@@ -26,7 +26,11 @@ class StepIndicator(Gtk.Box):
             col.set_halign(Gtk.Align.CENTER)
 
             circle = Gtk.Label(label=self._labels[i])
-            circle.set_size_request(28, 28)
+            circle.set_size_request(36, 36)
+            circle.set_margin_start(4)
+            circle.set_margin_end(4)
+            circle.set_margin_top(4)
+            circle.set_margin_bottom(4)
             circle.set_halign(Gtk.Align.CENTER)
             circle.set_valign(Gtk.Align.CENTER)
             self._circles.append(circle)
@@ -60,7 +64,7 @@ class StepIndicator(Gtk.Box):
                     label {
                         background: @success_bg_color;
                         color: @success_fg_color;
-                        border-radius: 14px;
+                        border-radius: 18px; padding: 4px 8px;
                         font-weight: bold;
                         font-size: 14px;
                     }
@@ -73,7 +77,7 @@ class StepIndicator(Gtk.Box):
                     label {
                         background: @accent_bg_color;
                         color: @accent_fg_color;
-                        border-radius: 14px;
+                        border-radius: 18px; padding: 4px 8px;
                         font-weight: bold;
                         font-size: 12px;
                     }
@@ -85,7 +89,7 @@ class StepIndicator(Gtk.Box):
                     label {
                         background: alpha(@window_fg_color, 0.1);
                         color: alpha(@window_fg_color, 0.5);
-                        border-radius: 14px;
+                        border-radius: 18px; padding: 4px 8px;
                         font-size: 12px;
                     }
                 """)
