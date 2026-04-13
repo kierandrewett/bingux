@@ -24,7 +24,7 @@ class WelcomePage(BasePage):
     def __init__(self, window):
         super().__init__(window, "Welcome", tag="welcome")
 
-        # Logo (smaller to save space)
+        # Logo
         logo_path = _find_logo()
         if logo_path:
             pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(logo_path, 96, 96, True)
@@ -44,20 +44,49 @@ class WelcomePage(BasePage):
         subtitle.set_margin_bottom(8)
         self.content.append(subtitle)
 
-        # Info cards (compact)
+        # Info cards in a horizontal row
+        cards_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        cards_box.set_halign(Gtk.Align.CENTER)
+        cards_box.set_homogeneous(True)
+
         cards = [
-            ("drive-harddisk-symbolic", "Install fresh or from your own config repository"),
-            ("network-wireless-symbolic", "An internet connection is required"),
-            ("dialog-password-symbolic", "Sign in to GitHub or GitLab if your config is private"),
+            ("drive-harddisk-symbolic", "Flexible", "Install fresh or from\nyour own config repo"),
+            ("network-wireless-symbolic", "Online", "Internet connection\nrequired to install"),
+            ("dialog-password-symbolic", "Private Repos", "Sign in to GitHub\nor GitLab if needed"),
         ]
 
-        for icon_name, text in cards:
-            row = Adw.ActionRow()
-            row.set_title(text)
+        for icon_name, heading, desc in cards:
+            card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+            card.add_css_class("card")
+            card.set_size_request(150, -1)
+            card.set_valign(Gtk.Align.START)
+
+            # Padding inside card
+            inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+            inner.set_margin_top(16)
+            inner.set_margin_bottom(16)
+            inner.set_margin_start(12)
+            inner.set_margin_end(12)
+
             icon = Gtk.Image.new_from_icon_name(icon_name)
-            icon.set_pixel_size(20)
-            row.add_prefix(icon)
-            self.content.append(row)
+            icon.set_pixel_size(28)
+            icon.add_css_class("accent")
+            inner.append(icon)
+
+            label = Gtk.Label(label=heading)
+            label.add_css_class("heading")
+            inner.append(label)
+
+            detail = Gtk.Label(label=desc)
+            detail.add_css_class("dim-label")
+            detail.add_css_class("caption")
+            detail.set_justify(Gtk.Justification.CENTER)
+            inner.append(detail)
+
+            card.append(inner)
+            cards_box.append(card)
+
+        self.content.append(cards_box)
 
         # Buttons side by side
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
