@@ -154,11 +154,15 @@ in
         adwaita-fonts
     ];
 
-    # Plymouth
+    # Plymouth + quiet boot
     boot.plymouth = {
+        enable = lib.mkForce true;
         theme = lib.mkForce "bingux";
         themePackages = lib.mkForce [ bingux-plymouth ];
     };
+    boot.kernelParams = [ "quiet" "splash" "loglevel=3" "rd.systemd.show_status=false" "udev.log_priority=3" ];
+    boot.consoleLogLevel = 0;
+    boot.initrd.verbose = false;
 
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
     system.nixos.distroName = "Bingux";
