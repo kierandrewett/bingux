@@ -123,6 +123,31 @@ services.earlyoom.enable = false;        # Disable earlyoom
 - **laptop** — TLP, thermald, powertop, lid switch handling
 - **generic** — No hardware-specific tweaks
 
+## The `os` CLI
+
+Every Bingux system includes the `os` command for managing your NixOS config at `/os`:
+
+```
+os rebuild          Rebuild and switch to new config
+os apply            Apply config without restarting services
+os test             Rebuild and test (no bootloader update)
+os update           Update flake inputs and rebuild
+os edit             Open /os in your editor
+os diff             Show uncommitted changes
+os log              Show recent commits
+os commit [msg]     Stage and commit changes
+os push             Commit and push to remote
+os status           Show git status
+```
+
+Typical workflow after installation:
+
+```
+cd /os
+git pull               # Pull latest config changes
+os rebuild             # Rebuild and switch
+```
+
 ## Building the ISO
 
 ```

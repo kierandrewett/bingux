@@ -38,5 +38,14 @@
         };
 
         i18n.defaultLocale = lib.mkDefault "en_US.UTF-8";
+
+        # Bingux CLI helper (os rebuild, os update, etc.)
+        environment.systemPackages = [ pkgs.os-helper ];
+
+        # Mark /os as safe for git
+        environment.etc."gitconfig".text = lib.mkDefault ''
+            [safe]
+                directory = /os
+        '';
     };
 }
