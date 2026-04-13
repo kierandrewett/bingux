@@ -206,7 +206,7 @@ def _print_table(label, label_color, infos, name_color=WHITE, show_size=True, sh
     print()
 
 
-def show_transaction(installs, removes, save=False):
+def show_transaction(installs, removes, save=False, remove_filter=None):
     if not installs and not removes:
         return True
 
@@ -223,7 +223,13 @@ def show_transaction(installs, removes, save=False):
             if r.get("size"):
                 r["size"] = f"-{r['size']}"
             neg_removes.append(r)
-        _print_table("Removing", WARN, neg_removes, name_color=FAIL, show_license=True)
+        if remove_filter == "session":
+            rm_label = f"Removing {DARK}(from this session){RESET}"
+        elif remove_filter == "permanent":
+            rm_label = f"Removing {DARK}(from this installation){RESET}"
+        else:
+            rm_label = "Removing"
+        _print_table(rm_label, WARN, neg_removes, name_color=FAIL, show_license=True)
 
     ni = len(installs)
     nr = len(removes)
@@ -503,7 +509,7 @@ def do_remove(pkgs, skip_confirm=False, profile_filter=None):
         count = len(infos)
         sp.stop(f"{DARK}Resolved {count} {'package' if count == 1 else 'packages'}.{RESET}")
 
-        if not show_transaction([], infos):
+        if not show_transaction([], infos, remove_filter=profile_filter):
             print(f"  {DARK}Aborted.{RESET}")
             return False
 
