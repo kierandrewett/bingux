@@ -285,8 +285,12 @@ def do_install(pkgs, save=False, skip_confirm=False):
     unfree = [i for i in infos if i.get("unfree")]
     if unfree:
         for i in unfree:
-            print(f"  {WARN}\u276f{RESET} {WHITE}{i['name']}{RESET} {DARK}is unfree. Enable unfree packages in your NixOS config:{RESET}")
-            print(f"    {DARK}nixpkgs.config.allowUnfree = true;{RESET}")
+            print(f"  {WARN}\u276f{RESET} {WHITE}{i['name']}{RESET} {DARK}is unfree. Enable unfree packages:{RESET}")
+            if os.path.exists("/etc/nixos"):
+                print(f"    {DARK}Add to your NixOS config: nixpkgs.config.allowUnfree = true;{RESET}")
+            else:
+                cfg = os.path.expanduser("~/.config/nixpkgs/config.nix")
+                print(f"    {DARK}Create {cfg} with: {{ allowUnfree = true; }}{RESET}")
         infos = [i for i in infos if not i.get("unfree")]
         if not infos:
             return False
@@ -317,8 +321,12 @@ def do_install(pkgs, save=False, skip_confirm=False):
             sp.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
 
             if "unfree" in output.lower():
-                print(f"    {DARK}\u2502 This package has an unfree license. Add to your NixOS config:{RESET}")
-                print(f"    {DARK}\u2570 nixpkgs.config.allowUnfree = true;{RESET}")
+                print(f"    {DARK}\u2502 This package has an unfree license. Enable unfree packages:{RESET}")
+                if os.path.exists("/etc/nixos"):
+                    print(f"    {DARK}\u2570 Add to your NixOS config: nixpkgs.config.allowUnfree = true;{RESET}")
+                else:
+                    cfg = os.path.expanduser("~/.config/nixpkgs/config.nix")
+                    print(f"    {DARK}\u2570 Create {cfg} with: {{ allowUnfree = true; }}{RESET}")
             elif "does not provide" in output:
                 print(f"    {DARK}\u2570 Package not found in nixpkgs.{RESET}")
             else:
