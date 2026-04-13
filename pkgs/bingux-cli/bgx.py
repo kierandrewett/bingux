@@ -355,7 +355,12 @@ def do_install(pkgs, save=False, skip_confirm=False):
     already = [p for p in pkgs if _is_installed(p)]
     if already:
         for p in already:
-            print(f"  {WARN}\u276f{RESET} {WHITE}{p}{RESET} {DARK}is already installed.{RESET}")
+            where = []
+            if _is_in_profile(p, VOLATILE_PROFILE):
+                where.append("session")
+            if _is_in_profile(p, PERMANENT_PROFILE):
+                where.append("permanent")
+            print(f"  {WARN}\u276f{RESET} {WHITE}{p}{RESET} {DARK}is already installed ({', '.join(where)}).{RESET}")
         pkgs = [p for p in pkgs if p not in already]
         if not pkgs:
             return True
