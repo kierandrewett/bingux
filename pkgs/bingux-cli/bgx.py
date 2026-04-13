@@ -191,8 +191,27 @@ def show_transaction(installs, removes, save=False):
     return confirm()
 
 
+def _is_installed(pkg):
+    """Check if a package is installed in either profile."""
+    for profile in (VOLATILE_PROFILE, PERMANENT_PROFILE):
+        r = run(["nix", "profile", "list", "--profile", profile],
+                capture_output=True, text=True)
+        if r.returncode == 0 and pkg in r.stdout:
+            return True
+    return False
+
+
 def do_install(pkgs, save=False, skip_confirm=False):
     profile = PERMANENT_PROFILE if save else VOLATILE_PROFILE
+
+    # Check for already installed
+    already = [p for p in pkgs if _is_installed(p)]
+    if already:
+        for p in already:
+            print(f"  {WARN}\u25b8{RESET} {WHITE}{p}{RESET} {DARK}is already installed.{RESET}")
+        pkgs = [p for p in pkgs if p not in already]
+        if not pkgs:
+            return True
 
     sp = Spinner("Resolving packages...")
     sp.start()
@@ -225,6 +244,15 @@ def do_install(pkgs, save=False, skip_confirm=False):
 
 
 def do_remove(pkgs, skip_confirm=False):
+    # Check for not installed
+    not_installed = [p for p in pkgs if not _is_installed(p)]
+    if not_installed:
+        for p in not_installed:
+            print(f"  {FAIL}\u2717{RESET} {WHITE}{p}{RESET} {DARK}is not installed.{RESET}")
+        pkgs = [p for p in pkgs if p not in not_installed]
+        if not pkgs:
+            return len(not_installed) == 0
+
     if not skip_confirm:
         sp = Spinner("Resolving packages...")
         sp.start()
