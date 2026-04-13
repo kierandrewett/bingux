@@ -231,6 +231,23 @@ def _is_installed(pkg):
     return _is_in_profile(pkg, VOLATILE_PROFILE) or _is_in_profile(pkg, PERMANENT_PROFILE)
 
 
+def _auto_gc():
+    """Run a quick garbage collection after transactions."""
+    sp = Spinner("Cleaning up...")
+    sp.start()
+    r = run(["nix", "store", "gc"], capture_output=True, text=True)
+    freed = ""
+    if r.returncode == 0 and r.stderr:
+        for line in r.stderr.split("\n"):
+            if "freed" in line.lower():
+                freed = line.strip()
+                break
+    if freed:
+        sp.stop(f"{DARK}{freed}{RESET}")
+    else:
+        sp.stop(f"{DARK}Nothing to clean.{RESET}")
+
+
 def _ensure_profile_dir(profile):
     d = os.path.dirname(profile)
     if d and not os.path.isdir(d):
@@ -454,10 +471,11 @@ def do_install(pkgs, save=False, skip_confirm=False):
         failed += 1
 
     if failed == 0 and len(pkgs) > 0:
-        print(f"\n  {DARK}All packages installed.{RESET}\n")
+        print(f"\n  {DARK}All packages installed.{RESET}")
     elif failed:
-        print(f"\n  {FAIL}{failed} failed.{RESET}\n")
+        print(f"\n  {FAIL}{failed} failed.{RESET}")
 
+    _auto_gc()
     return failed == 0
 
 
@@ -516,6 +534,7 @@ def do_remove(pkgs, skip_confirm=False, profile_filter=None):
             print(f"  {FAIL}\u2717{RESET} {WHITE}{pkg}{RESET} {DARK}not installed{RESET}", file=sys.stderr)
             failed += 1
 
+    _auto_gc()
     return failed == 0
 
 
