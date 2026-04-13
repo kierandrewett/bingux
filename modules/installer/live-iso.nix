@@ -2,6 +2,15 @@
 let
     bingux-plymouth = pkgs.callPackage ../../pkgs/bingux-plymouth { };
     bingux-installer = pkgs.callPackage ../../pkgs/bingux-installer { };
+
+    # Minimal GNOME Shell theme that hides the top bar
+    installerShellTheme = pkgs.runCommand "bingux-installer-shell-theme" {} ''
+        mkdir -p $out/share/themes/BinguxInstaller/gnome-shell
+        cat > $out/share/themes/BinguxInstaller/gnome-shell/gnome-shell.css << 'CSS'
+        @import url("resource:///org/gnome/shell/theme/gnome-shell.css");
+        #panel { height: 0; opacity: 0; pointer-events: none; }
+        CSS
+    '';
 in
 {
     imports = [
@@ -49,6 +58,9 @@ in
             monospace-font-name = "JetBrains Mono 11";
         };
         settings."org/gnome/shell" = {
+            enabled-extensions = [
+                "user-theme@gnome-shell-extensions.gcampax.github.com"
+            ];
             favorite-apps = [
                 "dev.drewett.BinguxInstaller.desktop"
                 "org.gnome.Nautilus.desktop"
@@ -57,6 +69,10 @@ in
             ];
         };
     }];
+
+        settings."org/gnome/shell/extensions/user-theme" = {
+            name = "BinguxInstaller";
+        };
 
     # Remove distro logo from GDM
     programs.dconf.profiles.gdm.databases = [{
@@ -85,9 +101,11 @@ in
         gnome-terminal
         gnome-text-editor
 
-        # Icons
+        # Icons + theme
         adwaita-icon-theme
         hicolor-icon-theme
+        installerShellTheme
+        gnomeExtensions.user-themes
     ];
 
     # Locale
