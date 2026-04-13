@@ -60,6 +60,7 @@ in
         settings."org/gnome/shell" = {
             enabled-extensions = [
                 "user-theme@gnome-shell-extensions.gcampax.github.com"
+                "dash-to-dock@micxgx.gmail.com"
             ];
             favorite-apps = [
                 "dev.drewett.BinguxInstaller.desktop"
@@ -72,6 +73,16 @@ in
 
         settings."org/gnome/shell/extensions/user-theme" = {
             name = "BinguxInstaller";
+        };
+        settings."org/gnome/shell/extensions/dash-to-dock" = {
+            dock-position = "BOTTOM";
+            dock-fixed = true;
+            dash-max-icon-size = lib.gvariant.mkInt32 48;
+            background-opacity = lib.gvariant.mkDouble 0.0;
+            transparency-mode = "FIXED";
+            disable-overview-on-startup = true;
+            show-mounts = false;
+            show-trash = false;
         };
 
     # Remove distro logo from GDM
@@ -106,6 +117,7 @@ in
         hicolor-icon-theme
         installerShellTheme
         gnomeExtensions.user-themes
+        gnomeExtensions.dash-to-dock
     ];
 
     # Locale
