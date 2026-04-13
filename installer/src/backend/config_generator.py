@@ -19,7 +19,7 @@ def generate_config(state, dest="/tmp/bingux-os"):
         user_block = f"""
         users.users.{state.username} = {{
             isNormalUser = true;
-            description = "{state.username}";
+            description = "{state.fullname or state.username}";
             shell = pkgs.zsh;
             extraGroups = [ "wheel" "networkmanager" "audio" "video" ];
         }};

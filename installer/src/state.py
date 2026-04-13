@@ -47,6 +47,7 @@ class InstallerState:
 
     # User
     username: str = ""
+    fullname: str = ""
     password: str = ""
 
     # Install

@@ -15,6 +15,10 @@ class UserSetupPage(BasePage):
         group.set_title("User Account")
         group.set_description("Set up your user account.")
 
+        self.fullname_row = Adw.EntryRow(title="Full Name")
+        self.fullname_row.set_tooltip_text("Optional — displayed on the login screen")
+        group.add(self.fullname_row)
+
         self.user_row = Adw.EntryRow(title="Username")
         group.add(self.user_row)
 
@@ -55,5 +59,6 @@ class UserSetupPage(BasePage):
             return False
 
         self.state.username = username
+        self.state.fullname = self.fullname_row.get_text().strip()
         self.state.password = p1
         return True
