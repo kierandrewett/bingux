@@ -118,7 +118,8 @@ def do_install(pkgs, save=False, skip_confirm=False):
     sp = Spinner("Resolving packages...")
     sp.start()
     infos = [pkg_info(p) for p in pkgs]
-    sp.stop("Done.")
+    count = len(infos)
+    sp.stop(f"Resolved {count} {'package' if count == 1 else 'packages'}.")
 
     if not skip_confirm and not show_transaction(infos, [], save=save):
         print("  Aborted.")
