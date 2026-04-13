@@ -138,6 +138,16 @@ def pkg_row(name, version="", size="", description=""):
     return f"    {WHITE}{n} {RESET}{WHITE}{v} {RESET}{GRAY}{s} {RESET}{DARK}{description}{RESET}"
 
 
+def _print_table(label, label_color, infos):
+    print(f"  {label_color}\u25b8{RESET} {WHITE}{label}{RESET}")
+    line_w = _term_width() - 6
+    print(f"    {DARK}{'Package'.ljust(COL_NAME)} {'Version'.ljust(COL_VER)} {'Size'.ljust(COL_SIZE)} Description{RESET}")
+    print(f"    {DARK}{'\u2500' * line_w}{RESET}")
+    for info in infos:
+        print(pkg_row(info["name"], info["version"], info.get("size", ""), info["description"]))
+    print()
+
+
 def show_transaction(installs, removes, save=False):
     if not installs and not removes:
         return True
@@ -146,22 +156,10 @@ def show_transaction(installs, removes, save=False):
 
     if installs:
         mode = "permanently" if save else "for this session"
-        print(f"  {ACCENT}\u25b8{RESET} {WHITE}Installing{RESET} {DARK}({mode}){RESET}")
-        line_w = _term_width() - 6
-        print(f"    {DARK}{'Package'.ljust(COL_NAME)} {'Version'.ljust(COL_VER)} {'Size'.ljust(COL_SIZE)} Description{RESET}")
-        print(f"    {DARK}{'\u2500' * line_w}{RESET}")
-        for info in installs:
-            print(pkg_row(info["name"], info["version"], info.get("size", ""), info["description"]))
-        print()
+        _print_table(f"Installing {DARK}({mode}){RESET}", ACCENT, installs)
 
     if removes:
-        print(f"  {WARN}\u25b8{RESET} {WHITE}Removing{RESET}")
-        line_w = _term_width() - 6
-        print(f"    {DARK}{'Package'.ljust(COL_NAME)}{RESET}")
-        print(f"    {DARK}{'\u2500' * line_w}{RESET}")
-        for pkg in removes:
-            print(f"    {WHITE}{pkg}{RESET}")
-        print()
+        _print_table("Removing", WARN, removes)
 
     ni = len(installs)
     nr = len(removes)
@@ -205,9 +203,16 @@ def do_install(pkgs, save=False, skip_confirm=False):
 
 
 def do_remove(pkgs, skip_confirm=False):
-    if not skip_confirm and not show_transaction([], pkgs):
-        print(f"  {DARK}Aborted.{RESET}")
-        return False
+    if not skip_confirm:
+        sp = Spinner("Resolving packages...")
+        sp.start()
+        infos = [pkg_info(p) for p in pkgs]
+        count = len(infos)
+        sp.stop(f"{DARK}Resolved {count} {'package' if count == 1 else 'packages'}.{RESET}")
+
+        if not show_transaction([], infos):
+            print(f"  {DARK}Aborted.{RESET}")
+            return False
 
     failed = 0
     for pkg in pkgs:
