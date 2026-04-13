@@ -195,6 +195,12 @@ class InstallPage(BasePage):
         terminal_btn.connect("clicked", self._on_terminal)
         box.append(terminal_btn)
 
+        restart_btn = Gtk.Button(label="Restart Installer")
+        restart_btn.add_css_class("pill")
+        restart_btn.add_css_class("destructive-action")
+        restart_btn.connect("clicked", self._on_restart)
+        box.append(restart_btn)
+
         self.content.append(box)
 
     def _get_log_text(self):
@@ -217,3 +223,12 @@ class InstallPage(BasePage):
     def _on_terminal(self, _btn):
         import subprocess
         subprocess.Popen(["gnome-terminal"])
+
+    def _on_restart(self, _btn):
+        import os, sys
+        from state import STATE_PATH
+        try:
+            os.remove(STATE_PATH)
+        except OSError:
+            pass
+        os.execv(sys.executable, [sys.executable] + sys.argv)
