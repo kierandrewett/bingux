@@ -20,7 +20,6 @@ from pages.repair import RepairPage
 from widgets.step_indicator import StepIndicator
 
 
-# Step labels for the indicator (simplified view of the flow)
 STEP_LABELS = ["Setup", "Config", "Disk", "User", "Review", "Install"]
 
 
@@ -35,12 +34,22 @@ class BinguxInstallerWindow(Adw.ApplicationWindow):
 
         self.state = InstallerState()
 
-        # Main layout: step indicator on top, nav view below
+        # Main layout
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
+        # Step indicator bar (hidden on welcome/complete)
+        self.step_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.step_bar.set_margin_start(12)
+        self.step_bar.set_margin_end(12)
+        self.step_bar.set_margin_top(8)
+        self.step_bar.set_margin_bottom(4)
+        self.step_bar.set_visible(False)
+
         self.step_indicator = StepIndicator(len(STEP_LABELS), STEP_LABELS)
-        self.step_indicator.set_margin_top(8)
-        main_box.append(self.step_indicator)
+        self.step_indicator.set_hexpand(True)
+        self.step_bar.append(self.step_indicator)
+
+        main_box.append(self.step_bar)
 
         self.nav_view = Adw.NavigationView()
         self.nav_view.set_vexpand(True)
@@ -50,27 +59,27 @@ class BinguxInstallerWindow(Adw.ApplicationWindow):
         self.set_content(main_box)
 
         self.pages = [
-            WelcomePage(self),           # step 0 (Setup)
-            NetworkPage(self),           # step 0 (skipped if online)
-            InstallTypePage(self),       # step 0
-            SystemConfigPage(self),      # step 1 (Config)
-            RepositoryPage(self),        # step 1
-            DiskPage(self),              # step 2 (Disk)
-            PartitioningPage(self),      # step 2
-            UserSetupPage(self),         # step 3 (User)
-            SummaryPage(self),           # step 4 (Review)
-            InstallPage(self),           # step 5 (Install)
-            CompletePage(self),          # step 5
+            WelcomePage(self),           # 0
+            NetworkPage(self),           # 1 (skipped if online)
+            InstallTypePage(self),       # 2
+            SystemConfigPage(self),      # 3 (fresh only)
+            RepositoryPage(self),        # 4 (repo only)
+            DiskPage(self),              # 5
+            PartitioningPage(self),      # 6 (manual only)
+            UserSetupPage(self),         # 7
+            SummaryPage(self),           # 8
+            InstallPage(self),           # 9
+            CompletePage(self),          # 10
         ]
 
-        # Map each page index to a step indicator index
         self._page_to_step = {
-            0: 0, 1: 0, 2: 0,  # Welcome, Network, InstallType -> Setup
-            3: 1, 4: 1,        # SystemConfig, Repository -> Config
-            5: 2, 6: 2,        # Disk, Partitioning -> Disk
-            7: 3,               # User -> User
-            8: 4,               # Summary -> Review
-            9: 5, 10: 5,       # Install, Complete -> Install
+            0: -1,                  # Welcome (no steps)
+            1: 0, 2: 0,            # Network, InstallType -> Setup
+            3: 1, 4: 1,            # SystemConfig, Repository -> Config
+            5: 2, 6: 2,            # Disk, Partitioning -> Disk
+            7: 3,                   # User
+            8: 4,                   # Review
+            9: 5, 10: -1,          # Install, Complete (no steps)
         }
 
         self.repair_page = RepairPage(self)
@@ -101,8 +110,10 @@ class BinguxInstallerWindow(Adw.ApplicationWindow):
     def _on_page_changed(self, nav_view, _pspec):
         page = nav_view.get_visible_page()
         idx = self._page_index(page)
-        step = self._page_to_step.get(idx, 0)
-        self.step_indicator.set_current(step)
+        step = self._page_to_step.get(idx, -1)
 
-        # Hide step indicator on complete page
-        self.step_indicator.set_visible(idx < 10)
+        if step >= 0:
+            self.step_bar.set_visible(True)
+            self.step_indicator.set_current(step)
+        else:
+            self.step_bar.set_visible(False)

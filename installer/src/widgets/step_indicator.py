@@ -9,10 +9,10 @@ class StepIndicator(Gtk.Box):
     """Horizontal step indicator: (1)──(2)──(3)──..."""
 
     def __init__(self, steps, labels=None):
-        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self.set_halign(Gtk.Align.CENTER)
-        self.set_margin_top(12)
-        self.set_margin_bottom(12)
+        self.set_margin_top(8)
+        self.set_margin_bottom(8)
 
         self._steps = steps
         self._labels = labels or [str(i + 1) for i in range(steps)]
@@ -37,7 +37,7 @@ class StepIndicator(Gtk.Box):
             # Connector line (except after last)
             if i < steps - 1:
                 line = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-                line.set_size_request(48, -1)
+                line.set_size_request(56, -1)
                 line.set_valign(Gtk.Align.CENTER)
                 self._lines.append(line)
                 self.append(line)

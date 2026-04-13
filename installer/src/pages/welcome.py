@@ -22,7 +22,7 @@ def _find_logo():
 
 class WelcomePage(BasePage):
     def __init__(self, window):
-        super().__init__(window, "Welcome", tag="welcome")
+        super().__init__(window, "Welcome to Bingux", tag="welcome", show_title=True)
 
         # Logo
         logo_path = _find_logo()
@@ -44,7 +44,7 @@ class WelcomePage(BasePage):
         subtitle.set_margin_bottom(8)
         self.content.append(subtitle)
 
-        # Info cards in a horizontal row
+        # Info cards
         cards_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         cards_box.set_halign(Gtk.Align.CENTER)
         cards_box.set_homogeneous(True)
@@ -61,7 +61,6 @@ class WelcomePage(BasePage):
             card.set_size_request(150, -1)
             card.set_valign(Gtk.Align.START)
 
-            # Padding inside card
             inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
             inner.set_margin_top(16)
             inner.set_margin_bottom(16)
@@ -88,23 +87,29 @@ class WelcomePage(BasePage):
 
         self.content.append(cards_box)
 
-        # Buttons side by side
-        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        btn_box.set_halign(Gtk.Align.CENTER)
-        btn_box.set_margin_top(12)
+        # Bottom bar: Repair (left), Get Started (right)
+        bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        bar.set_margin_start(24)
+        bar.set_margin_end(24)
+        bar.set_margin_top(8)
+        bar.set_margin_bottom(12)
+
+        repair_btn = Gtk.Button(label="Repair Options")
+        repair_btn.add_css_class("pill")
+        repair_btn.connect("clicked", self._on_repair)
+        bar.append(repair_btn)
+
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        bar.append(spacer)
 
         start_btn = Gtk.Button(label="Get Started")
         start_btn.add_css_class("pill")
         start_btn.add_css_class("suggested-action")
         start_btn.connect("clicked", lambda _: self.window.go_next())
-        btn_box.append(start_btn)
+        bar.append(start_btn)
 
-        repair_btn = Gtk.Button(label="Repair Options")
-        repair_btn.add_css_class("pill")
-        repair_btn.connect("clicked", self._on_repair)
-        btn_box.append(repair_btn)
-
-        self.content.append(btn_box)
+        self.toolbar_view.add_bottom_bar(bar)
 
     def _on_repair(self, _btn):
         repair_page = self.window.repair_page
