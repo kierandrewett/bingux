@@ -350,6 +350,11 @@ in
 
     networking.hostName = "bingux-installer";
 
+    # NTP + automatic timezone
+    services.automatic-timezoned.enable = true;
+    services.geoclue2.enable = true;
+    networking.networkmanager.enable = true;
+
     # Write pre-set repo URL for the installer to read
     environment.etc."bingux-installer/repo-url".text =
         lib.mkIf (cfg.repoUrl != null) cfg.repoUrl;
