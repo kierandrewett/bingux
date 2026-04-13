@@ -313,7 +313,53 @@ def do_remove(pkgs, skip_confirm=False):
 
 
 def do_search(query):
-    run(["nix", "search", "nixpkgs", query])
+    import re
+    sp = Spinner(f"Searching for '{query}'...")
+    sp.start()
+    r = run(["nix", "search", "nixpkgs", query], capture_output=True, text=True)
+    sp.stop(f"{DARK}Search complete.{RESET}")
+
+    if r.returncode != 0 or not r.stdout.strip():
+        print(f"  {DARK}No results found.{RESET}")
+        return
+
+    # Parse nix search output
+    ansi_re = re.compile(r"\033\[[0-9;]*m")
+    lines = r.stdout.strip().split("\n")
+    results = []
+    current = None
+
+    for line in lines:
+        clean = ansi_re.sub("", line).strip()
+        if clean.startswith("* "):
+            if current:
+                results.append(current)
+            # Extract package name and version
+            rest = clean[2:]
+            # Format: legacyPackages.x86_64-linux.pkgname (version)
+            m = re.match(r"legacyPackages\.\S+\.(\S+)\s*\(([^)]*)\)", rest)
+            if m:
+                current = {"name": m.group(1), "version": m.group(2), "description": ""}
+            else:
+                parts = rest.split(".")
+                current = {"name": parts[-1] if parts else rest, "version": "", "description": ""}
+        elif current and clean:
+            current["description"] = clean
+
+    if current:
+        results.append(current)
+
+    if not results:
+        print(f"  {DARK}No results found.{RESET}")
+        return
+
+    tw = _term_width()
+    line_w = tw - 6
+    print(f"    {DARK}{'Package'.ljust(COL_NAME)} {'Version'.ljust(COL_VER)} Description{RESET}")
+    print(f"    {DARK}{'\u2500' * line_w}{RESET}")
+    for info in results:
+        print(pkg_row(info["name"], info["version"], "", info["description"]))
+    print(f"\n  {DARK}{len(results)} results.{RESET}")
 
 
 def do_list():
