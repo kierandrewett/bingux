@@ -156,12 +156,9 @@ def show_transaction(installs, removes, save=False):
             print(f"    {WHITE}{pkg}{RESET}")
         print()
 
-    parts = []
-    if installs:
-        parts.append(f"{len(installs)} to install")
-    if removes:
-        parts.append(f"{len(removes)} to remove")
-    print(f"  {DARK}{', '.join(parts)}{RESET}")
+    ni = len(installs)
+    nr = len(removes)
+    print(f"  {DARK}+{ni} -{nr} ~0{RESET}")
     print()
 
     return confirm()
