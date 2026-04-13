@@ -28,6 +28,8 @@ class InstallPage(BasePage):
         self.content.append(self.log_view)
 
     def on_enter(self):
+        # Prevent going back during installation
+        self.set_can_pop(False)
         threading.Thread(target=self._run_install, daemon=True).start()
 
     def _set_status(self, text, fraction=None):
