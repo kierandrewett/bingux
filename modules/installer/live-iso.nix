@@ -200,7 +200,9 @@ in
         for f in $out/icons/nixos.png $out/logo.png; do
             if [ -f "$f" ]; then
                 ${pkgs.imagemagick}/bin/magick ${../../files/branding/bingus.png} \
-                    -resize 128x128 -background "#1a1a2e" -flatten -depth 8 -type TrueColor \
+                    -resize 256x256 -gravity center -extent 256x256 \
+                    -background "#1a1a2e" -flatten -depth 8 -type TrueColor \
+                    -filter Lanczos -quality 100 \
                     PNG24:"$f" 2>/dev/null || true
             fi
         done
