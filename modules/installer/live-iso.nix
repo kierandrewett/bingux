@@ -44,21 +44,12 @@ let
         # Dark background
         ${pkgs.swaybg}/bin/swaybg -c '#1a1a2e' &
 
-        # Ensure schema dir is set for gsettings
-        export XDG_DATA_DIRS="/run/current-system/sw/share:''${XDG_DATA_DIRS:-}"
-        export GSETTINGS_SCHEMA_DIR="/run/current-system/sw/share/glib-2.0/schemas"
-
-        # Force GTK font + theme via gsettings (writes to user dconf)
-        ${pkgs.glib}/bin/gsettings set org.gnome.desktop.interface font-name 'Inter 11' 2>/tmp/gsettings.log
-        ${pkgs.glib}/bin/gsettings set org.gnome.desktop.interface monospace-font-name 'JetBrains Mono 11' 2>>/tmp/gsettings.log
-        ${pkgs.glib}/bin/gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark' 2>>/tmp/gsettings.log
-        ${pkgs.glib}/bin/gsettings set org.gnome.desktop.interface icon-theme 'Adwaita' 2>>/tmp/gsettings.log
-        ${pkgs.glib}/bin/gsettings set org.gnome.desktop.interface gtk-theme 'adw-gtk3-dark' 2>>/tmp/gsettings.log
-
-        # Log results for debugging
-        ${pkgs.glib}/bin/gsettings get org.gnome.desktop.interface font-name >> /tmp/gsettings.log 2>&1
-        fc-match sans-serif >> /tmp/gsettings.log 2>&1
-        fc-match monospace >> /tmp/gsettings.log 2>&1
+        # Write GTK font + theme directly to dconf (no schema lookup needed)
+        ${pkgs.dconf}/bin/dconf write /org/gnome/desktop/interface/font-name "'Inter 11'"
+        ${pkgs.dconf}/bin/dconf write /org/gnome/desktop/interface/monospace-font-name "'JetBrains Mono 11'"
+        ${pkgs.dconf}/bin/dconf write /org/gnome/desktop/interface/color-scheme "'prefer-dark'"
+        ${pkgs.dconf}/bin/dconf write /org/gnome/desktop/interface/icon-theme "'Adwaita'"
+        ${pkgs.dconf}/bin/dconf write /org/gnome/desktop/interface/gtk-theme "'adw-gtk3-dark'"
 
         # Bottom taskbar
         ${pkgs.waybar}/bin/waybar &
@@ -173,9 +164,8 @@ in
     }];
 
     # Suppress zsh new-user setup prompt
-    programs.zsh.promptInit = "";
-    environment.etc.zshrc.text = lib.mkForce ''
-        # Bingux installer shell
+    system.activationScripts.zshrc.text = ''
+        echo "# Bingux installer" > /home/bingux/.zshrc 2>/dev/null || true
     '';
 
     # GTK settings (dark theme, Inter font, Adwaita icons)
