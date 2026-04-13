@@ -375,9 +375,21 @@ def do_search(query):
     if current:
         results.append(current)
 
-    # Filter out entries with no version, sort alphabetically
-    results = [r for r in results if r.get("version")]
-    results.sort(key=lambda r: r["name"].lower())
+    # Filter junk: no version, versions that look like filenames, duplicates
+    seen = set()
+    filtered = []
+    for r in results:
+        v = r.get("version", "")
+        if not v:
+            continue
+        if ".zip" in v or ".tar" in v or ".iso" in v:
+            continue
+        key = r["name"]
+        if key in seen:
+            continue
+        seen.add(key)
+        filtered.append(r)
+    results = sorted(filtered, key=lambda r: r["name"].lower())
 
     if not results:
         print(f"  {DARK}No results found.{RESET}")
