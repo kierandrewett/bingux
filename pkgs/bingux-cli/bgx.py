@@ -356,9 +356,10 @@ def do_search(query):
     current = None
 
     # Package paths to skip (deeply nested SDK/internal packages)
-    skip_prefixes = ("androidenv.", "python2", "haskellPackages.", "perlPackages.",
+    skip_prefixes = ("androidenv.", "python2", "python3", "haskellPackages.", "perlPackages.",
                      "rubyGems.", "emacsPackages.", "vimPlugins.", "ocamlPackages.",
-                     "coqPackages.", "beamPackages.", "luaPackages.", "rPackages.")
+                     "coqPackages.", "beamPackages.", "luaPackages.", "rPackages.",
+                     "tests.", "hashicorp_", "chickenPackages", "ocamlPackages_")
 
     for line in lines:
         clean = ansi_re.sub("", line).strip()
@@ -406,8 +407,14 @@ def do_search(query):
         print(f"  {DARK}No results found.{RESET}")
         return
 
-    _print_table(f"Results for '{query}'", ACCENT, results, name_color=WHITE, show_size=False)
-    print(f"  {DARK}{len(results)} results.{RESET}")
+    MAX_RESULTS = 50
+    total = len(results)
+    shown = results[:MAX_RESULTS]
+    _print_table(f"Results for '{query}'", ACCENT, shown, name_color=WHITE, show_size=False)
+    if total > MAX_RESULTS:
+        print(f"  {DARK}{total} results ({total - MAX_RESULTS} more not shown). Refine your search.{RESET}")
+    else:
+        print(f"  {DARK}{total} results.{RESET}")
 
 
 def do_list():
