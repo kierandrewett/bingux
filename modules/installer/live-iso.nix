@@ -45,11 +45,23 @@ let
         ${pkgs.swaybg}/bin/swaybg -c '#1a1a2e' &
 
         # Write GTK font + theme directly to dconf (no schema lookup needed)
+        export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
         ${pkgs.dconf}/bin/dconf write /org/gnome/desktop/interface/font-name "'Inter 11'"
         ${pkgs.dconf}/bin/dconf write /org/gnome/desktop/interface/monospace-font-name "'JetBrains Mono 11'"
         ${pkgs.dconf}/bin/dconf write /org/gnome/desktop/interface/color-scheme "'prefer-dark'"
         ${pkgs.dconf}/bin/dconf write /org/gnome/desktop/interface/icon-theme "'Adwaita'"
         ${pkgs.dconf}/bin/dconf write /org/gnome/desktop/interface/gtk-theme "'adw-gtk3-dark'"
+
+        # Set gnome-terminal profile font
+        ${pkgs.dconf}/bin/dconf write /org/gnome/terminal/legacy/profiles:/:b1dcc9dd-5262-4d8d-a863-c897e6d979b9/use-system-font false
+        ${pkgs.dconf}/bin/dconf write /org/gnome/terminal/legacy/profiles:/:b1dcc9dd-5262-4d8d-a863-c897e6d979b9/font "'JetBrains Mono 11'"
+
+        # Debug log
+        ${pkgs.dconf}/bin/dconf read /org/gnome/desktop/interface/font-name > /tmp/font-debug.log 2>&1
+        ${pkgs.dconf}/bin/dconf read /org/gnome/desktop/interface/monospace-font-name >> /tmp/font-debug.log 2>&1
+        echo "---" >> /tmp/font-debug.log
+        ${pkgs.fontconfig}/bin/fc-match sans-serif >> /tmp/font-debug.log 2>&1
+        ${pkgs.fontconfig}/bin/fc-match monospace >> /tmp/font-debug.log 2>&1
 
         # Bottom taskbar
         ${pkgs.waybar}/bin/waybar &
