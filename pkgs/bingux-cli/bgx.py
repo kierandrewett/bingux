@@ -376,13 +376,34 @@ def do_install(pkgs, save=False, skip_confirm=False):
                     print(f"    {DARK}\u2502 This package has an unfree license.{RESET}")
                     print(f"    {DARK}\u2570 Add to your NixOS config: nixpkgs.config.allowUnfree = true;{RESET}")
                 else:
-                    # Non-NixOS: retry with unfree allowed, overwrite the ✗ line
+                    # Non-NixOS: retry with unfree, overwrite the ✗ line
                     sys.stdout.write(f"\033[A\r\033[K")
-                    sp2 = Spinner(f"Retrying {pkg} (unfree)...")
+                    retry_env = {**os.environ, "NIXPKGS_ALLOW_UNFREE": "1"}
+                    retry_cmd = ["nix", "profile", "add", "--impure", "--profile", profile, f"nixpkgs#{pkg}"]
+                    proc2 = subprocess.Popen(retry_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=retry_env)
+                    sp2 = Spinner(f"{pkg}: retrying (unfree)...")
                     sp2.start()
-                    r2 = run(["nix", "profile", "add", "--impure", "--profile", profile, f"nixpkgs#{pkg}"],
-                             capture_output=True, text=True, env={**os.environ, "NIXPKGS_ALLOW_UNFREE": "1"})
-                    if r2.returncode == 0:
+
+                    def _read_retry():
+                        for line in proc2.stderr:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            if "copying path" in line:
+                                m = _re.search(r"copying path '.*-([^/']+)'", line)
+                                if m:
+                                    sp2.msg = f"{pkg}: fetching {m.group(1)}"
+                            elif "building" in line.lower():
+                                sp2.msg = f"{pkg}: building..."
+                            elif "downloading" in line.lower():
+                                sp2.msg = f"{pkg}: downloading..."
+
+                    rt = threading.Thread(target=_read_retry, daemon=True)
+                    rt.start()
+                    proc2.wait()
+                    sp2._stop = True
+                    rt.join(timeout=1)
+                    if proc2.returncode == 0:
                         sp2.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}(unfree){RESET}")
                         continue
                     sp2.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
@@ -432,19 +453,17 @@ def do_remove(pkgs, skip_confirm=False):
     failed = 0
     for pkg in pkgs:
         removed = False
-        for profile, label in [
-            (VOLATILE_PROFILE, "session"),
-            (PERMANENT_PROFILE, "permanent"),
-        ]:
+        for profile in (VOLATILE_PROFILE, PERMANENT_PROFILE):
             r = run(
                 ["nix", "profile", "remove", "--profile", profile, f".*{pkg}.*"],
                 capture_output=True,
             )
             if r.returncode == 0:
-                print(f"  {SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}({label}){RESET}")
                 removed = True
 
-        if not removed:
+        if removed:
+            print(f"  {SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}")
+        else:
             print(f"  {FAIL}\u2717{RESET} {WHITE}{pkg}{RESET} {DARK}not installed{RESET}", file=sys.stderr)
             failed += 1
 
