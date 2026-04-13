@@ -151,7 +151,7 @@ def set_password(username, password):
     try:
         p = subprocess.Popen(
             ["sudo", "nixos-enter", "--root", "/mnt", "--", "chpasswd"],
-            stdin=subprocess.PIPE, capture_output=True, text=True,
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         )
         p.communicate(input=f"{username}:{password}\n")
         return p.returncode == 0
