@@ -47,8 +47,14 @@ let
         exec_always ${pkgs.glib}/bin/gsettings set $gnome-schema font-name 'Inter 11'
         exec_always ${pkgs.glib}/bin/gsettings set $gnome-schema icon-theme 'Adwaita'
 
-        # Autostart installer (with delay for session readiness, fallback to terminal on error)
-        exec sleep 2 && ${bingux-installer}/bin/bingux-installer 2>/tmp/bingux-installer.log || ${pkgs.foot}/bin/foot
+        # Autostart installer with loading splash
+        exec ${pkgs.writeShellScript "launch-installer" ''
+            # Show loading message
+            ${pkgs.mako}/bin/makoctl dismiss -a 2>/dev/null || true
+            ${pkgs.libnotify}/bin/notify-send -t 10000 "Bingux" "Starting installer..."
+            sleep 1
+            ${bingux-installer}/bin/bingux-installer 2>/tmp/bingux-installer.log || ${pkgs.foot}/bin/foot
+        ''}
     '';
 
     # Greetd auto-login session

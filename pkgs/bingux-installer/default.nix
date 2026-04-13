@@ -24,6 +24,9 @@ stdenv.mkDerivation {
         cp -r src/* $out/lib/bingux-installer/
         cp ${../../files/branding/bingus.png} $out/share/bingux-installer/logo.png
 
+        # Precompile Python bytecode for faster startup
+        ${pythonEnv}/bin/python3 -m compileall -q $out/lib/bingux-installer/
+
         mkdir -p $out/bin
         makeWrapper ${pythonEnv}/bin/python3 $out/bin/bingux-installer \
             --add-flags "$out/lib/bingux-installer/main.py" \
