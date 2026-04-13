@@ -199,6 +199,10 @@ in
         if [ -f "$out/theme.txt" ]; then
             sed -i 's/NixOS/Bingux/g' "$out/theme.txt"
         fi
+        # Generate a proper GRUB font from Adwaita Sans
+        ${pkgs.grub2}/bin/grub-mkfont \
+            -s 24 -o "$out/font.pf2" \
+            ${pkgs.adwaita-fonts}/share/fonts/Adwaita/AdwaitaSans-Regular.ttf 2>/dev/null || true
     '';
     isoImage.syslinuxTheme = ''
         MENU TITLE Bingux
