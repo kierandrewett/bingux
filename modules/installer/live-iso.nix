@@ -389,8 +389,8 @@ in
     networking.wireless.enable = lib.mkForce false;
 
     # Write pre-set repo URL for the installer to read
-    environment.etc."bingux-installer/repo-url".text =
-        lib.mkIf (cfg.repoUrl != null) cfg.repoUrl;
+    environment.etc."bingux-installer/repo-url" =
+        lib.mkIf (cfg.repoUrl != null) { text = cfg.repoUrl; };
 
     # Autostart desktop entry for app launchers
     environment.etc."xdg/autostart/bingux-installer.desktop".text = ''
