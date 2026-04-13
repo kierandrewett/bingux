@@ -225,8 +225,16 @@ def do_install(pkgs, save=False, skip_confirm=False):
     sp = Spinner("Resolving packages...")
     sp.start()
     infos = [pkg_info(p) for p in pkgs]
-    count = len(infos)
-    sp.stop(f"{DARK}Resolved {count} {'package' if count == 1 else 'packages'}.{RESET}")
+    sp.stop(f"{DARK}Resolved {len(infos)} {'package' if len(infos) == 1 else 'packages'}.{RESET}")
+
+    # Check for packages that don't exist in nixpkgs
+    not_found = [i for i in infos if not i["version"] and not i["description"]]
+    if not_found:
+        for i in not_found:
+            print(f"  {FAIL}\u2717{RESET} {WHITE}{i['name']}{RESET} {DARK}not found in nixpkgs. Try 'bgx ?{i['name']}' to search.{RESET}")
+        infos = [i for i in infos if i not in not_found]
+        if not infos:
+            return False
 
     if not skip_confirm and not show_transaction(infos, [], save=save):
         print(f"  {DARK}Aborted.{RESET}")
