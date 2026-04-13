@@ -131,7 +131,7 @@ def pkg_row(name, version="", size="", description=""):
     max_desc = _term_width() - prefix_len - 2
     if max_desc > 0 and len(description) > max_desc:
         description = description[:max_desc - 1] + "\u2026"
-    return f"    {WHITE}{n} {RESET}{GRAY}{v} {RESET}{GRAY}{s} {RESET}{DARK}{description}{RESET}"
+    return f"    {WHITE}{n} {RESET}{WHITE}{v} {RESET}{GRAY}{s} {RESET}{DARK}{description}{RESET}"
 
 
 def show_transaction(installs, removes, save=False):
