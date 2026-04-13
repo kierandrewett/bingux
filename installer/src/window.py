@@ -6,6 +6,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 from state import InstallerState
 from pages.welcome import WelcomePage
+from pages.network import NetworkPage
 from pages.install_type import InstallTypePage
 from pages.system_config import SystemConfigPage
 from pages.repository import RepositoryPage
@@ -50,6 +51,7 @@ class BinguxInstallerWindow(Adw.ApplicationWindow):
 
         self.pages = [
             WelcomePage(self),           # step 0 (Setup)
+            NetworkPage(self),           # step 0 (skipped if online)
             InstallTypePage(self),       # step 0
             SystemConfigPage(self),      # step 1 (Config)
             RepositoryPage(self),        # step 1
@@ -63,12 +65,12 @@ class BinguxInstallerWindow(Adw.ApplicationWindow):
 
         # Map each page index to a step indicator index
         self._page_to_step = {
-            0: 0, 1: 0,       # Welcome, InstallType -> Setup
-            2: 1, 3: 1,       # SystemConfig, Repository -> Config
-            4: 2, 5: 2,       # Disk, Partitioning -> Disk
-            6: 3,              # User -> User
-            7: 4,              # Summary -> Review
-            8: 5, 9: 5,       # Install, Complete -> Install
+            0: 0, 1: 0, 2: 0,  # Welcome, Network, InstallType -> Setup
+            3: 1, 4: 1,        # SystemConfig, Repository -> Config
+            5: 2, 6: 2,        # Disk, Partitioning -> Disk
+            7: 3,               # User -> User
+            8: 4,               # Summary -> Review
+            9: 5, 10: 5,       # Install, Complete -> Install
         }
 
         self.repair_page = RepairPage(self)
@@ -103,4 +105,4 @@ class BinguxInstallerWindow(Adw.ApplicationWindow):
         self.step_indicator.set_current(step)
 
         # Hide step indicator on complete page
-        self.step_indicator.set_visible(idx < 9)
+        self.step_indicator.set_visible(idx < 10)
