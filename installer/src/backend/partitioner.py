@@ -59,7 +59,7 @@ def format_filesystem(device, fstype, label="nixos"):
 def setup_luks(device, passphrase, name="cryptroot"):
     p = subprocess.Popen(
         ["sudo", "cryptsetup", "luksFormat", "--type", "luks2", "--batch-mode", device],
-        stdin=subprocess.PIPE, capture_output=True, text=True,
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )
     _, err = p.communicate(input=passphrase + "\n")
     if p.returncode != 0:
@@ -67,7 +67,7 @@ def setup_luks(device, passphrase, name="cryptroot"):
 
     p2 = subprocess.Popen(
         ["sudo", "cryptsetup", "open", device, name],
-        stdin=subprocess.PIPE, capture_output=True, text=True,
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
     )
     _, err2 = p2.communicate(input=passphrase + "\n")
     return p2.returncode == 0, "", err2

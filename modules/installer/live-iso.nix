@@ -44,11 +44,12 @@ let
         gaps outer 4
         default_border pixel 2
 
-        # GTK dark theme + font + icons
+        # GTK settings via gsettings (needs dconf)
         set $gnome-schema org.gnome.desktop.interface
         exec_always ${pkgs.glib}/bin/gsettings set $gnome-schema color-scheme prefer-dark
         exec_always ${pkgs.glib}/bin/gsettings set $gnome-schema font-name 'Inter 11'
         exec_always ${pkgs.glib}/bin/gsettings set $gnome-schema icon-theme 'Adwaita'
+        exec_always ${pkgs.glib}/bin/gsettings set $gnome-schema gtk-theme 'Adwaita'
 
         # Autostart installer with loading splash
         exec ${pkgs.writeShellScript "launch-installer" ''
@@ -135,6 +136,25 @@ in
         adwaita-icon-theme
         hicolor-icon-theme
     ];
+
+    # GTK4 font/theme settings (fallback for when dconf isn't running)
+    environment.etc."xdg/gtk-4.0/settings.ini".text = ''
+        [Settings]
+        gtk-font-name=Inter 11
+        gtk-icon-theme-name=Adwaita
+        gtk-theme-name=Adwaita
+        gtk-application-prefer-dark-theme=true
+    '';
+    environment.etc."xdg/gtk-3.0/settings.ini".text = ''
+        [Settings]
+        gtk-font-name=Inter 11
+        gtk-icon-theme-name=Adwaita
+        gtk-theme-name=Adwaita
+        gtk-application-prefer-dark-theme=true
+    '';
+
+    # Ensure dconf service runs for gsettings
+    programs.dconf.enable = true;
 
     # Locale
     i18n.defaultLocale = lib.mkForce "en_US.UTF-8";
