@@ -14,9 +14,13 @@ GREEN = "\033[32m"
 RED = "\033[31m"
 YELLOW = "\033[33m"
 BLUE = "\033[34m"
+CYAN = "\033[36m"
+MAGENTA = "\033[35m"
 BOLD = "\033[1m"
 DIM = "\033[2m"
 RESET = "\033[0m"
+BG_BLUE = "\033[44m"
+BG_RED = "\033[41m"
 
 
 def run(cmd, **kwargs):
@@ -52,47 +56,53 @@ def confirm(prompt="Is this ok [y/N]: "):
 
 
 def show_transaction(installs, removes, save=False):
-    """Show a dnf-style transaction summary and prompt for confirmation."""
+    """Show a styled transaction summary and prompt for confirmation."""
     if not installs and not removes:
         return True
 
-    print(f"\n{BOLD}Transaction Summary:{RESET}")
+    print()
+    print(f"  {BOLD}{BLUE}\u2501\u2501 Transaction Summary \u2501\u2501{RESET}")
+    print()
 
     if installs:
         mode = "permanently" if save else "for this session"
-        print(f"  Installing ({mode}):")
+        print(f"  {GREEN}\u25bc{RESET} {BOLD}Installing{RESET} {DIM}({mode}){RESET}")
+        print()
         for info in installs:
             ver = info["version"]
             desc = info["description"]
-            line = f"    {BOLD}{info['name']}{RESET}"
+            print(f"    {GREEN}\u2022{RESET} {BOLD}{info['name']}{RESET}", end="")
             if ver != "?":
-                line += f"  {DIM}{ver}{RESET}"
+                print(f"  {CYAN}{ver}{RESET}", end="")
+            print()
             if desc:
-                line += f"  {DIM}— {desc}{RESET}"
-            print(line)
+                print(f"      {DIM}{desc}{RESET}")
+        print()
 
     if removes:
-        print(f"  Removing:")
+        print(f"  {RED}\u25b2{RESET} {BOLD}Removing{RESET}")
+        print()
         for pkg in removes:
-            print(f"    {BOLD}{pkg}{RESET}")
+            print(f"    {RED}\u2022{RESET} {BOLD}{pkg}{RESET}")
+        print()
 
-    total = len(installs) + len(removes)
+    print(f"  {DIM}\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500{RESET}")
     parts = []
     if installs:
-        parts.append(f"{len(installs)} to install")
+        parts.append(f"{GREEN}{len(installs)} to install{RESET}")
     if removes:
-        parts.append(f"{len(removes)} to remove")
-    print(f"\n  {', '.join(parts)}")
+        parts.append(f"{RED}{len(removes)} to remove{RESET}")
+    print(f"  {', '.join(parts)}")
     print()
 
-    return confirm(f"{BOLD}Proceed? [y/N]:{RESET} ")
+    return confirm(f"  {BOLD}Proceed? [{GREEN}y{RESET}/{RED}N{RESET}]{BOLD}:{RESET} ")
 
 
 def do_install(pkgs, save=False, skip_confirm=False):
     profile = PERMANENT_PROFILE if save else VOLATILE_PROFILE
 
     # Gather info
-    print(f"{DIM}Resolving packages...{RESET}")
+    print(f"\n  {BLUE}::{RESET} Resolving packages...")
     infos = [pkg_info(p) for p in pkgs]
 
     if not skip_confirm and not show_transaction(infos, [], save=save):
@@ -144,19 +154,24 @@ def do_search(query):
 
 
 def do_list():
-    print(f"{BOLD}Temporary (for this session):{RESET}")
+    print()
+    print(f"  {YELLOW}\u25cf{RESET} {BOLD}Temporary{RESET} {DIM}(for this session){RESET}")
     r = run(["nix", "profile", "list", "--profile", VOLATILE_PROFILE], capture_output=True, text=True)
     if r.returncode == 0 and r.stdout.strip():
-        print(r.stdout)
+        for line in r.stdout.strip().split("\n"):
+            print(f"    {line}")
     else:
-        print("  (none)\n")
+        print(f"    {DIM}(none){RESET}")
 
-    print(f"{BOLD}Permanent:{RESET}")
+    print()
+    print(f"  {GREEN}\u25cf{RESET} {BOLD}Permanent{RESET}")
     r = run(["nix", "profile", "list", "--profile", PERMANENT_PROFILE], capture_output=True, text=True)
     if r.returncode == 0 and r.stdout.strip():
-        print(r.stdout)
+        for line in r.stdout.strip().split("\n"):
+            print(f"    {line}")
     else:
-        print("  (none)")
+        print(f"    {DIM}(none){RESET}")
+    print()
 
 
 def run_prefix_mode(args):
