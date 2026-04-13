@@ -73,7 +73,7 @@ def format_size(nbytes):
 
 def pkg_info(pkg):
     import json
-    info = {"name": pkg, "version": "", "description": "", "size": ""}
+    info = {"name": pkg, "version": "", "description": "", "size": "", "size_bytes": 0}
     try:
         r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.version"],
                 capture_output=True, text=True, timeout=15)
@@ -97,6 +97,8 @@ def pkg_info(pkg):
             m = re.search(r"([\d.]+)\s+([KMGT]iB)\s+download,\s+([\d.]+)\s+([KMGT]iB)\s+unpacked", line)
             if m:
                 info["size"] = f"{m.group(3)} {m.group(4)}"
+                units = {"KiB": 1024, "MiB": 1024**2, "GiB": 1024**3, "TiB": 1024**4}
+                info["size_bytes"] = int(float(m.group(3)) * units.get(m.group(4), 1))
                 break
         # Fallback: parse stdout for store path size
         if not info["size"] and r.stdout:
@@ -169,7 +171,21 @@ def show_transaction(installs, removes, save=False):
 
     ni = len(installs)
     nr = len(removes)
-    print(f"  {GRAY}Summary: {SUCCESS}+{ni}{RESET}{DARK}/{RESET}{FAIL}-{nr}{RESET}{DARK}/{RESET}{WARN}~0{RESET}")
+    summary = f"  {GRAY}Summary: {SUCCESS}+{ni}{RESET}{DARK}/{RESET}{FAIL}-{nr}{RESET}{DARK}/{RESET}{WARN}~0{RESET}"
+
+    size_parts = []
+    if installs:
+        total_add = sum(i.get("size_bytes", 0) for i in installs)
+        if total_add:
+            size_parts.append(f"{SUCCESS}+{format_size(total_add)}{RESET}")
+    if removes:
+        total_rm = sum(i.get("size_bytes", 0) for i in removes)
+        if total_rm:
+            size_parts.append(f"{FAIL}-{format_size(total_rm)}{RESET}")
+    if size_parts:
+        summary += f"  {DARK}({' '.join(size_parts)}{DARK}){RESET}"
+
+    print(summary)
     print()
 
     return confirm()
