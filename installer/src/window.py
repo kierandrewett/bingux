@@ -11,8 +11,6 @@ from pages.system_config import SystemConfigPage
 from pages.repository import RepositoryPage
 from pages.disk import DiskPage
 from pages.partitioning import PartitioningPage
-from pages.encryption import EncryptionPage
-from pages.filesystem import FilesystemPage
 from pages.user_setup import UserSetupPage
 from pages.summary import SummaryPage
 from pages.install import InstallPage
@@ -25,6 +23,8 @@ class BinguxInstallerWindow(Adw.ApplicationWindow):
         self.set_title("Install Bingux")
         self.set_default_size(800, 600)
         self.set_resizable(False)
+        self.set_deletable(False)
+        self.connect("close-request", lambda _: True)  # Block Alt+F4
 
         self.state = InstallerState()
 
@@ -34,15 +34,10 @@ class BinguxInstallerWindow(Adw.ApplicationWindow):
         self.pages = [
             WelcomePage(self),
             InstallTypePage(self),
-            # Fresh install path
-            SystemConfigPage(self),
-            # Repository path (handles auth inline when needed)
-            RepositoryPage(self),
-            # Shared path
-            DiskPage(self),
-            PartitioningPage(self),
-            EncryptionPage(self),
-            FilesystemPage(self),
+            SystemConfigPage(self),      # Fresh install only
+            RepositoryPage(self),        # Repository only
+            DiskPage(self),              # Disk + fs + encryption (wipe mode)
+            PartitioningPage(self),      # Manual mode only
             UserSetupPage(self),
             SummaryPage(self),
             InstallPage(self),
@@ -55,7 +50,6 @@ class BinguxInstallerWindow(Adw.ApplicationWindow):
         current = self.nav_view.get_visible_page()
         idx = self._page_index(current)
 
-        # Find next page that should be shown
         for i in range(idx + 1, len(self.pages)):
             page = self.pages[i]
             if page.should_show():

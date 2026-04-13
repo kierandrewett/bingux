@@ -10,6 +10,25 @@ def run(cmd, **kwargs):
         return False, e.stdout, e.stderr
 
 
+def wipe_disk(device):
+    """Wipe the disk and create a GPT table with EFI + root partitions."""
+    # Zap existing partition table
+    ok, _, err = run(["sgdisk", "--zap-all", device])
+    if not ok:
+        return False, "", err
+    # Create 1GB EFI partition + rest as Linux root
+    ok, _, err = run(["sgdisk",
+        "-n", "1:0:+1G", "-t", "1:ef00", "-c", "1:EFI",
+        "-n", "2:0:0", "-t", "2:8300", "-c", "2:root",
+        device,
+    ])
+    if not ok:
+        return False, "", err
+    # Inform kernel of partition table changes
+    run(["partprobe", device])
+    return True, "", ""
+
+
 def format_fat32(device):
     return run(["mkfs.fat", "-F", "32", "-n", "EFI", device])
 

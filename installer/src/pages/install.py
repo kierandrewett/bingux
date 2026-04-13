@@ -47,7 +47,7 @@ class InstallPage(BasePage):
         step = 0
 
         try:
-            # Step 1: Generate config (fresh install) or use cloned repo
+            # Step 1: Generate config (fresh) or use cloned repo
             step += 1
             self._set_status("Preparing configuration...", step / steps)
             if s.install_type == "fresh":
@@ -57,48 +57,56 @@ class InstallPage(BasePage):
             else:
                 self._log(f"Using repository: {s.repo_url}\n")
 
-            # Step 2: Encryption
+            # Step 2: Partition (wipe mode) or use existing partitions
+            step += 1
+            self._set_status("Partitioning disk...", step / steps)
+            if s.disk_mode == "wipe":
+                self._log(f"Wiping disk: {s.selected_disk}\n")
+                ok, _, err = partitioner.wipe_disk(s.selected_disk)
+                if not ok:
+                    self._log(f"Partitioning failed: {err}\n")
+                    self._set_status("Partitioning failed")
+                    return
+                # wipe_disk sets efi_partition and root_partition
+                s.efi_partition = f"{s.selected_disk}1"
+                s.root_partition = f"{s.selected_disk}2"
+                # Handle NVMe naming (e.g. /dev/nvme0n1p1)
+                if "nvme" in s.selected_disk or "mmcblk" in s.selected_disk:
+                    s.efi_partition = f"{s.selected_disk}p1"
+                    s.root_partition = f"{s.selected_disk}p2"
+                self._log(f"EFI: {s.efi_partition}  Root: {s.root_partition}\n")
+
+            # Step 3: Encryption
             step += 1
             self._set_status("Setting up encryption...", step / steps)
             root_dev = s.root_partition
-            home_dev = s.home_partition
 
             if s.encrypt_root:
-                self._log("Setting up LUKS on " + s.root_partition + "\n")
+                self._log(f"Setting up LUKS on {s.root_partition}\n")
                 ok, _, err = partitioner.setup_luks(s.root_partition, s.luks_passphrase, "cryptroot")
                 if not ok:
-                    self._log("LUKS setup failed: " + err + "\n")
+                    self._log(f"LUKS setup failed: {err}\n")
                     self._set_status("Encryption failed")
                     return
                 root_dev = "/dev/mapper/cryptroot"
                 self._log("LUKS root ready\n")
 
-            if s.encrypt_home and s.home_partition:
-                self._log("Setting up LUKS on " + s.home_partition + "\n")
-                ok, _, err = partitioner.setup_luks(s.home_partition, s.luks_passphrase, "crypthome")
-                if not ok:
-                    self._log("LUKS home failed: " + err + "\n")
-                home_dev = "/dev/mapper/crypthome"
-
-            # Step 3: Format EFI
+            # Step 4: Format EFI
             step += 1
             self._set_status("Formatting EFI...", step / steps)
-            self._log("Formatting EFI: " + s.efi_partition + "\n")
+            self._log(f"Formatting EFI: {s.efi_partition}\n")
             partitioner.format_fat32(s.efi_partition)
             partitioner.set_efi_type(s.efi_partition)
 
-            # Step 4: Format root
+            # Step 5: Format root
             step += 1
             self._set_status(f"Formatting root ({s.filesystem})...", step / steps)
             self._log(f"Formatting root: {root_dev} as {s.filesystem}\n")
             partitioner.format_filesystem(root_dev, s.filesystem)
 
-            # Step 5: Format home / swap
-            step += 1
-            self._set_status("Setting up additional partitions...", step / steps)
-            if home_dev:
-                self._log(f"Formatting home: {home_dev}\n")
-                partitioner.format_filesystem(home_dev, s.filesystem, label="home")
+            if s.home_partition:
+                self._log(f"Formatting home: {s.home_partition}\n")
+                partitioner.format_filesystem(s.home_partition, s.filesystem, label="home")
             if s.swap_partition:
                 self._log(f"Setting up swap: {s.swap_partition}\n")
                 partitioner.setup_swap(s.swap_partition)
@@ -107,12 +115,12 @@ class InstallPage(BasePage):
             step += 1
             self._set_status("Mounting filesystems...", step / steps)
             if s.filesystem == "btrfs":
-                partitioner.setup_btrfs_subvolumes(root_dev, bool(home_dev))
+                partitioner.setup_btrfs_subvolumes(root_dev, bool(s.home_partition))
             else:
                 partitioner.mount_simple(root_dev)
             partitioner.mount_partition(s.efi_partition, "/mnt/boot")
-            if home_dev:
-                partitioner.mount_partition(home_dev, "/mnt/home")
+            if s.home_partition:
+                partitioner.mount_partition(s.home_partition, "/mnt/home")
             self._log("Filesystems mounted\n")
 
             # Step 7: Generate hardware config + copy repo
@@ -136,7 +144,6 @@ class InstallPage(BasePage):
                 self._log("\nInstallation failed.\n")
                 return
 
-            # Set password
             if s.username and s.password:
                 self._log(f"\nSetting password for {s.username}...\n")
                 nixos.set_password(s.username, s.password)

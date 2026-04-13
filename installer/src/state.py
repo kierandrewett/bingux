@@ -28,6 +28,7 @@ class InstallerState:
 
     # Disk
     selected_disk: str = ""
+    disk_mode: str = "wipe"
 
     # Partitions
     efi_partition: str = ""

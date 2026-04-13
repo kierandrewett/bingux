@@ -1,4 +1,5 @@
 import gi
+import subprocess
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
@@ -12,9 +13,24 @@ class PartitioningPage(BasePage):
     def __init__(self, window):
         super().__init__(window, "Partitions", tag="partitions")
 
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        btn_box.set_halign(Gtk.Align.CENTER)
+
+        gparted_btn = Gtk.Button(label="Open GParted")
+        gparted_btn.add_css_class("pill")
+        gparted_btn.connect("clicked", self._on_gparted)
+        btn_box.append(gparted_btn)
+
+        refresh_btn = Gtk.Button(label="Refresh")
+        refresh_btn.add_css_class("pill")
+        refresh_btn.connect("clicked", lambda _: self.on_enter())
+        btn_box.append(refresh_btn)
+
+        self.content.append(btn_box)
+
         self.group = Adw.PreferencesGroup()
         self.group.set_title("Assign Partitions")
-        self.group.set_description("Map your partitions to their roles.")
+        self.group.set_description("Partition your disk with GParted, then assign roles below.")
 
         self.efi_combo = Adw.ComboRow(title="EFI Partition")
         self.efi_combo.set_subtitle("Required \u2022 FAT32 \u2022 ~1 GB")
@@ -39,22 +55,26 @@ class PartitioningPage(BasePage):
         self.content.append(self.error_label)
 
         self.add_nav_buttons()
+        self._part_names = []
+        self._none_names = []
+
+    def should_show(self):
+        return getattr(self.state, "disk_mode", "wipe") == "manual"
 
     def on_enter(self):
         parts = list_partitions(self.state.selected_disk)
         efi_auto, root_auto, swap_auto = detect_partitions(self.state.selected_disk)
 
-        part_names = [p.get("name", "") for p in parts]
+        self._part_names = [p.get("name", "") for p in parts]
         part_labels = []
         for p in parts:
             name = p.get("name", "")
             size = format_size(p.get("size"))
             fstype = p.get("fstype") or ""
-            label = f"{name}  ({size}  {fstype})".strip()
-            part_labels.append(label)
+            part_labels.append(f"{name}  ({size}  {fstype})".strip())
 
         none_labels = ["(none)"] + part_labels
-        none_names = [""] + part_names
+        self._none_names = [""] + self._part_names
 
         for combo, auto_val in [
             (self.efi_combo, efi_auto),
@@ -64,8 +84,8 @@ class PartitioningPage(BasePage):
             for label in part_labels:
                 model.append(label)
             combo.set_model(model)
-            if auto_val in part_names:
-                combo.set_selected(part_names.index(auto_val))
+            if auto_val in self._part_names:
+                combo.set_selected(self._part_names.index(auto_val))
 
         for combo, auto_val in [
             (self.home_combo, ""),
@@ -75,11 +95,14 @@ class PartitioningPage(BasePage):
             for label in none_labels:
                 model.append(label)
             combo.set_model(model)
-            if auto_val in none_names:
-                combo.set_selected(none_names.index(auto_val))
+            if auto_val in self._none_names:
+                combo.set_selected(self._none_names.index(auto_val))
 
-        self._part_names = part_names
-        self._none_names = none_names
+    def _on_gparted(self, _btn):
+        try:
+            subprocess.Popen(["gparted"])
+        except FileNotFoundError:
+            pass
 
     def validate(self):
         self.error_label.set_text("")
