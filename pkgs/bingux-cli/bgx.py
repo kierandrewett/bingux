@@ -480,12 +480,16 @@ def do_remove(pkgs, skip_confirm=False, profile_filter=None):
     for pkg in pkgs:
         removed = False
         for profile, _ in profiles:
-            r = run(
-                ["nix", "profile", "remove", "--profile", profile, f".*{pkg}.*"],
-                capture_output=True,
-            )
-            if r.returncode == 0:
-                removed = True
+            # Check if actually in this profile before trying to remove
+            r = run(["nix", "profile", "list", "--profile", profile],
+                    capture_output=True, text=True)
+            if r.returncode == 0 and pkg in r.stdout:
+                r2 = run(
+                    ["nix", "profile", "remove", "--profile", profile, f".*{pkg}.*"],
+                    capture_output=True,
+                )
+                if r2.returncode == 0:
+                    removed = True
 
         if removed:
             print(f"  {SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}")
