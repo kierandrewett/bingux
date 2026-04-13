@@ -716,12 +716,27 @@ def run_prefix_mode(args):
 def run_subcommand_mode(args):
     cmd, rest = args[0], args[1:]
 
+    if "-h" in rest or "--help" in rest:
+        subcmd_help = {
+            "install": f"  {BOLD}bgx install{RESET} {DARK}[-p/--permanent] [-y] <packages...>{RESET}\n\n    Install packages for this session. Use -p to install permanently.",
+            "add": f"  {BOLD}bgx add{RESET} {DARK}[-p/--permanent] [-y] <packages...>{RESET}\n\n    Alias for install.",
+            "remove": f"  {BOLD}bgx remove{RESET} {DARK}[-p/--permanent] [-y] <packages...>{RESET}\n\n    Remove packages from this session. Use -p for permanent.",
+            "rm": f"  {BOLD}bgx rm{RESET} {DARK}[-p/--permanent] [-y] <packages...>{RESET}\n\n    Alias for remove.",
+            "search": f"  {BOLD}bgx search{RESET} {DARK}[--name/--version/--relevance] <query>{RESET}\n\n    Search nixpkgs. Default sort: relevance.",
+            "info": f"  {BOLD}bgx info{RESET} {DARK}<package>{RESET}\n\n    Show detailed package information.",
+            "list": f"  {BOLD}bgx list{RESET}\n\n    List installed packages (session + permanent).",
+        }
+        aliases = {"a": "install", "add": "install", "uninstall": "remove", "r": "remove", "s": "search", "q": "search", "i": "info", "ls": "list"}
+        key = aliases.get(cmd, cmd)
+        print(subcmd_help.get(key, f"  No help for '{cmd}'."))
+        return
+
     if cmd in ("install", "add", "a"):
         save = False
         yes = False
         pkgs = []
         for arg in rest:
-            if arg in ("-s", "--save"):
+            if arg in ("-s", "--save", "-p", "--permanent"):
                 save = True
             elif arg in ("-y", "--yes"):
                 yes = True
