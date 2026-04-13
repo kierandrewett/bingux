@@ -158,6 +158,7 @@ class InstallPage(BasePage):
             if not ok:
                 self._set_status("Installation failed")
                 self._log("\nInstallation failed.\n")
+                GLib.idle_add(self._show_error_actions)
                 return
 
             if s.username and s.password:
@@ -171,3 +172,48 @@ class InstallPage(BasePage):
         except Exception as e:
             self._set_status("Installation failed")
             self._log(f"\nError: {e}\n")
+            GLib.idle_add(self._show_error_actions)
+
+    def _show_error_actions(self):
+        """Show action buttons when installation fails."""
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        box.set_halign(Gtk.Align.CENTER)
+        box.set_margin_top(12)
+
+        copy_btn = Gtk.Button(label="Copy Log")
+        copy_btn.add_css_class("pill")
+        copy_btn.connect("clicked", self._on_copy_log)
+        box.append(copy_btn)
+
+        save_btn = Gtk.Button(label="Save Log")
+        save_btn.add_css_class("pill")
+        save_btn.connect("clicked", self._on_save_log)
+        box.append(save_btn)
+
+        terminal_btn = Gtk.Button(label="Open Terminal")
+        terminal_btn.add_css_class("pill")
+        terminal_btn.connect("clicked", self._on_terminal)
+        box.append(terminal_btn)
+
+        self.content.append(box)
+
+    def _get_log_text(self):
+        buf = self.log_view.buffer
+        return buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+
+    def _on_copy_log(self, _btn):
+        import subprocess
+        log = self._get_log_text()
+        p = subprocess.Popen(["wl-copy"], stdin=subprocess.PIPE, text=True)
+        p.communicate(input=log)
+
+    def _on_save_log(self, _btn):
+        log = self._get_log_text()
+        path = "/tmp/bingux-install.log"
+        with open(path, "w") as f:
+            f.write(log)
+        self._log(f"\nLog saved to {path}\n")
+
+    def _on_terminal(self, _btn):
+        import subprocess
+        subprocess.Popen(["gnome-terminal"])
