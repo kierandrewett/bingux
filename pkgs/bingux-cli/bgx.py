@@ -158,7 +158,7 @@ def show_transaction(installs, removes, save=False):
 
     if installs:
         mode = "permanently" if save else "for this session"
-        _print_table(f"Installing {DARK}({mode}){RESET}", ACCENT, installs, name_color=SUCCESS)
+        _print_table(f"Installing {DARK}({mode}){RESET}", SUCCESS, installs, name_color=SUCCESS)
 
     if removes:
         neg_removes = []
