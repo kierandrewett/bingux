@@ -141,7 +141,7 @@ def pkg_row(name, version="", size="", description="", name_color=WHITE):
 
 
 def _print_table(label, label_color, infos, name_color=WHITE):
-    print(f"  {label_color}\u25b8{RESET} {WHITE}{label}{RESET}")
+    print(f"  {label_color}\u276f{RESET} {WHITE}{label}{RESET}")
     line_w = _term_width() - 6
     print(f"    {DARK}{'Package'.ljust(COL_NAME)} {'Version'.ljust(COL_VER)} {'Size'.ljust(COL_SIZE)} Description{RESET}")
     print(f"    {DARK}{'\u2500' * line_w}{RESET}")
@@ -208,7 +208,7 @@ def do_install(pkgs, save=False, skip_confirm=False):
     already = [p for p in pkgs if _is_installed(p)]
     if already:
         for p in already:
-            print(f"  {WARN}\u25b8{RESET} {WHITE}{p}{RESET} {DARK}is already installed.{RESET}")
+            print(f"  {WARN}\u276f{RESET} {WHITE}{p}{RESET} {DARK}is already installed.{RESET}")
         pkgs = [p for p in pkgs if p not in already]
         if not pkgs:
             return True
