@@ -124,6 +124,39 @@ def run_tui():
     disk_idx = int(prompt(f"Select disk [1-{len(disks)}]", "1")) - 1
     state.selected_disk = disks[disk_idx]["name"]
 
+    print()
+    print(f"  {BOLD}Partitioning mode:{RESET}")
+    print(f"    {GREEN}1{RESET})  Erase entire disk")
+    print(f"    {YELLOW}2{RESET})  Manual (partition yourself, then assign)")
+    print()
+    disk_mode = prompt("Choice", "1")
+    state.disk_mode = "manual" if disk_mode == "2" else "wipe"
+
+    if state.disk_mode == "manual":
+        print()
+        info("Partition the disk now. Use fdisk, parted, or another tool.")
+        info("When done, press Enter to continue.")
+        input(f"  {BOLD}\u25b8{RESET} Press Enter... ")
+        print()
+
+        # Show partitions and let user assign
+        from backend.disks import list_partitions
+        parts = list_partitions(state.selected_disk)
+        efi_auto, root_auto, swap_auto = detect_partitions(state.selected_disk)
+
+        print(f"  {BOLD}Partitions on {state.selected_disk}:{RESET}")
+        for p in parts:
+            name = p.get("name", "")
+            size = format_size(p.get("size"))
+            fstype = p.get("fstype") or ""
+            print(f"    {name}  {size}  {fstype}")
+        print()
+
+        state.efi_partition = prompt("EFI partition", efi_auto)
+        state.root_partition = prompt("Root partition", root_auto)
+        state.home_partition = prompt("Home partition (blank to skip)", "")
+        state.swap_partition = prompt("Swap partition (blank to skip)", swap_auto)
+
     state.filesystem = prompt("Filesystem (btrfs/ext4/xfs)", "btrfs")
     state.encrypt_root = confirm("Encrypt root with LUKS2?")
     if state.encrypt_root:
@@ -139,29 +172,42 @@ def run_tui():
     print()
     print(f"  {BOLD}Summary:{RESET}")
     print(f"    Host:       {state.selected_host}")
-    print(f"    Disk:       {state.selected_disk}  (WIPE)")
+    if state.disk_mode == "wipe":
+        print(f"    Disk:       {state.selected_disk}  (WIPE)")
+    else:
+        print(f"    EFI:        {state.efi_partition}")
+        print(f"    Root:       {state.root_partition}")
+        if state.home_partition:
+            print(f"    Home:       {state.home_partition}")
+        if state.swap_partition:
+            print(f"    Swap:       {state.swap_partition}")
     print(f"    Filesystem: {state.filesystem}")
     if state.encrypt_root:
         print(f"    Encryption: LUKS2")
     print()
-    print(f"  {RED}{BOLD}WARNING: This will erase all data on {state.selected_disk}!{RESET}")
+    if state.disk_mode == "wipe":
+        print(f"  {RED}{BOLD}WARNING: This will erase all data on {state.selected_disk}!{RESET}")
+    else:
+        print(f"  {RED}{BOLD}WARNING: This will format the selected partitions!{RESET}")
     if not confirm("Type 'y' to proceed"):
         warn("Aborted.")
         return 1
 
     print()
 
-    # Wipe disk
-    info(f"Wiping {state.selected_disk}...")
-    ok, _, err = partitioner.wipe_disk(state.selected_disk)
-    if not ok:
-        fail(f"Partitioning failed: {err}")
-        return 1
+    # Partition
+    if state.disk_mode == "wipe":
+        info(f"Wiping {state.selected_disk}...")
+        ok, _, err = partitioner.wipe_disk(state.selected_disk)
+        if not ok:
+            fail(f"Partitioning failed: {err}")
+            return 1
 
-    disk = state.selected_disk
-    sep = "p" if "nvme" in disk or "mmcblk" in disk else ""
-    state.efi_partition = f"{disk}{sep}1"
-    state.root_partition = f"{disk}{sep}2"
+        disk = state.selected_disk
+        sep = "p" if "nvme" in disk or "mmcblk" in disk else ""
+        state.efi_partition = f"{disk}{sep}1"
+        state.root_partition = f"{disk}{sep}2"
+
     success(f"EFI: {state.efi_partition}  Root: {state.root_partition}")
 
     root_dev = state.root_partition
@@ -181,12 +227,21 @@ def run_tui():
     info(f"Formatting root ({state.filesystem})...")
     partitioner.format_filesystem(root_dev, state.filesystem)
 
+    if state.home_partition:
+        info(f"Formatting home ({state.filesystem})...")
+        partitioner.format_filesystem(state.home_partition, state.filesystem, label="home")
+    if state.swap_partition:
+        info("Setting up swap...")
+        partitioner.setup_swap(state.swap_partition)
+
     info("Mounting...")
     if state.filesystem == "btrfs":
-        partitioner.setup_btrfs_subvolumes(root_dev, False)
+        partitioner.setup_btrfs_subvolumes(root_dev, bool(state.home_partition))
     else:
         partitioner.mount_simple(root_dev)
     partitioner.mount_partition(state.efi_partition, "/mnt/boot")
+    if state.home_partition:
+        partitioner.mount_partition(state.home_partition, "/mnt/home")
     success("Mounted.")
 
     if state.install_type == "fresh":
