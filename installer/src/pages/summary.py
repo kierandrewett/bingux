@@ -5,12 +5,17 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gtk
 from pages.base_page import BasePage
+from widgets.disk_map import DiskMap
 
 
 class SummaryPage(BasePage):
     def __init__(self, window):
         super().__init__(window, "Summary", tag="summary")
         self._rows = []
+
+        self.disk_map = DiskMap()
+        self.content.append(self.disk_map)
+
         self.summary_group = Adw.PreferencesGroup()
         self.summary_group.set_title("Review Installation")
         self.summary_group.set_description(
@@ -70,3 +75,13 @@ class SummaryPage(BasePage):
                 row.set_subtitle(str(value))
                 self.summary_group.add(row)
                 self._rows.append(row)
+
+        # Update disk map
+        if getattr(s, "disk_mode", "wipe") == "wipe":
+            from backend.disks import list_disks
+            for d in list_disks():
+                if d.get("name") == s.selected_disk:
+                    self.disk_map.set_wipe_preview(d.get("size", 0))
+                    break
+        else:
+            self.disk_map.set_from_state(s)

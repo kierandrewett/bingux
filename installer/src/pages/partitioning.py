@@ -7,11 +7,15 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 from pages.base_page import BasePage
 from backend.disks import list_partitions, format_size, detect_partitions
+from widgets.disk_map import DiskMap
 
 
 class PartitioningPage(BasePage):
     def __init__(self, window):
         super().__init__(window, "Partitions", tag="partitions")
+
+        self.disk_map = DiskMap()
+        self.content.append(self.disk_map)
 
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         btn_box.set_halign(Gtk.Align.CENTER)
@@ -65,6 +69,7 @@ class PartitioningPage(BasePage):
         parts = list_partitions(self.state.selected_disk)
         efi_auto, root_auto, swap_auto = detect_partitions(self.state.selected_disk)
 
+        self.disk_map.set_from_lsblk(parts)
         self._part_names = [p.get("name", "") for p in parts]
         part_labels = []
         for p in parts:

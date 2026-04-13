@@ -7,11 +7,16 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 from pages.base_page import BasePage
 from backend.disks import list_disks, format_size
+from widgets.disk_map import DiskMap
 
 
 class DiskPage(BasePage):
     def __init__(self, window):
         super().__init__(window, "Disk Setup", tag="disk")
+
+        # Partition map preview
+        self.disk_map = DiskMap()
+        self.content.append(self.disk_map)
 
         # Disk selection
         self.disk_group = Adw.PreferencesGroup()
@@ -136,11 +141,28 @@ class DiskPage(BasePage):
     def _on_disk_toggled(self, check, disk_name):
         if check.get_active():
             self.state.selected_disk = disk_name
+            self._update_map()
 
     def _on_mode_changed(self, check):
         is_wipe = self.wipe_check.get_active()
         self.fs_group.set_visible(is_wipe)
         self.enc_group.set_visible(is_wipe)
+        self._update_map()
+
+    def _update_map(self):
+        if not self.state.selected_disk:
+            return
+        if self.wipe_check.get_active():
+            # Show wipe preview
+            for d in list_disks():
+                if d.get("name") == self.state.selected_disk:
+                    self.disk_map.set_wipe_preview(d.get("size", 0))
+                    break
+        else:
+            # Show current partitions
+            from backend.disks import list_partitions
+            parts = list_partitions(self.state.selected_disk)
+            self.disk_map.set_from_lsblk(parts)
 
     def _on_fs_toggled(self, check, key):
         if check.get_active():
