@@ -1,8 +1,8 @@
-{ pkgs, ... }:
+{ lib, pkgs, ... }:
 {
     programs.gnupg.agent = {
-        enable = true;
-        enableSSHSupport = true;
-        pinentryPackage = pkgs.pinentry-gnome3;
+        enable = lib.mkDefault true;
+        enableSSHSupport = lib.mkDefault true;
+        pinentryPackage = lib.mkDefault pkgs.pinentry-gnome3;
     };
 }

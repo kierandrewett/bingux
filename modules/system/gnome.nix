@@ -1,16 +1,16 @@
-{ pkgs, ... }:
+{ lib, pkgs, ... }:
 {
     # Auto-unlock gnome-keyring on login
-    security.pam.services.gdm-password.enableGnomeKeyring = true;
-    services.gnome.gnome-keyring.enable = true;
+    security.pam.services.gdm-password.enableGnomeKeyring = lib.mkDefault true;
+    services.gnome.gnome-keyring.enable = lib.mkDefault true;
 
     services.xserver = {
-        enable = true;
-        displayManager.gdm.enable = true;
-        desktopManager.gnome.enable = true;
+        enable = lib.mkDefault true;
+        displayManager.gdm.enable = lib.mkDefault true;
+        desktopManager.gnome.enable = lib.mkDefault true;
     };
 
-    services.displayManager.defaultSession = "gnome";
+    services.displayManager.defaultSession = lib.mkDefault "gnome";
 
     environment.gnome.excludePackages = with pkgs; [
         epiphany

@@ -1,26 +1,26 @@
-{ ... }:
+{ lib, ... }:
 {
-    services.pulseaudio.enable = false;
+    services.pulseaudio.enable = lib.mkDefault false;
 
     services.pipewire = {
-        enable = true;
+        enable = lib.mkDefault true;
         alsa = {
-            enable = true;
-            support32Bit = true;
+            enable = lib.mkDefault true;
+            support32Bit = lib.mkDefault true;
         };
-        pulse.enable = true;
-        jack.enable = true;
+        pulse.enable = lib.mkDefault true;
+        jack.enable = lib.mkDefault true;
         wireplumber.extraConfig."10-default-clock" = {
             "wireplumber.settings" = {
-                "default.clock.rate" = 48000;
-                "default.clock.allowed-rates" = [ 44100 48000 96000 ];
-                "default.clock.quantum" = 1024;
-                "default.clock.min-quantum" = 512;
-                "default.clock.max-quantum" = 2048;
+                "default.clock.rate" = lib.mkDefault 48000;
+                "default.clock.allowed-rates" = lib.mkDefault [ 44100 48000 96000 ];
+                "default.clock.quantum" = lib.mkDefault 1024;
+                "default.clock.min-quantum" = lib.mkDefault 512;
+                "default.clock.max-quantum" = lib.mkDefault 2048;
             };
         };
     };
 
-    security.rtkit.enable = true;
-    programs.dconf.enable = true;
+    security.rtkit.enable = lib.mkDefault true;
+    programs.dconf.enable = lib.mkDefault true;
 }

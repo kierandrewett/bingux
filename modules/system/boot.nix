@@ -12,13 +12,13 @@ in
 
     config = {
         boot.loader = {
-            systemd-boot.enable = true;
-            efi.canTouchEfiVariables = true;
-            timeout = 0;
+            systemd-boot.enable = lib.mkDefault true;
+            efi.canTouchEfiVariables = lib.mkDefault true;
+            timeout = lib.mkDefault 0;
         };
 
         boot.initrd = {
-            systemd.enable = true;
+            systemd.enable = lib.mkDefault true;
             luks.devices = lib.mkIf (cfg.luksUuid != null) {
                 "cryptroot" = {
                     device = "/dev/disk/by-uuid/${cfg.luksUuid}";
@@ -34,23 +34,21 @@ in
                 "sd_mod"
                 "amdgpu"
             ];
-            verbose = false;
+            verbose = lib.mkDefault false;
         };
 
-        # GB keyboard layout (also applied in initrd for LUKS passphrase entry)
-        console.keyMap = "uk";
+        console.keyMap = lib.mkDefault "us";
 
-        # Include fonts in Plymouth for LUKS prompt
-        # Plymouth (LUKS prompt) uses sans-serif
-        boot.plymouth.font = "${pkgs.adwaita-fonts}/share/fonts/Adwaita/AdwaitaSans-Regular.ttf";
+        boot.plymouth.font = lib.mkDefault
+            "${pkgs.adwaita-fonts}/share/fonts/Adwaita/AdwaitaSans-Regular.ttf";
 
         # Console (TTY) font
         console.packages = [ pkgs.terminus_font ];
-        console.font = "ter-v16n";
+        console.font = lib.mkDefault "ter-v16n";
 
-        boot.kernelPackages = pkgs.linuxPackages_latest;
+        boot.kernelPackages = lib.mkDefault pkgs.linuxPackages_latest;
         boot.supportedFilesystems = [ "btrfs" ];
-        boot.consoleLogLevel = 0;
+        boot.consoleLogLevel = lib.mkDefault 0;
         boot.kernelParams = [
             "quiet"
             "splash"
@@ -62,8 +60,8 @@ in
         ];
 
         boot.plymouth = {
-            enable = true;
-            theme = "bingux";
+            enable = lib.mkDefault true;
+            theme = lib.mkDefault "bingux";
             themePackages = [ bingux-plymouth ];
         };
 

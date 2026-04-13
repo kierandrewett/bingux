@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ lib, pkgs, ... }:
 let
     google-sans-code = pkgs.runCommand "google-sans-code" { } ''
         mkdir -p $out/share/fonts/truetype
@@ -30,7 +30,7 @@ in
     ];
 
     fonts.fontconfig.defaultFonts = {
-        sansSerif = [ "Adwaita Sans" "Cantarell" ];
-        monospace = [ "Google Sans Code" "JetBrains Mono" ];
+        sansSerif = lib.mkDefault [ "Adwaita Sans" "Cantarell" ];
+        monospace = lib.mkDefault [ "Google Sans Code" "JetBrains Mono" ];
     };
 }

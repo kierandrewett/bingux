@@ -12,31 +12,31 @@
     ];
 
     config = {
-        services.automatic-timezoned.enable = true;
-        services.openssh.enable = true;
-        services.geoclue2.enable = true;
-        services.earlyoom.enable = true;
-        location.provider = "geoclue2";
+        services.automatic-timezoned.enable = lib.mkDefault true;
+        services.openssh.enable = lib.mkDefault true;
+        services.geoclue2.enable = lib.mkDefault true;
+        services.earlyoom.enable = lib.mkDefault true;
+        location.provider = lib.mkDefault "geoclue2";
 
-        hardware.bluetooth.enable = true;
-        hardware.bluetooth.powerOnBoot = true;
+        hardware.bluetooth.enable = lib.mkDefault true;
+        hardware.bluetooth.powerOnBoot = lib.mkDefault true;
 
         # Printing
-        services.printing.enable = true;
+        services.printing.enable = lib.mkDefault true;
         services.printing.drivers = [ pkgs.gutenprint pkgs.hplip ];
 
         # mDNS / Bonjour
         services.avahi = {
-            enable = true;
-            nssmdns4 = true;
-            openFirewall = true;
+            enable = lib.mkDefault true;
+            nssmdns4 = lib.mkDefault true;
+            openFirewall = lib.mkDefault true;
             publish = {
-                enable = true;
-                addresses = true;
-                workstation = true;
+                enable = lib.mkDefault true;
+                addresses = lib.mkDefault true;
+                workstation = lib.mkDefault true;
             };
         };
 
-        i18n.defaultLocale = "en_GB.UTF-8";
+        i18n.defaultLocale = lib.mkDefault "en_US.UTF-8";
     };
 }

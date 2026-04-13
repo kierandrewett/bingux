@@ -1,11 +1,11 @@
-{ ... }:
+{ lib, ... }:
 {
-    services.tlp.enable = true;
-    services.power-profiles-daemon.enable = false;
-    services.thermald.enable = true;
+    services.tlp.enable = lib.mkDefault true;
+    services.power-profiles-daemon.enable = lib.mkDefault false;
+    services.thermald.enable = lib.mkDefault true;
 
-    services.logind.lidSwitch = "suspend";
-    services.logind.lidSwitchExternalPower = "ignore";
+    services.logind.lidSwitch = lib.mkDefault "suspend";
+    services.logind.lidSwitchExternalPower = lib.mkDefault "ignore";
 
-    powerManagement.powertop.enable = true;
+    powerManagement.powertop.enable = lib.mkDefault true;
 }
