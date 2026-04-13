@@ -61,11 +61,7 @@ class Spinner:
             time.sleep(0.08)
 
 
-NIX_ENV = {**os.environ, "NIXPKGS_ALLOW_UNFREE": "1"}
-
-
 def run(cmd, **kwargs):
-    kwargs.setdefault("env", NIX_ENV)
     return subprocess.run(cmd, **kwargs)
 
 
@@ -79,16 +75,18 @@ def format_size(nbytes):
 
 def pkg_info(pkg):
     import json
-    info = {"name": pkg, "version": "", "description": "", "size": "", "size_bytes": 0}
+    info = {"name": pkg, "version": "", "description": "", "size": "", "size_bytes": 0, "unfree": False}
     try:
-        r = run(["nix", "eval", "--impure", "--raw", f"nixpkgs#{pkg}.version"],
+        r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.version"],
                 capture_output=True, text=True, timeout=15)
         if r.returncode == 0:
             info["version"] = r.stdout.strip()
+        elif "unfree" in (r.stderr or "").lower():
+            info["unfree"] = True
     except subprocess.TimeoutExpired:
         pass
     try:
-        r = run(["nix", "eval", "--impure", "--raw", f"nixpkgs#{pkg}.meta.description"],
+        r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.meta.description"],
                 capture_output=True, text=True, timeout=15)
         if r.returncode == 0:
             info["description"] = r.stdout.strip()
@@ -96,7 +94,7 @@ def pkg_info(pkg):
         pass
     try:
         import re
-        r = run(["nix", "path-info", "--impure", "-S", f"nixpkgs#{pkg}"],
+        r = run(["nix", "path-info", "-S", f"nixpkgs#{pkg}"],
                 capture_output=True, text=True, timeout=30)
         # Parse stderr for "X.XX MiB download, Y.YY MiB unpacked"
         for line in (r.stderr or "").split("\n"):
@@ -257,6 +255,16 @@ def do_install(pkgs, save=False, skip_confirm=False):
     infos = [pkg_info(p) for p in pkgs]
     sp.stop(f"{DARK}Resolved {len(infos)} {'package' if len(infos) == 1 else 'packages'}.{RESET}")
 
+    # Warn about unfree packages
+    unfree = [i for i in infos if i.get("unfree")]
+    if unfree:
+        for i in unfree:
+            print(f"  {WARN}\u276f{RESET} {WHITE}{i['name']}{RESET} {DARK}is unfree. Enable unfree packages in your NixOS config:{RESET}")
+            print(f"    {DARK}nixpkgs.config.allowUnfree = true;{RESET}")
+        infos = [i for i in infos if not i.get("unfree")]
+        if not infos:
+            return False
+
     # Check for packages that don't exist in nixpkgs
     not_found = [i for i in infos if not i["version"] and not i["description"]]
     if not_found:
@@ -274,7 +282,7 @@ def do_install(pkgs, save=False, skip_confirm=False):
     for pkg in pkgs:
         sp = Spinner(f"Installing {pkg}...")
         sp.start()
-        r = run(["nix", "profile", "add", "--impure", "--profile", profile, f"nixpkgs#{pkg}"],
+        r = run(["nix", "profile", "add", "--profile", profile, f"nixpkgs#{pkg}"],
                 capture_output=True, text=True)
         if r.returncode == 0:
             sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}")
@@ -346,7 +354,7 @@ def do_search(query, sort="relevance"):
     import re
     sp = Spinner(f"Searching for '{query}'...")
     sp.start()
-    r = run(["nix", "search", "--impure", "nixpkgs", query], capture_output=True, text=True)
+    r = run(["nix", "search", "nixpkgs", query], capture_output=True, text=True)
     sp.stop(f"{DARK}Search complete.{RESET}")
 
     if r.returncode != 0 or not r.stdout.strip():
