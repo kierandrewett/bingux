@@ -22,9 +22,10 @@ class LogView(Gtk.ScrolledWindow):
         self.textview.set_left_margin(16)
         self.textview.set_right_margin(16)
 
-        # Explicit monospace font via Pango
-        font_desc = Pango.FontDescription.from_string("JetBrains Mono 10")
-        self.textview.override_font(font_desc)
+        # Explicit monospace font via CSS
+        css = Gtk.CssProvider()
+        css.load_from_string("textview { font-family: 'JetBrains Mono', monospace; font-size: 10pt; }")
+        self.textview.get_style_context().add_provider(css, 800)
 
         self.buffer = self.textview.get_buffer()
         self.set_child(self.textview)
