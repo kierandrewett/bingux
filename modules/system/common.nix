@@ -13,7 +13,7 @@
 
     config = {
         services.automatic-timezoned.enable = lib.mkDefault true;
-        services.openssh.enable = lib.mkDefault true;
+        services.openssh.enable = lib.mkDefault false;
         services.geoclue2.enable = lib.mkDefault true;
         services.earlyoom.enable = lib.mkDefault true;
         location.provider = lib.mkDefault "geoclue2";
