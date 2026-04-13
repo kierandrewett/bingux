@@ -67,11 +67,22 @@ let
         # Bottom taskbar
         ${pkgs.waybar}/bin/waybar &
 
+        # Wait for Wayland to be ready
+        for i in $(seq 1 10); do
+            [ -e "$XDG_RUNTIME_DIR/wayland-0" ] && break
+            sleep 1
+        done
+
+        # Ensure D-Bus session bus is running
+        if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
+            eval $(${pkgs.dbus}/bin/dbus-launch --sh-syntax)
+        fi
+
         # Launch installer (retry, show error if all attempts fail)
         (
             for i in 1 2 3 4 5; do
-                sleep 2
                 ${bingux-installer}/bin/bingux-installer 2>/tmp/bingux-installer.log && exit 0
+                sleep 2
             done
             # All retries failed — show error
             ERR=$(cat /tmp/bingux-installer.log 2>/dev/null || echo "Unknown error")
@@ -392,26 +403,6 @@ in
     };
 
     networking.hostName = "bingux-installer";
-
-    # Systemd user service to ensure the installer always runs
-    systemd.user.services.bingux-installer = {
-        description = "Bingux Installer";
-        wantedBy = [ "graphical-session.target" "default.target" ];
-        after = [ "graphical-session.target" ];
-        serviceConfig = {
-            ExecStart = "${bingux-installer}/bin/bingux-installer";
-            Restart = "on-failure";
-            RestartSec = 3;
-            Environment = [
-                "DISPLAY=:0"
-                "WAYLAND_DISPLAY=wayland-0"
-                "XDG_RUNTIME_DIR=/run/user/1000"
-                "FONTCONFIG_FILE=/etc/fonts/fonts.conf"
-                "ADW_DISABLE_PORTAL=1"
-                "GTK_THEME=adw-gtk3-dark"
-            ];
-        };
-    };
 
     # NTP + automatic timezone
     services.automatic-timezoned.enable = true;
