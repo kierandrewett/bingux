@@ -158,7 +158,7 @@ def show_transaction(installs, removes, save=False):
 
     ni = len(installs)
     nr = len(removes)
-    print(f"  {DARK}+{ni} -{nr} ~0{RESET}")
+    print(f"  {GRAY}Summary: {SUCCESS}+{ni}{RESET}{DARK}/{RESET}{FAIL}-{nr}{RESET}{DARK}/{RESET}{WARN}~0{RESET}")
     print()
 
     return confirm()
