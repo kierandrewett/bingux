@@ -23,9 +23,9 @@ SUCCESS = "\033[38;5;114m"  # soft green
 WARN = "\033[38;5;180m"     # soft amber
 FAIL = "\033[38;5;174m"     # soft red
 
-COL_NAME = 24
-COL_VER = 12
-COL_SIZE = 12
+COL_NAME = 28
+COL_VER = 14
+COL_SIZE = 14
 VERSION = "0.2.0"
 
 
@@ -118,9 +118,9 @@ def confirm():
 
 def pkg_row(name, version="", size="", description=""):
     n = name.ljust(COL_NAME)
-    v = (version or "").ljust(COL_VER)
-    s = (size or "").ljust(COL_SIZE)
-    return f"    {WHITE}{n}{RESET}{GRAY}{v}{RESET}{GRAY}{s}{RESET} {DARK}{description}{RESET}"
+    v = (version or "-").ljust(COL_VER)
+    s = (size or "-").ljust(COL_SIZE)
+    return f"    {WHITE}{n} {RESET}{GRAY}{v} {RESET}{GRAY}{s} {RESET}{DARK}{description}{RESET}"
 
 
 def show_transaction(installs, removes, save=False):
@@ -133,7 +133,7 @@ def show_transaction(installs, removes, save=False):
         mode = "permanently" if save else "for this session"
         print(f"  {ACCENT}\u25b8{RESET} {WHITE}Installing{RESET} {DARK}({mode}){RESET}")
         print(f"    {DARK}{'Package'.ljust(COL_NAME)} {'Version'.ljust(COL_VER)} {'Size'.ljust(COL_SIZE)} Description{RESET}")
-        print(f"    {DARK}{'\u2500' * (COL_NAME + COL_VER + COL_SIZE + 16)}{RESET}")
+        print(f"    {DARK}{'\u2500' * (COL_NAME + COL_VER + COL_SIZE + 24)}{RESET}")
         for info in installs:
             print(pkg_row(info["name"], info["version"], info.get("size", ""), info["description"]))
         print()
