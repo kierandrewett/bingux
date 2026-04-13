@@ -10,6 +10,11 @@ import sys
 VOLATILE_PROFILE = f"/nix/var/nix/profiles/per-user/{os.environ.get('USER', 'root')}/bgx-volatile"
 PERMANENT_PROFILE = os.path.expanduser("~/.local/state/nix/profiles/profile")
 
+GREEN = "\033[32m"
+RED = "\033[31m"
+BOLD = "\033[1m"
+RESET = "\033[0m"
+
 
 def run(cmd, **kwargs):
     return subprocess.run(cmd, **kwargs)
@@ -23,17 +28,17 @@ def cmd_install(args):
         print(f"Installing {pkg} permanently...")
         r = run(["nix", "profile", "install", "--profile", PERMANENT_PROFILE, nixpkg])
         if r.returncode == 0:
-            print(f"\033[32m✓\033[0m {pkg} installed permanently.")
+            print(f"{GREEN}\u2713{RESET} {pkg} installed permanently.")
         else:
-            print(f"\033[31m✗\033[0m Failed to install {pkg}.", file=sys.stderr)
+            print(f"{RED}\u2717{RESET} Failed to install {pkg}.", file=sys.stderr)
             sys.exit(1)
     else:
         print(f"Installing {pkg} (until reboot)...")
         r = run(["nix", "profile", "install", "--profile", VOLATILE_PROFILE, nixpkg])
         if r.returncode == 0:
-            print(f"\033[32m✓\033[0m {pkg} installed. Available system-wide until reboot.")
+            print(f"{GREEN}\u2713{RESET} {pkg} installed. Available system-wide until reboot.")
         else:
-            print(f"\033[31m✗\033[0m Failed to install {pkg}.", file=sys.stderr)
+            print(f"{RED}\u2717{RESET} Failed to install {pkg}.", file=sys.stderr)
             sys.exit(1)
 
 
@@ -50,7 +55,7 @@ def cmd_remove(args):
             capture_output=True,
         )
         if r.returncode == 0:
-            print(f"\033[32m✓\033[0m Removed {pkg} from {label} packages.")
+            print(f"{GREEN}\u2713{RESET} Removed {pkg} from {label} packages.")
             removed = True
 
     if not removed:
@@ -63,14 +68,14 @@ def cmd_search(args):
 
 
 def cmd_list(args):
-    print("\033[1mTemporary (until reboot):\033[0m")
+    print(f"{BOLD}Temporary (until reboot):{RESET}")
     r = run(["nix", "profile", "list", "--profile", VOLATILE_PROFILE], capture_output=True, text=True)
     if r.returncode == 0 and r.stdout.strip():
         print(r.stdout)
     else:
         print("  (none)\n")
 
-    print("\033[1mPermanent:\033[0m")
+    print(f"{BOLD}Permanent:{RESET}")
     r = run(["nix", "profile", "list", "--profile", PERMANENT_PROFILE], capture_output=True, text=True)
     if r.returncode == 0 and r.stdout.strip():
         print(r.stdout)
@@ -85,25 +90,29 @@ def main():
     )
     sub = parser.add_subparsers(dest="command")
 
-    # install
-    p_install = sub.add_parser("install", help="Install a package")
-    p_install.add_argument("--save", action="store_true", help="Persist after reboot")
-    p_install.add_argument("package", help="Package name")
-    p_install.set_defaults(func=cmd_install)
+    # install / add / +
+    for name in ["install", "add", "+"]:
+        p = sub.add_parser(name, help="Install a package")
+        p.add_argument("-s", "--save", action="store_true", help="Persist after reboot")
+        p.add_argument("package", help="Package name")
+        p.set_defaults(func=cmd_install)
 
-    # remove
-    p_remove = sub.add_parser("remove", help="Remove a package")
-    p_remove.add_argument("package", help="Package name")
-    p_remove.set_defaults(func=cmd_remove)
+    # remove / rm / -
+    for name in ["remove", "rm", "-"]:
+        p = sub.add_parser(name, help="Remove a package")
+        p.add_argument("package", help="Package name")
+        p.set_defaults(func=cmd_remove)
 
-    # search
-    p_search = sub.add_parser("search", help="Search for packages")
-    p_search.add_argument("query", help="Search query")
-    p_search.set_defaults(func=cmd_search)
+    # search / s
+    for name in ["search", "s"]:
+        p = sub.add_parser(name, help="Search for packages")
+        p.add_argument("query", help="Search query")
+        p.set_defaults(func=cmd_search)
 
-    # list
-    p_list = sub.add_parser("list", help="List installed packages")
-    p_list.set_defaults(func=cmd_list)
+    # list / ls
+    for name in ["list", "ls"]:
+        p = sub.add_parser(name, help="List installed packages")
+        p.set_defaults(func=cmd_list)
 
     args = parser.parse_args()
     if not args.command:
