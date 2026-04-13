@@ -9,6 +9,7 @@ import time
 
 
 _USER = os.environ.get('USER', 'root')
+_unfree_accepted = False
 VOLATILE_PROFILE = f"/tmp/bgx-{_USER}"
 PERMANENT_PROFILE = f"/nix/var/nix/profiles/per-user/{_USER}/bgx-saved"
 
@@ -282,6 +283,7 @@ def do_install(pkgs, save=False, skip_confirm=False):
     sp.stop(f"{DARK}Resolved {len(infos)} {'package' if len(infos) == 1 else 'packages'}.{RESET}")
 
     # Handle unfree packages
+    global _unfree_accepted
     unfree = [i for i in infos if i.get("unfree")]
     if unfree:
         is_nixos = os.path.exists("/etc/nixos")
@@ -292,6 +294,9 @@ def do_install(pkgs, save=False, skip_confirm=False):
             infos = [i for i in infos if not i.get("unfree")]
             if not infos:
                 return False
+        elif _unfree_accepted:
+            for i in unfree:
+                i["_allow_unfree"] = True
         else:
             if not confirm(f"  {DARK}Install unfree packages anyway?{RESET} [{GRAY}y/N{RESET}] "):
                 infos = [i for i in infos if not i.get("unfree")]
@@ -299,6 +304,7 @@ def do_install(pkgs, save=False, skip_confirm=False):
                     print(f"  {DARK}Aborted.{RESET}")
                     return False
             else:
+                _unfree_accepted = True
                 for i in unfree:
                     i["_allow_unfree"] = True
 
