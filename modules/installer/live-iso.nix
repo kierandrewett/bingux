@@ -130,14 +130,24 @@ in
     # Suppress zsh new-user setup prompt
     environment.etc."skel/.zshrc".text = "# Bingux installer\n";
 
-    # Strip GNOME bloat
+    # Strip all GNOME apps — we only need the shell + our installer
     environment.gnome.excludePackages = with pkgs; [
         epiphany geary gnome-music gnome-photos gnome-software gnome-tour
         yelp gnome-maps gnome-contacts gnome-weather gnome-clocks
         gnome-calendar gnome-characters gnome-connections gnome-console
         gnome-logs gnome-system-monitor baobab simple-scan totem evince
-        snapshot gnome-font-viewer gnome-disk-utility
+        snapshot gnome-font-viewer gnome-disk-utility gnome-calculator
+        gnome-text-editor loupe gnome-backgrounds nautilus
     ];
+
+    # Disable GNOME services we don't need
+    services.gnome.gnome-remote-desktop.enable = lib.mkForce false;
+    services.gnome.gnome-user-share.enable = lib.mkForce false;
+    services.gnome.rygel.enable = lib.mkForce false;
+    services.gnome.tracker-miners.enable = lib.mkForce false;
+    services.gnome.tracker.enable = lib.mkForce false;
+    services.gnome.evolution-data-server.enable = lib.mkForce false;
+    services.gnome.gnome-online-accounts.enable = lib.mkForce false;
 
     # Trim
     virtualisation.vmware.guest.enable = lib.mkForce false;
