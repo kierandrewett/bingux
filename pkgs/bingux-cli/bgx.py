@@ -338,7 +338,7 @@ def do_remove(pkgs, skip_confirm=False):
     return failed == 0
 
 
-def do_search(query):
+def do_search(query, sort="relevance"):
     import re
     sp = Spinner(f"Searching for '{query}'...")
     sp.start()
@@ -398,7 +398,13 @@ def do_search(query):
             continue
         seen.add(key)
         filtered.append(r)
-    results = sorted(filtered, key=lambda r: r["name"].lower())
+    if sort == "name":
+        results = sorted(filtered, key=lambda r: r["name"].lower())
+    elif sort == "version":
+        results = sorted(filtered, key=lambda r: r.get("version", ""), reverse=True)
+    else:
+        # relevance — keep nix's original order
+        results = filtered
 
     if not results:
         print(f"  {DARK}No results found.{RESET}")
@@ -493,10 +499,23 @@ def run_subcommand_mode(args):
             sys.exit(1)
 
     elif cmd in ("search", "s", "q", "?"):
-        if not rest:
+        sort = "relevance"
+        terms = []
+        for arg in rest:
+            if arg.startswith("--sort="):
+                sort = arg.split("=", 1)[1]
+            elif arg in ("--name", "--alphabetical"):
+                sort = "name"
+            elif arg == "--version":
+                sort = "version"
+            elif arg == "--relevance":
+                sort = "relevance"
+            else:
+                terms.append(arg)
+        if not terms:
             print(f"  {DARK}Search query required.{RESET}", file=sys.stderr)
             sys.exit(1)
-        do_search(" ".join(rest))
+        do_search(" ".join(terms), sort=sort)
 
     elif cmd in ("list", "ls"):
         do_list()
@@ -526,7 +545,7 @@ def print_usage():
   {WHITE}Commands:{RESET}
     {GRAY}{"install, add, a".ljust(C1)}{DARK}Install packages{RESET}
     {GRAY}{"remove, rm, r".ljust(C1)}{DARK}Remove packages{RESET}
-    {GRAY}{"search, s, q".ljust(C1)}{DARK}Search nixpkgs{RESET}
+    {GRAY}{"search, s, q".ljust(C1)}{DARK}Search nixpkgs (--name, --version, --relevance){RESET}
     {GRAY}{"list, ls".ljust(C1)}{DARK}List installed packages{RESET}
     {GRAY}{"help".ljust(C1)}{DARK}Show this help{RESET}
 
