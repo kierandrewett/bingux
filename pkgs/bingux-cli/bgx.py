@@ -253,15 +253,15 @@ def print_usage():
     {"bgx ?query".ljust(C1)}{DIM}Search{RESET}
 
   {BOLD}Commands:{RESET}
-    {BOLD}{"install, add, a".ljust(C1)}{RESET}{DIM}Install packages{RESET}
-    {BOLD}{"remove, rm, r".ljust(C1)}{RESET}{DIM}Remove packages{RESET}
-    {BOLD}{"search, s, q".ljust(C1)}{RESET}{DIM}Search nixpkgs{RESET}
-    {BOLD}{"list, ls".ljust(C1)}{RESET}{DIM}List installed packages{RESET}
-    {BOLD}{"help".ljust(C1)}{RESET}{DIM}Show this help{RESET}
+    {"install, add, a".ljust(C1)}{DIM}Install packages{RESET}
+    {"remove, rm, r".ljust(C1)}{DIM}Remove packages{RESET}
+    {"search, s, q".ljust(C1)}{DIM}Search nixpkgs{RESET}
+    {"list, ls".ljust(C1)}{DIM}List installed packages{RESET}
+    {"help".ljust(C1)}{DIM}Show this help{RESET}
 
   {BOLD}Flags:{RESET}
-    {BOLD}{"-s, --save".ljust(C1)}{RESET}{DIM}Install permanently (persists after reboot){RESET}
-    {BOLD}{"-y, --yes".ljust(C1)}{RESET}{DIM}Skip confirmation prompt{RESET}
+    {"-s, --save".ljust(C1)}{DIM}Install permanently (persists after reboot){RESET}
+    {"-y, --yes".ljust(C1)}{DIM}Skip confirmation prompt{RESET}
 """)
 
 
