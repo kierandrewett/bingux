@@ -22,7 +22,7 @@ class BinguxInstallerWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.set_title("Install Bingux")
-        self.set_default_size(800, 600)
+        self.set_default_size(900, 650)
         self.set_resizable(False)
         self.set_deletable(False)
         self.connect("close-request", lambda _: True)  # Block Alt+F4

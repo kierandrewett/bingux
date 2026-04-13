@@ -3,29 +3,116 @@ let
     bingux-plymouth = pkgs.callPackage ../../pkgs/bingux-plymouth { };
     bingux-installer = pkgs.callPackage ../../pkgs/bingux-installer { };
 
-    # Minimal GNOME Shell theme that hides the top bar
-    installerShellTheme = pkgs.runCommand "bingux-installer-shell-theme" {} ''
-        mkdir -p $out/share/themes/BinguxInstaller/gnome-shell
-        cat > $out/share/themes/BinguxInstaller/gnome-shell/gnome-shell.css << 'CSS'
-        @import url("resource:///org/gnome/shell/theme/gnome-shell.css");
-        #panel { height: 0; opacity: 0; pointer-events: none; }
-        CSS
+    # labwc config
+    labwcRc = pkgs.writeText "labwc-rc.xml" ''
+        <?xml version="1.0"?>
+        <labwc_config>
+            <theme>
+                <name>Adwaita</name>
+                <font place="ActiveWindow"><name>Inter</name><size>10</size></font>
+                <font place="InactiveWindow"><name>Inter</name><size>10</size></font>
+            </theme>
+            <keyboard>
+                <keybind key="W-Return"><action name="Execute"><command>${pkgs.gnome-terminal}/bin/gnome-terminal</command></action></keybind>
+                <keybind key="W-q"><action name="Close"/></keybind>
+            </keyboard>
+            <mouse>
+                <context name="TitleBar">
+                    <mousebind button="Left" action="Drag"><action name="Move"/></mousebind>
+                    <mousebind button="Left" action="DoubleClick"><action name="ToggleMaximize"/></mousebind>
+                </context>
+                <context name="Frame">
+                    <mousebind button="W-Left" action="Drag"><action name="Move"/></mousebind>
+                    <mousebind button="W-Right" action="Drag"><action name="Resize"/></mousebind>
+                </context>
+            </mouse>
+        </labwc_config>
+    '';
+
+    labwcEnv = pkgs.writeText "labwc-environment" ''
+        XDG_CURRENT_DESKTOP=labwc
+        MOZ_ENABLE_WAYLAND=1
+        GTK_THEME=Adwaita:dark
+        XCURSOR_THEME=Adwaita
+        XCURSOR_SIZE=24
+    '';
+
+    labwcAutostart = pkgs.writeShellScript "labwc-autostart" ''
+        # Dark background
+        ${pkgs.swaybg}/bin/swaybg -c '#1a1a2e' &
+
+        # Bottom taskbar
+        ${pkgs.waybar}/bin/waybar &
+
+        # Launch installer
+        sleep 1
+        ${bingux-installer}/bin/bingux-installer &
+    '';
+
+    waybarConfig = pkgs.writeText "waybar-config" (builtins.toJSON {
+        layer = "top";
+        position = "bottom";
+        height = 36;
+        modules-left = [ "wlr/taskbar" ];
+        modules-right = [ "clock" ];
+        "wlr/taskbar" = {
+            format = "{icon} {title}";
+            on-click = "activate";
+            icon-size = 20;
+        };
+        clock = {
+            format = "{:%H:%M}";
+        };
+    });
+
+    waybarStyle = pkgs.writeText "waybar-style.css" ''
+        * {
+            font-family: Inter, sans-serif;
+            font-size: 13px;
+            color: #ffffff;
+        }
+        window#waybar {
+            background: rgba(26, 26, 46, 0.9);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        #taskbar button {
+            padding: 2px 8px;
+            border-radius: 6px;
+            margin: 2px 2px;
+        }
+        #taskbar button.active {
+            background: rgba(82, 119, 195, 0.6);
+        }
+        #clock {
+            padding: 0 12px;
+        }
+    '';
+
+    labwcSession = pkgs.writeShellScript "labwc-session" ''
+        export XDG_CONFIG_HOME="$HOME/.config"
+        mkdir -p "$XDG_CONFIG_HOME/labwc" "$XDG_CONFIG_HOME/waybar"
+        ln -sf ${labwcRc} "$XDG_CONFIG_HOME/labwc/rc.xml"
+        ln -sf ${labwcEnv} "$XDG_CONFIG_HOME/labwc/environment"
+        ln -sf ${labwcAutostart} "$XDG_CONFIG_HOME/labwc/autostart"
+        ln -sf ${waybarConfig} "$XDG_CONFIG_HOME/waybar/config"
+        ln -sf ${waybarStyle} "$XDG_CONFIG_HOME/waybar/style.css"
+        exec ${pkgs.labwc}/bin/labwc
     '';
 in
 {
     imports = [
-        (modulesPath + "/installer/cd-dvd/installation-cd-graphical-base.nix")
+        (modulesPath + "/installer/cd-dvd/installation-cd-minimal.nix")
         ./live-shell.nix
         ../system/branding.nix
     ];
 
-    # GNOME + GDM autologin
-    services.xserver.desktopManager.gnome.enable = lib.mkForce true;
-    services.xserver.displayManager.gdm.enable = lib.mkForce true;
-    services.displayManager.defaultSession = "gnome";
-    services.displayManager.autoLogin = {
+    # greetd auto-login into labwc
+    services.greetd = {
         enable = true;
-        user = "bingux";
+        settings.default_session = {
+            command = "${labwcSession}";
+            user = "bingux";
+        };
     };
 
     # Passwordless bingux user
@@ -42,54 +129,31 @@ in
         });
     '';
 
-    # Dark theme, no wallpaper, installer in dock
-    programs.dconf.profiles.user.databases = [{
-        settings."org/gnome/desktop/background" = {
-            picture-options = "none";
-            primary-color = "#1a1a2e";
-        };
-        settings."org/gnome/desktop/screensaver" = {
-            picture-options = "none";
-            primary-color = "#1a1a2e";
-        };
-        settings."org/gnome/desktop/interface" = {
-            color-scheme = "prefer-dark";
-            font-name = "Inter 11";
-            monospace-font-name = "JetBrains Mono 11";
-        };
-        settings."org/gnome/shell" = {
-            enabled-extensions = [
-                "user-theme@gnome-shell-extensions.gcampax.github.com"
-                "dash-to-dock@micxgx.gmail.com"
-            ];
-            favorite-apps = [
-                "dev.drewett.BinguxInstaller.desktop"
-                "org.gnome.Nautilus.desktop"
-                "org.gnome.Terminal.desktop"
-                "firefox.desktop"
-            ];
-        };
-        settings."org/gnome/shell/extensions/user-theme" = {
-            name = "BinguxInstaller";
-        };
-        settings."org/gnome/shell/extensions/dash-to-dock" = {
-            dock-position = "BOTTOM";
-            dock-fixed = true;
-            dash-max-icon-size = lib.gvariant.mkInt32 48;
-            background-opacity = lib.gvariant.mkDouble 0.0;
-            transparency-mode = "FIXED";
-            disable-overview-on-startup = true;
-            show-mounts = false;
-            show-trash = false;
-        };
-    }];
+    # Wayland essentials
+    xdg.portal = {
+        enable = true;
+        wlr.enable = true;
+    };
+    programs.dconf.enable = true;
 
-    # Remove distro logo from GDM
-    programs.dconf.profiles.gdm.databases = [{
-        settings."org/gnome/login-screen" = {
-            logo = "";
-        };
-    }];
+    # Suppress zsh new-user setup prompt
+    environment.etc."skel/.zshrc".text = "# Bingux installer\n";
+
+    # GTK settings (dark theme, Inter font, Adwaita icons)
+    environment.etc."xdg/gtk-4.0/settings.ini".text = ''
+        [Settings]
+        gtk-font-name=Inter 11
+        gtk-icon-theme-name=Adwaita
+        gtk-theme-name=Adwaita
+        gtk-application-prefer-dark-theme=true
+    '';
+    environment.etc."xdg/gtk-3.0/settings.ini".text = ''
+        [Settings]
+        gtk-font-name=Inter 11
+        gtk-icon-theme-name=Adwaita
+        gtk-theme-name=Adwaita
+        gtk-application-prefer-dark-theme=true
+    '';
 
     environment.defaultPackages = lib.mkForce (with pkgs; [
         vim
@@ -100,23 +164,24 @@ in
         # Installer
         bingux-installer
 
+        # Compositor + panel
+        labwc
+        waybar
+        swaybg
+        wl-clipboard
+
         # Browser + tools
         firefox
         gh
         gparted
         gptfdisk
         ssh-to-age
-
-        # GNOME apps (minimal)
         gnome-terminal
         gnome-text-editor
 
-        # Icons + theme
+        # Icons + cursors
         adwaita-icon-theme
         hicolor-icon-theme
-        installerShellTheme
-        gnomeExtensions.user-themes
-        gnomeExtensions.dash-to-dock
     ];
 
     # Locale
@@ -125,28 +190,6 @@ in
         "en_US.UTF-8/UTF-8"
         "en_GB.UTF-8/UTF-8"
     ];
-
-    # Suppress zsh new-user setup prompt
-    environment.etc."skel/.zshrc".text = "# Bingux installer\n";
-
-    # Strip all GNOME apps — we only need the shell + our installer
-    environment.gnome.excludePackages = with pkgs; [
-        epiphany geary gnome-music gnome-photos gnome-software gnome-tour
-        yelp gnome-maps gnome-contacts gnome-weather gnome-clocks
-        gnome-calendar gnome-characters gnome-connections gnome-console
-        gnome-logs gnome-system-monitor baobab simple-scan totem evince
-        snapshot gnome-font-viewer gnome-disk-utility gnome-calculator
-        gnome-text-editor loupe gnome-backgrounds nautilus
-    ];
-
-    # Disable GNOME services we don't need
-    services.gnome.gnome-remote-desktop.enable = lib.mkForce false;
-    services.gnome.gnome-user-share.enable = lib.mkForce false;
-    services.gnome.rygel.enable = lib.mkForce false;
-    services.gnome.tracker-miners.enable = lib.mkForce false;
-    services.gnome.tracker.enable = lib.mkForce false;
-    services.gnome.evolution-data-server.enable = lib.mkForce false;
-    services.gnome.gnome-online-accounts.enable = lib.mkForce false;
 
     # Trim
     virtualisation.vmware.guest.enable = lib.mkForce false;
@@ -203,29 +246,25 @@ in
     isoImage.efiSplashImage = ../../files/branding/bingus.png;
     isoImage.splashImage = ../../files/branding/bingus-syslinux.png;
 
-    # GRUB theme — dark background, no NixOS logo
+    # GRUB theme
     isoImage.grubTheme = let
         base = pkgs.nixos-grub2-theme;
     in pkgs.runCommand "bingux-grub-theme" {} ''
         cp -r ${base} $out
         chmod -R u+w $out
-        # Remove NixOS logo
         for f in $out/icons/nixos.png $out/logo.png; do
             if [ -f "$f" ]; then
                 ${pkgs.imagemagick}/bin/magick -size 1x1 xc:#1a1a2e -depth 8 -type TrueColor \
                     PNG24:"$f" 2>/dev/null || true
             fi
         done
-        # Dark background
         if [ -f "$out/background.png" ]; then
             ${pkgs.imagemagick}/bin/magick -size 1920x1080 xc:#1a1a2e -depth 8 -type TrueColor \
                 PNG24:"$out/background.png" 2>/dev/null || true
         fi
-        # Rebrand text
         if [ -f "$out/theme.txt" ]; then
             sed -i 's/NixOS/Bingux/g' "$out/theme.txt"
         fi
-        # JetBrains Mono font for GRUB
         ${pkgs.grub2}/bin/grub-mkfont \
             -s 24 -o "$out/font.pf2" \
             ${pkgs.jetbrains-mono}/share/fonts/truetype/JetBrainsMono-Regular.ttf 2>/dev/null || true
@@ -257,17 +296,14 @@ in
 
     networking.hostName = "bingux-installer";
 
-    # Autostart the installer
+    # Autostart desktop entry for app launchers
     environment.etc."xdg/autostart/bingux-installer.desktop".text = ''
         [Desktop Entry]
         Type=Application
         Name=Install Bingux
-        Comment=Install Bingux to your disk
         Exec=${bingux-installer}/bin/bingux-installer
         Icon=bingux
-        Terminal=false
         Categories=System;
-        X-GNOME-Autostart-Phase=Application
-        X-GNOME-Autostart-Delay=2
+        Terminal=false
     '';
 }
