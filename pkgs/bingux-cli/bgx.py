@@ -232,8 +232,15 @@ def do_install(pkgs, save=False, skip_confirm=False):
         if r.returncode == 0:
             sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}")
         else:
-            err = (r.stderr or r.stdout or "").strip().split("\n")[-1]
-            sp.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET} {DARK}— {err}{RESET}")
+            output = (r.stderr or r.stdout or "").strip()
+            # Get the most useful error line (skip blank/trace lines)
+            lines = [l for l in output.split("\n") if l.strip() and not l.strip().startswith("…")]
+            summary = lines[-1].strip() if lines else "unknown error"
+            sp.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
+            print(f"\n  {DARK}{'─' * (_term_width() - 4)}{RESET}")
+            for line in lines[-5:]:
+                print(f"  {DARK}{line.strip()}{RESET}")
+            print(f"  {DARK}{'─' * (_term_width() - 4)}{RESET}\n")
             failed += 1
 
     if failed == 0 and len(pkgs) > 0:
