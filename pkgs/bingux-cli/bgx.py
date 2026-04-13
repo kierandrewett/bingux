@@ -8,8 +8,9 @@ import threading
 import time
 
 
-VOLATILE_PROFILE = f"/nix/var/nix/profiles/per-user/{os.environ.get('USER', 'root')}/bgx-volatile"
-PERMANENT_PROFILE = os.path.expanduser("~/.local/state/nix/profiles/profile")
+_USER = os.environ.get('USER', 'root')
+VOLATILE_PROFILE = f"/tmp/bgx-{_USER}"
+PERMANENT_PROFILE = f"/nix/var/nix/profiles/per-user/{_USER}/bgx-saved"
 
 # Colors — mostly grays with white for emphasis
 WHITE = "\033[97m"
@@ -201,8 +202,16 @@ def _is_installed(pkg):
     return False
 
 
+def _ensure_profile_dir(profile):
+    """Ensure the parent directory for a nix profile exists."""
+    d = os.path.dirname(profile)
+    if d and not os.path.isdir(d):
+        os.makedirs(d, mode=0o755, exist_ok=True)
+
+
 def do_install(pkgs, save=False, skip_confirm=False):
     profile = PERMANENT_PROFILE if save else VOLATILE_PROFILE
+    _ensure_profile_dir(profile)
 
     # Check for already installed
     already = [p for p in pkgs if _is_installed(p)]
