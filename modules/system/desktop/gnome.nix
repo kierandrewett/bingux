@@ -73,6 +73,7 @@ in
             environment.systemPackages = with pkgs; [
                 gnome-extension-manager
                 gnomeExtensions.user-themes
+                gnomeExtensions.appindicator
                 gnome-calculator
                 gnome-backgrounds
                 gnome-text-editor
@@ -90,7 +91,6 @@ in
         # ── Full Bingux GNOME (extensions + dconf defaults + theme-sync) ──
         (lib.mkIf isGnomeFull {
             environment.systemPackages = with pkgs; [
-                gnomeExtensions.appindicator
                 gnomeExtensions.blur-my-shell
                 gnomeExtensions.dash-to-dock
                 gnomeExtensions.grand-theft-focus
