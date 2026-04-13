@@ -2,6 +2,7 @@
 """bgx — Bingux package manager."""
 
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -13,24 +14,26 @@ _unfree_accepted = False
 VOLATILE_PROFILE = f"/tmp/bgx-session-{_USER}-packages"
 PERMANENT_PROFILE = f"/nix/var/nix/profiles/per-user/{_USER}/bgx/packages"
 
-# Colors — mostly grays with white for emphasis
 WHITE = "\033[97m"
 GRAY = "\033[37m"
 DARK = "\033[90m"
 BOLD = "\033[1m"
 DIM = "\033[2m"
 RESET = "\033[0m"
-ACCENT = "\033[38;5;111m"   # soft blue
-SUCCESS = "\033[38;5;114m"  # soft green
-WARN = "\033[38;5;180m"     # soft amber
-FAIL = "\033[38;5;174m"     # soft red
+ACCENT = "\033[38;5;111m"
+SUCCESS = "\033[38;5;114m"
+WARN = "\033[38;5;180m"
+FAIL = "\033[38;5;174m"
 
 MIN_NAME = 16
 MIN_VER = 10
 MIN_SIZE = 10
 MIN_DESC = 20
+MIN_LIC = 8
 VERSION = "0.2.0"
 
+
+# ── Spinner ──
 
 class Spinner:
     FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -62,8 +65,17 @@ class Spinner:
             time.sleep(0.08)
 
 
+# ── Nix helpers ──
+
 def run(cmd, **kwargs):
     return subprocess.run(cmd, **kwargs)
+
+
+def _term_width():
+    try:
+        return os.get_terminal_size().columns
+    except OSError:
+        return 80
 
 
 def format_size(nbytes):
@@ -74,8 +86,75 @@ def format_size(nbytes):
     return f"{nbytes:.2f} TiB"
 
 
+def _nix_install_streaming(cmd, env, pkg):
+    """Run a nix profile add command with streaming progress.
+
+    Returns (success, stderr_text, dl_size, progress_lines, fetched_count).
+    """
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+    sp = Spinner(f"{pkg}: installing...")
+    sp.start()
+
+    stderr_lines = []
+    progress_lines = []
+    state = {"fetched": 0, "total": 0, "dl_size": ""}
+
+    def reader():
+        while True:
+            raw = proc.stderr.readline()
+            if not raw:
+                break
+            try:
+                line = raw.decode("utf-8", errors="replace").strip()
+            except AttributeError:
+                line = raw.strip()
+            if not line:
+                continue
+            stderr_lines.append(line)
+
+            m = re.match(r"these (\d+) paths will be fetched \((.+?) download", line)
+            if m:
+                state["total"] = int(m.group(1))
+                state["dl_size"] = m.group(2)
+                sp.msg = f"{pkg}: fetching {state['total']} paths ({state['dl_size']})..."
+                continue
+
+            if "copying path" in line:
+                state["fetched"] += 1
+                m2 = re.search(r"copying path '.*-([^/']+)'", line)
+                name = m2.group(1) if m2 else "..."
+                t = state["total"]
+                f = state["fetched"]
+                sp.msg = f"{pkg}: [{f}/{t}] {name}" if t else f"{pkg}: fetching {name}"
+                progress_lines.append(f"    {DARK}\u2502 [{f}/{t or '?'}] {name}{RESET}")
+            elif "building" in line.lower():
+                sp.msg = f"{pkg}: building..."
+            elif "evaluating" in line.lower():
+                sp.msg = f"{pkg}: evaluating..."
+
+    t = threading.Thread(target=reader, daemon=True)
+    t.start()
+    proc.wait()
+    sp._stop = True
+    t.join(timeout=2)
+
+    ok = proc.returncode == 0
+    if ok:
+        extra = f" {DARK}({state['dl_size']}){RESET}" if state["dl_size"] else ""
+        sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}{extra}")
+        if progress_lines:
+            for pl in progress_lines[:-1]:
+                print(pl)
+            print(f"    {DARK}\u2570 {state['fetched']} paths fetched{RESET}")
+    else:
+        sp.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
+
+    return ok, "\n".join(stderr_lines)
+
+
+# ── Package info ──
+
 def pkg_info(pkg):
-    import json
     info = {"name": pkg, "version": "", "description": "", "size": "", "size_bytes": 0, "unfree": False, "license": ""}
     try:
         r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.version"],
@@ -85,6 +164,13 @@ def pkg_info(pkg):
         elif "unfree" in (r.stderr or "").lower():
             info["unfree"] = True
             info["license"] = "unfree"
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.meta.description"],
+                capture_output=True, text=True, timeout=15)
+        if r.returncode == 0:
+            info["description"] = r.stdout.strip()
     except subprocess.TimeoutExpired:
         pass
     try:
@@ -100,17 +186,8 @@ def pkg_info(pkg):
     except subprocess.TimeoutExpired:
         pass
     try:
-        r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.meta.description"],
-                capture_output=True, text=True, timeout=15)
-        if r.returncode == 0:
-            info["description"] = r.stdout.strip()
-    except subprocess.TimeoutExpired:
-        pass
-    try:
-        import re
         r = run(["nix", "path-info", "-S", f"nixpkgs#{pkg}"],
                 capture_output=True, text=True, timeout=30)
-        # Parse stderr for "X.XX MiB download, Y.YY MiB unpacked"
         for line in (r.stderr or "").split("\n"):
             m = re.search(r"([\d.]+)\s+([KMGT]iB)\s+download,\s+([\d.]+)\s+([KMGT]iB)\s+unpacked", line)
             if m:
@@ -118,7 +195,6 @@ def pkg_info(pkg):
                 info["size_bytes"] = int(float(m.group(3)) * units.get(m.group(4), 1))
                 info["size"] = format_size(info["size_bytes"])
                 break
-        # Fallback: parse stdout for store path size
         if not info["size"] and r.stdout:
             parts = r.stdout.strip().split()
             if len(parts) >= 2:
@@ -131,27 +207,35 @@ def pkg_info(pkg):
     return info
 
 
-def confirm():
-    try:
-        ans = input(f"  {DARK}Proceed?{RESET} {GRAY}[y/N]{RESET} ")
-        return ans.strip().lower() in ("y", "yes")
-    except (EOFError, KeyboardInterrupt):
-        print()
+# ── Profile checks ──
+
+def _is_in_profile(pkg, profile):
+    r = run(["nix", "profile", "list", "--profile", profile],
+            capture_output=True, text=True)
+    if r.returncode != 0 or not r.stdout.strip():
         return False
+    for line in r.stdout.split("\n"):
+        clean = line.strip()
+        if clean.startswith("Name:") and pkg in clean:
+            return True
+        if f"#{pkg}" in clean or f".{pkg}" in clean:
+            return True
+    return False
 
 
-def _term_width():
-    try:
-        return os.get_terminal_size().columns
-    except OSError:
-        return 80
+def _is_installed(pkg):
+    return _is_in_profile(pkg, VOLATILE_PROFILE) or _is_in_profile(pkg, PERMANENT_PROFILE)
 
 
-MIN_LIC = 8
+def _ensure_profile_dir(profile):
+    d = os.path.dirname(profile)
+    if d and not os.path.isdir(d):
+        os.makedirs(d, mode=0o755, exist_ok=True)
 
+
+# ── Table formatting ──
 
 def _calc_cols(infos, show_size=True, show_license=False):
-    """Calculate dynamic column widths based on content."""
     tw = _term_width()
     cn = max((len(i["name"]) for i in infos), default=0)
     cv = max((len(i.get("version") or "-") for i in infos), default=0)
@@ -206,6 +290,14 @@ def _print_table(label, label_color, infos, name_color=WHITE, show_size=True, sh
     print()
 
 
+def confirm(prompt=f"  {DARK}Proceed?{RESET} [{GRAY}y/N{RESET}] "):
+    try:
+        return input(prompt).strip().lower() in ("y", "yes")
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+
+
 def show_transaction(installs, removes, save=False, remove_filter=None):
     if not installs and not removes:
         return True
@@ -253,40 +345,13 @@ def show_transaction(installs, removes, save=False, remove_filter=None):
     return confirm()
 
 
-def _is_in_profile(pkg, profile):
-    """Check if a package is installed in a specific profile."""
-    r = run(["nix", "profile", "list", "--profile", profile],
-            capture_output=True, text=True)
-    if r.returncode != 0 or not r.stdout.strip():
-        return False
-    # nix profile list shows "Name: pkgname" lines
-    for line in r.stdout.split("\n"):
-        clean = line.strip()
-        # Match "Name:  vivaldi" or flake attr containing the pkg
-        if clean.startswith("Name:") and pkg in clean:
-            return True
-        if f"#{pkg}" in clean or f".{pkg}" in clean:
-            return True
-    return False
-
-
-def _is_installed(pkg):
-    """Check if a package is installed in either profile."""
-    return _is_in_profile(pkg, VOLATILE_PROFILE) or _is_in_profile(pkg, PERMANENT_PROFILE)
-
-
-def _ensure_profile_dir(profile):
-    """Ensure the parent directory for a nix profile exists."""
-    d = os.path.dirname(profile)
-    if d and not os.path.isdir(d):
-        os.makedirs(d, mode=0o755, exist_ok=True)
-
+# ── Commands ──
 
 def do_install(pkgs, save=False, skip_confirm=False):
+    global _unfree_accepted
     profile = PERMANENT_PROFILE if save else VOLATILE_PROFILE
     _ensure_profile_dir(profile)
 
-    # Check for already installed
     already = [p for p in pkgs if _is_installed(p)]
     if already:
         for p in already:
@@ -300,8 +365,7 @@ def do_install(pkgs, save=False, skip_confirm=False):
     infos = [pkg_info(p) for p in pkgs]
     sp.stop(f"{DARK}Resolved {len(infos)} {'package' if len(infos) == 1 else 'packages'}.{RESET}")
 
-    # Handle unfree packages
-    global _unfree_accepted
+    # Handle unfree
     unfree = [i for i in infos if i.get("unfree")]
     if unfree:
         is_nixos = os.path.exists("/etc/nixos")
@@ -326,7 +390,7 @@ def do_install(pkgs, save=False, skip_confirm=False):
                 for i in unfree:
                     i["_allow_unfree"] = True
 
-    # Check for packages that don't exist in nixpkgs
+    # Check for not found
     not_found = [i for i in infos if not i["version"] and not i["description"]]
     if not_found:
         for i in not_found:
@@ -339,8 +403,8 @@ def do_install(pkgs, save=False, skip_confirm=False):
         print(f"  {DARK}Aborted.{RESET}")
         return False
 
-    # Build a lookup for unfree packages
     unfree_pkgs = {i["name"] for i in infos if i.get("_allow_unfree")}
+    pkgs = [i["name"] for i in infos]
 
     failed = 0
     for pkg in pkgs:
@@ -351,147 +415,34 @@ def do_install(pkgs, save=False, skip_confirm=False):
             env = {**os.environ, "NIXPKGS_ALLOW_UNFREE": "1"}
         cmd.append(f"nixpkgs#{pkg}")
 
-        # Stream progress from nix stderr
-        import re as _re
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
-        sp = Spinner(f"Installing {pkg}...")
-        sp.start()
+        ok, stderr = _nix_install_streaming(cmd, env, pkg)
+        if ok:
+            continue
 
-        stderr_lines = []
-        progress_lines = []
-        fetched = 0
-        total_fetch = 0
-        dl_size = ""
-
-        def _read_progress():
-            nonlocal fetched, total_fetch, dl_size
-            while True:
-                raw = proc.stderr.readline()
-                if not raw:
-                    break
-                try:
-                    line = raw.decode("utf-8", errors="replace").strip()
-                except AttributeError:
-                    line = raw.strip()
-                if not line:
-                    continue
-                stderr_lines.append(line)
-
-                # "these N paths will be fetched (X MiB download, Y MiB unpacked):"
-                m = _re.match(r"these (\d+) paths will be fetched \((.+?) download", line)
-                if m:
-                    total_fetch = int(m.group(1))
-                    dl_size = m.group(2)
-                    sp.msg = f"{pkg}: fetching {total_fetch} paths ({dl_size})..."
-                    continue
-
-                if "copying path" in line:
-                    fetched += 1
-                    m2 = _re.search(r"copying path '.*-([^/']+)'", line)
-                    name = m2.group(1) if m2 else "..."
-                    if total_fetch:
-                        sp.msg = f"{pkg}: [{fetched}/{total_fetch}] {name}"
-                    else:
-                        sp.msg = f"{pkg}: fetching {name}"
-                    progress_lines.append(f"    {DARK}\u2502 [{fetched}/{total_fetch or '?'}] {name}{RESET}")
-                elif "building" in line.lower():
-                    sp.msg = f"{pkg}: building..."
-                elif "evaluating" in line.lower():
-                    sp.msg = f"{pkg}: evaluating..."
-
-        progress_thread = threading.Thread(target=_read_progress, daemon=True)
-        progress_thread.start()
-        proc.wait()
-        sp._stop = True
-        progress_thread.join(timeout=2)
-        r_code = proc.returncode
-        r_stderr = "\n".join(stderr_lines)
-        if r_code == 0:
-            extra = f" {DARK}({dl_size}){RESET}" if dl_size else ""
-            sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}{extra}")
-            if progress_lines:
-                for pl in progress_lines[:-1]:
-                    print(pl)
-                print(f"    {DARK}\u2570 {fetched} paths fetched{RESET}")
-        else:
-            output = r_stderr.strip()
-            sp.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
-
-            if "unfree" in output.lower():
-                if os.path.exists("/etc/nixos"):
-                    print(f"    {DARK}\u2502 This package has an unfree license.{RESET}")
-                    print(f"    {DARK}\u2570 Add to your NixOS config: nixpkgs.config.allowUnfree = true;{RESET}")
-                else:
-                    # Non-NixOS: retry with unfree, overwrite the ✗ line
-                    sys.stdout.write(f"\033[A\r\033[K")
-                    retry_env = {**os.environ, "NIXPKGS_ALLOW_UNFREE": "1"}
-                    retry_cmd = ["nix", "profile", "add", "--log-format", "bar-with-logs", "--impure", "--profile", profile, f"nixpkgs#{pkg}"]
-                    proc2 = subprocess.Popen(retry_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=retry_env)
-                    sp2 = Spinner(f"{pkg}: retrying (unfree)...")
-                    sp2.start()
-                    retry_progress = []
-                    retry_fetched = [0]
-                    retry_total = [0]
-                    retry_dl = [""]
-
-                    def _read_retry():
-                        while True:
-                            raw = proc2.stderr.readline()
-                            if not raw:
-                                break
-                            try:
-                                line = raw.decode("utf-8", errors="replace").strip()
-                            except AttributeError:
-                                line = raw.strip()
-                            if not line:
-                                continue
-                            m = _re.match(r"these (\d+) paths will be fetched \((.+?) download", line)
-                            if m:
-                                retry_total[0] = int(m.group(1))
-                                retry_dl[0] = m.group(2)
-                                sp2.msg = f"{pkg}: fetching {retry_total[0]} paths ({retry_dl[0]})..."
-                                continue
-                            if "copying path" in line:
-                                retry_fetched[0] += 1
-                                m2 = _re.search(r"copying path '.*-([^/']+)'", line)
-                                name = m2.group(1) if m2 else "..."
-                                if retry_total[0]:
-                                    sp2.msg = f"{pkg}: [{retry_fetched[0]}/{retry_total[0]}] {name}"
-                                else:
-                                    sp2.msg = f"{pkg}: fetching {name}"
-                                retry_progress.append(f"    {DARK}\u2502 [{retry_fetched[0]}/{retry_total[0] or '?'}] {name}{RESET}")
-                            elif "building" in line.lower():
-                                sp2.msg = f"{pkg}: building..."
-                            elif "evaluating" in line.lower():
-                                sp2.msg = f"{pkg}: evaluating..."
-
-                    rt = threading.Thread(target=_read_retry, daemon=True)
-                    rt.start()
-                    proc2.wait()
-                    sp2._stop = True
-                    rt.join(timeout=2)
-                    if proc2.returncode == 0:
-                        extra = f" {DARK}({retry_dl[0]}){RESET}" if retry_dl[0] else ""
-                        sp2.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}(unfree){RESET}{extra}")
-                        if retry_progress:
-                            for rp in retry_progress[:-1]:
-                                print(rp)
-                            print(f"    {DARK}\u2570 {retry_fetched[0]} paths fetched{RESET}")
-                        continue
-                    sp2.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
-                    print(f"    {DARK}\u2570 Failed to install unfree package.{RESET}")
-            elif "does not provide" in output:
-                print(f"    {DARK}\u2570 Package not found in nixpkgs.{RESET}")
+        # Handle errors
+        if "unfree" in stderr.lower():
+            if os.path.exists("/etc/nixos"):
+                print(f"    {DARK}\u2502 This package has an unfree license.{RESET}")
+                print(f"    {DARK}\u2570 Add to your NixOS config: nixpkgs.config.allowUnfree = true;{RESET}")
             else:
-                # Show last few meaningful lines
-                lines = [l for l in output.split("\n") if l.strip() and not l.strip().startswith("…")
-                         and not l.strip().startswith("at ") and not l.strip().startswith("(stack")]
-                for i, line in enumerate(lines[-3:]):
-                    if i < len(lines[-3:]) - 1:
-                        print(f"    {DARK}\u2502 {line.strip()}{RESET}")
-                    else:
-                        print(f"    {DARK}\u2570 {line.strip()}{RESET}")
-            failed += 1
+                sys.stdout.write(f"\033[A\r\033[K")
+                retry_cmd = ["nix", "profile", "add", "--log-format", "bar-with-logs", "--impure", "--profile", profile, f"nixpkgs#{pkg}"]
+                retry_env = {**os.environ, "NIXPKGS_ALLOW_UNFREE": "1"}
+                ok2, _ = _nix_install_streaming(retry_cmd, retry_env, pkg)
+                if ok2:
+                    continue
+                print(f"    {DARK}\u2570 Failed to install unfree package.{RESET}")
+        elif "does not provide" in stderr:
+            print(f"    {DARK}\u2570 Package not found in nixpkgs.{RESET}")
+        else:
+            lines = [l for l in stderr.split("\n") if l.strip() and not l.strip().startswith("…")
+                     and not l.strip().startswith("at ") and not l.strip().startswith("(stack")]
+            for i, line in enumerate(lines[-3:]):
+                if i < len(lines[-3:]) - 1:
+                    print(f"    {DARK}\u2502 {line.strip()}{RESET}")
+                else:
+                    print(f"    {DARK}\u2570 {line.strip()}{RESET}")
+        failed += 1
 
     if failed == 0 and len(pkgs) > 0:
         print(f"\n  {DARK}All packages installed.{RESET}\n")
@@ -509,7 +460,6 @@ def do_remove(pkgs, skip_confirm=False, profile_filter=None):
     else:
         profiles = [(VOLATILE_PROFILE, "session"), (PERMANENT_PROFILE, "permanent")]
 
-    # Check for not installed in the target profiles
     check_profiles = [p for p, _ in profiles]
     not_installed = [p for p in pkgs if not any(_is_in_profile(p, pr) for pr in check_profiles)]
     if not_installed:
@@ -532,13 +482,11 @@ def do_remove(pkgs, skip_confirm=False, profile_filter=None):
         sp = Spinner("Resolving packages...")
         sp.start()
         infos = [pkg_info(p) for p in pkgs]
-        count = len(infos)
-        sp.stop(f"{DARK}Resolved {count} {'package' if count == 1 else 'packages'}.{RESET}")
+        sp.stop(f"{DARK}Resolved {len(infos)} {'package' if len(infos) == 1 else 'packages'}.{RESET}")
 
         if not show_transaction([], infos, remove_filter=profile_filter):
             print(f"  {DARK}Aborted.{RESET}")
             return False
-
 
     failed = 0
     for pkg in pkgs:
@@ -546,9 +494,7 @@ def do_remove(pkgs, skip_confirm=False, profile_filter=None):
         for profile, _ in profiles:
             if not _is_in_profile(pkg, profile):
                 continue
-            run(["nix", "profile", "remove", "--profile", profile, pkg],
-                capture_output=True)
-            # Verify it's actually gone
+            run(["nix", "profile", "remove", "--profile", profile, pkg], capture_output=True)
             if not _is_in_profile(pkg, profile):
                 removed = True
             else:
@@ -565,12 +511,10 @@ def do_remove(pkgs, skip_confirm=False, profile_filter=None):
 
 
 def do_info(pkg):
-    """Show detailed package info."""
     sp = Spinner(f"Fetching info for {pkg}...")
     sp.start()
     info = pkg_info(pkg)
 
-    # Get homepage + full license name
     homepage = ""
     license_full = ""
     try:
@@ -596,31 +540,26 @@ def do_info(pkg):
 
     print(f"\n  {WHITE}{BOLD}{info['name']}{RESET}")
     print()
-    rows = [
+    label_w = 12
+    for label, val in [
         ("Version", info["version"] or "-"),
         ("License", license_full or info.get("license") or "-"),
         ("Size", info.get("size") or "-"),
         ("Homepage", homepage or "-"),
         ("Attribute", f"nixpkgs#{pkg}"),
-    ]
-    label_w = 12
-    for label, val in rows:
+    ]:
         print(f"    {GRAY}{label.ljust(label_w)}{RESET} {WHITE}{val}{RESET}")
 
     if info.get("description"):
         print(f"\n    {DARK}{info['description']}{RESET}")
-
     if info.get("unfree"):
         print(f"\n    {WARN}This package has an unfree license.{RESET}")
-
-    installed = _is_installed(pkg)
-    if installed:
+    if _is_installed(pkg):
         print(f"\n    {SUCCESS}Installed{RESET}")
     print()
 
 
 def do_search(query, sort="relevance"):
-    import re
     sp = Spinner(f"Searching for '{query}'...")
     sp.start()
     r = run(["nix", "search", "nixpkgs", query], capture_output=True, text=True)
@@ -630,14 +569,10 @@ def do_search(query, sort="relevance"):
         print(f"  {DARK}No results found.{RESET}")
         return
 
-    # Parse nix search output
     ansi_re = re.compile(r"\033\[[0-9;]*m")
     lines = r.stdout.strip().split("\n")
     results = []
     current = None
-
-    # Package paths to skip (deeply nested SDK/internal packages)
-    skip_prefixes = ()
 
     for line in lines:
         clean = ansi_re.sub("", line).strip()
@@ -645,15 +580,9 @@ def do_search(query, sort="relevance"):
             if current:
                 results.append(current)
             rest = clean[2:]
-            # Format: legacyPackages.x86_64-linux.pkgname (version)
             m = re.match(r"legacyPackages\.\S+?\.(.+?)\s*\(([^)]*)\)", rest)
             if m:
                 attr = m.group(1)
-                # Skip deeply nested internal packages
-                if any(attr.startswith(p) for p in skip_prefixes):
-                    current = None
-                    continue
-                # Use last segment as display name, but keep full path if nested
                 parts = attr.split(".")
                 name = parts[-1] if len(parts) <= 2 else attr
                 current = {"name": name, "version": m.group(2), "description": ""}
@@ -665,26 +594,22 @@ def do_search(query, sort="relevance"):
     if current:
         results.append(current)
 
-    # Filter junk: no version, versions that look like filenames, duplicates
     seen = set()
     filtered = []
     for r in results:
         v = r.get("version", "")
-        if not v:
+        if not v or ".zip" in v or ".tar" in v or ".iso" in v:
             continue
-        if ".zip" in v or ".tar" in v or ".iso" in v:
+        if r["name"] in seen:
             continue
-        key = r["name"]
-        if key in seen:
-            continue
-        seen.add(key)
+        seen.add(r["name"])
         filtered.append(r)
+
     if sort == "name":
         results = sorted(filtered, key=lambda r: r["name"].lower())
     elif sort == "version":
         results = sorted(filtered, key=lambda r: r.get("version", ""), reverse=True)
     else:
-        # relevance — keep nix's original order
         results = filtered
 
     if not results:
@@ -710,12 +635,11 @@ def do_list():
     print()
 
 
-def run_prefix_mode(args):
-    installs, saves, removes = [], [], []
-    yes = False
+# ── Routing ──
 
-    removes_volatile = []
-    removes_permanent = []
+def run_prefix_mode(args):
+    installs, saves, removes_volatile, removes_permanent = [], [], [], []
+    yes = False
 
     for arg in args:
         if arg in ("-y", "--yes"):
@@ -724,7 +648,7 @@ def run_prefix_mode(args):
             saves.append(arg[2:])
         elif arg.startswith("+"):
             installs.append(arg[1:])
-        elif arg.startswith("--") and not arg.startswith("---") and len(arg) > 2 and arg[2] != "-":
+        elif arg.startswith("--") and not arg.startswith("---") and len(arg) > 2:
             removes_permanent.append(arg[2:])
         elif arg.startswith("-") and len(arg) > 1:
             removes_volatile.append(arg[1:])
@@ -762,19 +686,17 @@ def run_prefix_mode(args):
 def run_subcommand_mode(args):
     cmd, rest = args[0], args[1:]
 
+    # Help for any subcommand
     if "-h" in rest or "--help" in rest:
         subcmd_help = {
             "install": f"  {BOLD}bgx install{RESET} {DARK}[-p/--permanent] [-y] <packages...>{RESET}\n\n    Install packages for this session. Use -p to install permanently.",
-            "add": f"  {BOLD}bgx add{RESET} {DARK}[-p/--permanent] [-y] <packages...>{RESET}\n\n    Alias for install.",
             "remove": f"  {BOLD}bgx remove{RESET} {DARK}[-p/--permanent] [-y] <packages...>{RESET}\n\n    Remove packages from this session. Use -p for permanent.",
-            "rm": f"  {BOLD}bgx rm{RESET} {DARK}[-p/--permanent] [-y] <packages...>{RESET}\n\n    Alias for remove.",
             "search": f"  {BOLD}bgx search{RESET} {DARK}[--name/--version/--relevance] <query>{RESET}\n\n    Search nixpkgs. Default sort: relevance.",
             "info": f"  {BOLD}bgx info{RESET} {DARK}<package>{RESET}\n\n    Show detailed package information.",
             "list": f"  {BOLD}bgx list{RESET}\n\n    List installed packages (session + permanent).",
         }
-        aliases = {"a": "install", "add": "install", "uninstall": "remove", "r": "remove", "s": "search", "q": "search", "i": "info", "ls": "list"}
-        key = aliases.get(cmd, cmd)
-        print(subcmd_help.get(key, f"  No help for '{cmd}'."))
+        aliases = {"a": "install", "add": "install", "uninstall": "remove", "rm": "remove", "r": "remove", "s": "search", "q": "search", "i": "info", "ls": "list"}
+        print(subcmd_help.get(aliases.get(cmd, cmd), f"  No help for '{cmd}'."))
         return
 
     if cmd in ("install", "add", "a"):
