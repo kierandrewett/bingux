@@ -15,6 +15,12 @@ in
             xfce.xfce4-screenshooter
             xfce.xfce4-taskmanager
             xfce.xfce4-terminal
+            adw-gtk3
         ];
+
+        # LightDM branding
+        services.xserver.displayManager.lightdm.greeters.gtk = {
+            theme.name = lib.mkDefault "adw-gtk3-dark";
+        };
     };
 }

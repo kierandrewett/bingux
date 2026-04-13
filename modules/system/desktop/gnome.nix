@@ -83,7 +83,6 @@ in
                 loupe
                 gnome-characters
                 gnome-tweaks
-                dconf-editor
                 adw-gtk3
             ];
         }
@@ -153,6 +152,12 @@ in
                         keep-rounded-corners-fullscreen = false;
                         skip-libadwaita = false;
                         skip-libhandy = false;
+                    };
+
+                    # adw-gtk3 for legacy GTK3 apps
+                    "org/gnome/desktop/interface" = {
+                        gtk-theme = "adw-gtk3-dark";
+                        color-scheme = "prefer-dark";
                     };
 
                     # Dark wallpaper instead of NixOS default

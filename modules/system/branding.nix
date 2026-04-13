@@ -23,6 +23,8 @@ in
     environment.etc."bingus.png".source = ../../files/branding/bingus.png;
     environment.etc."bingus-fastfetch.png".source = ../../files/branding/bingus-fastfetch.png;
 
+    system.nixos.distroName = lib.mkDefault "Bingux";
+
     environment.etc."os-release".text = lib.mkForce ''
         NAME="Bingux"
         ID=bingux

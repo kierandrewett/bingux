@@ -18,6 +18,10 @@ in
             kdePackages.spectacle
             kdePackages.gwenview
             kdePackages.okular
+            adw-gtk3
         ];
+
+        # SDDM branding — dark background
+        services.displayManager.sddm.theme = lib.mkDefault "breeze";
     };
 }
