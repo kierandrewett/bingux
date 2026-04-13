@@ -78,6 +78,25 @@ bingux.desktop = null;            # No desktop (server/headless)
 
 **`"gnome"`** includes: dash-to-dock, blur-my-shell, rounded-window-corners, night-theme-switcher, appindicator, user-themes, grand-theft-focus, and a theme-sync service.
 
+### Locale
+
+```nix
+bingux.locale = "en_GB.UTF-8";              # Sets locale + console keymap (uk) automatically
+bingux.extraLocales = [ "en_US.UTF-8" ];    # Additional supported locales
+```
+
+The keymap is derived from the locale automatically (en_GB -> uk, de_DE -> de, fr_FR -> fr, etc.).
+
+### Fonts
+
+```nix
+bingux.fonts.sansSerif = "Inter";           # Used in DE, login screen, Plymouth
+bingux.fonts.monospace = "JetBrains Mono";  # Used in terminals and editors
+bingux.fonts.serif = "Source Serif";
+```
+
+Defaults: Adwaita Sans, Google Sans Code, Noto Serif. The sans-serif font is also used for the Plymouth boot splash.
+
 ### Boot
 
 ```nix
@@ -86,26 +105,25 @@ bingux.boot.luksUuid = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";  # Enable LUKS
 
 ### Hardware Configuration Path
 
-When installing from a repository, the installer needs to know where to place the generated `hardware-configuration.nix`. Declare the path in your flake:
+The `hardwareConfigPath` parameter in `mkBinguxHost` tells the installer where to place `hardware-configuration.nix`:
 
 ```nix
-bingux.hardwareConfigPath = {
-    my-desktop = "machines/my-desktop";     # relative to repo root
-    my-laptop = "hosts/my-laptop";
+bingux.lib.mkBinguxHost {
+    hostname = "my-host";
+    hardwareConfigPath = "machines/my-host";   # relative to repo root (default)
+    ...
 };
 ```
 
-If not set, the installer searches common layouts (`machines/<host>/`, `hosts/<host>/`, etc.) and falls back to leaving it at `/mnt/etc/nixos/`.
+If not set, defaults to `machines/<hostname>`. The installer also searches common layouts as a fallback.
 
 ### Overriding Defaults
 
-All Bingux defaults use `lib.mkDefault`, so you can override any option by simply setting it in your config:
+All Bingux defaults use `lib.mkDefault`, so you can override any option by simply setting it:
 
 ```nix
-i18n.defaultLocale = "en_GB.UTF-8";     # Override default en_US
-console.keyMap = "uk";                   # Override default us
 boot.kernelPackages = pkgs.linuxPackages_6_12;
-services.earlyoom.enable = false;        # Disable earlyoom
+services.earlyoom.enable = false;
 ```
 
 ## What's Included

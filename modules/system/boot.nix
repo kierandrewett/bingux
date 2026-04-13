@@ -37,11 +37,6 @@ in
             verbose = lib.mkDefault false;
         };
 
-        console.keyMap = lib.mkDefault "us";
-
-        boot.plymouth.font = lib.mkDefault
-            "${pkgs.adwaita-fonts}/share/fonts/Adwaita/AdwaitaSans-Regular.ttf";
-
         # Console (TTY) font
         console.packages = [ pkgs.terminus_font ];
         console.font = lib.mkDefault "ter-v16n";

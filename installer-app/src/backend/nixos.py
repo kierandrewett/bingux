@@ -18,18 +18,22 @@ def generate_config():
 
 
 def _read_hw_config_path(repo_path, host):
-    """Read bingux.hardwareConfigPath.<host> from the flake if defined.
+    """Read bingux.hardwareConfigPath from the NixOS config.
 
-    Users can declare in their flake where hardware-configuration.nix
-    should be placed, e.g.:
+    This is set via the hardwareConfigPath parameter in mkBinguxHost:
 
-        bingux.hardwareConfigPath.fsociety = "machines/fsociety";
+        bingux.lib.mkBinguxHost {
+            hostname = "my-host";
+            hardwareConfigPath = "machines/my-host";
+            ...
+        };
 
-    The value is resolved relative to /os (the repo root).
+    Defaults to "machines/<hostname>".
     """
     try:
         r = subprocess.run(
-            ["nix", "eval", "--json", f"{repo_path}#bingux.hardwareConfigPath.{host}"],
+            ["nix", "eval", "--json",
+             f"{repo_path}#nixosConfigurations.{host}.config.bingux.hardwareConfigPath"],
             capture_output=True, text=True,
         )
         if r.returncode == 0:

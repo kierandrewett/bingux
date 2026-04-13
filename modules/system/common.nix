@@ -9,6 +9,7 @@
         ./desktop
         ./fonts.nix
         ./gpg.nix
+        ./locale.nix
     ];
 
     config = {
@@ -36,8 +37,6 @@
                 workstation = lib.mkDefault true;
             };
         };
-
-        i18n.defaultLocale = lib.mkDefault "en_US.UTF-8";
 
         # Bingux CLI helper (os rebuild, os update, etc.)
         environment.systemPackages = [ pkgs.os-helper ];

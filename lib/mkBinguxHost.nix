@@ -4,6 +4,7 @@
 , profile
 , system ? "x86_64-linux"
 , username ? "user"
+, hardwareConfigPath ? "machines/${hostname}"
 , extraModules ? []
 , extraOverlays ? []
 , specialArgs ? {}
@@ -30,6 +31,16 @@ lib.nixosSystem {
 
         # Machine profile (workstation, laptop, generic)
         (binguxModulesPath + "/profiles/${profile}.nix")
+
+        # Expose hardwareConfigPath for the installer
+        {
+            options.bingux.hardwareConfigPath = lib.mkOption {
+                type = lib.types.str;
+                default = hardwareConfigPath;
+                readOnly = true;
+                description = "Path (relative to repo root) where hardware-configuration.nix is placed by the installer.";
+            };
+        }
 
         # Nixpkgs configuration with bingux overlays
         {
