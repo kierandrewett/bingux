@@ -1,0 +1,12 @@
+.env
+.env.*
+*.pem
+*.key
+*.secret
+*.local
+.direnv/
+result
+result-*
+node_modules/
+target/
+.idea/
