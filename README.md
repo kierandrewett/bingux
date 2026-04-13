@@ -160,8 +160,8 @@ Every Bingux system includes the `os` command for managing your NixOS config at 
 
 ```
 os rebuild    Rebuild and switch to new config
+os test       Rebuild and test (no bootloader update)
 os update     Update flake inputs and rebuild
-os edit       Open /os in your editor
 ```
 
 ## Building the ISO

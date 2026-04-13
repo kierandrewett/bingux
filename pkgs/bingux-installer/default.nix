@@ -10,7 +10,7 @@ in
 stdenv.mkDerivation {
     pname = "bingux-installer";
     version = "0.1.0";
-    src = ../../installer-app;
+    src = ../../installer;
 
     nativeBuildInputs = [ gobject-introspection wrapGAppsHook4 glib makeWrapper ];
     buildInputs = [ gtk4 libadwaita ];
