@@ -137,6 +137,7 @@ in
         ../system/branding.nix
     ];
 
+    config = {
     # greetd auto-login into labwc
     services.greetd = {
         enable = true;
@@ -385,6 +386,7 @@ in
     services.automatic-timezoned.enable = true;
     services.geoclue2.enable = true;
     networking.networkmanager.enable = true;
+    networking.wireless.enable = lib.mkForce false;
 
     # Write pre-set repo URL for the installer to read
     environment.etc."bingux-installer/repo-url".text =
@@ -400,4 +402,5 @@ in
         Categories=System;
         Terminal=false
     '';
+    };
 }
