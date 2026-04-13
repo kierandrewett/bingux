@@ -44,6 +44,16 @@
         # Bingux CLI helper + essentials
         environment.systemPackages = with pkgs; [ os-helper bingux-cli fastfetch comma ];
 
+        # bgx volatile profile — cleared on boot, added to PATH
+        systemd.tmpfiles.rules = [
+            "R /nix/var/nix/profiles/per-user/root/bgx-volatile - - - - -"
+        ];
+        environment.extraInit = ''
+            if [ -d "/nix/var/nix/profiles/per-user/$USER/bgx-volatile/bin" ]; then
+                export PATH="/nix/var/nix/profiles/per-user/$USER/bgx-volatile/bin:$PATH"
+            fi
+        '';
+
         # Mark /os as safe for git
         environment.etc."gitconfig".text = lib.mkDefault ''
             [safe]
