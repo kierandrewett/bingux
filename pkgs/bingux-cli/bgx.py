@@ -242,7 +242,6 @@ def do_install(pkgs, save=False, skip_confirm=False):
                     print(f"    {DARK}\u2502 {line.strip()}{RESET}")
                 else:
                     print(f"    {DARK}\u2570 {line.strip()}{RESET}")
-            print()
             failed += 1
 
     if failed == 0 and len(pkgs) > 0:
