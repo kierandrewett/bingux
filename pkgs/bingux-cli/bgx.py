@@ -470,8 +470,12 @@ def do_remove(pkgs, skip_confirm=False, profile_filter=None):
         for p in not_installed:
             if profile_filter == "session":
                 print(f"  {FAIL}\u2717{RESET} {WHITE}{p}{RESET} {DARK}is not installed in this session.{RESET}")
+                if _is_in_profile(p, PERMANENT_PROFILE):
+                    print(f"    {DARK}\u2570 Did you mean: bgx --{p} or bgx remove -p {p}{RESET}")
             elif profile_filter == "permanent":
                 print(f"  {FAIL}\u2717{RESET} {WHITE}{p}{RESET} {DARK}is not installed to this installation.{RESET}")
+                if _is_in_profile(p, VOLATILE_PROFILE):
+                    print(f"    {DARK}\u2570 Did you mean: bgx -{p} or bgx remove -s {p}{RESET}")
             else:
                 print(f"  {FAIL}\u2717{RESET} {WHITE}{p}{RESET} {DARK}is not installed.{RESET}")
         pkgs = [p for p in pkgs if p not in not_installed]
@@ -730,12 +734,22 @@ def run_subcommand_mode(args):
             sys.exit(1)
 
     elif cmd in ("remove", "uninstall", "rm", "r"):
-        yes = "-y" in rest or "--yes" in rest
-        pkgs = [a for a in rest if a not in ("-y", "--yes")]
+        yes = False
+        pfilter = None
+        pkgs = []
+        for arg in rest:
+            if arg in ("-y", "--yes"):
+                yes = True
+            elif arg in ("-s", "--session"):
+                pfilter = "session"
+            elif arg in ("-p", "--permanent"):
+                pfilter = "permanent"
+            else:
+                pkgs.append(arg)
         if not pkgs:
             print(f"  {DARK}Package name required.{RESET}", file=sys.stderr)
             sys.exit(1)
-        if not do_remove(pkgs, skip_confirm=yes):
+        if not do_remove(pkgs, skip_confirm=yes, profile_filter=pfilter):
             sys.exit(1)
 
     elif cmd in ("info", "i"):
@@ -791,7 +805,7 @@ def print_usage():
 
   {WHITE}Commands:{RESET}
     {GRAY}{"install, add, a".ljust(C1)}{DARK}Install packages{RESET}
-    {GRAY}{"remove, rm, r".ljust(C1)}{DARK}Remove packages{RESET}
+    {GRAY}{"remove, rm, r".ljust(C1)}{DARK}Remove packages (-s session, -p permanent){RESET}
     {GRAY}{"info, i".ljust(C1)}{DARK}Show package details{RESET}
     {GRAY}{"search, s, q".ljust(C1)}{DARK}Search nixpkgs (--name, --version, --relevance){RESET}
     {GRAY}{"list, ls".ljust(C1)}{DARK}List installed packages{RESET}
