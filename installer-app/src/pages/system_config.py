@@ -60,6 +60,8 @@ class SystemConfigPage(BasePage):
         self.desktop_options = [
             ("gnome", "GNOME (Bingux)", "Full Bingux experience \u2014 extensions, blur, rounded corners"),
             ("gnome-default", "GNOME (Default)", "Stock GNOME desktop without Bingux extensions"),
+            ("kde", "KDE Plasma", "Feature-rich desktop with Plasma 6 and Wayland"),
+            ("xfce", "XFCE", "Lightweight traditional desktop"),
         ]
 
         desk_check_group = None
