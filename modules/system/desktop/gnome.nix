@@ -72,6 +72,7 @@ in
 
             environment.systemPackages = with pkgs; [
                 gnome-extension-manager
+                gnomeExtensions.user-themes
                 gnome-calculator
                 gnome-backgrounds
                 gnome-text-editor
@@ -94,7 +95,6 @@ in
                 gnomeExtensions.dash-to-dock
                 gnomeExtensions.grand-theft-focus
                 gnomeExtensions.rounded-window-corners-reborn
-                gnomeExtensions.user-themes
                 gnomeExtensions.night-theme-switcher
             ];
 
