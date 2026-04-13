@@ -1,4 +1,5 @@
 import glob
+import json
 import os
 import shutil
 import subprocess
@@ -16,20 +17,32 @@ def generate_config():
         return False, e.stderr
 
 
-def _find_hw_config_dir(repo_path, host):
-    """Try to find where hardware-configuration.nix belongs in the repo.
+def _read_hw_config_path(repo_path, host):
+    """Read bingux.hardwareConfigPath.<host> from the flake if defined.
 
-    Searches common layouts:
-      machines/<host>/
-      hosts/<host>/
-      <host>/
-      nixos/machines/<host>/
-      .  (repo root)
+    Users can declare in their flake where hardware-configuration.nix
+    should be placed, e.g.:
 
-    Also looks for an existing hardware-configuration.nix import anywhere
-    in the repo and places it next to the file that imports it.
+        bingux.hardwareConfigPath.fsociety = "machines/fsociety";
+
+    The value is resolved relative to /os (the repo root).
     """
-    # Check common directory patterns
+    try:
+        r = subprocess.run(
+            ["nix", "eval", "--json", f"{repo_path}#bingux.hardwareConfigPath.{host}"],
+            capture_output=True, text=True,
+        )
+        if r.returncode == 0:
+            path = json.loads(r.stdout)
+            if isinstance(path, str) and path:
+                return os.path.join(repo_path, path)
+    except (json.JSONDecodeError, subprocess.CalledProcessError):
+        pass
+    return None
+
+
+def _find_hw_config_dir(repo_path, host):
+    """Fallback: search common layouts for where hardware-configuration.nix belongs."""
     candidates = [
         os.path.join(repo_path, "machines", host),
         os.path.join(repo_path, "hosts", host),
@@ -42,7 +55,7 @@ def _find_hw_config_dir(repo_path, host):
         if os.path.isdir(d):
             return d
 
-    # Search for an existing hardware-configuration.nix stub anywhere in the repo
+    # Search for an existing hardware-configuration.nix stub anywhere
     for path in glob.glob(os.path.join(repo_path, "**", "hardware-configuration.nix"), recursive=True):
         return os.path.dirname(path)
 
@@ -50,11 +63,12 @@ def _find_hw_config_dir(repo_path, host):
 
 
 def copy_repo(host, repo_path="/tmp/bingux-os", log_callback=None):
-    """Copy cloned repo to /mnt/os and hardware config if applicable.
+    """Copy cloned repo to /mnt/os and place hardware config.
 
-    Works with any repo layout — hardware-configuration.nix is placed
-    wherever the repo expects it, or left at /mnt/etc/nixos/ for the
-    user to integrate manually.
+    Resolution order for hardware-configuration.nix placement:
+    1. bingux.hardwareConfigPath.<host> from the flake (explicit)
+    2. Heuristic search of common directory layouts
+    3. Left at /mnt/etc/nixos/ for manual integration
     """
     dest = "/mnt/os"
     if os.path.isdir(dest):
@@ -63,7 +77,13 @@ def copy_repo(host, repo_path="/tmp/bingux-os", log_callback=None):
 
     hw_config = "/mnt/etc/nixos/hardware-configuration.nix"
     if os.path.isfile(hw_config):
-        target_dir = _find_hw_config_dir(dest, host)
+        # Try explicit path from flake first
+        target_dir = _read_hw_config_path(dest, host)
+        if target_dir:
+            os.makedirs(target_dir, exist_ok=True)
+        else:
+            target_dir = _find_hw_config_dir(dest, host)
+
         if target_dir:
             target = os.path.join(target_dir, "hardware-configuration.nix")
             shutil.copy2(hw_config, target)
@@ -71,8 +91,8 @@ def copy_repo(host, repo_path="/tmp/bingux-os", log_callback=None):
                 log_callback(f"Hardware config placed at: {target}\n")
         elif log_callback:
             log_callback(
-                f"Hardware config generated at /mnt/etc/nixos/hardware-configuration.nix\n"
-                f"Integrate it into your flake if needed.\n"
+                "Hardware config generated at /mnt/etc/nixos/hardware-configuration.nix\n"
+                "Integrate it into your flake if needed.\n"
             )
 
     # Set ownership to first normal user (uid 1000)

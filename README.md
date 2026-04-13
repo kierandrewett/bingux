@@ -84,6 +84,19 @@ bingux.desktop = null;            # No desktop (server/headless)
 bingux.boot.luksUuid = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";  # Enable LUKS
 ```
 
+### Hardware Configuration Path
+
+When installing from a repository, the installer needs to know where to place the generated `hardware-configuration.nix`. Declare the path in your flake:
+
+```nix
+bingux.hardwareConfigPath = {
+    my-desktop = "machines/my-desktop";     # relative to repo root
+    my-laptop = "hosts/my-laptop";
+};
+```
+
+If not set, the installer searches common layouts (`machines/<host>/`, `hosts/<host>/`, etc.) and falls back to leaving it at `/mnt/etc/nixos/`.
+
 ### Overriding Defaults
 
 All Bingux defaults use `lib.mkDefault`, so you can override any option by simply setting it in your config:
