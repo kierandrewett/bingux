@@ -46,8 +46,9 @@
 
         # bgx profiles — volatile (/tmp, cleared on reboot) + permanent (persists)
         environment.extraInit = ''
-            for p in "/tmp/bgx-session-$USER-packages/bin" "/nix/var/nix/profiles/per-user/$USER/bgx/packages/bin"; do
-                [ -d "$p" ] && export PATH="$p:$PATH"
+            for profile in "/tmp/bgx-session-$USER-packages" "/nix/var/nix/profiles/per-user/$USER/bgx/packages"; do
+                [ -d "$profile/bin" ] && export PATH="$profile/bin:$PATH"
+                [ -d "$profile/share" ] && export XDG_DATA_DIRS="$profile/share:$XDG_DATA_DIRS"
             done
         '';
 
