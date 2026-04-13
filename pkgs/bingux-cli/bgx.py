@@ -231,6 +231,38 @@ def _is_installed(pkg):
     return _is_in_profile(pkg, VOLATILE_PROFILE) or _is_in_profile(pkg, PERMANENT_PROFILE)
 
 
+def _post_install_hooks(pkg, profile):
+    """Run post-install hooks for special package types."""
+    # VS Code extensions — symlink into ~/.vscode/extensions/
+    if "vscode-extensions." in pkg or pkg.startswith("vscode-extensions."):
+        ext_src = os.path.join(profile, "share", "vscode", "extensions")
+        if os.path.isdir(ext_src):
+            vscode_dir = os.path.expanduser("~/.vscode/extensions")
+            os.makedirs(vscode_dir, exist_ok=True)
+            for ext in os.listdir(ext_src):
+                src = os.path.join(ext_src, ext)
+                dst = os.path.join(vscode_dir, ext)
+                if os.path.islink(dst):
+                    os.remove(dst)
+                if not os.path.exists(dst):
+                    os.symlink(src, dst)
+                    print(f"    {DARK}\u2502 Linked VS Code extension: {ext}{RESET}")
+
+    # GNOME Shell extensions — already handled via XDG_DATA_DIRS
+
+
+def _post_remove_hooks(pkg, profile):
+    """Clean up after removing special package types."""
+    if "vscode-extensions." in pkg:
+        vscode_dir = os.path.expanduser("~/.vscode/extensions")
+        if os.path.isdir(vscode_dir):
+            for ext in os.listdir(vscode_dir):
+                dst = os.path.join(vscode_dir, ext)
+                if os.path.islink(dst) and not os.path.exists(dst):
+                    os.remove(dst)
+                    print(f"    {DARK}\u2502 Unlinked VS Code extension: {ext}{RESET}")
+
+
 def _auto_gc():
     """Run desktop database update and garbage collection after transactions."""
     # Update desktop database so new apps appear in GNOME menu
@@ -449,6 +481,7 @@ def do_install(pkgs, save=False, skip_confirm=False):
 
         ok, stderr = _nix_install_streaming(cmd, env, pkg)
         if ok:
+            _post_install_hooks(pkg, profile)
             continue
 
         # Handle errors
@@ -462,6 +495,7 @@ def do_install(pkgs, save=False, skip_confirm=False):
                 retry_env = {**os.environ, "NIXPKGS_ALLOW_UNFREE": "1"}
                 ok2, _ = _nix_install_streaming(retry_cmd, retry_env, pkg)
                 if ok2:
+                    _post_install_hooks(pkg, profile)
                     continue
                 print(f"    {DARK}\u2570 Failed to install unfree package.{RESET}")
         elif "does not provide" in stderr:
@@ -536,6 +570,7 @@ def do_remove(pkgs, skip_confirm=False, profile_filter=None):
 
         if removed:
             print(f"  {SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}")
+            _post_remove_hooks(pkg, profile)
         elif failed == 0:
             print(f"  {FAIL}\u2717{RESET} {WHITE}{pkg}{RESET} {DARK}not installed{RESET}", file=sys.stderr)
             failed += 1
