@@ -7,8 +7,7 @@ in
 {
     users.users.bingux = {
         isNormalUser = true;
-        initialHashedPassword = lib.mkForce null;
-        initialPassword = "bingux";
+        hashedPassword = lib.mkForce "";
         shell = pkgs.zsh;
         extraGroups = [ "networkmanager" "wheel" ];
     };

@@ -12,6 +12,13 @@
 
     services.displayManager.defaultSession = lib.mkDefault "gnome";
 
+    # Remove the distribution logo from the GDM login screen
+    programs.dconf.profiles.gdm.databases = [{
+        settings."org/gnome/login-screen" = {
+            logo = "";
+        };
+    }];
+
     environment.gnome.excludePackages = with pkgs; [
         epiphany
         geary
