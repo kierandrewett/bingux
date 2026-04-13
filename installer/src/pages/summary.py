@@ -10,11 +10,11 @@ from pages.base_page import BasePage
 class SummaryPage(BasePage):
     def __init__(self, window):
         super().__init__(window, "Summary", tag="summary")
+        self._rows = []
         self.summary_group = Adw.PreferencesGroup()
         self.summary_group.set_title("Review Installation")
         self.summary_group.set_description(
-            "Please review your choices before proceeding. "
-            "This will erase data on the selected partitions."
+            "Please review your choices before proceeding."
         )
         self.content.append(self.summary_group)
 
@@ -30,35 +30,43 @@ class SummaryPage(BasePage):
         self.add_nav_buttons(next_label="Install")
 
     def on_enter(self):
-        # Clear old rows
-        while True:
-            child = self.summary_group.get_first_child()
-            if child is None:
-                break
-            self.summary_group.remove(child)
+        # Remove previously added rows
+        for row in self._rows:
+            self.summary_group.remove(row)
+        self._rows.clear()
 
         s = self.state
-        rows = [
-            ("Host", s.selected_host),
-            ("Repository", s.repo_url),
-            ("Disk", s.selected_disk),
-            ("EFI", s.efi_partition),
-            ("Root", f"{s.root_partition}  \u2192  {s.filesystem}"),
-        ]
+        entries = []
 
-        if s.home_partition:
-            rows.append(("Home", s.home_partition))
-        if s.swap_partition:
-            rows.append(("Swap", s.swap_partition))
+        if s.install_type == "fresh":
+            entries.append(("Host", s.selected_host))
+            entries.append(("Profile", getattr(s, "profile", "")))
+            entries.append(("Desktop", getattr(s, "desktop", "")))
+        else:
+            entries.append(("Host", s.selected_host))
+            entries.append(("Repository", s.repo_url))
+
+        entries.append(("Disk", s.selected_disk))
+        if getattr(s, "disk_mode", "wipe") == "wipe":
+            entries.append(("Mode", "Erase entire disk"))
+        else:
+            entries.append(("EFI", s.efi_partition))
+            entries.append(("Root", s.root_partition))
+            if s.home_partition:
+                entries.append(("Home", s.home_partition))
+            if s.swap_partition:
+                entries.append(("Swap", s.swap_partition))
+
+        entries.append(("Filesystem", s.filesystem))
         if s.encrypt_root:
-            rows.append(("Encryption", "LUKS2 (root)"))
-        if s.encrypt_home:
-            rows.append(("Encryption", "LUKS2 (home)"))
+            entries.append(("Encryption", "LUKS2"))
         if s.username:
-            rows.append(("User", s.username))
+            entries.append(("User", s.username))
 
-        for title, value in rows:
-            row = Adw.ActionRow()
-            row.set_title(title)
-            row.set_subtitle(value)
-            self.summary_group.add(row)
+        for title, value in entries:
+            if value:
+                row = Adw.ActionRow()
+                row.set_title(title)
+                row.set_subtitle(str(value))
+                self.summary_group.add(row)
+                self._rows.append(row)
