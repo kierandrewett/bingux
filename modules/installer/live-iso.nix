@@ -67,9 +67,11 @@ let
         # Bottom taskbar
         ${pkgs.waybar}/bin/waybar &
 
-        # Launch installer
-        sleep 1
-        ${bingux-installer}/bin/bingux-installer &
+        # Launch installer (retry until it starts)
+        for i in 1 2 3 4 5; do
+            sleep 2
+            ${bingux-installer}/bin/bingux-installer && break
+        done &
     '';
 
     waybarConfig = pkgs.writeText "waybar-config" (builtins.toJSON {
@@ -381,6 +383,26 @@ in
     };
 
     networking.hostName = "bingux-installer";
+
+    # Systemd user service to ensure the installer always runs
+    systemd.user.services.bingux-installer = {
+        description = "Bingux Installer";
+        wantedBy = [ "graphical-session.target" "default.target" ];
+        after = [ "graphical-session.target" ];
+        serviceConfig = {
+            ExecStart = "${bingux-installer}/bin/bingux-installer";
+            Restart = "on-failure";
+            RestartSec = 3;
+            Environment = [
+                "DISPLAY=:0"
+                "WAYLAND_DISPLAY=wayland-0"
+                "XDG_RUNTIME_DIR=/run/user/1000"
+                "FONTCONFIG_FILE=/etc/fonts/fonts.conf"
+                "ADW_DISABLE_PORTAL=1"
+                "GTK_THEME=adw-gtk3-dark"
+            ];
+        };
+    };
 
     # NTP + automatic timezone
     services.automatic-timezoned.enable = true;
