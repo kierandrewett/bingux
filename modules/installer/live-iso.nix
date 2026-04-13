@@ -30,11 +30,12 @@ let
     '';
 
     labwcEnv = pkgs.writeText "labwc-environment" ''
-        XDG_CURRENT_DESKTOP=labwc
+        XDG_CURRENT_DESKTOP=GNOME
         MOZ_ENABLE_WAYLAND=1
         GTK_THEME=adw-gtk3-dark
         XCURSOR_THEME=Adwaita
         XCURSOR_SIZE=24
+        ADW_DISABLE_PORTAL=1
     '';
 
     labwcAutostart = pkgs.writeShellScript "labwc-autostart" ''
@@ -140,6 +141,7 @@ in
     xdg.portal = {
         enable = true;
         wlr.enable = true;
+        extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
     };
     programs.dconf.enable = true;
     programs.dconf.profiles.user.databases = [{
