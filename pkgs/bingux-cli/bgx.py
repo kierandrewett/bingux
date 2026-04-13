@@ -247,14 +247,22 @@ def show_transaction(installs, removes, save=False):
     return confirm()
 
 
-def _is_installed(pkg):
-    """Check if a package is installed in either profile."""
-    for profile in (VOLATILE_PROFILE, PERMANENT_PROFILE):
-        r = run(["nix", "profile", "list", "--profile", profile],
-                capture_output=True, text=True)
-        if r.returncode == 0 and pkg in r.stdout:
+def _is_in_profile(pkg, profile):
+    """Check if a package is installed in a specific profile."""
+    r = run(["nix", "profile", "list", "--profile", profile],
+            capture_output=True, text=True)
+    if r.returncode != 0:
+        return False
+    # Match package name precisely (not just substring)
+    for line in r.stdout.split("\n"):
+        if f"#{pkg}" in line or f"-{pkg}-" in line or line.strip().endswith(f"-{pkg}"):
             return True
     return False
+
+
+def _is_installed(pkg):
+    """Check if a package is installed in either profile."""
+    return _is_in_profile(pkg, VOLATILE_PROFILE) or _is_in_profile(pkg, PERMANENT_PROFILE)
 
 
 def _ensure_profile_dir(profile):
@@ -448,8 +456,16 @@ def do_install(pkgs, save=False, skip_confirm=False):
 
 
 def do_remove(pkgs, skip_confirm=False, profile_filter=None):
-    # Check for not installed
-    not_installed = [p for p in pkgs if not _is_installed(p)]
+    if profile_filter == "session":
+        profiles = [(VOLATILE_PROFILE, "session")]
+    elif profile_filter == "permanent":
+        profiles = [(PERMANENT_PROFILE, "permanent")]
+    else:
+        profiles = [(VOLATILE_PROFILE, "session"), (PERMANENT_PROFILE, "permanent")]
+
+    # Check for not installed in the target profiles
+    check_profiles = [p for p, _ in profiles]
+    not_installed = [p for p in pkgs if not any(_is_in_profile(p, pr) for pr in check_profiles)]
     if not_installed:
         for p in not_installed:
             print(f"  {FAIL}\u2717{RESET} {WHITE}{p}{RESET} {DARK}is not installed.{RESET}")
@@ -468,13 +484,6 @@ def do_remove(pkgs, skip_confirm=False, profile_filter=None):
             print(f"  {DARK}Aborted.{RESET}")
             return False
 
-    profiles = []
-    if profile_filter == "session":
-        profiles = [(VOLATILE_PROFILE, "session")]
-    elif profile_filter == "permanent":
-        profiles = [(PERMANENT_PROFILE, "permanent")]
-    else:
-        profiles = [(VOLATILE_PROFILE, "session"), (PERMANENT_PROFILE, "permanent")]
 
     failed = 0
     for pkg in pkgs:
