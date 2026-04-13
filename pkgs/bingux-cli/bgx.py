@@ -355,20 +355,31 @@ def do_search(query):
     results = []
     current = None
 
+    # Package paths to skip (deeply nested SDK/internal packages)
+    skip_prefixes = ("androidenv.", "python2", "haskellPackages.", "perlPackages.",
+                     "rubyGems.", "emacsPackages.", "vimPlugins.", "ocamlPackages.",
+                     "coqPackages.", "beamPackages.", "luaPackages.", "rPackages.")
+
     for line in lines:
         clean = ansi_re.sub("", line).strip()
         if clean.startswith("* "):
             if current:
                 results.append(current)
-            # Extract package name and version
             rest = clean[2:]
             # Format: legacyPackages.x86_64-linux.pkgname (version)
-            m = re.match(r"legacyPackages\.\S+\.(\S+)\s*\(([^)]*)\)", rest)
+            m = re.match(r"legacyPackages\.\S+?\.(.+?)\s*\(([^)]*)\)", rest)
             if m:
-                current = {"name": m.group(1), "version": m.group(2), "description": ""}
+                attr = m.group(1)
+                # Skip deeply nested internal packages
+                if any(attr.startswith(p) for p in skip_prefixes):
+                    current = None
+                    continue
+                # Use last segment as display name, but keep full path if nested
+                parts = attr.split(".")
+                name = parts[-1] if len(parts) <= 2 else attr
+                current = {"name": name, "version": m.group(2), "description": ""}
             else:
-                parts = rest.split(".")
-                current = {"name": parts[-1] if parts else rest, "version": "", "description": ""}
+                current = None
         elif current and clean:
             current["description"] = clean
 
