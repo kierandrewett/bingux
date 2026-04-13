@@ -116,10 +116,21 @@ def confirm():
         return False
 
 
+def _term_width():
+    try:
+        return os.get_terminal_size().columns
+    except OSError:
+        return 80
+
+
 def pkg_row(name, version="", size="", description=""):
     n = name.ljust(COL_NAME)
     v = (version or "-").ljust(COL_VER)
     s = (size or "-").ljust(COL_SIZE)
+    prefix_len = 4 + COL_NAME + 1 + COL_VER + 1 + COL_SIZE + 1
+    max_desc = _term_width() - prefix_len - 2
+    if max_desc > 0 and len(description) > max_desc:
+        description = description[:max_desc - 1] + "\u2026"
     return f"    {WHITE}{n} {RESET}{GRAY}{v} {RESET}{GRAY}{s} {RESET}{DARK}{description}{RESET}"
 
 
@@ -132,8 +143,9 @@ def show_transaction(installs, removes, save=False):
     if installs:
         mode = "permanently" if save else "for this session"
         print(f"  {ACCENT}\u25b8{RESET} {WHITE}Installing{RESET} {DARK}({mode}){RESET}")
+        line_w = _term_width() - 6
         print(f"    {DARK}{'Package'.ljust(COL_NAME)} {'Version'.ljust(COL_VER)} {'Size'.ljust(COL_SIZE)} Description{RESET}")
-        print(f"    {DARK}{'\u2500' * (COL_NAME + COL_VER + COL_SIZE + 24)}{RESET}")
+        print(f"    {DARK}{'\u2500' * line_w}{RESET}")
         for info in installs:
             print(pkg_row(info["name"], info["version"], info.get("size", ""), info["description"]))
         print()
