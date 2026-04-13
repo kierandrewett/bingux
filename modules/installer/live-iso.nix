@@ -578,11 +578,11 @@ in
     services.displayManager.defaultSession = "gnome";
     services.displayManager.autoLogin = {
         enable = true;
-        user = "nixos";
+        user = "bingux";
     };
 
-    # Passwordless nixos user on the live installer
-    users.users.nixos.hashedPassword = lib.mkForce "";
+    # Passwordless bingux user on the live installer
+    users.users.bingux.hashedPassword = lib.mkForce "";
     security.sudo.wheelNeedsPassword = lib.mkForce false;
 
     # Plain dark background instead of NixOS wallpaper

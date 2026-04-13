@@ -5,9 +5,10 @@ let
     };
 in
 {
-    users.users.nixos = {
+    users.users.bingux = {
+        isNormalUser = true;
         initialHashedPassword = lib.mkForce null;
-        initialPassword = "nixos";
+        initialPassword = "bingux";
         shell = pkgs.zsh;
         extraGroups = [ "networkmanager" "wheel" ];
     };
