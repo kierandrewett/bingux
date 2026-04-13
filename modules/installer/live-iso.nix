@@ -41,6 +41,13 @@ let
         # Dark background
         ${pkgs.swaybg}/bin/swaybg -c '#1a1a2e' &
 
+        # Force GTK font + theme via gsettings (writes to user dconf)
+        ${pkgs.glib}/bin/gsettings set org.gnome.desktop.interface font-name 'Inter 11'
+        ${pkgs.glib}/bin/gsettings set org.gnome.desktop.interface monospace-font-name 'JetBrains Mono 11'
+        ${pkgs.glib}/bin/gsettings set org.gnome.desktop.interface color-scheme 'prefer-dark'
+        ${pkgs.glib}/bin/gsettings set org.gnome.desktop.interface icon-theme 'Adwaita'
+        ${pkgs.glib}/bin/gsettings set org.gnome.desktop.interface gtk-theme 'adw-gtk3-dark'
+
         # Bottom taskbar
         ${pkgs.waybar}/bin/waybar &
 
