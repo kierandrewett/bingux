@@ -90,17 +90,17 @@ def show_transaction(installs, removes, save=False):
     if installs:
         mode = "permanently" if save else "for this session"
         print(f"\n  Installing ({mode}):")
-        print(f"  {DIM}{'Package'.ljust(COL_NAME)} {'Version'.ljust(COL_VER)} Description{RESET}")
+        print(f"    {DIM}{'Package'.ljust(COL_NAME)} {'Version'.ljust(COL_VER)} Description{RESET}")
         for info in installs:
             n = info["name"].ljust(COL_NAME)
             v = (info["version"] or "").ljust(COL_VER)
             d = info["description"]
-            print(f"  {BOLD}{n}{RESET} {v} {DIM}{d}{RESET}")
+            print(f"    {BOLD}{n}{RESET} {v} {DIM}{d}{RESET}")
 
     if removes:
         print(f"\n  Removing:")
         for pkg in removes:
-            print(f"  {pkg}")
+            print(f"    {pkg}")
 
     parts = []
     if installs:
