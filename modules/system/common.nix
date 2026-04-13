@@ -6,7 +6,7 @@
         ./boot.nix
         ./branding.nix
         ./audio.nix
-        ./gnome.nix
+        ./desktop
         ./fonts.nix
         ./gpg.nix
     ];
