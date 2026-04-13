@@ -227,7 +227,7 @@ def do_install(pkgs, save=False, skip_confirm=False):
     for pkg in pkgs:
         sp = Spinner(f"Installing {pkg}...")
         sp.start()
-        r = run(["nix", "profile", "install", "--profile", profile, f"nixpkgs#{pkg}"],
+        r = run(["nix", "profile", "add", "--profile", profile, f"nixpkgs#{pkg}"],
                 capture_output=True, text=True)
         if r.returncode == 0:
             sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}")
@@ -336,12 +336,21 @@ def run_prefix_mode(args):
             sys.exit(1)
 
     ok = True
+    changed = False
     if installs:
-        ok = do_install(installs, save=False, skip_confirm=yes) and ok
+        r = do_install(installs, save=False, skip_confirm=yes)
+        ok = r and ok
+        changed = changed or r
     if saves:
-        ok = do_install(saves, save=True, skip_confirm=yes) and ok
+        r = do_install(saves, save=True, skip_confirm=yes)
+        ok = r and ok
+        changed = changed or r
     if removes:
-        ok = do_remove(removes, skip_confirm=yes) and ok
+        r = do_remove(removes, skip_confirm=yes)
+        ok = r and ok
+        changed = changed or r
+    if not changed:
+        print(f"  {DARK}No changes were made.{RESET}")
     if not ok:
         sys.exit(1)
 
