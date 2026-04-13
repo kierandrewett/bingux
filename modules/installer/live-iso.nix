@@ -124,6 +124,11 @@ in
         mako              # notifications
         wl-clipboard      # clipboard
         gnome-text-editor # log viewer
+        libnotify         # notify-send
+
+        # Icons
+        adwaita-icon-theme
+        hicolor-icon-theme
     ];
 
     # Locale
@@ -168,7 +173,6 @@ in
     # Fonts + icons
     fonts.packages = with pkgs; [ adwaita-fonts inter ];
 
-    environment.systemPackages = with pkgs; [ adwaita-icon-theme hicolor-icon-theme ];
 
     # Plymouth + quiet boot
     boot.plymouth = {
