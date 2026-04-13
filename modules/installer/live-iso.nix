@@ -45,8 +45,8 @@ let
         set $gnome-schema org.gnome.desktop.interface
         exec_always ${pkgs.glib}/bin/gsettings set $gnome-schema color-scheme prefer-dark
 
-        # Autostart
-        exec ${bingux-installer}/bin/bingux-installer
+        # Autostart installer (with delay for session readiness, fallback to terminal on error)
+        exec sleep 2 && ${bingux-installer}/bin/bingux-installer 2>/tmp/bingux-installer.log || ${pkgs.foot}/bin/foot
     '';
 
     # Greetd auto-login session
