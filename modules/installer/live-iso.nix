@@ -163,7 +163,6 @@ in
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
     system.nixos.distroName = "Bingux";
     isoImage.squashfsCompression = "zstd -Xcompression-level 22";
-    isoImage.grubTheme = null;
     isoImage.efiSplashImage = ../../files/branding/bingus.png;
     isoImage.splashImage = ../../files/branding/bingus-syslinux.png;
     isoImage.syslinuxTheme = ''
