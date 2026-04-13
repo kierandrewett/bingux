@@ -75,7 +75,7 @@ def format_size(nbytes):
 
 def pkg_info(pkg):
     import json
-    info = {"name": pkg, "version": "", "description": "", "size": "", "size_bytes": 0, "unfree": False}
+    info = {"name": pkg, "version": "", "description": "", "size": "", "size_bytes": 0, "unfree": False, "license": ""}
     try:
         r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.version"],
                 capture_output=True, text=True, timeout=15)
@@ -83,6 +83,14 @@ def pkg_info(pkg):
             info["version"] = r.stdout.strip()
         elif "unfree" in (r.stderr or "").lower():
             info["unfree"] = True
+            info["license"] = "unfree"
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.meta.license.shortName"],
+                capture_output=True, text=True, timeout=15)
+        if r.returncode == 0 and r.stdout.strip():
+            info["license"] = r.stdout.strip()
     except subprocess.TimeoutExpired:
         pass
     try:
@@ -133,49 +141,62 @@ def _term_width():
         return 80
 
 
-def _calc_cols(infos, show_size=True):
+MIN_LIC = 8
+
+
+def _calc_cols(infos, show_size=True, show_license=False):
     """Calculate dynamic column widths based on content."""
     tw = _term_width()
     cn = max((len(i["name"]) for i in infos), default=0)
     cv = max((len(i.get("version") or "-") for i in infos), default=0)
     cs = max((len(i.get("size") or "-") for i in infos), default=0) if show_size else 0
+    cl = max((len(i.get("license") or "-") for i in infos), default=0) if show_license else 0
 
     cn = max(cn, MIN_NAME) + 2
     cv = max(cv, MIN_VER) + 2
     cs = (max(cs, MIN_SIZE) + 2) if show_size else 0
+    cl = (max(cl, MIN_LIC) + 2) if show_license else 0
 
-    # Cap name at 40% of terminal
     cn = min(cn, int(tw * 0.4))
-    cd = max(tw - 4 - cn - cv - cs - 3, MIN_DESC)
-    return cn, cv, cs, cd
+    cd = max(tw - 4 - cn - cv - cs - cl - 4, MIN_DESC)
+    return cn, cv, cs, cl, cd
 
 
-def _fmt_row(name, version, size, description, cols, name_color=WHITE):
-    cn, cv, cs, cd = cols
+def _fmt_row(name, version, size, description, cols, name_color=WHITE, license=""):
+    cn, cv, cs, cl, cd = cols
     n = name[:cn-1].ljust(cn) if len(name) >= cn else name.ljust(cn)
     v = (version or "-")[:cv-1].ljust(cv) if len(version or "-") >= cv else (version or "-").ljust(cv)
     desc = description
     if len(desc) > cd:
         desc = desc[:cd-1] + "\u2026"
+    parts = f"    {name_color}{n}{RESET} {WHITE}{v}{RESET}"
     if cs:
         s = (size or "-")[:cs-1].ljust(cs) if len(size or "-") >= cs else (size or "-").ljust(cs)
-        return f"    {name_color}{n}{RESET} {WHITE}{v}{RESET} {GRAY}{s}{RESET} {DARK}{desc}{RESET}"
-    else:
-        return f"    {name_color}{n}{RESET} {WHITE}{v}{RESET} {DARK}{desc}{RESET}"
+        parts += f" {GRAY}{s}{RESET}"
+    if cl:
+        lic = (license or "-")[:cl-1].ljust(cl) if len(license or "-") >= cl else (license or "-").ljust(cl)
+        lic_color = WARN if license == "unfree" else DARK
+        parts += f" {lic_color}{lic}{RESET}"
+    parts += f" {DARK}{desc}{RESET}"
+    return parts
 
 
-def _print_table(label, label_color, infos, name_color=WHITE, show_size=True):
-    cols = _calc_cols(infos, show_size=show_size)
-    cn, cv, cs, cd = cols
+def _print_table(label, label_color, infos, name_color=WHITE, show_size=True, show_license=False):
+    has_license = show_license and any(i.get("license") for i in infos)
+    cols = _calc_cols(infos, show_size=show_size, show_license=has_license)
+    cn, cv, cs, cl, cd = cols
     print(f"  {label_color}\u276f{RESET} {WHITE}{label}{RESET}")
     line_w = _term_width() - 6
-    if show_size:
-        print(f"    {DARK}{'Package'.ljust(cn)} {'Version'.ljust(cv)} {'Size'.ljust(cs)} Description{RESET}")
-    else:
-        print(f"    {DARK}{'Package'.ljust(cn)} {'Version'.ljust(cv)} Description{RESET}")
+    header = f"    {DARK}{'Package'.ljust(cn)} {'Version'.ljust(cv)}"
+    if cs:
+        header += f" {'Size'.ljust(cs)}"
+    if cl:
+        header += f" {'License'.ljust(cl)}"
+    header += f" Description{RESET}"
+    print(header)
     print(f"    {DARK}{'\u2500' * line_w}{RESET}")
     for info in infos:
-        print(_fmt_row(info["name"], info.get("version", ""), info.get("size", ""), info.get("description", ""), cols, name_color))
+        print(_fmt_row(info["name"], info.get("version", ""), info.get("size", ""), info.get("description", ""), cols, name_color, info.get("license", "")))
     print()
 
 
@@ -187,7 +208,7 @@ def show_transaction(installs, removes, save=False):
 
     if installs:
         mode = "permanently" if save else "for this session"
-        _print_table(f"Installing {DARK}({mode}){RESET}", SUCCESS, installs, name_color=SUCCESS)
+        _print_table(f"Installing {DARK}({mode}){RESET}", SUCCESS, installs, name_color=SUCCESS, show_license=True)
 
     if removes:
         neg_removes = []
@@ -196,7 +217,7 @@ def show_transaction(installs, removes, save=False):
             if r.get("size"):
                 r["size"] = f"-{r['size']}"
             neg_removes.append(r)
-        _print_table("Removing", WARN, neg_removes, name_color=FAIL)
+        _print_table("Removing", WARN, neg_removes, name_color=FAIL, show_license=True)
 
     ni = len(installs)
     nr = len(removes)
@@ -355,6 +376,53 @@ def do_remove(pkgs, skip_confirm=False):
             failed += 1
 
     return failed == 0
+
+
+def do_info(pkg):
+    """Show detailed package info."""
+    sp = Spinner(f"Fetching info for {pkg}...")
+    sp.start()
+    info = pkg_info(pkg)
+
+    # Get homepage
+    homepage = ""
+    try:
+        r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.meta.homepage"],
+                capture_output=True, text=True, timeout=15)
+        if r.returncode == 0:
+            homepage = r.stdout.strip()
+    except subprocess.TimeoutExpired:
+        pass
+
+    sp.stop(f"{DARK}Done.{RESET}")
+
+    if not info["version"] and not info["description"] and not info.get("unfree"):
+        print(f"  {FAIL}\u2717{RESET} {WHITE}{pkg}{RESET} {DARK}not found in nixpkgs.{RESET}")
+        return
+
+    print(f"\n  {WHITE}{BOLD}{info['name']}{RESET}")
+    print()
+    rows = [
+        ("Version", info["version"] or "-"),
+        ("License", info.get("license") or "-"),
+        ("Size", info.get("size") or "-"),
+        ("Homepage", homepage or "-"),
+        ("Attribute", f"nixpkgs#{pkg}"),
+    ]
+    label_w = 12
+    for label, val in rows:
+        print(f"    {GRAY}{label.ljust(label_w)}{RESET} {WHITE}{val}{RESET}")
+
+    if info.get("description"):
+        print(f"\n    {DARK}{info['description']}{RESET}")
+
+    if info.get("unfree"):
+        print(f"\n    {WARN}This package has an unfree license.{RESET}")
+
+    installed = _is_installed(pkg)
+    if installed:
+        print(f"\n    {SUCCESS}Installed{RESET}")
+    print()
 
 
 def do_search(query, sort="relevance"):
@@ -517,6 +585,12 @@ def run_subcommand_mode(args):
         if not do_remove(pkgs, skip_confirm=yes):
             sys.exit(1)
 
+    elif cmd in ("info", "i"):
+        if not rest:
+            print(f"  {DARK}Package name required.{RESET}", file=sys.stderr)
+            sys.exit(1)
+        do_info(rest[0])
+
     elif cmd in ("search", "s", "q", "?"):
         sort = "relevance"
         terms = []
@@ -564,6 +638,7 @@ def print_usage():
   {WHITE}Commands:{RESET}
     {GRAY}{"install, add, a".ljust(C1)}{DARK}Install packages{RESET}
     {GRAY}{"remove, rm, r".ljust(C1)}{DARK}Remove packages{RESET}
+    {GRAY}{"info, i".ljust(C1)}{DARK}Show package details{RESET}
     {GRAY}{"search, s, q".ljust(C1)}{DARK}Search nixpkgs (--name, --version, --relevance){RESET}
     {GRAY}{"list, ls".ljust(C1)}{DARK}List installed packages{RESET}
     {GRAY}{"help".ljust(C1)}{DARK}Show this help{RESET}
