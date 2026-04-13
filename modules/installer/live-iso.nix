@@ -2,59 +2,97 @@
 let
     bingux-plymouth = pkgs.callPackage ../../pkgs/bingux-plymouth { };
     bingux-installer = pkgs.callPackage ../../pkgs/bingux-installer { };
+
+    # Sway config: floating by default, dark bg, bottom bar, autostart installer
+    swayConfig = pkgs.writeText "sway-config" ''
+        # All windows float by default
+        for_window [app_id=".*"] floating enable
+
+        # Installer starts maximized
+        for_window [app_id="dev.drewett.BinguxInstaller"] floating enable, resize set 800 600, move position center
+
+        # Dark background
+        output * bg #1a1a2e solid_color
+
+        # Bottom bar
+        bar {
+            position bottom
+            status_command while date +'%H:%M'; do sleep 30; done
+            colors {
+                background #1a1a2e
+                statusline #ffffff
+                focused_workspace #5277c3 #5277c3 #ffffff
+                inactive_workspace #1a1a2e #1a1a2e #888888
+            }
+        }
+
+        # Keybindings
+        set $mod Mod4
+        bindsym $mod+Return exec ${pkgs.foot}/bin/foot
+        bindsym $mod+d exec ${pkgs.fuzzel}/bin/fuzzel
+        bindsym $mod+q kill
+        bindsym $mod+Shift+e exit
+
+        # Mouse focus
+        focus_follows_mouse yes
+
+        # Gaps
+        gaps inner 4
+        gaps outer 4
+        default_border pixel 2
+
+        # GTK dark theme
+        set $gnome-schema org.gnome.desktop.interface
+        exec_always ${pkgs.glib}/bin/gsettings set $gnome-schema color-scheme prefer-dark
+
+        # Autostart
+        exec ${bingux-installer}/bin/bingux-installer
+    '';
+
+    # Greetd auto-login session
+    swaySession = pkgs.writeShellScript "sway-session" ''
+        export XDG_SESSION_TYPE=wayland
+        export XDG_CURRENT_DESKTOP=sway
+        export MOZ_ENABLE_WAYLAND=1
+        exec ${pkgs.sway}/bin/sway --config ${swayConfig}
+    '';
 in
 {
     imports = [
-        (modulesPath + "/installer/cd-dvd/installation-cd-graphical-base.nix")
+        (modulesPath + "/installer/cd-dvd/installation-cd-minimal.nix")
         ./live-shell.nix
         ../system/branding.nix
     ];
 
-    # GNOME + GDM autologin
-    services.xserver.desktopManager.gnome.enable = lib.mkForce true;
-    services.xserver.displayManager.gdm.enable = lib.mkForce true;
-    services.displayManager.defaultSession = "gnome";
-    services.displayManager.autoLogin = {
+    # Greetd auto-login into sway
+    services.greetd = {
         enable = true;
-        user = "bingux";
+        settings.default_session = {
+            command = "${swaySession}";
+            user = "bingux";
+        };
     };
 
-    # Passwordless bingux user on the live installer
+    # Passwordless bingux user
     users.users.bingux.hashedPassword = lib.mkForce "";
     security.sudo.wheelNeedsPassword = lib.mkForce false;
 
-    # Polkit rule: allow bingux user to run bingux-installer backend as root
+    # Polkit for privileged operations
+    security.polkit.enable = true;
     security.polkit.extraConfig = ''
         polkit.addRule(function(action, subject) {
-            if (subject.user == "bingux" &&
-                action.id == "org.freedesktop.policykit.exec") {
+            if (subject.user == "bingux") {
                 return polkit.Result.YES;
             }
         });
     '';
 
-    # Plain dark background instead of NixOS wallpaper
-    programs.dconf.profiles.user.databases = [{
-        settings."org/gnome/desktop/background" = {
-            picture-options = "none";
-            primary-color = "#1a1a2e";
-        };
-        settings."org/gnome/desktop/screensaver" = {
-            picture-options = "none";
-            primary-color = "#1a1a2e";
-        };
-        settings."org/gnome/desktop/interface" = {
-            color-scheme = "prefer-dark";
-        };
-        settings."org/gnome/shell" = {
-            favorite-apps = [
-                "dev.drewett.BinguxInstaller.desktop"
-                "org.gnome.Nautilus.desktop"
-                "firefox.desktop"
-                "org.gnome.Terminal.desktop"
-            ];
-        };
-    }];
+    # Wayland + sway essentials
+    programs.sway.enable = true;
+    xdg.portal = {
+        enable = true;
+        wlr.enable = true;
+    };
 
     environment.defaultPackages = lib.mkForce (with pkgs; [
         vim
@@ -62,72 +100,42 @@ in
     ]);
 
     environment.systemPackages = with pkgs; [
+        # Installer
+        bingux-installer
+
+        # Browser + tools
         firefox
         gh
         gparted
         gptfdisk
         ssh-to-age
-        gnome-terminal
-        gnome-text-editor
-        bingux-installer
+
+        # Lightweight Wayland apps
+        foot              # terminal
+        fuzzel            # app launcher
+        mako              # notifications
+        wl-clipboard      # clipboard
+        gnome-text-editor # log viewer
     ];
 
-    # Locale and keyboard
+    # Locale
     i18n.defaultLocale = lib.mkForce "en_US.UTF-8";
     i18n.supportedLocales = lib.mkForce [
         "en_US.UTF-8/UTF-8"
         "en_GB.UTF-8/UTF-8"
     ];
 
-    # Strip GNOME bloat from installer
-    environment.gnome.excludePackages = with pkgs; [
-        epiphany
-        geary
-        gnome-music
-        gnome-photos
-        gnome-software
-        gnome-tour
-        yelp
-        gnome-maps
-        gnome-contacts
-        gnome-weather
-        gnome-clocks
-        gnome-calendar
-        gnome-characters
-        gnome-connections
-        gnome-console
-        gnome-logs
-        gnome-system-monitor
-        baobab
-        simple-scan
-        totem
-        evince
-        snapshot
-        gnome-font-viewer
-        gnome-disk-utility
-    ];
-
-    # Trim VM guest additions
+    # Trim
     virtualisation.vmware.guest.enable = lib.mkForce false;
-
-    # Disable nix-index in installer
     programs.nix-index.enable = lib.mkForce false;
-
-    # Disable direnv in installer
     programs.direnv.enable = lib.mkForce false;
-
-    # Exclude documentation
     documentation.enable = lib.mkForce false;
     documentation.man.enable = lib.mkForce false;
     documentation.info.enable = lib.mkForce false;
     documentation.doc.enable = lib.mkForce false;
     documentation.nixos.enable = lib.mkForce false;
-
-    # Only include firmware for common hardware
     hardware.enableAllFirmware = lib.mkForce false;
     hardware.enableRedistributableFirmware = true;
-
-    # Disable unneeded services
     services.printing.enable = lib.mkForce false;
     hardware.bluetooth.enable = lib.mkForce false;
     services.power-profiles-daemon.enable = lib.mkForce false;
@@ -135,7 +143,7 @@ in
     boot.swraid.enable = lib.mkForce false;
     virtualisation.hypervGuest.enable = lib.mkForce false;
 
-    # Ensure virtio drivers are available
+    # Virtio drivers
     boot.initrd.availableKernelModules = [
         "virtio_pci" "virtio_blk" "virtio_scsi" "virtio_net"
         "ahci" "sd_mod" "sr_mod" "usb_storage" "ehci_pci"
@@ -150,9 +158,7 @@ in
     nix.settings.cores = 0;
 
     # Fonts
-    fonts.packages = with pkgs; [
-        adwaita-fonts
-    ];
+    fonts.packages = with pkgs; [ adwaita-fonts ];
 
     # Plymouth + quiet boot
     boot.plymouth = {
@@ -194,29 +200,4 @@ in
     '';
 
     networking.hostName = "bingux-installer";
-
-    # Autostart the GTK4 installer
-    environment.etc."xdg/autostart/bingux-installer.desktop".text = ''
-        [Desktop Entry]
-        Type=Application
-        Name=Install Bingux
-        Comment=Install Bingux to your disk
-        Exec=${bingux-installer}/bin/bingux-installer
-        Icon=bingux
-        Terminal=false
-        Categories=System;
-        X-GNOME-Autostart-Phase=Application
-        X-GNOME-Autostart-Delay=2
-    '';
-
-    environment.etc."skel/Desktop/install-bingux.desktop".text = ''
-        [Desktop Entry]
-        Type=Application
-        Name=Install Bingux
-        Comment=Install Bingux to your disk
-        Exec=${bingux-installer}/bin/bingux-installer
-        Icon=bingux
-        Terminal=false
-        Categories=System;
-    '';
 }

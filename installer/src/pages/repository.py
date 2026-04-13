@@ -174,13 +174,13 @@ class RepositoryPage(BasePage):
 
     def _on_gh_login(self, _btn):
         subprocess.Popen([
-            "gnome-terminal", "--", "bash", "-c",
+            "foot", "--", "bash", "-c",
             "gh auth login -p https -w; echo; echo 'Done — close this window and try again.'; read",
         ])
 
     def _on_gl_login(self, _btn):
         subprocess.Popen([
-            "gnome-terminal", "--", "bash", "-c",
+            "foot", "--", "bash", "-c",
             "echo 'Paste a GitLab personal access token:'; read -s TOKEN; "
             "git config --global credential.helper store; "
             "echo \"https://oauth2:$TOKEN@gitlab.com\" >> ~/.git-credentials; "
