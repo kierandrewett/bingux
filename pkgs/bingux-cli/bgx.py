@@ -239,9 +239,9 @@ def do_install(pkgs, save=False, skip_confirm=False):
             sp.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
             for i, line in enumerate(lines[-5:]):
                 if i < len(lines[-5:]) - 1:
-                    print(f"  {DARK}\u2502 {line.strip()}{RESET}")
+                    print(f"    {DARK}\u2502 {line.strip()}{RESET}")
                 else:
-                    print(f"  {DARK}\u23bf {line.strip()}{RESET}")
+                    print(f"    {DARK}\u2570 {line.strip()}{RESET}")
             print()
             failed += 1
 
