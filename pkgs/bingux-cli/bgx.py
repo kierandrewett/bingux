@@ -10,8 +10,8 @@ import time
 
 _USER = os.environ.get('USER', 'root')
 _unfree_accepted = False
-VOLATILE_PROFILE = f"/tmp/bgx-{_USER}"
-PERMANENT_PROFILE = f"/nix/var/nix/profiles/per-user/{_USER}/bgx-saved"
+VOLATILE_PROFILE = f"/tmp/bgx-session-{_USER}-packages"
+PERMANENT_PROFILE = f"/nix/var/nix/profiles/per-user/{_USER}/bgx-permanent-{_USER}-packages"
 
 # Colors — mostly grays with white for emphasis
 WHITE = "\033[97m"
