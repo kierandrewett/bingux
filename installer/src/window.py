@@ -8,7 +8,6 @@ from state import InstallerState
 from pages.welcome import WelcomePage
 from pages.install_type import InstallTypePage
 from pages.system_config import SystemConfigPage
-from pages.auth import AuthPage
 from pages.repository import RepositoryPage
 from pages.disk import DiskPage
 from pages.partitioning import PartitioningPage
@@ -37,8 +36,7 @@ class BinguxInstallerWindow(Adw.ApplicationWindow):
             InstallTypePage(self),
             # Fresh install path
             SystemConfigPage(self),
-            # Repository path
-            AuthPage(self),
+            # Repository path (handles auth inline when needed)
             RepositoryPage(self),
             # Shared path
             DiskPage(self),

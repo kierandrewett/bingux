@@ -1,43 +1,37 @@
 import json
 import os
+import re
 import shutil
 import subprocess
 
 
-def is_authenticated():
-    try:
-        r = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True)
-        return r.returncode == 0
-    except FileNotFoundError:
-        return False
-
-
-def login():
-    """Launch gh auth login in a terminal window.
-
-    gh needs an interactive TTY for the device code flow, so we open
-    a terminal. The user completes auth there, then clicks Check Status.
-    """
-    subprocess.Popen([
-        "gnome-terminal", "--", "bash", "-c",
-        "gh auth login -p https -w; echo; echo 'Done — you can close this window.'; read",
-    ])
-
-
 def get_token():
-    try:
-        r = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, check=True)
-        return r.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return ""
+    """Try to get an access token from gh or glab CLI."""
+    for cmd in [["gh", "auth", "token"], ["glab", "auth", "token"]]:
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            token = r.stdout.strip()
+            if token:
+                return token
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            continue
+    return ""
 
 
-def configure_nix_token():
-    """Write GitHub token to nix config for flake access."""
-    token = get_token()
-    if not token:
+def configure_nix_token_from_url(clone_url):
+    """Extract host + token from a clone URL and write to nix config."""
+    m = re.match(r"https://oauth2:([^@]+)@([^/]+)/", clone_url)
+    if not m:
+        # Try gh CLI token for github.com
+        token = get_token()
+        if token:
+            _write_nix_token("github.com", token)
         return
-    # Write to both user and root nix config
+    token, host = m.group(1), m.group(2)
+    _write_nix_token(host, token)
+
+
+def _write_nix_token(host, token):
     for nix_dir in [
         os.path.expanduser("~/.config/nix"),
         "/root/.config/nix",
@@ -46,9 +40,9 @@ def configure_nix_token():
             os.makedirs(nix_dir, exist_ok=True)
             conf = os.path.join(nix_dir, "nix.conf")
             existing = open(conf).read() if os.path.exists(conf) else ""
-            if "github.com=" not in existing:
+            if f"{host}=" not in existing:
                 with open(conf, "a") as f:
-                    f.write(f"access-tokens = github.com={token}\n")
+                    f.write(f"access-tokens = {host}={token}\n")
         except OSError:
             pass
 
