@@ -89,20 +89,24 @@ def pkg_info(pkg):
     except subprocess.TimeoutExpired:
         pass
     try:
-        r = run(["nix", "path-info", "--json", "-S", f"nixpkgs#{pkg}"],
+        import re
+        r = run(["nix", "path-info", "-S", f"nixpkgs#{pkg}"],
                 capture_output=True, text=True, timeout=30)
-        if r.returncode == 0:
-            data = json.loads(r.stdout)
-            if isinstance(data, list) and data:
-                size = data[0].get("closureSize") or data[0].get("narSize") or 0
-            elif isinstance(data, dict):
-                key = next(iter(data), None)
-                size = data[key].get("closureSize", 0) if key else 0
-            else:
-                size = 0
-            if size:
-                info["size"] = format_size(size)
-    except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception):
+        # Parse stderr for "X.XX MiB download, Y.YY MiB unpacked"
+        for line in (r.stderr or "").split("\n"):
+            m = re.search(r"([\d.]+)\s+([KMGT]iB)\s+download,\s+([\d.]+)\s+([KMGT]iB)\s+unpacked", line)
+            if m:
+                info["size"] = f"{m.group(3)} {m.group(4)}"
+                break
+        # Fallback: parse stdout for store path size
+        if not info["size"] and r.stdout:
+            parts = r.stdout.strip().split()
+            if len(parts) >= 2:
+                try:
+                    info["size"] = format_size(int(parts[-1]))
+                except ValueError:
+                    pass
+    except (subprocess.TimeoutExpired, Exception):
         pass
     return info
 
@@ -152,6 +156,9 @@ def show_transaction(installs, removes, save=False):
 
     if removes:
         print(f"  {WARN}\u25b8{RESET} {WHITE}Removing{RESET}")
+        line_w = _term_width() - 6
+        print(f"    {DARK}{'Package'.ljust(COL_NAME)}{RESET}")
+        print(f"    {DARK}{'\u2500' * line_w}{RESET}")
         for pkg in removes:
             print(f"    {WHITE}{pkg}{RESET}")
         print()
