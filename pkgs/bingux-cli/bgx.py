@@ -232,7 +232,13 @@ def _is_installed(pkg):
 
 
 def _auto_gc():
-    """Run a quick garbage collection after transactions."""
+    """Run desktop database update and garbage collection after transactions."""
+    # Update desktop database so new apps appear in GNOME menu
+    for profile in (VOLATILE_PROFILE, PERMANENT_PROFILE):
+        apps_dir = f"{profile}/share/applications"
+        if os.path.isdir(apps_dir):
+            run(["update-desktop-database", apps_dir], capture_output=True)
+
     sp = Spinner("Cleaning up...")
     sp.start()
     r = run(["nix", "store", "gc"], capture_output=True, text=True)
