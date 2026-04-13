@@ -375,6 +375,10 @@ def do_search(query):
     if current:
         results.append(current)
 
+    # Filter out entries with no version, sort alphabetically
+    results = [r for r in results if r.get("version")]
+    results.sort(key=lambda r: r["name"].lower())
+
     if not results:
         print(f"  {DARK}No results found.{RESET}")
         return
