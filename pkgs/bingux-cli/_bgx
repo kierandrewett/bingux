@@ -1,0 +1,69 @@
+#compdef bgx
+
+_bgx_packages() {
+    # Complete from installed profiles
+    local -a pkgs
+    pkgs=(${(f)"$(nix profile list --profile ~/.local/state/nix/profiles/profile 2>/dev/null | awk '{print $NF}' | sed 's/.*#//')"})
+    _describe 'package' pkgs
+}
+
+_bgx_search() {
+    _message 'search query'
+}
+
+_bgx() {
+    local -a commands
+    commands=(
+        'install:Install a package'
+        'add:Install a package (alias)'
+        'a:Install a package (alias)'
+        'remove:Remove a package'
+        'uninstall:Remove a package (alias)'
+        'rm:Remove a package (alias)'
+        'r:Remove a package (alias)'
+        'search:Search for packages'
+        's:Search for packages (alias)'
+        'q:Search for packages (alias)'
+        'list:List installed packages'
+        'ls:List installed packages (alias)'
+    )
+
+    # Handle prefix operators
+    if [[ "$words[2]" == [+\-\?]* ]]; then
+        _message 'package (prefix: + install, ++ save, - remove, ? search)'
+        return
+    fi
+
+    _arguments -C \
+        '1:command:->cmd' \
+        '*:arg:->args'
+
+    case "$state" in
+        cmd)
+            _describe 'command' commands
+            ;;
+        args)
+            case "$words[2]" in
+                install|add|a)
+                    _arguments \
+                        '-s[Save permanently]' \
+                        '--save[Save permanently]' \
+                        '-y[Skip confirmation]' \
+                        '--yes[Skip confirmation]' \
+                        '*:package:_bgx_search'
+                    ;;
+                remove|uninstall|rm|r)
+                    _arguments \
+                        '-y[Skip confirmation]' \
+                        '--yes[Skip confirmation]' \
+                        '*:package:_bgx_packages'
+                    ;;
+                search|s|q)
+                    _bgx_search
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_bgx "$@"
