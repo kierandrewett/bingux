@@ -5,6 +5,7 @@ gi.require_version("Adw", "1")
 
 from gi.repository import Adw, Gtk
 from pages.base_page import BasePage
+from state import InstallerState
 
 
 class InstallTypePage(BasePage):
@@ -40,6 +41,13 @@ class InstallTypePage(BasePage):
 
         self.content.append(group)
         self.add_nav_buttons()
+
+    def should_show(self):
+        # Skip this page if a repo URL is baked into the ISO
+        if InstallerState.get_preset_repo_url():
+            self.state.install_type = "repository"
+            return False
+        return True
 
     def validate(self):
         self.state.install_type = "repository" if self.repo_check.get_active() else "fresh"

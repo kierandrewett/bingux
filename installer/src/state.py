@@ -3,6 +3,7 @@ import os
 from dataclasses import dataclass, field, asdict
 
 STATE_PATH = "/tmp/bingux-installer-state.json"
+REPO_URL_FILE = "/etc/bingux-installer/repo-url"
 
 
 @dataclass
@@ -77,3 +78,13 @@ class InstallerState:
     @classmethod
     def has_saved_state(cls):
         return os.path.exists(STATE_PATH)
+
+    @classmethod
+    def get_preset_repo_url(cls):
+        """Read pre-set repo URL baked into the ISO, if any."""
+        try:
+            with open(REPO_URL_FILE) as f:
+                url = f.read().strip()
+                return url if url else None
+        except OSError:
+            return None

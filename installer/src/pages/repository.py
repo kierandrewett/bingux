@@ -8,6 +8,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk, GLib
 from pages.base_page import BasePage
 from backend import github
+from state import InstallerState
 import threading
 
 
@@ -77,6 +78,14 @@ class RepositoryPage(BasePage):
 
     def should_show(self):
         return self.state.install_type == "repository"
+
+    def on_enter(self):
+        preset = InstallerState.get_preset_repo_url()
+        if preset:
+            self.url_row.set_text(preset)
+            self.url_row.set_editable(False)
+            # Auto-clone on enter
+            self._clone_and_enumerate(preset)
 
     def validate(self):
         url = self.url_row.get_text().strip()

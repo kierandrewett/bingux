@@ -1,5 +1,6 @@
-{ lib, modulesPath, pkgs, ... }:
+{ config, lib, modulesPath, pkgs, ... }:
 let
+    cfg = config.bingux.installer;
     bingux-plymouth = pkgs.callPackage ../../pkgs/bingux-plymouth { };
     bingux-installer = pkgs.callPackage ../../pkgs/bingux-installer { };
 
@@ -124,6 +125,12 @@ let
     '';
 in
 {
+    options.bingux.installer.repoUrl = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = "Pre-set repository URL. When set, the installer skips to host selection for this repo.";
+    };
+
     imports = [
         (modulesPath + "/installer/cd-dvd/installation-cd-minimal.nix")
         ./live-shell.nix
@@ -342,6 +349,10 @@ in
     '';
 
     networking.hostName = "bingux-installer";
+
+    # Write pre-set repo URL for the installer to read
+    environment.etc."bingux-installer/repo-url".text =
+        lib.mkIf (cfg.repoUrl != null) cfg.repoUrl;
 
     # Autostart desktop entry for app launchers
     environment.etc."xdg/autostart/bingux-installer.desktop".text = ''
