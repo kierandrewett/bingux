@@ -334,7 +334,7 @@ def do_install(pkgs, save=False, skip_confirm=False):
 
     failed = 0
     for pkg in pkgs:
-        cmd = ["nix", "profile", "add", "--profile", profile]
+        cmd = ["nix", "profile", "add", "--log-format", "bar-with-logs", "--profile", profile]
         env = None
         if pkg in unfree_pkgs:
             cmd.append("--impure")
@@ -343,7 +343,7 @@ def do_install(pkgs, save=False, skip_confirm=False):
 
         # Stream progress from nix stderr
         import re as _re
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
         sp = Spinner(f"Installing {pkg}...")
         sp.start()
 
@@ -351,19 +351,28 @@ def do_install(pkgs, save=False, skip_confirm=False):
         progress_lines = []
         fetched = 0
         total_fetch = 0
+        dl_size = ""
 
         def _read_progress():
-            nonlocal fetched, total_fetch
-            for line in proc.stderr:
-                line = line.strip()
+            nonlocal fetched, total_fetch, dl_size
+            while True:
+                raw = proc.stderr.readline()
+                if not raw:
+                    break
+                try:
+                    line = raw.decode("utf-8", errors="replace").strip()
+                except AttributeError:
+                    line = raw.strip()
                 if not line:
                     continue
                 stderr_lines.append(line)
 
-                # Count total paths to fetch
-                m = _re.match(r"these (\d+) paths will be fetched", line)
+                # "these N paths will be fetched (X MiB download, Y MiB unpacked):"
+                m = _re.match(r"these (\d+) paths will be fetched \((.+?) download", line)
                 if m:
                     total_fetch = int(m.group(1))
+                    dl_size = m.group(2)
+                    sp.msg = f"{pkg}: fetching {total_fetch} paths ({dl_size})..."
                     continue
 
                 if "copying path" in line:
@@ -384,11 +393,12 @@ def do_install(pkgs, save=False, skip_confirm=False):
         progress_thread.start()
         proc.wait()
         sp._stop = True
-        progress_thread.join(timeout=1)
+        progress_thread.join(timeout=2)
         r_code = proc.returncode
         r_stderr = "\n".join(stderr_lines)
         if r_code == 0:
-            sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}")
+            extra = f" {DARK}({dl_size}){RESET}" if dl_size else ""
+            sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}{extra}")
             if progress_lines:
                 for pl in progress_lines[:-1]:
                     print(pl)
