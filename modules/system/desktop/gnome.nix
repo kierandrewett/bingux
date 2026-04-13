@@ -151,6 +151,18 @@ in
                         border-width = gv.mkInt32 (-1);
                         keep-rounded-corners-maximized = false;
                         keep-rounded-corners-fullscreen = false;
+                        skip-libadwaita = false;
+                        skip-libhandy = false;
+                    };
+
+                    # Dark wallpaper instead of NixOS default
+                    "org/gnome/desktop/background" = {
+                        picture-options = "none";
+                        primary-color = "#1a1a2e";
+                    };
+                    "org/gnome/desktop/screensaver" = {
+                        picture-options = "none";
+                        primary-color = "#1a1a2e";
                     };
 
                     "org/gnome/shell/extensions/nightthemeswitcher/time" = {
@@ -168,6 +180,8 @@ in
                     ExecStart = "${themeSyncScript}";
                     Restart = "on-failure";
                     RestartSec = 5;
+                    # Delay start to let extensions load
+                    ExecStartPre = "${pkgs.coreutils}/bin/sleep 5";
                 };
             };
         })

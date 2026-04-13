@@ -38,8 +38,11 @@
             };
         };
 
-        # Bingux CLI helper (os rebuild, os update, etc.)
-        environment.systemPackages = [ pkgs.os-helper ];
+        # Default shell
+        programs.zsh.enable = lib.mkDefault true;
+
+        # Bingux CLI helper + essentials
+        environment.systemPackages = with pkgs; [ os-helper fastfetch ];
 
         # Mark /os as safe for git
         environment.etc."gitconfig".text = lib.mkDefault ''

@@ -2,20 +2,17 @@ import os
 
 
 def generate_config(state, dest="/tmp/bingux-os"):
-    """Generate a minimal NixOS flake config for a fresh install."""
+    """Generate a minimal NixOS flake config for a fresh install using bingux.* options."""
     os.makedirs(os.path.join(dest, f"machines/{state.hostname}"), exist_ok=True)
 
-    desktop_line = ""
+    # Build bingux.* option lines
+    bingux_opts = []
     if state.desktop:
-        desktop_line = f'        bingux.desktop = "{state.desktop}";'
-
-    locale_line = ""
+        bingux_opts.append(f'        bingux.desktop = "{state.desktop}";')
     if state.locale:
-        locale_line = f'        i18n.defaultLocale = "{state.locale}";'
+        bingux_opts.append(f'        bingux.locale = "{state.locale}";')
 
-    keymap_line = ""
-    if state.keymap:
-        keymap_line = f'        console.keyMap = "{state.keymap}";'
+    bingux_block = "\n".join(bingux_opts)
 
     user_block = ""
     if state.username:
@@ -23,6 +20,7 @@ def generate_config(state, dest="/tmp/bingux-os"):
         users.users.{state.username} = {{
             isNormalUser = true;
             description = "{state.username}";
+            shell = pkgs.zsh;
             extraGroups = [ "wheel" "networkmanager" "audio" "video" ];
         }};
         users.mutableUsers = true;"""
@@ -47,13 +45,15 @@ def generate_config(state, dest="/tmp/bingux-os"):
 }}
 """
 
-    machine_nix = f"""{{ ... }}:
+    machine_nix = f"""{{ pkgs, ... }}:
 {{
     imports = [ ./hardware-configuration.nix ];
-{desktop_line}
-{locale_line}
-{keymap_line}
+
+    networking.hostName = "{state.hostname}";
+
+{bingux_block}
 {user_block}
+
     system.stateVersion = "25.05";
 }}
 """

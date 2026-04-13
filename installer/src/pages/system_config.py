@@ -21,6 +21,26 @@ class SystemConfigPage(BasePage):
 
         self.content.append(host_group)
 
+        # Locale
+        locale_group = Adw.PreferencesGroup()
+        locale_group.set_title("Language & Region")
+
+        self.locale_combo = Adw.ComboRow(title="Locale")
+        self.locales = [
+            "en_US.UTF-8", "en_GB.UTF-8", "de_DE.UTF-8", "fr_FR.UTF-8",
+            "es_ES.UTF-8", "it_IT.UTF-8", "pt_BR.UTF-8", "nl_NL.UTF-8",
+            "pl_PL.UTF-8", "sv_SE.UTF-8", "nb_NO.UTF-8", "da_DK.UTF-8",
+            "fi_FI.UTF-8", "ja_JP.UTF-8", "ko_KR.UTF-8", "zh_CN.UTF-8",
+            "ru_RU.UTF-8",
+        ]
+        model = Gtk.StringList()
+        for loc in self.locales:
+            model.append(loc)
+        self.locale_combo.set_model(model)
+        locale_group.add(self.locale_combo)
+
+        self.content.append(locale_group)
+
         # Profile
         profile_group = Adw.PreferencesGroup()
         profile_group.set_title("System Profile")
@@ -112,4 +132,8 @@ class SystemConfigPage(BasePage):
             return False
         self.state.hostname = hostname
         self.state.selected_host = hostname
+
+        idx = self.locale_combo.get_selected()
+        self.state.locale = self.locales[idx] if idx < len(self.locales) else "en_US.UTF-8"
+
         return True

@@ -32,6 +32,9 @@ lib.nixosSystem {
         # Machine profile (workstation, laptop, generic)
         (binguxModulesPath + "/profiles/${profile}.nix")
 
+        # Set hostname from mkBinguxHost parameter
+        { networking.hostName = lib.mkDefault hostname; }
+
         # Expose hardwareConfigPath for the installer
         {
             options.bingux.hardwareConfigPath = lib.mkOption {
