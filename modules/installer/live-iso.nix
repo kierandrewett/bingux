@@ -31,6 +31,8 @@ let
 
     labwcEnv = pkgs.writeText "labwc-environment" ''
         XDG_CURRENT_DESKTOP=GNOME
+        XDG_DATA_DIRS=/run/current-system/sw/share
+        GSETTINGS_SCHEMA_DIR=/run/current-system/sw/share/glib-2.0/schemas
         MOZ_ENABLE_WAYLAND=1
         GTK_THEME=adw-gtk3-dark
         XCURSOR_THEME=Adwaita
@@ -197,10 +199,12 @@ in
         gnome-terminal
         gnome-text-editor
 
-        # Icons + cursors + theme
+        # Icons + cursors + theme + schemas
         adwaita-icon-theme
         hicolor-icon-theme
         adw-gtk3
+        gsettings-desktop-schemas
+        glib
     ];
 
     # Locale
