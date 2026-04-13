@@ -817,7 +817,7 @@ def print_usage():
     {GRAY}{"bgx ?query".ljust(C1)}{DARK}Search{RESET}
 
   {WHITE}Commands:{RESET}
-    {GRAY}{"install, add, a".ljust(C1)}{DARK}Install packages{RESET}
+    {GRAY}{"install, add, a".ljust(C1)}{DARK}Install for this session (-p for permanent){RESET}
     {GRAY}{"remove, rm, r".ljust(C1)}{DARK}Remove from session (-p for permanent){RESET}
     {GRAY}{"info, i".ljust(C1)}{DARK}Show package details{RESET}
     {GRAY}{"search, s, q".ljust(C1)}{DARK}Search nixpkgs (--name, --version, --relevance){RESET}
