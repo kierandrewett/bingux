@@ -11,18 +11,25 @@ import time
 VOLATILE_PROFILE = f"/nix/var/nix/profiles/per-user/{os.environ.get('USER', 'root')}/bgx-volatile"
 PERMANENT_PROFILE = os.path.expanduser("~/.local/state/nix/profiles/profile")
 
+# Colors — mostly grays with white for emphasis
+WHITE = "\033[97m"
+GRAY = "\033[37m"
+DARK = "\033[90m"
 BOLD = "\033[1m"
 DIM = "\033[2m"
 RESET = "\033[0m"
+ACCENT = "\033[38;5;111m"   # soft blue
+SUCCESS = "\033[38;5;114m"  # soft green
+WARN = "\033[38;5;180m"     # soft amber
+FAIL = "\033[38;5;174m"     # soft red
 
-COL_NAME = 28
-COL_VER = 14
-
+COL_NAME = 24
+COL_VER = 12
+COL_SIZE = 12
 VERSION = "0.2.0"
 
 
 class Spinner:
-    """Braille dot spinner for async operations."""
     FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
     def __init__(self, msg):
@@ -46,7 +53,7 @@ class Spinner:
         i = 0
         while not self._stop:
             frame = self.FRAMES[i % len(self.FRAMES)]
-            sys.stdout.write(f"\r  {frame} {self.msg}")
+            sys.stdout.write(f"\r  {DARK}{frame}{RESET} {GRAY}{self.msg}{RESET}")
             sys.stdout.flush()
             i += 1
             time.sleep(0.08)
@@ -56,8 +63,17 @@ def run(cmd, **kwargs):
     return subprocess.run(cmd, **kwargs)
 
 
+def format_size(nbytes):
+    for unit in ("B", "KB", "MB", "GB"):
+        if nbytes < 1024:
+            return f"{nbytes:.1f} {unit}"
+        nbytes /= 1024
+    return f"{nbytes:.1f} TB"
+
+
 def pkg_info(pkg):
-    info = {"name": pkg, "version": "", "description": ""}
+    import json
+    info = {"name": pkg, "version": "", "description": "", "size": ""}
     try:
         r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.version"],
                 capture_output=True, text=True, timeout=15)
@@ -72,42 +88,69 @@ def pkg_info(pkg):
             info["description"] = r.stdout.strip()
     except subprocess.TimeoutExpired:
         pass
+    try:
+        r = run(["nix", "path-info", "--json", "-S", f"nixpkgs#{pkg}"],
+                capture_output=True, text=True, timeout=30)
+        if r.returncode == 0:
+            data = json.loads(r.stdout)
+            if isinstance(data, list) and data:
+                size = data[0].get("closureSize") or data[0].get("narSize") or 0
+            elif isinstance(data, dict):
+                key = next(iter(data), None)
+                size = data[key].get("closureSize", 0) if key else 0
+            else:
+                size = 0
+            if size:
+                info["size"] = format_size(size)
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception):
+        pass
     return info
 
 
-def confirm(prompt="  Proceed? [y/N] "):
+def confirm():
     try:
-        return input(prompt).strip().lower() in ("y", "yes")
+        ans = input(f"  {DARK}Proceed?{RESET} {GRAY}[y/N]{RESET} ")
+        return ans.strip().lower() in ("y", "yes")
     except (EOFError, KeyboardInterrupt):
         print()
         return False
+
+
+def pkg_row(name, version="", size="", description=""):
+    n = name.ljust(COL_NAME)
+    v = (version or "").ljust(COL_VER)
+    s = (size or "").ljust(COL_SIZE)
+    return f"    {WHITE}{n}{RESET}{GRAY}{v}{RESET}{GRAY}{s}{RESET} {DARK}{description}{RESET}"
 
 
 def show_transaction(installs, removes, save=False):
     if not installs and not removes:
         return True
 
+    print()
+
     if installs:
         mode = "permanently" if save else "for this session"
-        print(f"\n  Installing ({mode}):")
-        print(f"    {DIM}{'Package'.ljust(COL_NAME)} {'Version'.ljust(COL_VER)} Description{RESET}")
+        print(f"  {ACCENT}\u25b8{RESET} {WHITE}Installing{RESET} {DARK}({mode}){RESET}")
+        print(f"    {DARK}{'Package'.ljust(COL_NAME)} {'Version'.ljust(COL_VER)} {'Size'.ljust(COL_SIZE)} Description{RESET}")
+        print(f"    {DARK}{'\u2500' * (COL_NAME + COL_VER + COL_SIZE + 16)}{RESET}")
         for info in installs:
-            n = info["name"].ljust(COL_NAME)
-            v = (info["version"] or "").ljust(COL_VER)
-            d = info["description"]
-            print(f"    {BOLD}{n}{RESET} {v} {DIM}{d}{RESET}")
+            print(pkg_row(info["name"], info["version"], info.get("size", ""), info["description"]))
+        print()
 
     if removes:
-        print(f"\n  Removing:")
+        print(f"  {WARN}\u25b8{RESET} {WHITE}Removing{RESET}")
         for pkg in removes:
-            print(f"    {pkg}")
+            print(f"    {WHITE}{pkg}{RESET}")
+        print()
 
     parts = []
     if installs:
         parts.append(f"{len(installs)} to install")
     if removes:
         parts.append(f"{len(removes)} to remove")
-    print(f"\n  {DIM}{', '.join(parts)}{RESET}\n")
+    print(f"  {DARK}{', '.join(parts)}{RESET}")
+    print()
 
     return confirm()
 
@@ -119,10 +162,10 @@ def do_install(pkgs, save=False, skip_confirm=False):
     sp.start()
     infos = [pkg_info(p) for p in pkgs]
     count = len(infos)
-    sp.stop(f"Resolved {count} {'package' if count == 1 else 'packages'}.")
+    sp.stop(f"{DARK}Resolved {count} {'package' if count == 1 else 'packages'}.{RESET}")
 
     if not skip_confirm and not show_transaction(infos, [], save=save):
-        print("  Aborted.")
+        print(f"  {DARK}Aborted.{RESET}")
         return False
 
     failed = 0
@@ -132,17 +175,22 @@ def do_install(pkgs, save=False, skip_confirm=False):
         r = run(["nix", "profile", "install", "--profile", profile, f"nixpkgs#{pkg}"],
                 capture_output=True)
         if r.returncode == 0:
-            sp.stop(f"\u2713 {pkg}")
+            sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}")
         else:
-            sp.stop(f"\u2717 {pkg}")
+            sp.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
             failed += 1
+
+    if failed == 0 and len(pkgs) > 0:
+        print(f"\n  {DARK}All packages installed.{RESET}\n")
+    elif failed:
+        print(f"\n  {FAIL}{failed} failed.{RESET}\n")
 
     return failed == 0
 
 
 def do_remove(pkgs, skip_confirm=False):
     if not skip_confirm and not show_transaction([], pkgs):
-        print("  Aborted.")
+        print(f"  {DARK}Aborted.{RESET}")
         return False
 
     failed = 0
@@ -157,11 +205,11 @@ def do_remove(pkgs, skip_confirm=False):
                 capture_output=True,
             )
             if r.returncode == 0:
-                print(f"  \u2713 {pkg} ({label})")
+                print(f"  {SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}({label}){RESET}")
                 removed = True
 
         if not removed:
-            print(f"  \u2717 {pkg} not installed", file=sys.stderr)
+            print(f"  {FAIL}\u2717{RESET} {WHITE}{pkg}{RESET} {DARK}not installed{RESET}", file=sys.stderr)
             failed += 1
 
     return failed == 0
@@ -172,24 +220,22 @@ def do_search(query):
 
 
 def do_list():
-    for profile, label in [
-        (VOLATILE_PROFILE, "Session"),
-        (PERMANENT_PROFILE, "Permanent"),
+    for profile, label, marker in [
+        (VOLATILE_PROFILE, "Session", WARN),
+        (PERMANENT_PROFILE, "Permanent", SUCCESS),
     ]:
-        print(f"\n  {BOLD}{label}{RESET}")
+        print(f"\n  {marker}\u25cf{RESET} {WHITE}{label}{RESET}")
         r = run(["nix", "profile", "list", "--profile", profile], capture_output=True, text=True)
         if r.returncode == 0 and r.stdout.strip():
             for line in r.stdout.strip().split("\n"):
-                print(f"    {line}")
+                print(f"    {GRAY}{line}{RESET}")
         else:
-            print(f"    {DIM}(none){RESET}")
+            print(f"    {DARK}(none){RESET}")
     print()
 
 
 def run_prefix_mode(args):
-    installs = []
-    saves = []
-    removes = []
+    installs, saves, removes = [], [], []
 
     for arg in args:
         if arg.startswith("++"):
@@ -202,7 +248,7 @@ def run_prefix_mode(args):
             do_search(arg[1:])
             return
         else:
-            print(f"  \u2717 Unknown: {arg}", file=sys.stderr)
+            print(f"  {FAIL}\u2717{RESET} Unknown: {arg}", file=sys.stderr)
             sys.exit(1)
 
     ok = True
@@ -212,14 +258,12 @@ def run_prefix_mode(args):
         ok = do_install(saves, save=True) and ok
     if removes:
         ok = do_remove(removes) and ok
-
     if not ok:
         sys.exit(1)
 
 
 def run_subcommand_mode(args):
-    cmd = args[0]
-    rest = args[1:]
+    cmd, rest = args[0], args[1:]
 
     if cmd in ("install", "add", "a"):
         save = False
@@ -233,7 +277,7 @@ def run_subcommand_mode(args):
             else:
                 pkgs.append(arg)
         if not pkgs:
-            print("  Package name required.", file=sys.stderr)
+            print(f"  {DARK}Package name required.{RESET}", file=sys.stderr)
             sys.exit(1)
         if not do_install(pkgs, save=save, skip_confirm=yes):
             sys.exit(1)
@@ -242,14 +286,14 @@ def run_subcommand_mode(args):
         yes = "-y" in rest or "--yes" in rest
         pkgs = [a for a in rest if a not in ("-y", "--yes")]
         if not pkgs:
-            print("  Package name required.", file=sys.stderr)
+            print(f"  {DARK}Package name required.{RESET}", file=sys.stderr)
             sys.exit(1)
         if not do_remove(pkgs, skip_confirm=yes):
             sys.exit(1)
 
     elif cmd in ("search", "s", "q"):
         if not rest:
-            print("  Search query required.", file=sys.stderr)
+            print(f"  {DARK}Search query required.{RESET}", file=sys.stderr)
             sys.exit(1)
         do_search(" ".join(rest))
 
@@ -269,35 +313,33 @@ C1 = 36
 
 def print_usage():
     print(f"""
-  {BOLD}bgx{RESET} {DIM}v{VERSION} — Bingux package manager{RESET}
+  {WHITE}{BOLD}bgx{RESET} {DARK}v{VERSION} — Bingux package manager{RESET}
 
-  {BOLD}Quick syntax:{RESET}
-    {"bgx +firefox".ljust(C1)}{DIM}Install for this session{RESET}
-    {"bgx ++firefox".ljust(C1)}{DIM}Install permanently{RESET}
-    {"bgx -firefox".ljust(C1)}{DIM}Remove{RESET}
-    {"bgx +pkg1 +pkg2 -pkg3".ljust(C1)}{DIM}Batch operations{RESET}
-    {"bgx ?query".ljust(C1)}{DIM}Search{RESET}
+  {WHITE}Quick syntax:{RESET}
+    {GRAY}{"bgx +firefox".ljust(C1)}{DARK}Install for this session{RESET}
+    {GRAY}{"bgx ++firefox".ljust(C1)}{DARK}Install permanently{RESET}
+    {GRAY}{"bgx -firefox".ljust(C1)}{DARK}Remove{RESET}
+    {GRAY}{"bgx +pkg1 +pkg2 -pkg3".ljust(C1)}{DARK}Batch operations{RESET}
+    {GRAY}{"bgx ?query".ljust(C1)}{DARK}Search{RESET}
 
-  {BOLD}Commands:{RESET}
-    {"install, add, a".ljust(C1)}{DIM}Install packages{RESET}
-    {"remove, rm, r".ljust(C1)}{DIM}Remove packages{RESET}
-    {"search, s, q".ljust(C1)}{DIM}Search nixpkgs{RESET}
-    {"list, ls".ljust(C1)}{DIM}List installed packages{RESET}
-    {"help".ljust(C1)}{DIM}Show this help{RESET}
+  {WHITE}Commands:{RESET}
+    {GRAY}{"install, add, a".ljust(C1)}{DARK}Install packages{RESET}
+    {GRAY}{"remove, rm, r".ljust(C1)}{DARK}Remove packages{RESET}
+    {GRAY}{"search, s, q".ljust(C1)}{DARK}Search nixpkgs{RESET}
+    {GRAY}{"list, ls".ljust(C1)}{DARK}List installed packages{RESET}
+    {GRAY}{"help".ljust(C1)}{DARK}Show this help{RESET}
 
-  {BOLD}Flags:{RESET}
-    {"-s, --save".ljust(C1)}{DIM}Install permanently (persists after reboot){RESET}
-    {"-y, --yes".ljust(C1)}{DIM}Skip confirmation prompt{RESET}
+  {WHITE}Flags:{RESET}
+    {GRAY}{"-s, --save".ljust(C1)}{DARK}Install permanently (persists after reboot){RESET}
+    {GRAY}{"-y, --yes".ljust(C1)}{DARK}Skip confirmation prompt{RESET}
 """)
 
 
 def main():
     args = sys.argv[1:]
-
     if not args:
         print_usage()
         return
-
     if args[0][0] in ("+", "-", "?"):
         run_prefix_mode(args)
     else:
