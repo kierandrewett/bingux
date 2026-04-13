@@ -39,10 +39,13 @@ let
         # Force immediate rendering (fixes blank screen until mouse move on virtio-gpu)
         seat * hide_cursor 0
 
-        # Gaps
+        # Titlebar on all windows (CSD-like, draggable)
+        default_border normal 1
+        titlebar_padding 6
+        titlebar_border_thickness 0
+        font Inter 10
         gaps inner 4
         gaps outer 4
-        default_border pixel 2
 
         # GTK settings via gsettings (needs dconf)
         set $gnome-schema org.gnome.desktop.interface
@@ -156,6 +159,26 @@ in
     # Ensure dconf service runs for gsettings
     programs.dconf.enable = true;
 
+    # Suppress zsh new-user setup prompt
+    environment.etc."skel/.zshrc".text = "# Bingux installer\n";
+
+    # Foot terminal config
+    environment.etc."xdg/foot/foot.ini".text = ''
+        [main]
+        font=JetBrains Mono:size=11
+        pad=8x8
+
+        [colors]
+        background=1a1a2e
+        foreground=ffffff
+    '';
+
+    # Fontconfig defaults (Libadwaita reads these, not GTK settings.ini)
+    fonts.fontconfig.defaultFonts = {
+        sansSerif = lib.mkForce [ "Inter" ];
+        monospace = lib.mkForce [ "JetBrains Mono" ];
+    };
+
     # Locale
     i18n.defaultLocale = lib.mkForce "en_US.UTF-8";
     i18n.supportedLocales = lib.mkForce [
@@ -196,7 +219,7 @@ in
     nix.settings.cores = 0;
 
     # Fonts + icons
-    fonts.packages = with pkgs; [ adwaita-fonts inter ];
+    fonts.packages = with pkgs; [ adwaita-fonts inter jetbrains-mono ];
 
 
     # Plymouth + quiet boot
