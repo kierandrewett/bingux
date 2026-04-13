@@ -43,15 +43,28 @@ class InstallPage(BasePage):
     def _log(self, text):
         GLib.idle_add(self.log_view.append, text)
 
+    def _pulse_progress(self):
+        """Slowly advance progress from 50% to 95% during nixos-install."""
+        def tick():
+            if not self._installing:
+                return False
+            cur = self.progress.get_fraction()
+            if cur < 0.95:
+                self.progress.set_fraction(cur + 0.002)
+                self.progress.set_text(f"{int((cur + 0.002) * 100)}%")
+            return self._installing
+        self._installing = True
+        GLib.timeout_add(3000, tick)
+
     def _run_install(self):
         s = self.state
-        steps = 8
-        step = 0
+        # Steps 1-7 = 0%–50%, step 8 (nixos-install) = 50%–95%, done = 100%
+        prep_steps = 7
 
         try:
             # Step 1: Generate config (fresh) or use cloned repo
-            step += 1
-            self._set_status("Preparing configuration...", step / steps)
+            step = 1
+            self._set_status("Preparing configuration...", step / prep_steps * 0.5)
             if s.install_type == "fresh":
                 self._log("Generating NixOS configuration...\n")
                 config_generator.generate_config(s)
@@ -60,8 +73,8 @@ class InstallPage(BasePage):
                 self._log(f"Using repository: {s.repo_url}\n")
 
             # Step 2: Partition (wipe mode) or use existing partitions
-            step += 1
-            self._set_status("Partitioning disk...", step / steps)
+            step = 2
+            self._set_status("Partitioning disk...", step / prep_steps * 0.5)
             if s.disk_mode == "wipe":
                 self._log(f"Wiping disk: {s.selected_disk}\n")
                 ok, _, err = partitioner.wipe_disk(s.selected_disk)
@@ -79,8 +92,8 @@ class InstallPage(BasePage):
                 self._log(f"EFI: {s.efi_partition}  Root: {s.root_partition}\n")
 
             # Step 3: Encryption
-            step += 1
-            self._set_status("Setting up encryption...", step / steps)
+            step = 3
+            self._set_status("Setting up encryption...", step / prep_steps * 0.5)
             root_dev = s.root_partition
 
             if s.encrypt_root:
@@ -94,15 +107,15 @@ class InstallPage(BasePage):
                 self._log("LUKS root ready\n")
 
             # Step 4: Format EFI
-            step += 1
-            self._set_status("Formatting EFI...", step / steps)
+            step = 4
+            self._set_status("Formatting EFI...", step / prep_steps * 0.5)
             self._log(f"Formatting EFI: {s.efi_partition}\n")
             partitioner.format_fat32(s.efi_partition)
             partitioner.set_efi_type(s.efi_partition)
 
             # Step 5: Format root
-            step += 1
-            self._set_status(f"Formatting root ({s.filesystem})...", step / steps)
+            step = 5
+            self._set_status(f"Formatting root ({s.filesystem})...", step / prep_steps * 0.5)
             self._log(f"Formatting root: {root_dev} as {s.filesystem}\n")
             partitioner.format_filesystem(root_dev, s.filesystem)
 
@@ -114,8 +127,8 @@ class InstallPage(BasePage):
                 partitioner.setup_swap(s.swap_partition)
 
             # Step 6: Mount
-            step += 1
-            self._set_status("Mounting filesystems...", step / steps)
+            step = 6
+            self._set_status("Mounting filesystems...", step / prep_steps * 0.5)
             if s.filesystem == "btrfs":
                 partitioner.setup_btrfs_subvolumes(root_dev, bool(s.home_partition))
             else:
@@ -126,8 +139,8 @@ class InstallPage(BasePage):
             self._log("Filesystems mounted\n")
 
             # Step 7: Generate hardware config + copy repo
-            step += 1
-            self._set_status("Generating hardware configuration...", step / steps)
+            step = 7
+            self._set_status("Generating hardware configuration...", step / prep_steps * 0.5)
             nixos.generate_config()
             nixos.copy_repo(s.selected_host, log_callback=self._log)
             age_key = nixos.generate_ssh_keys()
@@ -136,10 +149,11 @@ class InstallPage(BasePage):
             self._log("Flake ready\n")
 
             # Step 8: nixos-install
-            step += 1
-            self._set_status("Installing Bingux...", step / steps)
+            self._set_status("Installing Bingux...", 0.5)
             self._log("\n--- nixos-install ---\n\n")
+            GLib.idle_add(self._pulse_progress)
             ok = nixos.install(s.selected_host, log_callback=self._log)
+            self._installing = False
 
             if not ok:
                 self._set_status("Installation failed")
