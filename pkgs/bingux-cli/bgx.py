@@ -15,12 +15,12 @@ RED = "\033[31m"
 YELLOW = "\033[33m"
 BLUE = "\033[34m"
 CYAN = "\033[36m"
-MAGENTA = "\033[35m"
 BOLD = "\033[1m"
 DIM = "\033[2m"
 RESET = "\033[0m"
-BG_BLUE = "\033[44m"
-BG_RED = "\033[41m"
+
+COL_NAME = 30
+COL_VER = 16
 
 
 def run(cmd, **kwargs):
@@ -29,12 +29,12 @@ def run(cmd, **kwargs):
 
 def pkg_info(pkg):
     """Get package name, version, and description from nixpkgs."""
-    info = {"name": pkg, "version": "?", "description": ""}
+    info = {"name": pkg, "version": "", "description": ""}
     try:
         r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.version"],
                 capture_output=True, text=True, timeout=15)
         if r.returncode == 0:
-            info["version"] = r.stdout.strip() or "?"
+            info["version"] = r.stdout.strip()
     except subprocess.TimeoutExpired:
         pass
     try:
@@ -47,7 +47,7 @@ def pkg_info(pkg):
     return info
 
 
-def confirm(prompt="Is this ok [y/N]: "):
+def confirm(prompt="Proceed? [y/N] "):
     try:
         return input(prompt).strip().lower() in ("y", "yes")
     except (EOFError, KeyboardInterrupt):
@@ -55,58 +55,47 @@ def confirm(prompt="Is this ok [y/N]: "):
         return False
 
 
+def pkg_row(name, version="", description=""):
+    """Format a package as an aligned row."""
+    n = name.ljust(COL_NAME)
+    v = version.ljust(COL_VER) if version else " " * COL_VER
+    return f"  {BOLD}{n}{RESET} {CYAN}{v}{RESET} {DIM}{description}{RESET}"
+
+
 def show_transaction(installs, removes, save=False):
-    """Show a styled transaction summary and prompt for confirmation."""
     if not installs and not removes:
         return True
 
-    print()
-    print(f"  {BOLD}{BLUE}\u2501\u2501 Transaction Summary \u2501\u2501{RESET}")
-    print()
-
     if installs:
         mode = "permanently" if save else "for this session"
-        print(f"  {GREEN}\u25bc{RESET} {BOLD}Installing{RESET} {DIM}({mode}){RESET}")
-        print()
+        print(f"\n  {GREEN}Installing ({mode}):{RESET}")
+        print(f"  {'Package'.ljust(COL_NAME)} {'Version'.ljust(COL_VER)} Description")
         for info in installs:
-            ver = info["version"]
-            desc = info["description"]
-            print(f"    {GREEN}\u2022{RESET} {BOLD}{info['name']}{RESET}", end="")
-            if ver != "?":
-                print(f"  {CYAN}{ver}{RESET}", end="")
-            print()
-            if desc:
-                print(f"      {DIM}{desc}{RESET}")
-        print()
+            print(pkg_row(info["name"], info["version"], info["description"]))
 
     if removes:
-        print(f"  {RED}\u25b2{RESET} {BOLD}Removing{RESET}")
-        print()
+        print(f"\n  {RED}Removing:{RESET}")
         for pkg in removes:
-            print(f"    {RED}\u2022{RESET} {BOLD}{pkg}{RESET}")
-        print()
+            print(f"  {BOLD}{pkg}{RESET}")
 
-    print(f"  {DIM}\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500{RESET}")
     parts = []
     if installs:
         parts.append(f"{GREEN}{len(installs)} to install{RESET}")
     if removes:
         parts.append(f"{RED}{len(removes)} to remove{RESET}")
-    print(f"  {', '.join(parts)}")
-    print()
+    print(f"\n  {', '.join(parts)}\n")
 
-    return confirm(f"  {BOLD}Proceed? [{GREEN}y{RESET}/{RED}N{RESET}]{BOLD}:{RESET} ")
+    return confirm(f"  Proceed? [{GREEN}y{RESET}/{RED}N{RESET}] ")
 
 
 def do_install(pkgs, save=False, skip_confirm=False):
     profile = PERMANENT_PROFILE if save else VOLATILE_PROFILE
 
-    # Gather info
-    print(f"\n  {BLUE}::{RESET} Resolving packages...")
+    print(f"  {BLUE}::{RESET} Resolving packages...")
     infos = [pkg_info(p) for p in pkgs]
 
     if not skip_confirm and not show_transaction(infos, [], save=save):
-        print("Aborted.")
+        print("  Aborted.")
         return False
 
     failed = 0
@@ -114,9 +103,9 @@ def do_install(pkgs, save=False, skip_confirm=False):
         nixpkg = f"nixpkgs#{pkg}"
         r = run(["nix", "profile", "install", "--profile", profile, nixpkg])
         if r.returncode == 0:
-            print(f"{GREEN}\u2713{RESET} {pkg}")
+            print(f"  {GREEN}\u2713{RESET} {pkg}")
         else:
-            print(f"{RED}\u2717{RESET} {pkg}", file=sys.stderr)
+            print(f"  {RED}\u2717{RESET} {pkg}", file=sys.stderr)
             failed += 1
 
     return failed == 0
@@ -124,14 +113,14 @@ def do_install(pkgs, save=False, skip_confirm=False):
 
 def do_remove(pkgs, skip_confirm=False):
     if not skip_confirm and not show_transaction([], pkgs):
-        print("Aborted.")
+        print("  Aborted.")
         return False
 
     failed = 0
     for pkg in pkgs:
         removed = False
         for profile, label in [
-            (VOLATILE_PROFILE, "temporary"),
+            (VOLATILE_PROFILE, "session"),
             (PERMANENT_PROFILE, "permanent"),
         ]:
             r = run(
@@ -139,11 +128,11 @@ def do_remove(pkgs, skip_confirm=False):
                 capture_output=True,
             )
             if r.returncode == 0:
-                print(f"{GREEN}\u2713{RESET} Removed {pkg} ({label})")
+                print(f"  {GREEN}\u2713{RESET} {pkg} ({label})")
                 removed = True
 
         if not removed:
-            print(f"{RED}\u2717{RESET} {pkg} is not installed.", file=sys.stderr)
+            print(f"  {RED}\u2717{RESET} {pkg} not installed", file=sys.stderr)
             failed += 1
 
     return failed == 0
@@ -154,28 +143,21 @@ def do_search(query):
 
 
 def do_list():
-    print()
-    print(f"  {YELLOW}\u25cf{RESET} {BOLD}Temporary{RESET} {DIM}(for this session){RESET}")
-    r = run(["nix", "profile", "list", "--profile", VOLATILE_PROFILE], capture_output=True, text=True)
-    if r.returncode == 0 and r.stdout.strip():
-        for line in r.stdout.strip().split("\n"):
-            print(f"    {line}")
-    else:
-        print(f"    {DIM}(none){RESET}")
-
-    print()
-    print(f"  {GREEN}\u25cf{RESET} {BOLD}Permanent{RESET}")
-    r = run(["nix", "profile", "list", "--profile", PERMANENT_PROFILE], capture_output=True, text=True)
-    if r.returncode == 0 and r.stdout.strip():
-        for line in r.stdout.strip().split("\n"):
-            print(f"    {line}")
-    else:
-        print(f"    {DIM}(none){RESET}")
+    for profile, label, color in [
+        (VOLATILE_PROFILE, "Session", YELLOW),
+        (PERMANENT_PROFILE, "Permanent", GREEN),
+    ]:
+        print(f"\n  {color}\u25cf{RESET} {BOLD}{label}{RESET}")
+        r = run(["nix", "profile", "list", "--profile", profile], capture_output=True, text=True)
+        if r.returncode == 0 and r.stdout.strip():
+            for line in r.stdout.strip().split("\n"):
+                print(f"    {line}")
+        else:
+            print(f"    {DIM}(none){RESET}")
     print()
 
 
 def run_prefix_mode(args):
-    """Handle prefix operators: +pkg ++pkg -pkg ?query"""
     installs = []
     saves = []
     removes = []
@@ -191,7 +173,7 @@ def run_prefix_mode(args):
             do_search(arg[1:])
             return
         else:
-            print(f"{RED}\u2717{RESET} Unknown: {arg}", file=sys.stderr)
+            print(f"  {RED}\u2717{RESET} Unknown: {arg}", file=sys.stderr)
             sys.exit(1)
 
     ok = True
@@ -207,7 +189,6 @@ def run_prefix_mode(args):
 
 
 def run_subcommand_mode(args):
-    """Handle subcommands: install, remove, search, list"""
     cmd = args[0]
     rest = args[1:]
 
@@ -223,7 +204,7 @@ def run_subcommand_mode(args):
             else:
                 pkgs.append(arg)
         if not pkgs:
-            print("Package name required.", file=sys.stderr)
+            print("  Package name required.", file=sys.stderr)
             sys.exit(1)
         if not do_install(pkgs, save=save, skip_confirm=yes):
             sys.exit(1)
@@ -232,19 +213,22 @@ def run_subcommand_mode(args):
         yes = "-y" in rest or "--yes" in rest
         pkgs = [a for a in rest if a not in ("-y", "--yes")]
         if not pkgs:
-            print("Package name required.", file=sys.stderr)
+            print("  Package name required.", file=sys.stderr)
             sys.exit(1)
         if not do_remove(pkgs, skip_confirm=yes):
             sys.exit(1)
 
     elif cmd in ("search", "s", "q"):
         if not rest:
-            print("Search query required.", file=sys.stderr)
+            print("  Search query required.", file=sys.stderr)
             sys.exit(1)
         do_search(" ".join(rest))
 
     elif cmd in ("list", "ls"):
         do_list()
+
+    elif cmd in ("help", "--help", "-h"):
+        print_usage()
 
     else:
         print_usage()
@@ -253,33 +237,40 @@ def run_subcommand_mode(args):
 
 def print_usage():
     print(f"""
-{BOLD}bgx{RESET} — Bingux package manager
+  {BOLD}bgx{RESET} - Bingux package manager
 
-{BOLD}Quick syntax:{RESET}
-  bgx +firefox                    Install (for this session)
-  bgx ++firefox                   Install permanently
-  bgx -firefox                    Remove
-  bgx +firefox +htop -chromium    Batch operations
-  bgx ?browser                    Search
-  bgx                             List installed
+  {BOLD}Quick syntax:{RESET}
+    bgx +firefox                    Install for this session
+    bgx ++firefox                   Install permanently
+    bgx -firefox                    Remove
+    bgx +firefox +htop -chromium    Batch operations
+    bgx ?browser                    Search
 
-{BOLD}Subcommands:{RESET}
-  bgx install [-s] [-y] <pkg...>  Install (-s save, -y skip prompt)
-  bgx remove [-y] <pkg...>        Remove
-  bgx search <query>              Search nixpkgs
-  bgx list                        List installed packages
+  {BOLD}Commands:{RESET}
+    install, add, a  [-s] [-y]      Install packages (-s = permanent)
+    remove, rm, r    [-y]           Remove packages
+    search, s, q                    Search nixpkgs
+    list, ls                        List installed packages
+    help                            Show this help
 
-{BOLD}Aliases:{RESET}
-  install: add, a     remove: uninstall, rm, r
-  search: s, q        list: ls
-""".strip())
+  {BOLD}Flags:{RESET}
+    -s, --save       Install permanently (persists after reboot)
+    -y, --yes        Skip confirmation prompt
+
+  {BOLD}Examples:{RESET}
+    bgx +firefox                    bgx install firefox
+    bgx ++firefox                   bgx install -s firefox
+    bgx -firefox                    bgx remove firefox
+    bgx +firefox +htop -chromium    bgx install firefox htop
+    bgx ?browser                    bgx search browser
+""")
 
 
 def main():
     args = sys.argv[1:]
 
     if not args:
-        do_list()
+        print_usage()
         return
 
     if args[0][0] in ("+", "-", "?"):
