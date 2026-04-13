@@ -243,32 +243,25 @@ C2 = 20  # flags column
 
 def print_usage():
     print(f"""
-  {BOLD}bgx{RESET} {DIM}v{VERSION}{RESET} {DIM}-{RESET} Bingux package manager
+  {BOLD}bgx{RESET} {DIM}v{VERSION} — Bingux package manager{RESET}
 
-  {YELLOW}Quick syntax:{RESET}
-    {GREEN}bgx +firefox{RESET}                        {DIM}Install for this session{RESET}
-    {GREEN}bgx ++firefox{RESET}                       {DIM}Install permanently{RESET}
-    {RED}bgx -firefox{RESET}                        {DIM}Remove{RESET}
-    {CYAN}bgx +firefox +htop -chromium{RESET}        {DIM}Batch operations{RESET}
-    {BLUE}bgx ?browser{RESET}                        {DIM}Search{RESET}
+  {BOLD}Quick syntax:{RESET}
+    {"bgx +firefox".ljust(C1)}{DIM}Install for this session{RESET}
+    {"bgx ++firefox".ljust(C1)}{DIM}Install permanently{RESET}
+    {"bgx -firefox".ljust(C1)}{DIM}Remove{RESET}
+    {"bgx +pkg1 +pkg2 -pkg3".ljust(C1)}{DIM}Batch operations{RESET}
+    {"bgx ?query".ljust(C1)}{DIM}Search{RESET}
 
-  {YELLOW}Commands:{RESET}
-    {GREEN}{"install, add, a".ljust(C1)}{RESET}{DIM}{"[-s] [-y]".ljust(C2)}Install packages (-s = permanent){RESET}
-    {RED}{"remove, rm, r".ljust(C1)}{RESET}{DIM}{"[-y]".ljust(C2)}Remove packages{RESET}
-    {BLUE}{"search, s, q".ljust(C1)}{RESET}{DIM}{"".ljust(C2)}Search nixpkgs{RESET}
-    {CYAN}{"list, ls".ljust(C1)}{RESET}{DIM}{"".ljust(C2)}List installed packages{RESET}
-    {"help".ljust(C1)}{DIM}{"".ljust(C2)}Show this help{RESET}
+  {BOLD}Commands:{RESET}
+    {BOLD}{"install, add, a".ljust(C1)}{RESET}{DIM}Install packages{RESET}
+    {BOLD}{"remove, rm, r".ljust(C1)}{RESET}{DIM}Remove packages{RESET}
+    {BOLD}{"search, s, q".ljust(C1)}{RESET}{DIM}Search nixpkgs{RESET}
+    {BOLD}{"list, ls".ljust(C1)}{RESET}{DIM}List installed packages{RESET}
+    {BOLD}{"help".ljust(C1)}{RESET}{DIM}Show this help{RESET}
 
-  {YELLOW}Flags:{RESET}
-    {GREEN}{"-s, --save".ljust(C1)}{RESET}{DIM}Install permanently (persists after reboot){RESET}
-    {CYAN}{"-y, --yes".ljust(C1)}{RESET}{DIM}Skip confirmation prompt{RESET}
-
-  {YELLOW}Examples:{RESET}
-    {GREEN}{"bgx +firefox".ljust(C1)}{RESET}{DIM}bgx install firefox{RESET}
-    {GREEN}{"bgx ++firefox".ljust(C1)}{RESET}{DIM}bgx install -s firefox{RESET}
-    {RED}{"bgx -firefox".ljust(C1)}{RESET}{DIM}bgx remove firefox{RESET}
-    {CYAN}{"bgx +firefox +htop -chromium".ljust(C1)}{RESET}{DIM}bgx install firefox htop{RESET}
-    {BLUE}{"bgx ?browser".ljust(C1)}{RESET}{DIM}bgx search browser{RESET}
+  {BOLD}Flags:{RESET}
+    {BOLD}{"-s, --save".ljust(C1)}{RESET}{DIM}Install permanently (persists after reboot){RESET}
+    {BOLD}{"-y, --yes".ljust(C1)}{RESET}{DIM}Skip confirmation prompt{RESET}
 """)
 
 
