@@ -429,7 +429,7 @@ def do_install(pkgs, save=False, skip_confirm=False):
     return failed == 0
 
 
-def do_remove(pkgs, skip_confirm=False):
+def do_remove(pkgs, skip_confirm=False, profile_filter=None):
     # Check for not installed
     not_installed = [p for p in pkgs if not _is_installed(p)]
     if not_installed:
@@ -450,10 +450,18 @@ def do_remove(pkgs, skip_confirm=False):
             print(f"  {DARK}Aborted.{RESET}")
             return False
 
+    profiles = []
+    if profile_filter == "session":
+        profiles = [(VOLATILE_PROFILE, "session")]
+    elif profile_filter == "permanent":
+        profiles = [(PERMANENT_PROFILE, "permanent")]
+    else:
+        profiles = [(VOLATILE_PROFILE, "session"), (PERMANENT_PROFILE, "permanent")]
+
     failed = 0
     for pkg in pkgs:
         removed = False
-        for profile in (VOLATILE_PROFILE, PERMANENT_PROFILE):
+        for profile, _ in profiles:
             r = run(
                 ["nix", "profile", "remove", "--profile", profile, f".*{pkg}.*"],
                 capture_output=True,
@@ -620,6 +628,9 @@ def run_prefix_mode(args):
     installs, saves, removes = [], [], []
     yes = False
 
+    removes_volatile = []
+    removes_permanent = []
+
     for arg in args:
         if arg in ("-y", "--yes"):
             yes = True
@@ -627,8 +638,10 @@ def run_prefix_mode(args):
             saves.append(arg[2:])
         elif arg.startswith("+"):
             installs.append(arg[1:])
-        elif arg.startswith("-"):
-            removes.append(arg[1:])
+        elif arg.startswith("--") and not arg.startswith("---") and len(arg) > 2 and arg[2] != "-":
+            removes_permanent.append(arg[2:])
+        elif arg.startswith("-") and len(arg) > 1:
+            removes_volatile.append(arg[1:])
         elif arg.startswith("?"):
             do_search(arg[1:])
             return
@@ -646,8 +659,12 @@ def run_prefix_mode(args):
         r = do_install(saves, save=True, skip_confirm=yes)
         ok = r and ok
         changed = changed or r
-    if removes:
-        r = do_remove(removes, skip_confirm=yes)
+    if removes_volatile:
+        r = do_remove(removes_volatile, profile_filter="session", skip_confirm=yes)
+        ok = r and ok
+        changed = changed or r
+    if removes_permanent:
+        r = do_remove(removes_permanent, profile_filter="permanent", skip_confirm=yes)
         ok = r and ok
         changed = changed or r
     if not changed:
@@ -731,8 +748,9 @@ def print_usage():
   {WHITE}Quick syntax:{RESET}
     {GRAY}{"bgx +firefox".ljust(C1)}{DARK}Install for this session{RESET}
     {GRAY}{"bgx ++firefox".ljust(C1)}{DARK}Install permanently{RESET}
-    {GRAY}{"bgx -firefox".ljust(C1)}{DARK}Remove{RESET}
-    {GRAY}{"bgx +pkg1 +pkg2 -pkg3".ljust(C1)}{DARK}Batch operations{RESET}
+    {GRAY}{"bgx -firefox".ljust(C1)}{DARK}Remove from session{RESET}
+    {GRAY}{"bgx --firefox".ljust(C1)}{DARK}Remove permanently{RESET}
+    {GRAY}{"bgx +pkg1 ++pkg2 -pkg3".ljust(C1)}{DARK}Batch operations{RESET}
     {GRAY}{"bgx ?query".ljust(C1)}{DARK}Search{RESET}
 
   {WHITE}Commands:{RESET}
