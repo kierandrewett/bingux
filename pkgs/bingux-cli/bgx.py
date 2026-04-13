@@ -159,7 +159,13 @@ def show_transaction(installs, removes, save=False):
         _print_table(f"Installing {DARK}({mode}){RESET}", ACCENT, installs)
 
     if removes:
-        _print_table("Removing", WARN, removes)
+        neg_removes = []
+        for info in removes:
+            r = dict(info)
+            if r.get("size"):
+                r["size"] = f"-{r['size']}"
+            neg_removes.append(r)
+        _print_table("Removing", WARN, neg_removes)
 
     ni = len(installs)
     nr = len(removes)
