@@ -36,7 +36,6 @@ lib.nixosSystem {
             nixpkgs = {
                 config.allowUnfree = true;
                 overlays = [
-                    inputs.rust-overlay.overlays.default
                     inputs.nur.overlays.default
                     binguxOverlays
                 ] ++ extraOverlays;

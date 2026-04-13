@@ -21,13 +21,5 @@ final: prev: {
 
     bingux-plymouth = final.callPackage ../pkgs/bingux-plymouth { };
     minegrub-theme = final.callPackage ../pkgs/minegrub-theme { };
-    aide = final.callPackage ../pkgs/aide { };
     os-helper = final.callPackage ../pkgs/os-helper { };
-
-    # Override freedesktop sound theme with frealtek audio test sounds
-    sound-theme-freedesktop = prev.sound-theme-freedesktop.overrideAttrs (old: {
-        postInstall = (old.postInstall or "") + ''
-            cp ${inputs.sound-theme-frealtek}/*.oga $out/share/sounds/freedesktop/stereo/
-        '';
-    });
 }

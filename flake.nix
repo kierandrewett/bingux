@@ -5,27 +5,7 @@
         nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
         nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-        rust-overlay = {
-            url = "github:oxalica/rust-overlay";
-            inputs.nixpkgs.follows = "nixpkgs";
-        };
-
         nur.url = "github:nix-community/NUR";
-
-        aide-src = {
-            url = "github:kierandrewett/aide";
-            flake = false;
-        };
-
-        headline-zsh = {
-            url = "github:Moarram/headline";
-            flake = false;
-        };
-
-        sound-theme-frealtek = {
-            url = "github:kierandrewett/sound-theme-frealtek";
-            flake = false;
-        };
     };
 
     outputs = inputs@{ self, nixpkgs, nixpkgs-unstable, ... }:
@@ -37,7 +17,6 @@
                     inherit system;
                     config.allowUnfree = true;
                     overlays = [
-                        inputs.rust-overlay.overlays.default
                         inputs.nur.overlays.default
                         (import ./overlays/default.nix { inherit inputs; })
                     ];
@@ -61,7 +40,6 @@
                         {
                             nixpkgs.config.allowUnfree = true;
                             nixpkgs.overlays = [
-                                inputs.rust-overlay.overlays.default
                                 inputs.nur.overlays.default
                                 (import ./overlays/default.nix { inherit inputs; })
                             ];
