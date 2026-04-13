@@ -175,6 +175,28 @@ in
     isoImage.squashfsCompression = "zstd -Xcompression-level 22";
     isoImage.efiSplashImage = ../../files/branding/bingus.png;
     isoImage.splashImage = ../../files/branding/bingus-syslinux.png;
+
+    # Override NixOS GRUB theme: replace logo, darken background
+    isoImage.grubTheme = let
+        base = pkgs.nixos-grub2-theme;
+    in pkgs.runCommand "bingux-grub-theme" {} ''
+        cp -r ${base} $out
+        chmod -R u+w $out
+        # Replace NixOS logo with bingux
+        for f in $out/icons/nixos.png $out/logo.png; do
+            if [ -f "$f" ]; then
+                ${pkgs.imagemagick}/bin/magick ${../../files/branding/bingus.png} -resize 128x128 "$f" 2>/dev/null || true
+            fi
+        done
+        # Dark background
+        if [ -f "$out/background.png" ]; then
+            ${pkgs.imagemagick}/bin/magick -size 1920x1080 xc:#1a1a2e "$out/background.png" 2>/dev/null || true
+        fi
+        # Update theme.txt title
+        if [ -f "$out/theme.txt" ]; then
+            sed -i 's/NixOS/Bingux/g' "$out/theme.txt"
+        fi
+    '';
     isoImage.syslinuxTheme = ''
         MENU TITLE Bingux
         MENU RESOLUTION 800 600
