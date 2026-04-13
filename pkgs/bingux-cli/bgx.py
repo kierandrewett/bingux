@@ -346,8 +346,9 @@ def do_install(pkgs, save=False, skip_confirm=False):
                     print(f"    {DARK}\u2502 This package has an unfree license.{RESET}")
                     print(f"    {DARK}\u2570 Add to your NixOS config: nixpkgs.config.allowUnfree = true;{RESET}")
                 else:
-                    # Non-NixOS: retry with unfree allowed
-                    sp2 = Spinner(f"Retrying {pkg} with unfree allowed...")
+                    # Non-NixOS: retry with unfree allowed, overwrite the ✗ line
+                    sys.stdout.write(f"\033[A\r\033[K")
+                    sp2 = Spinner(f"Retrying {pkg} (unfree)...")
                     sp2.start()
                     r2 = run(["nix", "profile", "add", "--impure", "--profile", profile, f"nixpkgs#{pkg}"],
                              capture_output=True, text=True, env={**os.environ, "NIXPKGS_ALLOW_UNFREE": "1"})
