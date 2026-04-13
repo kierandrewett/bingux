@@ -22,4 +22,5 @@ final: prev: {
     bingux-plymouth = final.callPackage ../pkgs/bingux-plymouth { };
 os-helper = final.callPackage ../pkgs/os-helper { };
     bingux-installer = final.callPackage ../pkgs/bingux-installer { };
+    bingux-cli = final.callPackage ../pkgs/bingux-cli { };
 }
