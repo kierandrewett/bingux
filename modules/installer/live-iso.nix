@@ -69,8 +69,6 @@ in
                 "firefox.desktop"
             ];
         };
-    }];
-
         settings."org/gnome/shell/extensions/user-theme" = {
             name = "BinguxInstaller";
         };
@@ -84,6 +82,7 @@ in
             show-mounts = false;
             show-trash = false;
         };
+    }];
 
     # Remove distro logo from GDM
     programs.dconf.profiles.gdm.databases = [{
