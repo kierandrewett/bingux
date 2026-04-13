@@ -15,6 +15,7 @@ from pages.user_setup import UserSetupPage
 from pages.summary import SummaryPage
 from pages.install import InstallPage
 from pages.complete import CompletePage
+from pages.repair import RepairPage
 
 
 class BinguxInstallerWindow(Adw.ApplicationWindow):
@@ -43,6 +44,9 @@ class BinguxInstallerWindow(Adw.ApplicationWindow):
             InstallPage(self),
             CompletePage(self),
         ]
+
+        # Repair page (separate from install flow, pushed manually)
+        self.repair_page = RepairPage(self)
 
         self.nav_view.add(self.pages[0])
 

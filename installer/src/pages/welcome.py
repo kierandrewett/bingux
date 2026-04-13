@@ -73,15 +73,6 @@ class WelcomePage(BasePage):
         self.content.append(repair_btn)
 
     def _on_repair(self, _btn):
-        import subprocess
-        subprocess.Popen(["foot", "-e", "bash", "-c",
-            "echo '=== Bingux Repair Shell ==='; "
-            "echo; "
-            "echo 'Useful commands:'; "
-            "echo '  mount /dev/<root> /mnt        Mount your root partition'; "
-            "echo '  mount /dev/<efi> /mnt/boot    Mount EFI'; "
-            "echo '  nixos-enter --root /mnt       Enter installed system'; "
-            "echo '  nixos-rebuild switch --flake /mnt/os#<host>'; "
-            "echo; "
-            "exec bash",
-        ])
+        repair_page = self.window.repair_page
+        repair_page.on_enter()
+        self.window.nav_view.push(repair_page)
