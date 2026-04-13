@@ -825,8 +825,9 @@ def print_usage():
     {GRAY}{"help".ljust(C1)}{DARK}Show this help{RESET}
 
   {WHITE}Flags:{RESET}
-    {GRAY}{"-s, --save".ljust(C1)}{DARK}Install permanently (persists after reboot){RESET}
+    {GRAY}{"-p, --permanent".ljust(C1)}{DARK}Install/remove permanently (persists after reboot){RESET}
     {GRAY}{"-y, --yes".ljust(C1)}{DARK}Skip confirmation prompt{RESET}
+    {GRAY}{"-h, --help".ljust(C1)}{DARK}Show help for a subcommand{RESET}
 """)
 
 
