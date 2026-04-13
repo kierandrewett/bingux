@@ -9,38 +9,35 @@ writeShellScriptBin "bgx" ''
                 shift
                 pkg="''${1:?Package name required}"
                 echo "Adding $pkg to system config..."
-                nix profile install "nixpkgs#$pkg"
-                # Append to /os extra-packages.nix
                 f="/os/extra-packages.nix"
                 if [[ ! -f "$f" ]]; then
                     printf '{ pkgs, ... }:\n{ environment.systemPackages = with pkgs; [\n]; }\n' > "$f"
                 fi
                 grep -qx "    $pkg" "$f" 2>/dev/null || sed -i "/^\]; }$/i\\    $pkg" "$f"
-                echo "Installed now and saved to config. Run 'os rebuild' when ready."
+                echo "Saved. Run 'os rebuild' to apply."
             else
                 pkg="''${1:?Package name required}"
-                nix profile install "nixpkgs#$pkg"
+                echo "Installing $pkg for this session..."
+                exec nix shell "nixpkgs#$pkg"
             fi
             ;;
         remove)
             shift
             pkg="''${1:?Package name required}"
-            nix profile remove ".*$pkg.*" 2>/dev/null || true
             [[ -f /os/extra-packages.nix ]] && sed -i "/^    $pkg$/d" /os/extra-packages.nix 2>/dev/null || true
-            ;;
-        try)
-            shift
-            exec nix shell "nixpkgs#''${1:?Package name required}"
+            echo "Removed $pkg. Run 'os rebuild' to apply."
             ;;
         search)
             shift
             nix search nixpkgs "''${1:?Query required}"
             ;;
-        list)
-            nix profile list 2>/dev/null
-            ;;
         *)
-            echo "Usage: bgx <install [--save]|remove|try|search|list> <package>"
+            echo "Usage: bgx <install [--save]|remove|search> <package>"
+            echo ""
+            echo "  install <pkg>          Use a package for this session only"
+            echo "  install --save <pkg>   Add to system config permanently"
+            echo "  remove <pkg>           Remove from system config"
+            echo "  search <query>         Search for packages"
             ;;
     esac
 ''
