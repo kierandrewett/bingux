@@ -59,7 +59,7 @@ def show_transaction(installs, removes, save=False):
     print(f"\n{BOLD}Transaction Summary:{RESET}")
 
     if installs:
-        mode = "permanently" if save else "until reboot"
+        mode = "permanently" if save else "for this session"
         print(f"  Installing ({mode}):")
         for info in installs:
             ver = info["version"]
@@ -144,7 +144,7 @@ def do_search(query):
 
 
 def do_list():
-    print(f"{BOLD}Temporary (until reboot):{RESET}")
+    print(f"{BOLD}Temporary (for this session):{RESET}")
     r = run(["nix", "profile", "list", "--profile", VOLATILE_PROFILE], capture_output=True, text=True)
     if r.returncode == 0 and r.stdout.strip():
         print(r.stdout)
@@ -241,7 +241,7 @@ def print_usage():
 {BOLD}bgx{RESET} — Bingux package manager
 
 {BOLD}Quick syntax:{RESET}
-  bgx +firefox                    Install (until reboot)
+  bgx +firefox                    Install (for this session)
   bgx ++firefox                   Install permanently
   bgx -firefox                    Remove
   bgx +firefox +htop -chromium    Batch operations
