@@ -400,7 +400,7 @@ def run_subcommand_mode(args):
         if not do_remove(pkgs, skip_confirm=yes):
             sys.exit(1)
 
-    elif cmd in ("search", "s", "q"):
+    elif cmd in ("search", "s", "q", "?"):
         if not rest:
             print(f"  {DARK}Search query required.{RESET}", file=sys.stderr)
             sys.exit(1)
