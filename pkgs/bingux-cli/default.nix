@@ -1,5 +1,5 @@
 { writeShellScriptBin }:
-writeShellScriptBin "bingux" ''
+writeShellScriptBin "bgx" ''
     set -euo pipefail
 
     case "''${1:-}" in
@@ -16,7 +16,7 @@ writeShellScriptBin "bingux" ''
                     printf '{ pkgs, ... }:\n{ environment.systemPackages = with pkgs; [\n]; }\n' > "$f"
                 fi
                 grep -qx "    $pkg" "$f" 2>/dev/null || sed -i "/^\]; }$/i\\    $pkg" "$f"
-                echo "Saved. Run 'os rebuild' to make permanent."
+                echo "Installed now and saved to config. Run 'os rebuild' when ready."
             else
                 pkg="''${1:?Package name required}"
                 nix profile install "nixpkgs#$pkg"
@@ -40,7 +40,7 @@ writeShellScriptBin "bingux" ''
             nix profile list 2>/dev/null
             ;;
         *)
-            echo "Usage: bingux <install [--save]|remove|try|search|list> <package>"
+            echo "Usage: bgx <install [--save]|remove|try|search|list> <package>"
             ;;
     esac
 ''
