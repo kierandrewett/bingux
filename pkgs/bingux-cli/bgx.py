@@ -245,7 +245,7 @@ def _auto_gc():
     if freed:
         sp.stop(f"{DARK}{freed}{RESET}")
     else:
-        sp.stop(f"{DARK}Nothing to clean.{RESET}")
+        sp.stop(f"{DARK}Done.{RESET}")
 
 
 def _ensure_profile_dir(profile):
