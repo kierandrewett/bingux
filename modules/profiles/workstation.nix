@@ -1,7 +1,5 @@
-{ lib, ... }:
+{ ... }:
 {
-    systemd.targets.sleep.enable = lib.mkDefault false;
-    systemd.targets.suspend.enable = lib.mkDefault false;
-    systemd.targets.hibernate.enable = lib.mkDefault false;
-    systemd.targets.hybrid-sleep.enable = lib.mkDefault false;
+    # Workstation profile — no hardware-specific tweaks
+    # Override in your own config for machine-specific settings
 }

@@ -36,6 +36,9 @@ let
         # Mouse focus
         focus_follows_mouse yes
 
+        # Force immediate rendering (fixes blank screen until mouse move on virtio-gpu)
+        seat * hide_cursor 0
+
         # Gaps
         gaps inner 4
         gaps outer 4
@@ -52,7 +55,9 @@ let
             # Show loading message
             ${pkgs.mako}/bin/makoctl dismiss -a 2>/dev/null || true
             ${pkgs.libnotify}/bin/notify-send -t 10000 "Bingux" "Starting installer..."
-            sleep 1
+            sleep 2
+            # Force sway to redraw by toggling focus
+            ${pkgs.sway}/bin/swaymsg seat - cursor set 640 360 2>/dev/null || true
             ${bingux-installer}/bin/bingux-installer 2>/tmp/bingux-installer.log || ${pkgs.foot}/bin/foot
         ''}
     '';
