@@ -251,11 +251,15 @@ def _is_in_profile(pkg, profile):
     """Check if a package is installed in a specific profile."""
     r = run(["nix", "profile", "list", "--profile", profile],
             capture_output=True, text=True)
-    if r.returncode != 0:
+    if r.returncode != 0 or not r.stdout.strip():
         return False
-    # Match package name precisely (not just substring)
+    # nix profile list shows "Name: pkgname" lines
     for line in r.stdout.split("\n"):
-        if f"#{pkg}" in line or f"-{pkg}-" in line or line.strip().endswith(f"-{pkg}"):
+        clean = line.strip()
+        # Match "Name:  vivaldi" or flake attr containing the pkg
+        if clean.startswith("Name:") and pkg in clean:
+            return True
+        if f"#{pkg}" in clean or f".{pkg}" in clean:
             return True
     return False
 
@@ -508,20 +512,20 @@ def do_remove(pkgs, skip_confirm=False, profile_filter=None):
     for pkg in pkgs:
         removed = False
         for profile, _ in profiles:
-            # Check if actually in this profile before trying to remove
-            r = run(["nix", "profile", "list", "--profile", profile],
-                    capture_output=True, text=True)
-            if r.returncode == 0 and pkg in r.stdout:
-                r2 = run(
-                    ["nix", "profile", "remove", "--profile", profile, f".*{pkg}.*"],
-                    capture_output=True,
-                )
-                if r2.returncode == 0:
-                    removed = True
+            if not _is_in_profile(pkg, profile):
+                continue
+            run(["nix", "profile", "remove", "--profile", profile, pkg],
+                capture_output=True)
+            # Verify it's actually gone
+            if not _is_in_profile(pkg, profile):
+                removed = True
+            else:
+                print(f"  {FAIL}\u2717{RESET} {WHITE}{pkg}{RESET} {DARK}failed to remove{RESET}", file=sys.stderr)
+                failed += 1
 
         if removed:
             print(f"  {SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}")
-        else:
+        elif failed == 0:
             print(f"  {FAIL}\u2717{RESET} {WHITE}{pkg}{RESET} {DARK}not installed{RESET}", file=sys.stderr)
             failed += 1
 
