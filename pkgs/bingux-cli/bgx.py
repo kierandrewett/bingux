@@ -308,9 +308,12 @@ def do_list():
 
 def run_prefix_mode(args):
     installs, saves, removes = [], [], []
+    yes = False
 
     for arg in args:
-        if arg.startswith("++"):
+        if arg in ("-y", "--yes"):
+            yes = True
+        elif arg.startswith("++"):
             saves.append(arg[2:])
         elif arg.startswith("+"):
             installs.append(arg[1:])
@@ -325,11 +328,11 @@ def run_prefix_mode(args):
 
     ok = True
     if installs:
-        ok = do_install(installs, save=False) and ok
+        ok = do_install(installs, save=False, skip_confirm=yes) and ok
     if saves:
-        ok = do_install(saves, save=True) and ok
+        ok = do_install(saves, save=True, skip_confirm=yes) and ok
     if removes:
-        ok = do_remove(removes) and ok
+        ok = do_remove(removes, skip_confirm=yes) and ok
     if not ok:
         sys.exit(1)
 
