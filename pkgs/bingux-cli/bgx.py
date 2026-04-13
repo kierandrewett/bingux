@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """bgx — Bingux package manager."""
 
-import argparse
 import os
 import subprocess
 import sys
@@ -13,6 +12,7 @@ PERMANENT_PROFILE = os.path.expanduser("~/.local/state/nix/profiles/profile")
 GREEN = "\033[32m"
 RED = "\033[31m"
 BOLD = "\033[1m"
+DIM = "\033[2m"
 RESET = "\033[0m"
 
 
@@ -20,32 +20,22 @@ def run(cmd, **kwargs):
     return subprocess.run(cmd, **kwargs)
 
 
-def cmd_install(args):
-    pkg = args.package
+def do_install(pkg, save=False):
     nixpkg = f"nixpkgs#{pkg}"
+    profile = PERMANENT_PROFILE if save else VOLATILE_PROFILE
+    label = "permanently" if save else "until reboot"
 
-    if args.save:
-        print(f"Installing {pkg} permanently...")
-        r = run(["nix", "profile", "install", "--profile", PERMANENT_PROFILE, nixpkg])
-        if r.returncode == 0:
-            print(f"{GREEN}\u2713{RESET} {pkg} installed permanently.")
-        else:
-            print(f"{RED}\u2717{RESET} Failed to install {pkg}.", file=sys.stderr)
-            sys.exit(1)
+    r = run(["nix", "profile", "install", "--profile", profile, nixpkg])
+    if r.returncode == 0:
+        print(f"{GREEN}\u2713{RESET} {pkg} installed {label}.")
+        return True
     else:
-        print(f"Installing {pkg} (until reboot)...")
-        r = run(["nix", "profile", "install", "--profile", VOLATILE_PROFILE, nixpkg])
-        if r.returncode == 0:
-            print(f"{GREEN}\u2713{RESET} {pkg} installed. Available system-wide until reboot.")
-        else:
-            print(f"{RED}\u2717{RESET} Failed to install {pkg}.", file=sys.stderr)
-            sys.exit(1)
+        print(f"{RED}\u2717{RESET} Failed to install {pkg}.", file=sys.stderr)
+        return False
 
 
-def cmd_remove(args):
-    pkg = args.package
+def do_remove(pkg):
     removed = False
-
     for profile, label in [
         (VOLATILE_PROFILE, "temporary"),
         (PERMANENT_PROFILE, "permanent"),
@@ -59,15 +49,15 @@ def cmd_remove(args):
             removed = True
 
     if not removed:
-        print(f"{pkg} is not installed.", file=sys.stderr)
-        sys.exit(1)
+        print(f"{RED}\u2717{RESET} {pkg} is not installed.", file=sys.stderr)
+    return removed
 
 
-def cmd_search(args):
-    run(["nix", "search", "nixpkgs", args.query])
+def do_search(query):
+    run(["nix", "search", "nixpkgs", query])
 
 
-def cmd_list(args):
+def do_list():
     print(f"{BOLD}Temporary (until reboot):{RESET}")
     r = run(["nix", "profile", "list", "--profile", VOLATILE_PROFILE], capture_output=True, text=True)
     if r.returncode == 0 and r.stdout.strip():
@@ -83,43 +73,142 @@ def cmd_list(args):
         print("  (none)")
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        prog="bgx",
-        description="Bingux package manager",
-    )
-    sub = parser.add_subparsers(dest="command")
+def run_prefix_mode(args):
+    """Handle prefix operators: +pkg ++pkg -pkg ?query"""
+    installed = 0
+    removed = 0
+    failed = 0
 
-    # install / add / +
-    for name in ["install", "add", "+"]:
-        p = sub.add_parser(name, help="Install a package")
-        p.add_argument("-s", "--save", action="store_true", help="Persist after reboot")
-        p.add_argument("package", help="Package name")
-        p.set_defaults(func=cmd_install)
+    for arg in args:
+        if arg.startswith("++"):
+            pkg = arg[2:]
+            if do_install(pkg, save=True):
+                installed += 1
+            else:
+                failed += 1
+        elif arg.startswith("+"):
+            pkg = arg[1:]
+            if do_install(pkg, save=False):
+                installed += 1
+            else:
+                failed += 1
+        elif arg.startswith("-"):
+            pkg = arg[1:]
+            if do_remove(pkg):
+                removed += 1
+            else:
+                failed += 1
+        elif arg.startswith("?"):
+            do_search(arg[1:])
+        else:
+            print(f"{RED}\u2717{RESET} Unknown: {arg}", file=sys.stderr)
+            failed += 1
 
-    # remove / rm / -
-    for name in ["remove", "rm", "-"]:
-        p = sub.add_parser(name, help="Remove a package")
-        p.add_argument("package", help="Package name")
-        p.set_defaults(func=cmd_remove)
+    # Summary for batch operations
+    total = installed + removed + failed
+    if total > 1:
+        parts = []
+        if installed:
+            parts.append(f"{installed} installed")
+        if removed:
+            parts.append(f"{removed} removed")
+        if failed:
+            parts.append(f"{RED}{failed} failed{RESET}")
+        print(f"\n{DIM}{', '.join(parts)}{RESET}")
 
-    # search / s
-    for name in ["search", "s"]:
-        p = sub.add_parser(name, help="Search for packages")
-        p.add_argument("query", help="Search query")
-        p.set_defaults(func=cmd_search)
-
-    # list / ls
-    for name in ["list", "ls"]:
-        p = sub.add_parser(name, help="List installed packages")
-        p.set_defaults(func=cmd_list)
-
-    args = parser.parse_args()
-    if not args.command:
-        parser.print_help()
+    if failed:
         sys.exit(1)
 
-    args.func(args)
+
+def run_subcommand_mode(args):
+    """Handle subcommands: install, remove, search, list"""
+    cmd = args[0]
+    rest = args[1:]
+
+    # Install aliases
+    if cmd in ("install", "add", "a"):
+        save = False
+        pkgs = []
+        for arg in rest:
+            if arg in ("-s", "--save"):
+                save = True
+            else:
+                pkgs.append(arg)
+        if not pkgs:
+            print("Package name required.", file=sys.stderr)
+            sys.exit(1)
+        failed = 0
+        for pkg in pkgs:
+            if not do_install(pkg, save=save):
+                failed += 1
+        if failed:
+            sys.exit(1)
+
+    # Remove aliases
+    elif cmd in ("remove", "uninstall", "rm", "r"):
+        if not rest:
+            print("Package name required.", file=sys.stderr)
+            sys.exit(1)
+        failed = 0
+        for pkg in rest:
+            if not do_remove(pkg):
+                failed += 1
+        if failed:
+            sys.exit(1)
+
+    # Search aliases
+    elif cmd in ("search", "s", "q"):
+        if not rest:
+            print("Search query required.", file=sys.stderr)
+            sys.exit(1)
+        do_search(" ".join(rest))
+
+    # List aliases
+    elif cmd in ("list", "ls"):
+        do_list()
+
+    else:
+        print_usage()
+        sys.exit(1)
+
+
+def print_usage():
+    print(f"""
+{BOLD}bgx{RESET} — Bingux package manager
+
+{BOLD}Quick syntax:{RESET}
+  bgx +firefox                  Install (until reboot)
+  bgx ++firefox                 Install permanently
+  bgx -firefox                  Remove
+  bgx +firefox +htop -chromium  Batch operations
+  bgx ?browser                  Search
+  bgx                           List installed
+
+{BOLD}Subcommands:{RESET}
+  bgx install [-s] <pkg...>     Install (-s to save permanently)
+  bgx remove <pkg...>           Remove
+  bgx search <query>            Search nixpkgs
+  bgx list                      List installed packages
+
+{BOLD}Aliases:{RESET}
+  install: add, a               remove: uninstall, rm, r
+  search: s, q                  list: ls
+""".strip())
+
+
+def main():
+    args = sys.argv[1:]
+
+    # No args = list
+    if not args:
+        do_list()
+        return
+
+    # Check if first arg is a prefix operator
+    if args[0][0] in ("+", "-", "?"):
+        run_prefix_mode(args)
+    else:
+        run_subcommand_mode(args)
 
 
 if __name__ == "__main__":
