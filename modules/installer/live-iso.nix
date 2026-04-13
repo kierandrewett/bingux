@@ -57,8 +57,8 @@ let
 
         # Log results for debugging
         ${pkgs.glib}/bin/gsettings get org.gnome.desktop.interface font-name >> /tmp/gsettings.log 2>&1
-        ${pkgs.coreutils}/bin/fc-match sans-serif >> /tmp/gsettings.log 2>&1
-        ${pkgs.coreutils}/bin/fc-match monospace >> /tmp/gsettings.log 2>&1
+        fc-match sans-serif >> /tmp/gsettings.log 2>&1
+        fc-match monospace >> /tmp/gsettings.log 2>&1
 
         # Bottom taskbar
         ${pkgs.waybar}/bin/waybar &
@@ -155,6 +155,13 @@ in
         extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
     };
     programs.dconf.enable = true;
+
+    # Ensure GSettings schemas are compiled and available
+    environment.pathsToLink = [ "/share/glib-2.0" ];
+    environment.extraInit = ''
+        export XDG_DATA_DIRS="/run/current-system/sw/share:$HOME/.local/share:$XDG_DATA_DIRS"
+        export GSETTINGS_SCHEMA_DIR="/run/current-system/sw/share/glib-2.0/schemas"
+    '';
     programs.dconf.profiles.user.databases = [{
         settings."org/gnome/desktop/interface" = {
             font-name = "Inter 11";
