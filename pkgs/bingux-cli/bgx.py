@@ -228,11 +228,12 @@ def do_install(pkgs, save=False, skip_confirm=False):
         sp = Spinner(f"Installing {pkg}...")
         sp.start()
         r = run(["nix", "profile", "install", "--profile", profile, f"nixpkgs#{pkg}"],
-                capture_output=True)
+                capture_output=True, text=True)
         if r.returncode == 0:
             sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}")
         else:
-            sp.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
+            err = (r.stderr or r.stdout or "").strip().split("\n")[-1]
+            sp.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET} {DARK}— {err}{RESET}")
             failed += 1
 
     if failed == 0 and len(pkgs) > 0:
