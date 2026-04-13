@@ -20,6 +20,6 @@ final: prev: {
     '';
 
     bingux-plymouth = final.callPackage ../pkgs/bingux-plymouth { };
-    minegrub-theme = final.callPackage ../pkgs/minegrub-theme { };
-    os-helper = final.callPackage ../pkgs/os-helper { };
+os-helper = final.callPackage ../pkgs/os-helper { };
+    bingux-installer = final.callPackage ../pkgs/bingux-installer { };
 }

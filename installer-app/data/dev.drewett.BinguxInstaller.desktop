@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Install Bingux
+Comment=Install Bingux to your disk
+Exec=bingux-installer
+Icon=bingux
+Categories=System;
+Terminal=false
