@@ -410,8 +410,8 @@ def do_search(query, sort="relevance"):
         print(f"  {DARK}No results found.{RESET}")
         return
 
-    _print_table(f"Results for '{query}'", ACCENT, results, name_color=WHITE, show_size=False)
-    print(f"  {DARK}{len(results)} results.{RESET}")
+    _print_table(f"Results for '{query}' {DARK}(sorted by {sort}){RESET}", ACCENT, results, name_color=WHITE, show_size=False)
+    print(f"  {DARK}{len(results)} results \u2022 sorted by {sort}{RESET}")
 
 
 def do_list():
