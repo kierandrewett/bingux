@@ -220,8 +220,7 @@ in
         swaybg
         wl-clipboard
 
-        # Browser + tools
-        firefox
+        # Tools
         gh
         gparted
         gptfdisk
@@ -347,6 +346,38 @@ in
         MENU COLOR UNSEL        37;44      #FF000000    #00000000   none
         MENU COLOR SEL          7;37;40    #FFFFFFFF    #FF5277C3   std
     '';
+
+    # Firefox: skip first-run, disable telemetry, clean for installer use
+    programs.firefox = {
+        enable = true;
+        policies = {
+            DisableFirefoxStudies = true;
+            DisableTelemetry = true;
+            DisablePocket = true;
+            DisableFirefoxAccounts = true;
+            DisableSetDesktopBackground = true;
+            DontCheckDefaultBrowser = true;
+            NoDefaultBookmarks = true;
+            OfferToSaveLogins = false;
+            PasswordManagerEnabled = false;
+            OverrideFirstRunPage = "";
+            OverridePostUpdatePage = "";
+            Homepage = { StartPage = "none"; };
+            UserMessaging = {
+                SkipOnboarding = true;
+                ExtensionRecommendations = false;
+                UrlbarInterventions = false;
+                MoreFromMozilla = false;
+            };
+            Preferences = {
+                "browser.aboutConfig.showWarning" = { Value = false; Status = "locked"; };
+                "browser.newtabpage.activity-stream.showSponsored" = { Value = false; Status = "locked"; };
+                "browser.newtabpage.activity-stream.showSponsoredTopSites" = { Value = false; Status = "locked"; };
+                "datareporting.policy.dataSubmissionEnabled" = { Value = false; Status = "locked"; };
+                "toolkit.telemetry.reportingpolicy.firstRun" = { Value = false; Status = "locked"; };
+            };
+        };
+    };
 
     networking.hostName = "bingux-installer";
 
