@@ -214,10 +214,20 @@ class InstallPage(BasePage):
         p.communicate(input=log)
 
     def _on_save_log(self, _btn):
+        import time
         log = self._get_log_text()
-        path = "/tmp/bingux-install.log"
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        path = f"/tmp/bingux-install-{timestamp}.log"
+        link = "/tmp/bingux-install-latest.log"
         with open(path, "w") as f:
             f.write(log)
+        try:
+            import os
+            if os.path.islink(link):
+                os.remove(link)
+            os.symlink(path, link)
+        except OSError:
+            pass
         self._log(f"\nLog saved to {path}\n")
 
     def _on_terminal(self, _btn):
