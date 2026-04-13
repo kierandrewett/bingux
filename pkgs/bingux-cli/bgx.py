@@ -24,9 +24,10 @@ SUCCESS = "\033[38;5;114m"  # soft green
 WARN = "\033[38;5;180m"     # soft amber
 FAIL = "\033[38;5;174m"     # soft red
 
-COL_NAME = 28
-COL_VER = 14
-COL_SIZE = 14
+MIN_NAME = 16
+MIN_VER = 10
+MIN_SIZE = 10
+MIN_DESC = 20
 VERSION = "0.2.0"
 
 
@@ -130,24 +131,49 @@ def _term_width():
         return 80
 
 
-def pkg_row(name, version="", size="", description="", name_color=WHITE):
-    n = name.ljust(COL_NAME)
-    v = (version or "-").ljust(COL_VER)
-    s = (size or "-").ljust(COL_SIZE)
-    prefix_len = 4 + COL_NAME + 1 + COL_VER + 1 + COL_SIZE + 1
-    max_desc = _term_width() - prefix_len - 2
-    if max_desc > 0 and len(description) > max_desc:
-        description = description[:max_desc - 1] + "\u2026"
-    return f"    {name_color}{n} {RESET}{WHITE}{v} {RESET}{GRAY}{s} {RESET}{DARK}{description}{RESET}"
+def _calc_cols(infos, show_size=True):
+    """Calculate dynamic column widths based on content."""
+    tw = _term_width()
+    cn = max((len(i["name"]) for i in infos), default=0)
+    cv = max((len(i.get("version") or "-") for i in infos), default=0)
+    cs = max((len(i.get("size") or "-") for i in infos), default=0) if show_size else 0
+
+    cn = max(cn, MIN_NAME) + 2
+    cv = max(cv, MIN_VER) + 2
+    cs = (max(cs, MIN_SIZE) + 2) if show_size else 0
+
+    # Cap name at 40% of terminal
+    cn = min(cn, int(tw * 0.4))
+    cd = max(tw - 4 - cn - cv - cs - 3, MIN_DESC)
+    return cn, cv, cs, cd
 
 
-def _print_table(label, label_color, infos, name_color=WHITE):
+def _fmt_row(name, version, size, description, cols, name_color=WHITE):
+    cn, cv, cs, cd = cols
+    n = name[:cn-1].ljust(cn) if len(name) >= cn else name.ljust(cn)
+    v = (version or "-")[:cv-1].ljust(cv) if len(version or "-") >= cv else (version or "-").ljust(cv)
+    desc = description
+    if len(desc) > cd:
+        desc = desc[:cd-1] + "\u2026"
+    if cs:
+        s = (size or "-")[:cs-1].ljust(cs) if len(size or "-") >= cs else (size or "-").ljust(cs)
+        return f"    {name_color}{n}{RESET} {WHITE}{v}{RESET} {GRAY}{s}{RESET} {DARK}{desc}{RESET}"
+    else:
+        return f"    {name_color}{n}{RESET} {WHITE}{v}{RESET} {DARK}{desc}{RESET}"
+
+
+def _print_table(label, label_color, infos, name_color=WHITE, show_size=True):
+    cols = _calc_cols(infos, show_size=show_size)
+    cn, cv, cs, cd = cols
     print(f"  {label_color}\u276f{RESET} {WHITE}{label}{RESET}")
     line_w = _term_width() - 6
-    print(f"    {DARK}{'Package'.ljust(COL_NAME)} {'Version'.ljust(COL_VER)} {'Size'.ljust(COL_SIZE)} Description{RESET}")
+    if show_size:
+        print(f"    {DARK}{'Package'.ljust(cn)} {'Version'.ljust(cv)} {'Size'.ljust(cs)} Description{RESET}")
+    else:
+        print(f"    {DARK}{'Package'.ljust(cn)} {'Version'.ljust(cv)} Description{RESET}")
     print(f"    {DARK}{'\u2500' * line_w}{RESET}")
     for info in infos:
-        print(pkg_row(info["name"], info["version"], info.get("size", ""), info["description"], name_color))
+        print(_fmt_row(info["name"], info.get("version", ""), info.get("size", ""), info.get("description", ""), cols, name_color))
     print()
 
 
@@ -353,13 +379,8 @@ def do_search(query):
         print(f"  {DARK}No results found.{RESET}")
         return
 
-    tw = _term_width()
-    line_w = tw - 6
-    print(f"    {DARK}{'Package'.ljust(COL_NAME)} {'Version'.ljust(COL_VER)} Description{RESET}")
-    print(f"    {DARK}{'\u2500' * line_w}{RESET}")
-    for info in results:
-        print(pkg_row(info["name"], info["version"], "", info["description"]))
-    print(f"\n  {DARK}{len(results)} results.{RESET}")
+    _print_table(f"Results for '{query}'", ACCENT, results, name_color=WHITE, show_size=False)
+    print(f"  {DARK}{len(results)} results.{RESET}")
 
 
 def do_list():
