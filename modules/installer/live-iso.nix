@@ -196,13 +196,10 @@ in
     in pkgs.runCommand "bingux-grub-theme" {} ''
         cp -r ${base} $out
         chmod -R u+w $out
-        # Replace NixOS logo with bingux (GRUB needs 8-bit RGB, no alpha)
+        # Remove NixOS logo — replace with a blank dark image
         for f in $out/icons/nixos.png $out/logo.png; do
             if [ -f "$f" ]; then
-                ${pkgs.imagemagick}/bin/magick ${../../files/branding/bingus.png} \
-                    -resize 256x256 -gravity center -extent 256x256 \
-                    -background "#1a1a2e" -flatten -depth 8 -type TrueColor \
-                    -filter Lanczos -quality 100 \
+                ${pkgs.imagemagick}/bin/magick -size 1x1 xc:#1a1a2e -depth 8 -type TrueColor \
                     PNG24:"$f" 2>/dev/null || true
             fi
         done
