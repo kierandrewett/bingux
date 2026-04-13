@@ -167,6 +167,8 @@ class InstallPage(BasePage):
 
             self._set_status("Installation complete!", 1.0)
             self._log("\nInstallation complete!\n")
+            # Auto-save log
+            GLib.idle_add(self._on_save_log, None)
             GLib.idle_add(self.window.go_next)
 
         except Exception as e:

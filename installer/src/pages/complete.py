@@ -1,5 +1,5 @@
-import gi
 import subprocess
+import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
@@ -12,30 +12,60 @@ class CompletePage(BasePage):
     def __init__(self, window):
         super().__init__(window, "Complete", tag="complete")
 
-        status = Adw.StatusPage()
-        status.set_icon_name("emblem-ok-symbolic")
-        status.set_title("Installation Complete!")
-        status.set_description(
-            "Bingux has been installed successfully.\n\n"
-            "Remove the installation media and reboot to start using your new system."
-        )
-        self.content.append(status)
+        # Big checkmark
+        check = Gtk.Label(label="\u2713")
+        check.set_halign(Gtk.Align.CENTER)
+        css = Gtk.CssProvider()
+        css.load_from_string("""
+            label {
+                font-size: 64px;
+                color: @success_color;
+            }
+        """)
+        check.get_style_context().add_provider(css, 800)
+        self.content.append(check)
 
-        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        btn_box.set_halign(Gtk.Align.CENTER)
+        title = Gtk.Label(label="Installation Complete!")
+        title.add_css_class("title-1")
+        title.set_halign(Gtk.Align.CENTER)
+        self.content.append(title)
+
+        desc = Gtk.Label(label="Bingux has been installed successfully.\nRemove the installation media and reboot to start using your new system.")
+        desc.add_css_class("dim-label")
+        desc.set_halign(Gtk.Align.CENTER)
+        desc.set_justify(Gtk.Justification.CENTER)
+        desc.set_wrap(True)
+        self.content.append(desc)
+
+        # Bottom bar: View Log (left), Reboot (right)
+        bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        bar.set_margin_start(24)
+        bar.set_margin_end(24)
+        bar.set_margin_top(8)
+        bar.set_margin_bottom(12)
+
+        log_btn = Gtk.Button(label="View Log")
+        log_btn.add_css_class("pill")
+        log_btn.connect("clicked", self._on_view_log)
+        bar.append(log_btn)
+
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        bar.append(spacer)
 
         reboot_btn = Gtk.Button(label="Reboot Now")
         reboot_btn.add_css_class("pill")
         reboot_btn.add_css_class("suggested-action")
         reboot_btn.connect("clicked", self._on_reboot)
-        btn_box.append(reboot_btn)
+        bar.append(reboot_btn)
 
-        close_btn = Gtk.Button(label="Close")
-        close_btn.add_css_class("pill")
-        close_btn.connect("clicked", lambda _: self.window.close())
-        btn_box.append(close_btn)
+        self.toolbar_view.add_bottom_bar(bar)
 
-        self.content.append(btn_box)
+    def _on_view_log(self, _btn):
+        try:
+            subprocess.Popen(["gnome-text-editor", "/tmp/bingux-install-latest.log"])
+        except FileNotFoundError:
+            subprocess.Popen(["xdg-open", "/tmp/bingux-install-latest.log"])
 
     def _on_reboot(self, _btn):
         try:
