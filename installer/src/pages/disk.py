@@ -105,6 +105,11 @@ class DiskPage(BasePage):
 
     def on_enter(self):
         self._refresh_disks()
+        # Auto-select first disk if none selected
+        disks = list_disks()
+        if not self.state.selected_disk and disks:
+            self.state.selected_disk = disks[0].get("name", "")
+        self._update_map()
 
     def _refresh_disks(self):
         for row in self.disk_rows:
