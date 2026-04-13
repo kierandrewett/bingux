@@ -2,92 +2,21 @@
 let
     bingux-plymouth = pkgs.callPackage ../../pkgs/bingux-plymouth { };
     bingux-installer = pkgs.callPackage ../../pkgs/bingux-installer { };
-
-    # Sway config: floating by default, dark bg, bottom bar, autostart installer
-    swayConfig = pkgs.writeText "sway-config" ''
-        # All windows float by default
-        for_window [app_id=".*"] floating enable
-
-        # Installer starts maximized
-        for_window [app_id="dev.drewett.BinguxInstaller"] floating enable, resize set 800 600, move position center
-
-        # Dark background
-        output * bg #1a1a2e solid_color
-
-        # Bottom bar
-        bar {
-            position bottom
-            status_command while date +'%H:%M'; do sleep 30; done
-            colors {
-                background #1a1a2e
-                statusline #ffffff
-                focused_workspace #5277c3 #5277c3 #ffffff
-                inactive_workspace #1a1a2e #1a1a2e #888888
-            }
-        }
-
-        # Keybindings
-        set $mod Mod4
-        bindsym $mod+Return exec ${pkgs.foot}/bin/foot
-        bindsym $mod+d exec ${pkgs.fuzzel}/bin/fuzzel
-        bindsym $mod+q kill
-        bindsym $mod+Shift+e exit
-
-        # Mouse focus
-        focus_follows_mouse yes
-
-        # Force immediate rendering (fixes blank screen until mouse move on virtio-gpu)
-        seat * hide_cursor 0
-
-        # Titlebar on all windows (CSD-like, draggable)
-        default_border normal 1
-        titlebar_padding 6
-        titlebar_border_thickness 0
-        font Inter 10
-        gaps inner 4
-        gaps outer 4
-
-        # GTK settings via gsettings (needs dconf)
-        set $gnome-schema org.gnome.desktop.interface
-        exec_always ${pkgs.glib}/bin/gsettings set $gnome-schema color-scheme prefer-dark
-        exec_always ${pkgs.glib}/bin/gsettings set $gnome-schema font-name 'Inter 11'
-        exec_always ${pkgs.glib}/bin/gsettings set $gnome-schema icon-theme 'Adwaita'
-        exec_always ${pkgs.glib}/bin/gsettings set $gnome-schema gtk-theme 'Adwaita'
-
-        # Autostart installer with loading splash
-        exec ${pkgs.writeShellScript "launch-installer" ''
-            # Show loading message
-            ${pkgs.mako}/bin/makoctl dismiss -a 2>/dev/null || true
-            ${pkgs.libnotify}/bin/notify-send -t 10000 "Bingux" "Starting installer..."
-            sleep 2
-            # Force sway to redraw by toggling focus
-            ${pkgs.sway}/bin/swaymsg seat - cursor set 640 360 2>/dev/null || true
-            ${bingux-installer}/bin/bingux-installer 2>/tmp/bingux-installer.log || ${pkgs.foot}/bin/foot
-        ''}
-    '';
-
-    # Greetd auto-login session
-    swaySession = pkgs.writeShellScript "sway-session" ''
-        export XDG_SESSION_TYPE=wayland
-        export XDG_CURRENT_DESKTOP=sway
-        export MOZ_ENABLE_WAYLAND=1
-        exec ${pkgs.sway}/bin/sway --config ${swayConfig}
-    '';
 in
 {
     imports = [
-        (modulesPath + "/installer/cd-dvd/installation-cd-minimal.nix")
+        (modulesPath + "/installer/cd-dvd/installation-cd-graphical-base.nix")
         ./live-shell.nix
         ../system/branding.nix
     ];
 
-    # Greetd auto-login into sway
-    services.greetd = {
+    # GNOME + GDM autologin
+    services.xserver.desktopManager.gnome.enable = lib.mkForce true;
+    services.xserver.displayManager.gdm.enable = lib.mkForce true;
+    services.displayManager.defaultSession = "gnome";
+    services.displayManager.autoLogin = {
         enable = true;
-        settings.default_session = {
-            command = "${swaySession}";
-            user = "bingux";
-        };
+        user = "bingux";
     };
 
     # Passwordless bingux user
@@ -104,12 +33,37 @@ in
         });
     '';
 
-    # Wayland + sway essentials
-    programs.sway.enable = true;
-    xdg.portal = {
-        enable = true;
-        wlr.enable = true;
-    };
+    # Dark theme, no wallpaper, installer in dock
+    programs.dconf.profiles.user.databases = [{
+        settings."org/gnome/desktop/background" = {
+            picture-options = "none";
+            primary-color = "#1a1a2e";
+        };
+        settings."org/gnome/desktop/screensaver" = {
+            picture-options = "none";
+            primary-color = "#1a1a2e";
+        };
+        settings."org/gnome/desktop/interface" = {
+            color-scheme = "prefer-dark";
+            font-name = "Inter 11";
+            monospace-font-name = "JetBrains Mono 11";
+        };
+        settings."org/gnome/shell" = {
+            favorite-apps = [
+                "dev.drewett.BinguxInstaller.desktop"
+                "org.gnome.Nautilus.desktop"
+                "org.gnome.Terminal.desktop"
+                "firefox.desktop"
+            ];
+        };
+    }];
+
+    # Remove distro logo from GDM
+    programs.dconf.profiles.gdm.databases = [{
+        settings."org/gnome/login-screen" = {
+            logo = "";
+        };
+    }];
 
     environment.defaultPackages = lib.mkForce (with pkgs; [
         vim
@@ -127,63 +81,32 @@ in
         gptfdisk
         ssh-to-age
 
-        # Lightweight Wayland apps
-        foot              # terminal
-        fuzzel            # app launcher
-        mako              # notifications
-        wl-clipboard      # clipboard
-        gnome-text-editor # log viewer
-        libnotify         # notify-send
+        # GNOME apps (minimal)
+        gnome-terminal
+        gnome-text-editor
 
         # Icons
         adwaita-icon-theme
         hicolor-icon-theme
     ];
 
-    # GTK4 font/theme settings (fallback for when dconf isn't running)
-    environment.etc."xdg/gtk-4.0/settings.ini".text = ''
-        [Settings]
-        gtk-font-name=Inter 11
-        gtk-icon-theme-name=Adwaita
-        gtk-theme-name=Adwaita
-        gtk-application-prefer-dark-theme=true
-    '';
-    environment.etc."xdg/gtk-3.0/settings.ini".text = ''
-        [Settings]
-        gtk-font-name=Inter 11
-        gtk-icon-theme-name=Adwaita
-        gtk-theme-name=Adwaita
-        gtk-application-prefer-dark-theme=true
-    '';
-
-    # Ensure dconf service runs for gsettings
-    programs.dconf.enable = true;
-
-    # Suppress zsh new-user setup prompt
-    environment.etc."skel/.zshrc".text = "# Bingux installer\n";
-
-    # Foot terminal config
-    environment.etc."xdg/foot/foot.ini".text = ''
-        [main]
-        font=JetBrains Mono:size=11
-        pad=8x8
-
-        [colors]
-        background=1a1a2e
-        foreground=ffffff
-    '';
-
-    # Fontconfig defaults (Libadwaita reads these, not GTK settings.ini)
-    fonts.fontconfig.defaultFonts = {
-        sansSerif = lib.mkForce [ "Inter" ];
-        monospace = lib.mkForce [ "JetBrains Mono" ];
-    };
-
     # Locale
     i18n.defaultLocale = lib.mkForce "en_US.UTF-8";
     i18n.supportedLocales = lib.mkForce [
         "en_US.UTF-8/UTF-8"
         "en_GB.UTF-8/UTF-8"
+    ];
+
+    # Suppress zsh new-user setup prompt
+    environment.etc."skel/.zshrc".text = "# Bingux installer\n";
+
+    # Strip GNOME bloat
+    environment.gnome.excludePackages = with pkgs; [
+        epiphany geary gnome-music gnome-photos gnome-software gnome-tour
+        yelp gnome-maps gnome-contacts gnome-weather gnome-clocks
+        gnome-calendar gnome-characters gnome-connections gnome-console
+        gnome-logs gnome-system-monitor baobab simple-scan totem evince
+        snapshot gnome-font-viewer gnome-disk-utility
     ];
 
     # Trim
@@ -218,9 +141,12 @@ in
     nix.settings.max-jobs = "auto";
     nix.settings.cores = 0;
 
-    # Fonts + icons
+    # Fonts
     fonts.packages = with pkgs; [ adwaita-fonts inter jetbrains-mono ];
-
+    fonts.fontconfig.defaultFonts = {
+        sansSerif = lib.mkForce [ "Inter" ];
+        monospace = lib.mkForce [ "JetBrains Mono" ];
+    };
 
     # Plymouth + quiet boot
     boot.plymouth = {
@@ -238,33 +164,34 @@ in
     isoImage.efiSplashImage = ../../files/branding/bingus.png;
     isoImage.splashImage = ../../files/branding/bingus-syslinux.png;
 
-    # Override NixOS GRUB theme: replace logo, darken background
+    # GRUB theme — dark background, no NixOS logo
     isoImage.grubTheme = let
         base = pkgs.nixos-grub2-theme;
     in pkgs.runCommand "bingux-grub-theme" {} ''
         cp -r ${base} $out
         chmod -R u+w $out
-        # Remove NixOS logo — replace with a blank dark image
+        # Remove NixOS logo
         for f in $out/icons/nixos.png $out/logo.png; do
             if [ -f "$f" ]; then
                 ${pkgs.imagemagick}/bin/magick -size 1x1 xc:#1a1a2e -depth 8 -type TrueColor \
                     PNG24:"$f" 2>/dev/null || true
             fi
         done
-        # Dark background (8-bit RGB)
+        # Dark background
         if [ -f "$out/background.png" ]; then
             ${pkgs.imagemagick}/bin/magick -size 1920x1080 xc:#1a1a2e -depth 8 -type TrueColor \
                 PNG24:"$out/background.png" 2>/dev/null || true
         fi
-        # Update theme.txt title
+        # Rebrand text
         if [ -f "$out/theme.txt" ]; then
             sed -i 's/NixOS/Bingux/g' "$out/theme.txt"
         fi
-        # Generate a monospace GRUB font from JetBrains Mono
+        # JetBrains Mono font for GRUB
         ${pkgs.grub2}/bin/grub-mkfont \
             -s 24 -o "$out/font.pf2" \
             ${pkgs.jetbrains-mono}/share/fonts/truetype/JetBrainsMono-Regular.ttf 2>/dev/null || true
     '';
+
     isoImage.syslinuxTheme = ''
         MENU TITLE Bingux
         MENU RESOLUTION 800 600
@@ -290,4 +217,18 @@ in
     '';
 
     networking.hostName = "bingux-installer";
+
+    # Autostart the installer
+    environment.etc."xdg/autostart/bingux-installer.desktop".text = ''
+        [Desktop Entry]
+        Type=Application
+        Name=Install Bingux
+        Comment=Install Bingux to your disk
+        Exec=${bingux-installer}/bin/bingux-installer
+        Icon=bingux
+        Terminal=false
+        Categories=System;
+        X-GNOME-Autostart-Phase=Application
+        X-GNOME-Autostart-Delay=2
+    '';
 }

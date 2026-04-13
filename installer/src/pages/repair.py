@@ -112,7 +112,7 @@ class RepairPage(BasePage):
             self.no_systems_label.set_visible(True)
 
     def _on_terminal(self):
-        subprocess.Popen(["foot"])
+        subprocess.Popen(["gnome-terminal", "--"])
 
     def _on_browser(self):
         subprocess.Popen(["firefox"])
@@ -121,7 +121,7 @@ class RepairPage(BasePage):
         subprocess.Popen(["gparted"])
 
     def _on_chroot(self, device):
-        subprocess.Popen(["foot", "-e", "bash", "-c",
+        subprocess.Popen(["gnome-terminal", "--", "-e", "bash", "-c",
             f"echo 'Mounting {device} to /mnt...'; "
             f"sudo mount {device} /mnt 2>/dev/null; "
             f"if [ -d /mnt/etc ]; then "
