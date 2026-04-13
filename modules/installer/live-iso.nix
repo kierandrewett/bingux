@@ -32,7 +32,7 @@ let
     labwcEnv = pkgs.writeText "labwc-environment" ''
         XDG_CURRENT_DESKTOP=labwc
         MOZ_ENABLE_WAYLAND=1
-        GTK_THEME=Adwaita:dark
+        GTK_THEME=adw-gtk3-dark
         XCURSOR_THEME=Adwaita
         XCURSOR_SIZE=24
     '';
@@ -135,6 +135,15 @@ in
         wlr.enable = true;
     };
     programs.dconf.enable = true;
+    programs.dconf.profiles.user.databases = [{
+        settings."org/gnome/desktop/interface" = {
+            font-name = "Inter 11";
+            monospace-font-name = "JetBrains Mono 11";
+            color-scheme = "prefer-dark";
+            icon-theme = "Adwaita";
+            gtk-theme = "adw-gtk3-dark";
+        };
+    }];
 
     # Suppress zsh new-user setup prompt
     environment.etc."skel/.zshrc".text = "# Bingux installer\n";
@@ -144,14 +153,14 @@ in
         [Settings]
         gtk-font-name=Inter 11
         gtk-icon-theme-name=Adwaita
-        gtk-theme-name=Adwaita
+        gtk-theme-name=adw-gtk3-dark
         gtk-application-prefer-dark-theme=true
     '';
     environment.etc."xdg/gtk-3.0/settings.ini".text = ''
         [Settings]
         gtk-font-name=Inter 11
         gtk-icon-theme-name=Adwaita
-        gtk-theme-name=Adwaita
+        gtk-theme-name=adw-gtk3-dark
         gtk-application-prefer-dark-theme=true
     '';
 
@@ -179,9 +188,10 @@ in
         gnome-terminal
         gnome-text-editor
 
-        # Icons + cursors
+        # Icons + cursors + theme
         adwaita-icon-theme
         hicolor-icon-theme
+        adw-gtk3
     ];
 
     # Locale
