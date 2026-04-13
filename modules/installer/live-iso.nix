@@ -112,6 +112,8 @@ let
 
     labwcSession = pkgs.writeShellScript "labwc-session" ''
         export XDG_CONFIG_HOME="$HOME/.config"
+        export FONTCONFIG_FILE=/etc/fonts/fonts.conf
+        export XDG_DATA_DIRS="/run/current-system/sw/share''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
         mkdir -p "$XDG_CONFIG_HOME/labwc" "$XDG_CONFIG_HOME/waybar"
         ln -sf ${labwcRc} "$XDG_CONFIG_HOME/labwc/rc.xml"
         ln -sf ${labwcEnv} "$XDG_CONFIG_HOME/labwc/environment"
@@ -268,6 +270,7 @@ in
     nix.settings.cores = 0;
 
     # Fonts
+    fonts.fontconfig.enable = lib.mkForce true;
     fonts.packages = with pkgs; [ adwaita-fonts inter jetbrains-mono ];
     fonts.fontconfig.defaultFonts = {
         sansSerif = lib.mkForce [ "Inter" ];
