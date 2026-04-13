@@ -1,26 +1,55 @@
 #!/usr/bin/env python3
 """bgx — Bingux package manager."""
 
-import json
 import os
 import subprocess
 import sys
+import threading
+import time
 
 
 VOLATILE_PROFILE = f"/nix/var/nix/profiles/per-user/{os.environ.get('USER', 'root')}/bgx-volatile"
 PERMANENT_PROFILE = os.path.expanduser("~/.local/state/nix/profiles/profile")
 
-GREEN = "\033[32m"
-RED = "\033[31m"
-YELLOW = "\033[33m"
-BLUE = "\033[34m"
-CYAN = "\033[36m"
 BOLD = "\033[1m"
 DIM = "\033[2m"
 RESET = "\033[0m"
 
-COL_NAME = 30
-COL_VER = 16
+COL_NAME = 28
+COL_VER = 14
+
+VERSION = "0.2.0"
+
+
+class Spinner:
+    """Braille dot spinner for async operations."""
+    FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+    def __init__(self, msg):
+        self.msg = msg
+        self._stop = False
+        self._thread = None
+
+    def start(self):
+        self._stop = False
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+        self._thread.start()
+
+    def stop(self, result=""):
+        self._stop = True
+        if self._thread:
+            self._thread.join()
+        sys.stdout.write(f"\r\033[K  {result}\n")
+        sys.stdout.flush()
+
+    def _spin(self):
+        i = 0
+        while not self._stop:
+            frame = self.FRAMES[i % len(self.FRAMES)]
+            sys.stdout.write(f"\r  {frame} {self.msg}")
+            sys.stdout.flush()
+            i += 1
+            time.sleep(0.08)
 
 
 def run(cmd, **kwargs):
@@ -28,7 +57,6 @@ def run(cmd, **kwargs):
 
 
 def pkg_info(pkg):
-    """Get package name, version, and description from nixpkgs."""
     info = {"name": pkg, "version": "", "description": ""}
     try:
         r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.version"],
@@ -47,19 +75,12 @@ def pkg_info(pkg):
     return info
 
 
-def confirm(prompt="Proceed? [y/N] "):
+def confirm(prompt="  Proceed? [y/N] "):
     try:
         return input(prompt).strip().lower() in ("y", "yes")
     except (EOFError, KeyboardInterrupt):
         print()
         return False
-
-
-def pkg_row(name, version="", description=""):
-    """Format a package as an aligned row."""
-    n = name.ljust(COL_NAME)
-    v = version.ljust(COL_VER) if version else " " * COL_VER
-    return f"  {BOLD}{n}{RESET} {CYAN}{v}{RESET} {DIM}{description}{RESET}"
 
 
 def show_transaction(installs, removes, save=False):
@@ -68,31 +89,36 @@ def show_transaction(installs, removes, save=False):
 
     if installs:
         mode = "permanently" if save else "for this session"
-        print(f"\n  {GREEN}Installing ({mode}):{RESET}")
-        print(f"  {'Package'.ljust(COL_NAME)} {'Version'.ljust(COL_VER)} Description")
+        print(f"\n  Installing ({mode}):")
+        print(f"  {DIM}{'Package'.ljust(COL_NAME)} {'Version'.ljust(COL_VER)} Description{RESET}")
         for info in installs:
-            print(pkg_row(info["name"], info["version"], info["description"]))
+            n = info["name"].ljust(COL_NAME)
+            v = (info["version"] or "").ljust(COL_VER)
+            d = info["description"]
+            print(f"  {BOLD}{n}{RESET} {v} {DIM}{d}{RESET}")
 
     if removes:
-        print(f"\n  {RED}Removing:{RESET}")
+        print(f"\n  Removing:")
         for pkg in removes:
-            print(f"  {BOLD}{pkg}{RESET}")
+            print(f"  {pkg}")
 
     parts = []
     if installs:
-        parts.append(f"{GREEN}{len(installs)} to install{RESET}")
+        parts.append(f"{len(installs)} to install")
     if removes:
-        parts.append(f"{RED}{len(removes)} to remove{RESET}")
-    print(f"\n  {', '.join(parts)}\n")
+        parts.append(f"{len(removes)} to remove")
+    print(f"\n  {DIM}{', '.join(parts)}{RESET}\n")
 
-    return confirm(f"  Proceed? [{GREEN}y{RESET}/{RED}N{RESET}] ")
+    return confirm()
 
 
 def do_install(pkgs, save=False, skip_confirm=False):
     profile = PERMANENT_PROFILE if save else VOLATILE_PROFILE
 
-    print(f"  {BLUE}::{RESET} Resolving packages...")
+    sp = Spinner("Resolving packages...")
+    sp.start()
     infos = [pkg_info(p) for p in pkgs]
+    sp.stop("Done.")
 
     if not skip_confirm and not show_transaction(infos, [], save=save):
         print("  Aborted.")
@@ -100,12 +126,14 @@ def do_install(pkgs, save=False, skip_confirm=False):
 
     failed = 0
     for pkg in pkgs:
-        nixpkg = f"nixpkgs#{pkg}"
-        r = run(["nix", "profile", "install", "--profile", profile, nixpkg])
+        sp = Spinner(f"Installing {pkg}...")
+        sp.start()
+        r = run(["nix", "profile", "install", "--profile", profile, f"nixpkgs#{pkg}"],
+                capture_output=True)
         if r.returncode == 0:
-            print(f"  {GREEN}\u2713{RESET} {pkg}")
+            sp.stop(f"\u2713 {pkg}")
         else:
-            print(f"  {RED}\u2717{RESET} {pkg}", file=sys.stderr)
+            sp.stop(f"\u2717 {pkg}")
             failed += 1
 
     return failed == 0
@@ -128,11 +156,11 @@ def do_remove(pkgs, skip_confirm=False):
                 capture_output=True,
             )
             if r.returncode == 0:
-                print(f"  {GREEN}\u2713{RESET} {pkg} ({label})")
+                print(f"  \u2713 {pkg} ({label})")
                 removed = True
 
         if not removed:
-            print(f"  {RED}\u2717{RESET} {pkg} not installed", file=sys.stderr)
+            print(f"  \u2717 {pkg} not installed", file=sys.stderr)
             failed += 1
 
     return failed == 0
@@ -143,11 +171,11 @@ def do_search(query):
 
 
 def do_list():
-    for profile, label, color in [
-        (VOLATILE_PROFILE, "Session", YELLOW),
-        (PERMANENT_PROFILE, "Permanent", GREEN),
+    for profile, label in [
+        (VOLATILE_PROFILE, "Session"),
+        (PERMANENT_PROFILE, "Permanent"),
     ]:
-        print(f"\n  {color}\u25cf{RESET} {BOLD}{label}{RESET}")
+        print(f"\n  {BOLD}{label}{RESET}")
         r = run(["nix", "profile", "list", "--profile", profile], capture_output=True, text=True)
         if r.returncode == 0 and r.stdout.strip():
             for line in r.stdout.strip().split("\n"):
@@ -173,7 +201,7 @@ def run_prefix_mode(args):
             do_search(arg[1:])
             return
         else:
-            print(f"  {RED}\u2717{RESET} Unknown: {arg}", file=sys.stderr)
+            print(f"  \u2717 Unknown: {arg}", file=sys.stderr)
             sys.exit(1)
 
     ok = True
@@ -235,10 +263,7 @@ def run_subcommand_mode(args):
         sys.exit(1)
 
 
-VERSION = "0.2.0"
-
-C1 = 36  # command/example column
-C2 = 20  # flags column
+C1 = 36
 
 
 def print_usage():
