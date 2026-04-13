@@ -13,12 +13,15 @@ def is_authenticated():
 
 
 def login():
-    """Launch gh auth login.
+    """Launch gh auth login in a terminal window.
 
-    The installer GUI runs as the live user (bingux), so the browser
-    opens normally. Backend operations that need root use pkexec/sudo.
+    gh needs an interactive TTY for the device code flow, so we open
+    a terminal. The user completes auth there, then clicks Check Status.
     """
-    subprocess.Popen(["gh", "auth", "login", "-p", "https", "-w"])
+    subprocess.Popen([
+        "gnome-terminal", "--", "bash", "-c",
+        "gh auth login -p https -w; echo; echo 'Done — you can close this window.'; read",
+    ])
 
 
 def get_token():
