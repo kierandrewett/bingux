@@ -42,7 +42,7 @@
         programs.zsh.enable = lib.mkDefault true;
 
         # Bingux CLI helper + essentials
-        environment.systemPackages = with pkgs; [ os-helper fastfetch ];
+        environment.systemPackages = with pkgs; [ os-helper fastfetch comma ];
 
         # Mark /os as safe for git
         environment.etc."gitconfig".text = lib.mkDefault ''
