@@ -11,7 +11,9 @@ A NixOS-based Linux distribution with sensible defaults, GNOME extensions, and a
    nix build github:kierandrewett/bingux#installer-iso
    ```
 2. Flash the ISO to a USB drive or boot it in a VM.
-3. The graphical installer opens automatically. Choose **Fresh Install** to set up a new system, or **From Repository** to use an existing NixOS config.
+3. The graphical installer opens automatically:
+   - **Fresh Install** — set up hostname, desktop, and user graphically. The installer generates a minimal flake for you.
+   - **From Repository** — point to any NixOS config repository on GitHub. The installer uses `nix flake show` to discover all `nixosConfigurations` in the flake, regardless of repo layout. Any flake that exports `nixosConfigurations` works.
 
 ### Use Bingux in your own NixOS config
 

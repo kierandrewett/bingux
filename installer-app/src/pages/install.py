@@ -119,7 +119,7 @@ class InstallPage(BasePage):
             step += 1
             self._set_status("Generating hardware configuration...", step / steps)
             nixos.generate_config()
-            nixos.copy_repo(s.selected_host)
+            nixos.copy_repo(s.selected_host, log_callback=self._log)
             age_key = nixos.generate_ssh_keys()
             if age_key:
                 self._log(f"Age key for sops: {age_key}\n")

@@ -1,3 +1,4 @@
+import glob
 import os
 import shutil
 import subprocess
@@ -15,17 +16,64 @@ def generate_config():
         return False, e.stderr
 
 
-def copy_repo(host, repo_path="/tmp/bingux-os"):
-    """Copy cloned repo to /mnt/os and hardware config if applicable."""
+def _find_hw_config_dir(repo_path, host):
+    """Try to find where hardware-configuration.nix belongs in the repo.
+
+    Searches common layouts:
+      machines/<host>/
+      hosts/<host>/
+      <host>/
+      nixos/machines/<host>/
+      .  (repo root)
+
+    Also looks for an existing hardware-configuration.nix import anywhere
+    in the repo and places it next to the file that imports it.
+    """
+    # Check common directory patterns
+    candidates = [
+        os.path.join(repo_path, "machines", host),
+        os.path.join(repo_path, "hosts", host),
+        os.path.join(repo_path, host),
+        os.path.join(repo_path, "nixos", "machines", host),
+        os.path.join(repo_path, "nixos", "hosts", host),
+    ]
+
+    for d in candidates:
+        if os.path.isdir(d):
+            return d
+
+    # Search for an existing hardware-configuration.nix stub anywhere in the repo
+    for path in glob.glob(os.path.join(repo_path, "**", "hardware-configuration.nix"), recursive=True):
+        return os.path.dirname(path)
+
+    return None
+
+
+def copy_repo(host, repo_path="/tmp/bingux-os", log_callback=None):
+    """Copy cloned repo to /mnt/os and hardware config if applicable.
+
+    Works with any repo layout — hardware-configuration.nix is placed
+    wherever the repo expects it, or left at /mnt/etc/nixos/ for the
+    user to integrate manually.
+    """
     dest = "/mnt/os"
     if os.path.isdir(dest):
         shutil.rmtree(dest)
     shutil.copytree(repo_path, dest)
 
     hw_config = "/mnt/etc/nixos/hardware-configuration.nix"
-    machine_dir = os.path.join(dest, "machines", host)
-    if os.path.isdir(machine_dir) and os.path.isfile(hw_config):
-        shutil.copy2(hw_config, os.path.join(machine_dir, "hardware-configuration.nix"))
+    if os.path.isfile(hw_config):
+        target_dir = _find_hw_config_dir(dest, host)
+        if target_dir:
+            target = os.path.join(target_dir, "hardware-configuration.nix")
+            shutil.copy2(hw_config, target)
+            if log_callback:
+                log_callback(f"Hardware config placed at: {target}\n")
+        elif log_callback:
+            log_callback(
+                f"Hardware config generated at /mnt/etc/nixos/hardware-configuration.nix\n"
+                f"Integrate it into your flake if needed.\n"
+            )
 
     # Set ownership to first normal user (uid 1000)
     for root, dirs, files in os.walk(dest):
