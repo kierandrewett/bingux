@@ -67,11 +67,19 @@ let
         # Bottom taskbar
         ${pkgs.waybar}/bin/waybar &
 
-        # Launch installer (retry until it starts)
-        for i in 1 2 3 4 5; do
-            sleep 2
-            ${bingux-installer}/bin/bingux-installer && break
-        done &
+        # Launch installer (retry, show error if all attempts fail)
+        (
+            for i in 1 2 3 4 5; do
+                sleep 2
+                ${bingux-installer}/bin/bingux-installer 2>/tmp/bingux-installer.log && exit 0
+            done
+            # All retries failed — show error
+            ERR=$(cat /tmp/bingux-installer.log 2>/dev/null || echo "Unknown error")
+            ${pkgs.zenity}/bin/zenity --error \
+                --title="Bingux Installer Failed" \
+                --text="The installer could not start after 5 attempts.\n\nError:\n$ERR\n\nYou can try running it manually:\n  bingux-installer" \
+                --width=500
+        ) &
     '';
 
     waybarConfig = pkgs.writeText "waybar-config" (builtins.toJSON {
@@ -235,6 +243,7 @@ in
         adwaita-icon-theme
         hicolor-icon-theme
         adw-gtk3
+        zenity
         gsettings-desktop-schemas
         glib
     ];
