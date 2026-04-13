@@ -64,11 +64,11 @@ def run(cmd, **kwargs):
 
 
 def format_size(nbytes):
-    for unit in ("B", "KB", "MB", "GB"):
+    for unit in ("B", "KiB", "MiB", "GiB"):
         if nbytes < 1024:
-            return f"{nbytes:.1f} {unit}"
+            return f"{nbytes:.2f} {unit}"
         nbytes /= 1024
-    return f"{nbytes:.1f} TB"
+    return f"{nbytes:.2f} TiB"
 
 
 def pkg_info(pkg):
@@ -96,9 +96,9 @@ def pkg_info(pkg):
         for line in (r.stderr or "").split("\n"):
             m = re.search(r"([\d.]+)\s+([KMGT]iB)\s+download,\s+([\d.]+)\s+([KMGT]iB)\s+unpacked", line)
             if m:
-                info["size"] = f"{m.group(3)} {m.group(4)}"
                 units = {"KiB": 1024, "MiB": 1024**2, "GiB": 1024**3, "TiB": 1024**4}
                 info["size_bytes"] = int(float(m.group(3)) * units.get(m.group(4), 1))
+                info["size"] = format_size(info["size_bytes"])
                 break
         # Fallback: parse stdout for store path size
         if not info["size"] and r.stdout:
