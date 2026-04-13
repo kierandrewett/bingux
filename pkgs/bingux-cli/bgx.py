@@ -237,8 +237,11 @@ def do_install(pkgs, save=False, skip_confirm=False):
             lines = [l for l in output.split("\n") if l.strip() and not l.strip().startswith("…")]
             summary = lines[-1].strip() if lines else "unknown error"
             sp.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
-            for line in lines[-5:]:
-                print(f"      {DARK}{line.strip()}{RESET}")
+            for i, line in enumerate(lines[-5:]):
+                if i < len(lines[-5:]) - 1:
+                    print(f"    {DARK}\u2502 {line.strip()}{RESET}")
+                else:
+                    print(f"    {DARK}\u23bf {line.strip()}{RESET}")
             print()
             failed += 1
 
