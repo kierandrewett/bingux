@@ -140,8 +140,12 @@ def _nix_install_streaming(cmd, env, pkg):
 
     ok = proc.returncode == 0
     if ok:
-        extra = f" {DARK}({state['dl_size']}){RESET}" if state["dl_size"] else ""
-        sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}{extra}")
+        if state["dl_size"]:
+            sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}({state['dl_size']}){RESET}")
+        elif state["fetched"]:
+            sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}({state['fetched']} paths){RESET}")
+        else:
+            sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}(cached){RESET}")
         if progress_lines:
             for pl in progress_lines[:-1]:
                 print(pl)
