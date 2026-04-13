@@ -735,14 +735,12 @@ def run_subcommand_mode(args):
 
     elif cmd in ("remove", "uninstall", "rm", "r"):
         yes = False
-        pfilter = None
+        pfilter = "session"
         pkgs = []
         for arg in rest:
             if arg in ("-y", "--yes"):
                 yes = True
-            elif arg in ("-s", "--session"):
-                pfilter = "session"
-            elif arg in ("-p", "--permanent"):
+            elif arg in ("-p", "--permanent", "--save"):
                 pfilter = "permanent"
             else:
                 pkgs.append(arg)
@@ -805,7 +803,7 @@ def print_usage():
 
   {WHITE}Commands:{RESET}
     {GRAY}{"install, add, a".ljust(C1)}{DARK}Install packages{RESET}
-    {GRAY}{"remove, rm, r".ljust(C1)}{DARK}Remove packages (-s session, -p permanent){RESET}
+    {GRAY}{"remove, rm, r".ljust(C1)}{DARK}Remove from session (-p for permanent){RESET}
     {GRAY}{"info, i".ljust(C1)}{DARK}Show package details{RESET}
     {GRAY}{"search, s, q".ljust(C1)}{DARK}Search nixpkgs (--name, --version, --relevance){RESET}
     {GRAY}{"list, ls".ljust(C1)}{DARK}List installed packages{RESET}
