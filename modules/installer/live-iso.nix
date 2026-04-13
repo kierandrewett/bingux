@@ -32,7 +32,7 @@ let
     labwcEnv = pkgs.writeText "labwc-environment" ''
         XDG_CURRENT_DESKTOP=GNOME
         XDG_DATA_DIRS=/run/current-system/sw/share
-        GSETTINGS_SCHEMA_DIR=/run/current-system/sw/share/glib-2.0/schemas
+        FONTCONFIG_FILE=/etc/fonts/fonts.conf
         MOZ_ENABLE_WAYLAND=1
         GTK_THEME=adw-gtk3-dark
         XCURSOR_THEME=Adwaita
