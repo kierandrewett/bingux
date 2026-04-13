@@ -326,19 +326,49 @@ def do_install(pkgs, save=False, skip_confirm=False):
 
     failed = 0
     for pkg in pkgs:
-        sp = Spinner(f"Installing {pkg}...")
-        sp.start()
         cmd = ["nix", "profile", "add", "--profile", profile]
         env = None
         if pkg in unfree_pkgs:
             cmd.append("--impure")
             env = {**os.environ, "NIXPKGS_ALLOW_UNFREE": "1"}
         cmd.append(f"nixpkgs#{pkg}")
-        r = run(cmd, capture_output=True, text=True, env=env)
-        if r.returncode == 0:
+
+        # Stream progress from nix stderr
+        import re as _re
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        sp = Spinner(f"Installing {pkg}...")
+        sp.start()
+
+        stderr_lines = []
+        def _read_progress():
+            for line in proc.stderr:
+                line = line.strip()
+                if not line:
+                    continue
+                stderr_lines.append(line)
+                # Parse nix progress output
+                if "copying path" in line:
+                    m = _re.search(r"copying path '.*-([^/']+)'", line)
+                    if m:
+                        sp.msg = f"{pkg}: fetching {m.group(1)}"
+                elif "building" in line.lower():
+                    sp.msg = f"{pkg}: building..."
+                elif "downloading" in line.lower():
+                    sp.msg = f"{pkg}: downloading..."
+                elif "evaluating" in line.lower():
+                    sp.msg = f"{pkg}: evaluating..."
+
+        progress_thread = threading.Thread(target=_read_progress, daemon=True)
+        progress_thread.start()
+        proc.wait()
+        sp._stop = True
+        progress_thread.join(timeout=1)
+        r_code = proc.returncode
+        r_stderr = "\n".join(stderr_lines)
+        if r_code == 0:
             sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}")
         else:
-            output = (r.stderr or r.stdout or "").strip()
+            output = r_stderr.strip()
             sp.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
 
             if "unfree" in output.lower():
