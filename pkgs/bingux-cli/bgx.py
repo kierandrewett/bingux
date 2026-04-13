@@ -464,12 +464,16 @@ def do_remove(pkgs, skip_confirm=False, profile_filter=None):
         profiles = [(VOLATILE_PROFILE, "session"), (PERMANENT_PROFILE, "permanent")]
 
     # Check for not installed in the target profiles
-    profile_label = profile_filter or "session or permanent"
     check_profiles = [p for p, _ in profiles]
     not_installed = [p for p in pkgs if not any(_is_in_profile(p, pr) for pr in check_profiles)]
     if not_installed:
         for p in not_installed:
-            print(f"  {FAIL}\u2717{RESET} {WHITE}{p}{RESET} {DARK}is not installed in '{profile_label}'.{RESET}")
+            if profile_filter == "session":
+                print(f"  {FAIL}\u2717{RESET} {WHITE}{p}{RESET} {DARK}is not installed in this session.{RESET}")
+            elif profile_filter == "permanent":
+                print(f"  {FAIL}\u2717{RESET} {WHITE}{p}{RESET} {DARK}is not installed to this installation.{RESET}")
+            else:
+                print(f"  {FAIL}\u2717{RESET} {WHITE}{p}{RESET} {DARK}is not installed.{RESET}")
         pkgs = [p for p in pkgs if p not in not_installed]
         if not pkgs:
             return len(not_installed) == 0
