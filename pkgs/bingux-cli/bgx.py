@@ -288,15 +288,22 @@ def do_install(pkgs, save=False, skip_confirm=False):
             sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}")
         else:
             output = (r.stderr or r.stdout or "").strip()
-            # Get the most useful error line (skip blank/trace lines)
-            lines = [l for l in output.split("\n") if l.strip() and not l.strip().startswith("…")]
-            summary = lines[-1].strip() if lines else "unknown error"
             sp.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
-            for i, line in enumerate(lines[-5:]):
-                if i < len(lines[-5:]) - 1:
-                    print(f"    {DARK}\u2502 {line.strip()}{RESET}")
-                else:
-                    print(f"    {DARK}\u2570 {line.strip()}{RESET}")
+
+            if "unfree" in output.lower():
+                print(f"    {DARK}\u2570 This package has an unfree license. Add to your NixOS config:{RESET}")
+                print(f"      {DARK}nixpkgs.config.allowUnfree = true;{RESET}")
+            elif "does not provide" in output:
+                print(f"    {DARK}\u2570 Package not found in nixpkgs.{RESET}")
+            else:
+                # Show last few meaningful lines
+                lines = [l for l in output.split("\n") if l.strip() and not l.strip().startswith("…")
+                         and not l.strip().startswith("at ") and not l.strip().startswith("(stack")]
+                for i, line in enumerate(lines[-3:]):
+                    if i < len(lines[-3:]) - 1:
+                        print(f"    {DARK}\u2502 {line.strip()}{RESET}")
+                    else:
+                        print(f"    {DARK}\u2570 {line.strip()}{RESET}")
             failed += 1
 
     if failed == 0 and len(pkgs) > 0:
