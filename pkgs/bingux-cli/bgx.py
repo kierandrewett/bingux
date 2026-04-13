@@ -127,7 +127,7 @@ def _term_width():
         return 80
 
 
-def pkg_row(name, version="", size="", description=""):
+def pkg_row(name, version="", size="", description="", name_color=WHITE):
     n = name.ljust(COL_NAME)
     v = (version or "-").ljust(COL_VER)
     s = (size or "-").ljust(COL_SIZE)
@@ -135,16 +135,16 @@ def pkg_row(name, version="", size="", description=""):
     max_desc = _term_width() - prefix_len - 2
     if max_desc > 0 and len(description) > max_desc:
         description = description[:max_desc - 1] + "\u2026"
-    return f"    {WHITE}{n} {RESET}{WHITE}{v} {RESET}{GRAY}{s} {RESET}{DARK}{description}{RESET}"
+    return f"    {name_color}{n} {RESET}{WHITE}{v} {RESET}{GRAY}{s} {RESET}{DARK}{description}{RESET}"
 
 
-def _print_table(label, label_color, infos):
+def _print_table(label, label_color, infos, name_color=WHITE):
     print(f"  {label_color}\u25b8{RESET} {WHITE}{label}{RESET}")
     line_w = _term_width() - 6
     print(f"    {DARK}{'Package'.ljust(COL_NAME)} {'Version'.ljust(COL_VER)} {'Size'.ljust(COL_SIZE)} Description{RESET}")
     print(f"    {DARK}{'\u2500' * line_w}{RESET}")
     for info in infos:
-        print(pkg_row(info["name"], info["version"], info.get("size", ""), info["description"]))
+        print(pkg_row(info["name"], info["version"], info.get("size", ""), info["description"], name_color))
     print()
 
 
@@ -156,7 +156,7 @@ def show_transaction(installs, removes, save=False):
 
     if installs:
         mode = "permanently" if save else "for this session"
-        _print_table(f"Installing {DARK}({mode}){RESET}", ACCENT, installs)
+        _print_table(f"Installing {DARK}({mode}){RESET}", ACCENT, installs, name_color=SUCCESS)
 
     if removes:
         neg_removes = []
@@ -165,7 +165,7 @@ def show_transaction(installs, removes, save=False):
             if r.get("size"):
                 r["size"] = f"-{r['size']}"
             neg_removes.append(r)
-        _print_table("Removing", WARN, neg_removes)
+        _print_table("Removing", WARN, neg_removes, name_color=FAIL)
 
     ni = len(installs)
     nr = len(removes)
