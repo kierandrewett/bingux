@@ -281,20 +281,26 @@ def do_install(pkgs, save=False, skip_confirm=False):
     infos = [pkg_info(p) for p in pkgs]
     sp.stop(f"{DARK}Resolved {len(infos)} {'package' if len(infos) == 1 else 'packages'}.{RESET}")
 
-    # Handle unfree packages — ask user if they want to proceed
+    # Handle unfree packages
     unfree = [i for i in infos if i.get("unfree")]
     if unfree:
+        is_nixos = os.path.exists("/etc/nixos")
         for i in unfree:
             print(f"  {WARN}\u276f{RESET} {WHITE}{i['name']}{RESET} {DARK}has an unfree license.{RESET}")
-        if not confirm(f"  {DARK}Install unfree packages anyway?{RESET} [{GRAY}y/N{RESET}] "):
+        if is_nixos:
+            print(f"    {DARK}Enable unfree in your NixOS config: nixpkgs.config.allowUnfree = true;{RESET}")
             infos = [i for i in infos if not i.get("unfree")]
             if not infos:
-                print(f"  {DARK}Aborted.{RESET}")
                 return False
         else:
-            # Mark unfree packages to use --impure
-            for i in unfree:
-                i["_allow_unfree"] = True
+            if not confirm(f"  {DARK}Install unfree packages anyway?{RESET} [{GRAY}y/N{RESET}] "):
+                infos = [i for i in infos if not i.get("unfree")]
+                if not infos:
+                    print(f"  {DARK}Aborted.{RESET}")
+                    return False
+            else:
+                for i in unfree:
+                    i["_allow_unfree"] = True
 
     # Check for packages that don't exist in nixpkgs
     not_found = [i for i in infos if not i["version"] and not i["description"]]
@@ -329,19 +335,21 @@ def do_install(pkgs, save=False, skip_confirm=False):
             output = (r.stderr or r.stdout or "").strip()
             sp.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
 
-            if "unfree" in output.lower() and pkg not in unfree_pkgs:
-                # Retry with unfree allowed
-                sp2 = Spinner(f"Retrying {pkg} with unfree allowed...")
-                sp2.start()
-                r2 = run(["nix", "profile", "add", "--impure", "--profile", profile, f"nixpkgs#{pkg}"],
-                         capture_output=True, text=True, env={**os.environ, "NIXPKGS_ALLOW_UNFREE": "1"})
-                if r2.returncode == 0:
-                    sp2.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}(unfree){RESET}")
-                    continue
-                sp2.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
-                print(f"    {DARK}\u2570 Failed to install unfree package.{RESET}")
-            elif "unfree" in output.lower():
-                print(f"    {DARK}\u2570 Unfree package failed to install.{RESET}")
+            if "unfree" in output.lower():
+                if os.path.exists("/etc/nixos"):
+                    print(f"    {DARK}\u2502 This package has an unfree license.{RESET}")
+                    print(f"    {DARK}\u2570 Add to your NixOS config: nixpkgs.config.allowUnfree = true;{RESET}")
+                else:
+                    # Non-NixOS: retry with unfree allowed
+                    sp2 = Spinner(f"Retrying {pkg} with unfree allowed...")
+                    sp2.start()
+                    r2 = run(["nix", "profile", "add", "--impure", "--profile", profile, f"nixpkgs#{pkg}"],
+                             capture_output=True, text=True, env={**os.environ, "NIXPKGS_ALLOW_UNFREE": "1"})
+                    if r2.returncode == 0:
+                        sp2.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}(unfree){RESET}")
+                        continue
+                    sp2.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
+                    print(f"    {DARK}\u2570 Failed to install unfree package.{RESET}")
             elif "does not provide" in output:
                 print(f"    {DARK}\u2570 Package not found in nixpkgs.{RESET}")
             else:
