@@ -41,15 +41,13 @@ in
     programs.git = {
         enable = true;
         config = {
-            core.excludesFile = "/etc/xdg/git/ignore";
             delta = zshProfile.gitDeltaOptions;
         } // zshProfile.gitExtraConfig;
     };
 
     environment.etc = {
         "xdg/fastfetch/config.jsonc".source = zshProfile.fastfetchConfigSource;
-        "xdg/git/ignore".source = zshProfile.gitIgnoreSource;
-        "bingus.ascii".source = ../../files/branding/bingus.ascii;
+"bingus.ascii".source = ../../files/branding/bingus.ascii;
     };
 
     environment.variables.XDG_CONFIG_DIRS = lib.mkDefault "/etc/xdg";

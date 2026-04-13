@@ -37,7 +37,6 @@
     ];
 
     fastfetchConfigSource = ../../files/fastfetch/config.jsonc;
-    gitIgnoreSource = ../../files/git/gitignore_global;
 
     gitExtraConfig = {
         init.defaultBranch = "main";
