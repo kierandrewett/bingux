@@ -20,8 +20,9 @@ stdenv.mkDerivation {
     installPhase = ''
         runHook preInstall
 
-        mkdir -p $out/lib/bingux-installer
+        mkdir -p $out/lib/bingux-installer $out/share/bingux-installer
         cp -r src/* $out/lib/bingux-installer/
+        cp ${../../files/branding/bingus.png} $out/share/bingux-installer/logo.png
 
         mkdir -p $out/bin
         makeWrapper ${pythonEnv}/bin/python3 $out/bin/bingux-installer \

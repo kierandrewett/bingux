@@ -1,26 +1,65 @@
+import os
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 
-from gi.repository import Adw, Gtk
+from gi.repository import Adw, Gtk, GdkPixbuf
 from pages.base_page import BasePage
+
+
+def _find_logo():
+    """Find the bingux logo relative to the install prefix."""
+    # Installed path: $out/share/bingux-installer/logo.png
+    src_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    prefix = os.path.dirname(os.path.dirname(src_dir))  # $out
+    for path in [
+        os.path.join(prefix, "share", "bingux-installer", "logo.png"),
+        "/etc/bingus.png",
+    ]:
+        if os.path.isfile(path):
+            return path
+    return None
 
 
 class WelcomePage(BasePage):
     def __init__(self, window):
         super().__init__(window, "Welcome", tag="welcome")
 
-        status = Adw.StatusPage()
-        status.set_icon_name("system-software-install-symbolic")
-        status.set_title("Welcome to Bingux")
-        status.set_description(
-            "This wizard will guide you through installing Bingux on your computer.\n\n"
-            "You will need:\n"
-            "  \u2022  A GitHub account with access to your NixOS config repository\n"
-            "  \u2022  An internet connection\n"
-            "  \u2022  A disk to install to"
-        )
-        self.content.append(status)
+        # Logo
+        logo_path = _find_logo()
+        if logo_path:
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(logo_path, 128, 128, True)
+            texture = Gtk.Image.new_from_pixbuf(pixbuf)
+            texture.set_pixel_size(128)
+            texture.set_halign(Gtk.Align.CENTER)
+            texture.set_margin_bottom(8)
+            self.content.append(texture)
+
+        title = Gtk.Label(label="Welcome to Bingux")
+        title.add_css_class("title-1")
+        title.set_halign(Gtk.Align.CENTER)
+        self.content.append(title)
+
+        subtitle = Gtk.Label(label="A modern NixOS-based Linux distribution")
+        subtitle.add_css_class("dim-label")
+        subtitle.set_halign(Gtk.Align.CENTER)
+        subtitle.set_margin_bottom(16)
+        self.content.append(subtitle)
+
+        # Info cards
+        cards = [
+            ("drive-harddisk-symbolic", "Install fresh or from your own NixOS config repository"),
+            ("network-wireless-symbolic", "An internet connection is required"),
+            ("dialog-password-symbolic", "Sign in to GitHub or GitLab if your config is private"),
+        ]
+
+        for icon_name, text in cards:
+            row = Adw.ActionRow()
+            row.set_title(text)
+            icon = Gtk.Image.new_from_icon_name(icon_name)
+            icon.set_pixel_size(24)
+            row.add_prefix(icon)
+            self.content.append(row)
 
         self.add_nav_buttons(next_label="Get Started", show_back=False)
