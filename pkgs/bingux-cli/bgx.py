@@ -340,21 +340,35 @@ def do_install(pkgs, save=False, skip_confirm=False):
         sp.start()
 
         stderr_lines = []
+        progress_lines = []
+        fetched = 0
+        total_fetch = 0
+
         def _read_progress():
+            nonlocal fetched, total_fetch
             for line in proc.stderr:
                 line = line.strip()
                 if not line:
                     continue
                 stderr_lines.append(line)
-                # Parse nix progress output
+
+                # Count total paths to fetch
+                m = _re.match(r"these (\d+) paths will be fetched", line)
+                if m:
+                    total_fetch = int(m.group(1))
+                    continue
+
                 if "copying path" in line:
-                    m = _re.search(r"copying path '.*-([^/']+)'", line)
-                    if m:
-                        sp.msg = f"{pkg}: fetching {m.group(1)}"
+                    fetched += 1
+                    m2 = _re.search(r"copying path '.*-([^/']+)'", line)
+                    name = m2.group(1) if m2 else "..."
+                    if total_fetch:
+                        sp.msg = f"{pkg}: [{fetched}/{total_fetch}] {name}"
+                    else:
+                        sp.msg = f"{pkg}: fetching {name}"
+                    progress_lines.append(f"    {DARK}\u2502 [{fetched}/{total_fetch or '?'}] {name}{RESET}")
                 elif "building" in line.lower():
                     sp.msg = f"{pkg}: building..."
-                elif "downloading" in line.lower():
-                    sp.msg = f"{pkg}: downloading..."
                 elif "evaluating" in line.lower():
                     sp.msg = f"{pkg}: evaluating..."
 
@@ -367,6 +381,10 @@ def do_install(pkgs, save=False, skip_confirm=False):
         r_stderr = "\n".join(stderr_lines)
         if r_code == 0:
             sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET}")
+            if progress_lines:
+                for pl in progress_lines[:-1]:
+                    print(pl)
+                print(f"    {DARK}\u2570 {fetched} paths fetched{RESET}")
         else:
             output = r_stderr.strip()
             sp.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
