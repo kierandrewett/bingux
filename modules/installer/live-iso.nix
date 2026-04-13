@@ -41,9 +41,11 @@ let
         gaps outer 4
         default_border pixel 2
 
-        # GTK dark theme
+        # GTK dark theme + font + icons
         set $gnome-schema org.gnome.desktop.interface
         exec_always ${pkgs.glib}/bin/gsettings set $gnome-schema color-scheme prefer-dark
+        exec_always ${pkgs.glib}/bin/gsettings set $gnome-schema font-name 'Inter 11'
+        exec_always ${pkgs.glib}/bin/gsettings set $gnome-schema icon-theme 'Adwaita'
 
         # Autostart installer (with delay for session readiness, fallback to terminal on error)
         exec sleep 2 && ${bingux-installer}/bin/bingux-installer 2>/tmp/bingux-installer.log || ${pkgs.foot}/bin/foot
@@ -157,8 +159,10 @@ in
     nix.settings.max-jobs = "auto";
     nix.settings.cores = 0;
 
-    # Fonts
-    fonts.packages = with pkgs; [ adwaita-fonts ];
+    # Fonts + icons
+    fonts.packages = with pkgs; [ adwaita-fonts inter ];
+
+    environment.systemPackages = with pkgs; [ adwaita-icon-theme hicolor-icon-theme ];
 
     # Plymouth + quiet boot
     boot.plymouth = {
