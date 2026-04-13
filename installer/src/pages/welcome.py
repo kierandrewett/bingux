@@ -63,3 +63,25 @@ class WelcomePage(BasePage):
             self.content.append(row)
 
         self.add_nav_buttons(next_label="Get Started", show_back=False)
+
+        # Repair options
+        repair_btn = Gtk.Button(label="Repair Options")
+        repair_btn.add_css_class("pill")
+        repair_btn.add_css_class("flat")
+        repair_btn.set_halign(Gtk.Align.CENTER)
+        repair_btn.connect("clicked", self._on_repair)
+        self.content.append(repair_btn)
+
+    def _on_repair(self, _btn):
+        import subprocess
+        subprocess.Popen(["foot", "-e", "bash", "-c",
+            "echo '=== Bingux Repair Shell ==='; "
+            "echo; "
+            "echo 'Useful commands:'; "
+            "echo '  mount /dev/<root> /mnt        Mount your root partition'; "
+            "echo '  mount /dev/<efi> /mnt/boot    Mount EFI'; "
+            "echo '  nixos-enter --root /mnt       Enter installed system'; "
+            "echo '  nixos-rebuild switch --flake /mnt/os#<host>'; "
+            "echo; "
+            "exec bash",
+        ])
