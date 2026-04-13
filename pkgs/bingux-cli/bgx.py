@@ -425,32 +425,58 @@ def do_install(pkgs, save=False, skip_confirm=False):
                     # Non-NixOS: retry with unfree, overwrite the ✗ line
                     sys.stdout.write(f"\033[A\r\033[K")
                     retry_env = {**os.environ, "NIXPKGS_ALLOW_UNFREE": "1"}
-                    retry_cmd = ["nix", "profile", "add", "--impure", "--profile", profile, f"nixpkgs#{pkg}"]
-                    proc2 = subprocess.Popen(retry_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=retry_env)
+                    retry_cmd = ["nix", "profile", "add", "--log-format", "bar-with-logs", "--impure", "--profile", profile, f"nixpkgs#{pkg}"]
+                    proc2 = subprocess.Popen(retry_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=retry_env)
                     sp2 = Spinner(f"{pkg}: retrying (unfree)...")
                     sp2.start()
+                    retry_progress = []
+                    retry_fetched = [0]
+                    retry_total = [0]
+                    retry_dl = [""]
 
                     def _read_retry():
-                        for line in proc2.stderr:
-                            line = line.strip()
+                        while True:
+                            raw = proc2.stderr.readline()
+                            if not raw:
+                                break
+                            try:
+                                line = raw.decode("utf-8", errors="replace").strip()
+                            except AttributeError:
+                                line = raw.strip()
                             if not line:
                                 continue
+                            m = _re.match(r"these (\d+) paths will be fetched \((.+?) download", line)
+                            if m:
+                                retry_total[0] = int(m.group(1))
+                                retry_dl[0] = m.group(2)
+                                sp2.msg = f"{pkg}: fetching {retry_total[0]} paths ({retry_dl[0]})..."
+                                continue
                             if "copying path" in line:
-                                m = _re.search(r"copying path '.*-([^/']+)'", line)
-                                if m:
-                                    sp2.msg = f"{pkg}: fetching {m.group(1)}"
+                                retry_fetched[0] += 1
+                                m2 = _re.search(r"copying path '.*-([^/']+)'", line)
+                                name = m2.group(1) if m2 else "..."
+                                if retry_total[0]:
+                                    sp2.msg = f"{pkg}: [{retry_fetched[0]}/{retry_total[0]}] {name}"
+                                else:
+                                    sp2.msg = f"{pkg}: fetching {name}"
+                                retry_progress.append(f"    {DARK}\u2502 [{retry_fetched[0]}/{retry_total[0] or '?'}] {name}{RESET}")
                             elif "building" in line.lower():
                                 sp2.msg = f"{pkg}: building..."
-                            elif "downloading" in line.lower():
-                                sp2.msg = f"{pkg}: downloading..."
+                            elif "evaluating" in line.lower():
+                                sp2.msg = f"{pkg}: evaluating..."
 
                     rt = threading.Thread(target=_read_retry, daemon=True)
                     rt.start()
                     proc2.wait()
                     sp2._stop = True
-                    rt.join(timeout=1)
+                    rt.join(timeout=2)
                     if proc2.returncode == 0:
-                        sp2.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}(unfree){RESET}")
+                        extra = f" {DARK}({retry_dl[0]}){RESET}" if retry_dl[0] else ""
+                        sp2.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}(unfree){RESET}{extra}")
+                        if retry_progress:
+                            for rp in retry_progress[:-1]:
+                                print(rp)
+                            print(f"    {DARK}\u2570 {retry_fetched[0]} paths fetched{RESET}")
                         continue
                     sp2.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
                     print(f"    {DARK}\u2570 Failed to install unfree package.{RESET}")
