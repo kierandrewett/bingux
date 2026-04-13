@@ -235,34 +235,40 @@ def run_subcommand_mode(args):
         sys.exit(1)
 
 
+VERSION = "0.2.0"
+
+C1 = 36  # command/example column
+C2 = 20  # flags column
+
+
 def print_usage():
     print(f"""
-  {BOLD}bgx{RESET} - Bingux package manager
+  {BOLD}bgx{RESET} {DIM}v{VERSION}{RESET} {DIM}-{RESET} Bingux package manager
 
-  {BOLD}Quick syntax:{RESET}
-    bgx +firefox                    Install for this session
-    bgx ++firefox                   Install permanently
-    bgx -firefox                    Remove
-    bgx +firefox +htop -chromium    Batch operations
-    bgx ?browser                    Search
+  {YELLOW}Quick syntax:{RESET}
+    {GREEN}bgx +firefox{RESET}                        {DIM}Install for this session{RESET}
+    {GREEN}bgx ++firefox{RESET}                       {DIM}Install permanently{RESET}
+    {RED}bgx -firefox{RESET}                        {DIM}Remove{RESET}
+    {CYAN}bgx +firefox +htop -chromium{RESET}        {DIM}Batch operations{RESET}
+    {BLUE}bgx ?browser{RESET}                        {DIM}Search{RESET}
 
-  {BOLD}Commands:{RESET}
-    install, add, a  [-s] [-y]      Install packages (-s = permanent)
-    remove, rm, r    [-y]           Remove packages
-    search, s, q                    Search nixpkgs
-    list, ls                        List installed packages
-    help                            Show this help
+  {YELLOW}Commands:{RESET}
+    {GREEN}{"install, add, a".ljust(C1)}{RESET}{DIM}{"[-s] [-y]".ljust(C2)}Install packages (-s = permanent){RESET}
+    {RED}{"remove, rm, r".ljust(C1)}{RESET}{DIM}{"[-y]".ljust(C2)}Remove packages{RESET}
+    {BLUE}{"search, s, q".ljust(C1)}{RESET}{DIM}{"".ljust(C2)}Search nixpkgs{RESET}
+    {CYAN}{"list, ls".ljust(C1)}{RESET}{DIM}{"".ljust(C2)}List installed packages{RESET}
+    {"help".ljust(C1)}{DIM}{"".ljust(C2)}Show this help{RESET}
 
-  {BOLD}Flags:{RESET}
-    -s, --save       Install permanently (persists after reboot)
-    -y, --yes        Skip confirmation prompt
+  {YELLOW}Flags:{RESET}
+    {GREEN}{"-s, --save".ljust(C1)}{RESET}{DIM}Install permanently (persists after reboot){RESET}
+    {CYAN}{"-y, --yes".ljust(C1)}{RESET}{DIM}Skip confirmation prompt{RESET}
 
-  {BOLD}Examples:{RESET}
-    bgx +firefox                    bgx install firefox
-    bgx ++firefox                   bgx install -s firefox
-    bgx -firefox                    bgx remove firefox
-    bgx +firefox +htop -chromium    bgx install firefox htop
-    bgx ?browser                    bgx search browser
+  {YELLOW}Examples:{RESET}
+    {GREEN}{"bgx +firefox".ljust(C1)}{RESET}{DIM}bgx install firefox{RESET}
+    {GREEN}{"bgx ++firefox".ljust(C1)}{RESET}{DIM}bgx install -s firefox{RESET}
+    {RED}{"bgx -firefox".ljust(C1)}{RESET}{DIM}bgx remove firefox{RESET}
+    {CYAN}{"bgx +firefox +htop -chromium".ljust(C1)}{RESET}{DIM}bgx install firefox htop{RESET}
+    {BLUE}{"bgx ?browser".ljust(C1)}{RESET}{DIM}bgx search browser{RESET}
 """)
 
 
