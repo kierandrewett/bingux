@@ -87,10 +87,15 @@ def pkg_info(pkg):
     except subprocess.TimeoutExpired:
         pass
     try:
-        r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.meta.license.shortName"],
+        r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.meta.license.spdxId"],
                 capture_output=True, text=True, timeout=15)
         if r.returncode == 0 and r.stdout.strip():
             info["license"] = r.stdout.strip()
+        else:
+            r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.meta.license.shortName"],
+                    capture_output=True, text=True, timeout=15)
+            if r.returncode == 0 and r.stdout.strip():
+                info["license"] = r.stdout.strip()
     except subprocess.TimeoutExpired:
         pass
     try:
@@ -384,13 +389,21 @@ def do_info(pkg):
     sp.start()
     info = pkg_info(pkg)
 
-    # Get homepage
+    # Get homepage + full license name
     homepage = ""
+    license_full = ""
     try:
         r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.meta.homepage"],
                 capture_output=True, text=True, timeout=15)
         if r.returncode == 0:
             homepage = r.stdout.strip()
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.meta.license.fullName"],
+                capture_output=True, text=True, timeout=15)
+        if r.returncode == 0:
+            license_full = r.stdout.strip()
     except subprocess.TimeoutExpired:
         pass
 
@@ -404,7 +417,7 @@ def do_info(pkg):
     print()
     rows = [
         ("Version", info["version"] or "-"),
-        ("License", info.get("license") or "-"),
+        ("License", license_full or info.get("license") or "-"),
         ("Size", info.get("size") or "-"),
         ("Homepage", homepage or "-"),
         ("Attribute", f"nixpkgs#{pkg}"),
