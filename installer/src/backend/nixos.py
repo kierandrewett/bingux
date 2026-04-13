@@ -9,7 +9,7 @@ def generate_config():
     """Run nixos-generate-config --root /mnt."""
     try:
         r = subprocess.run(
-            ["nixos-generate-config", "--root", "/mnt"],
+            ["sudo", "nixos-generate-config", "--root", "/mnt"],
             capture_output=True, text=True, check=True,
         )
         return True, r.stdout
@@ -75,22 +75,21 @@ def copy_repo(host, repo_path="/tmp/bingux-os", log_callback=None):
     3. Left at /mnt/etc/nixos/ for manual integration
     """
     dest = "/mnt/os"
-    if os.path.isdir(dest):
-        shutil.rmtree(dest)
-    shutil.copytree(repo_path, dest)
+    subprocess.run(["sudo", "rm", "-rf", dest], capture_output=True)
+    subprocess.run(["sudo", "cp", "-a", repo_path, dest], capture_output=True, check=True)
 
     hw_config = "/mnt/etc/nixos/hardware-configuration.nix"
     if os.path.isfile(hw_config):
         # Try explicit path from flake first
         target_dir = _read_hw_config_path(dest, host)
         if target_dir:
-            os.makedirs(target_dir, exist_ok=True)
+            subprocess.run(["sudo", "mkdir", "-p", target_dir], capture_output=True)
         else:
             target_dir = _find_hw_config_dir(dest, host)
 
         if target_dir:
             target = os.path.join(target_dir, "hardware-configuration.nix")
-            shutil.copy2(hw_config, target)
+            subprocess.run(["sudo", "cp", hw_config, target], capture_output=True)
             if log_callback:
                 log_callback(f"Hardware config placed at: {target}\n")
         elif log_callback:
@@ -100,10 +99,7 @@ def copy_repo(host, repo_path="/tmp/bingux-os", log_callback=None):
             )
 
     # Set ownership to first normal user (uid 1000)
-    for root, dirs, files in os.walk(dest):
-        os.chown(root, 1000, 100)
-        for f in files:
-            os.chown(os.path.join(root, f), 1000, 100)
+    subprocess.run(["sudo", "chown", "-R", "1000:100", dest], capture_output=True)
 
 
 def generate_ssh_keys():
@@ -111,9 +107,9 @@ def generate_ssh_keys():
     key_path = "/mnt/etc/ssh/ssh_host_ed25519_key"
     if os.path.exists(key_path):
         return None
-    os.makedirs("/mnt/etc/ssh", exist_ok=True)
+    subprocess.run(["sudo", "mkdir", "-p", "/mnt/etc/ssh"], capture_output=True)
     subprocess.run(
-        ["ssh-keygen", "-t", "ed25519", "-f", key_path, "-N", "", "-q"],
+        ["sudo", "ssh-keygen", "-t", "ed25519", "-f", key_path, "-N", "", "-q"],
         check=True,
     )
     try:
@@ -130,6 +126,7 @@ def generate_ssh_keys():
 def install(host, log_callback=None):
     """Run nixos-install. Calls log_callback(line) for each output line."""
     cmd = [
+        "sudo",
         "nixos-install",
         "--no-root-passwd",
         "--root", "/mnt",
@@ -153,7 +150,7 @@ def set_password(username, password):
     """Set user password in the installed system."""
     try:
         p = subprocess.Popen(
-            ["nixos-enter", "--root", "/mnt", "--", "chpasswd"],
+            ["sudo", "nixos-enter", "--root", "/mnt", "--", "chpasswd"],
             stdin=subprocess.PIPE, capture_output=True, text=True,
         )
         p.communicate(input=f"{username}:{password}\n")

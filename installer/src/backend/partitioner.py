@@ -2,9 +2,9 @@ import subprocess
 
 
 def run(cmd, **kwargs):
-    """Run a command and return (success, stdout, stderr)."""
+    """Run a command as root and return (success, stdout, stderr)."""
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, check=True, **kwargs)
+        r = subprocess.run(["sudo"] + cmd, capture_output=True, text=True, check=True, **kwargs)
         return True, r.stdout, r.stderr
     except subprocess.CalledProcessError as e:
         return False, e.stdout, e.stderr
@@ -12,11 +12,9 @@ def run(cmd, **kwargs):
 
 def wipe_disk(device):
     """Wipe the disk and create a GPT table with EFI + root partitions."""
-    # Zap existing partition table
     ok, _, err = run(["sgdisk", "--zap-all", device])
     if not ok:
         return False, "", err
-    # Create 1GB EFI partition + rest as Linux root
     ok, _, err = run(["sgdisk",
         "-n", "1:0:+1G", "-t", "1:ef00", "-c", "1:EFI",
         "-n", "2:0:0", "-t", "2:8300", "-c", "2:root",
@@ -24,7 +22,6 @@ def wipe_disk(device):
     ])
     if not ok:
         return False, "", err
-    # Inform kernel of partition table changes
     run(["partprobe", device])
     return True, "", ""
 
@@ -61,7 +58,7 @@ def format_filesystem(device, fstype, label="nixos"):
 
 def setup_luks(device, passphrase, name="cryptroot"):
     p = subprocess.Popen(
-        ["cryptsetup", "luksFormat", "--type", "luks2", "--batch-mode", device],
+        ["sudo", "cryptsetup", "luksFormat", "--type", "luks2", "--batch-mode", device],
         stdin=subprocess.PIPE, capture_output=True, text=True,
     )
     _, err = p.communicate(input=passphrase + "\n")
@@ -69,7 +66,7 @@ def setup_luks(device, passphrase, name="cryptroot"):
         return False, "", err
 
     p2 = subprocess.Popen(
-        ["cryptsetup", "open", device, name],
+        ["sudo", "cryptsetup", "open", device, name],
         stdin=subprocess.PIPE, capture_output=True, text=True,
     )
     _, err2 = p2.communicate(input=passphrase + "\n")
