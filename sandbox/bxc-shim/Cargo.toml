@@ -7,3 +7,11 @@ description = "Multi-call launcher shim"
 
 [dependencies]
 bingux-common = { path = "../../common/bingux-common" }
+bxc-sandbox = { path = "../bxc-sandbox" }
+serde = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
