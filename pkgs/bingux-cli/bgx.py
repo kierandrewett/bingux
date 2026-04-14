@@ -380,7 +380,7 @@ def show_transaction(installs, removes, save=False, remove_filter=None):
             rm_label = f"Removing {DARK}(from this installation){RESET}"
         else:
             rm_label = "Removing"
-        _print_table(rm_label, WARN, removes, name_color=FAIL, show_license=True, show_size=False)
+        _print_table(rm_label, WARN, removes, name_color=FAIL, show_license=True)
 
     ni = len(installs)
     nr = len(removes)
