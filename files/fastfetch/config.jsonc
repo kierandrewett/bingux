@@ -4,14 +4,7 @@
         "source": "/etc/bingus-fastfetch.png",
         "type": "auto",
         "width": 30,
-        "height": 15,
-        "fallback": {
-            "source": "/etc/bingus.ascii",
-            "type": "file",
-            "color": {
-                "1": "magenta"
-            }
-        }
+        "height": 15
     },
     "modules": [
         "title",
