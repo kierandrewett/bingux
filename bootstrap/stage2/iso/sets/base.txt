@@ -1,0 +1,8 @@
+dbus
+openssl
+zlib
+curl
+git
+util-linux
+shadow
+sudo
