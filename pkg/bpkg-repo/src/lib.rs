@@ -1,5 +1,6 @@
-pub mod error;
+pub mod archive;
 pub mod bgx_info;
+pub mod error;
 
-pub use error::RepoError;
 pub use bgx_info::BgxInfo;
+pub use error::RepoError;
