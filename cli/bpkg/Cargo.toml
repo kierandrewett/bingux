@@ -12,6 +12,9 @@ path = "src/main.rs"
 [dependencies]
 bingux-common = { path = "../../common/bingux-common" }
 bpkg-store = { path = "../../pkg/bpkg-store" }
+bpkg-home = { path = "../../home/bpkg-home" }
+bpkg-repo = { path = "../../pkg/bpkg-repo" }
+bsys-compose = { path = "../../system/bsys-compose" }
 clap = { workspace = true }
 indicatif = { workspace = true }
 tracing = { workspace = true }
