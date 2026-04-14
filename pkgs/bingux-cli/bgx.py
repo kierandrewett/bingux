@@ -158,40 +158,56 @@ def _nix_install_streaming(cmd, env, pkg):
 
 # ── Package info ──
 
+UNFREE_ENV = {**os.environ, "NIXPKGS_ALLOW_UNFREE": "1"}
+
+
+def _eval_pkg(expr, timeout=15):
+    """Eval a nix expression, retrying with unfree if needed."""
+    r = run(["nix", "eval", "--raw", expr], capture_output=True, text=True, timeout=timeout)
+    if r.returncode == 0:
+        return True, r.stdout.strip(), False
+    if "unfree" in (r.stderr or "").lower():
+        r2 = run(["nix", "eval", "--impure", "--raw", expr],
+                 capture_output=True, text=True, timeout=timeout, env=UNFREE_ENV)
+        if r2.returncode == 0:
+            return True, r2.stdout.strip(), True
+        return False, "", True
+    return False, "", False
+
+
 def pkg_info(pkg):
     info = {"name": pkg, "version": "", "description": "", "size": "", "size_bytes": 0, "unfree": False, "license": ""}
     try:
-        r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.version"],
-                capture_output=True, text=True, timeout=15)
-        if r.returncode == 0:
-            info["version"] = r.stdout.strip()
-        elif "unfree" in (r.stderr or "").lower():
+        ok, val, is_unfree = _eval_pkg(f"nixpkgs#{pkg}.version")
+        if ok:
+            info["version"] = val
+        if is_unfree:
             info["unfree"] = True
             info["license"] = "unfree"
     except subprocess.TimeoutExpired:
         pass
     try:
-        r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.meta.description"],
-                capture_output=True, text=True, timeout=15)
-        if r.returncode == 0:
-            info["description"] = r.stdout.strip()
+        ok, val, _ = _eval_pkg(f"nixpkgs#{pkg}.meta.description")
+        if ok:
+            info["description"] = val
     except subprocess.TimeoutExpired:
         pass
     try:
-        r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.meta.license.spdxId"],
-                capture_output=True, text=True, timeout=15)
-        if r.returncode == 0 and r.stdout.strip():
-            info["license"] = r.stdout.strip()
+        ok, val, _ = _eval_pkg(f"nixpkgs#{pkg}.meta.license.spdxId")
+        if ok and val:
+            info["license"] = val
         else:
-            r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.meta.license.shortName"],
-                    capture_output=True, text=True, timeout=15)
-            if r.returncode == 0 and r.stdout.strip():
-                info["license"] = r.stdout.strip()
+            ok, val, _ = _eval_pkg(f"nixpkgs#{pkg}.meta.license.shortName")
+            if ok and val:
+                info["license"] = val
     except subprocess.TimeoutExpired:
         pass
     try:
-        r = run(["nix", "path-info", "-S", f"nixpkgs#{pkg}"],
-                capture_output=True, text=True, timeout=30)
+        env = UNFREE_ENV if info["unfree"] else None
+        cmd = ["nix", "path-info", "-S", f"nixpkgs#{pkg}"]
+        if info["unfree"]:
+            cmd.insert(1, "--impure")
+        r = run(cmd, capture_output=True, text=True, timeout=30, env=env)
         for line in (r.stderr or "").split("\n"):
             m = re.search(r"([\d.]+)\s+([KMGT]iB)\s+download,\s+([\d.]+)\s+([KMGT]iB)\s+unpacked", line)
             if m:
@@ -572,17 +588,15 @@ def do_info(pkg):
     homepage = ""
     license_full = ""
     try:
-        r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.meta.homepage"],
-                capture_output=True, text=True, timeout=15)
-        if r.returncode == 0:
-            homepage = r.stdout.strip()
+        ok, val, _ = _eval_pkg(f"nixpkgs#{pkg}.meta.homepage")
+        if ok:
+            homepage = val
     except subprocess.TimeoutExpired:
         pass
     try:
-        r = run(["nix", "eval", "--raw", f"nixpkgs#{pkg}.meta.license.fullName"],
-                capture_output=True, text=True, timeout=15)
-        if r.returncode == 0:
-            license_full = r.stdout.strip()
+        ok, val, _ = _eval_pkg(f"nixpkgs#{pkg}.meta.license.fullName")
+        if ok:
+            license_full = val
     except subprocess.TimeoutExpired:
         pass
 
