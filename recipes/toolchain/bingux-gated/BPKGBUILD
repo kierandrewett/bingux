@@ -1,0 +1,51 @@
+pkgscope="bingux"
+pkgname="bingux-gated"
+pkgver="0.1.0"
+pkgarch="x86_64-linux"
+pkgdesc="Bingux permission gating daemon"
+license="MIT"
+
+depends=("glibc" "dbus" "systemd")
+exports=(
+    "bin/bingux-gated"
+    "lib/systemd/system/bingux-gated.service"
+    "share/dbus-1/system.d/dev.bingux.Gate.conf"
+)
+
+source=()
+sha256sums=()
+
+build() {
+    cargo build --release -p bingux-gated
+}
+
+package() {
+    mkdir -p "$PKGDIR"/{bin,lib/systemd/system,share/dbus-1/system.d}
+    install -m755 "$BUILDDIR/target/release/bingux-gated" "$PKGDIR/bin/bingux-gated"
+
+    # systemd service unit
+    cat > "$PKGDIR/lib/systemd/system/bingux-gated.service" << 'EOF'
+[Unit]
+Description=Bingux Permission Gate Daemon
+After=dbus.service
+
+[Service]
+Type=dbus
+BusName=dev.bingux.Gate
+ExecStart=/system/packages/bingux-gated/bin/bingux-gated
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # D-Bus policy
+    cat > "$PKGDIR/share/dbus-1/system.d/dev.bingux.Gate.conf" << 'EOF'
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <policy context="default">
+    <allow send_destination="dev.bingux.Gate"/>
+  </policy>
+</busconfig>
+EOF
+}

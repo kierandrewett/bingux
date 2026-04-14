@@ -1,0 +1,23 @@
+pkgscope="bingux"
+pkgname="bsys"
+pkgver="0.1.0"
+pkgarch="x86_64-linux"
+pkgdesc="Bingux system management tool"
+license="MIT"
+
+depends=("glibc" "bpkg")
+exports=(
+    "bin/bsys"
+)
+
+source=()
+sha256sums=()
+
+build() {
+    cargo build --release -p bsys
+}
+
+package() {
+    mkdir -p "$PKGDIR/bin"
+    install -m755 "$BUILDDIR/target/release/bsys" "$PKGDIR/bin/bsys"
+}
