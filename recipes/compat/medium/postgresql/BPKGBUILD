@@ -1,0 +1,78 @@
+pkgscope="bingux"
+pkgname="postgresql"
+pkgver="16.6"
+pkgarch="x86_64-linux"
+pkgdesc="Advanced object-relational database system"
+license="PostgreSQL"
+
+depends=(
+    "glibc-2.39"
+    "openssl-3.4.0"
+    "zlib-1.3.1"
+    "readline-8.2"
+    "libxml2-2.13.5"
+    "icu-74.2"
+    "lz4-1.10.0"
+    "zstd-1.5.6"
+    "libxcrypt-4.4.36"
+)
+exports=(
+    "bin/psql"
+    "bin/pg_dump"
+    "bin/pg_restore"
+    "bin/pg_isready"
+    "bin/createdb"
+    "bin/dropdb"
+    "bin/initdb"
+    "bin/postgres"
+    "lib/libpq.so"
+    "lib/libpq.so.5"
+)
+
+source=("https://ftp.postgresql.org/pub/source/v${pkgver}/postgresql-${pkgver}.tar.bz2")
+sha256sums=("SKIP")
+
+# SERVICE NOTES:
+# PostgreSQL runs as a daemon. In the Bingux sandbox:
+# - Data directory in /system/state/postgresql-<ver>/data/
+# - Socket file in /system/state/postgresql-<ver>/run/.s.PGSQL.5432
+# - Log files in /system/state/postgresql-<ver>/log/
+# - Needs permissions: filesystem:state, network:listen (port 5432)
+# - initdb must be run before first start to create the data directory
+# - No setuid; runs entirely as sandbox user
+
+package() {
+    cd "$SRCDIR/postgresql-${pkgver}"
+
+    mkdir -p "$PKGDIR/bin"
+    mkdir -p "$PKGDIR/lib/postgresql"
+    mkdir -p "$PKGDIR/include"
+    mkdir -p "$PKGDIR/share/postgresql"
+    mkdir -p "$PKGDIR/share/man/man1"
+
+    # Install client and server binaries
+    for bin in psql pg_dump pg_restore pg_isready createdb dropdb \
+               initdb postgres pg_ctl pg_basebackup pg_config; do
+        install -m755 "src/bin/${bin}/${bin}" "$PKGDIR/bin/${bin}" 2>/dev/null || \
+        install -m755 "src/backend/${bin}" "$PKGDIR/bin/${bin}" 2>/dev/null || true
+    done
+
+    # Install libpq
+    cp -a src/interfaces/libpq/.libs/libpq.so* "$PKGDIR/lib/"
+
+    # Install server extensions
+    cp -a src/backend/.libs/*.so "$PKGDIR/lib/postgresql/" 2>/dev/null || true
+
+    # Install shared data (SQL init scripts, timezone data)
+    cp -a src/backend/catalog/sql_features.txt "$PKGDIR/share/postgresql/" 2>/dev/null || true
+
+    # Patchelf all binaries
+    for bin in "$PKGDIR/bin/"*; do
+        patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+                 --set-rpath "$STORE/glibc-2.39/lib:$STORE/openssl-3.4.0/lib:$STORE/zlib-1.3.1/lib:$STORE/readline-8.2/lib:$STORE/icu-74.2/lib" \
+                 "$bin" 2>/dev/null || true
+    done
+
+    patchelf --set-rpath "$STORE/glibc-2.39/lib:$STORE/openssl-3.4.0/lib" \
+             "$PKGDIR/lib/libpq.so.5"
+}

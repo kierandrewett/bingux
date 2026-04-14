@@ -1,0 +1,52 @@
+pkgscope="bingux"
+pkgname="nodejs"
+pkgver="20.18.1"
+pkgarch="x86_64-linux"
+pkgdesc="Node.js 20 LTS JavaScript runtime"
+license="MIT"
+
+depends=(
+    "glibc-2.39"
+    "openssl-3.4.0"
+    "zlib-1.3.1"
+    "icu-74.2"
+    "libuv-1.49.2"
+    "libnghttp2-1.64.0"
+    "brotli-1.1.0"
+    "c-ares-1.34.3"
+)
+exports=(
+    "bin/node"
+    "bin/npm"
+    "bin/npx"
+    "bin/corepack"
+)
+
+source=("https://nodejs.org/dist/v${pkgver}/node-v${pkgver}-linux-x64.tar.xz")
+sha256sums=("SKIP")
+
+package() {
+    cd "$SRCDIR/node-v${pkgver}-linux-x64"
+
+    mkdir -p "$PKGDIR/bin"
+    mkdir -p "$PKGDIR/lib/node_modules"
+    mkdir -p "$PKGDIR/include"
+    mkdir -p "$PKGDIR/share/man"
+
+    install -m755 bin/node "$PKGDIR/bin/node"
+    cp -a lib/node_modules/* "$PKGDIR/lib/node_modules/"
+    cp -a include/node "$PKGDIR/include/node"
+    cp -a share/man/* "$PKGDIR/share/man/" 2>/dev/null || true
+
+    # Create npm/npx/corepack wrapper scripts with correct shebangs
+    ln -s "../lib/node_modules/npm/bin/npm-cli.js" "$PKGDIR/bin/npm"
+    ln -s "../lib/node_modules/npm/bin/npx-cli.js" "$PKGDIR/bin/npx"
+    ln -s "../lib/node_modules/corepack/dist/corepack.js" "$PKGDIR/bin/corepack"
+
+    patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+             --set-rpath "$STORE/glibc-2.39/lib:$STORE/openssl-3.4.0/lib:$STORE/zlib-1.3.1/lib:$STORE/icu-74.2/lib" \
+             "$PKGDIR/bin/node"
+
+    # Rewrite shebangs in npm scripts
+    find "$PKGDIR/lib/node_modules" -name "*.js" -exec sed -i "1s|#!/usr/bin/env node|#!$STORE/nodejs-${pkgver}/bin/node|" {} + 2>/dev/null || true
+}

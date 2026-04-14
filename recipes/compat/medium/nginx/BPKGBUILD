@@ -1,0 +1,47 @@
+pkgscope="bingux"
+pkgname="nginx"
+pkgver="1.26.2"
+pkgarch="x86_64-linux"
+pkgdesc="High-performance HTTP server and reverse proxy"
+license="BSD-2-Clause"
+
+depends=(
+    "glibc-2.39"
+    "openssl-3.4.0"
+    "zlib-1.3.1"
+    "pcre2-10.44"
+    "libxcrypt-4.4.36"
+)
+exports=(
+    "bin/nginx"
+)
+
+source=("https://nginx.org/download/nginx-${pkgver}.tar.gz")
+sha256sums=("SKIP")
+
+# SERVICE NOTES:
+# Nginx runs as a daemon. In the Bingux sandbox:
+# - Needs network:listen permission in system.toml for ports 80/443
+# - Config lives in /system/state/nginx-<ver>/conf/nginx.conf
+# - PID file in /system/state/nginx-<ver>/run/nginx.pid
+# - Log files in /system/state/nginx-<ver>/logs/
+# - Worker processes inherit sandbox from master; no setuid/setgid
+# - Pre-grant permissions: network:listen, filesystem:state
+
+package() {
+    cd "$SRCDIR/nginx-${pkgver}"
+
+    mkdir -p "$PKGDIR/bin"
+    mkdir -p "$PKGDIR/share/nginx/conf"
+    mkdir -p "$PKGDIR/share/nginx/html"
+    mkdir -p "$PKGDIR/share/man/man8"
+
+    install -m755 objs/nginx "$PKGDIR/bin/nginx"
+    install -m644 conf/* "$PKGDIR/share/nginx/conf/"
+    install -m644 html/* "$PKGDIR/share/nginx/html/"
+    install -m644 docs/man/nginx.8 "$PKGDIR/share/man/man8/nginx.8"
+
+    patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+             --set-rpath "$STORE/glibc-2.39/lib:$STORE/openssl-3.4.0/lib:$STORE/zlib-1.3.1/lib:$STORE/pcre2-10.44/lib" \
+             "$PKGDIR/bin/nginx"
+}
