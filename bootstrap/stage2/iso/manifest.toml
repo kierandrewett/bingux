@@ -1,0 +1,18 @@
+# Bingux ISO metadata template.
+# This file is overwritten by mkiso.sh at build time.
+
+[meta]
+version = "0.0.0-dev"
+arch = "x86_64-linux"
+created = ""
+
+[package_sets]
+essential = "packages/essential/"
+base = "packages/base/"
+desktop = "packages/desktop/"
+extras = "packages/extras/"
+
+[boot]
+loader = "systemd-boot"
+kernel = "boot/vmlinuz"
+initramfs = "boot/initramfs.img"

@@ -1,0 +1,5 @@
+gtk4
+libadwaita
+pipewire
+bingux-prompt
+bingux-settings

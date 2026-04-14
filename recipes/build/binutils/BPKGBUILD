@@ -1,0 +1,28 @@
+pkgscope="bingux"
+pkgname="binutils"
+pkgver="2.43"
+pkgarch="x86_64-linux"
+pkgdesc="GNU binary utilities (ld, as, objdump, etc.)"
+license="GPL-3.0"
+
+depends=("glibc" "zlib")
+exports=(
+    "bin/ld"
+    "bin/as"
+    "bin/ar"
+    "bin/nm"
+    "bin/objdump"
+    "bin/objcopy"
+    "bin/strip"
+    "bin/ranlib"
+    "bin/readelf"
+)
+
+source=("https://ftp.gnu.org/gnu/binutils/binutils-${pkgver}.tar.xz")
+sha256sums=("SKIP")
+
+package() {
+    mkdir -p "$PKGDIR/bin"
+    # In practice, configure && make && make install
+    echo "TODO: build binutils"
+}

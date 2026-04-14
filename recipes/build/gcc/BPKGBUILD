@@ -1,0 +1,25 @@
+pkgscope="bingux"
+pkgname="gcc"
+pkgver="14.2.0"
+pkgarch="x86_64-linux"
+pkgdesc="GNU Compiler Collection (C, C++)"
+license="GPL-3.0"
+
+depends=("glibc" "binutils" "zlib")
+exports=(
+    "bin/gcc"
+    "bin/g++"
+    "bin/cpp"
+    "bin/gcov"
+    "lib/libgcc_s.so.1"
+    "lib/libstdc++.so.6"
+)
+
+source=("https://ftp.gnu.org/gnu/gcc/gcc-${pkgver}/gcc-${pkgver}.tar.xz")
+sha256sums=("SKIP")
+
+package() {
+    mkdir -p "$PKGDIR"/{bin,lib,include}
+    # In practice, this is a multi-stage build with gmp, mpfr, mpc
+    echo "TODO: build gcc"
+}

@@ -1,0 +1,26 @@
+pkgscope="bingux"
+pkgname="systemd"
+pkgver="256.4"
+pkgarch="x86_64-linux"
+pkgdesc="System and service manager"
+license="LGPL-2.1"
+
+depends=("glibc" "dbus" "util-linux")
+exports=(
+    "bin/systemctl"
+    "bin/journalctl"
+    "bin/loginctl"
+    "lib/systemd/systemd"
+    "lib/systemd/systemd-journald"
+    "lib/systemd/systemd-logind"
+    "lib/systemd/systemd-udevd"
+)
+
+source=("https://github.com/systemd/systemd/archive/v${pkgver}/systemd-${pkgver}.tar.gz")
+sha256sums=("SKIP")
+
+package() {
+    mkdir -p "$PKGDIR"/{bin,lib/systemd,etc/systemd}
+    # In practice, this would build systemd with meson or extract pre-built
+    echo "TODO: build or extract systemd"
+}

@@ -1,0 +1,26 @@
+pkgscope="bingux"
+pkgname="glibc"
+pkgver="2.39"
+pkgarch="x86_64-linux"
+pkgdesc="GNU C Library"
+license="LGPL-2.1"
+
+depends=()
+exports=(
+    "lib/libc.so.6"
+    "lib/libm.so.6"
+    "lib/libpthread.so.0"
+    "lib/libdl.so.2"
+    "lib/librt.so.1"
+    "lib/ld-linux-x86-64.so.2"
+)
+
+source=("https://ftp.gnu.org/gnu/glibc/glibc-${pkgver}.tar.xz")
+sha256sums=("SKIP")
+
+package() {
+    # Binary package: extract pre-built libs from host or download
+    mkdir -p "$PKGDIR/lib"
+    # In practice, this would copy from a known-good source
+    echo "TODO: populate glibc libs"
+}
