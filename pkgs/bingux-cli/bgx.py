@@ -67,6 +67,24 @@ class Spinner:
 
 # ── Nix helpers ──
 
+def _nix_profile_install_cmd():
+    """Detect whether nix uses 'add' or 'install' for profile install."""
+    r = subprocess.run(["nix", "profile", _profile_install(), "--help"], capture_output=True, text=True)
+    if r.returncode == 0:
+        return "install"
+    return "add"
+
+
+_PROFILE_INSTALL = None
+
+
+def _profile_install():
+    global _PROFILE_INSTALL
+    if _PROFILE_INSTALL is None:
+        _PROFILE_INSTALL = _nix_profile_install_cmd()
+    return _PROFILE_INSTALL
+
+
 def run(cmd, **kwargs):
     return subprocess.run(cmd, **kwargs)
 
@@ -488,7 +506,7 @@ def do_install(pkgs, save=False, skip_confirm=False):
 
     failed = 0
     for pkg in pkgs:
-        cmd = ["nix", "profile", "install", "--log-format", "bar-with-logs", "--profile", profile]
+        cmd = ["nix", "profile", _profile_install(), "--log-format", "bar-with-logs", "--profile", profile]
         env = None
         if pkg in unfree_pkgs:
             cmd.append("--impure")
@@ -506,7 +524,7 @@ def do_install(pkgs, save=False, skip_confirm=False):
                 print(f"    {DARK}\u2570 Add to your NixOS config: nixpkgs.config.allowUnfree = true;{RESET}")
             else:
                 sys.stdout.write(f"\033[A\r\033[K")
-                retry_cmd = ["nix", "profile", "install", "--log-format", "bar-with-logs", "--impure", "--profile", profile, f"nixpkgs#{pkg}"]
+                retry_cmd = ["nix", "profile", _profile_install(), "--log-format", "bar-with-logs", "--impure", "--profile", profile, f"nixpkgs#{pkg}"]
                 retry_env = {**os.environ, "NIXPKGS_ALLOW_UNFREE": "1"}
                 ok2, _ = _nix_install_streaming(retry_cmd, retry_env, pkg)
                 if ok2:
