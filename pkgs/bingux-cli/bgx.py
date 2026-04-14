@@ -216,12 +216,16 @@ def pkg_info(pkg):
                 info["size"] = format_size(info["size_bytes"])
                 break
         if not info["size"] and r.stdout:
-            parts = r.stdout.strip().split()
-            if len(parts) >= 2:
-                try:
-                    info["size"] = format_size(int(parts[-1]))
-                except ValueError:
-                    pass
+            # stdout format: /nix/store/xxx-pkg-1.0\t1234567
+            for line in r.stdout.strip().split("\n"):
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    try:
+                        info["size_bytes"] = int(parts[-1])
+                        info["size"] = format_size(info["size_bytes"])
+                        break
+                    except ValueError:
+                        pass
     except (subprocess.TimeoutExpired, Exception):
         pass
     return info
