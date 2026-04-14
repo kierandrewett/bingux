@@ -1,3 +1,4 @@
+pub mod backend;
 pub mod history;
 pub mod protocol;
 pub mod types;
