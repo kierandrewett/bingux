@@ -7,6 +7,11 @@ description = "System manager CLI"
 
 [dependencies]
 bingux-common = { path = "../../common/bingux-common" }
+bpkg-store = { path = "../../pkg/bpkg-store" }
+bpkg-recipe = { path = "../../pkg/bpkg-recipe" }
+bsys-config = { path = "../../system/bsys-config" }
+bsys-compose = { path = "../../system/bsys-compose" }
+anyhow = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
