@@ -92,7 +92,7 @@ def _nix_install_streaming(cmd, env, pkg):
     Returns (success, stderr_text, dl_size, progress_lines, fetched_count).
     """
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
-    sp = Spinner(f"{pkg}: installing...")
+    sp = Spinner(f"{pkg}: evaluating...")
     sp.start()
 
     stderr_lines = []
@@ -491,7 +491,6 @@ def do_install(pkgs, save=False, skip_confirm=False):
                 retry_env = {**os.environ, "NIXPKGS_ALLOW_UNFREE": "1"}
                 ok2, _ = _nix_install_streaming(retry_cmd, retry_env, pkg)
                 if ok2:
-                    _post_install_hooks(pkg, profile)
                     continue
                 print(f"    {DARK}\u2570 Failed to install unfree package.{RESET}")
         elif "does not provide" in stderr:
