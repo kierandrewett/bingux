@@ -38,8 +38,9 @@
             };
         };
 
-        # Default shell
+        # Default shell — suppress new-user prompt
         programs.zsh.enable = lib.mkDefault true;
+        programs.zsh.promptInit = lib.mkDefault "";
 
         # Bingux CLI helper + essentials
         environment.systemPackages = with pkgs; [ os-helper bingux-cli fastfetch comma ];

@@ -150,8 +150,8 @@ in
                         border-width = gv.mkInt32 (-1);
                         keep-rounded-corners-maximized = false;
                         keep-rounded-corners-fullscreen = false;
-                        skip-libadwaita = false;
-                        skip-libhandy = false;
+                        skip-libadwaita-app = false;
+                        tweak-kitty-terminal = false;
                     };
 
                     # adw-gtk3 for legacy GTK3 apps
