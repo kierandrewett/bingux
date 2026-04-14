@@ -281,7 +281,10 @@ def _auto_gc():
     for profile in (VOLATILE_PROFILE, PERMANENT_PROFILE):
         apps_dir = f"{profile}/share/applications"
         if os.path.isdir(apps_dir):
-            run(["update-desktop-database", apps_dir], capture_output=True)
+            try:
+                run(["update-desktop-database", apps_dir], capture_output=True)
+            except FileNotFoundError:
+                pass
 
     sp = Spinner("Cleaning up...")
     sp.start()
@@ -485,7 +488,7 @@ def do_install(pkgs, save=False, skip_confirm=False):
 
     failed = 0
     for pkg in pkgs:
-        cmd = ["nix", "profile", "add", "--log-format", "bar-with-logs", "--profile", profile]
+        cmd = ["nix", "profile", "install", "--log-format", "bar-with-logs", "--profile", profile]
         env = None
         if pkg in unfree_pkgs:
             cmd.append("--impure")
@@ -503,7 +506,7 @@ def do_install(pkgs, save=False, skip_confirm=False):
                 print(f"    {DARK}\u2570 Add to your NixOS config: nixpkgs.config.allowUnfree = true;{RESET}")
             else:
                 sys.stdout.write(f"\033[A\r\033[K")
-                retry_cmd = ["nix", "profile", "add", "--log-format", "bar-with-logs", "--impure", "--profile", profile, f"nixpkgs#{pkg}"]
+                retry_cmd = ["nix", "profile", "install", "--log-format", "bar-with-logs", "--impure", "--profile", profile, f"nixpkgs#{pkg}"]
                 retry_env = {**os.environ, "NIXPKGS_ALLOW_UNFREE": "1"}
                 ok2, _ = _nix_install_streaming(retry_cmd, retry_env, pkg)
                 if ok2:
