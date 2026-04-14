@@ -121,12 +121,12 @@ def _nix_install_streaming(cmd, env, pkg):
 
             if "copying path" in line:
                 state["fetched"] += 1
-                m2 = re.search(r"copying path '.*-([^/']+)'", line)
+                m2 = re.search(r"copying path '/nix/store/[a-z0-9]+-(.+?)'", line)
                 name = m2.group(1) if m2 else "..."
                 t = state["total"]
                 f = state["fetched"]
                 sp.msg = f"{pkg}: [{f}/{t}] {name}" if t else f"{pkg}: fetching {name}"
-                progress_lines.append(f"    {DARK}\u2502 [{f}/{t or '?'}] {name}{RESET}")
+                progress_lines.append(name)
             elif "building" in line.lower():
                 sp.msg = f"{pkg}: building..."
             elif "evaluating" in line.lower():
@@ -147,9 +147,13 @@ def _nix_install_streaming(cmd, env, pkg):
         else:
             sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}(cached){RESET}")
         if progress_lines:
-            for pl in progress_lines[:-1]:
-                print(pl)
-            print(f"    {DARK}\u2570 {state['fetched']} paths fetched{RESET}")
+            # Show last 5 fetched paths
+            shown = progress_lines[-5:]
+            for i, name in enumerate(shown):
+                if i < len(shown) - 1:
+                    print(f"    {DARK}\u2502 {name}{RESET}")
+                else:
+                    print(f"    {DARK}\u2570 {state['fetched']} paths fetched (last: {name}){RESET}")
     else:
         sp.stop(f"{FAIL}\u2717{RESET} {WHITE}{pkg}{RESET}")
 
