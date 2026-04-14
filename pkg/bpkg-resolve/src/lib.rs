@@ -1,1 +1,3 @@
-// TODO: Sprint 1 — Dependency resolution
+pub mod graph;
+
+pub use graph::DependencyGraph;
