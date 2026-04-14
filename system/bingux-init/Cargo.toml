@@ -7,3 +7,8 @@ description = "Initramfs early-boot binary"
 
 [dependencies]
 bingux-common = { path = "../../common/bingux-common" }
+bsys-config = { path = "../bsys-config" }
+serde = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
