@@ -141,9 +141,9 @@ def _nix_install_streaming(cmd, env, pkg):
     ok = proc.returncode == 0
     if ok:
         if state["dl_size"]:
-            sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}({state['dl_size']}){RESET}")
+            sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}(downloaded {state['dl_size']}){RESET}")
         elif state["fetched"]:
-            sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}({state['fetched']} paths){RESET}")
+            sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}({state['fetched']} paths fetched){RESET}")
         else:
             sp.stop(f"{SUCCESS}\u2713{RESET} {WHITE}{pkg}{RESET} {DARK}(cached){RESET}")
         if progress_lines:
@@ -342,7 +342,7 @@ def _print_table(label, label_color, infos, name_color=WHITE, show_size=True, sh
     line_w = _term_width() - 6
     header = f"    {DARK}{'Package'.ljust(cn)} {'Version'.ljust(cv)}"
     if cs:
-        header += f" {'Size'.ljust(cs)}"
+        header += f" {'Disk'.ljust(cs)}"
     if cl:
         header += f" {'License'.ljust(cl)}"
     header += f" Description{RESET}"
