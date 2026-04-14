@@ -265,7 +265,7 @@ def _is_installed(pkg):
 
 
 def _auto_gc():
-    """Run desktop database update and garbage collection after transactions."""
+    """Wipe old profile generations, update desktop db, and garbage collect."""
     # Update desktop database so new apps appear in GNOME menu
     for profile in (VOLATILE_PROFILE, PERMANENT_PROFILE):
         apps_dir = f"{profile}/share/applications"
@@ -274,6 +274,9 @@ def _auto_gc():
 
     sp = Spinner("Cleaning up...")
     sp.start()
+    # Wipe old profile generations so gc can actually free paths
+    for profile in (VOLATILE_PROFILE, PERMANENT_PROFILE):
+        run(["nix", "profile", "wipe-history", "--profile", profile], capture_output=True)
     r = run(["nix", "store", "gc"], capture_output=True, text=True)
     freed = ""
     if r.returncode == 0 and r.stderr:
