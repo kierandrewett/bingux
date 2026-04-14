@@ -155,11 +155,6 @@ in
                         tweak-kitty-terminal = false;
                     };
 
-                    # Match GNOME location toggle to system geoclue setting
-                    "org/gnome/system/location" = {
-                        enabled = config.services.geoclue2.enable;
-                    };
-
                     # adw-gtk3 for legacy GTK3 apps
                     "org/gnome/desktop/interface" = {
                         gtk-theme = "adw-gtk3-dark";

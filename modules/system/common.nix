@@ -19,6 +19,13 @@
         services.earlyoom.enable = lib.mkDefault true;
         location.provider = lib.mkDefault "geoclue2";
 
+        # Sync DE location toggle with system geoclue setting
+        programs.dconf.profiles.user.databases = lib.mkIf config.services.geoclue2.enable [{
+            settings."org/gnome/system/location" = {
+                enabled = true;
+            };
+        }];
+
         hardware.bluetooth.enable = lib.mkDefault true;
         hardware.bluetooth.powerOnBoot = lib.mkDefault true;
 
