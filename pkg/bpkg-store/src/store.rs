@@ -127,3 +127,158 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bingux_common::package_id::Arch;
+    use tempfile::TempDir;
+
+    /// Create a fake package source directory with a manifest and some files.
+    fn make_source_pkg(
+        tmp: &Path,
+        name: &str,
+        version: &str,
+        arch: &str,
+    ) -> PathBuf {
+        let src = tmp.join(format!("src-{name}-{version}"));
+        let meta = src.join(".bpkg");
+        fs::create_dir_all(&meta).unwrap();
+
+        let manifest = format!(
+            r#"[package]
+name = "{name}"
+version = "{version}"
+arch = "{arch}"
+description = "Test package"
+"#
+        );
+        fs::write(meta.join("manifest.toml"), manifest).unwrap();
+
+        // Create some fake content
+        let bin_dir = src.join("bin");
+        fs::create_dir_all(&bin_dir).unwrap();
+        fs::write(bin_dir.join(name), "#!/bin/sh\necho hello\n").unwrap();
+
+        src
+    }
+
+    #[test]
+    fn install_and_get() {
+        let tmp = TempDir::new().unwrap();
+        let store = PackageStore::new(tmp.path().join("store")).unwrap();
+
+        let src = make_source_pkg(tmp.path(), "hello", "1.0", "x86_64-linux");
+        let id = store.install(&src).unwrap();
+
+        assert_eq!(id.name, "hello");
+        assert_eq!(id.version, "1.0");
+
+        let pkg_path = store.get(&id);
+        assert!(pkg_path.is_some());
+        assert!(pkg_path.unwrap().join("bin/hello").exists());
+    }
+
+    #[test]
+    fn install_appears_in_list() {
+        let tmp = TempDir::new().unwrap();
+        let store = PackageStore::new(tmp.path().join("store")).unwrap();
+
+        let src = make_source_pkg(tmp.path(), "hello", "1.0", "x86_64-linux");
+        let id = store.install(&src).unwrap();
+
+        let listed = store.list();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0], id);
+    }
+
+    #[test]
+    fn manifest_readable_after_install() {
+        let tmp = TempDir::new().unwrap();
+        let store = PackageStore::new(tmp.path().join("store")).unwrap();
+
+        let src = make_source_pkg(tmp.path(), "hello", "1.0", "x86_64-linux");
+        let id = store.install(&src).unwrap();
+
+        let m = store.manifest(&id).unwrap();
+        assert_eq!(m.package.name, "hello");
+        assert_eq!(m.package.version, "1.0");
+    }
+
+    #[test]
+    fn remove_package() {
+        let tmp = TempDir::new().unwrap();
+        let store = PackageStore::new(tmp.path().join("store")).unwrap();
+
+        let src = make_source_pkg(tmp.path(), "hello", "1.0", "x86_64-linux");
+        let id = store.install(&src).unwrap();
+
+        store.remove(&id).unwrap();
+        assert!(store.get(&id).is_none());
+        assert!(store.list().is_empty());
+    }
+
+    #[test]
+    fn remove_nonexistent_fails() {
+        let tmp = TempDir::new().unwrap();
+        let store = PackageStore::new(tmp.path().join("store")).unwrap();
+        let id = PackageId::new("ghost", "1.0", Arch::X86_64Linux).unwrap();
+        assert!(store.remove(&id).is_err());
+    }
+
+    #[test]
+    fn query_multiple_versions() {
+        let tmp = TempDir::new().unwrap();
+        let store = PackageStore::new(tmp.path().join("store")).unwrap();
+
+        let src1 = make_source_pkg(tmp.path(), "hello", "1.0", "x86_64-linux");
+        let src2 = make_source_pkg(tmp.path(), "hello", "2.0", "x86_64-linux");
+        let src3 = make_source_pkg(tmp.path(), "world", "1.0", "x86_64-linux");
+
+        store.install(&src1).unwrap();
+        store.install(&src2).unwrap();
+        store.install(&src3).unwrap();
+
+        let results = store.query("hello");
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|id| id.name == "hello"));
+
+        let results = store.query("world");
+        assert_eq!(results.len(), 1);
+
+        let results = store.query("nonexistent");
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn reject_duplicate_install() {
+        let tmp = TempDir::new().unwrap();
+        let store = PackageStore::new(tmp.path().join("store")).unwrap();
+
+        let src = make_source_pkg(tmp.path(), "hello", "1.0", "x86_64-linux");
+        store.install(&src).unwrap();
+
+        // Second install of same package should fail
+        let result = store.install(&src);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BinguxError::PackageAlreadyExists(_) => {}
+            e => panic!("expected PackageAlreadyExists, got: {e}"),
+        }
+    }
+
+    #[test]
+    fn list_empty_store() {
+        let tmp = TempDir::new().unwrap();
+        let store = PackageStore::new(tmp.path().join("store")).unwrap();
+        assert!(store.list().is_empty());
+    }
+
+    #[test]
+    fn get_nonexistent_returns_none() {
+        let tmp = TempDir::new().unwrap();
+        let store = PackageStore::new(tmp.path().join("store")).unwrap();
+        let id = PackageId::new("nope", "1.0", Arch::X86_64Linux).unwrap();
+        assert!(store.get(&id).is_none());
+    }
+}

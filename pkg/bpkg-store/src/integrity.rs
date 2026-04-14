@@ -91,3 +91,90 @@ fn sha256_file(path: &Path) -> Result<String> {
     }
     Ok(format!("{:x}", hasher.finalize()))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    /// Create a minimal package directory with some files.
+    fn make_package(tmp: &Path) -> PathBuf {
+        let pkg = tmp.join("test-pkg");
+        let meta = pkg.join(".bpkg");
+        fs::create_dir_all(&meta).unwrap();
+
+        fs::write(
+            meta.join("manifest.toml"),
+            "[package]\nname = \"test\"\nversion = \"1.0\"\narch = \"x86_64-linux\"\n",
+        )
+        .unwrap();
+
+        let bin = pkg.join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        fs::write(bin.join("hello"), "#!/bin/sh\necho hello\n").unwrap();
+
+        let lib = pkg.join("lib");
+        fs::create_dir_all(&lib).unwrap();
+        fs::write(lib.join("libtest.so"), b"fake library content").unwrap();
+
+        pkg
+    }
+
+    #[test]
+    fn generate_and_verify_file_list() {
+        let tmp = TempDir::new().unwrap();
+        let pkg = make_package(tmp.path());
+
+        let file_list = generate_file_list(&pkg).unwrap();
+        assert!(!file_list.is_empty());
+
+        // Each line should have a hash and path
+        for line in file_list.lines() {
+            let parts: Vec<&str> = line.splitn(2, "  ").collect();
+            assert_eq!(parts.len(), 2);
+            assert_eq!(parts[0].len(), 64); // SHA-256 hex length
+        }
+
+        // Write files.txt and verify
+        let files_path = pkg.join(".bpkg").join("files.txt");
+        fs::write(&files_path, &file_list).unwrap();
+        verify_file_list(&pkg).unwrap();
+    }
+
+    #[test]
+    fn verify_fails_on_modified_file() {
+        let tmp = TempDir::new().unwrap();
+        let pkg = make_package(tmp.path());
+
+        let file_list = generate_file_list(&pkg).unwrap();
+        let files_path = pkg.join(".bpkg").join("files.txt");
+        fs::write(&files_path, &file_list).unwrap();
+
+        // Tamper with a file
+        fs::write(pkg.join("bin/hello"), "TAMPERED").unwrap();
+
+        let result = verify_file_list(&pkg);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            BinguxError::IntegrityCheckFailed { path, .. } => {
+                assert_eq!(path.to_string_lossy(), "bin/hello");
+            }
+            e => panic!("expected IntegrityCheckFailed, got: {e}"),
+        }
+    }
+
+    #[test]
+    fn files_txt_not_included_in_own_list() {
+        let tmp = TempDir::new().unwrap();
+        let pkg = make_package(tmp.path());
+
+        // Write a dummy files.txt first
+        let files_path = pkg.join(".bpkg").join("files.txt");
+        fs::write(&files_path, "dummy").unwrap();
+
+        let file_list = generate_file_list(&pkg).unwrap();
+        // files.txt should not appear in its own list
+        assert!(!file_list.contains(".bpkg/files.txt"));
+    }
+}
