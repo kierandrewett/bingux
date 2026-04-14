@@ -1,0 +1,67 @@
+pkgscope="bingux"
+pkgname="mpv"
+pkgver="0.39.0"
+pkgarch="x86_64-linux"
+pkgdesc="Free, open-source, and cross-platform media player"
+license="GPL-2.0-or-later AND LGPL-2.1-or-later"
+
+depends=(
+    "glibc-2.39"
+    "ffmpeg-7.1"
+    "libass-0.17.3"
+    "libplacebo-7.349.0"
+    "luajit-2.1.1731601260"
+    "mujs-1.3.5"
+    "zlib-1.3.1"
+    "mesa-24.3.2"
+    "wayland-1.23.0"
+    "wayland-protocols-1.38"
+    "libxkbcommon-1.7.0"
+    "pipewire-1.2.7"
+    "libpulse-17.0"
+    "alsa-lib-1.2.13"
+    "libdrm-2.4.124"
+    "vulkan-loader-1.3.304"
+    "libjpeg-turbo-3.1.0"
+    "lcms2-2.16"
+    "libarchive-3.7.7"
+    "uchardet-0.0.8"
+)
+exports=(
+    "bin/mpv"
+    "share/applications/mpv.desktop"
+    "share/icons/hicolor/scalable/apps/mpv.svg"
+)
+
+source=("https://github.com/mpv-player/mpv/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=("SKIP")
+
+# GPU NOTES:
+# mpv uses dlopen for VA-API, VDPAU, PipeWire, and Vulkan.
+# The sandbox needs:
+# - gpu permission for hardware-accelerated video decoding
+# - dlopen_hints for libva.so, libvdpau.so, libpipewire-0.3.so
+# - audio permission for PipeWire/PulseAudio access
+
+package() {
+    cd "$SRCDIR/mpv-${pkgver}"
+
+    mkdir -p "$PKGDIR/bin"
+    mkdir -p "$PKGDIR/share/applications"
+    mkdir -p "$PKGDIR/share/icons/hicolor/scalable/apps"
+    mkdir -p "$PKGDIR/share/icons/hicolor/symbolic/apps"
+    mkdir -p "$PKGDIR/share/man/man1"
+    mkdir -p "$PKGDIR/share/bash-completion/completions"
+    mkdir -p "$PKGDIR/share/zsh/site-functions"
+    mkdir -p "$PKGDIR/etc/mpv"
+
+    install -m755 build/mpv "$PKGDIR/bin/mpv"
+    install -m644 etc/mpv.desktop "$PKGDIR/share/applications/mpv.desktop"
+    install -m644 etc/mpv-icon-8bit-16x16.png "$PKGDIR/share/icons/hicolor/16x16/apps/mpv.png" 2>/dev/null || true
+    install -m644 etc/mpv.svg "$PKGDIR/share/icons/hicolor/scalable/apps/mpv.svg" 2>/dev/null || true
+    install -m644 etc/encoding-profiles.conf "$PKGDIR/etc/mpv/encoding-profiles.conf"
+
+    patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+             --set-rpath "$STORE/glibc-2.39/lib:$STORE/ffmpeg-7.1/lib:$STORE/libass-0.17.3/lib:$STORE/mesa-24.3.2/lib:$STORE/wayland-1.23.0/lib:$STORE/pipewire-1.2.7/lib:$STORE/vulkan-loader-1.3.304/lib:$STORE/libplacebo-7.349.0/lib" \
+             "$PKGDIR/bin/mpv"
+}

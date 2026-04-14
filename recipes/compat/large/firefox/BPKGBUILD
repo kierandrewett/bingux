@@ -1,0 +1,113 @@
+pkgscope="bingux"
+pkgname="firefox"
+pkgver="133.0"
+pkgarch="x86_64-linux"
+pkgdesc="Fast, private, and safe web browser from Mozilla"
+license="MPL-2.0"
+
+depends=(
+    "glibc-2.39"
+    "gtk3-3.24.43"
+    "glib2-2.82.4"
+    "pango-1.54.0"
+    "cairo-1.18.2"
+    "gdk-pixbuf2-2.42.12"
+    "atk-2.52.0"
+    "dbus-1.14.10"
+    "dbus-glib-0.112"
+    "libx11-1.8.10"
+    "libxcb-1.17.0"
+    "libxext-1.3.6"
+    "libxcomposite-0.4.6"
+    "libxdamage-1.1.6"
+    "libxfixes-6.0.1"
+    "libxrandr-1.5.4"
+    "libxrender-0.9.11"
+    "libxtst-1.2.5"
+    "mesa-24.3.2"
+    "libdrm-2.4.124"
+    "pipewire-1.2.7"
+    "libpulse-17.0"
+    "alsa-lib-1.2.13"
+    "ffmpeg-7.1"
+    "nss-3.106"
+    "nspr-4.36"
+    "icu-74.2"
+    "zlib-1.3.1"
+    "freetype2-2.13.3"
+    "fontconfig-2.15.0"
+    "harfbuzz-10.1.0"
+    "fribidi-1.0.16"
+    "wayland-1.23.0"
+    "libxkbcommon-1.7.0"
+)
+exports=(
+    "bin/firefox"
+    "share/applications/firefox.desktop"
+    "share/icons/hicolor/128x128/apps/firefox.png"
+)
+
+source=("https://archive.mozilla.org/pub/firefox/releases/${pkgver}/linux-x86_64/en-US/firefox-${pkgver}.tar.bz2")
+sha256sums=("SKIP")
+
+# GPU NOTES:
+# Firefox uses dlopen for VA-API (hardware video decode), PipeWire (screen
+# sharing), and Vulkan/EGL. The sandbox needs:
+# - gpu permission for WebGL and hardware video decode
+# - audio permission for PipeWire/PulseAudio
+# - network:connect for web access
+# - dlopen_hints for libva.so, libpipewire-0.3.so, libEGL.so
+# - MOZ_ENABLE_WAYLAND=1 for native Wayland
+
+package() {
+    cd "$SRCDIR/firefox"
+
+    mkdir -p "$PKGDIR/lib/firefox"
+    mkdir -p "$PKGDIR/bin"
+    mkdir -p "$PKGDIR/share/applications"
+    mkdir -p "$PKGDIR/share/icons/hicolor/128x128/apps"
+    mkdir -p "$PKGDIR/share/icons/hicolor/64x64/apps"
+    mkdir -p "$PKGDIR/share/icons/hicolor/48x48/apps"
+
+    # Install all of firefox's lib directory
+    cp -a . "$PKGDIR/lib/firefox/"
+
+    # Create wrapper script that sets up environment
+    cat > "$PKGDIR/bin/firefox" << 'WRAPPER'
+#!/bin/sh
+export MOZ_ENABLE_WAYLAND="${MOZ_ENABLE_WAYLAND:-1}"
+export MOZ_DISABLE_CONTENT_SANDBOX="${MOZ_DISABLE_CONTENT_SANDBOX:-0}"
+exec STORE_PATH/lib/firefox/firefox "$@"
+WRAPPER
+    sed -i "s|STORE_PATH|$STORE/firefox-${pkgver}|g" "$PKGDIR/bin/firefox"
+    chmod 755 "$PKGDIR/bin/firefox"
+
+    # Install desktop file and icons
+    install -m644 browser/chrome/icons/default/default128.png \
+            "$PKGDIR/share/icons/hicolor/128x128/apps/firefox.png"
+
+    cat > "$PKGDIR/share/applications/firefox.desktop" << DESKTOP
+[Desktop Entry]
+Name=Firefox
+GenericName=Web Browser
+Comment=Browse the World Wide Web
+Exec=firefox %u
+Icon=firefox
+Terminal=false
+Type=Application
+MimeType=text/html;text/xml;application/xhtml+xml;application/vnd.mozilla.xul+xml;text/mml;x-scheme-handler/http;x-scheme-handler/https;
+Categories=Network;WebBrowser;
+StartupNotify=true
+DESKTOP
+
+    # Patchelf the main binary and libxul
+    patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+             --set-rpath "$STORE/glibc-2.39/lib:$STORE/gtk3-3.24.43/lib:$STORE/glib2-2.82.4/lib:$STORE/dbus-1.14.10/lib:$STORE/mesa-24.3.2/lib:$STORE/nss-3.106/lib:$STORE/nspr-4.36/lib:$STORE/ffmpeg-7.1/lib:$STORE/pipewire-1.2.7/lib" \
+             "$PKGDIR/lib/firefox/firefox"
+
+    patchelf --set-rpath "$STORE/glibc-2.39/lib:$STORE/gtk3-3.24.43/lib:$STORE/glib2-2.82.4/lib:$STORE/dbus-1.14.10/lib:$STORE/mesa-24.3.2/lib:$STORE/nss-3.106/lib:$STORE/nspr-4.36/lib:$STORE/ffmpeg-7.1/lib:$STORE/icu-74.2/lib" \
+             "$PKGDIR/lib/firefox/libxul.so"
+
+    patchelf --set-rpath "$STORE/glibc-2.39/lib:$STORE/nss-3.106/lib:$STORE/nspr-4.36/lib" \
+             "$PKGDIR/lib/firefox/libmozsandbox.so" 2>/dev/null || true
+}

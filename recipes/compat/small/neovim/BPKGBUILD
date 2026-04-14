@@ -1,0 +1,45 @@
+pkgscope="bingux"
+pkgname="neovim"
+pkgver="0.10.3"
+pkgarch="x86_64-linux"
+pkgdesc="Hyperextensible Vim-based text editor"
+license="Apache-2.0"
+
+depends=(
+    "glibc-2.39"
+    "luajit-2.1.1731601260"
+    "libuv-1.49.2"
+    "msgpack-c-6.1.0"
+    "tree-sitter-0.24.5"
+    "unibilium-2.1.2"
+    "libtermkey-0.22"
+    "libvterm-0.3.3"
+)
+exports=(
+    "bin/nvim"
+)
+
+source=("https://github.com/neovim/neovim/releases/download/v${pkgver}/nvim-linux64.tar.gz")
+sha256sums=("SKIP")
+
+package() {
+    cd "$SRCDIR/nvim-linux64"
+
+    mkdir -p "$PKGDIR/bin"
+    mkdir -p "$PKGDIR/lib"
+    mkdir -p "$PKGDIR/share"
+
+    install -m755 bin/nvim "$PKGDIR/bin/nvim"
+    cp -a lib/nvim "$PKGDIR/lib/nvim"
+    cp -a share/nvim "$PKGDIR/share/nvim"
+    cp -a share/man "$PKGDIR/share/man" 2>/dev/null || true
+    cp -a share/locale "$PKGDIR/share/locale" 2>/dev/null || true
+    cp -a share/applications "$PKGDIR/share/applications" 2>/dev/null || true
+    cp -a share/icons "$PKGDIR/share/icons" 2>/dev/null || true
+
+    # Patchelf the main binary — the release tarball bundles most libs
+    # but still dynamically links against glibc
+    patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+             --set-rpath "$STORE/glibc-2.39/lib" \
+             "$PKGDIR/bin/nvim"
+}

@@ -1,0 +1,38 @@
+pkgscope="bingux"
+pkgname="htop"
+pkgver="3.3.0"
+pkgarch="x86_64-linux"
+pkgdesc="Interactive process viewer"
+license="GPL-2.0-or-later"
+
+depends=(
+    "glibc-2.39"
+    "ncurses-6.5"
+    "libcap-2.70"
+    "libnl-3.10"
+    "lm-sensors-3.6.0"
+)
+exports=(
+    "bin/htop"
+)
+
+source=("https://github.com/htop-dev/htop/releases/download/${pkgver}/htop-${pkgver}.tar.xz")
+sha256sums=("SKIP")
+
+package() {
+    cd "$SRCDIR/htop-${pkgver}"
+
+    mkdir -p "$PKGDIR/bin"
+    mkdir -p "$PKGDIR/share/man/man1"
+    mkdir -p "$PKGDIR/share/applications"
+    mkdir -p "$PKGDIR/share/pixmaps"
+
+    install -m755 htop "$PKGDIR/bin/htop"
+    install -m644 htop.1 "$PKGDIR/share/man/man1/htop.1"
+    install -m644 htop.desktop "$PKGDIR/share/applications/htop.desktop"
+    install -m644 htop.png "$PKGDIR/share/pixmaps/htop.png"
+
+    patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+             --set-rpath "$STORE/glibc-2.39/lib:$STORE/ncurses-6.5/lib" \
+             "$PKGDIR/bin/htop"
+}

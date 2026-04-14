@@ -1,0 +1,136 @@
+pkgscope="bingux"
+pkgname="libreoffice"
+pkgver="24.8.4"
+pkgarch="x86_64-linux"
+pkgdesc="Free and open-source office productivity suite"
+license="MPL-2.0"
+
+depends=(
+    "glibc-2.39"
+    "gtk3-3.24.43"
+    "glib2-2.82.4"
+    "cairo-1.18.2"
+    "pango-1.54.0"
+    "gdk-pixbuf2-2.42.12"
+    "cups-2.4.11"
+    "dbus-1.14.10"
+    "fontconfig-2.15.0"
+    "freetype2-2.13.3"
+    "harfbuzz-10.1.0"
+    "icu-74.2"
+    "libxml2-2.13.5"
+    "libxslt-1.1.42"
+    "nss-3.106"
+    "nspr-4.36"
+    "openssl-3.4.0"
+    "curl-8.11.1"
+    "zlib-1.3.1"
+    "libpng-1.6.44"
+    "libjpeg-turbo-3.1.0"
+    "libtiff-4.7.0"
+    "libwebp-1.4.0"
+    "lcms2-2.16"
+    "poppler-24.12.0"
+    "hunspell-1.7.2"
+    "hyphen-2.8.8"
+    "mythes-1.2.5"
+    "boost-1.86.0"
+    "libcdr-0.1.7"
+    "libvisio-0.1.7"
+    "libwpd-0.10.3"
+    "libwpg-0.3.4"
+    "libetonyek-0.1.10"
+    "libmspub-0.1.4"
+    "librevenge-0.0.5"
+    "clucene-2.3.3.4"
+    "redland-1.0.17"
+    "openjdk-21.0.5"
+    "python-3.12.8"
+)
+exports=(
+    "bin/libreoffice"
+    "bin/lowriter"
+    "bin/localc"
+    "bin/loimpress"
+    "bin/lodraw"
+    "bin/lobase"
+    "bin/lomath"
+    "share/applications/libreoffice-writer.desktop"
+    "share/applications/libreoffice-calc.desktop"
+    "share/applications/libreoffice-impress.desktop"
+    "share/applications/libreoffice-draw.desktop"
+    "share/icons/hicolor/256x256/apps/libreoffice-writer.png"
+    "share/icons/hicolor/256x256/apps/libreoffice-calc.png"
+    "share/icons/hicolor/256x256/apps/libreoffice-impress.png"
+)
+
+source=("https://download.documentfoundation.org/libreoffice/src/${pkgver}/libreoffice-${pkgver}.tar.xz")
+sha256sums=("SKIP")
+
+# BUILD NOTES:
+# LibreOffice has a massive build (>1 hour on fast hardware).
+# - Complex configure with many --with-system-* flags
+# - Needs Java (OpenJDK) for Base component and some build-time code generation
+# - Uses its own bundled copy of many libraries unless told otherwise
+# - DESTDIR install sometimes incomplete; may need post-install fixups
+# - Font configuration: needs fontconfig with system fonts visible in sandbox
+# - Spell-check dictionaries and locale data are separate packages
+
+package() {
+    cd "$SRCDIR/libreoffice-${pkgver}"
+
+    mkdir -p "$PKGDIR/lib/libreoffice"
+    mkdir -p "$PKGDIR/bin"
+    mkdir -p "$PKGDIR/share/applications"
+    mkdir -p "$PKGDIR/share/icons/hicolor/256x256/apps"
+    mkdir -p "$PKGDIR/share/icons/hicolor/48x48/apps"
+    mkdir -p "$PKGDIR/share/mime/packages"
+
+    # Install the entire LibreOffice program directory
+    cp -a instdir/program "$PKGDIR/lib/libreoffice/program"
+    cp -a instdir/share "$PKGDIR/lib/libreoffice/share"
+
+    # Create symlink wrappers for each component
+    for app in libreoffice lowriter localc loimpress lodraw lobase lomath; do
+        cat > "$PKGDIR/bin/${app}" << WRAPPER
+#!/bin/sh
+exec STORE_PATH/lib/libreoffice/program/soffice --${app#lo} "\$@"
+WRAPPER
+        sed -i "s|STORE_PATH|$STORE/libreoffice-${pkgver}|g" "$PKGDIR/bin/${app}"
+        chmod 755 "$PKGDIR/bin/${app}"
+    done
+    # Fix the main launcher (no component flag)
+    sed -i 's|--libreoffice||' "$PKGDIR/bin/libreoffice"
+
+    # Install desktop files
+    for comp in writer calc impress draw; do
+        cat > "$PKGDIR/share/applications/libreoffice-${comp}.desktop" << DESKTOP
+[Desktop Entry]
+Name=LibreOffice $(echo ${comp} | sed 's/./\U&/')
+GenericName=$(echo ${comp} | sed 's/./\U&/')
+Comment=LibreOffice ${comp}
+Exec=lo${comp} %U
+Icon=libreoffice-${comp}
+Terminal=false
+Type=Application
+Categories=Office;
+MimeType=application/vnd.oasis.opendocument.*;
+StartupNotify=true
+DESKTOP
+    done
+
+    # Patchelf soffice.bin (the real binary behind the shell wrapper)
+    patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+             --set-rpath "$STORE/glibc-2.39/lib:$STORE/gtk3-3.24.43/lib:$STORE/glib2-2.82.4/lib:$STORE/cairo-1.18.2/lib:$STORE/icu-74.2/lib:$STORE/nss-3.106/lib:$STORE/curl-8.11.1/lib:$STORE/libxml2-2.13.5/lib:$PKGDIR/lib/libreoffice/program" \
+             "$PKGDIR/lib/libreoffice/program/soffice.bin"
+
+    # Patchelf all .so files in the program directory
+    find "$PKGDIR/lib/libreoffice/program" -name "*.so" -type f | while read -r lib; do
+        patchelf --set-rpath "$STORE/glibc-2.39/lib:$STORE/gtk3-3.24.43/lib:$STORE/glib2-2.82.4/lib:$STORE/cairo-1.18.2/lib:$STORE/icu-74.2/lib:$PKGDIR/lib/libreoffice/program" \
+                 "$lib" 2>/dev/null || true
+    done
+
+    # Rewrite Python shebangs for UNO scripting
+    find "$PKGDIR/lib/libreoffice" -name "*.py" -exec \
+        sed -i "1s|#!/usr/bin/python.*|#!$STORE/python-3.12.8/bin/python3|" {} + 2>/dev/null || true
+}

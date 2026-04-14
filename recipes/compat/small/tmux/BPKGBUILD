@@ -1,0 +1,33 @@
+pkgscope="bingux"
+pkgname="tmux"
+pkgver="3.5a"
+pkgarch="x86_64-linux"
+pkgdesc="Terminal multiplexer"
+license="ISC"
+
+depends=(
+    "glibc-2.39"
+    "ncurses-6.5"
+    "libevent-2.1.12"
+    "libutempter-1.2.1"
+)
+exports=(
+    "bin/tmux"
+)
+
+source=("https://github.com/tmux/tmux/releases/download/${pkgver}/tmux-${pkgver}.tar.gz")
+sha256sums=("SKIP")
+
+package() {
+    cd "$SRCDIR/tmux-${pkgver}"
+
+    mkdir -p "$PKGDIR/bin"
+    mkdir -p "$PKGDIR/share/man/man1"
+
+    install -m755 tmux "$PKGDIR/bin/tmux"
+    install -m644 tmux.1 "$PKGDIR/share/man/man1/tmux.1"
+
+    patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+             --set-rpath "$STORE/glibc-2.39/lib:$STORE/ncurses-6.5/lib:$STORE/libevent-2.1.12/lib" \
+             "$PKGDIR/bin/tmux"
+}

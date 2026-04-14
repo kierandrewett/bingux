@@ -1,0 +1,32 @@
+pkgscope="bingux"
+pkgname="bat"
+pkgver="0.24.0"
+pkgarch="x86_64-linux"
+pkgdesc="Cat clone with syntax highlighting and Git integration"
+license="Apache-2.0 OR MIT"
+
+depends=("glibc-2.39")
+exports=(
+    "bin/bat"
+)
+
+source=("https://github.com/sharkdp/bat/releases/download/v${pkgver}/bat-v${pkgver}-x86_64-unknown-linux-musl.tar.gz")
+sha256sums=("SKIP")
+
+package() {
+    cd "$SRCDIR/bat-v${pkgver}-x86_64-unknown-linux-musl"
+
+    mkdir -p "$PKGDIR/bin"
+    mkdir -p "$PKGDIR/share/man/man1"
+    mkdir -p "$PKGDIR/share/bash-completion/completions"
+    mkdir -p "$PKGDIR/share/zsh/site-functions"
+
+    install -m755 bat "$PKGDIR/bin/bat"
+    install -m644 bat.1 "$PKGDIR/share/man/man1/bat.1"
+    install -m644 autocomplete/bat.bash "$PKGDIR/share/bash-completion/completions/bat"
+    install -m644 autocomplete/bat.zsh "$PKGDIR/share/zsh/site-functions/_bat"
+
+    # Musl static binary — patchelf PT_INTERP if dynamically linked
+    patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+             "$PKGDIR/bin/bat" || true
+}

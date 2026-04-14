@@ -1,0 +1,103 @@
+pkgscope="bingux"
+pkgname="gimp"
+pkgver="2.10.38"
+pkgarch="x86_64-linux"
+pkgdesc="GNU Image Manipulation Program"
+license="GPL-3.0-or-later"
+
+depends=(
+    "glibc-2.39"
+    "gtk2-2.24.33"
+    "glib2-2.82.4"
+    "gdk-pixbuf2-2.42.12"
+    "pango-1.54.0"
+    "cairo-1.18.2"
+    "gegl-0.4.50"
+    "babl-0.1.110"
+    "libmypaint-1.6.1"
+    "mypaint-brushes-1.3.1"
+    "freetype2-2.13.3"
+    "fontconfig-2.15.0"
+    "harfbuzz-10.1.0"
+    "libtiff-4.7.0"
+    "libjpeg-turbo-3.1.0"
+    "libpng-1.6.44"
+    "libwebp-1.4.0"
+    "librsvg-2.59.2"
+    "lcms2-2.16"
+    "poppler-24.12.0"
+    "libheif-1.19.5"
+    "openjpeg-2.5.3"
+    "libexif-0.6.24"
+    "libxpm-3.5.17"
+    "zlib-1.3.1"
+    "bzip2-1.0.8"
+    "xz-5.6.3"
+    "python-3.12.8"
+    "dbus-1.14.10"
+    "iso-codes-4.17.0"
+)
+exports=(
+    "bin/gimp"
+    "bin/gimp-console-2.10"
+    "lib/gimp/2.0/plug-ins/"
+    "share/applications/gimp.desktop"
+    "share/icons/hicolor/256x256/apps/gimp.png"
+)
+
+source=("https://download.gimp.org/pub/gimp/v2.10/gimp-${pkgver}.tar.bz2")
+sha256sums=("SKIP")
+
+package() {
+    cd "$SRCDIR/gimp-${pkgver}"
+
+    mkdir -p "$PKGDIR/bin"
+    mkdir -p "$PKGDIR/lib/gimp/2.0/plug-ins"
+    mkdir -p "$PKGDIR/lib/gimp/2.0/modules"
+    mkdir -p "$PKGDIR/lib/gimp/2.0/environ"
+    mkdir -p "$PKGDIR/share/gimp/2.0"
+    mkdir -p "$PKGDIR/share/applications"
+    mkdir -p "$PKGDIR/share/icons/hicolor/256x256/apps"
+    mkdir -p "$PKGDIR/share/man/man1"
+
+    install -m755 app/.libs/gimp-2.10 "$PKGDIR/bin/gimp"
+    install -m755 app/.libs/gimp-console-2.10 "$PKGDIR/bin/gimp-console-2.10"
+
+    # Install shared libraries
+    cp -a libgimp/.libs/libgimp-2.0.so* "$PKGDIR/lib/"
+    cp -a libgimpbase/.libs/libgimpbase-2.0.so* "$PKGDIR/lib/"
+    cp -a libgimpcolor/.libs/libgimpcolor-2.0.so* "$PKGDIR/lib/"
+    cp -a libgimpconfig/.libs/libgimpconfig-2.0.so* "$PKGDIR/lib/"
+    cp -a libgimpmath/.libs/libgimpmath-2.0.so* "$PKGDIR/lib/"
+    cp -a libgimpmodule/.libs/libgimpmodule-2.0.so* "$PKGDIR/lib/"
+    cp -a libgimpthumb/.libs/libgimpthumb-2.0.so* "$PKGDIR/lib/"
+    cp -a libgimpwidgets/.libs/libgimpwidgets-2.0.so* "$PKGDIR/lib/"
+
+    # Install plug-ins and data
+    cp -a plug-ins/*/.libs/* "$PKGDIR/lib/gimp/2.0/plug-ins/" 2>/dev/null || true
+    cp -a modules/.libs/*.so "$PKGDIR/lib/gimp/2.0/modules/" 2>/dev/null || true
+    cp -a data/* "$PKGDIR/share/gimp/2.0/" 2>/dev/null || true
+
+    # Desktop file and icons
+    install -m644 desktop/gimp.desktop "$PKGDIR/share/applications/gimp.desktop"
+    install -m644 icons/Color/256x256/gimp.png \
+            "$PKGDIR/share/icons/hicolor/256x256/apps/gimp.png" 2>/dev/null || true
+
+    # Patchelf main binaries
+    for bin in "$PKGDIR/bin/"*; do
+        patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+                 --set-rpath "$STORE/glibc-2.39/lib:$STORE/gtk2-2.24.33/lib:$STORE/glib2-2.82.4/lib:$STORE/gegl-0.4.50/lib:$STORE/babl-0.1.110/lib:$STORE/cairo-1.18.2/lib:$STORE/pango-1.54.0/lib:$PKGDIR/lib" \
+                 "$bin" 2>/dev/null || true
+    done
+
+    # Patchelf plug-ins (they're standalone ELF executables)
+    find "$PKGDIR/lib/gimp/2.0/plug-ins" -type f -executable | while read -r plug; do
+        patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+                 --set-rpath "$STORE/glibc-2.39/lib:$STORE/gtk2-2.24.33/lib:$STORE/glib2-2.82.4/lib:$STORE/gegl-0.4.50/lib:$STORE/babl-0.1.110/lib:$PKGDIR/lib" \
+                 "$plug" 2>/dev/null || true
+    done
+
+    # Rewrite Python plugin shebangs
+    find "$PKGDIR/lib/gimp/2.0/plug-ins" -name "*.py" -exec \
+        sed -i "1s|#!/usr/bin/python|#!$STORE/python-3.12.8/bin/python3|" {} + 2>/dev/null || true
+}

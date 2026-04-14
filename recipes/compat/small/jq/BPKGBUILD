@@ -1,0 +1,25 @@
+pkgscope="bingux"
+pkgname="jq"
+pkgver="1.7.1"
+pkgarch="x86_64-linux"
+pkgdesc="Command-line JSON processor"
+license="MIT"
+
+depends=("glibc-2.39")
+exports=(
+    "bin/jq"
+)
+
+source=("https://github.com/jqlang/jq/releases/download/jq-${pkgver}/jq-linux-amd64")
+sha256sums=("SKIP")
+
+package() {
+    mkdir -p "$PKGDIR/bin"
+
+    # Single static-ish binary — just install and patchelf
+    install -m755 "$SRCDIR/jq-linux-amd64" "$PKGDIR/bin/jq"
+
+    patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+             --set-rpath "$STORE/glibc-2.39/lib" \
+             "$PKGDIR/bin/jq"
+}
