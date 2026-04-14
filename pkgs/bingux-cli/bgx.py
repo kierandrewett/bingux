@@ -520,15 +520,17 @@ def do_remove(pkgs, skip_confirm=False, profile_filter=None):
         if not pkgs:
             return len(not_installed) == 0
 
-    if not skip_confirm:
-        sp = Spinner("Resolving packages...")
-        sp.start()
-        infos = [pkg_info(p) for p in pkgs]
-        sp.stop(f"{DARK}Resolved {len(infos)} {'package' if len(infos) == 1 else 'packages'}.{RESET}")
+    sp = Spinner("Resolving packages...")
+    sp.start()
+    infos = [pkg_info(p) for p in pkgs]
+    sp.stop(f"{DARK}Resolved {len(infos)} {'package' if len(infos) == 1 else 'packages'}.{RESET}")
 
+    if not skip_confirm:
         if not show_transaction([], infos, remove_filter=profile_filter):
             print(f"  {DARK}Aborted.{RESET}")
             return False
+
+    total_freed = sum(i.get("size_bytes", 0) for i in infos)
 
     failed = 0
     for pkg in pkgs:
@@ -548,6 +550,15 @@ def do_remove(pkgs, skip_confirm=False, profile_filter=None):
         elif failed == 0:
             print(f"  {FAIL}\u2717{RESET} {WHITE}{pkg}{RESET} {DARK}not installed{RESET}", file=sys.stderr)
             failed += 1
+
+    removed_count = len(pkgs) - failed
+    if removed_count > 0:
+        msg = f"\n  {DARK}{removed_count} removed."
+        if total_freed:
+            msg += f" Freed {format_size(total_freed)}.{RESET}"
+        else:
+            msg += f"{RESET}"
+        print(msg)
 
     _auto_gc()
     return failed == 0
