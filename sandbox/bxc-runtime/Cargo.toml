@@ -1,0 +1,9 @@
+[package]
+name = "bxc-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Namespace sandbox runtime"
+
+[dependencies]
+bingux-common = { path = "../../common/bingux-common" }

@@ -1,0 +1,19 @@
+[package]
+name = "bpkg-build"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Package build orchestrator for Bingux"
+
+[dependencies]
+bingux-common = { path = "../../common/bingux-common" }
+bpkg-recipe = { path = "../bpkg-recipe" }
+bpkg-store = { path = "../bpkg-store" }
+bpkg-resolve = { path = "../bpkg-resolve" }
+bpkg-patchelf = { path = "../bpkg-patchelf" }
+serde = { workspace = true }
+sha2 = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+tempfile = { workspace = true }
+tracing = { workspace = true }

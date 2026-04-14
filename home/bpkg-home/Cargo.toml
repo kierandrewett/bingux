@@ -1,0 +1,9 @@
+[package]
+name = "bpkg-home"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Declarative home environment manager"
+
+[dependencies]
+bingux-common = { path = "../../common/bingux-common" }

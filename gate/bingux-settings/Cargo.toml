@@ -1,0 +1,9 @@
+[package]
+name = "bingux-settings"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Permission management GUI"
+
+[dependencies]
+bingux-common = { path = "../../common/bingux-common" }

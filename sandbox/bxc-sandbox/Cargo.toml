@@ -1,0 +1,9 @@
+[package]
+name = "bxc-sandbox"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Seccomp filter generator and sandbox primitives"
+
+[dependencies]
+bingux-common = { path = "../../common/bingux-common" }

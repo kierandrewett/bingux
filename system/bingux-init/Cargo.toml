@@ -1,0 +1,9 @@
+[package]
+name = "bingux-init"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Initramfs early-boot binary"
+
+[dependencies]
+bingux-common = { path = "../../common/bingux-common" }

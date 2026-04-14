@@ -1,0 +1,13 @@
+[package]
+name = "bpkg-patchelf"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "ELF binary patching for Bingux package store"
+
+[dependencies]
+bingux-common = { path = "../../common/bingux-common" }
+bpkg-resolve = { path = "../bpkg-resolve" }
+goblin = { workspace = true }
+walkdir = { workspace = true }
+tracing = { workspace = true }

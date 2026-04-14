@@ -1,0 +1,14 @@
+[package]
+name = "bpkg-repo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Repository system for Bingux packages"
+
+[dependencies]
+bingux-common = { path = "../../common/bingux-common" }
+serde = { workspace = true }
+toml = { workspace = true }
+reqwest = { workspace = true }
+sha2 = { workspace = true }
+tracing = { workspace = true }

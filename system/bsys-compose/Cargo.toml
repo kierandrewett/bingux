@@ -1,0 +1,9 @@
+[package]
+name = "bsys-compose"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "System profile generation"
+
+[dependencies]
+bingux-common = { path = "../../common/bingux-common" }

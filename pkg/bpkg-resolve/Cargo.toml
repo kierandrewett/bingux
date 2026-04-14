@@ -1,0 +1,12 @@
+[package]
+name = "bpkg-resolve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Dependency resolution and library lookup for Bingux"
+
+[dependencies]
+bingux-common = { path = "../../common/bingux-common" }
+bpkg-store = { path = "../bpkg-store" }
+serde = { workspace = true }
+tracing = { workspace = true }

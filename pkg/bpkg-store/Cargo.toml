@@ -1,0 +1,17 @@
+[package]
+name = "bpkg-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Package store management for Bingux"
+
+[dependencies]
+bingux-common = { path = "../../common/bingux-common" }
+serde = { workspace = true }
+toml = { workspace = true }
+sha2 = { workspace = true }
+walkdir = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

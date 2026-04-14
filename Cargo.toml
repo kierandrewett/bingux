@@ -1,0 +1,72 @@
+[workspace]
+resolver = "2"
+members = [
+    "common/bingux-common",
+    "pkg/bpkg-recipe",
+    "pkg/bpkg-store",
+    "pkg/bpkg-resolve",
+    "pkg/bpkg-patchelf",
+    "pkg/bpkg-build",
+    "pkg/bpkg-repo",
+    "home/bpkg-home",
+    "sandbox/bxc-sandbox",
+    "sandbox/bxc-runtime",
+    "sandbox/bxc-shim",
+    "gate/bingux-gated",
+    "gate/bingux-prompt",
+    "gate/bingux-settings",
+    "system/bsys-compose",
+    "system/bsys-config",
+    "system/bingux-init",
+    "cli/bpkg",
+    "cli/bsys",
+    "cli/bxc",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/nicebingux/bingux"
+
+[workspace.dependencies]
+# Serialisation
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+indicatif = "0.17"
+
+# Filesystem
+walkdir = "2"
+tempfile = "3"
+
+# Crypto
+sha2 = "0.10"
+
+# ELF
+goblin = "0.9"
+
+# Linux
+nix = { version = "0.29", features = ["mount", "sched", "signal", "user", "process", "fs"] }
+
+# Database
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Async
+tokio = { version = "1", features = ["full"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# D-Bus
+zbus = "5"
+
+# Network
+reqwest = { version = "0.12", features = ["stream"] }

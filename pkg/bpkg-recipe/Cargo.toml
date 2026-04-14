@@ -1,0 +1,13 @@
+[package]
+name = "bpkg-recipe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "BPKGBUILD recipe parser for Bingux"
+
+[dependencies]
+bingux-common = { path = "../../common/bingux-common" }
+serde = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
