@@ -70,3 +70,6 @@ zbus = "5"
 
 # Network
 reqwest = { version = "0.12", features = ["stream"] }
+
+# Bitflags
+bitflags = "2"
