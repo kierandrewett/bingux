@@ -6,6 +6,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk
 from state import InstallerState
 from pages.welcome import WelcomePage
+from pages.locale import LocalePage
 from pages.network import NetworkPage
 from pages.install_type import InstallTypePage
 from pages.system_config import SystemConfigPage
@@ -60,8 +61,9 @@ class BinguxInstallerWindow(Adw.ApplicationWindow):
 
         self.pages = [
             WelcomePage(self),           # 0
-            NetworkPage(self),           # 1 (skipped if online)
-            InstallTypePage(self),       # 2
+            LocalePage(self),            # 1
+            NetworkPage(self),           # 2 (skipped if online)
+            InstallTypePage(self),       # 3
             SystemConfigPage(self),      # 3 (fresh only)
             RepositoryPage(self),        # 4 (repo only)
             DiskPage(self),              # 5
@@ -74,12 +76,13 @@ class BinguxInstallerWindow(Adw.ApplicationWindow):
 
         self._page_to_step = {
             0: -1,                  # Welcome (no steps)
-            1: 0, 2: 0,            # Network, InstallType -> Setup
-            3: 1, 4: 1,            # SystemConfig, Repository -> Config
-            5: 2, 6: 2,            # Disk, Partitioning -> Disk
-            7: 3,                   # User
-            8: 4,                   # Review
-            9: 5, 10: -1,          # Install, Complete (no steps)
+            1: -1,                  # Locale (own title)
+            2: 0, 3: 0,            # Network, InstallType -> Setup
+            4: 1, 5: 1,            # SystemConfig, Repository -> Config
+            6: 2, 7: 2,            # Disk, Partitioning -> Disk
+            8: 3,                   # User
+            9: 4,                   # Review
+            10: 5, 11: -1,         # Install, Complete (no steps)
         }
 
         self.repair_page = RepairPage(self)

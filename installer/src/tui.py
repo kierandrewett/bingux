@@ -45,6 +45,10 @@ def run_tui():
 
     state = InstallerState()
 
+    # Locale
+    state.locale = prompt("Locale", "en_US.UTF-8")
+    print()
+
     # Install type
     print(f"  {BOLD}Installation type:{RESET}")
     print(f"    {GREEN}1{RESET})  Fresh install")
