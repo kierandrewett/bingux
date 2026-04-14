@@ -337,4 +337,96 @@ clipboard = "allow"
         assert!(perms.mounts.is_empty());
         assert!(perms.files.is_empty());
     }
+
+    // ── PermissionDb on-disk tests ────────────────────────────
+
+    #[test]
+    fn db_load_save_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = PermissionDb::new("alice", dir.path().to_path_buf());
+
+        let perms = {
+            let mut p = PackagePermissions::new_empty("firefox");
+            p.capabilities.insert("gpu".into(), PermissionGrant::Allow);
+            p.capabilities.insert("camera".into(), PermissionGrant::Deny);
+            p.mounts.insert("~/Downloads".into(), "list,w".into());
+            p.files.insert("~/.ssh/id_rsa".into(), "deny(r)".into());
+            p
+        };
+
+        db.save("firefox", &perms).unwrap();
+
+        // Fresh DB instance to prove it reads from disk, not cache
+        let mut db2 = PermissionDb::new("alice", dir.path().to_path_buf());
+        let loaded = db2.load("firefox").unwrap();
+        assert_eq!(loaded.meta.package, "firefox");
+        assert_eq!(loaded.capabilities.get("gpu"), Some(&PermissionGrant::Allow));
+        assert_eq!(loaded.capabilities.get("camera"), Some(&PermissionGrant::Deny));
+        assert_eq!(loaded.mounts.get("~/Downloads"), Some(&"list,w".to_string()));
+        assert_eq!(loaded.files.get("~/.ssh/id_rsa"), Some(&"deny(r)".to_string()));
+    }
+
+    #[test]
+    fn check_capability_allow_deny_prompt() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut db = PermissionDb::new("alice", dir.path().to_path_buf());
+
+        db.grant_capability("firefox", "gpu").unwrap();
+        db.deny_capability("firefox", "camera").unwrap();
+
+        assert_eq!(db.check_capability("firefox", "gpu"), PermissionGrant::Allow);
+        assert_eq!(db.check_capability("firefox", "camera"), PermissionGrant::Deny);
+        // Missing capability → Prompt
+        assert_eq!(db.check_capability("firefox", "microphone"), PermissionGrant::Prompt);
+    }
+
+    #[test]
+    fn check_mount_present_and_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut db = PermissionDb::new("alice", dir.path().to_path_buf());
+
+        db.grant_mount("firefox", "~/Downloads", "list,w").unwrap();
+
+        assert_eq!(db.check_mount("firefox", "~/Downloads"), Some("list,w".to_string()));
+        assert_eq!(db.check_mount("firefox", "~/Documents"), None);
+    }
+
+    #[test]
+    fn check_file_allow_deny_prompt() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut db = PermissionDb::new("alice", dir.path().to_path_buf());
+
+        db.grant_file("firefox", "~/.ssh/id_rsa.pub", "r").unwrap();
+        db.grant_file("firefox", "~/.ssh/id_rsa", "deny(r)").unwrap();
+
+        assert_eq!(db.check_file("firefox", "~/.ssh/id_rsa.pub"), PermissionGrant::Allow);
+        assert_eq!(db.check_file("firefox", "~/.ssh/id_rsa"), PermissionGrant::Deny);
+        assert_eq!(db.check_file("firefox", "/tmp/unknown"), PermissionGrant::Prompt);
+    }
+
+    #[test]
+    fn grant_capability_then_recheck() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut db = PermissionDb::new("alice", dir.path().to_path_buf());
+
+        // Initially Prompt
+        assert_eq!(db.check_capability("vlc", "audio"), PermissionGrant::Prompt);
+
+        // Grant it
+        db.grant_capability("vlc", "audio").unwrap();
+        assert_eq!(db.check_capability("vlc", "audio"), PermissionGrant::Allow);
+
+        // Verify it's on disk too
+        let mut db2 = PermissionDb::new("alice", dir.path().to_path_buf());
+        assert_eq!(db2.check_capability("vlc", "audio"), PermissionGrant::Allow);
+    }
+
+    #[test]
+    fn load_nonexistent_gives_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut db = PermissionDb::new("alice", dir.path().to_path_buf());
+        let perms = db.load("nonexistent-pkg").unwrap();
+        assert_eq!(perms.meta.package, "nonexistent-pkg");
+        assert!(perms.capabilities.is_empty());
+    }
 }
