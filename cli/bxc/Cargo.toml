@@ -14,3 +14,6 @@ nix = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
