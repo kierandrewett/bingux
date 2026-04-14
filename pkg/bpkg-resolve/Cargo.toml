@@ -9,4 +9,9 @@ description = "Dependency resolution and library lookup for Bingux"
 bingux-common = { path = "../../common/bingux-common" }
 bpkg-store = { path = "../bpkg-store" }
 serde = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
+walkdir = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
