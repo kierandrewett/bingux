@@ -17,6 +17,8 @@ class InstallerState:
     desktop: str = "gnome"
     locale: str = ""
     keymap: str = ""
+    enable_location: bool = True
+    allow_unfree: bool = False
 
     # Auth
     gh_authenticated: bool = False

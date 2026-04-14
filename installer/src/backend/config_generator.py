@@ -12,7 +12,15 @@ def generate_config(state, dest="/tmp/bingux-os"):
     if state.locale:
         bingux_opts.append(f'        bingux.locale = "{state.locale}";')
 
+    if not state.enable_location:
+        bingux_opts.append("        services.automatic-timezoned.enable = false;")
+        bingux_opts.append("        services.geoclue2.enable = false;")
+
     bingux_block = "\n".join(bingux_opts)
+
+    unfree_block = ""
+    if state.allow_unfree:
+        unfree_block = "        nixpkgs.config.allowUnfree = true;"
 
     user_block = ""
     if state.username:
@@ -52,6 +60,7 @@ def generate_config(state, dest="/tmp/bingux-os"):
     networking.hostName = "{state.hostname}";
 
 {bingux_block}
+{unfree_block}
 {user_block}
 
     system.stateVersion = "25.05";

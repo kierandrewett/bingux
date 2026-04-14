@@ -85,6 +85,22 @@ class SystemConfigPage(BasePage):
 
         self.content.append(desktop_group)
 
+        # Privacy & packages
+        priv_group = Adw.PreferencesGroup()
+        priv_group.set_title("Privacy & Packages")
+
+        self.location_switch = Adw.SwitchRow(title="Location Services")
+        self.location_switch.set_subtitle("Automatic timezone and geolocation")
+        self.location_switch.set_active(True)
+        priv_group.add(self.location_switch)
+
+        self.unfree_switch = Adw.SwitchRow(title="Allow Unfree Packages")
+        self.unfree_switch.set_subtitle("Enable proprietary software (Chrome, Spotify, etc.)")
+        self.unfree_switch.set_active(False)
+        priv_group.add(self.unfree_switch)
+
+        self.content.append(priv_group)
+
         self.error_label = Gtk.Label()
         self.error_label.add_css_class("error")
         self.content.append(self.error_label)
@@ -112,4 +128,6 @@ class SystemConfigPage(BasePage):
             return False
         self.state.hostname = hostname
         self.state.selected_host = hostname
+        self.state.enable_location = self.location_switch.get_active()
+        self.state.allow_unfree = self.unfree_switch.get_active()
         return True
