@@ -7,3 +7,7 @@ description = "Namespace sandbox runtime"
 
 [dependencies]
 bingux-common = { path = "../../common/bingux-common" }
+bxc-sandbox = { path = "../bxc-sandbox" }
+serde = { workspace = true }
+nix = { workspace = true }
+anyhow = { workspace = true }
