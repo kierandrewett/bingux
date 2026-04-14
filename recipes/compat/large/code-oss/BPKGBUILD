@@ -1,0 +1,112 @@
+pkgscope="bingux"
+pkgname="code-oss"
+pkgver="1.95.3"
+pkgarch="x86_64-linux"
+pkgdesc="Visual Studio Code Open Source — code editor"
+license="MIT"
+
+depends=(
+    "glibc-2.39"
+    "gtk3-3.24.43"
+    "glib2-2.82.4"
+    "nss-3.106"
+    "nspr-4.36"
+    "libx11-1.8.10"
+    "libxcb-1.17.0"
+    "libxkbcommon-1.7.0"
+    "libxcomposite-0.4.6"
+    "libxdamage-1.1.6"
+    "libxfixes-6.0.1"
+    "libxrandr-1.5.4"
+    "libdrm-2.4.124"
+    "mesa-24.3.2"
+    "alsa-lib-1.2.13"
+    "dbus-1.14.10"
+    "expat-2.6.4"
+    "at-spi2-core-2.54.0"
+    "cups-2.4.11"
+    "libsecret-0.21.4"
+    "libnotify-0.8.3"
+    "wayland-1.23.0"
+)
+exports=(
+    "bin/code-oss"
+    "share/applications/code-oss.desktop"
+    "share/icons/hicolor/512x512/apps/code-oss.png"
+)
+
+source=("https://github.com/VSCodium/vscodium/releases/download/${pkgver}.25101/VSCodium-linux-x64-${pkgver}.25101.tar.gz")
+sha256sums=("SKIP")
+
+# ELECTRON APP NOTES:
+# VS Code bundles its own Chromium (Electron). Key considerations:
+# - The bundled Chromium binary needs patchelf (it's the actual process)
+# - Native Node modules (.node files) in extensions also need patchelf
+# - Electron has its own sandbox (--no-sandbox may be needed inside Bingux sandbox)
+# - GPU acceleration needs --enable-features=UseOzonePlatform --ozone-platform=wayland
+# - Extensions that download native binaries at runtime (e.g., C++ extension)
+#   will need those binaries patchelfed too — future bpkg hook
+
+package() {
+    cd "$SRCDIR"
+
+    mkdir -p "$PKGDIR/lib/code-oss"
+    mkdir -p "$PKGDIR/bin"
+    mkdir -p "$PKGDIR/share/applications"
+    mkdir -p "$PKGDIR/share/icons/hicolor/512x512/apps"
+    mkdir -p "$PKGDIR/share/icons/hicolor/256x256/apps"
+    mkdir -p "$PKGDIR/share/mime/packages"
+
+    # Install the entire Electron app bundle
+    cp -a . "$PKGDIR/lib/code-oss/"
+    rm -f "$PKGDIR/lib/code-oss/code-oss.desktop"
+
+    # Create wrapper script
+    cat > "$PKGDIR/bin/code-oss" << 'WRAPPER'
+#!/bin/sh
+ELECTRON_FLAGS=""
+if [ "$XDG_SESSION_TYPE" = "wayland" ]; then
+    ELECTRON_FLAGS="--enable-features=UseOzonePlatform,WaylandWindowDecorations --ozone-platform=wayland"
+fi
+# Disable Chromium sandbox inside Bingux sandbox to avoid nested sandboxing issues
+exec STORE_PATH/lib/code-oss/bin/codium $ELECTRON_FLAGS --no-sandbox "$@"
+WRAPPER
+    sed -i "s|STORE_PATH|$STORE/code-oss-${pkgver}|g" "$PKGDIR/bin/code-oss"
+    chmod 755 "$PKGDIR/bin/code-oss"
+
+    # Desktop file
+    cat > "$PKGDIR/share/applications/code-oss.desktop" << DESKTOP
+[Desktop Entry]
+Name=VS Code OSS
+GenericName=Text Editor
+Comment=Code editing, redefined
+Exec=code-oss %F
+Icon=code-oss
+Terminal=false
+Type=Application
+MimeType=text/plain;application/x-code-workspace;
+Categories=Development;TextEditor;IDE;
+StartupNotify=true
+StartupWMClass=codium
+DESKTOP
+
+    install -m644 resources/app/resources/linux/code.png \
+            "$PKGDIR/share/icons/hicolor/512x512/apps/code-oss.png" 2>/dev/null || true
+
+    # Patchelf the bundled Electron binary
+    patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+             --set-rpath "$STORE/glibc-2.39/lib:$STORE/gtk3-3.24.43/lib:$STORE/glib2-2.82.4/lib:$STORE/nss-3.106/lib:$STORE/nspr-4.36/lib:$STORE/mesa-24.3.2/lib:$STORE/libdrm-2.4.124/lib:$STORE/alsa-lib-1.2.13/lib:$STORE/dbus-1.14.10/lib:$STORE/libxkbcommon-1.7.0/lib:$STORE/at-spi2-core-2.54.0/lib:$STORE/expat-2.6.4/lib" \
+             "$PKGDIR/lib/code-oss/codium"
+
+    # Patchelf native node modules
+    find "$PKGDIR/lib/code-oss" -name "*.node" -type f | while read -r mod; do
+        patchelf --set-rpath "$STORE/glibc-2.39/lib" "$mod" 2>/dev/null || true
+    done
+
+    # Patchelf the bundled Node binary used for extensions
+    if [ -f "$PKGDIR/lib/code-oss/node" ]; then
+        patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+                 --set-rpath "$STORE/glibc-2.39/lib" \
+                 "$PKGDIR/lib/code-oss/node"
+    fi
+}
