@@ -1,6 +1,7 @@
 pub mod error;
 pub mod parser;
 pub mod recipe;
+mod tests;
 pub mod validate;
 
 pub use error::RecipeError;
