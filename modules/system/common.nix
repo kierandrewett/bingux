@@ -43,7 +43,7 @@
         programs.zsh.promptInit = lib.mkDefault "";
 
         # Bingux CLI helper + essentials
-        environment.systemPackages = with pkgs; [ os-helper bingux-cli fastfetch comma desktop-file-utils ];
+        environment.systemPackages = with pkgs; [ os-helper bingux-cli fastfetch desktop-file-utils ];
 
         # bgx profiles — volatile (/tmp, cleared on reboot) + permanent (persists)
         environment.extraInit = ''
