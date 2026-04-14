@@ -45,9 +45,18 @@
             };
         };
 
-        # Default shell — suppress new-user prompt
+        # Default shell
         programs.zsh.enable = lib.mkDefault true;
-        programs.zsh.promptInit = lib.mkDefault "";
+        programs.zsh.interactiveShellInit = lib.mkDefault ''
+            # Suppress zsh-newuser-install wizard
+            zsh-newuser-install() { :; }
+        '';
+        programs.zsh.promptInit = lib.mkDefault ''
+            PS1='%F{blue}%n%f@%F{magenta}%m%f:%F{cyan}%~%f > '
+        '';
+
+        # Create .zshrc for new users so the wizard never triggers
+        environment.etc."skel/.zshrc".text = "# Bingux\n";
 
         # Bingux CLI helper + essentials
         environment.systemPackages = with pkgs; [ os-helper bingux-cli fastfetch desktop-file-utils ];

@@ -154,6 +154,17 @@ in
                         tweak-kitty-terminal = false;
                     };
 
+                    # Use GNOME default wallpaper instead of NixOS snowflake
+                    "org/gnome/desktop/background" = {
+                        picture-uri = "file:///run/current-system/sw/share/backgrounds/gnome/adwaita-l.jpg";
+                        picture-uri-dark = "file:///run/current-system/sw/share/backgrounds/gnome/adwaita-d.jpg";
+                        picture-options = "zoom";
+                    };
+                    "org/gnome/desktop/screensaver" = {
+                        picture-uri = "file:///run/current-system/sw/share/backgrounds/gnome/adwaita-d.jpg";
+                        picture-options = "zoom";
+                    };
+
                     # adw-gtk3 for legacy GTK3 apps
                     "org/gnome/desktop/interface" = {
                         gtk-theme = "adw-gtk3-dark";
