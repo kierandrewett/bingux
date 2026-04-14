@@ -1,0 +1,36 @@
+pkgscope="bingux"
+pkgname="coreutils"
+pkgver="9.5"
+pkgarch="x86_64-linux"
+pkgdesc="GNU core utilities (ls, cp, mv, cat, etc.)"
+license="GPL-3.0"
+
+depends=("glibc")
+exports=(
+    "bin/ls"
+    "bin/cp"
+    "bin/mv"
+    "bin/rm"
+    "bin/cat"
+    "bin/mkdir"
+    "bin/chmod"
+    "bin/chown"
+    "bin/ln"
+    "bin/echo"
+    "bin/env"
+    "bin/uname"
+    "bin/id"
+    "bin/head"
+    "bin/tail"
+    "bin/sort"
+    "bin/wc"
+)
+
+source=("https://ftp.gnu.org/gnu/coreutils/coreutils-${pkgver}.tar.xz")
+sha256sums=("SKIP")
+
+package() {
+    mkdir -p "$PKGDIR/bin"
+    # In practice, configure && make && make install
+    echo "TODO: build coreutils"
+}

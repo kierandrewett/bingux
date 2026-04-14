@@ -1,0 +1,22 @@
+pkgscope="bingux"
+pkgname="linux"
+pkgver="6.12.8"
+pkgarch="x86_64-linux"
+pkgdesc="Linux kernel image and modules"
+license="GPL-2.0"
+
+depends=()
+exports=(
+    "boot/vmlinuz"
+    "lib/modules/${pkgver}/"
+)
+
+source=("https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${pkgver}.tar.xz")
+sha256sums=("SKIP")
+
+package() {
+    mkdir -p "$PKGDIR/boot" "$PKGDIR/lib/modules/${pkgver}"
+    # In practice, this would build the kernel with Bingux defconfig
+    # or extract a pre-built kernel image
+    echo "TODO: build or extract kernel image"
+}

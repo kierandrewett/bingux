@@ -1,0 +1,21 @@
+pkgscope="bingux"
+pkgname="bash"
+pkgver="5.2.37"
+pkgarch="x86_64-linux"
+pkgdesc="GNU Bourne-Again Shell"
+license="GPL-3.0"
+
+depends=("glibc")
+exports=(
+    "bin/bash"
+    "bin/sh"
+)
+
+source=("https://ftp.gnu.org/gnu/bash/bash-${pkgver}.tar.gz")
+sha256sums=("SKIP")
+
+package() {
+    mkdir -p "$PKGDIR/bin"
+    # In practice, configure && make && make install
+    echo "TODO: build bash"
+}
