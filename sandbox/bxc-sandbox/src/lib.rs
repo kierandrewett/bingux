@@ -1,1 +1,3 @@
-// TODO: Sprint 2+
+pub mod categories;
+
+pub use categories::PermissionCategory;
