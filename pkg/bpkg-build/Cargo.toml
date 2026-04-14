@@ -17,3 +17,12 @@ reqwest = { workspace = true }
 tokio = { workspace = true }
 tempfile = { workspace = true }
 tracing = { workspace = true }
+thiserror = { workspace = true }
+tar = { workspace = true }
+bzip2 = { workspace = true }
+flate2 = { workspace = true }
+walkdir = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
