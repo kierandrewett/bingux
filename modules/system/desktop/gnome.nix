@@ -155,6 +155,11 @@ in
                         tweak-kitty-terminal = false;
                     };
 
+                    # Enable location services in GNOME
+                    "org/gnome/system/location" = {
+                        enabled = true;
+                    };
+
                     # adw-gtk3 for legacy GTK3 apps
                     "org/gnome/desktop/interface" = {
                         gtk-theme = "adw-gtk3-dark";
