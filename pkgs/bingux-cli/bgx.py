@@ -207,30 +207,23 @@ def pkg_info(pkg):
     except subprocess.TimeoutExpired:
         pass
     try:
-        cmd = ["nix", "path-info", "-S", f"nixpkgs#{pkg}"]
+        # Use NAR size (package only), not -S closure size (package + all deps)
+        cmd = ["nix", "path-info", f"nixpkgs#{pkg}"]
         r = run(cmd, capture_output=True, text=True, timeout=30)
-        # Retry with unfree if it failed
         if r.returncode != 0:
-            r = run(["nix", "path-info", "--impure", "-S", f"nixpkgs#{pkg}"],
+            r = run(["nix", "path-info", "--impure", f"nixpkgs#{pkg}"],
                     capture_output=True, text=True, timeout=30, env=UNFREE_ENV)
-        for line in (r.stderr or "").split("\n"):
-            m = re.search(r"([\d.]+)\s+([KMGT]iB)\s+download,\s+([\d.]+)\s+([KMGT]iB)\s+unpacked", line)
-            if m:
-                units = {"KiB": 1024, "MiB": 1024**2, "GiB": 1024**3, "TiB": 1024**4}
-                info["size_bytes"] = int(float(m.group(3)) * units.get(m.group(4), 1))
-                info["size"] = format_size(info["size_bytes"])
-                break
-        if not info["size"] and r.stdout:
-            # stdout format: /nix/store/xxx-pkg-1.0\t1234567
-            for line in r.stdout.strip().split("\n"):
-                parts = line.strip().split()
-                if len(parts) >= 2:
-                    try:
-                        info["size_bytes"] = int(parts[-1])
-                        info["size"] = format_size(info["size_bytes"])
-                        break
-                    except ValueError:
-                        pass
+        # Get NAR size from nix-store
+        if r.returncode == 0 and r.stdout.strip():
+            store_path = r.stdout.strip().split("\n")[0].split("\t")[0].strip()
+            r2 = run(["nix-store", "--query", "--size", store_path],
+                     capture_output=True, text=True, timeout=10)
+            if r2.returncode == 0 and r2.stdout.strip():
+                try:
+                    info["size_bytes"] = int(r2.stdout.strip())
+                    info["size"] = format_size(info["size_bytes"])
+                except ValueError:
+                    pass
     except (subprocess.TimeoutExpired, Exception):
         pass
     return info
