@@ -155,9 +155,9 @@ in
                         tweak-kitty-terminal = false;
                     };
 
-                    # Enable location services in GNOME
+                    # Match GNOME location toggle to system geoclue setting
                     "org/gnome/system/location" = {
-                        enabled = true;
+                        enabled = config.services.geoclue2.enable;
                     };
 
                     # adw-gtk3 for legacy GTK3 apps
