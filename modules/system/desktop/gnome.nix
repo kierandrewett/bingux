@@ -68,7 +68,6 @@ in
                 gnome-music
                 gnome-photos
                 gnome-software
-                nixos-backgrounds
             ];
 
             environment.systemPackages = with pkgs; [
