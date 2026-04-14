@@ -207,23 +207,19 @@ def pkg_info(pkg):
     except subprocess.TimeoutExpired:
         pass
     try:
-        # Use NAR size (package only), not -S closure size (package + all deps)
-        cmd = ["nix", "path-info", f"nixpkgs#{pkg}"]
+        # Use nix build --dry-run to get download/unpacked size without fetching
+        cmd = ["nix", "build", "--dry-run", f"nixpkgs#{pkg}"]
         r = run(cmd, capture_output=True, text=True, timeout=30)
         if r.returncode != 0:
-            r = run(["nix", "path-info", "--impure", f"nixpkgs#{pkg}"],
+            r = run(["nix", "build", "--impure", "--dry-run", f"nixpkgs#{pkg}"],
                     capture_output=True, text=True, timeout=30, env=UNFREE_ENV)
-        # Get NAR size from nix-store
-        if r.returncode == 0 and r.stdout.strip():
-            store_path = r.stdout.strip().split("\n")[0].split("\t")[0].strip()
-            r2 = run(["nix-store", "--query", "--size", store_path],
-                     capture_output=True, text=True, timeout=10)
-            if r2.returncode == 0 and r2.stdout.strip():
-                try:
-                    info["size_bytes"] = int(r2.stdout.strip())
-                    info["size"] = format_size(info["size_bytes"])
-                except ValueError:
-                    pass
+        for line in (r.stderr or "").split("\n"):
+            m = re.search(r"([\d.]+)\s+([KMGT]iB)\s+download,\s+([\d.]+)\s+([KMGT]iB)\s+unpacked", line)
+            if m:
+                units = {"KiB": 1024, "MiB": 1024**2, "GiB": 1024**3, "TiB": 1024**4}
+                info["size_bytes"] = int(float(m.group(3)) * units.get(m.group(4), 1))
+                info["size"] = f"{m.group(1)} {m.group(2)}"  # show download size
+                break
     except (subprocess.TimeoutExpired, Exception):
         pass
     return info
