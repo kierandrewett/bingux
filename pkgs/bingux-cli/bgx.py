@@ -255,7 +255,8 @@ def _is_installed(pkg):
 
 
 def _auto_gc():
-    """Wipe old profile generations, update desktop db, and garbage collect."""
+    """Wipe old profile generations, update desktop db, and garbage collect.
+    Returns freed size string or empty string."""
     # Update desktop database so new apps appear in GNOME menu
     for profile in (VOLATILE_PROFILE, PERMANENT_PROFILE):
         apps_dir = f"{profile}/share/applications"
@@ -269,15 +270,19 @@ def _auto_gc():
         run(["nix", "profile", "wipe-history", "--profile", profile], capture_output=True)
     r = run(["nix", "store", "gc"], capture_output=True, text=True)
     freed = ""
+    freed_size = ""
     if r.returncode == 0 and r.stderr:
         for line in r.stderr.split("\n"):
-            if "freed" in line.lower():
+            m = re.search(r"([\d.]+)\s+(\S+)\s+freed", line)
+            if m:
                 freed = line.strip()
+                freed_size = f"{m.group(1)} {m.group(2)}"
                 break
     if freed:
         sp.stop(f"{DARK}{freed}{RESET}")
     else:
         sp.stop(f"{DARK}Done.{RESET}")
+    return freed_size
 
 
 def _ensure_profile_dir(profile):
@@ -564,7 +569,12 @@ def do_remove(pkgs, skip_confirm=False, profile_filter=None):
 
     removed_count = len(pkgs) - failed
     if removed_count > 0:
-        print(f"\n  {DARK}{removed_count} removed.{RESET}")
+        freed = _auto_gc()
+        if freed:
+            print(f"\n  {DARK}{removed_count} removed. Freed {freed}.{RESET}")
+        else:
+            print(f"\n  {DARK}{removed_count} removed.{RESET}")
+        return failed == 0
 
     _auto_gc()
     return failed == 0
