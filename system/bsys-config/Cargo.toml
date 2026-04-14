@@ -7,3 +7,11 @@ description = "System configuration management"
 
 [dependencies]
 bingux-common = { path = "../../common/bingux-common" }
+serde = { workspace = true }
+toml = { workspace = true }
+sha2 = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
