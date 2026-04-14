@@ -7,8 +7,15 @@ description = "Repository system for Bingux packages"
 
 [dependencies]
 bingux-common = { path = "../../common/bingux-common" }
+bpkg-store = { path = "../bpkg-store" }
 serde = { workspace = true }
 toml = { workspace = true }
-reqwest = { workspace = true }
 sha2 = { workspace = true }
+tar = { workspace = true }
+bzip2 = { workspace = true }
+walkdir = { workspace = true }
 tracing = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
