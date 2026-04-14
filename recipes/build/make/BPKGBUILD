@@ -1,0 +1,20 @@
+pkgscope="bingux"
+pkgname="make"
+pkgver="4.4.1"
+pkgarch="x86_64-linux"
+pkgdesc="GNU make build automation tool"
+license="GPL-3.0"
+
+depends=("glibc")
+exports=(
+    "bin/make"
+)
+
+source=("https://ftp.gnu.org/gnu/make/make-${pkgver}.tar.gz")
+sha256sums=("SKIP")
+
+package() {
+    mkdir -p "$PKGDIR/bin"
+    # In practice, configure && make && make install
+    echo "TODO: build make"
+}

@@ -1,0 +1,24 @@
+pkgscope="bingux"
+pkgname="rust"
+pkgver="1.83.0"
+pkgarch="x86_64-linux"
+pkgdesc="Rust programming language toolchain (rustc, cargo)"
+license="MIT AND Apache-2.0"
+
+depends=("glibc" "gcc" "zlib" "openssl" "curl")
+exports=(
+    "bin/rustc"
+    "bin/cargo"
+    "bin/rustup"
+    "lib/librustc_driver.so"
+    "lib/libstd.so"
+)
+
+source=("https://static.rust-lang.org/dist/rust-${pkgver}-x86_64-unknown-linux-gnu.tar.xz")
+sha256sums=("SKIP")
+
+package() {
+    mkdir -p "$PKGDIR"/{bin,lib}
+    # Binary distribution: extract pre-built Rust toolchain
+    echo "TODO: extract Rust toolchain"
+}
