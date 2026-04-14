@@ -23,6 +23,9 @@ in
     environment.etc."bingus.png".source = ../../files/branding/bingus.png;
     environment.etc."bingus-fastfetch.png".source = ../../files/branding/bingus-fastfetch.png;
 
+    # Use bingux fastfetch config system-wide
+    environment.etc."xdg/fastfetch/config.jsonc".source = ../../files/fastfetch/config.jsonc;
+
     system.nixos.distroName = lib.mkDefault "Bingux";
 
     environment.etc."os-release".text = lib.mkForce ''
