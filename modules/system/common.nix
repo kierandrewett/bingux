@@ -64,10 +64,12 @@
         # bgx profiles — volatile (/tmp, cleared on reboot) + permanent (persists)
         environment.extraInit = ''
             for profile in "/tmp/bgx-session-$USER-packages" "/nix/var/nix/profiles/per-user/$USER/bgx/packages"; do
-                # Ensure dirs exist so GNOME watches them from login
-                mkdir -p "$profile/bin" "$profile/share/applications" 2>/dev/null || true
-                export PATH="$profile/bin:$PATH"
-                export XDG_DATA_DIRS="$profile/share:$XDG_DATA_DIRS"
+                if [ -d "$profile/bin" ]; then
+                    export PATH="$profile/bin:$PATH"
+                fi
+                if [ -d "$profile/share" ]; then
+                    export XDG_DATA_DIRS="$profile/share:$XDG_DATA_DIRS"
+                fi
             done
         '';
 

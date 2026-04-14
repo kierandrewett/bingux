@@ -327,6 +327,11 @@ def _auto_gc():
 
 
 def _ensure_profile_dir(profile):
+    """Ensure parent dir exists. Remove stale real directories that conflict with nix profile symlinks."""
+    # If profile path is a real directory (not a symlink), nix profile can't use it
+    if os.path.isdir(profile) and not os.path.islink(profile):
+        import shutil
+        shutil.rmtree(profile)
     d = os.path.dirname(profile)
     if d and not os.path.isdir(d):
         os.makedirs(d, mode=0o755, exist_ok=True)
