@@ -7,3 +7,11 @@ description = "Permission daemon"
 
 [dependencies]
 bingux-common = { path = "../../common/bingux-common" }
+serde = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+bitflags = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
