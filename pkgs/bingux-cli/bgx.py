@@ -221,6 +221,26 @@ def pkg_info(pkg):
                 info["size"] = f"{m.group(1)} {m.group(2)}"
                 info["disk"] = f"{m.group(3)} {m.group(4)}"
                 break
+        # Fallback: query installed store path for disk size
+        if not info["disk"]:
+            for pcmd in [["nix", "path-info", f"nixpkgs#{pkg}"],
+                         ["nix", "path-info", "--impure", f"nixpkgs#{pkg}"]]:
+                pr = run(pcmd, capture_output=True, text=True, timeout=15,
+                         env=UNFREE_ENV if "--impure" in pcmd else None)
+                if pr.returncode == 0 and pr.stdout.strip():
+                    spath = pr.stdout.strip().split()[0]
+                    sr = run(["nix-store", "--query", "--size", spath],
+                             capture_output=True, text=True, timeout=10)
+                    if sr.returncode == 0 and sr.stdout.strip():
+                        try:
+                            nb = int(sr.stdout.strip())
+                            info["disk"] = format_size(nb)
+                            if not info["size_bytes"]:
+                                info["size_bytes"] = nb
+                                info["size"] = info["disk"]
+                        except ValueError:
+                            pass
+                    break
     except (subprocess.TimeoutExpired, Exception):
         pass
     return info
