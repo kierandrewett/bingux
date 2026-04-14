@@ -1,0 +1,32 @@
+pkgscope="bingux"
+pkgname="hello"
+pkgver="2.12.1"
+pkgarch="x86_64-linux"
+pkgdesc="GNU Hello — prints a greeting (autotools test package)"
+license="GPL-3.0-or-later"
+
+depends=("glibc-2.39")
+exports=(
+    "bin/hello"
+)
+
+source=("https://ftp.gnu.org/gnu/hello/hello-${pkgver}.tar.gz")
+sha256sums=("SKIP")
+
+package() {
+    cd "$SRCDIR/hello-${pkgver}"
+
+    mkdir -p "$PKGDIR/bin"
+    mkdir -p "$PKGDIR/share/man/man1"
+    mkdir -p "$PKGDIR/share/info"
+    mkdir -p "$PKGDIR/share/locale"
+
+    # Binary recipe: extract pre-built binary and patchelf
+    install -m755 src/hello "$PKGDIR/bin/hello"
+    install -m644 man/hello.1 "$PKGDIR/share/man/man1/hello.1"
+
+    # Rewrite ELF interpreter and rpath for Bingux store
+    patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+             --set-rpath "$STORE/glibc-2.39/lib" \
+             "$PKGDIR/bin/hello"
+}

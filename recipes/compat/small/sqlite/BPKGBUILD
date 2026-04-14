@@ -1,0 +1,40 @@
+pkgscope="bingux"
+pkgname="sqlite"
+pkgver="3.47.2"
+pkgarch="x86_64-linux"
+pkgdesc="Self-contained, serverless, zero-configuration SQL database engine"
+license="blessing"
+
+depends=(
+    "glibc-2.39"
+    "readline-8.2"
+    "zlib-1.3.1"
+)
+exports=(
+    "bin/sqlite3"
+    "lib/libsqlite3.so"
+    "lib/libsqlite3.so.0"
+)
+
+source=("https://www.sqlite.org/2024/sqlite-autoconf-3470200.tar.gz")
+sha256sums=("SKIP")
+
+package() {
+    cd "$SRCDIR/sqlite-autoconf-3470200"
+
+    mkdir -p "$PKGDIR/bin"
+    mkdir -p "$PKGDIR/lib/pkgconfig"
+    mkdir -p "$PKGDIR/include"
+
+    install -m755 .libs/sqlite3 "$PKGDIR/bin/sqlite3"
+    cp -a .libs/libsqlite3.so* "$PKGDIR/lib/"
+    install -m644 sqlite3.h "$PKGDIR/include/sqlite3.h"
+    install -m644 sqlite3ext.h "$PKGDIR/include/sqlite3ext.h"
+
+    patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+             --set-rpath "$STORE/glibc-2.39/lib:$STORE/readline-8.2/lib:$STORE/zlib-1.3.1/lib" \
+             "$PKGDIR/bin/sqlite3"
+
+    patchelf --set-rpath "$STORE/glibc-2.39/lib:$STORE/zlib-1.3.1/lib" \
+             "$PKGDIR/lib/libsqlite3.so.0"
+}

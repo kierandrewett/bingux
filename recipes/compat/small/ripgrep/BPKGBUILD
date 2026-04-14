@@ -1,0 +1,33 @@
+pkgscope="bingux"
+pkgname="ripgrep"
+pkgver="14.1.1"
+pkgarch="x86_64-linux"
+pkgdesc="Recursively search directories for a regex pattern"
+license="MIT"
+
+depends=("glibc-2.39")
+exports=(
+    "bin/rg"
+)
+
+source=("https://github.com/BurntSushi/ripgrep/releases/download/${pkgver}/ripgrep-${pkgver}-x86_64-unknown-linux-musl.tar.gz")
+sha256sums=("SKIP")
+
+package() {
+    cd "$SRCDIR/ripgrep-${pkgver}-x86_64-unknown-linux-musl"
+
+    mkdir -p "$PKGDIR/bin"
+    mkdir -p "$PKGDIR/share/man/man1"
+    mkdir -p "$PKGDIR/share/bash-completion/completions"
+    mkdir -p "$PKGDIR/share/zsh/site-functions"
+
+    install -m755 rg "$PKGDIR/bin/rg"
+    install -m644 doc/rg.1 "$PKGDIR/share/man/man1/rg.1"
+    install -m644 complete/rg.bash "$PKGDIR/share/bash-completion/completions/rg"
+    install -m644 complete/_rg "$PKGDIR/share/zsh/site-functions/_rg"
+
+    # Musl-linked static binary — PT_INTERP still needs rewriting
+    # but no dynamic library deps to fix
+    patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+             "$PKGDIR/bin/rg" || true  # may fail if fully static; that's fine
+}

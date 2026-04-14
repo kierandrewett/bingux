@@ -1,0 +1,29 @@
+pkgscope="bingux"
+pkgname="tree"
+pkgver="2.2.1"
+pkgarch="x86_64-linux"
+pkgdesc="Recursive directory listing command"
+license="GPL-2.0-or-later"
+
+depends=("glibc-2.39")
+exports=(
+    "bin/tree"
+)
+
+source=("https://github.com/Old-Man-Programmer/tree/archive/refs/tags/${pkgver}.tar.gz")
+sha256sums=("SKIP")
+
+package() {
+    cd "$SRCDIR/tree-${pkgver}"
+
+    mkdir -p "$PKGDIR/bin"
+    mkdir -p "$PKGDIR/share/man/man1"
+
+    # Tiny C program — single binary, libc only
+    install -m755 tree "$PKGDIR/bin/tree"
+    install -m644 doc/tree.1 "$PKGDIR/share/man/man1/tree.1"
+
+    patchelf --set-interpreter "$STORE/glibc-2.39/lib/ld-linux-x86-64.so.2" \
+             --set-rpath "$STORE/glibc-2.39/lib" \
+             "$PKGDIR/bin/tree"
+}
