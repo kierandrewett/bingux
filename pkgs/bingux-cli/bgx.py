@@ -372,35 +372,22 @@ def show_transaction(installs, removes, save=False, remove_filter=None):
         _print_table(f"Installing {DARK}({mode}){RESET}", SUCCESS, installs, name_color=SUCCESS, show_license=True)
 
     if removes:
-        neg_removes = []
-        for info in removes:
-            r = dict(info)
-            if r.get("size"):
-                r["size"] = f"-{r['size']}"
-            neg_removes.append(r)
         if remove_filter == "session":
             rm_label = f"Removing {DARK}(from this session){RESET}"
         elif remove_filter == "permanent":
             rm_label = f"Removing {DARK}(from this installation){RESET}"
         else:
             rm_label = "Removing"
-        _print_table(rm_label, WARN, neg_removes, name_color=FAIL, show_license=True)
+        _print_table(rm_label, WARN, removes, name_color=FAIL, show_license=True, show_size=False)
 
     ni = len(installs)
     nr = len(removes)
     summary = f"  {GRAY}Summary: {SUCCESS}+{ni}{RESET}{DARK}/{RESET}{FAIL}-{nr}{RESET}{DARK}/{RESET}{WARN}~0{RESET}"
 
-    size_parts = []
     if installs:
         total_add = sum(i.get("size_bytes", 0) for i in installs)
         if total_add:
-            size_parts.append(f"{SUCCESS}+{format_size(total_add)}{RESET}")
-    if removes:
-        total_rm = sum(i.get("size_bytes", 0) for i in removes)
-        if total_rm:
-            size_parts.append(f"{FAIL}-{format_size(total_rm)}{RESET}")
-    if size_parts:
-        summary += f"  {DARK}({' '.join(size_parts)}{DARK}){RESET}"
+            summary += f"  {DARK}({SUCCESS}{format_size(total_add)}{DARK}){RESET}"
 
     print(summary)
     print()
@@ -580,12 +567,7 @@ def do_remove(pkgs, skip_confirm=False, profile_filter=None):
 
     removed_count = len(pkgs) - failed
     if removed_count > 0:
-        msg = f"\n  {DARK}{removed_count} removed."
-        if total_freed:
-            msg += f" Freed {format_size(total_freed)}.{RESET}"
-        else:
-            msg += f"{RESET}"
-        print(msg)
+        print(f"\n  {DARK}{removed_count} removed.{RESET}")
 
     _auto_gc()
     return failed == 0
