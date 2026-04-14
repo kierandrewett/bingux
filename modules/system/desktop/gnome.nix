@@ -68,6 +68,7 @@ in
                 gnome-music
                 gnome-photos
                 gnome-software
+                nixos-backgrounds
             ];
 
             environment.systemPackages = with pkgs; [
@@ -160,15 +161,6 @@ in
                         color-scheme = "prefer-dark";
                     };
 
-                    # Dark wallpaper instead of NixOS default
-                    "org/gnome/desktop/background" = {
-                        picture-options = "none";
-                        primary-color = "#1a1a2e";
-                    };
-                    "org/gnome/desktop/screensaver" = {
-                        picture-options = "none";
-                        primary-color = "#1a1a2e";
-                    };
 
                     "org/gnome/shell/extensions/nightthemeswitcher/time" = {
                         manual-schedule = false;
