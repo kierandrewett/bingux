@@ -203,11 +203,12 @@ def pkg_info(pkg):
     except subprocess.TimeoutExpired:
         pass
     try:
-        env = UNFREE_ENV if info["unfree"] else None
         cmd = ["nix", "path-info", "-S", f"nixpkgs#{pkg}"]
-        if info["unfree"]:
-            cmd.insert(1, "--impure")
-        r = run(cmd, capture_output=True, text=True, timeout=30, env=env)
+        r = run(cmd, capture_output=True, text=True, timeout=30)
+        # Retry with unfree if it failed
+        if r.returncode != 0:
+            r = run(["nix", "path-info", "--impure", "-S", f"nixpkgs#{pkg}"],
+                    capture_output=True, text=True, timeout=30, env=UNFREE_ENV)
         for line in (r.stderr or "").split("\n"):
             m = re.search(r"([\d.]+)\s+([KMGT]iB)\s+download,\s+([\d.]+)\s+([KMGT]iB)\s+unpacked", line)
             if m:
