@@ -15,8 +15,8 @@ class UserSetupPage(BasePage):
         group.set_title("User Account")
         group.set_description("Set up your user account.")
 
-        self.fullname_row = Adw.EntryRow(title="Full Name")
-        self.fullname_row.set_tooltip_text("Optional — displayed on the login screen")
+        self.fullname_row = Adw.EntryRow(title="Full Name (optional)")
+        self.fullname_row.set_tooltip_text("Displayed on the login screen")
         group.add(self.fullname_row)
 
         self.user_row = Adw.EntryRow(title="Username")
