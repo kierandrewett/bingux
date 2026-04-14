@@ -217,8 +217,9 @@ def pkg_info(pkg):
             m = re.search(r"([\d.]+)\s+([KMGT]iB)\s+download,\s+([\d.]+)\s+([KMGT]iB)\s+unpacked", line)
             if m:
                 units = {"KiB": 1024, "MiB": 1024**2, "GiB": 1024**3, "TiB": 1024**4}
-                info["size_bytes"] = int(float(m.group(3)) * units.get(m.group(4), 1))
-                info["size"] = f"{m.group(1)} {m.group(2)}"  # show download size
+                dl_size = f"{m.group(1)} {m.group(2)}"
+                info["size_bytes"] = int(float(m.group(1)) * units.get(m.group(2), 1))
+                info["size"] = dl_size
                 break
     except (subprocess.TimeoutExpired, Exception):
         pass
@@ -331,7 +332,7 @@ def _print_table(label, label_color, infos, name_color=WHITE, show_size=True, sh
     line_w = _term_width() - 6
     header = f"    {DARK}{'Package'.ljust(cn)} {'Version'.ljust(cv)}"
     if cs:
-        header += f" {'Disk'.ljust(cs)}"
+        header += f" {'Download'.ljust(cs)}"
     if cl:
         header += f" {'License'.ljust(cl)}"
     header += f" Description{RESET}"
