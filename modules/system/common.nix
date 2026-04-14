@@ -59,7 +59,7 @@
         environment.etc."skel/.zshrc".text = "# Bingux\n";
 
         # Bingux CLI helper + essentials
-        environment.systemPackages = with pkgs; [ os-helper bingux-cli fastfetch desktop-file-utils ];
+        environment.systemPackages = with pkgs; [ os-helper bingux-cli fastfetch-wrapped desktop-file-utils ];
 
         # bgx profiles — volatile (/tmp, cleared on reboot) + permanent (persists)
         environment.extraInit = ''

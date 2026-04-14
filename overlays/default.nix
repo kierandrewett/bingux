@@ -23,4 +23,5 @@ final: prev: {
 os-helper = final.callPackage ../pkgs/os-helper { };
     bingux-installer = final.callPackage ../pkgs/bingux-installer { };
     bingux-cli = final.callPackage ../pkgs/bingux-cli { };
+    fastfetch-wrapped = final.callPackage ../pkgs/fastfetch-wrapper { };
 }
