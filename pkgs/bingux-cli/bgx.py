@@ -68,11 +68,11 @@ class Spinner:
 # ── Nix helpers ──
 
 def _nix_profile_install_cmd():
-    """Detect whether nix uses 'add' or 'install' for profile install."""
-    r = subprocess.run(["nix", "profile", _profile_install(), "--help"], capture_output=True, text=True)
-    if r.returncode == 0:
-        return "install"
-    return "add"
+    """Detect whether nix uses 'add' (newer) or 'install' (older)."""
+    r = subprocess.run(["nix", "profile", "add", "--help"], capture_output=True, text=True)
+    if r.returncode == 0 and "not a recognised command" not in (r.stderr or ""):
+        return "add"
+    return "install"
 
 
 _PROFILE_INSTALL = None
