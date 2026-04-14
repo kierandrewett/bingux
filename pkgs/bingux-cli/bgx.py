@@ -180,7 +180,7 @@ def _eval_pkg(expr, timeout=15):
 
 
 def pkg_info(pkg):
-    info = {"name": pkg, "version": "", "description": "", "size": "", "size_bytes": 0, "unfree": False, "license": ""}
+    info = {"name": pkg, "version": "", "description": "", "size": "", "size_bytes": 0, "disk": "", "unfree": False, "license": ""}
     try:
         ok, val, is_unfree = _eval_pkg(f"nixpkgs#{pkg}.version")
         if ok:
@@ -217,9 +217,9 @@ def pkg_info(pkg):
             m = re.search(r"([\d.]+)\s+([KMGT]iB)\s+download,\s+([\d.]+)\s+([KMGT]iB)\s+unpacked", line)
             if m:
                 units = {"KiB": 1024, "MiB": 1024**2, "GiB": 1024**3, "TiB": 1024**4}
-                dl_size = f"{m.group(1)} {m.group(2)}"
                 info["size_bytes"] = int(float(m.group(1)) * units.get(m.group(2), 1))
-                info["size"] = dl_size
+                info["size"] = f"{m.group(1)} {m.group(2)}"
+                info["disk"] = f"{m.group(3)} {m.group(4)}"
                 break
     except (subprocess.TimeoutExpired, Exception):
         pass
@@ -293,20 +293,22 @@ def _calc_cols(infos, show_size=True, show_license=False):
     cn = max((len(i["name"]) for i in infos), default=0)
     cv = max((len(i.get("version") or "-") for i in infos), default=0)
     cs = max((len(i.get("size") or "-") for i in infos), default=0) if show_size else 0
+    cdisk = max((len(i.get("disk") or "-") for i in infos), default=0) if show_size else 0
     cl = max((len(i.get("license") or "-") for i in infos), default=0) if show_license else 0
 
     cn = max(cn, MIN_NAME) + 2
     cv = max(cv, MIN_VER) + 2
     cs = (max(cs, MIN_SIZE) + 2) if show_size else 0
+    cdisk = (max(cdisk, MIN_SIZE) + 2) if show_size else 0
     cl = (max(cl, MIN_LIC) + 2) if show_license else 0
 
     cn = min(cn, int(tw * 0.4))
-    cd = max(tw - 4 - cn - cv - cs - cl - 4, MIN_DESC)
-    return cn, cv, cs, cl, cd
+    cd = max(tw - 4 - cn - cv - cs - cdisk - cl - 5, MIN_DESC)
+    return cn, cv, cs, cdisk, cl, cd
 
 
-def _fmt_row(name, version, size, description, cols, name_color=WHITE, license=""):
-    cn, cv, cs, cl, cd = cols
+def _fmt_row(name, version, size, description, cols, name_color=WHITE, license="", disk=""):
+    cn, cv, cs, cdisk, cl, cd = cols
     n = name[:cn-1].ljust(cn) if len(name) >= cn else name.ljust(cn)
     v = (version or "-")[:cv-1].ljust(cv) if len(version or "-") >= cv else (version or "-").ljust(cv)
     desc = description
@@ -314,10 +316,13 @@ def _fmt_row(name, version, size, description, cols, name_color=WHITE, license="
         desc = desc[:cd-1] + "\u2026"
     parts = f"    {name_color}{n}{RESET} {WHITE}{v}{RESET}"
     if cs:
-        s = (size or "-")[:cs-1].ljust(cs) if len(size or "-") >= cs else (size or "-").ljust(cs)
+        s = (size or "-").ljust(cs)
         parts += f" {GRAY}{s}{RESET}"
+    if cdisk:
+        d = (disk or "-").ljust(cdisk)
+        parts += f" {GRAY}{d}{RESET}"
     if cl:
-        lic = (license or "-")[:cl-1].ljust(cl) if len(license or "-") >= cl else (license or "-").ljust(cl)
+        lic = (license or "-").ljust(cl)
         lic_color = WARN if license == "unfree" else DARK
         parts += f" {lic_color}{lic}{RESET}"
     parts += f" {DARK}{desc}{RESET}"
@@ -327,19 +332,21 @@ def _fmt_row(name, version, size, description, cols, name_color=WHITE, license="
 def _print_table(label, label_color, infos, name_color=WHITE, show_size=True, show_license=False):
     has_license = show_license and any(i.get("license") for i in infos)
     cols = _calc_cols(infos, show_size=show_size, show_license=has_license)
-    cn, cv, cs, cl, cd = cols
+    cn, cv, cs, cdisk, cl, cd = cols
     print(f"  {label_color}\u276f{RESET} {WHITE}{label}{RESET}")
     line_w = _term_width() - 6
     header = f"    {DARK}{'Package'.ljust(cn)} {'Version'.ljust(cv)}"
     if cs:
         header += f" {'Download'.ljust(cs)}"
+    if cdisk:
+        header += f" {'Disk'.ljust(cdisk)}"
     if cl:
         header += f" {'License'.ljust(cl)}"
     header += f" Description{RESET}"
     print(header)
     print(f"    {DARK}{'\u2500' * line_w}{RESET}")
     for info in infos:
-        print(_fmt_row(info["name"], info.get("version", ""), info.get("size", ""), info.get("description", ""), cols, name_color, info.get("license", "")))
+        print(_fmt_row(info["name"], info.get("version", ""), info.get("size", ""), info.get("description", ""), cols, name_color, info.get("license", ""), info.get("disk", "")))
     print()
 
 
