@@ -7,3 +7,7 @@ description = "GTK4 permission dialog"
 
 [dependencies]
 bingux-common = { path = "../../common/bingux-common" }
+serde = { workspace = true }
+serde_json = "1"
+thiserror = { workspace = true }
+tracing = { workspace = true }
