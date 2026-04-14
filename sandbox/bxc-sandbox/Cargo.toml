@@ -7,3 +7,5 @@ description = "Seccomp filter generator and sandbox primitives"
 
 [dependencies]
 bingux-common = { path = "../../common/bingux-common" }
+serde = { workspace = true }
+nix = { workspace = true }
