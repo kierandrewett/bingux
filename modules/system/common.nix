@@ -64,12 +64,10 @@
         # bgx profiles — volatile (/tmp, cleared on reboot) + permanent (persists)
         environment.extraInit = ''
             for profile in "/tmp/bgx-session-$USER-packages" "/nix/var/nix/profiles/per-user/$USER/bgx/packages"; do
-                if [ -d "$profile/bin" ]; then
-                    export PATH="$profile/bin:$PATH"
-                fi
-                if [ -d "$profile/share" ]; then
-                    export XDG_DATA_DIRS="$profile/share:$XDG_DATA_DIRS"
-                fi
+                # Always add to PATH and XDG_DATA_DIRS — even if dirs don't exist yet
+                # so GNOME picks up .desktop files when they appear after bgx install
+                export PATH="$profile/bin:$PATH"
+                export XDG_DATA_DIRS="$profile/share:$XDG_DATA_DIRS"
             done
         '';
 
