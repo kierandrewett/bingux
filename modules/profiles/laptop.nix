@@ -1,7 +1,7 @@
 { lib, ... }:
 {
     services.tlp.enable = lib.mkDefault true;
-    services.power-profiles-daemon.enable = lib.mkDefault false;
+    services.power-profiles-daemon.enable = lib.mkForce false;
     services.thermald.enable = lib.mkDefault true;
 
     services.logind.lidSwitch = lib.mkDefault "suspend";
