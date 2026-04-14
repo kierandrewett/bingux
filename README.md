@@ -52,6 +52,75 @@ Then build and switch:
 sudo nixos-rebuild switch --flake .#my-host
 ```
 
+## Package Management (`bgx`)
+
+Every Bingux system includes `bgx`, a package manager that wraps nix with a friendly interface.
+
+### Quick syntax
+
+```
+bgx +firefox                    Install for this session (gone after reboot)
+bgx ++firefox                   Install permanently (survives reboot)
+bgx -firefox                    Remove from this session
+bgx --firefox                   Remove permanently
+bgx +firefox ++htop -chromium   Batch operations
+bgx ?browser                    Search nixpkgs
+bgx                             Show help
+```
+
+### Subcommands
+
+```
+bgx install firefox             Install for this session
+bgx install -p firefox          Install permanently
+bgx remove firefox              Remove from this session
+bgx remove -p firefox           Remove permanently
+bgx search firefox              Search nixpkgs
+bgx info firefox                Show package details
+bgx list                        List installed packages
+```
+
+### How it works
+
+bgx manages two nix profiles:
+
+- **Session** (`+` / `-`) — stored in `/tmp`, cleared on reboot. Good for trying things out.
+- **Permanent** (`++` / `--` / `-p`) — stored in your nix profile directory, survives reboots. For apps you want to keep.
+
+Installed apps automatically appear in your desktop's app menu (GNOME, KDE, etc.) and are available in PATH across all terminals.
+
+### What stays and what goes after `os rebuild`?
+
+`os rebuild` rebuilds the system from your NixOS config. It does **not** touch your home directory.
+
+**Survives rebuild and reboot:**
+- Everything in your home directory (`~/`)
+- VS Code extensions, browser bookmarks/extensions, app settings
+- bgx permanent packages (`++` / `-p`)
+- Any personal files and configs
+
+**Survives reboot but cleared by rebuild:**
+- Nothing — bgx permanent packages survive both
+
+**Cleared on reboot:**
+- bgx session packages (`+`)
+
+**Rebuilt from config:**
+- System packages defined in your NixOS config
+
+Your personal data (home directory, browser profiles, editor extensions, app settings) is always safe. NixOS only manages the system — it never touches `~/`.
+
+### What bgx is for
+
+bgx is for standalone apps and CLI tools — browsers, editors, terminals, dev tools, media players, utilities. These install binaries and `.desktop` files that work immediately.
+
+For things tightly integrated with a host app, use their native mechanisms:
+- **VS Code extensions** — `Ctrl+Shift+X` or `code --install-extension`
+- **Browser extensions** — install from the browser's extension store
+- **GNOME extensions** — managed via system config or extension manager
+- **Python/pip packages** — `bgx +python3` then use pip normally
+- **Cargo crates** — `bgx +cargo` then use cargo normally
+
 ## `mkBinguxHost` Options
 
 | Option | Type | Default | Description |
@@ -60,6 +129,7 @@ sudo nixos-rebuild switch --flake .#my-host
 | `profile` | string | required | `"workstation"`, `"laptop"`, or `"generic"` |
 | `system` | string | `"x86_64-linux"` | Target architecture |
 | `username` | string | `"user"` | Primary user |
+| `hardwareConfigPath` | string | `"machines/<hostname>"` | Where the installer places hardware-configuration.nix |
 | `extraModules` | list | `[]` | Additional NixOS modules |
 | `extraOverlays` | list | `[]` | Additional nixpkgs overlays |
 | `specialArgs` | attrs | `{}` | Extra args passed to all modules |
@@ -103,20 +173,6 @@ Defaults: Adwaita Sans, Google Sans Code, Noto Serif. The sans-serif font is als
 bingux.boot.luksUuid = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx";  # Enable LUKS
 ```
 
-### Hardware Configuration Path
-
-The `hardwareConfigPath` parameter in `mkBinguxHost` tells the installer where to place `hardware-configuration.nix`:
-
-```nix
-bingux.lib.mkBinguxHost {
-    hostname = "my-host";
-    hardwareConfigPath = "machines/my-host";   # relative to repo root (default)
-    ...
-};
-```
-
-If not set, defaults to `machines/<hostname>`. The installer also searches common layouts as a fallback.
-
 ### Overriding Defaults
 
 All Bingux defaults use `lib.mkDefault`, so you can override any option by simply setting it:
@@ -124,35 +180,8 @@ All Bingux defaults use `lib.mkDefault`, so you can override any option by simpl
 ```nix
 boot.kernelPackages = pkgs.linuxPackages_6_12;
 services.earlyoom.enable = false;
+bingux.desktop = null;    # Strip the desktop entirely
 ```
-
-## What's Included
-
-### System
-- Pipewire audio (ALSA, PulseAudio, JACK)
-- Bluetooth
-- Printing (CUPS, Gutenprint, HPLIP)
-- mDNS/Bonjour (Avahi)
-- GeoClue + automatic timezone
-- EarlyOOM
-- GPG agent with SSH support
-- Nix flakes enabled, weekly garbage collection
-
-### Boot
-- systemd-boot
-- Plymouth (Bingux theme)
-- Latest kernel
-- Btrfs support
-- Quiet boot
-
-### Fonts
-- Adwaita Sans, Google Sans Code, Inter, JetBrains Mono, Noto, Roboto, Fira, Ubuntu Sans, and more
-
-### Profiles
-
-- **workstation** — Disables sleep/suspend/hibernate
-- **laptop** — TLP, thermald, powertop, lid switch handling
-- **generic** — No hardware-specific tweaks
 
 ## The `os` CLI
 
@@ -163,6 +192,27 @@ os rebuild    Rebuild and switch to new config
 os test       Rebuild and test (no bootloader update)
 os update     Update flake inputs and rebuild
 ```
+
+## What's Included
+
+### System
+- Pipewire audio (ALSA, PulseAudio, JACK)
+- Bluetooth, printing (CUPS), mDNS/Bonjour (Avahi)
+- GeoClue + automatic timezone
+- EarlyOOM, GPG agent with SSH support
+- Nix flakes enabled, weekly garbage collection
+- zsh as default shell, fastfetch
+
+### Boot
+- systemd-boot, Plymouth (Bingux theme), latest kernel, btrfs, quiet boot
+
+### Fonts
+- Adwaita Sans, Google Sans Code, Inter, JetBrains Mono, Noto, Roboto, Fira, Ubuntu Sans, and more
+
+### Profiles
+- **workstation** — No hardware-specific tweaks (override in your config)
+- **laptop** — TLP, thermald, powertop, lid switch handling
+- **generic** — Minimal
 
 ## Building the ISO
 
@@ -184,15 +234,18 @@ modules/
       gnome.nix              # GNOME + Bingux extensions
       kde.nix                # KDE Plasma 6
       xfce.nix               # XFCE
-  profiles/
-    workstation.nix
-    laptop.nix
-    generic.nix
+    locale.nix               # bingux.locale option
+    fonts.nix                # bingux.fonts options
+  profiles/                  # workstation, laptop, generic
   installer/
     live-iso.nix             # ISO configuration
     live-shell.nix           # Live environment shell
-installer-app/               # GTK4 Python graphical installer
-pkgs/                        # Custom packages (plymouth, os-helper, etc.)
+installer/                   # GTK4 Python graphical installer
+pkgs/
+  bingux-cli/                # bgx package manager
+  bingux-installer/          # GTK4 installer package
+  bingux-plymouth/           # Plymouth boot theme
+  os-helper/                 # os CLI
 files/                       # Branding, fonts, fastfetch config
 overlays/                    # Nixpkgs overlays
 ```
