@@ -7,6 +7,10 @@ description = "Sandbox container CLI"
 
 [dependencies]
 bingux-common = { path = "../../common/bingux-common" }
+bingux-gated = { path = "../../gate/bingux-gated" }
+bxc-sandbox = { path = "../../sandbox/bxc-sandbox" }
+bxc-shim = { path = "../../sandbox/bxc-shim" }
+nix = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
