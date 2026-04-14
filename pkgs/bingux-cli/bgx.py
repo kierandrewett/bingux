@@ -59,7 +59,7 @@ class Spinner:
         i = 0
         while not self._stop:
             frame = self.FRAMES[i % len(self.FRAMES)]
-            sys.stdout.write(f"\r  {DARK}{frame}{RESET} {GRAY}{self.msg}{RESET}")
+            sys.stdout.write(f"\r\033[K  {DARK}{frame}{RESET} {GRAY}{self.msg}{RESET}")
             sys.stdout.flush()
             i += 1
             time.sleep(0.08)
