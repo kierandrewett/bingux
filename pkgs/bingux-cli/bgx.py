@@ -213,18 +213,26 @@ def pkg_info(pkg):
 
 # ── Profile checks ──
 
-def _is_in_profile(pkg, profile):
+def _list_profile_packages(profile):
+    """Get list of package names in a profile."""
     r = run(["nix", "profile", "list", "--profile", profile],
             capture_output=True, text=True)
     if r.returncode != 0 or not r.stdout.strip():
-        return False
+        return []
+    pkgs = []
     for line in r.stdout.split("\n"):
         clean = line.strip()
-        if clean.startswith("Name:") and pkg in clean:
-            return True
-        if f"#{pkg}" in clean or f".{pkg}" in clean:
-            return True
-    return False
+        if clean.startswith("Name:"):
+            name = clean.split(":", 1)[1].strip()
+            # Strip ANSI codes
+            name = re.sub(r"\033\[[0-9;]*m", "", name).strip()
+            if name:
+                pkgs.append(name)
+    return pkgs
+
+
+def _is_in_profile(pkg, profile):
+    return pkg in _list_profile_packages(profile)
 
 
 def _is_installed(pkg):
@@ -684,9 +692,17 @@ def run_prefix_mode(args):
         elif arg.startswith("+"):
             installs.append(arg[1:])
         elif arg.startswith("--") and not arg.startswith("---") and len(arg) > 2:
-            removes_permanent.append(arg[2:])
+            pkg = arg[2:]
+            if pkg == "*":
+                removes_permanent.extend(_list_profile_packages(PERMANENT_PROFILE))
+            else:
+                removes_permanent.append(pkg)
         elif arg.startswith("-") and len(arg) > 1:
-            removes_volatile.append(arg[1:])
+            pkg = arg[1:]
+            if pkg == "*":
+                removes_volatile.extend(_list_profile_packages(VOLATILE_PROFILE))
+            else:
+                removes_volatile.append(pkg)
         elif arg.startswith("?"):
             do_search(arg[1:])
             return
@@ -761,10 +777,14 @@ def run_subcommand_mode(args):
             elif arg in ("-p", "--permanent", "--save"):
                 pfilter = "permanent"
             else:
-                pkgs.append(arg)
+                if arg == "*":
+                    profile = PERMANENT_PROFILE if pfilter == "permanent" else VOLATILE_PROFILE
+                    pkgs.extend(_list_profile_packages(profile))
+                else:
+                    pkgs.append(arg)
         if not pkgs:
-            print(f"  {DARK}Package name required.{RESET}", file=sys.stderr)
-            sys.exit(1)
+            print(f"  {DARK}No packages to remove.{RESET}")
+            return
         if not do_remove(pkgs, skip_confirm=yes, profile_filter=pfilter):
             sys.exit(1)
 
