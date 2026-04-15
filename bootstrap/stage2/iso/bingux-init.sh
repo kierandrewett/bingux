@@ -4,6 +4,9 @@
 # FHS compat via hidden symlinks + kernel module
 set -e
 
+# PATH must be set FIRST — before any commands
+export PATH="/system/profiles/current/bin:/bin:/sbin:/usr/bin"
+
 # ── Phase 1: Mount kernel pseudo-filesystems ──────────────────
 mount -t proc proc /system/kernel/proc
 mount -t sysfs sysfs /system/kernel/sys
@@ -23,7 +26,6 @@ mount -t devpts devpts /io/pts 2>/dev/null || true
 mount -t tmpfs tmpfs /io/shm 2>/dev/null || true
 
 # ── Phase 2: Environment ──────────────────────────────────────
-export PATH="/system/profiles/current/bin"
 export LD_LIBRARY_PATH="/lib64"
 export HOME="/users/root"
 export TERM=linux
