@@ -1,0 +1,22 @@
+pkgscope="bingux"
+pkgname="nl-src"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="nl — number lines"
+license="MIT"
+depends=()
+exports=("bin/bingux-nl")
+source=()
+sha256sums=()
+build() {
+    cat > "$SRCDIR/nl.c" << 'C'
+#include <stdio.h>
+int main() {
+    char line[4096]; int n = 1;
+    while (fgets(line, sizeof(line), stdin)) printf("%6d\t%s", n++, line);
+    return 0;
+}
+C
+    bingux-gcc -o "$BUILDDIR/bingux-nl" "$SRCDIR/nl.c"
+}
+package() { mkdir -p "$PKGDIR/bin"; cp "$BUILDDIR/bingux-nl" "$PKGDIR/bin/bingux-nl"; chmod +x "$PKGDIR/bin/bingux-nl"; }
