@@ -1,0 +1,72 @@
+pkgscope="bingux"
+pkgname="coreutils-src"
+pkgver="9.5"
+pkgarch="x86_64-linux"
+pkgdesc="GNU Coreutils — compiled from source"
+license="GPL-3.0"
+
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+
+exports=(
+    "bin/ls"
+    "bin/cat"
+    "bin/cp"
+    "bin/mv"
+    "bin/rm"
+    "bin/mkdir"
+    "bin/chmod"
+    "bin/echo"
+    "bin/head"
+    "bin/tail"
+    "bin/wc"
+    "bin/sort"
+    "bin/uniq"
+    "bin/tr"
+    "bin/cut"
+    "bin/basename"
+    "bin/dirname"
+    "bin/uname"
+    "bin/date"
+    "bin/id"
+    "bin/whoami"
+    "bin/env"
+    "bin/tee"
+    "bin/touch"
+    "bin/ln"
+    "bin/readlink"
+    "bin/realpath"
+    "bin/sleep"
+    "bin/true"
+    "bin/false"
+    "bin/yes"
+    "bin/seq"
+    "bin/printf"
+    "bin/test"
+    "bin/expr"
+)
+
+source=("https://ftpmirror.gnu.org/coreutils/coreutils-9.5.tar.gz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/coreutils-9.5"
+    CC=bingux-gcc FORCE_UNSAFE_CONFIGURE=1 \
+        ./configure --prefix=/ \
+        --disable-nls \
+        --without-openssl \
+        --without-gmp \
+        CFLAGS="-static" \
+        LDFLAGS="-static -Wl,--allow-multiple-definition" \
+        2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+
+package() {
+    cd "$SRCDIR/coreutils-9.5"
+    mkdir -p "$PKGDIR/bin"
+    make install DESTDIR="$PKGDIR" 2>/dev/null
+    # Move from usr/bin to bin
+    cp "$PKGDIR/usr/bin/"* "$PKGDIR/bin/" 2>/dev/null || true
+    rm -rf "$PKGDIR/usr" 2>/dev/null
+}
