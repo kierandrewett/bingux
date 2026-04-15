@@ -221,6 +221,20 @@ fn parse_function_body(lines: &[&str], start_line: usize) -> Result<(String, usi
     while i < lines.len() {
         let line = lines[i];
 
+        // Check for single-line compact function: `name() { cmd1; cmd2; }`
+        if i == start_line {
+            if let Some(open_brace) = line.find('{') {
+                let after_brace = &line[open_brace + 1..];
+                if let Some(close_brace) = after_brace.rfind('}') {
+                    // Everything between { and } on the same line
+                    let body = after_brace[..close_brace].trim().to_string();
+                    if !body.is_empty() {
+                        return Ok((body, i));
+                    }
+                }
+            }
+        }
+
         for ch in line.chars() {
             match ch {
                 '{' => {
@@ -230,8 +244,6 @@ fn parse_function_body(lines: &[&str], start_line: usize) -> Result<(String, usi
                 '}' if found_open => {
                     depth -= 1;
                     if depth == 0 {
-                        // Closing brace found. Build the body from lines between
-                        // the opener line and this line.
                         let body = body_lines.join("\n");
                         return Ok((body, i));
                     }

@@ -336,3 +336,25 @@ fn test_seccomp_profile_generation() {
     let strict = SeccompProfile::for_level(SandboxLevel::Strict);
     assert!(strict.notify_list.len() >= standard.notify_list.len());
 }
+
+#[test]
+fn test_compact_package_body_parsing() {
+    let recipe = bpkg_recipe::parse_recipe(r#"
+pkgscope="bingux"
+pkgname="test"
+pkgver="1.0"
+pkgarch="x86_64-linux"
+pkgdesc="test"
+license="MIT"
+depends=()
+exports=("bin/test")
+source=()
+sha256sums=()
+package() { mkdir -p "$PKGDIR/bin"; echo hi > "$PKGDIR/bin/test"; }
+"#).unwrap();
+    
+    let body = recipe.package.unwrap();
+    println!("PACKAGE BODY: [{}]", body);
+    assert!(body.contains("mkdir"), "body should contain mkdir: [{}]", body);
+    assert!(body.contains("PKGDIR"), "body should contain PKGDIR: [{}]", body);
+}

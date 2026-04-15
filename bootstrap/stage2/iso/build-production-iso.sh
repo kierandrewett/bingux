@@ -175,11 +175,42 @@ cp /etc/ssl/certs/ca-bundle.crt "$INITRD/etc/ssl/certs/" 2>/dev/null || true
 # Copy package store
 cp -a "$STORE"/* "$INITRD/system/packages/"
 
-# Copy generation profiles (with dispatch table)
-cp -a "$BSYS_PROFILES_ROOT"/* "$INITRD/system/profiles/"
+# Create generation profile with correct runtime paths (/system/packages/...)
+# Don't copy the build-time generation — it has wrong symlink targets
+PROFILE_DIR="$INITRD/system/profiles/1"
+PROFILE_BIN="$PROFILE_DIR/bin"
+mkdir -p "$PROFILE_BIN" "$PROFILE_DIR/lib" "$PROFILE_DIR/share"
 
-# Ensure current symlink exists
-[ -L "$INITRD/system/profiles/current" ] || ln -sf 1 "$INITRD/system/profiles/current"
+# Create dispatch table and symlinks for all packages
+for pkg_dir in "$INITRD/system/packages"/*/; do
+    [ -d "$pkg_dir" ] || continue
+    pkg_name=$(basename "$pkg_dir")
+    manifest="$pkg_dir/.bpkg/manifest.toml"
+    [ -f "$manifest" ] || continue
+
+    # Symlink all binaries in the package
+    if [ -d "$pkg_dir/bin" ]; then
+        for binary in "$pkg_dir/bin"/*; do
+            [ -f "$binary" ] || continue
+            bin_name=$(basename "$binary")
+            # Use absolute runtime path
+            ln -sf "/system/packages/$pkg_name/bin/$bin_name" "$PROFILE_BIN/$bin_name"
+        done
+    fi
+done
+
+# Copy dispatch table from build-time generation if it exists
+if [ -f "$BSYS_PROFILES_ROOT/1/.dispatch.toml" ]; then
+    cp "$BSYS_PROFILES_ROOT/1/.dispatch.toml" "$PROFILE_DIR/.dispatch.toml"
+fi
+if [ -f "$BSYS_PROFILES_ROOT/1/generation.toml" ]; then
+    cp "$BSYS_PROFILES_ROOT/1/generation.toml" "$PROFILE_DIR/generation.toml"
+fi
+
+# Create current symlink
+ln -sf 1 "$INITRD/system/profiles/current"
+
+echo "    Profile bin/ entries: $(ls "$PROFILE_BIN" | wc -l)"
 
 # System config
 cp "$ISO_WORK/system.toml" "$INITRD/system/config/system.toml"
