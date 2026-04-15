@@ -21,6 +21,7 @@ members = [
     "cli/bpkg",
     "cli/bsys",
     "cli/bxc",
+    "tests/e2e",
 ]
 
 [workspace.package]

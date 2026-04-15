@@ -1,0 +1,21 @@
+[package]
+name = "bingux-e2e-tests"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+bingux-common = { path = "../../common/bingux-common" }
+bpkg-recipe = { path = "../../pkg/bpkg-recipe" }
+bpkg-store = { path = "../../pkg/bpkg-store" }
+bpkg-build = { path = "../../pkg/bpkg-build" }
+bpkg-repo = { path = "../../pkg/bpkg-repo" }
+bpkg-resolve = { path = "../../pkg/bpkg-resolve" }
+bpkg-home = { path = "../../home/bpkg-home" }
+bxc-sandbox = { path = "../../sandbox/bxc-sandbox" }
+bxc-runtime = { path = "../../sandbox/bxc-runtime" }
+bingux-gated = { path = "../../gate/bingux-gated" }
+bsys-compose = { path = "../../system/bsys-compose" }
+bsys-config = { path = "../../system/bsys-config" }
+tokio = { version = "1", features = ["full"] }
+tempfile = "3"
