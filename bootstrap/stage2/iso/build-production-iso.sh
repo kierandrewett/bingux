@@ -246,6 +246,26 @@ for f in "$BSYS_ETC_ROOT"/*; do
     [ -f "$f" ] && cp "$f" "$INITRD/etc/"
 done
 
+# /etc/profile for shell environment
+cat > "$INITRD/etc/profile" << 'PROFILE'
+export PATH="/system/profiles/current/bin:/bin:/sbin:/usr/bin:/usr/sbin"
+export LD_LIBRARY_PATH="/lib64:/usr/lib64"
+export BPKG_STORE_ROOT="/system/packages"
+export BSYS_CONFIG_PATH="/system/config/system.toml"
+export BSYS_PROFILES_ROOT="/system/profiles"
+export BSYS_PACKAGES_ROOT="/system/packages"
+export HOME="/tmp"
+export TERM="linux"
+export SSL_CERT_FILE="/etc/ssl/certs/ca-bundle.crt"
+export PS1='\[\e[1;36m\]bingux\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '
+
+# Welcome message on login
+gen=$(readlink /system/profiles/current 2>/dev/null || echo "?")
+pkgs=$(ls /system/packages/ 2>/dev/null | wc -l)
+echo "  Bingux 0.1.0 | $pkgs packages | generation $gen"
+echo ""
+PROFILE
+
 # systemd
 copy_with_deps() {
     local binary="$1"
