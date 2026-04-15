@@ -18,7 +18,7 @@ build() {
 package() {
     cd "$SRCDIR/pkgconf-2.3.0"
     mkdir -p "$PKGDIR/bin"
-    cp cli/pkgconf "$PKGDIR/bin/pkgconf" 2>/dev/null
+    cp pkgconf "$PKGDIR/bin/pkgconf" 2>/dev/null || cp cli/pkgconf "$PKGDIR/bin/pkgconf" 2>/dev/null
     ln -sf pkgconf "$PKGDIR/bin/pkg-config"
     chmod +x "$PKGDIR/bin/pkgconf"
 }
