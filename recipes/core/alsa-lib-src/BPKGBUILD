@@ -1,0 +1,31 @@
+pkgscope="bingux"
+pkgname="alsa-lib-src"
+pkgver="1.2.12"
+pkgarch="x86_64-linux"
+pkgdesc="ALSA library — Advanced Linux Sound Architecture user-space library"
+license="LGPL-2.1"
+depends=()
+makedepends=()
+exports=("lib/libasound.so" "include/alsa")
+source=("https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.12.tar.bz2")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/alsa-lib-1.2.12"
+
+    ./configure --prefix=/ \
+        --enable-shared --disable-static \
+        --disable-python \
+        CFLAGS="-O2" 2>&1 | tail -5
+
+    make -j$(nproc) 2>&1 | tail -5
+}
+
+package() {
+    cd "$SRCDIR/alsa-lib-1.2.12"
+
+    make DESTDIR="$PKGDIR" install 2>&1 | tail -3
+
+    # Clean up docs/man
+    rm -rf "$PKGDIR/share/doc" "$PKGDIR/share/man"
+}

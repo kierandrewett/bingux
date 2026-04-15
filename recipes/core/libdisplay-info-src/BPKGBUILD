@@ -1,0 +1,26 @@
+pkgscope="bingux"
+pkgname="libdisplay-info-src"
+pkgver="0.2.0"
+pkgarch="x86_64-linux"
+pkgdesc="libdisplay-info — EDID and DisplayID library"
+license="MIT"
+depends=()
+makedepends=()
+exports=("lib/libdisplay-info.so" "include/libdisplay-info")
+source=("https://gitlab.freedesktop.org/emersion/libdisplay-info/-/releases/0.2.0/downloads/libdisplay-info-0.2.0.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/libdisplay-info-0.2.0"
+
+    meson setup build --prefix=/ \
+        2>&1 | tail -10
+
+    ninja -C build -j$(nproc) 2>&1 | tail -5
+}
+
+package() {
+    cd "$SRCDIR/libdisplay-info-0.2.0"
+
+    DESTDIR="$PKGDIR" ninja -C build install 2>&1 | tail -3
+}

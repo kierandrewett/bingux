@@ -1,0 +1,38 @@
+pkgscope="bingux"
+pkgname="foot-src"
+pkgver="1.19.0"
+pkgarch="x86_64-linux"
+pkgdesc="foot — fast, lightweight Wayland terminal emulator"
+license="MIT"
+depends=("fcft-src-3.1.9" "xkbcommon-src-1.7.0" "wayland-protocols-src-1.38")
+makedepends=()
+exports=("bin/foot" "bin/footclient")
+source=("https://codeberg.org/dnkl/foot/archive/1.19.0.tar.gz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/foot"
+
+    FCFT="$BPKG_STORE_ROOT/fcft-src-3.1.9-x86_64-linux"
+    XKBCOMMON="$BPKG_STORE_ROOT/xkbcommon-src-1.7.0-x86_64-linux"
+    WLPROTOS="$BPKG_STORE_ROOT/wayland-protocols-src-1.38-x86_64-linux"
+
+    export PKG_CONFIG_PATH="$FCFT/lib64/pkgconfig:$XKBCOMMON/lib/pkgconfig:$WLPROTOS/share/pkgconfig:${PKG_CONFIG_PATH:-}"
+
+    meson setup build --prefix=/ \
+        -Ddocs=disabled \
+        -Dthemes=false \
+        -Dtests=false \
+        -Dime=true \
+        2>&1 | tail -10
+
+    ninja -C build -j$(nproc) 2>&1 | tail -5
+}
+
+package() {
+    cd "$SRCDIR/foot"
+
+    DESTDIR="$PKGDIR" ninja -C build install 2>&1 | tail -3
+
+    rm -rf "$PKGDIR/share/doc" "$PKGDIR/share/man"
+}

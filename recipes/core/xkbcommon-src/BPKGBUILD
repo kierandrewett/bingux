@@ -1,0 +1,32 @@
+pkgscope="bingux"
+pkgname="xkbcommon-src"
+pkgver="1.7.0"
+pkgarch="x86_64-linux"
+pkgdesc="libxkbcommon — keyboard keymap handling library"
+license="MIT"
+depends=()
+makedepends=()
+exports=("lib/libxkbcommon.so" "include/xkbcommon")
+source=("https://xkbcommon.org/download/libxkbcommon-1.7.0.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/libxkbcommon-1.7.0"
+
+    meson setup build --prefix=/ \
+        -Denable-docs=false \
+        -Denable-wayland=false \
+        -Denable-x11=false \
+        -Denable-xkbregistry=true \
+        2>&1 | tail -10
+
+    ninja -C build -j$(nproc) 2>&1 | tail -5
+}
+
+package() {
+    cd "$SRCDIR/libxkbcommon-1.7.0"
+
+    DESTDIR="$PKGDIR" ninja -C build install 2>&1 | tail -3
+
+    rm -rf "$PKGDIR/share/doc" "$PKGDIR/share/man"
+}

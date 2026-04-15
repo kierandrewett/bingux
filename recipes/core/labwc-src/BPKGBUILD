@@ -1,0 +1,38 @@
+pkgscope="bingux"
+pkgname="labwc-src"
+pkgver="0.8.2"
+pkgarch="x86_64-linux"
+pkgdesc="labwc — stacking Wayland compositor inspired by Openbox"
+license="GPL-2.0"
+depends=("wlroots-src-0.18.2" "xkbcommon-src-1.7.0" "wayland-protocols-src-1.38" "libdisplay-info-src-0.2.0")
+makedepends=()
+exports=("bin/labwc")
+source=("https://github.com/labwc/labwc/archive/refs/tags/0.8.2.tar.gz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/labwc-0.8.2"
+
+    WLROOTS="$BPKG_STORE_ROOT/wlroots-src-0.18.2-x86_64-linux"
+    XKBCOMMON="$BPKG_STORE_ROOT/xkbcommon-src-1.7.0-x86_64-linux"
+    LIBDRM="$BPKG_STORE_ROOT/libdrm-src-2.4.123-x86_64-linux"
+    WLPROTOS="$BPKG_STORE_ROOT/wayland-protocols-src-1.38-x86_64-linux"
+    LIBDI="$BPKG_STORE_ROOT/libdisplay-info-src-0.2.0-x86_64-linux"
+
+    export PKG_CONFIG_PATH="$WLROOTS/lib64/pkgconfig:$XKBCOMMON/lib/pkgconfig:$LIBDRM/lib/pkgconfig:$WLPROTOS/share/pkgconfig:$LIBDI/lib64/pkgconfig:${PKG_CONFIG_PATH:-}"
+
+    meson setup build --prefix=/ \
+        -Dxwayland=disabled \
+        -Dman-pages=disabled \
+        2>&1 | tail -15
+
+    ninja -C build -j$(nproc) 2>&1 | tail -5
+}
+
+package() {
+    cd "$SRCDIR/labwc-0.8.2"
+
+    DESTDIR="$PKGDIR" ninja -C build install 2>&1 | tail -3
+
+    rm -rf "$PKGDIR/share/doc" "$PKGDIR/share/man"
+}

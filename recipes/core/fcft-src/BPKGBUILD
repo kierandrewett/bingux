@@ -1,0 +1,28 @@
+pkgscope="bingux"
+pkgname="fcft-src"
+pkgver="3.1.9"
+pkgarch="x86_64-linux"
+pkgdesc="fcft — simple font loading and glyph rasterization library"
+license="MIT"
+depends=()
+makedepends=()
+exports=("lib/libfcft.so" "include/fcft")
+source=("https://codeberg.org/dnkl/fcft/archive/3.1.9.tar.gz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/fcft"
+
+    meson setup build --prefix=/ \
+        -Ddocs=disabled \
+        -Dtest-text-shaping=false \
+        2>&1 | tail -10
+
+    ninja -C build -j$(nproc) 2>&1 | tail -5
+}
+
+package() {
+    cd "$SRCDIR/fcft"
+
+    DESTDIR="$PKGDIR" ninja -C build install 2>&1 | tail -3
+}

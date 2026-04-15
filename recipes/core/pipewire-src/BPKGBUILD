@@ -1,0 +1,57 @@
+pkgscope="bingux"
+pkgname="pipewire-src"
+pkgver="1.2.7"
+pkgarch="x86_64-linux"
+pkgdesc="PipeWire — multimedia processing graph"
+license="MIT"
+depends=("alsa-lib-src-1.2.12" "dbus-src-1.14.10")
+makedepends=()
+exports=("bin/pipewire" "bin/pw-cli" "lib/libpipewire-0.3.so")
+source=("https://gitlab.freedesktop.org/pipewire/pipewire/-/archive/1.2.7/pipewire-1.2.7.tar.gz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/pipewire-1.2.7"
+
+    ALSA="$BPKG_STORE_ROOT/alsa-lib-src-1.2.12-x86_64-linux"
+
+    # Set up pkg-config search paths to find alsa-lib from the store
+    export PKG_CONFIG_PATH="$ALSA/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+
+    meson setup build --prefix=/ \
+        -Dpipewire-alsa=enabled \
+        -Dpipewire-jack=disabled \
+        -Dspa-plugins=enabled \
+        -Dalsa=enabled \
+        -Dlibpulse=disabled \
+        -Djack=disabled \
+        -Dpipewire-v4l2=disabled \
+        -Dv4l2=disabled \
+        -Dgstreamer=disabled \
+        -Dsystemd=disabled \
+        -Dselinux=disabled \
+        -Dtests=disabled \
+        -Dexamples=disabled \
+        -Ddocs=disabled \
+        -Dsession-managers=[] \
+        -Dvolume=disabled \
+        -Dvulkan=disabled \
+        -Dffmpeg=disabled \
+        -Davahi=disabled \
+        -Dlibcamera=disabled \
+        -Draop=disabled \
+        -Dbluez5=disabled \
+        -Dlibusb=disabled \
+        -Dudevrulesdir=/lib/udev/rules.d \
+        2>&1 | tail -15
+
+    ninja -C build -j$(nproc) 2>&1 | tail -5
+}
+
+package() {
+    cd "$SRCDIR/pipewire-1.2.7"
+
+    DESTDIR="$PKGDIR" ninja -C build install 2>&1 | tail -3
+
+    rm -rf "$PKGDIR/share/doc" "$PKGDIR/share/man"
+}
