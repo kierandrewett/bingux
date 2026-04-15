@@ -215,4 +215,10 @@ package() {
     cp -a "$inst/include/"* "$PKGDIR/include/" 2>/dev/null
 
     chmod +x "$PKGDIR/bin/"* "$PKGDIR/lib/systemd/systemd"* 2>/dev/null
+
+    # Strip all ELF binaries to reduce package size (~100M -> ~50M)
+    find "$PKGDIR" -type f -executable -exec file {} \; | grep "ELF" | cut -d: -f1 | while read f; do
+        strip --strip-unneeded "$f" 2>/dev/null
+    done
+    find "$PKGDIR" -name "*.so*" -type f -exec strip --strip-unneeded {} \; 2>/dev/null
 }
