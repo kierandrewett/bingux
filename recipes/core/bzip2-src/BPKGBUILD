@@ -1,0 +1,25 @@
+pkgscope="bingux"
+pkgname="bzip2-src"
+pkgver="1.0.8"
+pkgarch="x86_64-linux"
+pkgdesc="bzip2 — compiled from source"
+license="BSD"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/bzip2" "bin/bunzip2" "bin/bzcat" "lib/libbz2.a")
+source=("https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/bzip2-1.0.8"
+    make -j1 CC=bingux-gcc CFLAGS="-Wall -O2 -static" LDFLAGS="-static" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/bzip2-1.0.8"
+    mkdir -p "$PKGDIR/bin" "$PKGDIR/lib" "$PKGDIR/include"
+    cp bzip2 "$PKGDIR/bin/bzip2"
+    chmod +x "$PKGDIR/bin/bzip2"
+    ln -sf bzip2 "$PKGDIR/bin/bunzip2"
+    ln -sf bzip2 "$PKGDIR/bin/bzcat"
+    cp libbz2.a "$PKGDIR/lib/"
+    cp bzlib.h "$PKGDIR/include/"
+}
