@@ -32,13 +32,18 @@ MODULE_DESCRIPTION("Hide FHS compatibility dirs from ls /");
 MODULE_VERSION("1.0");
 
 /* Directories to hide from root listing.
- * These are FHS compatibility symlinks — they work but don't
- * appear in ls /. The visible root is: dev proc sys system users
+ * These are FHS/compat symlinks — they work but don't
+ * appear in ls /. The visible root is: io system users
  */
 static const char *hidden_names[] = {
+	/* FHS compat */
 	"bin", "sbin", "lib", "lib64", "usr", "opt",
 	"etc", "home", "root", "var", "run", "tmp",
-	"mnt", "media", "srv", "boot", "init",
+	"mnt", "media", "srv", "boot",
+	/* kernel pseudofs compat */
+	"dev", "proc", "sys",
+	/* initramfs artifact */
+	"init",
 	NULL
 };
 

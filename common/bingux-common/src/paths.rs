@@ -64,6 +64,19 @@ impl SystemPaths {
     /// Kernel modules and firmware.
     pub const MODULES: &str = "/system/modules";
 
+    // ── /system/kernel/ — kernel pseudo-filesystems ────────────
+
+    /// procfs mount point.
+    pub const PROC: &str = "/system/kernel/proc";
+
+    /// sysfs mount point.
+    pub const SYS: &str = "/system/kernel/sys";
+
+    // ── /io/ — device nodes ────────────────────────────────────
+
+    /// devtmpfs mount point (device nodes).
+    pub const IO: &str = "/io";
+
     // ── /users/ (persistent, per-user) ─────────────────────────
 
     /// Top-level user home directories.
