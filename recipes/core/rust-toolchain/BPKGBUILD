@@ -1,0 +1,30 @@
+pkgscope="bingux"
+pkgname="rust-toolchain"
+pkgver="1.84.0"
+pkgarch="x86_64-linux"
+pkgdesc="Rust toolchain — rustc, cargo, std"
+license="MIT"
+
+depends=()
+exports=("bin/rustc" "bin/cargo")
+
+source=("https://static.rust-lang.org/dist/rust-1.84.0-x86_64-unknown-linux-musl.tar.xz")
+sha256sums=("SKIP")
+
+package() {
+    mkdir -p "$PKGDIR/bin" "$PKGDIR/lib"
+    RUST="$SRCDIR/rust-1.84.0-x86_64-unknown-linux-musl"
+    
+    # Install rustc
+    cp -a "$RUST/rustc/bin/"* "$PKGDIR/bin/" 2>/dev/null
+    cp -a "$RUST/rustc/lib/"* "$PKGDIR/lib/" 2>/dev/null
+    
+    # Install cargo
+    cp -a "$RUST/cargo/bin/"* "$PKGDIR/bin/" 2>/dev/null
+    
+    # Install std
+    cp -a "$RUST/rust-std-x86_64-unknown-linux-musl/lib/"* "$PKGDIR/lib/" 2>/dev/null
+    
+    chmod +x "$PKGDIR/bin/"* 2>/dev/null
+    echo "Rust toolchain: $(ls "$PKGDIR/bin/" | wc -l) binaries"
+}
