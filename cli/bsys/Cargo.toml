@@ -9,6 +9,8 @@ description = "System manager CLI"
 bingux-common = { path = "../../common/bingux-common" }
 bpkg-store = { path = "../../pkg/bpkg-store" }
 bpkg-recipe = { path = "../../pkg/bpkg-recipe" }
+bpkg-build = { path = "../../pkg/bpkg-build" }
+tokio = { workspace = true }
 bsys-config = { path = "../../system/bsys-config" }
 bsys-compose = { path = "../../system/bsys-compose" }
 bxc-sandbox = { path = "../../sandbox/bxc-sandbox" }
