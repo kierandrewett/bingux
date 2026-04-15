@@ -1,0 +1,28 @@
+pkgscope="bingux"
+pkgname="htop-src"
+pkgver="3.3.0"
+pkgarch="x86_64-linux"
+pkgdesc="htop — interactive process viewer"
+license="GPL-2.0"
+depends=("ncurses-6.5")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/htop")
+source=("https://github.com/htop-dev/htop/releases/download/3.3.0/htop-3.3.0.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/htop-3.3.0"
+    NCURSES="/tmp/bingux-bootstrap-store/ncurses-6.5-x86_64-linux"
+    CC=bingux-gcc ./configure --prefix=/ --disable-unicode \
+        --enable-static \
+        CFLAGS="-static -I$NCURSES/include -I$NCURSES/include/ncursesw" \
+        LDFLAGS="-static -L$NCURSES/lib -Wl,--allow-multiple-definition" \
+        LIBS="-lncursesw" \
+        2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -L$NCURSES/lib -lncursesw -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/htop-3.3.0"
+    mkdir -p "$PKGDIR/bin"
+    cp htop "$PKGDIR/bin/htop"
+    chmod +x "$PKGDIR/bin/htop"
+}
