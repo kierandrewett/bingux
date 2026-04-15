@@ -2,9 +2,9 @@ pkgscope="bingux"
 pkgname="curl-src"
 pkgver="8.11.1"
 pkgarch="x86_64-linux"
-pkgdesc="curl — compiled from source (HTTP only, no TLS)"
+pkgdesc="curl — HTTP/HTTPS client with OpenSSL"
 license="MIT"
-depends=("zlib-1.3.1")
+depends=("zlib-1.3.1" "openssl-src-3.4.1")
 makedepends=("musl-toolchain-11.2.1")
 exports=("bin/curl")
 source=("https://curl.se/download/curl-8.11.1.tar.gz")
@@ -12,18 +12,18 @@ sha256sums=("SKIP")
 build() {
     cd "$SRCDIR/curl-8.11.1"
     ZLIB="/tmp/bingux-bootstrap-store/zlib-1.3.1-x86_64-linux"
+    OPENSSL="/tmp/bingux-bootstrap-store/openssl-src-3.4.1-x86_64-linux"
     CC=bingux-gcc ./configure --prefix=/ --disable-shared \
-        --without-ssl --without-libssh2 --without-libidn2 \
-        --without-brotli --without-zstd --without-nghttp2 \
+        --with-openssl="$OPENSSL" \
         --with-zlib="$ZLIB" \
-        --disable-ldap --disable-rtsp --disable-dict \
-        --disable-telnet --disable-tftp --disable-pop3 \
-        --disable-imap --disable-smb --disable-smtp \
-        --disable-gopher --disable-mqtt \
-        CFLAGS="-static -I$ZLIB/include" \
-        LDFLAGS="-static -L$ZLIB/lib -Wl,--allow-multiple-definition" \
+        --without-libssh2 --without-libidn2 \
+        --without-brotli --without-zstd --without-nghttp2 \
+        --disable-ldap --disable-rtsp \
+        CFLAGS="-static -I$ZLIB/include -I$OPENSSL/include" \
+        LDFLAGS="-static -L$ZLIB/lib -L$OPENSSL/lib -Wl,--allow-multiple-definition" \
+        LIBS="-lssl -lcrypto -lz" \
         2>/dev/null
-    make -j1 CC=bingux-gcc LDFLAGS="-static -L$ZLIB/lib -lz -Wl,--allow-multiple-definition" 2>&1 | tail -3
+    make -j1 CC=bingux-gcc LDFLAGS="-static -L$ZLIB/lib -L$OPENSSL/lib -lssl -lcrypto -lz -Wl,--allow-multiple-definition" 2>&1 | tail -3
 }
 package() {
     cd "$SRCDIR/curl-8.11.1"
