@@ -1,0 +1,64 @@
+pkgscope="bingux"
+pkgname="less-glibc"
+pkgver="661"
+pkgarch="x86_64-linux"
+pkgdesc="less — pager, dynamically linked against glibc 2.39"
+license="GPL-3.0"
+
+depends=("glibc-src-2.39" "ncurses-6.5")
+makedepends=("gcc-glibc-14.2.0")
+
+exports=("bin/less" "bin/lesskey")
+
+source=("https://www.greenwoodsoftware.com/less/less-661.tar.gz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/less-661"
+
+    GLIBC_PKG="/system/packages/glibc-src-2.39-x86_64-linux"
+    GCC_PKG="/system/packages/gcc-glibc-14.2.0-x86_64-linux"
+    NCURSES_PKG="/system/packages/ncurses-6.5-x86_64-linux"
+    SYSROOT="$BUILDDIR/sysroot"
+
+    # Create sysroot combining glibc + kernel headers
+    mkdir -p "$SYSROOT/usr/include" "$SYSROOT/usr/lib"
+    cp -a "$GLIBC_PKG/include/"* "$SYSROOT/usr/include/"
+    cp -a "$GLIBC_PKG/lib/"* "$SYSROOT/usr/lib/"
+    ln -sf lib "$SYSROOT/usr/lib64"
+
+    # Fix libc.so linker script for build-time
+    cat > "$SYSROOT/usr/lib/libc.so" << 'LDSCRIPT'
+/* GNU ld script */
+OUTPUT_FORMAT(elf64-x86-64)
+GROUP ( libc.so.6 libc_nonshared.a  AS_NEEDED ( ld-linux-x86-64.so.2 ) )
+LDSCRIPT
+
+    CC="$GCC_PKG/bin/gcc --sysroot=$SYSROOT" \
+    CFLAGS="-O2 -I$NCURSES_PKG/include -I$NCURSES_PKG/include/ncursesw" \
+    LDFLAGS="-Wl,--dynamic-linker=$GLIBC_PKG/lib/ld-linux-x86-64.so.2 -Wl,-rpath,$GLIBC_PKG/lib -L$NCURSES_PKG/lib -Wl,-rpath,$NCURSES_PKG/lib" \
+    ./configure --prefix=/ \
+        2>/dev/null
+
+    make -j"$(nproc)" 2>&1 | tail -3
+}
+
+package() {
+    cd "$SRCDIR/less-661"
+    mkdir -p "$PKGDIR/bin"
+    cp less "$PKGDIR/bin/less"
+    cp lesskey "$PKGDIR/bin/lesskey" 2>/dev/null || true
+    cp lessecho "$PKGDIR/bin/lessecho" 2>/dev/null || true
+    chmod +x "$PKGDIR/bin/"*
+
+    # Set final PT_INTERP and RUNPATH
+    PATCHELF="/system/packages/patchelf-0.18.0-x86_64-linux/bin/patchelf"
+    GLIBC_PKG="/system/packages/glibc-src-2.39-x86_64-linux"
+    for bin in less lesskey lessecho; do
+        if [ -f "$PKGDIR/bin/$bin" ]; then
+            $PATCHELF --set-interpreter "$GLIBC_PKG/lib/ld-linux-x86-64.so.2" \
+                      --set-rpath "$GLIBC_PKG/lib" \
+                      "$PKGDIR/bin/$bin"
+        fi
+    done
+}

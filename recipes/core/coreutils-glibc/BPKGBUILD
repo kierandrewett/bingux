@@ -1,0 +1,95 @@
+pkgscope="bingux"
+pkgname="coreutils-glibc"
+pkgver="9.5"
+pkgarch="x86_64-linux"
+pkgdesc="GNU Coreutils — dynamically linked against glibc 2.39"
+license="GPL-3.0"
+
+depends=("glibc-src-2.39")
+makedepends=("gcc-glibc-14.2.0")
+
+exports=(
+    "bin/ls"
+    "bin/cat"
+    "bin/cp"
+    "bin/mv"
+    "bin/rm"
+    "bin/mkdir"
+    "bin/chmod"
+    "bin/echo"
+    "bin/head"
+    "bin/tail"
+    "bin/wc"
+    "bin/sort"
+    "bin/uniq"
+    "bin/tr"
+    "bin/cut"
+    "bin/basename"
+    "bin/dirname"
+    "bin/uname"
+    "bin/date"
+    "bin/id"
+    "bin/whoami"
+    "bin/env"
+    "bin/tee"
+    "bin/touch"
+    "bin/ln"
+    "bin/readlink"
+    "bin/realpath"
+    "bin/sleep"
+    "bin/true"
+    "bin/false"
+    "bin/yes"
+    "bin/seq"
+    "bin/printf"
+    "bin/test"
+    "bin/expr"
+)
+
+source=("https://ftpmirror.gnu.org/coreutils/coreutils-9.5.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/coreutils-9.5"
+
+    GLIBC_PKG="/system/packages/glibc-src-2.39-x86_64-linux"
+    GCC_PKG="/system/packages/gcc-glibc-14.2.0-x86_64-linux"
+    SYSROOT="$BUILDDIR/sysroot"
+
+    # Create sysroot combining glibc + kernel headers
+    mkdir -p "$SYSROOT/usr/include" "$SYSROOT/usr/lib"
+    cp -a "$GLIBC_PKG/include/"* "$SYSROOT/usr/include/"
+    cp -a "$GLIBC_PKG/lib/"* "$SYSROOT/usr/lib/"
+    ln -sf lib "$SYSROOT/usr/lib64"
+
+    # Fix libc.so linker script for build-time
+    cat > "$SYSROOT/usr/lib/libc.so" << 'LDSCRIPT'
+/* GNU ld script */
+OUTPUT_FORMAT(elf64-x86-64)
+GROUP ( libc.so.6 libc_nonshared.a  AS_NEEDED ( ld-linux-x86-64.so.2 ) )
+LDSCRIPT
+
+    CC="$GCC_PKG/bin/gcc --sysroot=$SYSROOT" \
+    CFLAGS="-O2" \
+    LDFLAGS="-Wl,--dynamic-linker=$GLIBC_PKG/lib/ld-linux-x86-64.so.2 -Wl,-rpath,$GLIBC_PKG/lib" \
+    FORCE_UNSAFE_CONFIGURE=1 \
+    ./configure --prefix=/ \
+        --enable-single-binary=symlinks \
+        --disable-nls \
+        --without-openssl \
+        2>/dev/null
+
+    make -j"$(nproc)" 2>&1 | tail -3
+}
+
+package() {
+    cd "$SRCDIR/coreutils-9.5"
+    make install DESTDIR="$PKGDIR" 2>/dev/null
+
+    # Set final PT_INTERP and RUNPATH on the single binary
+    PATCHELF="/system/packages/patchelf-0.18.0-x86_64-linux/bin/patchelf"
+    GLIBC_PKG="/system/packages/glibc-src-2.39-x86_64-linux"
+    $PATCHELF --set-interpreter "$GLIBC_PKG/lib/ld-linux-x86-64.so.2" \
+              --set-rpath "$GLIBC_PKG/lib" \
+              "$PKGDIR/bin/coreutils"
+}
