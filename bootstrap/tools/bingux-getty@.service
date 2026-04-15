@@ -1,0 +1,18 @@
+[Unit]
+Description=Bingux Getty on %I
+After=systemd-logind.service
+
+[Service]
+ExecStart=/system/profiles/current/bin/bingux-getty %I
+Type=idle
+Restart=always
+RestartSec=0
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/%I
+TTYReset=yes
+TTYVHangup=yes
+
+[Install]
+WantedBy=getty.target

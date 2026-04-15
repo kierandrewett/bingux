@@ -82,11 +82,11 @@ fn main() -> Result<()> {
             RepoCommand::List => {
                 commands::repo::run_list()?;
             }
-            RepoCommand::Add { scope, url } => {
-                commands::repo::run_add(scope, url)?;
+            RepoCommand::Add { name, url } => {
+                commands::repo::run_add(name, url)?;
             }
-            RepoCommand::Rm { scope } => {
-                commands::repo::run_rm(scope)?;
+            RepoCommand::Rm { name } => {
+                commands::repo::run_rm(name)?;
             }
             RepoCommand::Sync => {
                 commands::repo::run_sync()?;

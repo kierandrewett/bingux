@@ -68,7 +68,9 @@ pub fn apply() {
                 if let Ok(store) = store {
                     let matching = store.query(pkg_name);
                     if let Some(pkg_id) = matching.into_iter().next() {
-                        // Read manifest for exports
+                        // Read manifest for exports; fall back gracefully if
+                        // no manifest exists (common for packages that were
+                        // built without an [exports] section).
                         let mut exports = bsys_compose::generation::ExportedItems {
                             binaries: vec![],
                             libraries: vec![],
@@ -79,6 +81,36 @@ pub fn apply() {
                             exports.libraries = manifest.exports.libraries.clone();
                             exports.data = manifest.exports.data.clone();
                         }
+
+                        // Auto-discover: when no binaries are declared in the
+                        // manifest (or the manifest is absent), scan the
+                        // package's bin/ directory and export every file or
+                        // symlink found there.
+                        if exports.binaries.is_empty() {
+                            let bin_dir = packages_root.join(pkg_id.dir_name()).join("bin");
+                            if bin_dir.is_dir() {
+                                if let Ok(rd) = std::fs::read_dir(&bin_dir) {
+                                    for entry in rd.flatten() {
+                                        let ft = entry.file_type();
+                                        if let Ok(ft) = ft {
+                                            if ft.is_file() || ft.is_symlink() {
+                                                if let Some(name) = entry.file_name().to_str() {
+                                                    exports.binaries.push(format!("bin/{name}"));
+                                                }
+                                            }
+                                        }
+                                    }
+                                    exports.binaries.sort();
+                                }
+                                if !exports.binaries.is_empty() {
+                                    output::status("discover", &format!(
+                                        "{}: auto-discovered {} binaries from bin/",
+                                        pkg_name, exports.binaries.len()
+                                    ));
+                                }
+                            }
+                        }
+
                         let sandbox_level = bxc_sandbox::levels::SandboxLevel::Minimal;
                         entries.push(bsys_compose::generation::PackageEntry {
                             package_id: pkg_id,

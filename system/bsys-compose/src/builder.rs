@@ -70,6 +70,24 @@ impl GenerationBuilder {
             let pkg_dir = self.packages_root.join(entry.package_id.dir_name());
 
             // Create bin symlinks and dispatch entries.
+            //
+            // Two modes for bin/ links:
+            //
+            //   1. Direct symlinks (current default) — each link in bin/
+            //      points straight at the real binary inside the package
+            //      store.  Simple, but bypasses the sandbox dispatch
+            //      entirely; suitable only for SandboxLevel::None.
+            //
+            //   2. Shim-based symlinks — each link in bin/ points at the
+            //      bxc-shim multi-call binary.  When invoked, the shim
+            //      reads .dispatch.toml, resolves the real binary, and
+            //      applies the configured sandbox level before exec'ing.
+            //      This is the intended production mode once bxc-shim is
+            //      deployed to /system/bin/bxc-shim.
+            //
+            // TODO: Switch to shim mode by default once bxc-shim is
+            // installed into the base system.  The switch is a one-line
+            // change: replace `target` below with the path to bxc-shim.
             for bin_path in &entry.exports.binaries {
                 let bin_name = Path::new(bin_path)
                     .file_name()
@@ -82,8 +100,6 @@ impl GenerationBuilder {
                 let target = pkg_dir.join(bin_path);
                 let link = bin_dir.join(&bin_name);
 
-                // For sandboxed binaries, in the future this would be a
-                // hardlink to bxc-shim.  For now we use symlinks everywhere.
                 symlink_or_create_parent(&target, &link)?;
 
                 dispatch.insert(

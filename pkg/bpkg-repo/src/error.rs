@@ -16,6 +16,21 @@ pub enum RepoError {
     #[error("package not found: {0}")]
     PackageNotFound(String),
 
+    #[error("repository not found: {0}")]
+    RepoNotFound(String),
+
+    #[error("repository already exists: {0}")]
+    RepoAlreadyExists(String),
+
+    #[error("cannot remove built-in repository: {0}")]
+    BuiltinRepo(String),
+
+    #[error("sync failed: {0}")]
+    SyncFailed(String),
+
+    #[error("HTTP error: {0}")]
+    Http(String),
+
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 

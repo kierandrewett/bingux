@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use bingux_common::error::Result;
 
-use crate::config::SystemConfig;
+use crate::config::{SystemConfig, UserConfig};
 
 /// A file that was generated (or should be generated) by the config system.
 #[derive(Debug, Clone)]
@@ -30,8 +30,8 @@ impl EtcGenerator {
         let mut files = Vec::new();
 
         // Core identity files
-        files.push(self.generate_passwd()?);
-        files.push(self.generate_group()?);
+        files.push(self.generate_passwd(&config.users)?);
+        files.push(self.generate_group(&config.users)?);
         files.push(self.generate_os_release()?);
 
         // System config derived
@@ -174,31 +174,104 @@ table inet filter {{
         Ok(GeneratedFile { path, content })
     }
 
-    /// Generate `/etc/passwd` — root + system users.
+    /// Generate `/etc/passwd` from configured users plus built-in system accounts.
     /// User home dirs use the Bingux `/users/<name>/home` layout.
-    pub fn generate_passwd(&self) -> Result<GeneratedFile> {
+    pub fn generate_passwd(&self, users: &[UserConfig]) -> Result<GeneratedFile> {
         let path = self.target.join("passwd");
-        let content = "\
-root:x:0:0:root:/users/root:/bin/sh
-nobody:x:65534:65534:Nobody:/:/sbin/nologin
-systemd-journal:x:190:190:systemd Journal:/:/sbin/nologin
-dbus:x:81:81:D-Bus:/:/sbin/nologin
-"
-        .to_string();
+
+        // Built-in system accounts that are always present.
+        let mut lines = vec![
+            "nobody:x:65534:65534:Nobody:/:/sbin/nologin".to_string(),
+            "systemd-journal:x:190:190:systemd Journal:/:/sbin/nologin".to_string(),
+            "dbus:x:81:81:D-Bus:/:/sbin/nologin".to_string(),
+        ];
+
+        // Prepend configured users (they take priority for uid 0 / root).
+        let mut user_lines: Vec<String> = users
+            .iter()
+            .map(|u| {
+                format!(
+                    "{}:x:{}:{}:{}:{}:{}",
+                    u.name, u.uid, u.gid, u.name, u.home, u.shell
+                )
+            })
+            .collect();
+
+        // If no users are configured, provide a default root entry.
+        if user_lines.is_empty() {
+            user_lines.push("root:x:0:0:root:/users/root:/bin/sh".to_string());
+        }
+
+        user_lines.append(&mut lines);
+        let content = user_lines.join("\n") + "\n";
+
         write_file(&path, &content)?;
         Ok(GeneratedFile { path, content })
     }
 
-    /// Generate `/etc/group`.
-    pub fn generate_group(&self) -> Result<GeneratedFile> {
+    /// Generate `/etc/group` from configured users plus built-in system groups.
+    pub fn generate_group(&self, users: &[UserConfig]) -> Result<GeneratedFile> {
+        use std::collections::BTreeMap;
+
         let path = self.target.join("group");
-        let content = "\
-root:x:0:
-nobody:x:65534:
-systemd-journal:x:190:
-dbus:x:81:
-"
-        .to_string();
+
+        // Collect all groups: primary groups from users + supplementary groups.
+        let mut groups: BTreeMap<String, (u32, Vec<String>)> = BTreeMap::new();
+
+        for user in users {
+            // Primary group (named after the user).
+            groups
+                .entry(user.name.clone())
+                .or_insert_with(|| (user.gid, Vec::new()));
+
+            // Supplementary groups — assign gid 0 as placeholder; real gid
+            // would come from a groups config, but for now we use a simple scheme.
+            for group_name in &user.groups {
+                let entry = groups
+                    .entry(group_name.clone())
+                    .or_insert_with(|| {
+                        // Well-known group names get conventional GIDs.
+                        let gid = match group_name.as_str() {
+                            "wheel" => 10,
+                            "audio" => 11,
+                            "video" => 12,
+                            "input" => 13,
+                            "users" => 100,
+                            _ => 900, // generic fallback
+                        };
+                        (gid, Vec::new())
+                    });
+                if !entry.1.contains(&user.name) {
+                    entry.1.push(user.name.clone());
+                }
+            }
+        }
+
+        let mut lines: Vec<String> = Vec::new();
+
+        // Emit user primary groups and supplementary groups.
+        for (name, (gid, members)) in &groups {
+            lines.push(format!("{}:x:{}:{}", name, gid, members.join(",")));
+        }
+
+        // Built-in system groups (skip if already defined by users).
+        let builtins = [
+            ("nobody", 65534),
+            ("systemd-journal", 190),
+            ("dbus", 81),
+        ];
+        for (name, gid) in builtins {
+            if !groups.contains_key(name) {
+                lines.push(format!("{name}:x:{gid}:"));
+            }
+        }
+
+        // If nothing was configured, provide a default root group.
+        if users.is_empty() {
+            lines.insert(0, "root:x:0:".to_string());
+        }
+
+        let content = lines.join("\n") + "\n";
         write_file(&path, &content)?;
         Ok(GeneratedFile { path, content })
     }

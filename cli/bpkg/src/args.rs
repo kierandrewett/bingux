@@ -128,19 +128,19 @@ pub enum HomeCommand {
 pub enum RepoCommand {
     /// List configured repositories
     List,
-    /// Add a user repository
+    /// Add a repository
     Add {
-        /// Repository scope name
-        scope: String,
-        /// Repository URL
+        /// Repository name (e.g. "core", "community")
+        name: String,
+        /// Repository URL (e.g. "https://repo.bingux.dev/core")
         url: String,
     },
-    /// Remove a user repository
+    /// Remove a repository
     Rm {
-        /// Repository scope name
-        scope: String,
+        /// Repository name
+        name: String,
     },
-    /// Refresh repository indexes
+    /// Download and refresh repository indexes
     Sync,
 }
 

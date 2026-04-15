@@ -1,0 +1,130 @@
+pkgscope="bingux"
+pkgname="linux-kernel-src"
+pkgver="6.12.8"
+pkgarch="x86_64-linux"
+pkgdesc="Linux kernel — full build from source proving self-hosting capability"
+license="GPL-2.0"
+
+depends=()
+makedepends=("musl-toolchain-13.2.0" "flex-src" "bison-src" "bc-src" "perl-src" "binutils-src" "libelf-src" "openssl-src")
+
+exports=(
+    "boot/vmlinuz"
+    "boot/System.map"
+)
+
+source=("https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.8.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/linux-6.12.8"
+
+    # Resolve the compiler — prefer bingux-gcc from the store, fall back to
+    # a musl-toolchain path, fall back to whatever CC is on PATH.
+    if command -v bingux-gcc >/dev/null 2>&1; then
+        CC="bingux-gcc"
+    elif [ -d "$BINGUX_STORE/musl-toolchain-13.2.0-x86_64-linux" ]; then
+        CC="$BINGUX_STORE/musl-toolchain-13.2.0-x86_64-linux/bin/bingux-gcc"
+    elif [ -d "/system/packages/musl-toolchain-13.2.0-x86_64-linux" ]; then
+        CC="/system/packages/musl-toolchain-13.2.0-x86_64-linux/bin/bingux-gcc"
+    else
+        CC="gcc"
+    fi
+
+    echo "==> Using CC=$CC"
+    echo "==> Starting with defconfig..."
+
+    # Start from defconfig (reasonable x86_64 defaults)
+    make defconfig ARCH=x86_64
+
+    # ── Virtualisation (QEMU/KVM) ──────────────────────────────────────
+    scripts/config --enable CONFIG_VIRTIO_PCI
+    scripts/config --enable CONFIG_VIRTIO_BLK
+    scripts/config --enable CONFIG_VIRTIO_NET
+    scripts/config --enable CONFIG_VIRTIO_CONSOLE
+    scripts/config --enable CONFIG_HW_RANDOM_VIRTIO
+    scripts/config --enable CONFIG_VIRTIO_MMIO
+
+    # ── Filesystems ────────────────────────────────────────────────────
+    scripts/config --enable CONFIG_EXT4_FS
+    scripts/config --enable CONFIG_BTRFS_FS
+    scripts/config --enable CONFIG_TMPFS
+    scripts/config --enable CONFIG_PROC_FS
+    scripts/config --enable CONFIG_SYSFS
+    scripts/config --enable CONFIG_DEVTMPFS
+    scripts/config --enable CONFIG_DEVTMPFS_MOUNT
+
+    # ── Containers / namespaces ────────────────────────────────────────
+    scripts/config --enable CONFIG_CGROUPS
+    scripts/config --enable CONFIG_CGROUP_PIDS
+    scripts/config --enable CONFIG_CGROUP_CPUACCT
+    scripts/config --enable CONFIG_MEMCG
+    scripts/config --enable CONFIG_NAMESPACES
+    scripts/config --enable CONFIG_UTS_NS
+    scripts/config --enable CONFIG_IPC_NS
+    scripts/config --enable CONFIG_USER_NS
+    scripts/config --enable CONFIG_PID_NS
+    scripts/config --enable CONFIG_NET_NS
+
+    # ── Bingux permission system (seccomp) ─────────────────────────────
+    scripts/config --enable CONFIG_SECCOMP
+    scripts/config --enable CONFIG_SECCOMP_FILTER
+
+    # ── Modules ────────────────────────────────────────────────────────
+    scripts/config --enable CONFIG_MODULES
+    scripts/config --enable CONFIG_MODULE_UNLOAD
+
+    # ── Console / serial ───────────────────────────────────────────────
+    scripts/config --enable CONFIG_SERIAL_8250
+    scripts/config --enable CONFIG_SERIAL_8250_CONSOLE
+    scripts/config --enable CONFIG_TTY
+    scripts/config --enable CONFIG_VT
+    scripts/config --enable CONFIG_VT_CONSOLE
+    scripts/config --enable CONFIG_PRINTK
+
+    # ── Networking ─────────────────────────────────────────────────────
+    scripts/config --enable CONFIG_NET
+    scripts/config --enable CONFIG_INET
+    scripts/config --enable CONFIG_UNIX
+
+    # ── initramfs ──────────────────────────────────────────────────────
+    scripts/config --enable CONFIG_BLK_DEV_INITRD
+    scripts/config --enable CONFIG_RD_GZIP
+
+    # ── Misc userspace requirements ────────────────────────────────────
+    scripts/config --enable CONFIG_BINFMT_ELF
+    scripts/config --enable CONFIG_BINFMT_SCRIPT
+    scripts/config --enable CONFIG_MULTIUSER
+    scripts/config --enable CONFIG_EPOLL
+    scripts/config --enable CONFIG_SIGNALFD
+    scripts/config --enable CONFIG_TIMERFD
+    scripts/config --enable CONFIG_EVENTFD
+    scripts/config --enable CONFIG_INOTIFY_USER
+    scripts/config --enable CONFIG_FUTEX
+    scripts/config --enable CONFIG_POSIX_TIMERS
+
+    # Reconcile any dependency changes
+    make olddefconfig ARCH=x86_64
+
+    echo "==> Building bzImage with $(nproc) jobs..."
+    make -j$(nproc) ARCH=x86_64 CC="$CC" bzImage
+
+    echo "==> Building modules..."
+    make -j$(nproc) ARCH=x86_64 CC="$CC" modules || echo "(no modules configured — OK)"
+}
+
+package() {
+    cd "$SRCDIR/linux-6.12.8"
+
+    # Install kernel image and System.map
+    mkdir -p "$PKGDIR/boot"
+    cp arch/x86/boot/bzImage "$PKGDIR/boot/vmlinuz"
+    cp System.map "$PKGDIR/boot/System.map"
+
+    # Install modules (if any were built)
+    if [ -n "$(find . -name '*.ko' 2>/dev/null | head -1)" ]; then
+        make modules_install INSTALL_MOD_PATH="$PKGDIR" ARCH=x86_64
+    fi
+
+    echo "==> Kernel installed: $(du -h "$PKGDIR/boot/vmlinuz" | cut -f1)"
+}

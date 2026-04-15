@@ -21,6 +21,27 @@ pub struct SystemConfig {
     pub network: Option<NetworkSection>,
     /// Optional firewall configuration.
     pub firewall: Option<FirewallSection>,
+    /// User accounts to create.
+    #[serde(default)]
+    pub users: Vec<UserConfig>,
+}
+
+/// A user account declaration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserConfig {
+    /// Login name.
+    pub name: String,
+    /// Numeric user ID.
+    pub uid: u32,
+    /// Numeric primary group ID.
+    pub gid: u32,
+    /// Home directory path.
+    pub home: String,
+    /// Login shell path.
+    pub shell: String,
+    /// Additional group memberships.
+    #[serde(default)]
+    pub groups: Vec<String>,
 }
 
 /// Core system identity and locale settings.
