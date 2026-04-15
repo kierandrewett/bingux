@@ -1,1 +1,0 @@
-./bingux_hide.o
