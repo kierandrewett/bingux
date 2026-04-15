@@ -1,0 +1,22 @@
+pkgscope="bingux"
+pkgname="lzip-src"
+pkgver="1.24.1"
+pkgarch="x86_64-linux"
+pkgdesc="lzip — LZMA compression"
+license="GPL-2.0"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/lzip")
+source=("https://download.savannah.gnu.org/releases/lzip/lzip-1.24.1.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/lzip-1.24.1"
+    CC=bingux-gcc CXX=bingux-gcc ./configure --prefix=/ CXXFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    make -j1 CXX=bingux-gcc CXXFLAGS="-static" LDFLAGS="-static" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/lzip-1.24.1"
+    mkdir -p "$PKGDIR/bin"
+    cp lzip "$PKGDIR/bin/lzip"
+    chmod +x "$PKGDIR/bin/lzip"
+}
