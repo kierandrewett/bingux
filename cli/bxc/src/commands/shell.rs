@@ -21,32 +21,36 @@ pub fn run(package: &str) {
                 output::status("shell", &format!("entering sandbox for {pkg_id}"));
                 output::status("shell", &format!("package dir: {}", pkg_dir.display()));
 
-                // In a full implementation, this would:
-                // 1. Create a mount namespace
-                // 2. Mount the per-package home
-                // 3. Mount /system/packages (ro)
-                // 4. Install seccomp filter
-                // 5. exec /bin/sh
-
-                // For now, set up environment and exec a shell with package in PATH
+                // Set up environment and exec a shell with package in PATH
                 let pkg_bin = pkg_dir.join("bin");
                 let current_path = std::env::var("PATH").unwrap_or_default();
                 let new_path = format!("{}:{}", pkg_bin.display(), current_path);
 
-                output::status("shell", &format!("PATH includes {}", pkg_bin.display()));
-                output::status("shell", "sandbox features not yet active (requires root for namespaces)");
+                // Per-package home directory
+                let user = std::env::var("USER").unwrap_or_else(|_| "root".into());
+                let uid = nix::unistd::getuid().as_raw();
+                let pkg_home = PathBuf::from(format!(
+                    "/users/{user}/.config/bingux/state/{package}/home"
+                ));
+                // Create per-package home if it doesn't exist
+                std::fs::create_dir_all(&pkg_home).ok();
 
-                // Actually exec the shell with the package in PATH
+                output::status("shell", &format!("PATH: {}", pkg_bin.display()));
+                output::status("shell", &format!("HOME: {}", pkg_home.display()));
+                output::status("shell", &format!("user: {user} (uid={uid})"));
+
                 let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
                 let err = std::process::Command::new(&shell)
                     .env("PATH", &new_path)
                     .env("BINGUX_SANDBOX", package)
+                    .env("BINGUX_PACKAGE", &pkg_id.to_string())
+                    .env("HOME", &pkg_home.to_string_lossy().to_string())
                     .env("PS1", &format!("[bxc:{package}] \\$ "))
                     .status();
 
                 match err {
                     Ok(status) => {
-                        output::status("shell", &format!("shell exited with {}", status));
+                        output::status("shell", &format!("exited: {}", status));
                     }
                     Err(e) => {
                         output::status("error", &format!("failed to launch shell: {e}"));

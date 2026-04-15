@@ -9,6 +9,7 @@ description = "Sandbox container CLI"
 bingux-common = { path = "../../common/bingux-common" }
 bingux-gated = { path = "../../gate/bingux-gated" }
 bxc-sandbox = { path = "../../sandbox/bxc-sandbox" }
+bxc-runtime = { path = "../../sandbox/bxc-runtime" }
 bpkg-store = { path = "../../pkg/bpkg-store" }
 bxc-shim = { path = "../../sandbox/bxc-shim" }
 nix = { workspace = true }
