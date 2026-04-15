@@ -1,0 +1,27 @@
+pkgscope="bingux"
+pkgname="tmux-src"
+pkgver="3.5a"
+pkgarch="x86_64-linux"
+pkgdesc="tmux — terminal multiplexer"
+license="ISC"
+depends=("ncurses-6.5" "libevent-src-2.1.12")
+makedepends=("musl-toolchain-13.2.0")
+exports=("bin/tmux")
+source=("https://github.com/tmux/tmux/releases/download/3.5a/tmux-3.5a.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/tmux-3.5a"
+    NC="$BPKG_STORE_ROOT/ncurses-6.5-x86_64-linux"
+    LIBEVENT="$BPKG_STORE_ROOT/libevent-src-2.1.12-x86_64-linux"
+    CC=bingux-gcc ./configure --prefix=/ \
+        CFLAGS="-static -O2 -I$NC/include -I$NC/include/ncurses -I$LIBEVENT/include" \
+        LDFLAGS="-static -L$NC/lib -L$LIBEVENT/lib" \
+        LIBS="-levent -lncurses -lpthread" 2>/dev/null
+    make -j$(nproc) 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/tmux-3.5a"
+    mkdir -p "$PKGDIR/bin"
+    cp tmux "$PKGDIR/bin/tmux"
+    chmod +x "$PKGDIR/bin/tmux"
+}

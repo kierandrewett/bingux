@@ -1,0 +1,24 @@
+pkgscope="bingux"
+pkgname="entr-src"
+pkgver="5.6"
+pkgarch="x86_64-linux"
+pkgdesc="entr — run commands when files change"
+license="ISC"
+depends=()
+makedepends=("musl-toolchain-13.2.0")
+exports=("bin/entr")
+source=("https://eradman.com/entrproject/code/entr-5.6.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/entr-5.6"
+    ./configure 2>/dev/null
+    make CC=bingux-gcc \
+        CFLAGS="-static -O2 -D_GNU_SOURCE -D_LINUX_PORT -Imissing -DRELEASE='\"5.6\"'" \
+        LDFLAGS="-static" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/entr-5.6"
+    mkdir -p "$PKGDIR/bin"
+    cp entr "$PKGDIR/bin/entr"
+    chmod +x "$PKGDIR/bin/entr"
+}

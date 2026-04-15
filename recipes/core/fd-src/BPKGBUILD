@@ -1,0 +1,21 @@
+pkgscope="bingux"
+pkgname="fd-src"
+pkgver="10.2.0"
+pkgarch="x86_64-linux"
+pkgdesc="fd — fast file finder"
+license="MIT"
+depends=()
+makedepends=("rust-toolchain-1.84.0")
+exports=("bin/fd")
+source=("https://github.com/sharkdp/fd/archive/refs/tags/v10.2.0.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/fd-10.2.0"
+    cargo build --release 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/fd-10.2.0"
+    mkdir -p "$PKGDIR/bin"
+    cp target/release/fd "$PKGDIR/bin/fd"
+    chmod +x "$PKGDIR/bin/fd"
+}

@@ -1,0 +1,21 @@
+pkgscope="bingux"
+pkgname="ripgrep-src"
+pkgver="14.1.1"
+pkgarch="x86_64-linux"
+pkgdesc="ripgrep — fast recursive grep"
+license="MIT"
+depends=()
+makedepends=("rust-toolchain-1.84.0")
+exports=("bin/rg")
+source=("https://github.com/BurntSushi/ripgrep/archive/refs/tags/14.1.1.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/ripgrep-14.1.1"
+    cargo build --release 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/ripgrep-14.1.1"
+    mkdir -p "$PKGDIR/bin"
+    cp target/release/rg "$PKGDIR/bin/rg"
+    chmod +x "$PKGDIR/bin/rg"
+}
