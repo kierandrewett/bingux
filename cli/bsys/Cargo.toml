@@ -14,6 +14,8 @@ tokio = { workspace = true }
 bsys-config = { path = "../../system/bsys-config" }
 bsys-compose = { path = "../../system/bsys-compose" }
 bxc-sandbox = { path = "../../sandbox/bxc-sandbox" }
+bpkg-home = { path = "../../home/bpkg-home" }
+walkdir = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
 tracing = { workspace = true }
