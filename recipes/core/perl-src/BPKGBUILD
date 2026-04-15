@@ -1,0 +1,41 @@
+pkgscope="bingux"
+pkgname="perl-src"
+pkgver="5.40.0"
+pkgarch="x86_64-linux"
+pkgdesc="Perl 5 programming language — compiled from source"
+license="Artistic-1.0-Perl OR GPL-1.0-or-later"
+depends=()
+makedepends=("musl-toolchain-13.2.0")
+exports=("bin/perl" "bin/perl5.40.0")
+source=("https://www.cpan.org/src/5.0/perl-5.40.0.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/perl-5.40.0"
+    TC="/tmp/bingux-bootstrap-store/musl-toolchain-13.2.0-x86_64-linux"
+
+    sh Configure -des \
+        -Dprefix=/ \
+        -Dcc="$TC/bin/gcc" \
+        -Dccflags="-static -O2 -isystem $TC/include" \
+        -Dldflags="-static" \
+        -Dlddlflags="-static" \
+        -Dusethreads=n \
+        -Duselargefiles \
+        -Dd_semctl_semun \
+        -Dlibs="-lm -lcrypt -ldl" \
+        -Ud_dlopen \
+        -Dso=none \
+        -Dusedl=n \
+        -Duseshrplib=false \
+        -Dar="$TC/bin/ar" \
+        -Dfull_ar="$TC/bin/ar" \
+        -Dranlib="$TC/bin/ranlib" \
+        -Dnm="$TC/bin/nm" \
+        -Dld="$TC/bin/gcc"
+
+    make -j$(nproc)
+}
+package() {
+    cd "$SRCDIR/perl-5.40.0"
+    make DESTDIR="$PKGDIR" install
+}

@@ -1,0 +1,24 @@
+pkgscope="bingux"
+pkgname="zip-src"
+pkgver="3.0"
+pkgarch="x86_64-linux"
+pkgdesc="Info-ZIP zip — .zip archive creator"
+license="Info-ZIP"
+depends=()
+makedepends=("musl-toolchain-13.2.0")
+exports=("bin/zip" "bin/zipnote" "bin/zipsplit" "bin/zipcloak")
+source=("https://downloads.sourceforge.net/infozip/zip30.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/zip30"
+    make -f unix/Makefile generic CC=bingux-gcc LOCAL_ZIP="-DHAVE_STRERROR" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/zip30"
+    mkdir -p "$PKGDIR/bin"
+    cp zip "$PKGDIR/bin/zip"
+    cp zipnote "$PKGDIR/bin/zipnote"
+    cp zipsplit "$PKGDIR/bin/zipsplit"
+    cp zipcloak "$PKGDIR/bin/zipcloak"
+    chmod +x "$PKGDIR/bin"/*
+}

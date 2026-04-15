@@ -1,0 +1,23 @@
+pkgscope="bingux"
+pkgname="mpfr-src"
+pkgver="4.2.1"
+pkgarch="x86_64-linux"
+pkgdesc="GNU MPFR — multiple-precision floating-point library"
+license="LGPL-3.0"
+depends=("gmp-src-6.3.0")
+makedepends=("musl-toolchain-11.2.1")
+exports=("lib/libmpfr.a" "include/mpfr.h")
+source=("https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.1.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/mpfr-4.2.1"
+    CC=x86_64-linux-musl-gcc ./configure --prefix=/ \
+        --enable-static --disable-shared \
+        --with-gmp="$BPKG_STORE_ROOT/gmp-src-6.3.0-x86_64-linux" \
+        CFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    make -j$(nproc) 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/mpfr-4.2.1"
+    make DESTDIR="$PKGDIR" install 2>/dev/null
+}

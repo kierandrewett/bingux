@@ -1,0 +1,26 @@
+pkgscope="bingux"
+pkgname="unzip-src"
+pkgver="6.0"
+pkgarch="x86_64-linux"
+pkgdesc="Info-ZIP unzip — .zip extraction utility"
+license="Info-ZIP"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/unzip")
+source=("https://downloads.sourceforge.net/infozip/unzip60.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/unzip60"
+    make -f unix/Makefile generic \
+        CC=x86_64-linux-musl-gcc \
+        CF="-static -DUNIX -I." \
+        LF="-static" 2>&1 | tail -5
+}
+package() {
+    cd "$SRCDIR/unzip60"
+    mkdir -p "$PKGDIR/bin"
+    cp unzip "$PKGDIR/bin/unzip"
+    cp funzip "$PKGDIR/bin/funzip"
+    cp unzipsfx "$PKGDIR/bin/unzipsfx" 2>/dev/null || true
+    chmod +x "$PKGDIR/bin"/*
+}

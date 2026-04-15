@@ -1,0 +1,22 @@
+pkgscope="bingux"
+pkgname="gmp-src"
+pkgver="6.3.0"
+pkgarch="x86_64-linux"
+pkgdesc="GNU Multiple Precision Arithmetic Library"
+license="LGPL-3.0"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("lib/libgmp.a" "include/gmp.h")
+source=("https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/gmp-6.3.0"
+    CC=x86_64-linux-musl-gcc ./configure --prefix=/ \
+        --enable-static --disable-shared \
+        CFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    make -j$(nproc) 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/gmp-6.3.0"
+    make DESTDIR="$PKGDIR" install 2>/dev/null
+}

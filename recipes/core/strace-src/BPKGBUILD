@@ -1,22 +1,41 @@
 pkgscope="bingux"
 pkgname="strace-src"
-pkgver="6.12"
+pkgver="6.19"
 pkgarch="x86_64-linux"
 pkgdesc="strace — system call tracer"
 license="LGPL-2.1"
 depends=()
-makedepends=("musl-toolchain-11.2.1")
+makedepends=("musl-toolchain-13.2.0")
 exports=("bin/strace")
-source=("https://github.com/strace/strace/releases/download/v6.12/strace-6.12.tar.xz")
+source=("https://github.com/strace/strace/releases/download/v6.19/strace-6.19.tar.xz")
 sha256sums=("SKIP")
 build() {
-    cd "$SRCDIR/strace-6.12"
-    CC=bingux-gcc ./configure --prefix=/ --enable-mpers=no \
-        CFLAGS="-static" LDFLAGS="-static -Wl,--allow-multiple-definition" 2>/dev/null
-    make -j1 CC=bingux-gcc LDFLAGS="-static -Wl,--allow-multiple-definition" 2>&1 | tail -3
+    cd "$SRCDIR/strace-6.19"
+    # strace needs a custom gcc wrapper that uses -idirafter for toolchain
+    # headers so strace's bundled kernel headers take priority
+    TC="$(cd "$(dirname "$(which bingux-gcc)")/.." && pwd)"
+    cat > "$SRCDIR/strace-gcc" << WEOF
+#!/bin/sh
+exec "$TC/bin/gcc" \\
+    -B "$TC/libexec/gcc/x86_64-linux-musl/11.2.1/" \\
+    -B "$TC/lib/" \\
+    -nostdinc \\
+    -isystem "$TC/lib/gcc/x86_64-linux-musl/11.2.1/include" \\
+    -idirafter "$TC/include" \\
+    -static \\
+    "\$@"
+WEOF
+    chmod +x "$SRCDIR/strace-gcc"
+    CC="$SRCDIR/strace-gcc" CC_FOR_BUILD="$SRCDIR/strace-gcc" \
+        ./configure --prefix=/ --enable-mpers=no --enable-bundled=yes \
+        CFLAGS="-Wno-error" LDFLAGS="-Wl,--allow-multiple-definition" \
+        CFLAGS_FOR_BUILD="-Wno-error" LDFLAGS_FOR_BUILD=""
+    make -j$(nproc) CC="$SRCDIR/strace-gcc" CC_FOR_BUILD="$SRCDIR/strace-gcc" \
+        CFLAGS="-Wno-error" LDFLAGS="-Wl,--allow-multiple-definition" \
+        CFLAGS_FOR_BUILD="-Wno-error" LDFLAGS_FOR_BUILD=""
 }
 package() {
-    cd "$SRCDIR/strace-6.12"
+    cd "$SRCDIR/strace-6.19"
     mkdir -p "$PKGDIR/bin"
     cp src/strace "$PKGDIR/bin/strace" 2>/dev/null || cp strace "$PKGDIR/bin/strace"
     chmod +x "$PKGDIR/bin/strace"

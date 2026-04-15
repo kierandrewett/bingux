@@ -1,0 +1,24 @@
+pkgscope="bingux"
+pkgname="zstd-src"
+pkgver="1.5.6"
+pkgarch="x86_64-linux"
+pkgdesc="Zstandard — fast real-time compression"
+license="BSD-3-Clause"
+depends=()
+makedepends=("musl-toolchain-13.2.0")
+exports=("bin/zstd" "bin/zstdcat" "bin/unzstd" "bin/zstdmt")
+source=("https://github.com/facebook/zstd/releases/download/v1.5.6/zstd-1.5.6.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/zstd-1.5.6"
+    make CC=bingux-gcc LDFLAGS="-static" -j$(nproc) 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/zstd-1.5.6"
+    mkdir -p "$PKGDIR/bin"
+    cp programs/zstd "$PKGDIR/bin/zstd"
+    ln -sf zstd "$PKGDIR/bin/zstdcat"
+    ln -sf zstd "$PKGDIR/bin/unzstd"
+    ln -sf zstd "$PKGDIR/bin/zstdmt"
+    chmod +x "$PKGDIR/bin/zstd"
+}

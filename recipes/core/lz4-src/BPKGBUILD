@@ -1,0 +1,24 @@
+pkgscope="bingux"
+pkgname="lz4-src"
+pkgver="1.10.0"
+pkgarch="x86_64-linux"
+pkgdesc="LZ4 — fast lossless compression"
+license="BSD-2-Clause"
+depends=()
+makedepends=("musl-toolchain-13.2.0")
+exports=("bin/lz4" "bin/lz4c" "bin/lz4cat" "bin/unlz4")
+source=("https://github.com/lz4/lz4/releases/download/v1.10.0/lz4-1.10.0.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/lz4-1.10.0"
+    make CC=bingux-gcc LDFLAGS="-static" -j$(nproc) 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/lz4-1.10.0"
+    mkdir -p "$PKGDIR/bin"
+    cp programs/lz4 "$PKGDIR/bin/lz4"
+    ln -sf lz4 "$PKGDIR/bin/lz4c"
+    ln -sf lz4 "$PKGDIR/bin/lz4cat"
+    ln -sf lz4 "$PKGDIR/bin/unlz4"
+    chmod +x "$PKGDIR/bin/lz4"
+}

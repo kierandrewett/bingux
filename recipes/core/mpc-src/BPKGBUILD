@@ -1,0 +1,24 @@
+pkgscope="bingux"
+pkgname="mpc-src"
+pkgver="1.3.1"
+pkgarch="x86_64-linux"
+pkgdesc="GNU MPC — multiple-precision complex number library"
+license="LGPL-3.0"
+depends=("gmp-src-6.3.0" "mpfr-src-4.2.1")
+makedepends=("musl-toolchain-11.2.1")
+exports=("lib/libmpc.a" "include/mpc.h")
+source=("https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/mpc-1.3.1"
+    CC=x86_64-linux-musl-gcc ./configure --prefix=/ \
+        --enable-static --disable-shared \
+        --with-gmp="$BPKG_STORE_ROOT/gmp-src-6.3.0-x86_64-linux" \
+        --with-mpfr="$BPKG_STORE_ROOT/mpfr-src-4.2.1-x86_64-linux" \
+        CFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    make -j$(nproc) 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/mpc-1.3.1"
+    make DESTDIR="$PKGDIR" install 2>/dev/null
+}

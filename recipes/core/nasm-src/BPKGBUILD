@@ -1,0 +1,24 @@
+pkgscope="bingux"
+pkgname="nasm-src"
+pkgver="2.16.03"
+pkgarch="x86_64-linux"
+pkgdesc="Netwide Assembler — x86/x64 assembler"
+license="BSD-2-Clause"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/nasm" "bin/ndisasm")
+source=("https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/nasm-2.16.03.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/nasm-2.16.03"
+    CC=x86_64-linux-musl-gcc ./configure --prefix=/ \
+        CFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    make -j$(nproc) 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/nasm-2.16.03"
+    mkdir -p "$PKGDIR/bin"
+    cp nasm "$PKGDIR/bin/nasm"
+    cp ndisasm "$PKGDIR/bin/ndisasm"
+    chmod +x "$PKGDIR/bin/nasm" "$PKGDIR/bin/ndisasm"
+}

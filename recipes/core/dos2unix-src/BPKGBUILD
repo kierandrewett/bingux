@@ -1,0 +1,23 @@
+pkgscope="bingux"
+pkgname="dos2unix-src"
+pkgver="7.5.2"
+pkgarch="x86_64-linux"
+pkgdesc="dos2unix — text file format converters"
+license="BSD-2-Clause"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/dos2unix" "bin/unix2dos")
+source=("https://waterlan.home.xs4all.nl/dos2unix/dos2unix-7.5.2.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/dos2unix-7.5.2"
+    make CC=x86_64-linux-musl-gcc \
+        LDFLAGS_EXTRA="-static" ENABLE_NLS= 2>&1 | tail -5
+}
+package() {
+    cd "$SRCDIR/dos2unix-7.5.2"
+    mkdir -p "$PKGDIR/bin"
+    cp dos2unix "$PKGDIR/bin/dos2unix"
+    ln -sf dos2unix "$PKGDIR/bin/unix2dos"
+    chmod +x "$PKGDIR/bin/dos2unix"
+}
