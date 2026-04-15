@@ -41,10 +41,10 @@ All 11 sprints from the original plan are implemented. See git log for details.
 - [ ] Test: bsys/bpkg work on the improved kernel
 
 ### Phase C: Wire patchelf into the build pipeline end-to-end
-- [ ] When patchelf is in the store, automatically add to PATH during builds
-- [ ] After package() completes, if binary is dynamically linked, patch it
-- [ ] Test: build a dynamically-linked C program, patchelf it, run it
-- [ ] Verify RUNPATH points to store dependency paths
+- [x] When patchelf is in the store, automatically add to PATH during builds
+- [x] After package() completes, if binary is dynamically linked, patch it
+- [x] Test: build a dynamically-linked C program, patchelf it, run it
+- [x] Verify RUNPATH points to store dependency paths
 
 ### Phase D: Create a qcow2 persistent disk for the VM
 - [ ] Create a 2GB qcow2 disk image
