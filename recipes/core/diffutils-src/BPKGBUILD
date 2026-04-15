@@ -1,0 +1,24 @@
+pkgscope="bingux"
+pkgname="diffutils-src"
+pkgver="3.10"
+pkgarch="x86_64-linux"
+pkgdesc="GNU diffutils — compiled from source"
+license="GPL-3.0"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/diff" "bin/cmp" "bin/sdiff")
+source=("https://ftpmirror.gnu.org/diffutils/diffutils-3.10.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/diffutils-3.10"
+    CC=bingux-gcc ./configure --prefix=/ --disable-nls \
+        CFLAGS="-static" LDFLAGS="-static -Wl,--allow-multiple-definition" 2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/diffutils-3.10"
+    mkdir -p "$PKGDIR/bin"
+    for b in diff cmp sdiff diff3; do
+        [ -f "src/$b" ] && cp "src/$b" "$PKGDIR/bin/" && chmod +x "$PKGDIR/bin/$b"
+    done
+}

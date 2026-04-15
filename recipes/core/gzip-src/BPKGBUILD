@@ -1,0 +1,25 @@
+pkgscope="bingux"
+pkgname="gzip-src"
+pkgver="1.13"
+pkgarch="x86_64-linux"
+pkgdesc="GNU gzip — compiled from source"
+license="GPL-3.0"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/gzip" "bin/gunzip" "bin/zcat")
+source=("https://ftpmirror.gnu.org/gzip/gzip-1.13.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/gzip-1.13"
+    CC=bingux-gcc ./configure --prefix=/ --disable-nls \
+        CFLAGS="-static" LDFLAGS="-static -Wl,--allow-multiple-definition" 2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/gzip-1.13"
+    mkdir -p "$PKGDIR/bin"
+    cp gzip "$PKGDIR/bin/gzip"
+    chmod +x "$PKGDIR/bin/gzip"
+    ln -sf gzip "$PKGDIR/bin/gunzip"
+    ln -sf gzip "$PKGDIR/bin/zcat"
+}
