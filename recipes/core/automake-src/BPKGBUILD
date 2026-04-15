@@ -1,0 +1,21 @@
+pkgscope="bingux"
+pkgname="automake-src"
+pkgver="1.17"
+pkgarch="x86_64-linux"
+pkgdesc="GNU automake — Makefile generator"
+license="GPL-2.0"
+depends=("autoconf-src-2.72")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/automake" "bin/aclocal")
+source=("https://ftpmirror.gnu.org/automake/automake-1.17.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/automake-1.17"
+    ./configure --prefix=/ 2>/dev/null
+    make -j1 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/automake-1.17"
+    mkdir -p "$PKGDIR"
+    make install DESTDIR="$PKGDIR" 2>/dev/null
+}

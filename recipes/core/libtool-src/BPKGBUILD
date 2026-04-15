@@ -1,0 +1,22 @@
+pkgscope="bingux"
+pkgname="libtool-src"
+pkgver="2.5.4"
+pkgarch="x86_64-linux"
+pkgdesc="GNU libtool — shared library support"
+license="GPL-2.0"
+depends=("m4-src-1.4.19")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/libtool" "bin/libtoolize")
+source=("https://ftpmirror.gnu.org/libtool/libtool-2.5.4.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/libtool-2.5.4"
+    CC=bingux-gcc ./configure --prefix=/ \
+        CFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    make -j1 CC=bingux-gcc 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/libtool-2.5.4"
+    mkdir -p "$PKGDIR"
+    make install DESTDIR="$PKGDIR" 2>/dev/null
+}
