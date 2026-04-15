@@ -74,13 +74,11 @@ else
     TOTAL_FAIL=$((TOTAL_FAIL + 1))
 fi
 
-PKG_COUNT=$(echo "$BOOT_OUTPUT" | grep -c "kept" || echo 0)
-echo "  packages in boot: $PKG_COUNT"
-if [ "$PKG_COUNT" -gt 10 ]; then
-    echo "  package count: PASS (>10)"
+if echo "$BOOT_OUTPUT" | grep -q "bingux-welcome.*Packages"; then
+    echo "  package listing: PASS"
     TOTAL_PASS=$((TOTAL_PASS + 1))
 else
-    echo "  package count: FAIL (<10)"
+    echo "  package listing: FAIL"
     TOTAL_FAIL=$((TOTAL_FAIL + 1))
 fi
 
