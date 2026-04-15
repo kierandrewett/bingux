@@ -118,12 +118,20 @@ impl BuildPipeline {
         let executor = BuildExecutor::new(work_dir);
         let env = executor.prepare()?;
 
-        // Extract any fetched sources into SRCDIR.
+        // Extract or copy fetched sources into SRCDIR.
         for url in &recipe.source {
             let filename = url.rsplit('/').next().unwrap_or("download");
             let cached = self.config.source_cache.join(filename);
             if cached.exists() {
-                SourceFetcher::extract(&cached, &env.srcdir)?;
+                // Try extracting as an archive; if it's not an archive, just copy the file
+                match SourceFetcher::extract(&cached, &env.srcdir) {
+                    Ok(()) => {}
+                    Err(_) => {
+                        // Not an archive — copy the raw file into SRCDIR
+                        info!("not an archive, copying raw file: {filename}");
+                        fs::copy(&cached, env.srcdir.join(filename))?;
+                    }
+                }
             }
         }
 
