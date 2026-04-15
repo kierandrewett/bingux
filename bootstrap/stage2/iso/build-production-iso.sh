@@ -110,7 +110,33 @@ sha256sums=("SKIP")
 package() { mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/fzf" "$PKGDIR/bin/fzf"; chmod +x "$PKGDIR/bin/fzf"; }
 R
 
-for recipe in jq ripgrep fd bat fzf; do
+# Additional packages — write recipes individually to avoid IFS issues with URLs
+write_recipe() { local name=$1 ver=$2 url=$3 src_path=$4
+    mkdir -p "$ISO_WORK/recipes/$name"
+    cat > "$ISO_WORK/recipes/$name/BPKGBUILD" << RECIPE
+pkgscope="bingux"
+pkgname="$name"
+pkgver="$ver"
+pkgarch="x86_64-linux"
+pkgdesc="$name"
+license="MIT"
+depends=()
+exports=("bin/$name")
+source=("$url")
+sha256sums=("SKIP")
+package() { mkdir -p "\$PKGDIR/bin"; cp "\$SRCDIR/$src_path" "\$PKGDIR/bin/$name"; chmod +x "\$PKGDIR/bin/$name"; }
+RECIPE
+}
+
+write_recipe eza 0.20.14 "https://github.com/eza-community/eza/releases/download/v0.20.14/eza_x86_64-unknown-linux-musl.tar.gz" eza
+write_recipe delta 0.18.2 "https://github.com/dandavison/delta/releases/download/0.18.2/delta-0.18.2-x86_64-unknown-linux-musl.tar.gz" "delta-0.18.2-x86_64-unknown-linux-musl/delta"
+write_recipe zoxide 0.9.6 "https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.6/zoxide-0.9.6-x86_64-unknown-linux-musl.tar.gz" zoxide
+write_recipe dust 1.1.1 "https://github.com/bootandy/dust/releases/download/v1.1.1/dust-v1.1.1-x86_64-unknown-linux-musl.tar.gz" "dust-v1.1.1-x86_64-unknown-linux-musl/dust"
+write_recipe starship 1.22.1 "https://github.com/starship/starship/releases/download/v1.22.1/starship-x86_64-unknown-linux-musl.tar.gz" starship
+write_recipe hexyl 0.14.0 "https://github.com/sharkdp/hexyl/releases/download/v0.14.0/hexyl-v0.14.0-x86_64-unknown-linux-musl.tar.gz" "hexyl-v0.14.0-x86_64-unknown-linux-musl/hexyl"
+write_recipe hyperfine 1.19.0 "https://github.com/sharkdp/hyperfine/releases/download/v1.19.0/hyperfine-v1.19.0-x86_64-unknown-linux-musl.tar.gz" "hyperfine-v1.19.0-x86_64-unknown-linux-musl/hyperfine"
+
+for recipe in jq ripgrep fd bat fzf eza delta zoxide dust starship hexyl hyperfine; do
     "$ROOT_DIR/target/release/bsys-cli" build "$ISO_WORK/recipes/$recipe/BPKGBUILD" 2>&1 | grep -E "ok:|error"
 done
 
