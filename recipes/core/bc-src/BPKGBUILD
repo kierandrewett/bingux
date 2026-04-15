@@ -1,0 +1,29 @@
+pkgscope="bingux"
+pkgname="bc-src"
+pkgver="1.07.1"
+pkgarch="x86_64-linux"
+pkgdesc="bc — arbitrary precision calculator"
+license="GPL-3.0"
+depends=("readline-8.2" "ncurses-6.5")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/bc" "bin/dc")
+source=("https://ftpmirror.gnu.org/bc/bc-1.07.1.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/bc-1.07.1"
+    READLINE="/tmp/bingux-bootstrap-store/readline-8.2-x86_64-linux"
+    NCURSES="/tmp/bingux-bootstrap-store/ncurses-6.5-x86_64-linux"
+    CC=bingux-gcc ./configure --prefix=/ \
+        --with-readline \
+        CFLAGS="-static -I$READLINE/include -I$NCURSES/include" \
+        LDFLAGS="-static -L$READLINE/lib -L$NCURSES/lib -Wl,--allow-multiple-definition" \
+        LIBS="-lreadline -lncursesw" 2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -L$READLINE/lib -L$NCURSES/lib -lreadline -lncursesw -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/bc-1.07.1"
+    mkdir -p "$PKGDIR/bin"
+    cp bc/bc "$PKGDIR/bin/bc" 2>/dev/null || true
+    cp dc/dc "$PKGDIR/bin/dc" 2>/dev/null || true
+    chmod +x "$PKGDIR/bin/"*
+}
