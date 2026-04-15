@@ -1,0 +1,81 @@
+pkgscope="bingux"
+pkgname="gcc-src"
+pkgver="14.2.0"
+pkgarch="x86_64-linux"
+pkgdesc="GNU Compiler Collection 14.2.0 — C/C++ compiler built from source"
+license="GPL-3.0"
+depends=("gmp-src-6.3.0" "mpfr-src-4.2.1" "mpc-src-1.3.1")
+makedepends=("musl-toolchain-13.2.0")
+exports=(
+    "bin/gcc"
+    "bin/g++"
+    "bin/cpp"
+    "bin/c++"
+    "bin/gcc-ar"
+    "bin/gcc-nm"
+    "bin/gcc-ranlib"
+    "bin/gcov"
+)
+source=("https://ftpmirror.gnu.org/gcc/gcc-14.2.0/gcc-14.2.0.tar.xz")
+sha256sums=("SKIP")
+build() {
+    TC="$BINGUX_STORE/musl-toolchain-13.2.0-x86_64-linux"
+    GMP="$BINGUX_STORE/gmp-src-6.3.0-x86_64-linux"
+    MPFR="$BINGUX_STORE/mpfr-src-4.2.1-x86_64-linux"
+    MPC="$BINGUX_STORE/mpc-src-1.3.1-x86_64-linux"
+
+    # Create sysroot with musl headers/libs so the newly-built xgcc
+    # can find a C library when configuring target runtime libs
+    SYSROOT="$SRCDIR/sysroot"
+    mkdir -p "$SYSROOT/usr/include" "$SYSROOT/usr/lib" "$SYSROOT/lib"
+    cp -a "$TC/include/"* "$SYSROOT/usr/include/"
+    cp -a "$TC/lib/"*.a "$SYSROOT/usr/lib/" 2>/dev/null || true
+    cp -a "$TC/lib/"*.o "$SYSROOT/usr/lib/" 2>/dev/null || true
+    cp -a "$TC/lib/"*.a "$SYSROOT/lib/" 2>/dev/null || true
+    cp -a "$TC/lib/"*.o "$SYSROOT/lib/" 2>/dev/null || true
+
+    # Patch os_defines.h for musl compatibility (musl lacks __GLIBC_PREREQ)
+    sed -i '/#include <features.h>/a\
+\n// Provide a fallback for non-glibc systems (e.g. musl)\n#ifndef __GLIBC_PREREQ\n# define __GLIBC_PREREQ(maj, min) 0\n#endif' \
+        "$SRCDIR/gcc-14.2.0/libstdc++-v3/config/os/gnu-linux/os_defines.h"
+
+    mkdir -p "$SRCDIR/build" && cd "$SRCDIR/build"
+    ../gcc-14.2.0/configure --prefix=/ \
+        --enable-languages=c,c++ \
+        --disable-multilib \
+        --disable-bootstrap \
+        --disable-nls \
+        --disable-libsanitizer \
+        --disable-libvtv \
+        --disable-libssp \
+        --disable-libgomp \
+        --disable-libitm \
+        --disable-libatomic \
+        --disable-libstdcxx \
+        --without-isl \
+        --disable-shared \
+        --disable-threads \
+        --with-sysroot="$SYSROOT" \
+        --with-build-sysroot="$SYSROOT" \
+        --with-gmp="$GMP" \
+        --with-mpfr="$MPFR" \
+        --with-mpc="$MPC" \
+        CC="$TC/bin/gcc" \
+        CXX="$TC/bin/g++" \
+        CFLAGS="-static -O2 -idirafter $TC/include" \
+        CXXFLAGS="-static -O2 -idirafter $TC/include" \
+        LDFLAGS="-static" \
+        2>/dev/null
+    make -j$(nproc) 2>&1 | tail -5
+}
+package() {
+    cd "$SRCDIR/build"
+    make DESTDIR="$PKGDIR" install 2>/dev/null
+
+    # Strip binaries
+    find "$PKGDIR/bin" -type f -exec strip {} \; 2>/dev/null
+    find "$PKGDIR/libexec" -type f -exec strip {} \; 2>/dev/null
+
+    # Create cc/c++ symlinks
+    ln -sf gcc "$PKGDIR/bin/cc"
+}
