@@ -1,0 +1,28 @@
+pkgscope="bingux"
+pkgname="lua-src"
+pkgver="5.4.7"
+pkgarch="x86_64-linux"
+pkgdesc="Lua — scripting language, compiled from source"
+license="MIT"
+depends=("readline-8.2" "ncurses-6.5")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/lua" "bin/luac")
+source=("https://www.lua.org/ftp/lua-5.4.7.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/lua-5.4.7"
+    READLINE="/tmp/bingux-bootstrap-store/readline-8.2-x86_64-linux"
+    NCURSES="/tmp/bingux-bootstrap-store/ncurses-6.5-x86_64-linux"
+    make linux CC=bingux-gcc \
+        MYCFLAGS="-static -I$READLINE/include -I$NCURSES/include" \
+        MYLDFLAGS="-static -L$READLINE/lib -L$NCURSES/lib" \
+        MYLIBS="-lreadline -lncursesw" \
+        2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/lua-5.4.7"
+    mkdir -p "$PKGDIR/bin"
+    cp src/lua "$PKGDIR/bin/lua"
+    cp src/luac "$PKGDIR/bin/luac"
+    chmod +x "$PKGDIR/bin/"*
+}
