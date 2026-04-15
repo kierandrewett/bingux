@@ -89,9 +89,17 @@ build_pkg "dust" "1.1.1" "https://github.com/bootandy/dust/releases/download/v1.
 build_pkg "neovim" "0.10.4" "https://github.com/neovim/neovim/releases/download/v0.10.4/nvim-linux-x86_64.tar.gz" \
     'mkdir -p "$PKGDIR/bin" "$PKGDIR/lib" "$PKGDIR/share"; cp "$SRCDIR/nvim-linux-x86_64/bin/nvim" "$PKGDIR/bin/nvim"; chmod +x "$PKGDIR/bin/nvim"; cp -a "$SRCDIR/nvim-linux-x86_64/lib/"* "$PKGDIR/lib/" 2>/dev/null || true; cp -a "$SRCDIR/nvim-linux-x86_64/share/"* "$PKGDIR/share/" 2>/dev/null || true' "bin/nvim"
 
-# curl (static binary from moparisthebest)
-build_pkg "curl" "8.11.1" "https://github.com/moparisthebest/static-curl/releases/download/v8.11.1/curl-amd64" \
+# curl (static binary)
+build_pkg "curl" "8.10.1" "https://github.com/moparisthebest/static-curl/releases/download/v8.10.1/curl-amd64" \
     'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/curl-amd64" "$PKGDIR/bin/curl"; chmod +x "$PKGDIR/bin/curl"' "bin/curl"
+
+# Python (standalone build from indygreg)
+build_pkg "python" "3.12.9" "https://github.com/indygreg/python-build-standalone/releases/download/20250317/cpython-3.12.9+20250317-x86_64-unknown-linux-musl-install_only_stripped.tar.gz" \
+    'mkdir -p "$PKGDIR/bin" "$PKGDIR/lib"; cp -a "$SRCDIR/python/bin/python3.12" "$PKGDIR/bin/python3"; ln -sf python3 "$PKGDIR/bin/python"; cp -a "$SRCDIR/python/lib/python3.12" "$PKGDIR/lib/" 2>/dev/null || true; chmod +x "$PKGDIR/bin/python3"' "bin/python3"
+
+# Node.js
+build_pkg "nodejs" "22.14.0" "https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-x64.tar.gz" \
+    'mkdir -p "$PKGDIR/bin" "$PKGDIR/lib"; cp "$SRCDIR/node-v22.14.0-linux-x64/bin/node" "$PKGDIR/bin/node"; chmod +x "$PKGDIR/bin/node"' "bin/node"
 
 echo "    Packages: $(ls "$STORE" 2>/dev/null | wc -l)"
 
