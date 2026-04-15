@@ -193,6 +193,20 @@ impl BuildPipeline {
         let meta_dir = env.pkgdir.join(SystemPaths::BPKG_META_DIR);
         fs::create_dir_all(&meta_dir)?;
 
+        // Classify exports into binaries and libraries.
+        let export_bins: Vec<_> = recipe
+            .exports
+            .iter()
+            .filter(|e| e.starts_with("bin/"))
+            .map(|e| format!("\"{e}\""))
+            .collect();
+        let export_libs: Vec<_> = recipe
+            .exports
+            .iter()
+            .filter(|e| e.starts_with("lib/"))
+            .map(|e| format!("\"{e}\""))
+            .collect();
+
         let manifest_content = format!(
             r#"[package]
 name = "{name}"
@@ -205,6 +219,13 @@ license = "{license}"
 [dependencies]
 runtime = [{runtime_deps}]
 build = [{build_deps}]
+
+[exports]
+binaries = [{export_bins}]
+libraries = [{export_libs}]
+
+[sandbox]
+level = "minimal"
 "#,
             name = recipe.pkgname,
             scope = recipe.pkgscope,
@@ -224,6 +245,8 @@ build = [{build_deps}]
                 .map(|d| format!("\"{d}\""))
                 .collect::<Vec<_>>()
                 .join(", "),
+            export_bins = export_bins.join(", "),
+            export_libs = export_libs.join(", "),
         );
 
         fs::write(
