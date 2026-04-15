@@ -131,6 +131,30 @@ build_package "eza" "0.20.14" "Modern ls replacement" \
     'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/eza" "$PKGDIR/bin/eza"; chmod +x "$PKGDIR/bin/eza"' \
     "bin/eza"
 
+# delta 0.18.2 (git diff viewer)
+build_package "delta" "0.18.2" "Syntax-highlighting pager for git" \
+    "https://github.com/dandavison/delta/releases/download/0.18.2/delta-0.18.2-x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/delta-0.18.2-x86_64-unknown-linux-musl/delta" "$PKGDIR/bin/delta"; chmod +x "$PKGDIR/bin/delta"' \
+    "bin/delta"
+
+# zoxide 0.9.6 (smart cd)
+build_package "zoxide" "0.9.6" "Smarter cd command" \
+    "https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.6/zoxide-0.9.6-x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/zoxide" "$PKGDIR/bin/zoxide"; chmod +x "$PKGDIR/bin/zoxide"' \
+    "bin/zoxide"
+
+# fzf 0.57.0 (fuzzy finder)
+build_package "fzf" "0.57.0" "Fuzzy finder" \
+    "https://github.com/junegunn/fzf/releases/download/v0.57.0/fzf-0.57.0-linux_amd64.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/fzf" "$PKGDIR/bin/fzf"; chmod +x "$PKGDIR/bin/fzf"' \
+    "bin/fzf"
+
+# dust 1.1.1 (disk usage viewer — static musl binary)
+build_package "dust" "1.1.1" "Intuitive disk usage tool" \
+    "https://github.com/bootandy/dust/releases/download/v1.1.1/dust-v1.1.1-x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/dust-v1.1.1-x86_64-unknown-linux-musl/dust" "$PKGDIR/bin/dust"; chmod +x "$PKGDIR/bin/dust"' \
+    "bin/dust"
+
 echo ""
 echo "    All packages built:"
 ls -1 "$STORE/" | sed 's/^/      /'
@@ -213,7 +237,7 @@ timezone = "Europe/London"
 keymap = "uk"
 
 [packages]
-keep = ["jq", "ripgrep", "fd", "bat", "eza"]
+keep = ["jq", "ripgrep", "fd", "bat", "eza", "delta", "zoxide", "fzf", "dust"]
 
 [services]
 enable = []
@@ -268,7 +292,7 @@ echo ""
 
 # Verify tools
 echo "[init] Tool verification:"
-for cmd in jq rg fd bat eza; do
+for cmd in jq rg fd bat eza delta zoxide fzf dust; do
     if command -v $cmd >/dev/null 2>&1; then
         version=$($cmd --version 2>&1 | head -1)
         echo "  OK  $cmd: $version"
@@ -278,7 +302,7 @@ for cmd in jq rg fd bat eza; do
 done
 echo ""
 
-echo "[init] Type 'bpkg list' to see packages, or use jq/rg/fd/bat/eza."
+echo "[init] Type 'bpkg list' to see packages, or use jq/rg/fd/bat/eza/delta/fzf."
 echo "[init] Ready."
 echo ""
 
