@@ -1,0 +1,23 @@
+pkgscope="bingux"
+pkgname="strace-src"
+pkgver="6.12"
+pkgarch="x86_64-linux"
+pkgdesc="strace — system call tracer"
+license="LGPL-2.1"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/strace")
+source=("https://github.com/strace/strace/releases/download/v6.12/strace-6.12.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/strace-6.12"
+    CC=bingux-gcc ./configure --prefix=/ --enable-mpers=no \
+        CFLAGS="-static" LDFLAGS="-static -Wl,--allow-multiple-definition" 2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/strace-6.12"
+    mkdir -p "$PKGDIR/bin"
+    cp src/strace "$PKGDIR/bin/strace" 2>/dev/null || cp strace "$PKGDIR/bin/strace"
+    chmod +x "$PKGDIR/bin/strace"
+}
