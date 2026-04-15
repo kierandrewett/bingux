@@ -147,19 +147,25 @@ impl BuildPipeline {
 
         // 5. Patchelf ELF binaries.
         let scan_result = scan_package_dir(&env.pkgdir)?;
-        let patched_count = scan_result.elfs.len();
+        let mut patched_count = 0;
 
         if !scan_result.elfs.is_empty() {
+            info!(
+                "scanned {}: {} ELF files found, {} non-ELF skipped",
+                env.pkgdir.display(),
+                scan_result.elfs.len(),
+                scan_result.skipped.len(),
+            );
+
             // Compute runpath from dependency store paths.
             let mut lib_paths: Vec<String> = Vec::new();
             for dep in &recipe.depends {
                 let dep_versions = store.query(dep);
                 for dep_id in &dep_versions {
-                    let dep_dir = self.config.store_root.join(dep_id.dir_name());
-                    let dep_lib = dep_dir.join("lib");
-                    if dep_lib.is_dir() {
-                        lib_paths.push(dep_lib.to_string_lossy().to_string());
-                    }
+                    let dep_store = PathBuf::from(SystemPaths::PACKAGES).join(dep_id.dir_name());
+                    let dep_lib = dep_store.join("lib");
+                    // Use the store canonical path for RUNPATH (not the local build dir).
+                    lib_paths.push(dep_lib.to_string_lossy().to_string());
                 }
             }
 
@@ -174,16 +180,36 @@ impl BuildPipeline {
             let interpreter = find_interpreter(&store);
 
             if let Some(ref interp) = interpreter {
+                info!("using interpreter: {interp}");
+
                 match PatchPlan::compute(&env.pkgdir, interp, &runpath) {
                     Ok(plan) => {
-                        let effective = plan.effective_patches().len();
+                        let effective = plan.effective_patches();
+                        let effective_count = effective.len();
                         write_log(&env.pkgdir, &plan, &[])?;
 
-                        // Try to apply the patches if patchelf is available
-                        if effective > 0 {
-                            match plan.apply() {
+                        // Log each binary that will be patched.
+                        for patch in &effective {
+                            info!(
+                                "  patch: {} (NEEDED: {})",
+                                patch.path.display(),
+                                if patch.needed.is_empty() {
+                                    "(none)".to_string()
+                                } else {
+                                    patch.needed.join(", ")
+                                },
+                            );
+                        }
+
+                        // Try to apply the patches if patchelf is available.
+                        if effective_count > 0 {
+                            let patchelf_bin = find_patchelf_bin(&store);
+                            info!("using patchelf binary: {patchelf_bin}");
+
+                            match plan.apply_with(&patchelf_bin) {
                                 Ok(()) => {
-                                    info!("patchelf applied to {effective} binaries");
+                                    patched_count = effective_count;
+                                    info!("patchelf applied to {effective_count} binaries");
                                 }
                                 Err(e) => {
                                     // patchelf not found is OK — log and continue
@@ -191,7 +217,7 @@ impl BuildPipeline {
                                 }
                             }
                         } else {
-                            info!("no ELF binaries need patching");
+                            info!("no ELF binaries need patching (all already correct)");
                         }
                     }
                     Err(e) => {
@@ -199,8 +225,10 @@ impl BuildPipeline {
                     }
                 }
             } else {
-                info!("no interpreter found, skipping patchelf");
+                info!("no glibc interpreter found in store, skipping patchelf (set BPKG_GLIBC_STORE to override)");
             }
+        } else {
+            info!("no ELF files found in package, skipping patchelf step");
         }
 
         // 6. Write manifest.
@@ -295,8 +323,22 @@ level = "minimal"
     }
 }
 
-/// Try to find a glibc interpreter in the store.
+/// Try to find a glibc interpreter path.
+///
+/// Resolution order:
+/// 1. `BPKG_GLIBC_STORE` environment variable (absolute path to the glibc store dir)
+/// 2. Any package in the store whose name starts with `glibc` (matches `glibc`,
+///    `glibc-src`, etc.)
 fn find_interpreter(store: &PackageStore) -> Option<String> {
+    // 1. Check environment variable override.
+    if let Ok(glibc_store) = std::env::var("BPKG_GLIBC_STORE") {
+        let interp = PathBuf::from(&glibc_store).join("lib/ld-linux-x86-64.so.2");
+        return Some(interp.to_string_lossy().to_string());
+    }
+
+    // 2. Search the store for a glibc package.
+    //    Prefer exact "glibc" match, fall back to "glibc-*" variants (e.g. glibc-src).
+    let mut fallback: Option<String> = None;
     for id in store.list() {
         if id.name == "glibc" {
             let interp_path = PathBuf::from(SystemPaths::PACKAGES)
@@ -304,8 +346,32 @@ fn find_interpreter(store: &PackageStore) -> Option<String> {
                 .join("lib/ld-linux-x86-64.so.2");
             return Some(interp_path.to_string_lossy().to_string());
         }
+        if id.name.starts_with("glibc") && fallback.is_none() {
+            let interp_path = PathBuf::from(SystemPaths::PACKAGES)
+                .join(id.dir_name())
+                .join("lib/ld-linux-x86-64.so.2");
+            fallback = Some(interp_path.to_string_lossy().to_string());
+        }
     }
-    None
+    fallback
+}
+
+/// Try to find a patchelf binary in the store or on PATH.
+///
+/// Resolution order:
+/// 1. `BPKG_PATCHELF_BIN` environment variable (checked later in `apply_with`)
+/// 2. Any `patchelf` package in the store
+/// 3. Falls back to `"patchelf"` (PATH lookup)
+fn find_patchelf_bin(store: &PackageStore) -> String {
+    for id in store.list() {
+        if id.name == "patchelf" {
+            let bin_path = PathBuf::from(SystemPaths::PACKAGES)
+                .join(id.dir_name())
+                .join("bin/patchelf");
+            return bin_path.to_string_lossy().to_string();
+        }
+    }
+    "patchelf".to_string()
 }
 
 #[cfg(test)]

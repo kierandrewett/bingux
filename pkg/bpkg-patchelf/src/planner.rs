@@ -121,27 +121,45 @@ impl PatchPlan {
 
     /// Apply the patch plan by shelling out to the `patchelf` command.
     ///
-    /// Returns an error if the `patchelf` binary is not found on PATH.
+    /// Uses the default `patchelf` on PATH. To specify a custom binary path,
+    /// use [`apply_with`].
     pub fn apply(&self) -> Result<(), BinguxError> {
-        // Verify patchelf is available.
-        let status = Command::new("which")
-            .arg("patchelf")
-            .output()
-            .map_err(|e| BinguxError::PatchelfFailed {
-                path: self.package_dir.clone(),
-                message: format!("failed to check for patchelf: {e}"),
-            })?;
+        self.apply_with("patchelf")
+    }
 
-        if !status.status.success() {
+    /// Apply the patch plan using the given patchelf binary path.
+    ///
+    /// The `patchelf_bin` can be an absolute path (e.g. from the package store)
+    /// or just `"patchelf"` to use PATH lookup.
+    ///
+    /// The `BPKG_PATCHELF_BIN` environment variable, if set, takes precedence
+    /// over the argument.
+    pub fn apply_with(&self, patchelf_bin: &str) -> Result<(), BinguxError> {
+        let bin = std::env::var("BPKG_PATCHELF_BIN")
+            .unwrap_or_else(|_| patchelf_bin.to_string());
+
+        // Verify patchelf is available: check absolute path directly, or use `which`.
+        let bin_path = Path::new(&bin);
+        let available = if bin_path.is_absolute() {
+            bin_path.exists()
+        } else {
+            Command::new("which")
+                .arg(&bin)
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        };
+
+        if !available {
             return Err(BinguxError::PatchelfFailed {
                 path: self.package_dir.clone(),
-                message: "patchelf binary not found on PATH".to_string(),
+                message: format!("patchelf binary not found: {bin}"),
             });
         }
 
         for patch in self.effective_patches() {
             if let Some(ref new_interp) = patch.new_interpreter {
-                let output = Command::new("patchelf")
+                let output = Command::new(&bin)
                     .arg("--set-interpreter")
                     .arg(new_interp)
                     .arg(&patch.path)
@@ -163,7 +181,7 @@ impl PatchPlan {
             }
 
             if let Some(ref new_runpath) = patch.new_runpath {
-                let output = Command::new("patchelf")
+                let output = Command::new(&bin)
                     .arg("--set-rpath")
                     .arg(new_runpath)
                     .arg(&patch.path)
