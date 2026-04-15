@@ -1,0 +1,25 @@
+pkgscope="bingux"
+pkgname="libevent-src"
+pkgver="2.1.12"
+pkgarch="x86_64-linux"
+pkgdesc="libevent — event notification library"
+license="BSD-3"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("lib/libevent.a")
+source=("https://github.com/libevent/libevent/releases/download/release-2.1.12-stable/libevent-2.1.12-stable.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/libevent-2.1.12-stable"
+    CC=bingux-gcc ./configure --prefix=/ --disable-shared --disable-openssl \
+        CFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    make -j1 CC=bingux-gcc 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/libevent-2.1.12-stable"
+    mkdir -p "$PKGDIR/lib" "$PKGDIR/include"
+    cp .libs/libevent.a "$PKGDIR/lib/" 2>/dev/null || cp libevent.a "$PKGDIR/lib/"
+    cp .libs/libevent_core.a "$PKGDIR/lib/" 2>/dev/null || true
+    cp include/event2/*.h "$PKGDIR/include/" 2>/dev/null || true
+    cp include/*.h "$PKGDIR/include/" 2>/dev/null || true
+}
