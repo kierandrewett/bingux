@@ -104,9 +104,9 @@ fn apply_reads_system_toml_and_generates_etc_files() {
     let generator = EtcGenerator::new(etc_dir.clone());
     let files = generator.generate_all(&config).unwrap();
 
-    // Should generate: hostname, locale.conf, locale.gen, vconsole.conf,
-    // localtime, resolv.conf, nftables.conf = 7 files
-    assert_eq!(files.len(), 7);
+    // passwd, group, os-release + hostname, locale.conf, locale.gen, vconsole.conf,
+    // localtime, resolv.conf, nftables.conf = 10 files
+    assert_eq!(files.len(), 10);
 
     // Verify hostname content
     let hostname_content = fs::read_to_string(etc_dir.join("hostname")).unwrap();
@@ -154,6 +154,6 @@ enable = []
     let generator = EtcGenerator::new(etc_dir);
     let files = generator.generate_all(&config).unwrap();
 
-    // Only 5 core files (no resolv.conf, no nftables.conf)
-    assert_eq!(files.len(), 5);
+    // passwd, group, os-release + 5 config files (no resolv.conf, no nftables.conf)
+    assert_eq!(files.len(), 8);
 }

@@ -29,6 +29,12 @@ impl EtcGenerator {
     pub fn generate_all(&self, config: &SystemConfig) -> Result<Vec<GeneratedFile>> {
         let mut files = Vec::new();
 
+        // Core identity files
+        files.push(self.generate_passwd()?);
+        files.push(self.generate_group()?);
+        files.push(self.generate_os_release()?);
+
+        // System config derived
         files.push(self.generate_hostname(&config.system.hostname)?);
         files.push(self.generate_locale_conf(&config.system.locale)?);
         files.push(self.generate_locale_gen(&config.system.locale)?);
@@ -167,6 +173,50 @@ table inet filter {{
         write_file(&path, &content)?;
         Ok(GeneratedFile { path, content })
     }
+
+    /// Generate `/etc/passwd` — root + system users.
+    /// User home dirs use the Bingux `/users/<name>/home` layout.
+    pub fn generate_passwd(&self) -> Result<GeneratedFile> {
+        let path = self.target.join("passwd");
+        let content = "\
+root:x:0:0:root:/users/root:/bin/sh
+nobody:x:65534:65534:Nobody:/:/sbin/nologin
+systemd-journal:x:190:190:systemd Journal:/:/sbin/nologin
+dbus:x:81:81:D-Bus:/:/sbin/nologin
+"
+        .to_string();
+        write_file(&path, &content)?;
+        Ok(GeneratedFile { path, content })
+    }
+
+    /// Generate `/etc/group`.
+    pub fn generate_group(&self) -> Result<GeneratedFile> {
+        let path = self.target.join("group");
+        let content = "\
+root:x:0:
+nobody:x:65534:
+systemd-journal:x:190:
+dbus:x:81:
+"
+        .to_string();
+        write_file(&path, &content)?;
+        Ok(GeneratedFile { path, content })
+    }
+
+    /// Generate `/etc/os-release`.
+    pub fn generate_os_release(&self) -> Result<GeneratedFile> {
+        let path = self.target.join("os-release");
+        let content = "\
+NAME=\"Bingux\"
+ID=bingux
+VERSION_ID=2
+PRETTY_NAME=\"Bingux v2\"
+HOME_URL=\"https://github.com/kierandrewett/bingux\"
+"
+        .to_string();
+        write_file(&path, &content)?;
+        Ok(GeneratedFile { path, content })
+    }
 }
 
 /// Helper: write content to a file, creating parent directories as needed.
@@ -280,8 +330,8 @@ allow_ports = [22]
         let (_tmp, generator) = make_generator();
         let files = generator.generate_all(&config).unwrap();
 
-        // hostname, locale.conf, locale.gen, vconsole.conf, localtime, resolv.conf, nftables.conf
-        assert_eq!(files.len(), 7);
+        // passwd, group, os-release, hostname, locale.conf, locale.gen, vconsole.conf, localtime, resolv.conf, nftables.conf
+        assert_eq!(files.len(), 10);
 
         let names: Vec<String> = files
             .iter()
@@ -323,7 +373,7 @@ enable = []
         let (_tmp, generator) = make_generator();
         let files = generator.generate_all(&config).unwrap();
 
-        // Only the 5 core files (no resolv.conf, no nftables.conf).
-        assert_eq!(files.len(), 5);
+        // passwd, group, os-release + 5 config files (no resolv.conf, no nftables.conf).
+        assert_eq!(files.len(), 8);
     }
 }
