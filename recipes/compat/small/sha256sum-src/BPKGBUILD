@@ -1,0 +1,34 @@
+pkgscope="bingux"
+pkgname="sha256sum-src"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="sha256sum — compute SHA-256 hash"
+license="MIT"
+depends=("openssl-src-3.4.1")
+exports=("bin/bingux-sha256sum")
+source=()
+sha256sums=()
+build() {
+    cat > "$SRCDIR/sha256sum.c" << 'C'
+#include <stdio.h>
+#include <openssl/sha.h>
+int main(int argc, char *argv[]) {
+    FILE *f = argc > 1 ? fopen(argv[1], "rb") : stdin;
+    if (!f) { perror(argv[1]); return 1; }
+    SHA256_CTX ctx;
+    SHA256_Init(&ctx);
+    unsigned char buf[8192];
+    int n;
+    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) SHA256_Update(&ctx, buf, n);
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256_Final(hash, &ctx);
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) printf("%02x", hash[i]);
+    printf("  %s\n", argc > 1 ? argv[1] : "-");
+    if (f != stdin) fclose(f);
+    return 0;
+}
+C
+    OPENSSL="/tmp/bingux-bootstrap-store/openssl-src-3.4.1-x86_64-linux"
+    bingux-gcc -I "$OPENSSL/include" -L "$OPENSSL/lib" -o "$BUILDDIR/bingux-sha256sum" "$SRCDIR/sha256sum.c" -lcrypto
+}
+package() { mkdir -p "$PKGDIR/bin"; cp "$BUILDDIR/bingux-sha256sum" "$PKGDIR/bin/bingux-sha256sum"; chmod +x "$PKGDIR/bin/bingux-sha256sum"; }
