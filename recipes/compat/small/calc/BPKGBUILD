@@ -1,0 +1,83 @@
+pkgscope="bingux"
+pkgname="calc"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="Simple calculator — multi-file C project compiled from source"
+license="MIT"
+
+depends=()
+exports=("bin/calc")
+source=()
+sha256sums=()
+
+build() {
+    # Create a multi-file C project
+    mkdir -p "$SRCDIR/calc"
+    
+    cat > "$SRCDIR/calc/math_ops.h" << 'H'
+#ifndef MATH_OPS_H
+#define MATH_OPS_H
+double add(double a, double b);
+double sub(double a, double b);
+double mul(double a, double b);
+double divide(double a, double b);
+int factorial(int n);
+#endif
+H
+
+    cat > "$SRCDIR/calc/math_ops.c" << 'C'
+#include "math_ops.h"
+double add(double a, double b) { return a + b; }
+double sub(double a, double b) { return a - b; }
+double mul(double a, double b) { return a * b; }
+double divide(double a, double b) { return b != 0 ? a / b : 0; }
+int factorial(int n) { return n <= 1 ? 1 : n * factorial(n - 1); }
+C
+
+    cat > "$SRCDIR/calc/main.c" << 'C'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "math_ops.h"
+
+int main(int argc, char *argv[]) {
+    if (argc < 4) {
+        printf("calc — Bingux calculator\n");
+        printf("Usage: calc <num> <op> <num>\n");
+        printf("  ops: add sub mul div fact\n");
+        printf("\nExamples:\n");
+        printf("  calc 10 add 20    → 30\n");
+        printf("  calc 100 div 7    → 14.29\n");
+        printf("  calc 10 fact 0    → 3628800\n");
+        return 0;
+    }
+
+    double a = atof(argv[1]);
+    char *op = argv[2];
+    double b = atof(argv[3]);
+    double result;
+
+    if (strcmp(op, "add") == 0) result = add(a, b);
+    else if (strcmp(op, "sub") == 0) result = sub(a, b);
+    else if (strcmp(op, "mul") == 0) result = mul(a, b);
+    else if (strcmp(op, "div") == 0) result = divide(a, b);
+    else if (strcmp(op, "fact") == 0) { printf("%d\n", factorial((int)a)); return 0; }
+    else { printf("unknown op: %s\n", op); return 1; }
+
+    printf("%.6g\n", result);
+    return 0;
+}
+C
+
+    # Compile multi-file project
+    cd "$SRCDIR/calc"
+    bingux-gcc -c math_ops.c -o "$BUILDDIR/math_ops.o"
+    bingux-gcc -c main.c -o "$BUILDDIR/main.o"
+    bingux-gcc -o "$BUILDDIR/calc" "$BUILDDIR/math_ops.o" "$BUILDDIR/main.o"
+}
+
+package() {
+    mkdir -p "$PKGDIR/bin"
+    cp "$BUILDDIR/calc" "$PKGDIR/bin/calc"
+    chmod +x "$PKGDIR/bin/calc"
+}
