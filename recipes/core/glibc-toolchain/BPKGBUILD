@@ -1,0 +1,67 @@
+pkgscope="bingux"
+pkgname="glibc-toolchain"
+pkgver="12.3.0"
+pkgarch="x86_64-linux"
+pkgdesc="GCC 12.3 + binutils + glibc — standard C/C++ toolchain"
+license="GPL-3.0"
+
+depends=()
+exports=(
+    "bin/gcc"
+    "bin/g++"
+    "bin/cc"
+    "bin/ld"
+    "bin/as"
+    "bin/ar"
+    "bin/make"
+)
+
+source=("https://toolchains.bootlin.com/downloads/releases/toolchains/x86-64/tarballs/x86-64--glibc--stable-2023.11-1.tar.bz2")
+sha256sums=("SKIP")
+
+package() {
+    mkdir -p "$PKGDIR/bin" "$PKGDIR/lib" "$PKGDIR/lib64" "$PKGDIR/include" "$PKGDIR/libexec" "$PKGDIR/sysroot"
+
+    TC="$SRCDIR/x86-64--glibc--stable-2023.11-1"
+
+    # Copy compiler binaries with standard names
+    for bin in gcc g++ cpp ld as ar nm objdump objcopy strip ranlib readelf size strings; do
+        src="$TC/bin/x86_64-buildroot-linux-gnu-$bin"
+        [ -f "$src" ] && cp "$src" "$PKGDIR/bin/$bin" && chmod +x "$PKGDIR/bin/$bin"
+    done
+    # Handle the .br_real GCC wrapper
+    [ -f "$TC/bin/x86_64-buildroot-linux-gnu-gcc.br_real" ] && \
+        cp "$TC/bin/x86_64-buildroot-linux-gnu-gcc.br_real" "$PKGDIR/bin/gcc" && \
+        chmod +x "$PKGDIR/bin/gcc"
+    ln -sf gcc "$PKGDIR/bin/cc"
+    ln -sf g++ "$PKGDIR/bin/c++"
+
+    # Copy GCC internal files (cc1, cc1plus, collect2, lto1)
+    cp -a "$TC/libexec/"* "$PKGDIR/libexec/" 2>/dev/null || true
+
+    # Copy GCC libraries
+    cp -a "$TC/lib/gcc" "$PKGDIR/lib/" 2>/dev/null || true
+    cp -a "$TC/lib/"*.a "$PKGDIR/lib/" 2>/dev/null || true
+    cp -a "$TC/lib/"*.so* "$PKGDIR/lib/" 2>/dev/null || true
+
+    # Copy glibc sysroot (headers + libs)
+    if [ -d "$TC/x86_64-buildroot-linux-gnu/sysroot" ]; then
+        cp -a "$TC/x86_64-buildroot-linux-gnu/sysroot/"* "$PKGDIR/sysroot/"
+        # Also copy to standard locations
+        cp -a "$TC/x86_64-buildroot-linux-gnu/sysroot/usr/include/"* "$PKGDIR/include/" 2>/dev/null || true
+        cp -a "$TC/x86_64-buildroot-linux-gnu/sysroot/lib/"*.so* "$PKGDIR/lib64/" 2>/dev/null || true
+        cp -a "$TC/x86_64-buildroot-linux-gnu/sysroot/lib/"*.a "$PKGDIR/lib64/" 2>/dev/null || true
+        cp -a "$TC/x86_64-buildroot-linux-gnu/sysroot/usr/lib/"*.so* "$PKGDIR/lib64/" 2>/dev/null || true
+        cp -a "$TC/x86_64-buildroot-linux-gnu/sysroot/usr/lib/"*.a "$PKGDIR/lib64/" 2>/dev/null || true
+        # Copy crt*.o files
+        cp -a "$TC/x86_64-buildroot-linux-gnu/sysroot/usr/lib/"crt*.o "$PKGDIR/lib64/" 2>/dev/null || true
+    fi
+
+    # Copy the dynamic linker
+    cp -a "$TC/x86_64-buildroot-linux-gnu/sysroot/lib/ld-linux-x86-64.so.2" "$PKGDIR/lib64/" 2>/dev/null || true
+
+    # Copy make if it exists
+    [ -f "$TC/bin/make" ] && cp "$TC/bin/make" "$PKGDIR/bin/" 2>/dev/null || true
+
+    echo "glibc toolchain: $(ls "$PKGDIR/bin/" | wc -l) binaries"
+}

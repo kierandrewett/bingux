@@ -112,14 +112,26 @@ impl PackageStore {
     }
 }
 
-/// Recursively copy a directory tree.
+/// Recursively copy a directory tree, handling symlinks.
 fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
-        if src_path.is_dir() {
+        let file_type = entry.file_type()?;
+
+        if file_type.is_symlink() {
+            // Copy symlinks as-is (even if broken)
+            if let Ok(target) = fs::read_link(&src_path) {
+                // Remove existing if present
+                let _ = fs::remove_file(&dst_path);
+                #[cfg(unix)]
+                std::os::unix::fs::symlink(&target, &dst_path)?;
+                #[cfg(not(unix))]
+                fs::copy(&src_path, &dst_path).ok();
+            }
+        } else if file_type.is_dir() {
             copy_dir_recursive(&src_path, &dst_path)?;
         } else {
             fs::copy(&src_path, &dst_path)?;
