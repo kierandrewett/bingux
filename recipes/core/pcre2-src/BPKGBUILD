@@ -1,0 +1,26 @@
+pkgscope="bingux"
+pkgname="pcre2-src"
+pkgver="10.44"
+pkgarch="x86_64-linux"
+pkgdesc="PCRE2 — Perl-compatible regex library"
+license="BSD-3"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("lib/libpcre2-8.a" "bin/pcre2grep")
+source=("https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.44/pcre2-10.44.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/pcre2-10.44"
+    CC=bingux-gcc ./configure --prefix=/ --disable-shared --enable-static \
+        CFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    make -j1 CC=bingux-gcc 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/pcre2-10.44"
+    mkdir -p "$PKGDIR/bin" "$PKGDIR/lib" "$PKGDIR/include"
+    cp .libs/libpcre2-8.a "$PKGDIR/lib/" 2>/dev/null
+    cp .libs/libpcre2-posix.a "$PKGDIR/lib/" 2>/dev/null
+    cp src/pcre2.h "$PKGDIR/include/" 2>/dev/null
+    cp pcre2grep "$PKGDIR/bin/" 2>/dev/null || cp .libs/pcre2grep "$PKGDIR/bin/" 2>/dev/null
+    chmod +x "$PKGDIR/bin/"* 2>/dev/null
+}

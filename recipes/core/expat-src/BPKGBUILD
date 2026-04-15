@@ -1,0 +1,23 @@
+pkgscope="bingux"
+pkgname="expat-src"
+pkgver="2.6.4"
+pkgarch="x86_64-linux"
+pkgdesc="expat — XML parser library"
+license="MIT"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("lib/libexpat.a")
+source=("https://github.com/libexpat/libexpat/releases/download/R_2_6_4/expat-2.6.4.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/expat-2.6.4"
+    CC=bingux-gcc ./configure --prefix=/ --disable-shared --without-docbook \
+        CFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    make -j1 CC=bingux-gcc 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/expat-2.6.4"
+    mkdir -p "$PKGDIR/lib" "$PKGDIR/include"
+    cp .libs/libexpat.a "$PKGDIR/lib/" 2>/dev/null || cp lib/.libs/libexpat.a "$PKGDIR/lib/"
+    cp lib/expat.h lib/expat_external.h "$PKGDIR/include/" 2>/dev/null
+}
