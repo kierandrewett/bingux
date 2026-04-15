@@ -1,0 +1,28 @@
+pkgscope="bingux"
+pkgname="xz-src"
+pkgver="5.6.3"
+pkgarch="x86_64-linux"
+pkgdesc="XZ Utils — compiled from source"
+license="GPL-2.0"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/xz" "bin/unxz" "bin/xzcat" "lib/liblzma.a")
+source=("https://github.com/tukaani-project/xz/releases/download/v5.6.3/xz-5.6.3.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/xz-5.6.3"
+    CC=bingux-gcc ./configure --prefix=/ --disable-shared --disable-nls \
+        CFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    make -j1 CC=bingux-gcc 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/xz-5.6.3"
+    mkdir -p "$PKGDIR/bin" "$PKGDIR/lib" "$PKGDIR/include/lzma"
+    cp src/xz/xz "$PKGDIR/bin/xz"
+    chmod +x "$PKGDIR/bin/xz"
+    ln -sf xz "$PKGDIR/bin/unxz"
+    ln -sf xz "$PKGDIR/bin/xzcat"
+    cp src/liblzma/.libs/liblzma.a "$PKGDIR/lib/" 2>/dev/null || true
+    cp src/liblzma/api/lzma.h "$PKGDIR/include/" 2>/dev/null || true
+    cp src/liblzma/api/lzma/*.h "$PKGDIR/include/lzma/" 2>/dev/null || true
+}
