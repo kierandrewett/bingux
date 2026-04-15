@@ -1,0 +1,28 @@
+pkgscope="bingux"
+pkgname="kmod-src"
+pkgver="33"
+pkgarch="x86_64-linux"
+pkgdesc="kmod — kernel module tools"
+license="LGPL-2.1"
+depends=("zlib-1.3.1")
+makedepends=("musl-toolchain-13.2.0")
+exports=("bin/kmod" "bin/lsmod" "bin/modprobe" "bin/insmod" "bin/rmmod" "bin/modinfo" "bin/depmod")
+source=("https://git.kernel.org/pub/scm/utils/kernel/kmod/kmod.git/snapshot/kmod-33.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/kmod-33"
+    autoreconf --install --force 2>/dev/null
+    ZLIB="$BPKG_STORE_ROOT/zlib-1.3.1-x86_64-linux"
+    CC=bingux-gcc ./configure --prefix=/ --disable-manpages --with-zlib --without-openssl \
+        CFLAGS="-static -O2 -I$ZLIB/include" LDFLAGS="-static -L$ZLIB/lib" 2>/dev/null
+    make -j$(nproc) 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/kmod-33"
+    mkdir -p "$PKGDIR/bin"
+    cp tools/kmod "$PKGDIR/bin/kmod"
+    chmod +x "$PKGDIR/bin/kmod"
+    for cmd in lsmod modprobe rmmod insmod modinfo depmod; do
+        ln -sf kmod "$PKGDIR/bin/$cmd"
+    done
+}
