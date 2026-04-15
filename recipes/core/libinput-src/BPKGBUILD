@@ -1,0 +1,32 @@
+pkgscope="bingux"
+pkgname="libinput-src"
+pkgver="1.27.0"
+pkgarch="x86_64-linux"
+pkgdesc="libinput — input device management and event handling library"
+license="MIT"
+depends=("libevdev-src-1.13.3" "mtdev-src-1.1.7")
+makedepends=()
+exports=("lib/libinput.so.10" "bin/libinput")
+source=("https://gitlab.freedesktop.org/libinput/libinput/-/archive/1.27.0/libinput-1.27.0.tar.gz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/libinput-1.27.0"
+    export PKG_CONFIG_PATH="$BPKG_STORE_ROOT/libevdev-src-1.13.3-x86_64-linux/lib/pkgconfig:$BPKG_STORE_ROOT/mtdev-src-1.1.7-x86_64-linux/lib/pkgconfig:$BPKG_STORE_ROOT/wayland-src-1.23.1-x86_64-linux/lib/pkgconfig"
+    meson setup build --prefix=/ \
+        -Ddefault_library=shared \
+        -Dtests=false -Ddocumentation=false \
+        -Ddebug-gui=false -Dlibwacom=false
+    ninja -C build -j$(nproc)
+}
+
+package() {
+    cd "$SRCDIR/libinput-1.27.0"
+    DESTDIR="$PKGDIR" ninja -C build install
+    if [ -d "$PKGDIR/lib64" ] && [ ! -d "$PKGDIR/lib" ]; then
+        mv "$PKGDIR/lib64" "$PKGDIR/lib"
+    elif [ -d "$PKGDIR/lib64" ]; then
+        cp -a "$PKGDIR/lib64/"* "$PKGDIR/lib/"
+        rm -rf "$PKGDIR/lib64"
+    fi
+}

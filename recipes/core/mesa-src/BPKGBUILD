@@ -1,0 +1,43 @@
+pkgscope="bingux"
+pkgname="mesa-src"
+pkgver="24.3.4"
+pkgarch="x86_64-linux"
+pkgdesc="mesa — OpenGL and EGL implementation (softpipe software renderer)"
+license="MIT"
+depends=("libdrm-src-2.4.123" "wayland-src-1.23.1" "wayland-protocols-src-1.38" "zlib-1.3.1" "expat-src-2.6.4")
+makedepends=()
+exports=("lib/libEGL_mesa.so.0" "lib/libgbm.so.1" "lib/libglapi.so.0" "lib/libgallium-24.3.4.so")
+source=("https://archive.mesa3d.org/mesa-24.3.4.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/mesa-24.3.4"
+    export PKG_CONFIG_PATH="$BPKG_STORE_ROOT/libdrm-src-2.4.123-x86_64-linux/lib/pkgconfig:$BPKG_STORE_ROOT/wayland-src-1.23.1-x86_64-linux/lib/pkgconfig:$BPKG_STORE_ROOT/wayland-protocols-src-1.38-x86_64-linux/share/pkgconfig"
+    meson setup build --prefix=/ \
+        -Ddefault_library=shared \
+        -Dgallium-drivers=softpipe \
+        -Dvulkan-drivers= \
+        -Dplatforms=wayland \
+        -Degl=enabled \
+        -Dgles2=enabled \
+        -Dglx=disabled \
+        -Dllvm=disabled \
+        -Dvalgrind=disabled \
+        -Dgallium-vdpau=disabled \
+        -Dgallium-va=disabled \
+        -Dgallium-xa=disabled \
+        -Dvideo-codecs= \
+        -Dgallium-nine=false
+    ninja -C build -j$(nproc)
+}
+
+package() {
+    cd "$SRCDIR/mesa-24.3.4"
+    DESTDIR="$PKGDIR" ninja -C build install
+    if [ -d "$PKGDIR/lib64" ] && [ ! -d "$PKGDIR/lib" ]; then
+        mv "$PKGDIR/lib64" "$PKGDIR/lib"
+    elif [ -d "$PKGDIR/lib64" ]; then
+        cp -a "$PKGDIR/lib64/"* "$PKGDIR/lib/"
+        rm -rf "$PKGDIR/lib64"
+    fi
+}

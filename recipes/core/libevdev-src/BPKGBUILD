@@ -1,0 +1,30 @@
+pkgscope="bingux"
+pkgname="libevdev-src"
+pkgver="1.13.3"
+pkgarch="x86_64-linux"
+pkgdesc="libevdev — wrapper library for evdev devices"
+license="MIT"
+depends=()
+makedepends=()
+exports=("lib/libevdev.so.2")
+source=("https://www.freedesktop.org/software/libevdev/libevdev-1.13.3.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/libevdev-1.13.3"
+    meson setup build --prefix=/ \
+        -Ddefault_library=shared \
+        -Dtests=disabled -Ddocumentation=disabled
+    ninja -C build -j$(nproc)
+}
+
+package() {
+    cd "$SRCDIR/libevdev-1.13.3"
+    DESTDIR="$PKGDIR" ninja -C build install
+    if [ -d "$PKGDIR/lib64" ] && [ ! -d "$PKGDIR/lib" ]; then
+        mv "$PKGDIR/lib64" "$PKGDIR/lib"
+    elif [ -d "$PKGDIR/lib64" ]; then
+        cp -a "$PKGDIR/lib64/"* "$PKGDIR/lib/"
+        rm -rf "$PKGDIR/lib64"
+    fi
+}

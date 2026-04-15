@@ -1,0 +1,32 @@
+pkgscope="bingux"
+pkgname="libdrm-src"
+pkgver="2.4.123"
+pkgarch="x86_64-linux"
+pkgdesc="libdrm — userspace interface to kernel DRM services"
+license="MIT"
+depends=()
+makedepends=()
+exports=("lib/libdrm.so.2" "lib/libdrm_intel.so.1" "lib/libdrm_radeon.so.1" "lib/libdrm_amdgpu.so.1" "lib/libdrm_nouveau.so.2")
+source=("https://dri.freedesktop.org/libdrm/libdrm-2.4.123.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/libdrm-2.4.123"
+    meson setup build --prefix=/ \
+        -Ddefault_library=shared \
+        -Dintel=enabled -Dradeon=enabled -Damdgpu=enabled -Dnouveau=enabled \
+        -Dtests=false -Dman-pages=disabled -Dcairo-tests=disabled
+    ninja -C build -j$(nproc)
+}
+
+package() {
+    cd "$SRCDIR/libdrm-2.4.123"
+    DESTDIR="$PKGDIR" ninja -C build install
+    # Normalize lib64 -> lib
+    if [ -d "$PKGDIR/lib64" ] && [ ! -d "$PKGDIR/lib" ]; then
+        mv "$PKGDIR/lib64" "$PKGDIR/lib"
+    elif [ -d "$PKGDIR/lib64" ]; then
+        cp -a "$PKGDIR/lib64/"* "$PKGDIR/lib/"
+        rm -rf "$PKGDIR/lib64"
+    fi
+}

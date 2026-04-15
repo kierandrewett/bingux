@@ -1,0 +1,22 @@
+pkgscope="bingux"
+pkgname="mtdev-src"
+pkgver="1.1.7"
+pkgarch="x86_64-linux"
+pkgdesc="mtdev — multitouch protocol translation library"
+license="MIT"
+depends=()
+makedepends=()
+exports=("lib/libmtdev.so.1")
+source=("http://bitmath.org/code/mtdev/mtdev-1.1.7.tar.bz2")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/mtdev-1.1.7"
+    ./configure --prefix=/
+    make -j$(nproc)
+}
+
+package() {
+    cd "$SRCDIR/mtdev-1.1.7"
+    make DESTDIR="$PKGDIR" install
+}

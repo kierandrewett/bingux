@@ -1,0 +1,23 @@
+pkgscope="bingux"
+pkgname="wayland-protocols-src"
+pkgver="1.38"
+pkgarch="x86_64-linux"
+pkgdesc="wayland-protocols — additional Wayland protocol XML files"
+license="MIT"
+depends=("wayland-src-1.23.1")
+makedepends=()
+exports=("share/wayland-protocols")
+source=("https://gitlab.freedesktop.org/wayland/wayland-protocols/-/releases/1.38/downloads/wayland-protocols-1.38.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/wayland-protocols-1.38"
+    export PKG_CONFIG_PATH="$BPKG_STORE_ROOT/wayland-src-1.23.1-x86_64-linux/lib/pkgconfig"
+    meson setup build --prefix=/ -Dtests=false
+    ninja -C build
+}
+
+package() {
+    cd "$SRCDIR/wayland-protocols-1.38"
+    DESTDIR="$PKGDIR" ninja -C build install
+}
