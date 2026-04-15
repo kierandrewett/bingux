@@ -1,0 +1,33 @@
+pkgscope="bingux"
+pkgname="readline"
+pkgver="8.2"
+pkgarch="x86_64-linux"
+pkgdesc="GNU readline — line editing library"
+license="GPL-3.0"
+
+depends=("ncurses-6.5")
+makedepends=("musl-toolchain-11.2.1")
+
+exports=("lib/libreadline.a")
+
+source=("https://ftpmirror.gnu.org/readline/readline-8.2.tar.gz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/readline-8.2"
+    NCURSES="/system/packages/ncurses-6.5-x86_64-linux"
+    CC=bingux-gcc ./configure --prefix=/ --disable-shared \
+        --with-curses \
+        CFLAGS="-I$NCURSES/include -I$NCURSES/include/ncursesw" \
+        LDFLAGS="-L$NCURSES/lib" \
+        2>/dev/null
+    make -j1 CC=bingux-gcc SHLIB_LIBS="" 2>&1 | tail -3
+}
+
+package() {
+    cd "$SRCDIR/readline-8.2"
+    mkdir -p "$PKGDIR/lib" "$PKGDIR/include/readline"
+    cp libreadline.a "$PKGDIR/lib/" 2>/dev/null || true
+    cp libhistory.a "$PKGDIR/lib/" 2>/dev/null || true
+    cp *.h "$PKGDIR/include/readline/" 2>/dev/null || true
+}

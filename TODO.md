@@ -56,7 +56,7 @@ All 11 sprints from the original plan are implemented. See git log for details.
 ### Phase E: Improve bsys build for real-world packages
 - [x] Download and compile `zlib` from source (1.3.1) from source (real library dependency)
 - [x] Download and compile `ncurses` from source (6.5) from source
-- [ ] Download and compile `readline` from source
+- [x] Download and compile `readline` from source (8.2) from source
 - [ ] Build `bash` from source using zlib + readline + ncurses
 - [ ] Test bash runs inside the VM
 
