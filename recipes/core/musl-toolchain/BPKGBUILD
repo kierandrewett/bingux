@@ -1,0 +1,71 @@
+pkgscope="bingux"
+pkgname="musl-toolchain"
+pkgver="13.2.0"
+pkgarch="x86_64-linux"
+pkgdesc="GCC 13.2 + binutils + musl libc — complete C/C++ toolchain"
+license="GPL-3.0"
+
+depends=()
+exports=(
+    "bin/gcc"
+    "bin/g++"
+    "bin/cc"
+    "bin/c++"
+    "bin/ld"
+    "bin/as"
+    "bin/ar"
+    "bin/nm"
+    "bin/objdump"
+    "bin/strip"
+    "bin/make"
+)
+
+source=("https://musl.cc/x86_64-linux-musl-native.tgz")
+sha256sums=("SKIP")
+
+package() {
+    mkdir -p "$PKGDIR/bin" "$PKGDIR/lib" "$PKGDIR/include"
+
+    TOOLCHAIN="$SRCDIR/x86_64-linux-musl-native"
+
+    # Copy compiler binaries
+    for bin in gcc g++ cpp ld as ar nm objdump objcopy strip ranlib readelf size strings; do
+        if [ -f "$TOOLCHAIN/bin/x86_64-linux-musl-$bin" ]; then
+            cp "$TOOLCHAIN/bin/x86_64-linux-musl-$bin" "$PKGDIR/bin/$bin"
+            chmod +x "$PKGDIR/bin/$bin"
+        elif [ -f "$TOOLCHAIN/bin/$bin" ]; then
+            cp "$TOOLCHAIN/bin/$bin" "$PKGDIR/bin/$bin"
+            chmod +x "$PKGDIR/bin/$bin"
+        fi
+    done
+
+    # Create cc/c++ symlinks
+    ln -sf gcc "$PKGDIR/bin/cc"
+    ln -sf g++ "$PKGDIR/bin/c++"
+
+    # Copy GCC internal libs and specs
+    if [ -d "$TOOLCHAIN/lib/gcc" ]; then
+        cp -a "$TOOLCHAIN/lib/gcc" "$PKGDIR/lib/"
+    fi
+    # Copy libgcc, libstdc++ etc
+    cp -a "$TOOLCHAIN/lib/"*.a "$PKGDIR/lib/" 2>/dev/null || true
+    cp -a "$TOOLCHAIN/lib/"*.so* "$PKGDIR/lib/" 2>/dev/null || true
+    cp -a "$TOOLCHAIN/lib/"*.o "$PKGDIR/lib/" 2>/dev/null || true
+
+    # Copy musl libc (headers + libs)
+    if [ -d "$TOOLCHAIN/include" ]; then
+        cp -a "$TOOLCHAIN/include/"* "$PKGDIR/include/"
+    fi
+
+    # Copy the musl dynamic linker and libc
+    if [ -d "$TOOLCHAIN/x86_64-linux-musl/lib" ]; then
+        cp -a "$TOOLCHAIN/x86_64-linux-musl/lib/"* "$PKGDIR/lib/" 2>/dev/null || true
+    fi
+
+    # Copy libexec (cc1, cc1plus, collect2, etc.)
+    if [ -d "$TOOLCHAIN/libexec" ]; then
+        cp -a "$TOOLCHAIN/libexec" "$PKGDIR/"
+    fi
+
+    echo "Toolchain installed: $(ls "$PKGDIR/bin/" | wc -l) binaries"
+}

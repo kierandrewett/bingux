@@ -135,8 +135,12 @@ write_recipe dust 1.1.1 "https://github.com/bootandy/dust/releases/download/v1.1
 write_recipe starship 1.22.1 "https://github.com/starship/starship/releases/download/v1.22.1/starship-x86_64-unknown-linux-musl.tar.gz" starship
 write_recipe hexyl 0.14.0 "https://github.com/sharkdp/hexyl/releases/download/v0.14.0/hexyl-v0.14.0-x86_64-unknown-linux-musl.tar.gz" "hexyl-v0.14.0-x86_64-unknown-linux-musl/hexyl"
 write_recipe hyperfine 1.19.0 "https://github.com/sharkdp/hyperfine/releases/download/v1.19.0/hyperfine-v1.19.0-x86_64-unknown-linux-musl.tar.gz" "hyperfine-v1.19.0-x86_64-unknown-linux-musl/hyperfine"
+write_recipe lazygit 0.44.1 "https://github.com/jesseduffield/lazygit/releases/download/v0.44.1/lazygit_0.44.1_Linux_x86_64.tar.gz" lazygit
+write_recipe bottom 0.10.2 "https://github.com/ClementTsang/bottom/releases/download/0.10.2/bottom_x86_64-unknown-linux-musl.tar.gz" btm
+write_recipe sd 1.0.0 "https://github.com/chmln/sd/releases/download/v1.0.0/sd-v1.0.0-x86_64-unknown-linux-musl.tar.gz" "sd-v1.0.0-x86_64-unknown-linux-musl/sd"
+write_recipe bandwhich 0.22.2 "https://github.com/imsnif/bandwhich/releases/download/v0.22.2/bandwhich-v0.22.2-x86_64-unknown-linux-musl.tar.gz" "bandwhich-v0.22.2-x86_64-unknown-linux-musl/bandwhich"
 
-for recipe in jq ripgrep fd bat fzf eza delta zoxide dust starship hexyl hyperfine; do
+for recipe in jq ripgrep fd bat fzf eza delta zoxide dust starship hexyl hyperfine lazygit bottom sd bandwhich; do
     "$ROOT_DIR/target/release/bsys-cli" build "$ISO_WORK/recipes/$recipe/BPKGBUILD" 2>&1 | grep -E "ok:|error"
 done
 

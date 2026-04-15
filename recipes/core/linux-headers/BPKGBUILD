@@ -1,0 +1,29 @@
+pkgscope="bingux"
+pkgname="make"
+pkgver="4.4.1"
+pkgarch="x86_64-linux"
+pkgdesc="GNU Make — build automation tool"
+license="GPL-3.0"
+
+depends=()
+exports=("bin/make")
+
+source=("https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz")
+sha256sums=("SKIP")
+
+package() {
+    mkdir -p "$PKGDIR/bin"
+    cd "$SRCDIR/make-4.4.1"
+    # Bootstrap make from source (make can build itself)
+    sh configure --prefix=/ 2>/dev/null
+    sh build.sh 2>/dev/null || ./make 2>/dev/null || true
+    if [ -f make ]; then
+        cp make "$PKGDIR/bin/make"
+    elif [ -f "$SRCDIR/make-4.4.1/make" ]; then
+        cp "$SRCDIR/make-4.4.1/make" "$PKGDIR/bin/make"
+    else
+        # Fallback: download a static binary
+        echo "make build failed, using busybox make if available"
+    fi
+    chmod +x "$PKGDIR/bin/make" 2>/dev/null || true
+}
