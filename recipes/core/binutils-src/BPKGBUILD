@@ -1,0 +1,30 @@
+pkgscope="bingux"
+pkgname="binutils-src"
+pkgver="2.43.1"
+pkgarch="x86_64-linux"
+pkgdesc="GNU binutils — assembler, linker, etc."
+license="GPL-3.0"
+depends=("zlib-1.3.1")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/ld" "bin/as" "bin/ar" "bin/nm" "bin/strip" "bin/objdump" "bin/objcopy" "bin/readelf" "bin/ranlib" "bin/size" "bin/strings")
+source=("https://ftpmirror.gnu.org/binutils/binutils-2.43.1.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/binutils-2.43.1"
+    ZLIB="/tmp/bingux-bootstrap-store/zlib-1.3.1-x86_64-linux"
+    CC=bingux-gcc ./configure --prefix=/ --disable-nls --disable-shared \
+        --disable-werror --disable-gdb --disable-gdbserver \
+        --with-zlib \
+        CFLAGS="-static -I$ZLIB/include" \
+        LDFLAGS="-static -L$ZLIB/lib -Wl,--allow-multiple-definition" \
+        2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -L$ZLIB/lib -lz -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/binutils-2.43.1"
+    mkdir -p "$PKGDIR/bin"
+    for b in ld/ld-new gas/as-new binutils/ar binutils/nm-new binutils/strip-new binutils/objdump binutils/objcopy binutils/readelf binutils/ranlib binutils/size binutils/strings; do
+        name=$(basename "$b" | sed 's/-new//')
+        [ -f "$b" ] && cp "$b" "$PKGDIR/bin/$name" && chmod +x "$PKGDIR/bin/$name"
+    done
+}
