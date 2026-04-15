@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use crate::output;
 
 use bsys_compose::GenerationBuilder;
+use bpkg_store;
+use bxc_sandbox;
 use bsys_config::{EtcGenerator, parse_system_config};
 
 /// Default system config path.
@@ -37,7 +39,10 @@ pub fn apply() {
             ));
 
             // Show what /etc/ files would be generated.
-            let etc_gen = EtcGenerator::new(PathBuf::from("/etc"));
+            let etc_root = std::env::var("BSYS_ETC_ROOT")
+                .map(PathBuf::from)
+                .unwrap_or_else(|_| PathBuf::from("/etc"));
+            let etc_gen = EtcGenerator::new(etc_root);
             match etc_gen.generate_all(&config) {
                 Ok(files) => {
                     for f in &files {
@@ -54,8 +59,36 @@ pub fn apply() {
             let packages = default_packages_root();
             let builder = GenerationBuilder::new(profiles, packages);
 
-            // TODO: build PackageEntry list from config.packages.keep
-            match builder.build(&[]) {
+            // Build PackageEntry list from config.packages.keep
+            let packages_root = default_packages_root();
+            let mut entries = Vec::new();
+            for pkg_name in &config.packages.keep {
+                // Find matching package in store
+                let store = bpkg_store::PackageStore::new(packages_root.clone());
+                if let Ok(store) = store {
+                    let matching = store.query(pkg_name);
+                    if let Some(pkg_id) = matching.into_iter().next() {
+                        // Read manifest for exports
+                        let mut exports = bsys_compose::generation::ExportedItems {
+                            binaries: vec![],
+                            libraries: vec![],
+                            data: vec![],
+                        };
+                        if let Ok(manifest) = store.manifest(&pkg_id) {
+                            exports.binaries = manifest.exports.binaries.clone();
+                            exports.libraries = manifest.exports.libraries.clone();
+                            exports.data = manifest.exports.data.clone();
+                        }
+                        let sandbox_level = bxc_sandbox::levels::SandboxLevel::Minimal;
+                        entries.push(bsys_compose::generation::PackageEntry {
+                            package_id: pkg_id,
+                            sandbox_level,
+                            exports,
+                        });
+                    }
+                }
+            }
+            match builder.build(&entries) {
                 Ok(built) => {
                     if let Err(e) = builder.activate(built.id) {
                         output::status("error", &format!("activation failed: {e}"));
