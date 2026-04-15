@@ -1,0 +1,33 @@
+pkgscope="bingux"
+pkgname="mandoc-src"
+pkgver="1.14.6"
+pkgarch="x86_64-linux"
+pkgdesc="mandoc — man page formatter"
+license="ISC"
+depends=("zlib-1.3.1")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/mandoc" "bin/man")
+source=("https://mandoc.bsd.lv/snapshots/mandoc-1.14.6.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/mandoc-1.14.6"
+    ZLIB="/tmp/bingux-bootstrap-store/zlib-1.3.1-x86_64-linux"
+    cat > configure.local << CONF
+CC=bingux-gcc
+CFLAGS="-static -I$ZLIB/include"
+LDFLAGS="-static -L$ZLIB/lib"
+PREFIX=/
+MANPATH_DEFAULT=/usr/share/man
+HAVE_WCHAR=0
+UTF8_LOCALE=C
+CONF
+    ./configure 2>/dev/null
+    make -j1 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/mandoc-1.14.6"
+    mkdir -p "$PKGDIR/bin"
+    cp mandoc "$PKGDIR/bin/mandoc"
+    ln -sf mandoc "$PKGDIR/bin/man"
+    chmod +x "$PKGDIR/bin/mandoc"
+}
