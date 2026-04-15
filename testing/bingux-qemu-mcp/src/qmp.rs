@@ -129,12 +129,13 @@ impl QmpClient {
     }
 
     /// Capture a screenshot to a PPM file via the `screendump` command.
-    pub async fn screendump(&self, output_path: &Path) -> Result<()> {
-        self.execute(
-            "screendump",
-            serde_json::json!({"filename": output_path.to_str().unwrap()}),
-        )
-        .await?;
+    /// If `device` is provided, captures from that specific display device (e.g. "gpu1").
+    pub async fn screendump(&self, output_path: &Path, device: Option<&str>) -> Result<()> {
+        let mut args = serde_json::json!({"filename": output_path.to_str().unwrap()});
+        if let Some(dev) = device {
+            args["device"] = serde_json::Value::String(dev.to_string());
+        }
+        self.execute("screendump", args).await?;
         Ok(())
     }
 

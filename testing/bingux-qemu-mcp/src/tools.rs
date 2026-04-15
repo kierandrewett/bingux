@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use serde_json::{json, Value};
 
 use crate::config::LaunchConfig;
@@ -47,9 +49,36 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
                         "type": "boolean",
                         "description": "Run headless with serial-only console",
                         "default": false
+                    },
+                    "kernel": {
+                        "type": "string",
+                        "description": "Path to kernel image for direct boot (bypasses disk)"
+                    },
+                    "initrd": {
+                        "type": "string",
+                        "description": "Path to initrd/initramfs image"
+                    },
+                    "append": {
+                        "type": "string",
+                        "description": "Kernel command-line arguments"
+                    },
+                    "virtio_gpu": {
+                        "type": "boolean",
+                        "description": "Enable virtio-GPU for graphical compositor",
+                        "default": false
+                    },
+                    "vga": {
+                        "type": "boolean",
+                        "description": "Enable VGA (std) alongside virtio-GPU for VT support",
+                        "default": false
+                    },
+                    "extra_args": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Extra QEMU arguments"
                     }
                 },
-                "required": ["image"]
+                "required": []
             }),
         },
         ToolDefinition {
@@ -61,6 +90,10 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
                     "vm_id": {
                         "type": "string",
                         "description": "VM identifier (from bingux_qemu_boot). If omitted, uses the most recent VM."
+                    },
+                    "device": {
+                        "type": "string",
+                        "description": "GPU device to capture from (e.g. 'gpu1' for virtio-gpu). If omitted, captures the default display."
                     }
                 }
             }),
@@ -255,7 +288,7 @@ async fn handle_boot(args: Value, state: &mut ServerState) -> Result<Value> {
     let image = args
         .get("image")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| Error::InvalidArguments("missing required field: image".into()))?;
+        .unwrap_or("");
 
     let config = LaunchConfig {
         image: image.into(),
@@ -273,6 +306,15 @@ async fn handle_boot(args: Value, state: &mut ServerState) -> Result<Value> {
             .get("serial_only")
             .and_then(|v| v.as_bool())
             .unwrap_or(false),
+        kernel: args.get("kernel").and_then(|v| v.as_str()).map(PathBuf::from),
+        initrd: args.get("initrd").and_then(|v| v.as_str()).map(PathBuf::from),
+        append: args.get("append").and_then(|v| v.as_str()).map(String::from),
+        virtio_gpu: args.get("virtio_gpu").and_then(|v| v.as_bool()).unwrap_or(false),
+        vga: args.get("vga").and_then(|v| v.as_bool()).unwrap_or(false),
+        extra_args: args.get("extra_args")
+            .and_then(|v| v.as_array())
+            .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default(),
     };
 
     let instance = QemuInstance::launch(config).await?;
@@ -298,7 +340,8 @@ async fn handle_boot(args: Value, state: &mut ServerState) -> Result<Value> {
 async fn handle_screenshot(args: Value, state: &mut ServerState) -> Result<Value> {
     let vm_id = resolve_vm_id(&args, state)?;
     let qmp = get_qmp(state, &vm_id).await?;
-    let result = screenshot::capture_screenshot(&qmp).await?;
+    let device = args.get("device").and_then(|v| v.as_str());
+    let result = screenshot::capture_screenshot_device(&qmp, device).await?;
 
     Ok(json!({
         "vm_id": vm_id,

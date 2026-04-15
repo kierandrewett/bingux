@@ -23,6 +23,30 @@ pub struct LaunchConfig {
     /// Run headless with serial-only console (no VNC/display).
     #[serde(default)]
     pub serial_only: bool,
+
+    /// Path to kernel image for direct kernel boot (bypasses disk boot).
+    #[serde(default)]
+    pub kernel: Option<PathBuf>,
+
+    /// Path to initrd/initramfs image.
+    #[serde(default)]
+    pub initrd: Option<PathBuf>,
+
+    /// Extra kernel command-line arguments.
+    #[serde(default)]
+    pub append: Option<String>,
+
+    /// Enable virtio-gpu (for graphical compositor testing).
+    #[serde(default)]
+    pub virtio_gpu: bool,
+
+    /// Enable VGA (std) alongside virtio-gpu for VT support.
+    #[serde(default)]
+    pub vga: bool,
+
+    /// Extra QEMU arguments passed verbatim.
+    #[serde(default)]
+    pub extra_args: Vec<String>,
 }
 
 fn default_memory() -> String {
@@ -45,6 +69,12 @@ impl Default for LaunchConfig {
             cpus: default_cpus(),
             kvm: default_kvm(),
             serial_only: false,
+            kernel: None,
+            initrd: None,
+            append: None,
+            virtio_gpu: false,
+            vga: false,
+            extra_args: Vec::new(),
         }
     }
 }

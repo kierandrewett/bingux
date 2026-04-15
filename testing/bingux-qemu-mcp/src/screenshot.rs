@@ -21,12 +21,17 @@ pub struct ScreenshotResult {
 /// This captures the framebuffer as a PPM file, converts it to PNG, and
 /// returns the result as base64-encoded PNG data.
 pub async fn capture_screenshot(qmp: &QmpClient) -> Result<ScreenshotResult> {
+    capture_screenshot_device(qmp, None).await
+}
+
+/// Capture a screenshot from a specific GPU device.
+pub async fn capture_screenshot_device(qmp: &QmpClient, device: Option<&str>) -> Result<ScreenshotResult> {
     // Create a temporary file for the PPM screendump
     let tmp_dir = std::env::temp_dir();
     let ppm_path = tmp_dir.join(format!("bingux-screenshot-{}.ppm", std::process::id()));
 
     // Capture via QMP
-    qmp.screendump(&ppm_path)
+    qmp.screendump(&ppm_path, device)
         .await
         .map_err(|e| Error::ScreenshotFailed(e.to_string()))?;
 

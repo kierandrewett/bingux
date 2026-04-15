@@ -32,12 +32,27 @@ impl QemuInstance {
 
         let mut cmd = tokio::process::Command::new("qemu-system-x86_64");
 
-        // Disk image
-        cmd.arg("-drive")
-            .arg(format!(
-                "file={},format=qcow2,if=virtio",
-                config.image.display()
-            ));
+        // Disk image (optional if using kernel+initrd)
+        if config.image.as_os_str().len() > 0 {
+            let fmt = if config.image.extension().map_or(false, |e| e == "qcow2") {
+                "qcow2"
+            } else {
+                "raw"
+            };
+            cmd.arg("-drive")
+                .arg(format!(
+                    "file={},format={fmt},if=virtio",
+                    config.image.display()
+                ));
+        }
+
+        // Kernel + initrd direct boot
+        if let Some(ref kernel) = config.kernel {
+            cmd.arg("-kernel").arg(kernel);
+        }
+        if let Some(ref initrd) = config.initrd {
+            cmd.arg("-initrd").arg(initrd);
+        }
 
         // Memory and CPUs
         cmd.arg("-m").arg(&config.memory);
@@ -48,6 +63,16 @@ impl QemuInstance {
             cmd.arg("-enable-kvm").arg("-cpu").arg("host");
         }
 
+        // GPU: virtio-gpu + optional VGA for VT support
+        if config.virtio_gpu {
+            if config.vga {
+                cmd.arg("-vga").arg("std");
+            }
+            cmd.arg("-device").arg("virtio-gpu-pci,id=gpu1");
+            cmd.arg("-device").arg("virtio-keyboard-pci");
+            cmd.arg("-device").arg("virtio-mouse-pci");
+        }
+
         // QMP socket
         cmd.arg("-qmp")
             .arg(format!("unix:{},server,nowait", qmp_socket.display()));
@@ -56,8 +81,8 @@ impl QemuInstance {
         cmd.arg("-serial")
             .arg(format!("unix:{},server,nowait", serial_socket.display()));
 
-        // Display: VNC on unix socket or none
-        if config.serial_only {
+        // Display: VNC on unix socket
+        if config.serial_only && !config.virtio_gpu {
             cmd.arg("-display").arg("none");
         } else {
             cmd.arg("-vnc")
@@ -67,8 +92,14 @@ impl QemuInstance {
         // No default NIC noise — use virtio-net
         cmd.arg("-nic").arg("user,model=virtio-net-pci");
 
-        // Boot with serial console on ttyS0
-        cmd.arg("-append").arg("console=ttyS0");
+        // Kernel command line
+        let append = config.append.as_deref().unwrap_or("console=ttyS0 quiet");
+        cmd.arg("-append").arg(append);
+
+        // Extra QEMU arguments
+        for arg in &config.extra_args {
+            cmd.arg(arg);
+        }
 
         // Daemonize: no, we manage the child process ourselves
         cmd.stdout(std::process::Stdio::null());
