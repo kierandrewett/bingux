@@ -1,0 +1,46 @@
+pkgscope="bingux"
+pkgname="time-src"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="time — measure command execution time"
+license="MIT"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/bingux-time")
+source=()
+sha256sums=()
+build() {
+    cat > "$SRCDIR/time.c" << 'C'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+int main(int argc, char *argv[]) {
+    if (argc < 2) { fprintf(stderr, "usage: time <command> [args...]\n"); return 1; }
+    
+    struct timeval start, end;
+    gettimeofday(&start, NULL);
+    
+    pid_t pid = fork();
+    if (pid == 0) { execvp(argv[1], &argv[1]); perror(argv[1]); _exit(127); }
+    
+    int status;
+    struct rusage ru;
+    wait4(pid, &status, 0, &ru);
+    gettimeofday(&end, NULL);
+    
+    double real = (end.tv_sec - start.tv_sec) + (end.tv_usec - start.tv_usec) / 1e6;
+    double user = ru.ru_utime.tv_sec + ru.ru_utime.tv_usec / 1e6;
+    double sys = ru.ru_stime.tv_sec + ru.ru_stime.tv_usec / 1e6;
+    
+    fprintf(stderr, "\nreal\t%.3fs\nuser\t%.3fs\nsys\t%.3fs\n", real, user, sys);
+    return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+}
+C
+    bingux-gcc -o "$BUILDDIR/bingux-time" "$SRCDIR/time.c"
+}
+package() { mkdir -p "$PKGDIR/bin"; cp "$BUILDDIR/bingux-time" "$PKGDIR/bin/bingux-time"; chmod +x "$PKGDIR/bin/bingux-time"; }

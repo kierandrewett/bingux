@@ -1,0 +1,22 @@
+pkgscope="bingux"
+pkgname="ed-src"
+pkgver="1.20.2"
+pkgarch="x86_64-linux"
+pkgdesc="GNU ed — the standard editor"
+license="GPL-3.0"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/ed")
+source=("https://ftpmirror.gnu.org/ed/ed-1.20.2.tar.lz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/ed-1.20.2"
+    CC=bingux-gcc ./configure --prefix=/ CFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    make -j1 CC=bingux-gcc 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/ed-1.20.2"
+    mkdir -p "$PKGDIR/bin"
+    cp ed "$PKGDIR/bin/ed"
+    chmod +x "$PKGDIR/bin/ed"
+}
