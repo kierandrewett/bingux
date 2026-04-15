@@ -1,0 +1,24 @@
+pkgscope="bingux"
+pkgname="pkgconf-src"
+pkgver="2.3.0"
+pkgarch="x86_64-linux"
+pkgdesc="pkgconf — pkg-config replacement"
+license="ISC"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/pkgconf" "bin/pkg-config")
+source=("https://distfiles.ariadne.space/pkgconf/pkgconf-2.3.0.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/pkgconf-2.3.0"
+    CC=bingux-gcc ./configure --prefix=/ \
+        CFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    make -j1 CC=bingux-gcc 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/pkgconf-2.3.0"
+    mkdir -p "$PKGDIR/bin"
+    cp cli/pkgconf "$PKGDIR/bin/pkgconf" 2>/dev/null
+    ln -sf pkgconf "$PKGDIR/bin/pkg-config"
+    chmod +x "$PKGDIR/bin/pkgconf"
+}
