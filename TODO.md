@@ -61,11 +61,11 @@ All 11 sprints from the original plan are implemented. See git log for details.
 - [x] Test dash runs: "Dash shell compiled from source!" the VM
 
 ### Phase F: Integration testing
-- [ ] Run full CI pipeline (build-and-test.sh)
-- [ ] Run all QEMU smoke tests
-- [ ] Run bootstrap chain validation
-- [ ] Verify all 425+ Rust tests pass
-- [ ] Update test counts in docs
+- [x] Run full CI pipeline (build-and-test.sh)
+- [x] Run all QEMU smoke tests
+- [x] Run bootstrap chain validation
+- [x] Verify all 425 Rust tests pass
+- [x] Update test counts in docs
 
 ### Phase G: Documentation and cleanup
 - [ ] Update PLAN.md with current status
