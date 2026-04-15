@@ -1,0 +1,23 @@
+pkgscope="bingux"
+pkgname="pigz-src"
+pkgver="2.8"
+pkgarch="x86_64-linux"
+pkgdesc="pigz — parallel gzip"
+license="Zlib"
+depends=("zlib-1.3.1")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/pigz")
+source=("https://zlib.net/pigz/pigz-2.8.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/pigz-2.8"
+    ZLIB="/tmp/bingux-bootstrap-store/zlib-1.3.1-x86_64-linux"
+    make CC=bingux-gcc CFLAGS="-static -O2 -I$ZLIB/include" LDFLAGS="-static -L$ZLIB/lib" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/pigz-2.8"
+    mkdir -p "$PKGDIR/bin"
+    cp pigz "$PKGDIR/bin/pigz"
+    ln -sf pigz "$PKGDIR/bin/unpigz"
+    chmod +x "$PKGDIR/bin/pigz"
+}
