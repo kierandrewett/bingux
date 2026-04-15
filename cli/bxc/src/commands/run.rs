@@ -29,10 +29,49 @@ pub fn run(package: &str, args: &[String]) {
             output::status("run", &format!("package: {}", entry.package));
             output::status("run", &format!("binary: {}", binary_path.display()));
             output::status("run", &format!("sandbox: {}", entry.sandbox));
-            if !args.is_empty() {
-                output::status("run", &format!("args: {}", args.join(" ")));
+
+            // For sandbox=none or minimal, exec the binary directly
+            let sandbox_lower = entry.sandbox.to_lowercase();
+            if sandbox_lower == "none" || sandbox_lower == "minimal" {
+                // Direct execution — no sandbox
+                if binary_path.exists() {
+                    let mut cmd = std::process::Command::new(&binary_path);
+                    cmd.args(args);
+
+                    // Set up environment
+                    let path = std::env::var("PATH").unwrap_or_default();
+                    cmd.env("PATH", &path);
+
+                    match cmd.status() {
+                        Ok(status) => std::process::exit(status.code().unwrap_or(1)),
+                        Err(e) => {
+                            output::status("error", &format!("exec failed: {e}"));
+                            std::process::exit(127);
+                        }
+                    }
+                } else {
+                    output::status("error", &format!("binary not found: {}", binary_path.display()));
+                    std::process::exit(127);
+                }
+            } else {
+                // Standard/strict sandbox — would set up namespaces
+                output::status("run", "sandbox isolation requires bingux-gated daemon");
+                output::status("run", "executing directly (sandbox not yet active)...");
+
+                if binary_path.exists() {
+                    let mut cmd = std::process::Command::new(&binary_path);
+                    cmd.args(args);
+                    match cmd.status() {
+                        Ok(status) => std::process::exit(status.code().unwrap_or(1)),
+                        Err(e) => {
+                            output::status("error", &format!("exec failed: {e}"));
+                            std::process::exit(127);
+                        }
+                    }
+                } else {
+                    output::status("error", &format!("binary not found: {}", binary_path.display()));
+                }
             }
-            output::status("run", "would launch sandbox now");
         }
         Err(e) => {
             output::status("error", &format!("dispatch failed: {e}"));
