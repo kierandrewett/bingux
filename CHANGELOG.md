@@ -135,3 +135,26 @@
 - GNU autoconf 2.72 compiled from source
 - GNU libtool 2.5.4 compiled from source
 - pkgconf 2.3.0 compiled from source
+
+### Final Session Status (75 packages)
+
+Complete POSIX+GNU userland compiled from source:
+- Kernel: Linux 6.12.8
+- Shells: Bash 5.2.21, Dash 0.5.12
+- Core: GNU Coreutils 9.5 (106 utils)
+- Text: grep 3.11, sed 4.9, gawk 5.3.1
+- Archive: tar 1.35, gzip 1.13, bzip2 1.0.8, xz 5.6.3, cpio 2.15
+- Build: GCC 11.2, Make 4.4.1, binutils 2.43.1, flex 2.6.4, bison 3.8.2
+- Build system: autoconf 2.72, libtool 2.5.4, m4 1.4.19, pkgconf 2.3.0
+- VCS: Git 2.47.1
+- Network: wget 1.24.5 (HTTPS), rsync 3.4.1, netcat
+- Crypto: OpenSSL 3.4.1
+- Database: SQLite 3.47.2
+- Languages: Lua 5.4.7, Rust 1.84.0 (packaged)
+- Libs: zlib, ncurses, readline, expat, pcre2, libffi, libunistring, libevent
+- Tools: htop, jq (from source), less, file, bc, tree, pigz, mandoc, patchelf
+- Utilities: hexdump, xxd, uptime, free, nproc, mktemp, printenv, watch, yes, seq
+- System: sysinit, bingux-init (C), sha256sum, hostname, pkg-list
+
+VM validated: 28/28 checks on own kernel
+CI: 437 tests, ALL PASS
