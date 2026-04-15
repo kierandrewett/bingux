@@ -110,10 +110,28 @@ impl BuildExecutor {
         debug!("executing script in {}", working_dir.display());
 
         let start = Instant::now();
-        // Inherit PATH from parent so shell builtins and coreutils are found.
-        // Fall back to a sensible default if PATH is not set.
-        let path = std::env::var("PATH")
+        // Build PATH: include dependency bin/ directories + parent PATH.
+        let mut path_parts: Vec<String> = Vec::new();
+
+        // Add store dependency bin/ directories to PATH
+        let store_root = std::env::var("BPKG_STORE_ROOT").unwrap_or_default();
+        if !store_root.is_empty() {
+            if let Ok(entries) = std::fs::read_dir(&store_root) {
+                for entry in entries.flatten() {
+                    let bin_dir = entry.path().join("bin");
+                    if bin_dir.is_dir() {
+                        path_parts.push(bin_dir.to_string_lossy().to_string());
+                    }
+                }
+            }
+        }
+
+        // Add parent PATH
+        let parent_path = std::env::var("PATH")
             .unwrap_or_else(|_| "/bin:/usr/bin:/sbin:/usr/sbin".to_string());
+        path_parts.push(parent_path);
+
+        let path = path_parts.join(":");
 
         // Try bash first, fall back to sh (busybox environments may not have bash)
         let shell = if std::path::Path::new("/bin/bash").exists()
