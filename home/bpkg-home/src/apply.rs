@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use bingux_common::error::{BinguxError, Result};
 
-use crate::delta::{DotfileLink, HomeDelta};
+use crate::delta::{DotfileLink, DotfilesRepoDelta, HomeDelta};
 
 /// Summary of actions taken during an apply operation.
 #[derive(Debug, Clone, Default)]
@@ -12,9 +12,19 @@ pub struct ApplySummary {
     pub packages_removed: usize,
     pub dotfiles_linked: usize,
     pub dotfiles_backed_up: usize,
+    pub dotfiles_repo_cloned: bool,
+    pub dotfiles_repo_updated: bool,
     pub env_vars_set: usize,
+    pub shell_rc_written: bool,
     pub services_changed: usize,
     pub dconf_applied: usize,
+}
+
+/// Result of syncing a dotfiles repository.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DotfilesRepoAction {
+    Cloned,
+    Updated,
 }
 
 /// Engine that applies a [`HomeDelta`] to the filesystem.
@@ -41,7 +51,8 @@ impl ApplyEngine {
     ///
     /// Package installation/removal is **not** performed here — that is the
     /// responsibility of the `bpkg` CLI which orchestrates the package
-    /// manager.  This engine handles dotfiles, env, dconf, and services.
+    /// manager.  This engine handles dotfiles, env, shell RC, dconf, and
+    /// services.
     pub fn apply(&self, delta: &HomeDelta) -> Result<ApplySummary> {
         let mut summary = ApplySummary::default();
 
@@ -49,7 +60,14 @@ impl ApplyEngine {
         summary.packages_added = delta.packages_to_add.len();
         summary.packages_removed = delta.packages_to_remove.len();
 
-        // Dotfiles
+        // Dotfiles repo
+        if let Some(ref repo_delta) = delta.dotfiles_repo {
+            let result = self.sync_dotfiles_repo(repo_delta)?;
+            summary.dotfiles_repo_cloned = result == DotfilesRepoAction::Cloned;
+            summary.dotfiles_repo_updated = result == DotfilesRepoAction::Updated;
+        }
+
+        // Dotfile symlinks
         let linked = self.link_dotfiles(&delta.dotfiles_to_link, &delta.dotfiles_to_backup)?;
         summary.dotfiles_linked = delta.dotfiles_to_link.len();
         summary.dotfiles_backed_up = linked.iter().filter(|m| m.starts_with("backed up")).count();
@@ -58,6 +76,12 @@ impl ApplyEngine {
         if !delta.env_changes.is_empty() {
             self.generate_env_sh(&delta.env_changes)?;
             summary.env_vars_set = delta.env_changes.len();
+        }
+
+        // Shell RC
+        if !delta.shell_rc.is_empty() {
+            self.generate_shell_rc(&delta.shell_rc, delta.shell_name.as_deref())?;
+            summary.shell_rc_written = true;
         }
 
         // dconf
@@ -171,6 +195,105 @@ impl ApplyEngine {
 
         std::fs::write(&env_path, &content)?;
         Ok(env_path)
+    }
+
+    /// Clone or update a dotfiles git repository.
+    ///
+    /// Returns whether a clone or update was performed.
+    pub fn sync_dotfiles_repo(&self, repo: &DotfilesRepoDelta) -> Result<DotfilesRepoAction> {
+        if repo.already_cloned {
+            // Pull latest changes.
+            let status = std::process::Command::new("git")
+                .args(["pull", "--ff-only"])
+                .current_dir(&repo.target)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .status()
+                .map_err(|e| BinguxError::Config {
+                    path: repo.target.clone(),
+                    message: format!("failed to run git pull: {e}"),
+                })?;
+            if !status.success() {
+                return Err(BinguxError::Config {
+                    path: repo.target.clone(),
+                    message: "git pull failed (non-zero exit)".into(),
+                });
+            }
+            Ok(DotfilesRepoAction::Updated)
+        } else {
+            // Clone the repo.
+            if let Some(parent) = repo.target.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let status = std::process::Command::new("git")
+                .args(["clone", &repo.url])
+                .arg(&repo.target)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .status()
+                .map_err(|e| BinguxError::Config {
+                    path: repo.target.clone(),
+                    message: format!("failed to run git clone: {e}"),
+                })?;
+            if !status.success() {
+                return Err(BinguxError::Config {
+                    path: repo.target.clone(),
+                    message: "git clone failed (non-zero exit)".into(),
+                });
+            }
+            Ok(DotfilesRepoAction::Cloned)
+        }
+    }
+
+    /// Generate a shell RC snippet file that gets sourced by the user's
+    /// shell profile.
+    ///
+    /// Writes `~/.config/bingux/shell.rc` which should be sourced from
+    /// `.bashrc` / `.zshrc`. Also writes a source-line into the actual
+    /// RC file if it is not already present.
+    pub fn generate_shell_rc(
+        &self,
+        lines: &[String],
+        shell_name: Option<&str>,
+    ) -> Result<PathBuf> {
+        let bingux_dir = self.home_dir.join(".config").join("bingux");
+        std::fs::create_dir_all(&bingux_dir)?;
+
+        let rc_path = bingux_dir.join("shell.rc");
+        let mut content = String::from("# Generated by bpkg-home — do not edit manually.\n");
+        for line in lines {
+            content.push_str(line);
+            content.push('\n');
+        }
+        std::fs::write(&rc_path, &content)?;
+
+        // Ensure the user's actual shell RC file sources our snippet.
+        let shell = shell_name.unwrap_or("bash");
+        let rc_file = match shell {
+            "zsh" => ".zshrc",
+            "fish" => ".config/fish/config.fish",
+            _ => ".bashrc",
+        };
+        let user_rc = self.home_dir.join(rc_file);
+        let source_line = format!(
+            "[ -f \"$HOME/.config/bingux/shell.rc\" ] && . \"$HOME/.config/bingux/shell.rc\""
+        );
+
+        // Read existing content to check if source line is already present.
+        let existing = std::fs::read_to_string(&user_rc).unwrap_or_default();
+        if !existing.contains(".config/bingux/shell.rc") {
+            if let Some(parent) = user_rc.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let mut new_content = existing;
+            if !new_content.is_empty() && !new_content.ends_with('\n') {
+                new_content.push('\n');
+            }
+            new_content.push_str(&format!("\n# Bingux home environment\n{source_line}\n"));
+            std::fs::write(&user_rc, &new_content)?;
+        }
+
+        Ok(rc_path)
     }
 
     /// Apply dconf settings by writing gsettings commands.
@@ -371,5 +494,62 @@ mod tests {
             actions,
             vec!["enable syncthing", "enable ssh-agent", "disable tracker-miner"]
         );
+    }
+
+    #[test]
+    fn generate_shell_rc_creates_snippet() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = make_engine(dir.path());
+
+        let lines = vec![
+            r#"alias ll="ls -la""#.to_string(),
+            r#"export PATH="$HOME/.local/bin:$PATH""#.to_string(),
+        ];
+
+        let path = engine.generate_shell_rc(&lines, Some("bash")).unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+
+        assert!(content.contains("# Generated by bpkg-home"));
+        assert!(content.contains(r#"alias ll="ls -la""#));
+        assert!(content.contains(r#"export PATH="$HOME/.local/bin:$PATH""#));
+    }
+
+    #[test]
+    fn generate_shell_rc_sources_from_bashrc() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = make_engine(dir.path());
+
+        let lines = vec!["alias ll='ls -la'".to_string()];
+        engine.generate_shell_rc(&lines, Some("bash")).unwrap();
+
+        let bashrc = std::fs::read_to_string(engine.home_dir.join(".bashrc")).unwrap();
+        assert!(bashrc.contains(".config/bingux/shell.rc"));
+    }
+
+    #[test]
+    fn generate_shell_rc_sources_from_zshrc() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = make_engine(dir.path());
+
+        let lines = vec!["alias ll='ls -la'".to_string()];
+        engine.generate_shell_rc(&lines, Some("zsh")).unwrap();
+
+        let zshrc = std::fs::read_to_string(engine.home_dir.join(".zshrc")).unwrap();
+        assert!(zshrc.contains(".config/bingux/shell.rc"));
+    }
+
+    #[test]
+    fn generate_shell_rc_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = make_engine(dir.path());
+
+        let lines = vec!["alias ll='ls -la'".to_string()];
+        engine.generate_shell_rc(&lines, Some("bash")).unwrap();
+        engine.generate_shell_rc(&lines, Some("bash")).unwrap();
+
+        let bashrc = std::fs::read_to_string(engine.home_dir.join(".bashrc")).unwrap();
+        // The "# Bingux home environment" marker should appear exactly once.
+        let count = bashrc.matches("# Bingux home environment").count();
+        assert_eq!(count, 1);
     }
 }

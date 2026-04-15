@@ -20,11 +20,27 @@ pub struct HomeDelta {
     pub packages_to_remove: Vec<String>,
     pub dotfiles_to_link: Vec<DotfileLink>,
     pub dotfiles_to_backup: Vec<PathBuf>,
+    /// Git repo URL to clone/update for dotfiles (if specified).
+    pub dotfiles_repo: Option<DotfilesRepoDelta>,
     pub env_changes: HashMap<String, String>,
+    /// Shell RC lines to write.
+    pub shell_rc: Vec<String>,
+    /// Which shell to target (e.g. "bash", "zsh").
+    pub shell_name: Option<String>,
     pub services_to_enable: Vec<String>,
     pub services_to_disable: Vec<String>,
     pub dconf_changes: HashMap<String, String>,
     pub permissions_to_set: HashMap<String, PermissionSection>,
+}
+
+/// Delta for dotfiles repo cloning/updating.
+#[derive(Debug, Clone)]
+pub struct DotfilesRepoDelta {
+    pub url: String,
+    /// Absolute path to clone into.
+    pub target: PathBuf,
+    /// Whether the repo already exists at the target.
+    pub already_cloned: bool,
 }
 
 /// Compute the delta between the desired state (`home.toml`) and the current
@@ -65,7 +81,19 @@ pub fn compute_delta(
 
     // ── Dotfiles ──────────────────────────────────────────────────────
     if let Some(ref dotfiles) = config.dotfiles {
-        for (source_rel, target_rel) in dotfiles {
+        // Dotfiles repo clone/update.
+        if let Some(ref repo_url) = dotfiles.repo {
+            let target_dir = home_dir.join(&dotfiles.target);
+            let already_cloned = target_dir.join(".git").is_dir();
+            delta.dotfiles_repo = Some(DotfilesRepoDelta {
+                url: repo_url.clone(),
+                target: target_dir,
+                already_cloned,
+            });
+        }
+
+        // Individual file link mappings.
+        for (source_rel, target_rel) in &dotfiles.links {
             let source = PathBuf::from(source_rel);
             let target = PathBuf::from(target_rel);
             let target_abs = home_dir.join(&target);
@@ -95,6 +123,17 @@ pub fn compute_delta(
     // ── Environment variables ─────────────────────────────────────────
     if let Some(ref env) = config.env {
         delta.env_changes = env.clone();
+    }
+
+    // ── Shell RC ─────────────────────────────────────────────────────
+    if let Some(ref shell) = config.shell {
+        if !shell.rc.is_empty() {
+            delta.shell_rc = shell.rc.clone();
+        }
+    }
+    // Determine target shell from user config.
+    if let Some(ref user) = config.user {
+        delta.shell_name = user.shell.clone();
     }
 
     // ── Services ──────────────────────────────────────────────────────
@@ -205,6 +244,7 @@ rm = ["epiphany"]
         let config = HomeConfig::load_str(
             r#"
 [dotfiles]
+[dotfiles.links]
 "zsh/.zshrc" = ".zshrc"
 "#,
         )
@@ -236,6 +276,7 @@ rm = ["epiphany"]
         let config = HomeConfig::load_str(
             r#"
 [dotfiles]
+[dotfiles.links]
 "zsh/.zshrc" = ".zshrc"
 "#,
         )
@@ -244,6 +285,47 @@ rm = ["epiphany"]
         let delta = compute_delta(&config, &cfg, &home, &[]);
         assert_eq!(delta.dotfiles_to_link.len(), 1);
         assert_eq!(delta.dotfiles_to_backup, vec![PathBuf::from(".zshrc")]);
+    }
+
+    #[test]
+    fn dotfiles_repo_delta() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
+        let cfg = dir.path().join("cfg");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(&cfg).unwrap();
+
+        let config = HomeConfig::load_str(
+            r#"
+[dotfiles]
+repo = "https://github.com/kieran/dotfiles"
+"#,
+        )
+        .unwrap();
+
+        let delta = compute_delta(&config, &cfg, &home, &[]);
+        let repo_delta = delta.dotfiles_repo.as_ref().unwrap();
+        assert_eq!(repo_delta.url, "https://github.com/kieran/dotfiles");
+        assert_eq!(repo_delta.target, home.join(".dotfiles"));
+        assert!(!repo_delta.already_cloned);
+    }
+
+    #[test]
+    fn shell_rc_forwarded() {
+        let config = HomeConfig::load_str(
+            r#"
+[user]
+shell = "bash"
+
+[shell]
+rc = ['alias ll="ls -la"', 'export PATH="$HOME/.local/bin:$PATH"']
+"#,
+        )
+        .unwrap();
+
+        let delta = compute_delta(&config, Path::new("/cfg"), Path::new("/home/u"), &[]);
+        assert_eq!(delta.shell_rc.len(), 2);
+        assert_eq!(delta.shell_name.as_deref(), Some("bash"));
     }
 
     #[test]

@@ -227,7 +227,11 @@ EDITOR = "nvim"
 PAGER = "bat"
 
 [dotfiles]
+[dotfiles.links]
 "gitconfig" = ".gitconfig"
+
+[shell]
+rc = ['alias ll="ls -la"']
 
 [services]
 enable = ["syncthing"]

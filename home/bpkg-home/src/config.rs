@@ -15,8 +15,9 @@ pub struct HomeConfig {
     pub repos: Option<Vec<RepoEntry>>,
     pub mounts: Option<MountsSection>,
     pub permissions: Option<HashMap<String, PermissionSection>>,
-    pub dotfiles: Option<HashMap<String, String>>,
+    pub dotfiles: Option<DotfilesSection>,
     pub env: Option<HashMap<String, String>>,
+    pub shell: Option<ShellSection>,
     pub services: Option<ServicesSection>,
     pub dconf: Option<HashMap<String, String>>,
 }
@@ -25,9 +26,36 @@ pub struct HomeConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct UserSection {
+    pub name: Option<String>,
     pub shell: Option<String>,
     pub editor: Option<String>,
     pub terminal: Option<String>,
+}
+
+/// Dotfiles configuration — can specify a git repo to clone and/or
+/// individual file mappings (source -> target relative to `$HOME`).
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct DotfilesSection {
+    /// Git repository URL for dotfiles.
+    pub repo: Option<String>,
+    /// Target directory to clone into (relative to `$HOME`, defaults to `.dotfiles`).
+    #[serde(default = "default_dotfiles_target")]
+    pub target: String,
+    /// Individual file mappings: source (relative to config dir) -> target (relative to `$HOME`).
+    #[serde(default)]
+    pub links: HashMap<String, String>,
+}
+
+fn default_dotfiles_target() -> String {
+    ".dotfiles".to_string()
+}
+
+/// Shell RC configuration — lines to append to the user's shell RC file.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct ShellSection {
+    /// Lines to add to .bashrc / .zshrc (depending on `[user].shell`).
+    #[serde(default)]
+    pub rc: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -126,6 +154,7 @@ mod tests {
 
     const FULL_TOML: &str = r#"
 [user]
+name = "kieran"
 shell = "zsh"
 editor = "nvim"
 terminal = "ghostty"
@@ -163,6 +192,10 @@ allow = ["display", "clipboard"]
 mounts = ["~/src:rw", "~/Documents:rw", "~/.config/nvim:rw", "~/.ssh:list,deny(w)"]
 
 [dotfiles]
+repo = "https://github.com/kieran/dotfiles"
+target = ".dotfiles"
+
+[dotfiles.links]
 "nvim/" = ".config/nvim"
 "zsh/.zshrc" = ".zshrc"
 "git/config" = ".gitconfig"
@@ -170,6 +203,12 @@ mounts = ["~/src:rw", "~/Documents:rw", "~/.config/nvim:rw", "~/.ssh:list,deny(w
 [env]
 EDITOR = "nvim"
 PAGER = "bat --paging=always"
+
+[shell]
+rc = [
+    'alias ll="ls -la"',
+    'export PATH="$HOME/.local/bin:$PATH"',
+]
 
 [services]
 enable = ["syncthing", "ssh-agent"]
@@ -185,6 +224,7 @@ enable = ["syncthing", "ssh-agent"]
 
         // user
         let user = config.user.as_ref().unwrap();
+        assert_eq!(user.name.as_deref(), Some("kieran"));
         assert_eq!(user.shell.as_deref(), Some("zsh"));
         assert_eq!(user.editor.as_deref(), Some("nvim"));
         assert_eq!(user.terminal.as_deref(), Some("ghostty"));
@@ -212,11 +252,21 @@ enable = ["syncthing", "ssh-agent"]
 
         // dotfiles
         let dotfiles = config.dotfiles.as_ref().unwrap();
-        assert_eq!(dotfiles.get("zsh/.zshrc").unwrap(), ".zshrc");
+        assert_eq!(
+            dotfiles.repo.as_deref(),
+            Some("https://github.com/kieran/dotfiles")
+        );
+        assert_eq!(dotfiles.target, ".dotfiles");
+        assert_eq!(dotfiles.links.get("zsh/.zshrc").unwrap(), ".zshrc");
 
         // env
         let env = config.env.as_ref().unwrap();
         assert_eq!(env.get("EDITOR").unwrap(), "nvim");
+
+        // shell
+        let shell = config.shell.as_ref().unwrap();
+        assert_eq!(shell.rc.len(), 2);
+        assert!(shell.rc[0].contains("alias ll"));
 
         // services
         let services = config.services.as_ref().unwrap();
@@ -241,6 +291,7 @@ keep = ["firefox", "git"]
         let config = HomeConfig::load_str(toml).unwrap();
         assert!(config.user.is_none());
         assert!(config.dotfiles.is_none());
+        assert!(config.shell.is_none());
         assert_eq!(config.packages.as_ref().unwrap().keep.len(), 2);
     }
 

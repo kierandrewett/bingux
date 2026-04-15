@@ -47,11 +47,20 @@ pub fn run_apply(path: Option<&PathBuf>) -> Result<()> {
     if summary.packages_removed > 0 {
         output::print_status("packages", &format!("{} to remove", summary.packages_removed));
     }
+    if summary.dotfiles_repo_cloned {
+        output::print_status("dotfiles", "repository cloned");
+    }
+    if summary.dotfiles_repo_updated {
+        output::print_status("dotfiles", "repository updated");
+    }
     if summary.dotfiles_linked > 0 {
         output::print_status("dotfiles", &format!("{} linked", summary.dotfiles_linked));
     }
     if summary.env_vars_set > 0 {
         output::print_status("env", &format!("{} variables set", summary.env_vars_set));
+    }
+    if summary.shell_rc_written {
+        output::print_status("shell", "RC snippet written");
     }
     if summary.dconf_applied > 0 {
         output::print_status("dconf", &format!("{} settings applied", summary.dconf_applied));
@@ -96,6 +105,18 @@ pub fn run_diff() -> Result<()> {
             println!("  - {pkg}");
         }
     }
+    if let Some(ref repo) = delta.dotfiles_repo {
+        has_changes = true;
+        if repo.already_cloned {
+            println!("Dotfiles repo: will pull {}", repo.url);
+        } else {
+            println!(
+                "Dotfiles repo: will clone {} -> {}",
+                repo.url,
+                repo.target.display()
+            );
+        }
+    }
     if !delta.dotfiles_to_link.is_empty() {
         has_changes = true;
         println!("Dotfiles to link:");
@@ -106,8 +127,18 @@ pub fn run_diff() -> Result<()> {
     if !delta.env_changes.is_empty() {
         has_changes = true;
         println!("Environment variables:");
-        for (key, val) in &delta.env_changes {
-            println!("  {key}={val}");
+        let mut keys: Vec<&String> = delta.env_changes.keys().collect();
+        keys.sort();
+        for key in keys {
+            println!("  {key}={}", delta.env_changes[key]);
+        }
+    }
+    if !delta.shell_rc.is_empty() {
+        has_changes = true;
+        let shell = delta.shell_name.as_deref().unwrap_or("bash");
+        println!("Shell RC ({shell}):");
+        for line in &delta.shell_rc {
+            println!("  {line}");
         }
     }
     if !delta.services_to_enable.is_empty() {
@@ -115,6 +146,15 @@ pub fn run_diff() -> Result<()> {
         println!("Services to enable:");
         for svc in &delta.services_to_enable {
             println!("  + {svc}");
+        }
+    }
+    if !delta.dconf_changes.is_empty() {
+        has_changes = true;
+        println!("Dconf settings:");
+        let mut keys: Vec<&String> = delta.dconf_changes.keys().collect();
+        keys.sort();
+        for key in keys {
+            println!("  {key} = {}", delta.dconf_changes[key]);
         }
     }
 
@@ -156,8 +196,22 @@ pub fn run_status() -> Result<()> {
             bpkg_home::PackageDrift::NotInConfig(pkg) => {
                 println!("  package not in config: {pkg}");
             }
-            bpkg_home::PackageDrift::VersionMismatch { name, declared, installed } => {
-                println!("  version mismatch: {name} (declared {declared}, installed {installed})");
+            bpkg_home::PackageDrift::VersionMismatch {
+                name,
+                declared,
+                installed,
+            } => {
+                println!(
+                    "  version mismatch: {name} (declared {declared}, installed {installed})"
+                );
+            }
+        }
+    }
+
+    for drift in &status.dotfiles_repo_drift {
+        match drift {
+            bpkg_home::DotfilesRepoDrift::NotCloned { url, target } => {
+                println!("  dotfiles repo not cloned: {url} -> ~/{target}");
             }
         }
     }
@@ -172,6 +226,20 @@ pub fn run_status() -> Result<()> {
             }
             bpkg_home::DotfileDrift::BrokenLink { target } => {
                 println!("  dotfile broken link: {target}");
+            }
+        }
+    }
+
+    for drift in &status.shell_drift {
+        match drift {
+            bpkg_home::ShellDrift::NotGenerated => {
+                println!("  shell RC snippet not generated");
+            }
+            bpkg_home::ShellDrift::OutOfDate => {
+                println!("  shell RC snippet out of date");
+            }
+            bpkg_home::ShellDrift::NotSourced { rc_file } => {
+                println!("  shell RC not sourced in {rc_file}");
             }
         }
     }
