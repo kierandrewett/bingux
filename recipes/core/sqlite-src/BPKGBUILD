@@ -1,0 +1,29 @@
+pkgscope="bingux"
+pkgname="sqlite-src"
+pkgver="3.47.2"
+pkgarch="x86_64-linux"
+pkgdesc="SQLite — database engine, compiled from source"
+license="public-domain"
+depends=("readline-8.2" "ncurses-6.5")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/sqlite3" "lib/libsqlite3.a")
+source=("https://www.sqlite.org/2024/sqlite-autoconf-3470200.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/sqlite-autoconf-3470200"
+    READLINE="/tmp/bingux-bootstrap-store/readline-8.2-x86_64-linux"
+    NCURSES="/tmp/bingux-bootstrap-store/ncurses-6.5-x86_64-linux"
+    CC=bingux-gcc ./configure --prefix=/ --disable-shared --enable-readline \
+        CFLAGS="-static -I$READLINE/include -I$NCURSES/include -DSQLITE_ENABLE_FTS5" \
+        LDFLAGS="-static -L$READLINE/lib -L$NCURSES/lib -lreadline -lncursesw -Wl,--allow-multiple-definition" \
+        2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -L$READLINE/lib -L$NCURSES/lib -lreadline -lncursesw -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/sqlite-autoconf-3470200"
+    mkdir -p "$PKGDIR/bin" "$PKGDIR/lib" "$PKGDIR/include"
+    cp sqlite3 "$PKGDIR/bin/sqlite3" 2>/dev/null || cp .libs/sqlite3 "$PKGDIR/bin/sqlite3"
+    cp .libs/libsqlite3.a "$PKGDIR/lib/" 2>/dev/null || cp libsqlite3.a "$PKGDIR/lib/" 2>/dev/null
+    cp sqlite3.h "$PKGDIR/include/"
+    chmod +x "$PKGDIR/bin/sqlite3"
+}
