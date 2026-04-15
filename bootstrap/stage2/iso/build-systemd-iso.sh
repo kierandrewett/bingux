@@ -265,6 +265,23 @@ OSREL
 
 # Create a bingux welcome service
 mkdir -p "$INITRD/usr/lib/systemd/system/multi-user.target.wants"
+# Create a welcome script (avoids escape issues in unit files)
+cat > "$INITRD/bin/bingux-welcome" << 'WELCOMESCRIPT'
+#!/bin/sh
+echo ""
+echo "  Bingux Live Environment (systemd)"
+echo "  ================================="
+echo ""
+export BPKG_STORE_ROOT=/system/packages
+export PATH=/system/profiles/default/bin:/bin:/usr/bin
+export LD_LIBRARY_PATH=/lib64:/usr/lib64
+echo "  Packages:"
+/bin/bpkg list 2>&1 | sed 's/^/    /'
+echo ""
+echo "  Ready."
+WELCOMESCRIPT
+chmod +x "$INITRD/bin/bingux-welcome"
+
 cat > "$INITRD/usr/lib/systemd/system/bingux-welcome.service" << 'UNIT'
 [Unit]
 Description=Bingux Welcome Message
@@ -272,7 +289,7 @@ After=systemd-journald.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'echo ""; echo "  ____  _                       "; echo " | __ )(_)_ __   __ _ _   ___  _"; echo " |  _ \\| | '"'"'_ \\ / _\` | | | \\ \\/ /"; echo " | |_) | | | | | (_| | |_| |>  < "; echo " |____/|_|_| |_|\\__, |\\__,_/_/\\_\\"; echo "                |___/            "; echo ""; echo "  Bingux — powered by systemd"; echo ""; echo "  Packages:"; BPKG_STORE_ROOT=/system/packages PATH=/system/profiles/default/bin:/bin:/usr/bin LD_LIBRARY_PATH=/lib64:/usr/lib64 /bin/bpkg list 2>&1 || echo "  (bpkg unavailable)"; echo ""'
+ExecStart=/bin/bingux-welcome
 RemainAfterExit=yes
 StandardOutput=journal+console
 StandardError=journal+console
