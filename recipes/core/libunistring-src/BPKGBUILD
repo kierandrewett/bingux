@@ -1,0 +1,23 @@
+pkgscope="bingux"
+pkgname="libunistring-src"
+pkgver="1.3"
+pkgarch="x86_64-linux"
+pkgdesc="libunistring — Unicode string library"
+license="LGPL-3.0"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("lib/libunistring.a")
+source=("https://ftpmirror.gnu.org/libunistring/libunistring-1.3.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/libunistring-1.3"
+    CC=bingux-gcc ./configure --prefix=/ --disable-shared --disable-nls \
+        CFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    make -j1 CC=bingux-gcc 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/libunistring-1.3"
+    mkdir -p "$PKGDIR/lib" "$PKGDIR/include"
+    cp lib/.libs/libunistring.a "$PKGDIR/lib/" 2>/dev/null
+    cp lib/*.h "$PKGDIR/include/" 2>/dev/null
+}

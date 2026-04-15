@@ -1,0 +1,26 @@
+pkgscope="bingux"
+pkgname="libffi-src"
+pkgver="3.4.6"
+pkgarch="x86_64-linux"
+pkgdesc="libffi — foreign function interface"
+license="MIT"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("lib/libffi.a")
+source=("https://github.com/libffi/libffi/releases/download/v3.4.6/libffi-3.4.6.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/libffi-3.4.6"
+    CC=bingux-gcc ./configure --prefix=/ --disable-shared \
+        CFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    make -j1 CC=bingux-gcc 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/libffi-3.4.6"
+    mkdir -p "$PKGDIR/lib" "$PKGDIR/include"
+    cp x86_64-pc-linux-musl/.libs/libffi.a "$PKGDIR/lib/" 2>/dev/null || \
+        find . -name libffi.a -exec cp {} "$PKGDIR/lib/" \;
+    cp x86_64-pc-linux-musl/include/*.h "$PKGDIR/include/" 2>/dev/null || \
+        find . -name ffi.h -exec cp {} "$PKGDIR/include/" \;
+    find . -name ffitarget.h -exec cp {} "$PKGDIR/include/" \;
+}
