@@ -1,0 +1,64 @@
+pkgscope="bingux"
+pkgname="sysinit-src"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="sysinit — Bingux system initializer"
+license="MIT"
+depends=()
+exports=("bin/sysinit")
+source=()
+sha256sums=()
+build() {
+    cat > "$SRCDIR/sysinit.c" << 'C'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/mount.h>
+#include <sys/stat.h>
+#include <sys/utsname.h>
+
+void mount_fs(const char *type, const char *target) {
+    mkdir(target, 0755);
+    if (mount(type, target, type, 0, NULL) == 0)
+        printf("  mount %s on %s\n", type, target);
+}
+
+int main() {
+    struct utsname un;
+    uname(&un);
+    
+    printf("\n");
+    printf("  Bingux System Init\n");
+    printf("  Kernel: %s %s\n", un.sysname, un.release);
+    printf("\n");
+    
+    printf("Mounting filesystems:\n");
+    mount_fs("proc", "/proc");
+    mount_fs("sysfs", "/sys");
+    mount("devtmpfs", "/dev", "devtmpfs", 0, NULL);
+    printf("  mount devtmpfs on /dev\n");
+    mount("tmpfs", "/tmp", "tmpfs", 0, "size=512M");
+    printf("  mount tmpfs on /tmp\n");
+    mount("tmpfs", "/run", "tmpfs", 0, NULL);
+    printf("  mount tmpfs on /run\n");
+    
+    printf("\n");
+    printf("Setting up environment:\n");
+    setenv("PATH", "/system/profiles/current/bin:/bin:/sbin", 1);
+    setenv("LD_LIBRARY_PATH", "/lib64", 1);
+    setenv("BPKG_STORE_ROOT", "/system/packages", 1);
+    setenv("HOME", "/tmp", 1);
+    setenv("TERM", "linux", 1);
+    printf("  PATH, LD_LIBRARY_PATH, BPKG_STORE_ROOT set\n");
+    
+    printf("\nBingux ready.\n\n");
+    
+    // Exec shell
+    execl("/bin/sh", "sh", "-l", NULL);
+    return 1;
+}
+C
+    bingux-gcc -o "$BUILDDIR/sysinit" "$SRCDIR/sysinit.c"
+}
+package() { mkdir -p "$PKGDIR/bin"; cp "$BUILDDIR/sysinit" "$PKGDIR/bin/sysinit"; chmod +x "$PKGDIR/bin/sysinit"; }
