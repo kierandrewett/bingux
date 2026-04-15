@@ -1,0 +1,73 @@
+pkgscope="bingux"
+pkgname="glibc-src"
+pkgver="2.39"
+pkgarch="x86_64-linux"
+pkgdesc="GNU C Library 2.39 — standard C library for Linux ABI compatibility"
+license="LGPL-2.1"
+depends=("linux-headers-6.12.8")
+makedepends=("gcc-src-14.2.0" "binutils-src-2.43.1")
+exports=(
+    "bin/ldd"
+    "bin/getent"
+    "bin/getconf"
+    "bin/iconv"
+    "bin/locale"
+    "bin/localedef"
+    "sbin/ldconfig"
+    "sbin/sln"
+)
+source=("https://ftpmirror.gnu.org/glibc/glibc-2.39.tar.xz")
+sha256sums=("SKIP")
+build() {
+    GCC="$BINGUX_STORE/gcc-src-14.2.0-x86_64-linux"
+    BINUTILS="$BINGUX_STORE/binutils-src-2.43.1-x86_64-linux"
+    MUSL_TC="$BINGUX_STORE/musl-toolchain-13.2.0-x86_64-linux"
+
+    # Prepare clean kernel headers directory
+    KERNEL_HEADERS="$SRCDIR/kernel-headers/include"
+    mkdir -p "$KERNEL_HEADERS"
+    for d in linux asm asm-generic; do
+        cp -a "$MUSL_TC/include/$d" "$KERNEL_HEADERS/"
+    done
+
+    mkdir -p "$SRCDIR/build" && cd "$SRCDIR/build"
+
+    CC="$GCC/bin/gcc" \
+    CXX="$GCC/bin/g++" \
+    AR="$BINUTILS/bin/ar" \
+    AS="$BINUTILS/bin/as" \
+    LD="/usr/bin/ld" \
+    NM="$BINUTILS/bin/nm" \
+    RANLIB="$BINUTILS/bin/ranlib" \
+    OBJCOPY="$BINUTILS/bin/objcopy" \
+    OBJDUMP="$BINUTILS/bin/objdump" \
+    READELF="$BINUTILS/bin/readelf" \
+    STRIP="$BINUTILS/bin/strip" \
+    ../glibc-2.39/configure \
+        --prefix=/ \
+        --host=x86_64-pc-linux-gnu \
+        --build=x86_64-pc-linux-gnu \
+        --with-headers="$KERNEL_HEADERS" \
+        --disable-werror \
+        --disable-nscd \
+        --disable-timezone-tools \
+        --enable-kernel=6.1 \
+        --enable-cet \
+        --enable-bind-now \
+        --enable-stack-protector=strong \
+        libc_cv_forced_unwind=yes \
+        libc_cv_c_cleanup=yes \
+        libc_cv_slibdir=/lib \
+        libc_cv_rtlddir=/lib
+
+    make -j$(nproc) 2>&1 | tail -5
+}
+package() {
+    cd "$SRCDIR/build"
+    make DESTDIR="$PKGDIR" install
+
+    # Strip debug symbols from libraries to save space
+    find "$PKGDIR/lib" -name '*.so*' -type f -exec strip --strip-debug {} \; 2>/dev/null || true
+    find "$PKGDIR/sbin" -type f -exec strip {} \; 2>/dev/null || true
+    find "$PKGDIR/bin" -type f -exec strip {} \; 2>/dev/null || true
+}
