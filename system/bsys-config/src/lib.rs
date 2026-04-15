@@ -1,5 +1,6 @@
 pub mod config;
 pub mod etc_gen;
+pub mod profile_env;
 pub mod service_backend;
 
 pub use config::{
