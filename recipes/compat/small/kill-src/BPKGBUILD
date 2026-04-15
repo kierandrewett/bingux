@@ -1,0 +1,15 @@
+pkgscope="bingux"
+pkgname="kill-src"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="kill — send signal"
+license="MIT"
+depends=()
+exports=("bin/bingux-kill")
+source=()
+sha256sums=()
+build() {
+    printf '#include <stdio.h>\n#include <stdlib.h>\n#include <signal.h>\nint main(int c,char**v){if(c<2){fprintf(stderr,"usage: kill [-sig] pid\n");return 1;}int s=SIGTERM;int i=1;if(v[1][0]=='-'){s=atoi(v[1]+1);i=2;}for(;i<c;i++)kill(atoi(v[i]),s);return 0;}' > "$SRCDIR/kill.c"
+    bingux-gcc -o "$BUILDDIR/bingux-kill" "$SRCDIR/kill.c"
+}
+package() { mkdir -p "$PKGDIR/bin"; cp "$BUILDDIR/bingux-kill" "$PKGDIR/bin/bingux-kill"; chmod +x "$PKGDIR/bin/bingux-kill"; }

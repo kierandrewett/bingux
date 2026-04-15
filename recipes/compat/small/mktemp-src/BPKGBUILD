@@ -1,0 +1,15 @@
+pkgscope="bingux"
+pkgname="mktemp-src"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="mktemp — create temp file"
+license="MIT"
+depends=()
+exports=("bin/bingux-mktemp")
+source=()
+sha256sums=()
+build() {
+    printf '#include <stdio.h>\n#include <stdlib.h>\nint main(){char t[]="/tmp/bingux.XXXXXX";int f=mkstemp(t);if(f<0)return 1;close(f);puts(t);return 0;}' > "$SRCDIR/mktemp.c"
+    bingux-gcc -o "$BUILDDIR/bingux-mktemp" "$SRCDIR/mktemp.c"
+}
+package() { mkdir -p "$PKGDIR/bin"; cp "$BUILDDIR/bingux-mktemp" "$PKGDIR/bin/bingux-mktemp"; chmod +x "$PKGDIR/bin/bingux-mktemp"; }

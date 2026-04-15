@@ -1,0 +1,15 @@
+pkgscope="bingux"
+pkgname="md5sum-src"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="md5sum stub — hash placeholder"
+license="MIT"
+depends=()
+exports=("bin/bingux-md5sum")
+source=()
+sha256sums=()
+build() {
+    printf '#include <stdio.h>\nint main(){printf("md5sum: not yet implemented (need crypto)\n");return 0;}' > "$SRCDIR/md5sum.c"
+    bingux-gcc -o "$BUILDDIR/bingux-md5sum" "$SRCDIR/md5sum.c"
+}
+package() { mkdir -p "$PKGDIR/bin"; cp "$BUILDDIR/bingux-md5sum" "$PKGDIR/bin/bingux-md5sum"; chmod +x "$PKGDIR/bin/bingux-md5sum"; }

@@ -1,0 +1,15 @@
+pkgscope="bingux"
+pkgname="nproc-src"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="nproc — number of CPUs"
+license="MIT"
+depends=()
+exports=("bin/bingux-nproc")
+source=()
+sha256sums=()
+build() {
+    printf '#include <unistd.h>\n#include <stdio.h>\nint main(){printf("%ld\n",sysconf(_SC_NPROCESSORS_ONLN));return 0;}' > "$SRCDIR/nproc.c"
+    bingux-gcc -o "$BUILDDIR/bingux-nproc" "$SRCDIR/nproc.c"
+}
+package() { mkdir -p "$PKGDIR/bin"; cp "$BUILDDIR/bingux-nproc" "$PKGDIR/bin/bingux-nproc"; chmod +x "$PKGDIR/bin/bingux-nproc"; }

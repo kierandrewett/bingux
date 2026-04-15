@@ -1,0 +1,15 @@
+pkgscope="bingux"
+pkgname="printenv-src"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="printenv — print environment"
+license="MIT"
+depends=()
+exports=("bin/bingux-printenv")
+source=()
+sha256sums=()
+build() {
+    printf '#include <stdio.h>\nextern char**environ;\nint main(int c,char**v){if(c>1){char*e=getenv(v[1]);if(e)puts(e);else return 1;}else{for(char**p=environ;*p;p++)puts(*p);}return 0;}' > "$SRCDIR/printenv.c"
+    bingux-gcc -o "$BUILDDIR/bingux-printenv" "$SRCDIR/printenv.c"
+}
+package() { mkdir -p "$PKGDIR/bin"; cp "$BUILDDIR/bingux-printenv" "$PKGDIR/bin/bingux-printenv"; chmod +x "$PKGDIR/bin/bingux-printenv"; }
