@@ -110,19 +110,23 @@ All 11 sprints from the original plan are implemented. See git log for details.
 - [x] Build glibc 2.39 from source using our GCC 14
 - [x] Verify libc.so.6, ld-linux-x86-64.so.2, crt*.o all present
 - [x] Verify PT_INTERP points to Bingux store path
-- [ ] Rebuild GCC against glibc (stage3 with libstdc++)
+- [x] Rebuild GCC against glibc (stage3 with libstdc++)
 - [ ] Rebuild key packages against glibc
 - [ ] Verify patchelf rewrites PT_INTERP + RUNPATH to store glibc
 
-#### Phase J: systemd boot
-- [ ] Build util-linux from source (mount, lsblk, etc.)
-- [ ] Build D-Bus from source
-- [ ] Build systemd from source (needs glibc)
-- [ ] Wire systemd into the ISO builder
-- [ ] Boot with systemd as PID 1
+#### Phase J: systemd boot ✅
+- [x] Build util-linux from source (mount, lsblk, fdisk, nsenter, etc.)
+- [x] Build D-Bus from source
+- [x] Build systemd 256.11 from source (meson + ninja)
+- [x] Build e2fsprogs, kmod, libcap, gperf
+- [x] Implement real boot executor (mount, symlink, /etc generation, exec init)
+- [ ] Wire systemd into production ISO builder
+- [ ] Boot with systemd as PID 1 in QEMU
 
 #### Phase K: Proper profiles & generations
+- [x] Generation builder with symlinks + dispatch tables (already implemented)
+- [x] Atomic profile switching via current→N symlink (already implemented)
 - [ ] Wire bsys apply into the init sequence
-- [ ] Implement atomic profile switching via symlinks
 - [ ] Wire dispatch table (.dispatch.toml) into init
-- [ ] Test generation rollback
+- [ ] Test generation rollback in VM
+- [ ] Build production ISO with full profile system
