@@ -23,7 +23,7 @@ pub fn run(package: &str) {
             output::status("inspect", &format!("sandbox level: {}", entry.sandbox));
 
             // Parse sandbox level and show seccomp profile details.
-            let level = match entry.sandbox.as_str() {
+            let level = match entry.sandbox.to_lowercase().as_str() {
                 "none" => SandboxLevel::None,
                 "minimal" => SandboxLevel::Minimal,
                 "standard" => SandboxLevel::Standard,
@@ -44,6 +44,32 @@ pub fn run(package: &str) {
                     profile.notify_list.len(),
                     profile.deny_list.len(),
                 ));
+            }
+
+            // Show sandbox capabilities based on level
+            match level {
+                SandboxLevel::None => {
+                    output::status("inspect", "capabilities: FULL (no restrictions)");
+                    output::status("inspect", "mounts: host filesystem (no isolation)");
+                }
+                SandboxLevel::Minimal => {
+                    output::status("inspect", "capabilities: mount namespace only");
+                    output::status("inspect", "mounts: full filesystem (no seccomp)");
+                }
+                SandboxLevel::Standard => {
+                    output::status("inspect", "capabilities: mount ns + seccomp prompting");
+                    output::status("inspect", "mounts: /system/packages (ro), /proc, /dev (minimal), /tmp");
+                    output::status("inspect", "home: per-package (~/.config/bingux/state/<pkg>/home/)");
+                    output::status("inspect", "network: prompts on connect/bind/listen");
+                    output::status("inspect", "files: prompts on access outside package");
+                }
+                SandboxLevel::Strict => {
+                    output::status("inspect", "capabilities: mount + pid + net ns + seccomp");
+                    output::status("inspect", "mounts: /system/packages (ro), /proc, /dev (minimal), /tmp");
+                    output::status("inspect", "home: per-package (isolated)");
+                    output::status("inspect", "network: isolated namespace (must be explicitly granted)");
+                    output::status("inspect", "files: strict prompting, no permanent grants for dangerous ops");
+                }
             }
         }
         Err(_) => {
