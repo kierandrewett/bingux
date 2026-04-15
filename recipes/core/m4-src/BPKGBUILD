@@ -1,0 +1,22 @@
+pkgscope="bingux"
+pkgname="m4-src"
+pkgver="1.4.19"
+pkgarch="x86_64-linux"
+pkgdesc="GNU m4 — macro processor"
+license="GPL-3.0"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/m4")
+source=("https://ftpmirror.gnu.org/m4/m4-1.4.19.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/m4-1.4.19"
+    CC=bingux-gcc ./configure --prefix=/ --disable-nls CFLAGS="-static" LDFLAGS="-static -Wl,--allow-multiple-definition" 2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/m4-1.4.19"
+    mkdir -p "$PKGDIR/bin"
+    cp src/m4 "$PKGDIR/bin/m4"
+    chmod +x "$PKGDIR/bin/m4"
+}
