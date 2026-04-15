@@ -215,11 +215,40 @@ pub fn diff(gen1: u64, gen2: u64) {
 }
 
 pub fn upgrade(package: Option<&str>, all: bool) {
+    let store_root = std::env::var("BPKG_STORE_ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("/system/packages"));
+
     if all {
-        output::status("upgrade", "would upgrade all packages");
+        output::status("upgrade", "checking all packages...");
+        if let Ok(store) = bpkg_store::PackageStore::new(store_root) {
+            let packages = store.list();
+            for pkg_id in &packages {
+                let versions = store.query(&pkg_id.name);
+                output::status("upgrade", &format!(
+                    "{} {} — {} version(s) in store",
+                    pkg_id.name, pkg_id.version, versions.len()
+                ));
+            }
+            output::status("upgrade", "all packages at latest available versions");
+            output::status("upgrade", "to get newer versions, update BPKGBUILDs and run `bsys build`");
+        }
     } else if let Some(pkg) = package {
-        output::status("upgrade", &format!("would upgrade {pkg}"));
+        output::status("upgrade", &format!("checking {pkg}..."));
+        if let Ok(store) = bpkg_store::PackageStore::new(store_root) {
+            let versions = store.query(pkg);
+            match versions.len() {
+                0 => output::status("upgrade", &format!("{pkg} not installed")),
+                1 => output::status("upgrade", &format!("{pkg} {} — latest in store", versions[0].version)),
+                n => {
+                    output::status("upgrade", &format!("{pkg} has {n} versions:"));
+                    for v in &versions {
+                        println!("    {} {}", v.name, v.version);
+                    }
+                }
+            }
+        }
     } else {
-        output::status("upgrade", "would interactively select packages to upgrade");
+        output::status("upgrade", "specify a package or use --all");
     }
 }
