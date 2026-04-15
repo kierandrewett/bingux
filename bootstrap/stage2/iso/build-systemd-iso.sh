@@ -101,6 +101,48 @@ build_pkg "python" "3.12.9" "https://github.com/indygreg/python-build-standalone
 build_pkg "nodejs" "22.14.0" "https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-x64.tar.gz" \
     'mkdir -p "$PKGDIR/bin" "$PKGDIR/lib"; cp "$SRCDIR/node-v22.14.0-linux-x64/bin/node" "$PKGDIR/bin/node"; chmod +x "$PKGDIR/bin/node"' "bin/node"
 
+# ---- 10 more essential packages ----
+
+# starship (cross-shell prompt)
+build_pkg "starship" "1.22.1" "https://github.com/starship/starship/releases/download/v1.22.1/starship-x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/starship" "$PKGDIR/bin/starship"; chmod +x "$PKGDIR/bin/starship"' "bin/starship"
+
+# lazygit (terminal git UI)
+build_pkg "lazygit" "0.44.1" "https://github.com/jesseduffield/lazygit/releases/download/v0.44.1/lazygit_0.44.1_Linux_x86_64.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/lazygit" "$PKGDIR/bin/lazygit"; chmod +x "$PKGDIR/bin/lazygit"' "bin/lazygit"
+
+# bottom (system monitor)
+build_pkg "bottom" "0.10.2" "https://github.com/ClementTsang/bottom/releases/download/0.10.2/bottom_x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/btm" "$PKGDIR/bin/btm"; chmod +x "$PKGDIR/bin/btm"' "bin/btm"
+
+# yq (YAML processor)
+build_pkg "yq" "4.45.1" "https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_amd64.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; find "$SRCDIR" -name "yq*" -type f | head -1 | xargs -I{} cp {} "$PKGDIR/bin/yq"; chmod +x "$PKGDIR/bin/yq"' "bin/yq"
+
+# hexyl (hex viewer)
+build_pkg "hexyl" "0.14.0" "https://github.com/sharkdp/hexyl/releases/download/v0.14.0/hexyl-v0.14.0-x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/hexyl-v0.14.0-x86_64-unknown-linux-musl/hexyl" "$PKGDIR/bin/hexyl"; chmod +x "$PKGDIR/bin/hexyl"' "bin/hexyl"
+
+# hyperfine (benchmarking)
+build_pkg "hyperfine" "1.19.0" "https://github.com/sharkdp/hyperfine/releases/download/v1.19.0/hyperfine-v1.19.0-x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/hyperfine-v1.19.0-x86_64-unknown-linux-musl/hyperfine" "$PKGDIR/bin/hyperfine"; chmod +x "$PKGDIR/bin/hyperfine"' "bin/hyperfine"
+
+# tokei (code stats)
+build_pkg "tokei" "13.0.0-alpha.7" "https://github.com/XAMPPRocky/tokei/releases/download/v13.0.0-alpha.7/tokei-x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/tokei" "$PKGDIR/bin/tokei"; chmod +x "$PKGDIR/bin/tokei"' "bin/tokei"
+
+# sd (sed alternative)
+build_pkg "sd" "1.0.0" "https://github.com/chmln/sd/releases/download/v1.0.0/sd-v1.0.0-x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; find "$SRCDIR" -name sd -type f | head -1 | xargs -I{} cp {} "$PKGDIR/bin/sd"; chmod +x "$PKGDIR/bin/sd"' "bin/sd"
+
+# bandwhich (network monitor)
+build_pkg "bandwhich" "0.22.2" "https://github.com/imsnif/bandwhich/releases/download/v0.22.2/bandwhich-v0.22.2-x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; find "$SRCDIR" -name bandwhich -type f | head -1 | xargs -I{} cp {} "$PKGDIR/bin/bandwhich"; chmod +x "$PKGDIR/bin/bandwhich"' "bin/bandwhich"
+
+# dog (DNS client, dig alternative)
+build_pkg "dog" "0.1.0" "https://github.com/ogham/dog/releases/download/v0.1.0/dog-v0.1.0-x86_64-unknown-linux-musl.zip" \
+    'mkdir -p "$PKGDIR/bin"; find "$SRCDIR" -name dog -type f | head -1 | xargs -I{} cp {} "$PKGDIR/bin/dog"; chmod +x "$PKGDIR/bin/dog"' "bin/dog"
+
 echo "    Packages: $(ls "$STORE" 2>/dev/null | wc -l)"
 
 # --- Phase 3: Build initramfs with systemd ---
