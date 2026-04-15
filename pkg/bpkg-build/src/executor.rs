@@ -110,10 +110,25 @@ impl BuildExecutor {
         debug!("executing script in {}", working_dir.display());
 
         let start = Instant::now();
-        let output = Command::new("bash")
+        // Inherit PATH from parent so shell builtins and coreutils are found.
+        // Fall back to a sensible default if PATH is not set.
+        let path = std::env::var("PATH")
+            .unwrap_or_else(|_| "/bin:/usr/bin:/sbin:/usr/sbin".to_string());
+
+        // Try bash first, fall back to sh (busybox environments may not have bash)
+        let shell = if std::path::Path::new("/bin/bash").exists()
+            && !is_busybox_symlink("/bin/bash")
+        {
+            "bash"
+        } else {
+            "sh"
+        };
+
+        let output = Command::new(shell)
             .arg("-c")
             .arg(&full_script)
             .current_dir(working_dir)
+            .env("PATH", &path)
             .env("SRCDIR", &env.srcdir)
             .env("BUILDDIR", &env.builddir)
             .env("PKGDIR", &env.pkgdir)
@@ -133,6 +148,13 @@ impl BuildExecutor {
             duration,
         })
     }
+}
+
+/// Check if a path is a busybox symlink (busybox doesn't support bash).
+fn is_busybox_symlink(path: &str) -> bool {
+    std::fs::read_link(path)
+        .map(|target| target.to_string_lossy().contains("busybox"))
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
