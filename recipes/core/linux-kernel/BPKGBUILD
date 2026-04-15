@@ -1,0 +1,50 @@
+pkgscope="bingux"
+pkgname="linux"
+pkgver="6.12.8"
+pkgarch="x86_64-linux"
+pkgdesc="Linux kernel — compiled from source for Bingux"
+license="GPL-2.0"
+
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+
+exports=(
+    "boot/vmlinuz"
+)
+
+source=("https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.8.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/linux-6.12.8"
+    # Minimal kernel config for QEMU/KVM
+    make tinyconfig CC="gcc" HOSTCC="gcc"
+    # Enable essentials
+    scripts/config --enable CONFIG_64BIT
+    scripts/config --enable CONFIG_PRINTK
+    scripts/config --enable CONFIG_TTY
+    scripts/config --enable CONFIG_SERIAL_8250
+    scripts/config --enable CONFIG_SERIAL_8250_CONSOLE
+    scripts/config --enable CONFIG_BLK_DEV_INITRD
+    scripts/config --enable CONFIG_BINFMT_ELF
+    scripts/config --enable CONFIG_BINFMT_SCRIPT
+    scripts/config --enable CONFIG_DEVTMPFS
+    scripts/config --enable CONFIG_PROC_FS
+    scripts/config --enable CONFIG_SYSFS
+    scripts/config --enable CONFIG_TMPFS
+    scripts/config --enable CONFIG_VIRTIO
+    scripts/config --enable CONFIG_VIRTIO_PCI
+    scripts/config --enable CONFIG_VIRTIO_BLK
+    scripts/config --enable CONFIG_VIRTIO_NET
+    scripts/config --enable CONFIG_NET
+    scripts/config --enable CONFIG_INET
+    make olddefconfig CC="gcc" HOSTCC="gcc"
+    make -j$(nproc) CC="gcc" HOSTCC="gcc"
+}
+
+package() {
+    cd "$SRCDIR/linux-6.12.8"
+    mkdir -p "$PKGDIR/boot" "$PKGDIR/lib/modules"
+    cp arch/x86/boot/bzImage "$PKGDIR/boot/vmlinuz"
+    make modules_install INSTALL_MOD_PATH="$PKGDIR" 2>/dev/null || true
+}
