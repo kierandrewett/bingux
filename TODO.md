@@ -72,3 +72,50 @@ All 11 sprints from the original plan are implemented. See git log for details.
 - [x] Clean up any remaining TODO stubs in CLI handlers
 - [x] Add CHANGELOG.md with milestone entries
 - [x] Final git push
+
+---
+
+## Current Status (April 15, 2026)
+
+### Package Bootstrap
+- **118 packages** in store, 86 recipes
+- **69/69 VM checks pass** (100% in QEMU)
+- **309 binaries** available across 89 packages with bin/
+- **425 Rust tests** passing
+
+### Key packages built from source:
+- **Shells**: bash 5.2.21, dash 0.5.12
+- **Editors**: nano 8.2, vim 9.1
+- **Languages**: perl 5.40.0, lua 5.4.7
+- **Dev tools**: git 2.47.1, cmake 3.31.3, ninja 1.12.1, nasm 2.16.03
+- **Build system**: autoconf 2.72, automake 1.17, m4, bison, flex, libtool, pkgconf
+- **GCC prereqs**: GMP 6.3.0, MPFR 4.2.1, MPC 1.3.1
+- **Compression**: lz4 1.10.0, zstd 1.5.6, zip 3.0, unzip 6.0, libarchive 3.7.7
+- **Networking**: curl 8.11.1 (with OpenSSL), wget 1.24.5, inetutils 2.5
+- **Modern CLI**: ripgrep, fd, bat, eza, fzf, zoxide, starship, lazygit, delta, hyperfine
+
+### Next: Full Bootstrap Path
+
+#### Phase H: Build GCC from source
+- [ ] Build GCC 14.2.0 from source using musl toolchain + GMP/MPFR/MPC
+- [ ] Verify GCC can compile C and C++ programs
+- [ ] Test GCC self-compilation (stage2)
+
+#### Phase I: glibc transition
+- [ ] Build glibc 2.39+ from source using our GCC
+- [ ] Rebuild GCC against glibc (stage3)
+- [ ] Rebuild key packages against glibc
+- [ ] Verify patchelf rewrites PT_INTERP + RUNPATH to store glibc
+
+#### Phase J: systemd boot
+- [ ] Build util-linux from source (mount, lsblk, etc.)
+- [ ] Build D-Bus from source
+- [ ] Build systemd from source (needs glibc)
+- [ ] Wire systemd into the ISO builder
+- [ ] Boot with systemd as PID 1
+
+#### Phase K: Proper profiles & generations
+- [ ] Wire bsys apply into the init sequence
+- [ ] Implement atomic profile switching via symlinks
+- [ ] Wire dispatch table (.dispatch.toml) into init
+- [ ] Test generation rollback
