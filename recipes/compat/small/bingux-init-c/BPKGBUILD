@@ -1,0 +1,84 @@
+pkgscope="bingux"
+pkgname="bingux-init-c"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="bingux-init — minimal PID 1 init in C"
+license="MIT"
+depends=()
+exports=("bin/bingux-init")
+source=()
+sha256sums=()
+build() {
+    cat > "$SRCDIR/init.c" << 'C'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <signal.h>
+#include <sys/mount.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <sys/reboot.h>
+
+void sigchld_handler(int sig) { while (waitpid(-1, NULL, WNOHANG) > 0); }
+
+int main() {
+    // Only run as PID 1
+    if (getpid() != 1) {
+        fprintf(stderr, "bingux-init: must be PID 1\n");
+        return 1;
+    }
+    
+    // Set up signal handlers
+    signal(SIGCHLD, sigchld_handler);
+    signal(SIGINT, SIG_IGN);
+    
+    // Mount essential filesystems
+    mount("proc", "/proc", "proc", 0, NULL);
+    mount("sysfs", "/sys", "sysfs", 0, NULL);
+    mount("devtmpfs", "/dev", "devtmpfs", 0, NULL);
+    mkdir("/dev/pts", 0755);
+    mount("devpts", "/dev/pts", "devpts", 0, NULL);
+    mkdir("/dev/shm", 1777);
+    mount("tmpfs", "/dev/shm", "tmpfs", 0, NULL);
+    mount("tmpfs", "/tmp", "tmpfs", 0, "size=512M");
+    mount("tmpfs", "/run", "tmpfs", 0, NULL);
+    
+    // Set hostname
+    sethostname("bingux", 6);
+    
+    // Set environment
+    setenv("PATH", "/system/profiles/current/bin:/bin:/sbin:/usr/bin", 1);
+    setenv("LD_LIBRARY_PATH", "/lib64:/usr/lib64", 1);
+    setenv("BPKG_STORE_ROOT", "/system/packages", 1);
+    setenv("HOME", "/tmp", 1);
+    setenv("TERM", "linux", 1);
+    
+    // Print banner
+    printf("\n  Bingux 0.1.0\n\n");
+    
+    // Spawn a shell as the main process
+    pid_t pid = fork();
+    if (pid == 0) {
+        setsid();
+        execl("/system/profiles/current/bin/bash", "bash", "-l", NULL);
+        execl("/bin/sh", "sh", "-l", NULL);
+        _exit(1);
+    }
+    
+    // Wait forever, reaping zombies
+    while (1) {
+        int status;
+        pid_t w = wait(&status);
+        if (w == pid) {
+            // Main shell exited — reboot
+            sync();
+            reboot(RB_POWER_OFF);
+        }
+    }
+    return 0;
+}
+C
+    bingux-gcc -o "$BUILDDIR/bingux-init" "$SRCDIR/init.c"
+}
+package() { mkdir -p "$PKGDIR/bin"; cp "$BUILDDIR/bingux-init" "$PKGDIR/bin/bingux-init"; chmod +x "$PKGDIR/bin/bingux-init"; }
