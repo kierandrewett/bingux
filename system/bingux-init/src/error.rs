@@ -10,6 +10,8 @@ pub enum InitError {
     SymlinkFailed { target: String, link: String },
     #[error("switch_root failed: {0}")]
     SwitchRootFailed(String),
+    #[error("boot step failed: {0}")]
+    StepFailed(String),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 }
