@@ -112,3 +112,26 @@
 - ncurses 6.5 (60s)
 - readline 8.2 (7s)
 - Plus 11 custom C utilities (httpd, sysinfo, calc, etc.)
+
+### 60-Package Milestone
+- Git 2.47.1 compiled from source (zlib + NO_REGEX)
+- OpenSSL 3.4.1 compiled from source (145 files, 6min)
+- SQLite 3.47.2 compiled from source (readline)
+- Lua 5.4.7 compiled from source (readline)
+- htop 3.3.0 compiled from source (ncurses)
+- flex 2.6.4 compiled from source
+- bison 3.8.2 compiled from source (m4)
+- expat 2.6.4 compiled from source
+- PCRE2 10.44 compiled from source
+- libffi 3.4.6 compiled from source
+- libunistring 1.3 compiled from source
+- libevent 2.1.12 compiled from source
+- pigz 2.8 compiled from source (parallel gzip)
+- jq 1.7.1 compiled from source (oniguruma)
+- mandoc 1.14.6 compiled from source
+- rsync 3.4.1 compiled from source (OpenSSL)
+- GNU binutils 2.43.1 compiled from source
+- GNU gettext 0.22.5 compiled from source
+- GNU autoconf 2.72 compiled from source
+- GNU libtool 2.5.4 compiled from source
+- pkgconf 2.3.0 compiled from source
