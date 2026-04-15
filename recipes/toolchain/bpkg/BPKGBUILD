@@ -2,22 +2,14 @@ pkgscope="bingux"
 pkgname="bpkg"
 pkgver="0.1.0"
 pkgarch="x86_64-linux"
-pkgdesc="Bingux package manager"
-license="MIT"
-
-depends=("glibc" "openssl" "curl")
-exports=(
-    "bin/bpkg"
-)
-
+pkgdesc="Bingux user package manager"
+license="GPL-3.0-or-later"
+depends=()
+exports=("bin/bpkg")
 source=()
 sha256sums=()
-
-build() {
-    cargo build --release -p bpkg
-}
-
 package() {
     mkdir -p "$PKGDIR/bin"
-    install -m755 "$BUILDDIR/target/release/bpkg" "$PKGDIR/bin/bpkg"
+    cp "/home/kieran/dev/bingux/target/release/bpkg" "$PKGDIR/bin/bpkg"
+    chmod +x "$PKGDIR/bin/bpkg"
 }

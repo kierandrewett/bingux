@@ -1,0 +1,15 @@
+pkgscope="bingux"
+pkgname="bxc-shim"
+pkgver="0.1.0"
+pkgarch="x86_64-linux"
+pkgdesc="Bingux sandbox launcher shim"
+license="GPL-3.0-or-later"
+depends=()
+exports=("bin/bxc-shim")
+source=()
+sha256sums=()
+package() {
+    mkdir -p "$PKGDIR/bin"
+    cp "/home/kieran/dev/bingux/target/release/bxc-shim" "$PKGDIR/bin/bxc-shim"
+    chmod +x "$PKGDIR/bin/bxc-shim"
+}
