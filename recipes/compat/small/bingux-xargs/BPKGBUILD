@@ -1,0 +1,33 @@
+pkgscope="bingux"
+pkgname="bingux-xargs"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="xargs — build commands from stdin"
+license="MIT"
+depends=()
+exports=("bin/bingux-xargs")
+source=()
+sha256sums=()
+build() {
+    cat > "$SRCDIR/xargs.c" << 'C'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/wait.h>
+int main(int argc, char *argv[]) {
+    char *cmd = argc > 1 ? argv[1] : "echo";
+    char line[4096];
+    while (fgets(line, sizeof(line), stdin)) {
+        line[strcspn(line, "\n")] = 0;
+        if (strlen(line) == 0) continue;
+        pid_t pid = fork();
+        if (pid == 0) { execlp(cmd, cmd, line, NULL); _exit(127); }
+        if (pid > 0) waitpid(pid, NULL, 0);
+    }
+    return 0;
+}
+C
+    bingux-gcc -o "$BUILDDIR/bingux-xargs" "$SRCDIR/xargs.c"
+}
+package() { mkdir -p "$PKGDIR/bin"; cp "$BUILDDIR/bingux-xargs" "$PKGDIR/bin/bingux-xargs"; chmod +x "$PKGDIR/bin/bingux-xargs"; }

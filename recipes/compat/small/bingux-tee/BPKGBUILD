@@ -1,0 +1,35 @@
+pkgscope="bingux"
+pkgname="bingux-tee"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="tee — copy stdin to stdout and files"
+license="MIT"
+depends=()
+exports=("bin/bingux-tee")
+source=()
+sha256sums=()
+build() {
+    cat > "$SRCDIR/tee.c" << 'C'
+#include <stdio.h>
+#include <string.h>
+int main(int argc, char *argv[]) {
+    int append = 0;
+    FILE *files[64];
+    int nfiles = 0;
+    for (int i = 1; i < argc && nfiles < 64; i++) {
+        if (strcmp(argv[i], "-a") == 0) { append = 1; continue; }
+        files[nfiles] = fopen(argv[i], append ? "a" : "w");
+        if (files[nfiles]) nfiles++;
+    }
+    int c;
+    while ((c = getchar()) != EOF) {
+        putchar(c);
+        for (int i = 0; i < nfiles; i++) fputc(c, files[i]);
+    }
+    for (int i = 0; i < nfiles; i++) fclose(files[i]);
+    return 0;
+}
+C
+    bingux-gcc -o "$BUILDDIR/bingux-tee" "$SRCDIR/tee.c"
+}
+package() { mkdir -p "$PKGDIR/bin"; cp "$BUILDDIR/bingux-tee" "$PKGDIR/bin/bingux-tee"; chmod +x "$PKGDIR/bin/bingux-tee"; }

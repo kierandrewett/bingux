@@ -1,0 +1,36 @@
+pkgscope="bingux"
+pkgname="bingux-which"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="which — locate a command"
+license="MIT"
+depends=()
+exports=("bin/which")
+source=()
+sha256sums=()
+build() {
+    cat > "$SRCDIR/which.c" << 'C'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+int main(int argc, char *argv[]) {
+    if (argc < 2) { fprintf(stderr, "usage: which <command>\n"); return 1; }
+    char *path = getenv("PATH");
+    if (!path) return 1;
+    char *p = strdup(path);
+    char *dir = strtok(p, ":");
+    while (dir) {
+        char full[4096];
+        snprintf(full, sizeof(full), "%s/%s", dir, argv[1]);
+        if (access(full, X_OK) == 0) { printf("%s\n", full); free(p); return 0; }
+        dir = strtok(NULL, ":");
+    }
+    free(p);
+    fprintf(stderr, "%s not found\n", argv[1]);
+    return 1;
+}
+C
+    bingux-gcc -o "$BUILDDIR/which" "$SRCDIR/which.c"
+}
+package() { mkdir -p "$PKGDIR/bin"; cp "$BUILDDIR/which" "$PKGDIR/bin/which"; chmod +x "$PKGDIR/bin/which"; }
