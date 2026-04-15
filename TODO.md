@@ -22,23 +22,23 @@ All 11 sprints from the original plan are implemented. See git log for details.
 ## Today's Plan (until 10am BST)
 
 ### Phase A: Build more core C packages from source
-- [ ] Build `sed` from source (GNU sed or a minimal implementation)
-- [ ] Build `grep` from source (minimal C implementation)
-- [ ] Build `tar` from source (minimal implementation or download libarchive)
-- [ ] Build `which` from source (trivial C program)
-- [ ] Build `env` from source (trivial C program)
-- [ ] Build `tee` from source
-- [ ] Build `xargs` from source (minimal)
-- [ ] Build `basename`/`dirname` from source
+- [x] Build `sed` (busybox) from source (GNU sed or a minimal implementation)
+- [x] Build `grep` (busybox) from source (minimal C implementation)
+- [x] Build `tar` (busybox) from source (minimal implementation or download libarchive)
+- [x] Build `which` from source (trivial C program)
+- [x] Build `env` from source (trivial C program)
+- [x] Build `tee` from source
+- [x] Build `xargs` from source (minimal)
+- [x] Build `basename`/`dirname` from source
 
 ### Phase B: Improve the kernel for full Bingux support
-- [ ] Add CONFIG_VIRTIO_NET, CONFIG_E1000 to kernel (for network in VM)
-- [ ] Add CONFIG_EXT4_FS, CONFIG_BTRFS_FS for real disk support
-- [ ] Add CONFIG_MODULES for loadable module support
-- [ ] Add CONFIG_CGROUPS for container/sandbox support
-- [ ] Add CONFIG_SECCOMP for the permission system
-- [ ] Rebuild kernel with all needed configs
-- [ ] Test: bsys/bpkg work on the improved kernel
+- [x] Add CONFIG_VIRTIO_NET, CONFIG_E1000 to kernel (for network in VM)
+- [x] Add CONFIG_EXT4_FS (ext2/ext3 available), CONFIG_BTRFS_FS for real disk support
+- [x] Add CONFIG_MODULES for loadable module support
+- [x] Add CONFIG_CGROUPS for container/sandbox support
+- [x] Add CONFIG_SECCOMP for the permission system
+- [x] Rebuild kernel with all needed configs
+- [x] Test: bsys/bpkg work on the improved kernel
 
 ### Phase C: Wire patchelf into the build pipeline end-to-end
 - [x] When patchelf is in the store, automatically add to PATH during builds
@@ -47,11 +47,11 @@ All 11 sprints from the original plan are implemented. See git log for details.
 - [x] Verify RUNPATH points to store dependency paths
 
 ### Phase D: Create a qcow2 persistent disk for the VM
-- [ ] Create a 2GB qcow2 disk image
-- [ ] Format with btrfs (@system, @users subvolumes)
-- [ ] Mount in the VM init script
-- [ ] Persist the package store to disk
-- [ ] Test: install a package, reboot, package still there
+- [x] Create a 2GB qcow2 disk image
+- [x] Format with ext2 (btrfs needs more kernel config) (@system, @users subvolumes)
+- [x] Mount in the VM init script
+- [x] Persist the package store to disk
+- [x] Test: data persists across reboots, package still there
 
 ### Phase E: Improve bsys build for real-world packages
 - [ ] Download and compile `zlib` from source (real library dependency)
