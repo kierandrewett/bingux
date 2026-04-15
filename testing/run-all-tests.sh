@@ -76,6 +76,32 @@ else
 fi
 echo ""
 
+# Phase 6: Full workflow test
+echo "==> Phase 6: QEMU workflow test (8 checks)"
+if bash "$SCRIPT_DIR/smoke-tests/run-full-workflow.sh" > /tmp/bingux-workflow-result.log 2>&1; then
+    WF_PASS=$(grep -c "PASS:" /tmp/bingux-workflow-result.log)
+    echo "    $WF_PASS checks passed"
+    TOTAL_PASS=$((TOTAL_PASS + WF_PASS))
+else
+    WF_FAIL=$(grep -c "FAIL:" /tmp/bingux-workflow-result.log 2>/dev/null || echo 1)
+    echo "    FAILED ($WF_FAIL checks)"
+    TOTAL_FAIL=$((TOTAL_FAIL + WF_FAIL))
+fi
+echo ""
+
+# Phase 7: Self-hosting test
+echo "==> Phase 7: QEMU self-hosting test (6 checks)"
+if bash "$SCRIPT_DIR/smoke-tests/run-selfhost-test.sh" > /tmp/bingux-selfhost-result.log 2>&1; then
+    SH_PASS=$(grep -c "PASS:" /tmp/bingux-selfhost-result.log)
+    echo "    $SH_PASS checks passed"
+    TOTAL_PASS=$((TOTAL_PASS + SH_PASS))
+else
+    SH_FAIL=$(grep -c "FAIL:" /tmp/bingux-selfhost-result.log 2>/dev/null || echo 1)
+    echo "    FAILED ($SH_FAIL checks)"
+    TOTAL_FAIL=$((TOTAL_FAIL + SH_FAIL))
+fi
+echo ""
+
 # Summary
 echo "============================================"
 echo "  TOTAL: $TOTAL_PASS passed, $TOTAL_FAIL failed"
@@ -86,6 +112,8 @@ echo "  QEMU boot:         $(grep -c "PASS:" /tmp/bingux-boot-result.log 2>/dev/
 echo "  QEMU lifecycle:    $(grep -c "PASS:" /tmp/bingux-lifecycle-result.log 2>/dev/null || echo 0)"
 echo "  QEMU system:       $(grep -c "PASS:" /tmp/bingux-system-result.log 2>/dev/null || echo 0)"
 echo "  QEMU permissions:  $(grep -c "PASS:" /tmp/bingux-perms-result.log 2>/dev/null || echo 0)"
+echo "  QEMU workflow:     $(grep -c "PASS:" /tmp/bingux-workflow-result.log 2>/dev/null || echo 0)"
+echo "  QEMU self-hosting: $(grep -c "PASS:" /tmp/bingux-selfhost-result.log 2>/dev/null || echo 0)"
 echo ""
 
 [ "$TOTAL_FAIL" -eq 0 ] && echo "ALL TESTS PASSED" || exit 1
