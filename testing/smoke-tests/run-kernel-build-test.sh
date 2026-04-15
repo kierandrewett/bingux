@@ -71,6 +71,15 @@ cp -a "$STORE/bison-src-3.8.2-x86_64-linux" "$FRESH/system/packages/"
 echo "    Copying bc..."
 cp -a "$STORE/bc-src-1.07.1-x86_64-linux" "$FRESH/system/packages/"
 
+# m4 (needed by flex - flex has hardcoded m4 path from build time)
+echo "    Copying m4..."
+cp -a "$STORE/m4-src-1.4.19-x86_64-linux" "$FRESH/system/packages/"
+
+# NOTE: We intentionally do NOT include bash. scripts/config needs bash
+# but when it works, it enables options (like OBJTOOL) that need libelf.
+# Without bash, scripts/config silently fails, and tinyconfig's defaults
+# already work perfectly for a minimal bootable kernel.
+
 # Core utilities needed by kernel Makefile
 for pkg in sed-src-4.9-x86_64-linux grep-src-3.11-x86_64-linux gawk-src-5.3.1-x86_64-linux \
     findutils-src-4.10.0-x86_64-linux diffutils-src-3.10-x86_64-linux tar-src-1.35-x86_64-linux \
@@ -123,6 +132,10 @@ export HOME="/tmp"
 # Tell GCC where to find its headers and libs
 export C_INCLUDE_PATH="$MUSL_ROOT/include"
 export LIBRARY_PATH="$MUSL_ROOT/lib"
+# flex has hardcoded m4 path from build time; override via env var
+export M4="/system/profiles/current/bin/m4"
+# bison looks for data files relative to its compiled prefix; override
+export BISON_PKGDATADIR="/system/packages/bison-src-3.8.2-x86_64-linux/share/bison"
 
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
@@ -182,24 +195,23 @@ cd /tmp/linux-6.12.8
 echo "==> [3/6] Configuring kernel (tinyconfig + QEMU essentials)..."
 # HOSTLDFLAGS=-static ensures host tools (fixdep, etc.) are statically linked
 # against musl, since there's no dynamic linker in the initramfs
-make tinyconfig CC=bingux-gcc HOSTCC=bingux-gcc HOSTLDFLAGS=-static 2>&1 | tail -5
+make tinyconfig CC=bingux-gcc HOSTCC=bingux-gcc HOSTLDFLAGS=-static 2>&1 | tail -10
 echo ""
 
 # Enable essential configs for a bootable QEMU kernel
 echo "==> [4/6] Enabling essential boot configs..."
-./scripts/config --enable CONFIG_64BIT
-./scripts/config --enable CONFIG_PRINTK
-./scripts/config --enable CONFIG_SERIAL_8250
-./scripts/config --enable CONFIG_SERIAL_8250_CONSOLE
-./scripts/config --enable CONFIG_TTY
-./scripts/config --enable CONFIG_BINFMT_ELF
-./scripts/config --enable CONFIG_BLK_DEV_INITRD
-./scripts/config --enable CONFIG_HAS_IOMEM
-./scripts/config --enable CONFIG_HAS_IOPORT
-./scripts/config --enable CONFIG_BLOCK
-echo "  Configs set."
+# tinyconfig already provides a minimal 64-bit config that builds without
+# objtool/libelf. We enable essential boot options via sed on .config
+# (scripts/config needs bash which we intentionally exclude).
+sed -i 's/# CONFIG_PRINTK is not set/CONFIG_PRINTK=y/' .config 2>/dev/null
+sed -i 's/# CONFIG_SERIAL_8250 is not set/CONFIG_SERIAL_8250=y/' .config 2>/dev/null
+sed -i 's/# CONFIG_SERIAL_8250_CONSOLE is not set/CONFIG_SERIAL_8250_CONSOLE=y/' .config 2>/dev/null
+sed -i 's/# CONFIG_TTY is not set/CONFIG_TTY=y/' .config 2>/dev/null
+sed -i 's/# CONFIG_BINFMT_ELF is not set/CONFIG_BINFMT_ELF=y/' .config 2>/dev/null
+sed -i 's/# CONFIG_BLK_DEV_INITRD is not set/CONFIG_BLK_DEV_INITRD=y/' .config 2>/dev/null
+echo "  Boot configs added via sed."
 
-# Update .config to resolve dependencies
+# Resolve dependencies
 make olddefconfig CC=bingux-gcc HOSTCC=bingux-gcc HOSTLDFLAGS=-static 2>&1 | tail -3
 echo ""
 echo "  Config options:"
