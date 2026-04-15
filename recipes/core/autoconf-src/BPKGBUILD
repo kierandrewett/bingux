@@ -1,0 +1,25 @@
+pkgscope="bingux"
+pkgname="autoconf-src"
+pkgver="2.72"
+pkgarch="x86_64-linux"
+pkgdesc="GNU autoconf — build system generator"
+license="GPL-3.0"
+depends=("m4-src-1.4.19")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/autoconf" "bin/autoheader" "bin/autoreconf")
+source=("https://ftpmirror.gnu.org/autoconf/autoconf-2.72.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/autoconf-2.72"
+    M4="/tmp/bingux-bootstrap-store/m4-src-1.4.19-x86_64-linux/bin/m4"
+    ./configure --prefix=/ M4="$M4" 2>/dev/null
+    make -j1 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/autoconf-2.72"
+    mkdir -p "$PKGDIR"
+    make install DESTDIR="$PKGDIR" 2>/dev/null
+    # Move from /usr to /
+    cp -a "$PKGDIR/bin/"* "$PKGDIR/bin/" 2>/dev/null || true
+    cp -a "$PKGDIR/share" "$PKGDIR/" 2>/dev/null || true
+}
