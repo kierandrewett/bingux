@@ -1,0 +1,51 @@
+pkgscope="bingux"
+pkgname="python-src"
+pkgver="3.12.8"
+pkgarch="x86_64-linux"
+pkgdesc="Python 3.12 — compiled from source"
+license="Python-2.0"
+depends=("zlib-1.3.1" "openssl-src-3.4.1" "readline-8.2" "ncurses-6.5" "bzip2-src-1.0.8" "xz-src-5.6.3" "libffi-src-3.4.6" "expat-src-2.6.4" "sqlite-src-3.47.2")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/python3")
+source=("https://www.python.org/ftp/python/3.12.8/Python-3.12.8.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/Python-3.12.8"
+    STORE="/tmp/bingux-bootstrap-store"
+    
+    CC=bingux-gcc ./configure --prefix=/ \
+        --disable-shared \
+        --without-ensurepip \
+        --without-c-locale-coercion \
+        CFLAGS="-static \
+            -I$STORE/zlib-1.3.1-x86_64-linux/include \
+            -I$STORE/openssl-src-3.4.1-x86_64-linux/include \
+            -I$STORE/readline-8.2-x86_64-linux/include \
+            -I$STORE/ncurses-6.5-x86_64-linux/include \
+            -I$STORE/ncurses-6.5-x86_64-linux/include/ncursesw \
+            -I$STORE/bzip2-src-1.0.8-x86_64-linux/include \
+            -I$STORE/xz-src-5.6.3-x86_64-linux/include \
+            -I$STORE/libffi-src-3.4.6-x86_64-linux/include \
+            -I$STORE/expat-src-2.6.4-x86_64-linux/include \
+            -I$STORE/sqlite-src-3.47.2-x86_64-linux/include" \
+        LDFLAGS="-static \
+            -L$STORE/zlib-1.3.1-x86_64-linux/lib \
+            -L$STORE/openssl-src-3.4.1-x86_64-linux/lib \
+            -L$STORE/readline-8.2-x86_64-linux/lib \
+            -L$STORE/ncurses-6.5-x86_64-linux/lib \
+            -L$STORE/bzip2-src-1.0.8-x86_64-linux/lib \
+            -L$STORE/xz-src-5.6.3-x86_64-linux/lib \
+            -L$STORE/libffi-src-3.4.6-x86_64-linux/lib \
+            -L$STORE/expat-src-2.6.4-x86_64-linux/lib \
+            -L$STORE/sqlite-src-3.47.2-x86_64-linux/lib \
+            -Wl,--allow-multiple-definition" \
+        2>/dev/null
+    make -j$(nproc) CC=bingux-gcc LDFLAGS="-static -Wl,--allow-multiple-definition" 2>&1 | tail -5
+}
+package() {
+    cd "$SRCDIR/Python-3.12.8"
+    mkdir -p "$PKGDIR/bin"
+    cp python "$PKGDIR/bin/python3"
+    ln -sf python3 "$PKGDIR/bin/python"
+    chmod +x "$PKGDIR/bin/python3"
+}
