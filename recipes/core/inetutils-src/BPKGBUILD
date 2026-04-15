@@ -1,0 +1,30 @@
+pkgscope="bingux"
+pkgname="inetutils-src"
+pkgver="2.5"
+pkgarch="x86_64-linux"
+pkgdesc="GNU inetutils — network utilities"
+license="GPL-3.0"
+depends=("ncurses-6.5" "readline-8.2")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/hostname" "bin/ping" "bin/traceroute" "bin/ftp" "bin/telnet")
+source=("https://ftpmirror.gnu.org/inetutils/inetutils-2.5.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/inetutils-2.5"
+    NCURSES="/tmp/bingux-bootstrap-store/ncurses-6.5-x86_64-linux"
+    READLINE="/tmp/bingux-bootstrap-store/readline-8.2-x86_64-linux"
+    CC=bingux-gcc ./configure --prefix=/ --disable-nls --disable-servers \
+        --disable-logger --disable-whois --disable-rcp --disable-rlogin --disable-rsh \
+        CFLAGS="-static -I$NCURSES/include -I$READLINE/include" \
+        LDFLAGS="-static -L$NCURSES/lib -L$READLINE/lib -Wl,--allow-multiple-definition" \
+        2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -L$NCURSES/lib -L$READLINE/lib -lreadline -lncursesw -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/inetutils-2.5"
+    mkdir -p "$PKGDIR/bin"
+    for b in hostname ping traceroute ftp telnet; do
+        [ -f "$b/$b" ] && cp "$b/$b" "$PKGDIR/bin/" && chmod +x "$PKGDIR/bin/$b"
+        [ -f "src/$b" ] && cp "src/$b" "$PKGDIR/bin/" && chmod +x "$PKGDIR/bin/$b"
+    done
+}
