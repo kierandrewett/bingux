@@ -1,0 +1,23 @@
+pkgscope="bingux"
+pkgname="bingux-getty"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="bingux-getty — minimal login prompt for Bingux Linux"
+license="MIT"
+depends=()
+exports=("bin/bingux-getty")
+source=()
+sha256sums=()
+build() {
+    cp "$REPODIR/bootstrap/tools/bingux-getty.c" "$SRCDIR/bingux-getty.c"
+    bingux-gcc -static -o "$BUILDDIR/bingux-getty" "$SRCDIR/bingux-getty.c"
+}
+package() {
+    mkdir -p "$PKGDIR/bin"
+    cp "$BUILDDIR/bingux-getty" "$PKGDIR/bin/bingux-getty"
+    chmod +x "$PKGDIR/bin/bingux-getty"
+
+    # Install systemd service template
+    mkdir -p "$PKGDIR/lib/systemd/system"
+    cp "$REPODIR/bootstrap/tools/bingux-getty@.service" "$PKGDIR/lib/systemd/system/"
+}

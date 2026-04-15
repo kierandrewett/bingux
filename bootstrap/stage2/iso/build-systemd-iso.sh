@@ -257,6 +257,14 @@ ln -sf multi-user.target "$INITRD/usr/lib/systemd/system/default.target" 2>/dev/
 mkdir -p "$INITRD/usr/lib/systemd/system/getty.target.wants"
 ln -sf ../serial-getty@.service "$INITRD/usr/lib/systemd/system/getty.target.wants/serial-getty@ttyS0.service" 2>/dev/null || true
 
+# bingux-getty login program (static musl binary)
+GETTY_BIN="/tmp/bingux-bootstrap-store/bingux-getty-1.0.0-x86_64-linux/bin/bingux-getty"
+if [ -f "$GETTY_BIN" ]; then
+    cp "$GETTY_BIN" "$INITRD/bin/bingux-getty"
+    chmod +x "$INITRD/bin/bingux-getty"
+    echo "      bingux-getty"
+fi
+
 # Busybox for shell + coreutils
 cp /usr/bin/busybox "$INITRD/bin/"
 for cmd in sh bash cat echo ls mkdir mount umount sleep grep cp rm ln chmod clear reboot poweroff login agetty; do
@@ -288,6 +296,14 @@ for pkg_dir in "$INITRD/system/packages"/*/; do
         done
     fi
 done
+
+# Symlink bingux-getty into the default profile
+if [ -f "$INITRD/bin/bingux-getty" ]; then
+    ln -sf /bin/bingux-getty "$INITRD/system/profiles/default/bin/bingux-getty"
+fi
+
+# Create profiles/current -> profiles/default symlink
+ln -sf default "$INITRD/system/profiles/current"
 
 # System config
 cat > "$INITRD/system/config/system.toml" << 'TOML'
@@ -372,8 +388,16 @@ WantedBy=multi-user.target
 UNIT
 ln -sf ../bingux-welcome.service "$INITRD/usr/lib/systemd/system/multi-user.target.wants/"
 
-# Create an autologin override for serial console
-cat > "$INITRD/usr/lib/systemd/system/bingux-shell.service" << 'UNIT'
+# Install bingux-getty service template and wire it to serial console
+if [ -f "$INITRD/bin/bingux-getty" ]; then
+    cp "$ROOT_DIR/bootstrap/tools/bingux-getty@.service" "$INITRD/usr/lib/systemd/system/"
+    ln -sf ../bingux-getty@.service "$INITRD/usr/lib/systemd/system/getty.target.wants/bingux-getty@ttyS0.service"
+    # Remove old serial-getty symlink since bingux-getty replaces it
+    rm -f "$INITRD/usr/lib/systemd/system/getty.target.wants/serial-getty@ttyS0.service"
+    echo "    bingux-getty@ttyS0 enabled"
+else
+    # Fallback: plain shell service
+    cat > "$INITRD/usr/lib/systemd/system/bingux-shell.service" << 'UNIT'
 [Unit]
 Description=Bingux Interactive Shell
 After=bingux-welcome.service
@@ -396,7 +420,8 @@ Environment=TERM=linux
 [Install]
 WantedBy=multi-user.target
 UNIT
-ln -sf ../bingux-shell.service "$INITRD/usr/lib/systemd/system/multi-user.target.wants/"
+    ln -sf ../bingux-shell.service "$INITRD/usr/lib/systemd/system/multi-user.target.wants/"
+fi
 
 # Make init point to systemd
 ln -sf /usr/lib/systemd/systemd "$INITRD/init"
