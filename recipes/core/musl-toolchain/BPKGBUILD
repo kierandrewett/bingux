@@ -67,5 +67,20 @@ package() {
         cp -a "$TOOLCHAIN/libexec" "$PKGDIR/"
     fi
 
+    # Create bingux-gcc / bingux-cc wrappers that auto-resolve include/lib paths
+    cat > "$PKGDIR/bin/bingux-gcc" << 'GCCWRAP'
+#!/bin/sh
+SELF="$0"
+while [ -L "$SELF" ]; do
+    DIR="$(cd "$(dirname "$SELF")" && pwd)"
+    SELF="$(readlink "$SELF")"
+    case "$SELF" in /*) ;; *) SELF="$DIR/$SELF" ;; esac
+done
+DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
+exec "$DIR/bin/gcc" -isystem "$DIR/include" -B"$DIR/lib" -L"$DIR/lib" "$@"
+GCCWRAP
+    chmod +x "$PKGDIR/bin/bingux-gcc"
+    cp "$PKGDIR/bin/bingux-gcc" "$PKGDIR/bin/bingux-cc"
+
     echo "Toolchain installed: $(ls "$PKGDIR/bin/" | wc -l) binaries"
 }
