@@ -68,7 +68,7 @@ All 11 sprints from the original plan are implemented. See git log for details.
 - [x] Update test counts in docs
 
 ### Phase G: Documentation and cleanup
-- [ ] Update PLAN.md with current status
-- [ ] Clean up any remaining TODO stubs in CLI handlers
-- [ ] Add CHANGELOG.md with milestone entries
-- [ ] Final git push
+- [x] Update PLAN.md with current status
+- [x] Clean up any remaining TODO stubs in CLI handlers
+- [x] Add CHANGELOG.md with milestone entries
+- [x] Final git push
