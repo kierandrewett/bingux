@@ -1,0 +1,24 @@
+pkgscope="bingux"
+pkgname="jq-src"
+pkgver="1.7.1"
+pkgarch="x86_64-linux"
+pkgdesc="jq — compiled from source"
+license="MIT"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/jq")
+source=("https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-1.7.1.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/jq-1.7.1"
+    CC=bingux-gcc ./configure --prefix=/ --disable-shared --disable-docs \
+        --with-oniguruma=builtin \
+        CFLAGS="-static" LDFLAGS="-static -Wl,--allow-multiple-definition" 2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/jq-1.7.1"
+    mkdir -p "$PKGDIR/bin"
+    cp jq "$PKGDIR/bin/jq" 2>/dev/null || cp .libs/jq "$PKGDIR/bin/jq"
+    chmod +x "$PKGDIR/bin/jq"
+}
