@@ -176,9 +176,23 @@ impl BuildPipeline {
             if let Some(ref interp) = interpreter {
                 match PatchPlan::compute(&env.pkgdir, interp, &runpath) {
                     Ok(plan) => {
-                        // Write patchelf log but don't apply (patchelf binary may not be present).
+                        let effective = plan.effective_patches().len();
                         write_log(&env.pkgdir, &plan, &[])?;
-                        info!("patchelf plan computed for {} binaries", plan.effective_patches().len());
+
+                        // Try to apply the patches if patchelf is available
+                        if effective > 0 {
+                            match plan.apply() {
+                                Ok(()) => {
+                                    info!("patchelf applied to {effective} binaries");
+                                }
+                                Err(e) => {
+                                    // patchelf not found is OK — log and continue
+                                    info!("patchelf not applied (will work without patching for static binaries): {e}");
+                                }
+                            }
+                        } else {
+                            info!("no ELF binaries need patching");
+                        }
                     }
                     Err(e) => {
                         warn!("patchelf planning failed: {e}");
