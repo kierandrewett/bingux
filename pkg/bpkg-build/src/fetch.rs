@@ -127,11 +127,8 @@ impl SourceFetcher {
         } else if filename.ends_with(".tar.bz2") || filename.ends_with(".tbz2") {
             Self::extract_tar_bz2(archive, target_dir)
         } else if filename.ends_with(".tar.xz") || filename.ends_with(".txz") {
-            // TODO: Add xz2 crate dependency for .tar.xz support
-            Err(BuildError::ExtractionFailed {
-                path: archive.to_path_buf(),
-                message: ".tar.xz extraction not yet supported (needs xz2 crate)".to_string(),
-            })
+            // Use xz command-line tool if available, otherwise error
+            Self::extract_tar_xz(archive, target_dir)
         } else if filename.ends_with(".tar") {
             Self::extract_tar(archive, target_dir)
         } else {
@@ -161,6 +158,34 @@ impl SourceFetcher {
             path: archive.to_path_buf(),
             message: e.to_string(),
         })?;
+        Ok(())
+    }
+
+    fn extract_tar_xz(archive: &Path, target_dir: &Path) -> Result<()> {
+        // Shell out to xz + tar (xz crate not in deps, but xz binary may be available)
+        let output = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(format!(
+                "xz -dc '{}' | tar x -C '{}'",
+                archive.display(),
+                target_dir.display()
+            ))
+            .output()
+            .map_err(|e| BuildError::ExtractionFailed {
+                path: archive.to_path_buf(),
+                message: format!("failed to run xz: {e}"),
+            })?;
+
+        if !output.status.success() {
+            return Err(BuildError::ExtractionFailed {
+                path: archive.to_path_buf(),
+                message: format!(
+                    ".tar.xz extraction failed (exit {}): {}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr)
+                ),
+            });
+        }
         Ok(())
     }
 
