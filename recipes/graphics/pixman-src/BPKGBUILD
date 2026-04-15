@@ -1,0 +1,29 @@
+pkgscope="bingux"
+pkgname="pixman-src"
+pkgver="0.43.4"
+pkgarch="x86_64-linux"
+pkgdesc="pixman — low-level pixel manipulation library"
+license="MIT"
+depends=()
+makedepends=()
+exports=("lib/libpixman-1.a")
+source=("https://cairographics.org/releases/pixman-0.43.4.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR"
+    meson setup build "pixman-0.43.4" \
+        --prefix=/ \
+        --default-library=static \
+        -Dgtk=disabled \
+        -Dlibpng=disabled \
+        -Dtests=disabled \
+        -Ddemos=disabled 2>&1 | tail -10
+    ninja -C build 2>&1 | tail -5
+}
+package() {
+    cd "$SRCDIR"
+    mkdir -p "$PKGDIR/lib" "$PKGDIR/include/pixman-1" "$PKGDIR/lib/pkgconfig"
+    cp build/pixman/libpixman-1.a "$PKGDIR/lib/"
+    cp pixman-0.43.4/pixman/pixman.h pixman-0.43.4/pixman/pixman-version.h "$PKGDIR/include/pixman-1/"
+    cp build/pixman/pixman-version.h "$PKGDIR/include/pixman-1/" 2>/dev/null || true
+}

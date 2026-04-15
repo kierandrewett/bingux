@@ -1,0 +1,19 @@
+pkgscope="bingux"
+pkgname="fonts-liberation"
+pkgver="2.1.5"
+pkgarch="x86_64-linux"
+pkgdesc="Liberation fonts — metrically compatible with Arial, Times New Roman, Courier New"
+license="OFL-1.1"
+depends=()
+makedepends=()
+exports=("share/fonts/LiberationSans-Regular.ttf")
+source=("https://github.com/liberationfonts/liberation-fonts/files/7261482/liberation-fonts-ttf-2.1.5.tar.gz")
+sha256sums=("SKIP")
+build() {
+    true
+}
+package() {
+    cd "$SRCDIR/liberation-fonts-ttf-2.1.5"
+    mkdir -p "$PKGDIR/share/fonts"
+    cp *.ttf "$PKGDIR/share/fonts/"
+}

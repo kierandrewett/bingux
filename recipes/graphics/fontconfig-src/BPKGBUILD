@@ -1,0 +1,42 @@
+pkgscope="bingux"
+pkgname="fontconfig-src"
+pkgver="2.15.0"
+pkgarch="x86_64-linux"
+pkgdesc="fontconfig — font configuration and customization library"
+license="MIT"
+depends=("freetype-src-2.13.3" "expat-src-2.6.4")
+makedepends=("gperf-src-3.1")
+exports=("lib/libfontconfig.a")
+source=("https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.15.0.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/fontconfig-2.15.0"
+    STORE="/tmp/bingux-bootstrap-store"
+    FT_DIR="$STORE/freetype-src-2.13.3-x86_64-linux"
+    EXPAT_DIR="$STORE/expat-src-2.6.4-x86_64-linux"
+    ZLIB_DIR="$STORE/zlib-1.3.1-x86_64-linux"
+    BZIP2_DIR="$STORE/bzip2-src-1.0.8-x86_64-linux"
+    LIBPNG_DIR="$STORE/libpng-src-1.6.44-x86_64-linux"
+    GPERF_DIR="$STORE/gperf-src-3.1-x86_64-linux"
+    export PATH="$GPERF_DIR/bin:$PATH"
+    ./configure --prefix=/ --disable-shared --enable-static \
+        --disable-docs \
+        --sysconfdir=/etc --localstatedir=/var \
+        FREETYPE_CFLAGS="-I${FT_DIR}/include/freetype2" \
+        FREETYPE_LIBS="-L${FT_DIR}/lib -lfreetype -L${LIBPNG_DIR}/lib -lpng16 -L${ZLIB_DIR}/lib -lz -L${BZIP2_DIR}/lib -lbz2 -lm" \
+        EXPAT_CFLAGS="-I${EXPAT_DIR}/include" \
+        EXPAT_LIBS="-L${EXPAT_DIR}/lib -lexpat" \
+        CFLAGS="-I${FT_DIR}/include/freetype2 -I${EXPAT_DIR}/include" \
+        LDFLAGS="-L${FT_DIR}/lib -L${EXPAT_DIR}/lib -L${ZLIB_DIR}/lib -L${BZIP2_DIR}/lib -L${LIBPNG_DIR}/lib" \
+        LIBS="-lm -lpthread" 2>&1 | tail -10
+    make -j$(nproc) 2>&1 | tail -5
+}
+package() {
+    cd "$SRCDIR/fontconfig-2.15.0"
+    mkdir -p "$PKGDIR/lib" "$PKGDIR/include/fontconfig" "$PKGDIR/etc/fonts" "$PKGDIR/bin"
+    cp src/.libs/libfontconfig.a "$PKGDIR/lib/"
+    cp fontconfig/*.h "$PKGDIR/include/fontconfig/"
+    cp fc-cache/fc-cache fc-list/fc-list fc-match/fc-match "$PKGDIR/bin/" 2>/dev/null || true
+    chmod +x "$PKGDIR/bin/"* 2>/dev/null || true
+    cp -r conf.d fonts.conf "$PKGDIR/etc/fonts/" 2>/dev/null || true
+}

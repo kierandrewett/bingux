@@ -1,0 +1,35 @@
+pkgscope="bingux"
+pkgname="freetype-src"
+pkgver="2.13.3"
+pkgarch="x86_64-linux"
+pkgdesc="FreeType — font rendering library"
+license="FTL"
+depends=("zlib-1.3.1" "bzip2-src-1.0.8" "libpng-src-1.6.44")
+makedepends=()
+exports=("lib/libfreetype.a")
+source=("https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/freetype-2.13.3"
+    ZLIB_DIR="/tmp/bingux-bootstrap-store/zlib-1.3.1-x86_64-linux"
+    BZIP2_DIR="/tmp/bingux-bootstrap-store/bzip2-src-1.0.8-x86_64-linux"
+    LIBPNG_DIR="/tmp/bingux-bootstrap-store/libpng-src-1.6.44-x86_64-linux"
+    ./configure --prefix=/ --disable-shared --enable-static \
+        --with-zlib=yes --with-bzip2=yes --with-png=yes \
+        --without-harfbuzz --without-brotli \
+        ZLIB_CFLAGS="-I${ZLIB_DIR}/include" \
+        ZLIB_LIBS="-L${ZLIB_DIR}/lib -lz" \
+        BZIP2_CFLAGS="-I${BZIP2_DIR}/include" \
+        BZIP2_LIBS="-L${BZIP2_DIR}/lib -lbz2" \
+        LIBPNG_CFLAGS="-I${LIBPNG_DIR}/include" \
+        LIBPNG_LIBS="-L${LIBPNG_DIR}/lib -lpng16 -L${ZLIB_DIR}/lib -lz" \
+        CFLAGS="-I${ZLIB_DIR}/include -I${BZIP2_DIR}/include -I${LIBPNG_DIR}/include" \
+        LDFLAGS="-L${ZLIB_DIR}/lib -L${BZIP2_DIR}/lib -L${LIBPNG_DIR}/lib" 2>&1 | tail -5
+    make -j$(nproc) 2>&1 | tail -5
+}
+package() {
+    cd "$SRCDIR/freetype-2.13.3"
+    mkdir -p "$PKGDIR/lib" "$PKGDIR/include/freetype2"
+    cp objs/.libs/libfreetype.a "$PKGDIR/lib/" 2>/dev/null || cp objs/libfreetype.a "$PKGDIR/lib/"
+    cp -r include/* "$PKGDIR/include/freetype2/"
+}
