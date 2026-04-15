@@ -1,0 +1,21 @@
+pkgscope="bingux"
+pkgname="tree-src"
+pkgver="2.1.3"
+pkgarch="x86_64-linux"
+pkgdesc="tree — directory listing as tree"
+license="GPL-2.0"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/tree")
+source=("https://github.com/Old-Man-Programmer/tree/archive/refs/tags/2.1.3.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/tree-2.1.3"
+    make CC=bingux-gcc CFLAGS="-static -O2" LDFLAGS="-static" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/tree-2.1.3"
+    mkdir -p "$PKGDIR/bin"
+    cp tree "$PKGDIR/bin/tree"
+    chmod +x "$PKGDIR/bin/tree"
+}
