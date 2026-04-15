@@ -1,0 +1,11 @@
+pkgscope="bingux"
+pkgname="patchelf"
+pkgver="0.18.0"
+pkgarch="x86_64-linux"
+pkgdesc="NixOS patchelf — modify ELF binaries"
+license="GPL-3.0"
+depends=()
+exports=("bin/patchelf")
+source=("https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-x86_64.tar.gz")
+sha256sums=("SKIP")
+package() { mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/bin/patchelf" "$PKGDIR/bin/patchelf"; chmod +x "$PKGDIR/bin/patchelf"; }
