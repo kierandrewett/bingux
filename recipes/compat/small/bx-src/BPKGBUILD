@@ -1,0 +1,79 @@
+pkgscope="bingux"
+pkgname="bx-src"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="bx — Bingux system inspector"
+license="MIT"
+depends=()
+exports=("bin/bx")
+source=()
+sha256sums=()
+build() {
+    cat > "$SRCDIR/bx.c" << 'C'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/utsname.h>
+#include <sys/sysinfo.h>
+#include <dirent.h>
+#include <sys/stat.h>
+
+void cmd_info() {
+    struct utsname un; uname(&un);
+    struct sysinfo si; sysinfo(&si);
+    printf("Bingux System Info\n");
+    printf("  Kernel:   %s %s\n", un.sysname, un.release);
+    printf("  Arch:     %s\n", un.machine);
+    printf("  Hostname: %s\n", un.nodename);
+    printf("  Uptime:   %ld days, %ld:%02ld\n", si.uptime/86400, (si.uptime%86400)/3600, (si.uptime%3600)/60);
+    printf("  Memory:   %ld MB total, %ld MB free\n", si.totalram/(1024*1024), si.freeram/(1024*1024));
+    printf("  CPUs:     %ld\n", sysconf(_SC_NPROCESSORS_ONLN));
+    
+    char *store = getenv("BPKG_STORE_ROOT");
+    if (store) {
+        DIR *d = opendir(store);
+        if (d) {
+            int count = 0;
+            struct dirent *e;
+            while ((e = readdir(d))) if (e->d_name[0] != '.') count++;
+            closedir(d);
+            printf("  Packages: %d\n", count);
+        }
+    }
+}
+
+void cmd_packages() {
+    char *store = getenv("BPKG_STORE_ROOT");
+    if (!store) store = "/system/packages";
+    DIR *d = opendir(store);
+    if (!d) { printf("no store at %s\n", store); return; }
+    struct dirent *e;
+    while ((e = readdir(d))) {
+        if (e->d_name[0] != '.') printf("  %s\n", e->d_name);
+    }
+    closedir(d);
+}
+
+void cmd_help() {
+    printf("bx — Bingux system inspector\n\n");
+    printf("Commands:\n");
+    printf("  bx info      System information\n");
+    printf("  bx packages  List installed packages\n");
+    printf("  bx version   Show version\n");
+    printf("  bx help      This help\n");
+}
+
+int main(int argc, char *argv[]) {
+    if (argc < 2) { cmd_help(); return 0; }
+    if (strcmp(argv[1], "info") == 0) cmd_info();
+    else if (strcmp(argv[1], "packages") == 0) cmd_packages();
+    else if (strcmp(argv[1], "version") == 0) printf("bx 1.0.0\n");
+    else if (strcmp(argv[1], "help") == 0) cmd_help();
+    else { printf("unknown command: %s\n", argv[1]); return 1; }
+    return 0;
+}
+C
+    bingux-gcc -o "$BUILDDIR/bx" "$SRCDIR/bx.c"
+}
+package() { mkdir -p "$PKGDIR/bin"; cp "$BUILDDIR/bx" "$PKGDIR/bin/bx"; chmod +x "$PKGDIR/bin/bx"; }
