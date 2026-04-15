@@ -1,0 +1,218 @@
+pkgscope="bingux"
+pkgname="systemd-src"
+pkgver="256.11"
+pkgarch="x86_64-linux"
+pkgdesc="systemd — system and service manager (minimal build)"
+license="LGPL-2.1"
+depends=("glibc-src-2.39" "libcap-src-2.70")
+makedepends=("gcc-glibc-14.2.0")
+exports=(
+    "bin/systemctl"
+    "bin/journalctl"
+    "bin/busctl"
+    "bin/systemd-run"
+    "bin/systemd-cat"
+    "bin/systemd-tmpfiles"
+    "bin/systemd-notify"
+    "bin/systemd-escape"
+    "bin/systemd-mount"
+    "bin/systemd-path"
+    "bin/systemd-detect-virt"
+    "bin/systemd-ask-password"
+    "bin/systemd-id128"
+    "bin/systemd-cgls"
+    "bin/systemd-cgtop"
+    "bin/systemd-delta"
+    "bin/systemd-creds"
+    "bin/systemd-ac-power"
+    "bin/init"
+    "bin/halt"
+    "bin/poweroff"
+    "bin/reboot"
+    "bin/shutdown"
+    "lib/systemd/systemd"
+    "lib/systemd/systemd-journald"
+    "lib/systemd/systemd-udevd"
+    "lib/systemd/systemd-executor"
+    "lib/systemd/systemd-shutdown"
+    "lib/systemd/systemd-remount-fs"
+    "lib/systemd/systemd-fsck"
+    "lib/systemd/systemd-growfs"
+    "lib/systemd/systemd-makefs"
+    "lib/systemd/systemd-sleep"
+    "lib/systemd/systemd-sulogin-shell"
+    "lib/systemd/systemd-sysctl"
+    "lib/systemd/systemd-tmpfiles"
+    "lib/systemd/systemd-network-generator"
+    "lib64/libsystemd.so.0"
+    "lib64/libudev.so.1"
+    "lib64/systemd/libsystemd-shared-256.so"
+    "lib64/systemd/libsystemd-core-256.so"
+)
+source=("https://github.com/systemd/systemd/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=("SKIP")
+
+# NOTE: systemd requires glibc and cannot be built with musl.
+# This recipe uses the host GCC + meson + ninja to build systemd,
+# producing dynamically-linked binaries that depend on our glibc.
+# Many optional features are disabled for a minimal init system.
+
+build() {
+    cd "$SRCDIR/systemd-${pkgver}"
+
+    meson setup build \
+        --prefix=/ \
+        -Dmode=release \
+        -Dlink-udev-shared=false \
+        -Dlink-systemctl-shared=false \
+        -Dlink-journalctl-shared=false \
+        -Dlink-executor-shared=false \
+        -Dlink-networkd-shared=false \
+        -Dlink-timesyncd-shared=false \
+        -Dlink-boot-shared=false \
+        -Dlink-portabled-shared=false \
+        -Dstatic-libsystemd=false \
+        -Dstandalone-binaries=true \
+        -Dsysvinit-path='' \
+        -Db_lto=false \
+        -Dacl=disabled \
+        -Dapparmor=disabled \
+        -Daudit=disabled \
+        -Dblkid=disabled \
+        -Dbootloader=disabled \
+        -Dbpf-framework=disabled \
+        -Dbzip2=disabled \
+        -Ddbus=disabled \
+        -Delfutils=disabled \
+        -Dfdisk=disabled \
+        -Dgcrypt=disabled \
+        -Dglib=disabled \
+        -Dgnutls=disabled \
+        -Dhomed=disabled \
+        -Dhtml=disabled \
+        -Dimportd=disabled \
+        -Dkmod=disabled \
+        -Dlibarchive=disabled \
+        -Dlibcryptsetup=disabled \
+        -Dlibcryptsetup-plugins=disabled \
+        -Dlibcurl=disabled \
+        -Dlibfido2=disabled \
+        -Dlibidn=disabled \
+        -Dlibidn2=disabled \
+        -Dlibiptc=disabled \
+        -Dlz4=disabled \
+        -Dman=disabled \
+        -Dmicrohttpd=disabled \
+        -Dnss-mymachines=disabled \
+        -Dnss-resolve=disabled \
+        -Dopenssl=disabled \
+        -Dp11kit=disabled \
+        -Dpam=disabled \
+        -Dpasswdqc=disabled \
+        -Dpcre2=disabled \
+        -Dpolkit=disabled \
+        -Dpwquality=disabled \
+        -Dqrencode=disabled \
+        -Dremote=disabled \
+        -Drepart=disabled \
+        -Dseccomp=disabled \
+        -Dselinux=disabled \
+        -Dsysupdate=disabled \
+        -Dtpm2=disabled \
+        -Dukify=disabled \
+        -Dvmspawn=disabled \
+        -Dxenctrl=disabled \
+        -Dxkbcommon=disabled \
+        -Dxz=disabled \
+        -Dzlib=disabled \
+        -Dzstd=disabled \
+        -Dlog-message-verification=disabled \
+        -Danalyze=false \
+        -Dbacklight=false \
+        -Dbinfmt=false \
+        -Dcoredump=false \
+        -Defi=false \
+        -Denvironment-d=false \
+        -Dfirstboot=false \
+        -Dhibernate=false \
+        -Dhostnamed=false \
+        -Dhwdb=false \
+        -Dinstall-tests=false \
+        -Dkernel-install=false \
+        -Dldconfig=false \
+        -Dlocaled=false \
+        -Dlogind=false \
+        -Dmachined=false \
+        -Dmountfsd=false \
+        -Dnetworkd=false \
+        -Dnscd=false \
+        -Dnsresourced=false \
+        -Dnss-myhostname=false \
+        -Dnss-systemd=false \
+        -Doomd=false \
+        -Dportabled=false \
+        -Dpstore=false \
+        -Dquotacheck=false \
+        -Drandomseed=false \
+        -Dresolve=false \
+        -Drfkill=false \
+        -Dstoragetm=false \
+        -Dsysext=false \
+        -Dsysusers=false \
+        -Dtimedated=false \
+        -Dtimesyncd=false \
+        -Dtmpfiles=true \
+        -Dtranslations=false \
+        -Duserdb=false \
+        -Dutmp=false \
+        -Dvconsole=false \
+        -Dxdg-autostart=false \
+        -Ddefault-dnssec=no \
+        -Drpmmacrosdir=no \
+        -Dinitrd=false \
+        -Dima=false \
+        -Dsmack=false \
+        -Dgshadow=false \
+        -Didn=false \
+        2>/dev/null
+
+    ninja -C build -j$(nproc) 2>&1 | tail -5
+}
+
+package() {
+    cd "$SRCDIR/systemd-${pkgver}"
+
+    # Install to staging area then copy to PKGDIR
+    DESTDIR="$SRCDIR/_install" ninja -C build install 2>/dev/null
+    local inst="$SRCDIR/_install"
+
+    # Find the installed tree (meson uses --prefix for layout)
+    mkdir -p "$PKGDIR"/{bin,lib/systemd/system,lib64/systemd,share,include}
+
+    # Copy CLI binaries
+    for b in systemctl journalctl busctl systemd-run systemd-cat systemd-cgls \
+             systemd-cgtop systemd-detect-virt systemd-ask-password systemd-notify \
+             systemd-id128 systemd-path systemd-escape systemd-mount systemd-tmpfiles \
+             systemd-tmpfiles.standalone systemd-ac-power systemd-delta systemd-creds; do
+        [ -f "$inst/bin/$b" ] && cp "$inst/bin/$b" "$PKGDIR/bin/"
+    done
+
+    # Copy symlinks (halt, poweroff, reboot, shutdown, init, run0)
+    for s in halt poweroff reboot shutdown init run0; do
+        [ -L "$inst/bin/$s" ] && cp -P "$inst/bin/$s" "$PKGDIR/bin/"
+    done
+
+    # Copy PID 1 + daemon binaries
+    cp -a "$inst/lib/systemd/"* "$PKGDIR/lib/systemd/"
+
+    # Copy shared libraries (libsystemd, libudev, internal libs)
+    cp -a "$inst/lib64/"* "$PKGDIR/lib64/"
+
+    # Copy D-Bus service files, tmpfiles.d configs, etc
+    cp -a "$inst/share/"* "$PKGDIR/share/" 2>/dev/null
+
+    # Copy development headers
+    cp -a "$inst/include/"* "$PKGDIR/include/" 2>/dev/null
+
+    chmod +x "$PKGDIR/bin/"* "$PKGDIR/lib/systemd/systemd"* 2>/dev/null
+}
