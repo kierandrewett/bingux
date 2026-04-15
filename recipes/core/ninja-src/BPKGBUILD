@@ -1,0 +1,29 @@
+pkgscope="bingux"
+pkgname="ninja-src"
+pkgver="1.12.1"
+pkgarch="x86_64-linux"
+pkgdesc="Ninja — small build system with a focus on speed"
+license="Apache-2.0"
+depends=()
+makedepends=("musl-toolchain-13.2.0")
+exports=("bin/ninja")
+source=("https://github.com/ninja-build/ninja/archive/refs/tags/v1.12.1.tar.gz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/ninja-1.12.1"
+
+    TC="/tmp/bingux-bootstrap-store/musl-toolchain-13.2.0-x86_64-linux"
+
+    CXX="$TC/bin/g++" \
+    CXXFLAGS="-static -idirafter $TC/include" \
+    LDFLAGS="-static" \
+    python3 configure.py --bootstrap 2>&1 | tail -5
+}
+
+package() {
+    cd "$SRCDIR/ninja-1.12.1"
+    mkdir -p "$PKGDIR/bin"
+    cp ninja "$PKGDIR/bin/ninja"
+    chmod +x "$PKGDIR/bin/ninja"
+}

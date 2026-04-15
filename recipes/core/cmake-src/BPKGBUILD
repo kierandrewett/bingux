@@ -1,0 +1,62 @@
+pkgscope="bingux"
+pkgname="cmake-src"
+pkgver="3.31.3"
+pkgarch="x86_64-linux"
+pkgdesc="CMake — cross-platform build system generator"
+license="BSD-3-Clause"
+depends=()
+makedepends=("musl-toolchain-13.2.0")
+exports=("bin/cmake" "bin/ctest" "bin/cpack")
+source=("https://github.com/Kitware/CMake/releases/download/v3.31.3/cmake-3.31.3.tar.gz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/cmake-3.31.3"
+
+    TC="/tmp/bingux-bootstrap-store/musl-toolchain-13.2.0-x86_64-linux"
+
+    # Pre-seed type sizes for musl/Linux (libarchive check_type_size needs these)
+    cat > /tmp/cmake-init-cache.cmake <<'INITEOF'
+set(HAVE_MODE_T TRUE CACHE INTERNAL "")
+set(MODE_T 4 CACHE INTERNAL "")
+set(HAVE_OFF_T TRUE CACHE INTERNAL "")
+set(OFF_T 8 CACHE INTERNAL "")
+set(HAVE_SIZE_T TRUE CACHE INTERNAL "")
+set(SIZE_T 8 CACHE INTERNAL "")
+set(HAVE_SSIZE_T TRUE CACHE INTERNAL "")
+set(SSIZE_T 8 CACHE INTERNAL "")
+set(HAVE_UID_T TRUE CACHE INTERNAL "")
+set(UID_T 4 CACHE INTERNAL "")
+set(HAVE_PID_T TRUE CACHE INTERNAL "")
+set(PID_T 4 CACHE INTERNAL "")
+set(HAVE_ID_T TRUE CACHE INTERNAL "")
+set(ID_T 4 CACHE INTERNAL "")
+set(HAVE_GID_T TRUE CACHE INTERNAL "")
+set(GID_T 4 CACHE INTERNAL "")
+set(HAVE_DEV_T TRUE CACHE INTERNAL "")
+set(DEV_T 8 CACHE INTERNAL "")
+set(HAVE_INO_T TRUE CACHE INTERNAL "")
+set(INO_T 8 CACHE INTERNAL "")
+INITEOF
+
+    ./bootstrap --prefix=/ --parallel=$(nproc) \
+        --init=/tmp/cmake-init-cache.cmake \
+        -- \
+        -DCMAKE_C_COMPILER=$TC/bin/gcc \
+        -DCMAKE_CXX_COMPILER=$TC/bin/g++ \
+        -DCMAKE_C_FLAGS="-static -idirafter $TC/include" \
+        -DCMAKE_CXX_FLAGS="-static -idirafter $TC/include" \
+        -DCMAKE_EXE_LINKER_FLAGS="-static" \
+        -DCMAKE_USE_OPENSSL=OFF \
+        -DBUILD_CursesDialog=OFF \
+        -DCMAKE_USE_SYSTEM_CURL=OFF \
+        -DBUILD_TESTING=OFF \
+        2>&1 | tail -5
+
+    make -j$(nproc) 2>&1 | tail -5
+}
+
+package() {
+    cd "$SRCDIR/cmake-3.31.3"
+    make DESTDIR="$PKGDIR" install 2>&1 | tail -3
+}
