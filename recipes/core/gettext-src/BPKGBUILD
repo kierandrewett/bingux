@@ -1,0 +1,27 @@
+pkgscope="bingux"
+pkgname="gettext-src"
+pkgver="0.22.5"
+pkgarch="x86_64-linux"
+pkgdesc="GNU gettext — internationalization"
+license="GPL-3.0"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/gettext" "bin/envsubst" "bin/ngettext")
+source=("https://ftpmirror.gnu.org/gettext/gettext-0.22.5.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/gettext-0.22.5/gettext-runtime"
+    CC=bingux-gcc ./configure --prefix=/ --disable-shared --disable-nls --disable-java \
+        CFLAGS="-static" LDFLAGS="-static -Wl,--allow-multiple-definition" 2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/gettext-0.22.5/gettext-runtime"
+    mkdir -p "$PKGDIR/bin" "$PKGDIR/lib" "$PKGDIR/include"
+    cp src/gettext "$PKGDIR/bin/gettext" 2>/dev/null || true
+    cp src/envsubst "$PKGDIR/bin/envsubst" 2>/dev/null || true
+    cp src/ngettext "$PKGDIR/bin/ngettext" 2>/dev/null || true
+    cp intl/.libs/libintl.a "$PKGDIR/lib/" 2>/dev/null || true
+    cp intl/libgnuintl.h "$PKGDIR/include/libintl.h" 2>/dev/null || true
+    chmod +x "$PKGDIR/bin/"* 2>/dev/null || true
+}
