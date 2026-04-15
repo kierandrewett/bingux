@@ -1,0 +1,25 @@
+pkgscope="bingux"
+pkgname="grep-src"
+pkgver="3.11"
+pkgarch="x86_64-linux"
+pkgdesc="GNU grep — compiled from source"
+license="GPL-3.0"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/grep")
+source=("https://ftpmirror.gnu.org/grep/grep-3.11.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/grep-3.11"
+    CC=bingux-gcc ./configure --prefix=/ --disable-nls \
+        CFLAGS="-static" LDFLAGS="-static -Wl,--allow-multiple-definition" 2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/grep-3.11"
+    mkdir -p "$PKGDIR/bin"
+    cp src/grep "$PKGDIR/bin/grep" 2>/dev/null || cp grep "$PKGDIR/bin/grep"
+    chmod +x "$PKGDIR/bin/grep"
+    ln -sf grep "$PKGDIR/bin/egrep"
+    ln -sf grep "$PKGDIR/bin/fgrep"
+}

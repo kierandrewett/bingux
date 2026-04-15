@@ -1,0 +1,23 @@
+pkgscope="bingux"
+pkgname="sed-src"
+pkgver="4.9"
+pkgarch="x86_64-linux"
+pkgdesc="GNU sed — compiled from source"
+license="GPL-3.0"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/sed")
+source=("https://ftpmirror.gnu.org/sed/sed-4.9.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/sed-4.9"
+    CC=bingux-gcc ./configure --prefix=/ --disable-nls \
+        CFLAGS="-static" LDFLAGS="-static -Wl,--allow-multiple-definition" 2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/sed-4.9"
+    mkdir -p "$PKGDIR/bin"
+    cp sed/sed "$PKGDIR/bin/sed" 2>/dev/null || cp src/sed "$PKGDIR/bin/sed"
+    chmod +x "$PKGDIR/bin/sed"
+}
