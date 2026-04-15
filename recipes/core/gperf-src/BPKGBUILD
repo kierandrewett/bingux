@@ -1,0 +1,23 @@
+pkgscope="bingux"
+pkgname="gperf-src"
+pkgver="3.1"
+pkgarch="x86_64-linux"
+pkgdesc="gperf — perfect hash function generator"
+license="GPL-3.0"
+depends=()
+makedepends=("musl-toolchain-13.2.0")
+exports=("bin/gperf")
+source=("https://ftpmirror.gnu.org/gperf/gperf-3.1.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/gperf-3.1"
+    CC=bingux-gcc CXX=bingux-g++ ./configure --prefix=/ \
+        CFLAGS="-static -O2" CXXFLAGS="-static -O2" LDFLAGS="-static" 2>/dev/null
+    make -j$(nproc) 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/gperf-3.1"
+    mkdir -p "$PKGDIR/bin"
+    cp src/gperf "$PKGDIR/bin/gperf"
+    chmod +x "$PKGDIR/bin/gperf"
+}
