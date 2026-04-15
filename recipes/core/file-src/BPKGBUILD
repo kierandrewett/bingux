@@ -1,0 +1,24 @@
+pkgscope="bingux"
+pkgname="file-src"
+pkgver="5.45"
+pkgarch="x86_64-linux"
+pkgdesc="file — determine file type"
+license="BSD-2"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/file")
+source=("https://astron.com/pub/file/file-5.45.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/file-5.45"
+    CC=bingux-gcc ./configure --prefix=/ --disable-shared \
+        CFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/file-5.45"
+    mkdir -p "$PKGDIR/bin" "$PKGDIR/share/misc"
+    cp src/file "$PKGDIR/bin/file"
+    cp magic/magic.mgc "$PKGDIR/share/misc/" 2>/dev/null || true
+    chmod +x "$PKGDIR/bin/file"
+}
