@@ -2,29 +2,21 @@
  * bingux_compat — Kernel module for transparent FHS path translation
  *
  * Bingux uses a three-directory root: /system, /users, /io
- * No other entries exist at /.  FHS compatibility is achieved by
- * overriding the root inode's lookup operation so that path resolution
- * for /bin, /usr, /etc, etc. transparently follows into the Bingux
- * hierarchy.
+ * No other entries exist at /.  FHS compatibility is achieved by:
  *
- *   ls /           → system  users  io    (only real dentries)
+ *   1. Overriding the root inode's lookup to create virtual symlinks
+ *      for FHS paths (/bin, /usr, /etc, etc.)
+ *   2. Filtering the root directory listing (readdir) to hide bind
+ *      mount points (/dev, /proc, /sys) and boot artifacts (/init)
+ *
+ * Result:
+ *   ls /           → system  users  io    (the only visible entries)
  *   ls /etc        → works   (resolves /system/state/ephemeral/etc)
  *   cat /bin/sh    → works   (resolves /system/profiles/current/bin/sh)
- *   readlink /bin  → /system/profiles/current/bin  (virtual symlink)
+ *   ls /dev/dri    → works   (bind mount from /io)
+ *   cat /proc/1/status → works (bind mount from /system/kernel/proc)
  *
- * Implementation:
- *   On load, we replace the root inode's i_op->lookup with our own.
- *   When the VFS resolves an FHS name at /, our lookup creates a
- *   virtual symlink inode (on the root superblock) whose get_link
- *   returns the Bingux target path.  The VFS follows the symlink
- *   transparently, crossing mount boundaries correctly.
- *
- *   Since no real dentries exist for FHS names, readdir (ls /)
- *   naturally shows only system, users, io.  The virtual symlinks
- *   are instantiated on demand during path resolution and are
- *   managed by the dcache like any other negative/positive dentry.
- *
- *   On unload, we restore the original i_op.
+ * On unload, all original operations are restored.
  */
 
 #include <linux/module.h>
@@ -35,23 +27,17 @@
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/version.h>
-#include <linux/stringhash.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Bingux Project");
 MODULE_DESCRIPTION("Transparent FHS path translation for Bingux root layout");
-MODULE_VERSION("1.0");
+MODULE_VERSION("1.1");
 
-/*
- * FHS-to-Bingux path mapping table.
- *
- * When a process resolves /bin/sh, the VFS calls lookup("bin") on
- * the root inode.  We intercept that and return a virtual symlink
- * inode pointing to the Bingux path.
- */
+/* ── FHS path mapping table ─────────────────────────────────────────── */
+
 struct compat_mapping {
-	const char *fhs_name;     /* Name looked up at / (e.g. "bin") */
-	const char *bingux_path;  /* Absolute Bingux path to redirect to */
+	const char *fhs_name;
+	const char *bingux_path;
 };
 
 static const struct compat_mapping mappings[] = {
@@ -75,22 +61,6 @@ static const struct compat_mapping mappings[] = {
 	{ "home",   "/users"                         },
 	{ "root",   "/users/root"                    },
 
-	/*
-	 * /dev is NOT handled here — it needs a real bind mount
-	 * from /io so that realpath("/dev/...") stays as "/dev/..."
-	 * rather than resolving through a symlink to "/io/...".
-	 * Programs like seatd validate device paths against /dev/.
-	 * Init handles this: mkdir /dev && mount --bind /io /dev
-	 */
-
-	/*
-	 * /proc and /sys are also handled via bind mounts in init,
-	 * like /dev, so that realpath() returns /proc/... and /sys/...
-	 * as programs expect.  Init does:
-	 *   mkdir /proc && mount --bind /system/kernel/proc /proc
-	 *   mkdir /sys  && mount --bind /system/kernel/sys  /sys
-	 */
-
 	/* Boot */
 	{ "boot",   "/system/boot"                   },
 
@@ -102,20 +72,34 @@ static const struct compat_mapping mappings[] = {
 	{ NULL, NULL }
 };
 
-/* Saved original inode operations so we can restore on unload */
+/*
+ * Entries to hide from ls / (readdir filter).
+ *
+ * These are real directories/files on the rootfs that exist for
+ * technical reasons but should not be visible to the user:
+ *   - dev, proc, sys: bind mount points (needed by programs that
+ *     call realpath and expect /dev/..., /proc/..., /sys/...)
+ *   - init: the boot script (initramfs artifact)
+ */
+static const char *hidden_from_listing[] = {
+	"dev", "proc", "sys", "init", "root", NULL
+};
+
+/* ── Saved original operations ──────────────────────────────────────── */
+
 static const struct inode_operations *orig_root_i_op;
 static struct inode_operations compat_root_i_op;
+static const struct file_operations *orig_root_f_op;
+static struct file_operations compat_root_f_op;
 
 /* Inode operations for virtual symlink inodes */
 static struct inode_operations compat_symlink_i_op;
 
-/*
- * Find the mapping for an FHS name.
- */
+/* ── Helpers ────────────────────────────────────────────────────────── */
+
 static const struct compat_mapping *find_mapping(const char *name)
 {
 	const struct compat_mapping *m;
-
 	for (m = mappings; m->fhs_name; m++) {
 		if (strcmp(name, m->fhs_name) == 0)
 			return m;
@@ -123,36 +107,26 @@ static const struct compat_mapping *find_mapping(const char *name)
 	return NULL;
 }
 
-/*
- * get_link for our virtual symlinks.
- *
- * The target path string is stored in inode->i_link (set when we
- * create the inode).  The VFS follows this like a regular symlink,
- * correctly crossing mount boundaries.
- *
- * We use DELAYED_CALL with no destructor since the link target is
- * a static string from our mapping table (module lifetime).
- */
+static bool should_hide_from_listing(const char *name)
+{
+	const char **p;
+	for (p = hidden_from_listing; *p; p++) {
+		if (strcmp(name, *p) == 0)
+			return true;
+	}
+	return false;
+}
+
+/* ── Virtual symlink inode ──────────────────────────────────────────── */
+
 static const char *compat_get_link(struct dentry *dentry, struct inode *inode,
 				   struct delayed_call *done)
 {
 	if (!inode)
 		return ERR_PTR(-ECHILD);
-	/* i_link was set to the static mapping string on creation */
 	return inode->i_link;
 }
 
-/*
- * Create a virtual symlink inode on the root superblock.
- *
- * This inode:
- *   - Lives on the root superblock (no cross-mount confusion)
- *   - Has S_IFLNK type so the VFS follows it during path resolution
- *   - Has get_link returning the Bingux target path
- *   - Is ephemeral — the dcache manages its lifetime
- *   - Never hits disk (rootfs is tmpfs/ramfs in initramfs,
- *     and even on ext4 we never create a real dirent)
- */
 static struct inode *make_virtual_symlink(struct super_block *sb,
 					  const char *target)
 {
@@ -167,21 +141,14 @@ static struct inode *make_virtual_symlink(struct super_block *sb,
 	inode->i_uid = GLOBAL_ROOT_UID;
 	inode->i_gid = GLOBAL_ROOT_GID;
 	inode->i_op = &compat_symlink_i_op;
-	inode->i_link = (char *)target;  /* static string, no free needed */
+	inode->i_link = (char *)target;
 	inode->i_size = strlen(target);
 
 	return inode;
 }
 
-/*
- * Our replacement lookup for the root inode.
- *
- * For FHS compat names: create a virtual symlink inode and splice
- * it into the dentry.  The VFS will follow it transparently.
- *
- * For real names (system, users, io) or unknown names: delegate
- * to the original filesystem's lookup.
- */
+/* ── Root inode lookup override ─────────────────────────────────────── */
+
 static struct dentry *compat_lookup(struct inode *dir, struct dentry *dentry,
 				    unsigned int flags)
 {
@@ -190,17 +157,12 @@ static struct dentry *compat_lookup(struct inode *dir, struct dentry *dentry,
 
 	m = find_mapping(dentry->d_name.name);
 	if (!m) {
-		/* Not an FHS name — delegate to original lookup */
 		if (orig_root_i_op && orig_root_i_op->lookup)
 			return orig_root_i_op->lookup(dir, dentry, flags);
 		d_add(dentry, NULL);
 		return NULL;
 	}
 
-	/*
-	 * Create a virtual symlink for this FHS name.
-	 * The VFS will follow it to the real Bingux path.
-	 */
 	inode = make_virtual_symlink(dir->i_sb, m->bingux_path);
 	if (!inode) {
 		d_add(dentry, NULL);
@@ -211,53 +173,71 @@ static struct dentry *compat_lookup(struct inode *dir, struct dentry *dentry,
 	return NULL;
 }
 
+/* ── Root directory listing filter (readdir) ────────────────────────── */
+
 /*
- * Invalidate any cached dentries for FHS names in the root directory.
- *
- * During early boot (before this module loads), the kernel may create
- * real directories like /dev on the rootfs and cache their dentries.
- * We need to evict those so that subsequent lookups hit our
- * compat_lookup and get redirected.
+ * Wrapper context for filtering readdir output.
+ * We intercept each entry from the real iterate_shared and only
+ * pass through entries that should be visible.
  */
-static void invalidate_fhs_dentries(struct dentry *root)
+struct filter_ctx {
+	struct dir_context ctx;        /* must be first */
+	struct dir_context *orig_ctx;  /* the caller's real context */
+};
+
+static bool filter_actor(struct dir_context *ctx, const char *name, int namlen,
+			 loff_t offset, u64 ino, unsigned int d_type)
 {
-	const struct compat_mapping *m;
-	struct dentry *child;
+	struct filter_ctx *fctx = container_of(ctx, struct filter_ctx, ctx);
+	char buf[256];
 
-	for (m = mappings; m->fhs_name; m++) {
-		struct qstr name = QSTR_INIT(m->fhs_name,
-					     strlen(m->fhs_name));
-		child = d_hash_and_lookup(root, &name);
-		if (!child)
-			continue;
+	/* Safety: don't overflow our stack buffer */
+	if (namlen >= sizeof(buf))
+		return fctx->orig_ctx->actor(fctx->orig_ctx, name, namlen,
+					     offset, ino, d_type);
 
-		pr_debug("bingux_compat: evicting cached dentry /%s\n",
-			 m->fhs_name);
+	memcpy(buf, name, namlen);
+	buf[namlen] = '\0';
 
-		/*
-		 * d_invalidate unhashes the dentry and evicts it from the
-		 * dcache, along with its entire subtree.  Next time userspace
-		 * accesses this name, the VFS will call our compat_lookup.
-		 */
-		d_invalidate(child);
-		dput(child);
-	}
+	/* Filter: skip entries that should be hidden */
+	if (should_hide_from_listing(buf))
+		return true;  /* true = continue iterating, just skip this one */
+
+	/* Pass through to the real caller */
+	return fctx->orig_ctx->actor(fctx->orig_ctx, name, namlen,
+				     offset, ino, d_type);
 }
 
-/*
- * Module init: hook the root inode's lookup.
- */
+static int compat_iterate_shared(struct file *file, struct dir_context *ctx)
+{
+	struct filter_ctx fctx = {
+		.ctx.actor = filter_actor,
+		.ctx.pos = ctx->pos,
+		.orig_ctx = ctx,
+	};
+	int ret;
+
+	if (!orig_root_f_op || !orig_root_f_op->iterate_shared)
+		return -ENOTDIR;
+
+	ret = orig_root_f_op->iterate_shared(file, &fctx.ctx);
+
+	/* Sync position back */
+	ctx->pos = fctx.ctx.pos;
+	return ret;
+}
+
+/* ── Module init/exit ───────────────────────────────────────────────── */
+
 static int __init bingux_compat_init(void)
 {
 	struct path root_path;
 	struct inode *root_inode;
 	int err;
 
-	/* Set up our symlink inode operations */
 	memset(&compat_symlink_i_op, 0, sizeof(compat_symlink_i_op));
 	compat_symlink_i_op.get_link = compat_get_link;
 
-	/* Get the root dentry */
 	err = kern_path("/", LOOKUP_DIRECTORY, &root_path);
 	if (err) {
 		pr_err("bingux_compat: cannot resolve root path: %d\n", err);
@@ -271,30 +251,17 @@ static int __init bingux_compat_init(void)
 		return -ENOENT;
 	}
 
-	/* Save original operations */
+	/* Override inode operations (lookup) */
 	orig_root_i_op = root_inode->i_op;
-
-	/* Build our replacement: copy all ops, override lookup */
 	memcpy(&compat_root_i_op, orig_root_i_op, sizeof(compat_root_i_op));
 	compat_root_i_op.lookup = compat_lookup;
-
-	/*
-	 * Swap in our operations.  Single pointer write — effectively
-	 * atomic w.r.t. concurrent lookups.
-	 */
 	root_inode->i_op = &compat_root_i_op;
 
-	/*
-	 * NOTE: We do NOT call d_invalidate on ramfs/tmpfs dentries.
-	 * On ramfs the dentries ARE the data — invalidating them would
-	 * destroy real directories.  Pre-existing entries like the
-	 * kernel's early-boot /dev are handled by bind mounts in init
-	 * (which override them before this module loads).
-	 *
-	 * For disk-backed rootfs (ext4, etc.), you may need to add
-	 * dentry invalidation here.  For initramfs, it's not needed
-	 * and would be destructive.
-	 */
+	/* Override file operations (readdir/iterate) */
+	orig_root_f_op = root_inode->i_fop;
+	memcpy(&compat_root_f_op, orig_root_f_op, sizeof(compat_root_f_op));
+	compat_root_f_op.iterate_shared = compat_iterate_shared;
+	root_inode->i_fop = &compat_root_f_op;
 
 	path_put(&root_path);
 
@@ -303,9 +270,6 @@ static int __init bingux_compat_init(void)
 	return 0;
 }
 
-/*
- * Module exit: restore original root inode operations.
- */
 static void __exit bingux_compat_exit(void)
 {
 	struct path root_path;
@@ -313,8 +277,12 @@ static void __exit bingux_compat_exit(void)
 
 	if (kern_path("/", LOOKUP_DIRECTORY, &root_path) == 0) {
 		root_inode = root_path.dentry->d_inode;
-		if (root_inode && root_inode->i_op == &compat_root_i_op)
-			root_inode->i_op = orig_root_i_op;
+		if (root_inode) {
+			if (root_inode->i_op == &compat_root_i_op)
+				root_inode->i_op = orig_root_i_op;
+			if (root_inode->i_fop == &compat_root_f_op)
+				root_inode->i_fop = orig_root_f_op;
+		}
 		path_put(&root_path);
 	}
 
