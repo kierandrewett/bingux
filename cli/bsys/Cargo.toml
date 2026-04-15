@@ -8,6 +8,7 @@ description = "System manager CLI"
 [dependencies]
 bingux-common = { path = "../../common/bingux-common" }
 bpkg-store = { path = "../../pkg/bpkg-store" }
+bpkg-repo = { path = "../../pkg/bpkg-repo" }
 bpkg-recipe = { path = "../../pkg/bpkg-recipe" }
 bpkg-build = { path = "../../pkg/bpkg-build" }
 tokio = { workspace = true }
