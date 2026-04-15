@@ -1,0 +1,73 @@
+pkgscope="bingux"
+pkgname="bingux-httpd"
+pkgver="0.1.0"
+pkgarch="x86_64-linux"
+pkgdesc="Minimal HTTP server — compiled from C source"
+license="MIT"
+
+depends=()
+exports=("bin/bingux-httpd")
+source=()
+sha256sums=()
+
+build() {
+    cat > "$SRCDIR/httpd.c" << 'C'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+
+const char *response =
+    "HTTP/1.1 200 OK\r\n"
+    "Content-Type: text/html\r\n"
+    "Connection: close\r\n"
+    "\r\n"
+    "<!DOCTYPE html><html><head><title>Bingux</title></head>"
+    "<body><h1>Bingux HTTP Server</h1>"
+    "<p>This server was compiled from C source inside Bingux.</p>"
+    "<p>Running on the Bingux package store.</p>"
+    "</body></html>\r\n";
+
+int main(int argc, char *argv[]) {
+    int port = argc > 1 ? atoi(argv[1]) : 8080;
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) { perror("socket"); return 1; }
+
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in addr = {
+        .sin_family = AF_INET,
+        .sin_port = htons(port),
+        .sin_addr.s_addr = INADDR_ANY,
+    };
+
+    if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        perror("bind"); return 1;
+    }
+    if (listen(server_fd, 5) < 0) { perror("listen"); return 1; }
+
+    printf("bingux-httpd listening on port %d\n", port);
+
+    while (1) {
+        int client = accept(server_fd, NULL, NULL);
+        if (client < 0) continue;
+        
+        char buf[1024];
+        read(client, buf, sizeof(buf));
+        write(client, response, strlen(response));
+        close(client);
+    }
+    return 0;
+}
+C
+    bingux-gcc -o "$BUILDDIR/bingux-httpd" "$SRCDIR/httpd.c"
+}
+
+package() {
+    mkdir -p "$PKGDIR/bin"
+    cp "$BUILDDIR/bingux-httpd" "$PKGDIR/bin/bingux-httpd"
+    chmod +x "$PKGDIR/bin/bingux-httpd"
+}
