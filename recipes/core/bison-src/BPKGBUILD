@@ -1,0 +1,26 @@
+pkgscope="bingux"
+pkgname="bison-src"
+pkgver="3.8.2"
+pkgarch="x86_64-linux"
+pkgdesc="GNU bison — parser generator"
+license="GPL-3.0"
+depends=("m4-src-1.4.19")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/bison" "bin/yacc")
+source=("https://ftpmirror.gnu.org/bison/bison-3.8.2.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/bison-3.8.2"
+    M4="/tmp/bingux-bootstrap-store/m4-src-1.4.19-x86_64-linux/bin/m4"
+    CC=bingux-gcc M4="$M4" ./configure --prefix=/ --disable-nls \
+        CFLAGS="-static" LDFLAGS="-static -Wl,--allow-multiple-definition" 2>/dev/null
+    make -j1 CC=bingux-gcc M4="$M4" LDFLAGS="-static -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/bison-3.8.2"
+    mkdir -p "$PKGDIR/bin" "$PKGDIR/share"
+    cp src/bison "$PKGDIR/bin/bison"
+    ln -sf bison "$PKGDIR/bin/yacc"
+    chmod +x "$PKGDIR/bin/bison"
+    cp -a data "$PKGDIR/share/bison" 2>/dev/null || true
+}
