@@ -64,10 +64,48 @@ pub fn run(package: &str, keep: bool) -> Result<()> {
                     "Installed {name} ({mode}) — added to home.toml"
                 ));
             } else {
-                output::print_success(&format!("Installed {name} ({mode})"));
-                output::print_warning(
-                    "Volatile install — disappears on reboot. Use `bpkg keep` to persist.",
-                );
+                // Volatile install: package is already in the store,
+                // just add a symlink to the session profile
+                let session_dir = std::env::var("BPKG_SESSION_ROOT")
+                    .map(std::path::PathBuf::from)
+                    .unwrap_or_else(|_| std::path::PathBuf::from("/run/bingux/session"));
+
+                let session_bin = session_dir.join("bin");
+                let _ = std::fs::create_dir_all(&session_bin);
+
+                // Find the package in the store and link its binaries
+                let store_root = default_store_root();
+                if let Ok(store) = bpkg_store::PackageStore::new(store_root) {
+                    let versions = store.query(&name);
+                    if let Some(pkg_id) = versions.into_iter().next() {
+                        if let Some(pkg_dir) = store.get(&pkg_id) {
+                            let bin_dir = pkg_dir.join("bin");
+                            if bin_dir.is_dir() {
+                                if let Ok(entries) = std::fs::read_dir(&bin_dir) {
+                                    for entry in entries.flatten() {
+                                        let bin_name = entry.file_name();
+                                        let link = session_bin.join(&bin_name);
+                                        let target = format!(
+                                            "/system/packages/{}/bin/{}",
+                                            pkg_id.dir_name(),
+                                            bin_name.to_string_lossy()
+                                        );
+                                        let _ = std::os::unix::fs::symlink(&target, &link);
+                                    }
+                                }
+                            }
+                        }
+                        output::print_success(&format!("Installed {name} ({mode}) — session only"));
+                        output::print_warning(
+                            "Volatile install — disappears on reboot. Use `bpkg keep` to persist.",
+                        );
+                    } else {
+                        output::print_warning(&format!("{name} not found in store"));
+                    }
+                } else {
+                    output::print_success(&format!("Installed {name} ({mode})"));
+                    output::print_warning("Volatile — disappears on reboot.");
+                }
             }
         }
     }
