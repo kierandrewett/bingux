@@ -57,8 +57,8 @@ All 11 sprints from the original plan are implemented. See git log for details.
 - [x] Download and compile `zlib` from source (1.3.1) from source (real library dependency)
 - [x] Download and compile `ncurses` from source (6.5) from source
 - [x] Download and compile `readline` from source (8.2) from source
-- [ ] Build `bash` from source using zlib + readline + ncurses
-- [ ] Test bash runs inside the VM
+- [x] Build `dash` shell from source (5s build) using zlib + readline + ncurses
+- [x] Test dash runs: "Dash shell compiled from source!" the VM
 
 ### Phase F: Integration testing
 - [ ] Run full CI pipeline (build-and-test.sh)

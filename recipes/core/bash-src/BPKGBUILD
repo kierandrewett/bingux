@@ -1,0 +1,36 @@
+pkgscope="bingux"
+pkgname="bash-src"
+pkgver="5.2.21"
+pkgarch="x86_64-linux"
+pkgdesc="GNU Bash — compiled from source (minimal)"
+license="GPL-3.0"
+
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+
+exports=("bin/bash")
+
+source=("https://ftpmirror.gnu.org/bash/bash-5.2.21.tar.gz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/bash-5.2.21"
+    CC=bingux-gcc ./configure --prefix=/ \
+        --without-bash-malloc \
+        --enable-static-link \
+        --disable-nls \
+        --without-readline \
+        CFLAGS="-static" LDFLAGS="-static" \
+        2>/dev/null
+    make -j1 CC=bingux-gcc 2>&1 | tail -5
+}
+
+package() {
+    cd "$SRCDIR/bash-5.2.21"
+    mkdir -p "$PKGDIR/bin"
+    if [ -f bash ]; then
+        cp bash "$PKGDIR/bin/bash"
+        chmod +x "$PKGDIR/bin/bash"
+        ln -sf bash "$PKGDIR/bin/sh"
+    fi
+}

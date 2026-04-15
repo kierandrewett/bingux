@@ -1,0 +1,37 @@
+pkgscope="bingux"
+pkgname="dash"
+pkgver="0.5.12"
+pkgarch="x86_64-linux"
+pkgdesc="Dash — POSIX compliant shell, compiled from source"
+license="BSD-3"
+
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+
+exports=("bin/dash" "bin/sh")
+
+source=("https://git.kernel.org/pub/scm/utils/dash/dash.git/snapshot/dash-0.5.12.tar.gz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/dash-0.5.12"
+    # dash needs autoreconf, but we can configure manually
+    CC=bingux-gcc ./configure --prefix=/ --enable-static CFLAGS="-static" LDFLAGS="-static" 2>/dev/null || {
+        # If configure doesn't exist, try autoreconf or manual build
+        CC=bingux-gcc sh ./autogen.sh 2>/dev/null
+        CC=bingux-gcc ./configure --prefix=/ --enable-static CFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    }
+    make -j1 CC=bingux-gcc 2>&1 | tail -3
+}
+
+package() {
+    cd "$SRCDIR/dash-0.5.12"
+    mkdir -p "$PKGDIR/bin"
+    if [ -f src/dash ]; then
+        cp src/dash "$PKGDIR/bin/dash"
+    elif [ -f dash ]; then
+        cp dash "$PKGDIR/bin/dash"
+    fi
+    chmod +x "$PKGDIR/bin/dash" 2>/dev/null
+    ln -sf dash "$PKGDIR/bin/sh"
+}
