@@ -1,0 +1,31 @@
+pkgscope="bingux"
+pkgname="vim-src"
+pkgver="9.1.0971"
+pkgarch="x86_64-linux"
+pkgdesc="Vim — text editor, compiled from source"
+license="Vim"
+depends=("ncurses-6.5")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/vim" "bin/vi")
+source=("https://github.com/vim/vim/archive/refs/tags/v9.1.0971.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/vim-9.1.0971/src"
+    NCURSES="/tmp/bingux-bootstrap-store/ncurses-6.5-x86_64-linux"
+    CC=bingux-gcc ./configure --prefix=/ \
+        --with-features=normal --disable-gui --without-x --disable-gpm \
+        --disable-multibyte --disable-nls \
+        --with-tlib=ncursesw \
+        CFLAGS="-static -I$NCURSES/include -I$NCURSES/include/ncursesw" \
+        LDFLAGS="-static -L$NCURSES/lib -Wl,--allow-multiple-definition" \
+        LIBS="-lncursesw" \
+        2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -L$NCURSES/lib -lncursesw -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/vim-9.1.0971/src"
+    mkdir -p "$PKGDIR/bin"
+    cp vim "$PKGDIR/bin/vim"
+    ln -sf vim "$PKGDIR/bin/vi"
+    chmod +x "$PKGDIR/bin/vim"
+}
