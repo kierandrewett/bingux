@@ -33,6 +33,9 @@ pub struct GenerationBuilder {
     root: PathBuf,
     /// Root directory for installed packages (e.g. `/system/packages/`).
     packages_root: PathBuf,
+    /// If set, all bin symlinks point to this shim binary instead of direct package paths.
+    /// The shim reads .dispatch.toml to resolve the real binary + sandbox level.
+    shim_path: Option<PathBuf>,
 }
 
 impl GenerationBuilder {
@@ -41,10 +44,43 @@ impl GenerationBuilder {
     /// `packages_root` is the directory where installed packages live,
     /// used to resolve symlink targets.
     pub fn new(root: PathBuf, packages_root: PathBuf) -> Self {
+        // Check for bxc-shim in the packages store
+        let shim_path = Self::find_shim(&packages_root);
         Self {
             root,
             packages_root,
+            shim_path,
         }
+    }
+
+    /// Look for bxc-shim in the package store or well-known paths.
+    fn find_shim(packages_root: &Path) -> Option<PathBuf> {
+        // Check env override first
+        if let Ok(path) = std::env::var("BXC_SHIM_PATH") {
+            let p = PathBuf::from(&path);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+        // Search store for bxc-shim package
+        if let Ok(entries) = std::fs::read_dir(packages_root) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name_str = name.to_string_lossy();
+                if name_str.starts_with("bxc-shim-") || name_str.starts_with("bingux-shim-") {
+                    let shim = entry.path().join("bin/bxc-shim");
+                    if shim.exists() {
+                        return Some(shim);
+                    }
+                }
+            }
+        }
+        // Check well-known path
+        let well_known = packages_root.join("../profiles/current/bin/bxc-shim");
+        if well_known.exists() {
+            return Some(well_known.canonicalize().unwrap_or(well_known));
+        }
+        None
     }
 
     /// Build a new generation from the given package entries.
@@ -97,7 +133,12 @@ impl GenerationBuilder {
                     .to_string_lossy()
                     .into_owned();
 
-                let target = pkg_dir.join(bin_path);
+                // Use shim if available, otherwise direct symlink
+                let target = if let Some(ref shim) = self.shim_path {
+                    shim.clone()
+                } else {
+                    pkg_dir.join(bin_path)
+                };
                 let link = bin_dir.join(&bin_name);
 
                 symlink_or_create_parent(&target, &link)?;
