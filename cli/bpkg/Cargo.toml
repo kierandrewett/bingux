@@ -14,6 +14,7 @@ bingux-common = { path = "../../common/bingux-common" }
 bpkg-store = { path = "../../pkg/bpkg-store" }
 bpkg-home = { path = "../../home/bpkg-home" }
 bpkg-repo = { path = "../../pkg/bpkg-repo" }
+bingux-gated = { path = "../../gate/bingux-gated" }
 bsys-compose = { path = "../../system/bsys-compose" }
 clap = { workspace = true }
 indicatif = { workspace = true }
