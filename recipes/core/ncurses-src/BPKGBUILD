@@ -1,0 +1,33 @@
+pkgscope="bingux"
+pkgname="ncurses"
+pkgver="6.5"
+pkgarch="x86_64-linux"
+pkgdesc="ncurses terminal library — compiled from source"
+license="MIT"
+
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+
+exports=("lib/libncurses.a")
+
+source=("https://ftpmirror.gnu.org/ncurses/ncurses-6.5.tar.gz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/ncurses-6.5"
+    CC=bingux-gcc CXX=bingux-gcc \
+        ./configure --prefix=/ --without-shared --without-debug \
+        --without-cxx --without-cxx-binding --without-ada \
+        --enable-widec --with-default-terminfo-dir=/usr/share/terminfo \
+        2>/dev/null
+    make -j1 CC=bingux-gcc 2>&1 | tail -3
+}
+
+package() {
+    cd "$SRCDIR/ncurses-6.5"
+    mkdir -p "$PKGDIR/lib" "$PKGDIR/include" "$PKGDIR/include/ncursesw"
+    cp lib/libncursesw.a "$PKGDIR/lib/libncurses.a" 2>/dev/null || true
+    cp lib/libncursesw.a "$PKGDIR/lib/libncursesw.a" 2>/dev/null || true
+    cp include/*.h "$PKGDIR/include/" 2>/dev/null || true
+    cp include/*.h "$PKGDIR/include/ncursesw/" 2>/dev/null || true
+}
