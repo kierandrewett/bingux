@@ -15,6 +15,7 @@ members = [
     "gate/bingux-gated",
     "gate/bingux-prompt",
     "gate/bingux-settings",
+    "gate/bingux-dbus-proxy",
     "system/bsys-compose",
     "system/bsys-config",
     "system/bingux-init",

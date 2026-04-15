@@ -1,0 +1,17 @@
+[package]
+name = "bingux-dbus-proxy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "D-Bus proxy for Bingux sandbox — mediates app access to system/session bus"
+
+[dependencies]
+bingux-common = { path = "../../common/bingux-common" }
+bingux-gated = { path = "../bingux-gated" }
+serde = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
