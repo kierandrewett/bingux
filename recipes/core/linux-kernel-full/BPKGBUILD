@@ -1,0 +1,155 @@
+pkgscope="bingux"
+pkgname="linux-kernel-full"
+pkgver="6.12.8"
+pkgarch="x86_64-linux"
+pkgdesc="Linux kernel — full hardware support for real metal + QEMU"
+license="GPL-2.0"
+
+depends=()
+makedepends=()
+
+exports=(
+    "boot/vmlinuz"
+    "boot/System.map"
+    "boot/config"
+)
+
+source=("https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.8.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/linux-6.12.8"
+
+    # ── Compiler selection ─────────────────────────────────────────────
+    # Prefer host GCC for speed (faster than musl cross-compiler).
+    # Fall back to bingux-gcc if host GCC is unavailable.
+    if command -v gcc >/dev/null 2>&1; then
+        CC="gcc"
+    elif command -v bingux-gcc >/dev/null 2>&1; then
+        CC="bingux-gcc"
+    elif [ -d "$BINGUX_STORE/musl-toolchain-13.2.0-x86_64-linux" ]; then
+        CC="$BINGUX_STORE/musl-toolchain-13.2.0-x86_64-linux/bin/bingux-gcc"
+    else
+        echo "ERROR: No suitable compiler found" >&2
+        return 1
+    fi
+    echo "==> Using CC=$CC"
+
+    # ── Apply Bingux kernel config ─────────────────────────────────────
+    # The config is pre-generated with full hardware support.
+    # It lives at kernel/bingux-kernel-config in the Bingux source tree.
+    BINGUX_CONFIG="$SRCDIR/../bingux-kernel-config"
+    if [ -f "$BINGUX_CONFIG" ]; then
+        echo "==> Using pre-built bingux-kernel-config"
+        cp "$BINGUX_CONFIG" .config
+    else
+        echo "==> No bingux-kernel-config found, generating from defconfig + overrides"
+        make defconfig ARCH=x86_64
+
+        # ── Storage ────────────────────────────────────────────────────
+        scripts/config --enable CONFIG_BLK_DEV_NVME
+        scripts/config --enable CONFIG_SATA_AHCI
+        scripts/config --enable CONFIG_ATA
+        scripts/config --module CONFIG_USB_STORAGE
+        scripts/config --enable CONFIG_VIRTIO_BLK
+        scripts/config --enable CONFIG_BLK_DEV_DM
+        scripts/config --enable CONFIG_DM_CRYPT
+        scripts/config --enable CONFIG_BLK_DEV_LOOP
+        scripts/config --enable CONFIG_SCSI
+        scripts/config --enable CONFIG_BLK_DEV_SD
+
+        # ── Filesystems ───────────────────────────────────────────────
+        scripts/config --enable CONFIG_EXT4_FS
+        scripts/config --enable CONFIG_BTRFS_FS
+        scripts/config --enable CONFIG_XFS_FS
+        scripts/config --enable CONFIG_VFAT_FS
+        scripts/config --enable CONFIG_NTFS3_FS
+        scripts/config --enable CONFIG_SQUASHFS
+        scripts/config --enable CONFIG_SQUASHFS_XZ
+        scripts/config --enable CONFIG_SQUASHFS_ZSTD
+        scripts/config --enable CONFIG_OVERLAY_FS
+        scripts/config --enable CONFIG_FUSE_FS
+        scripts/config --enable CONFIG_TMPFS
+        scripts/config --enable CONFIG_DEVTMPFS
+        scripts/config --enable CONFIG_DEVTMPFS_MOUNT
+        scripts/config --enable CONFIG_EFIVARFS_FS
+
+        # ── Networking ─────────────────────────────────────────────────
+        scripts/config --enable CONFIG_NET
+        scripts/config --enable CONFIG_INET
+        scripts/config --enable CONFIG_IPV6
+        scripts/config --enable CONFIG_NETFILTER
+        scripts/config --enable CONFIG_NF_TABLES
+        scripts/config --enable CONFIG_WIREGUARD
+        scripts/config --module CONFIG_E1000E
+        scripts/config --module CONFIG_R8169
+        scripts/config --module CONFIG_IWLWIFI
+        scripts/config --enable CONFIG_VIRTIO_NET
+        scripts/config --enable CONFIG_CFG80211
+        scripts/config --enable CONFIG_MAC80211
+
+        # ── Graphics ───────────────────────────────────────────────────
+        scripts/config --enable CONFIG_DRM
+        scripts/config --module CONFIG_DRM_I915
+        scripts/config --module CONFIG_DRM_AMDGPU
+        scripts/config --module CONFIG_DRM_NOUVEAU
+        scripts/config --enable CONFIG_DRM_SIMPLEDRM
+        scripts/config --enable CONFIG_FB_EFI
+        scripts/config --enable CONFIG_FRAMEBUFFER_CONSOLE
+
+        # ── USB / Input ────────────────────────────────────────────────
+        scripts/config --enable CONFIG_USB_XHCI_HCD
+        scripts/config --enable CONFIG_USB_EHCI_HCD
+        scripts/config --enable CONFIG_USB_HID
+        scripts/config --enable CONFIG_INPUT_EVDEV
+        scripts/config --module CONFIG_BT
+
+        # ── Audio ──────────────────────────────────────────────────────
+        scripts/config --module CONFIG_SND_HDA_INTEL
+        scripts/config --module CONFIG_SND_USB_AUDIO
+
+        # ── Containers / Security ──────────────────────────────────────
+        scripts/config --enable CONFIG_NAMESPACES
+        scripts/config --enable CONFIG_USER_NS
+        scripts/config --enable CONFIG_CGROUPS
+        scripts/config --enable CONFIG_SECCOMP
+        scripts/config --enable CONFIG_SECCOMP_FILTER
+
+        # ── Boot ───────────────────────────────────────────────────────
+        scripts/config --enable CONFIG_EFI_STUB
+        scripts/config --enable CONFIG_BLK_DEV_INITRD
+        scripts/config --enable CONFIG_RD_GZIP
+        scripts/config --enable CONFIG_RD_ZSTD
+
+        # ── VirtIO ─────────────────────────────────────────────────────
+        scripts/config --enable CONFIG_VIRTIO_PCI
+        scripts/config --enable CONFIG_VIRTIO_CONSOLE
+        scripts/config --enable CONFIG_VIRTIO_MMIO
+    fi
+
+    make olddefconfig ARCH=x86_64
+
+    echo "==> Building bzImage with $(nproc) jobs..."
+    make -j$(nproc) ARCH=x86_64 CC="$CC" bzImage
+
+    echo "==> Building modules..."
+    make -j$(nproc) ARCH=x86_64 CC="$CC" modules
+}
+
+package() {
+    cd "$SRCDIR/linux-6.12.8"
+
+    # Install kernel image, System.map, and config
+    mkdir -p "$PKGDIR/boot"
+    cp arch/x86/boot/bzImage "$PKGDIR/boot/vmlinuz"
+    cp System.map "$PKGDIR/boot/System.map"
+    cp .config "$PKGDIR/boot/config"
+
+    # Install modules
+    if [ -n "$(find . -name '*.ko' 2>/dev/null | head -1)" ]; then
+        make modules_install INSTALL_MOD_PATH="$PKGDIR" ARCH=x86_64
+    fi
+
+    echo "==> Kernel installed: $(du -h "$PKGDIR/boot/vmlinuz" | cut -f1)"
+    echo "==> Module count: $(find "$PKGDIR" -name '*.ko' 2>/dev/null | wc -l)"
+}
