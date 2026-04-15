@@ -91,3 +91,24 @@
 - jq, ripgrep, fd, bat, eza, delta, zoxide, fzf, dust
 - starship, lazygit, bottom, yq, hexyl, hyperfine, sd, bandwhich
 - neovim, curl, python, nodejs
+
+### Additional Source-Compiled Packages (Bootstrap Session)
+- GNU Coreutils 9.5 (106 utilities, 80s build)
+- GNU grep 3.11 (25s)
+- GNU sed 4.9 (21s)
+- GNU gawk 5.3.1 (15s)
+- GNU tar 1.35 (30s)
+- GNU gzip 1.13 (13s)
+- bzip2 1.0.8 (4s)
+- XZ Utils 5.6.3 (14s)
+- GNU patch 2.7.6 (20s)
+- GNU m4 1.4.19 (30s)
+- file 5.45 (8s)
+- less 661 (5s)
+- bc 1.07.1 (4s)
+- tree 2.1.3 (2s)
+- Dash 0.5.12 (5s)
+- zlib 1.3.1 (4s)
+- ncurses 6.5 (60s)
+- readline 8.2 (7s)
+- Plus 11 custom C utilities (httpd, sysinfo, calc, etc.)
