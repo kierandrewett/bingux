@@ -1,0 +1,31 @@
+pkgscope="bingux"
+pkgname="util-linux-src"
+pkgver="2.40.2"
+pkgarch="x86_64-linux"
+pkgdesc="util-linux — essential Linux system utilities"
+license="GPL-2.0"
+depends=()
+makedepends=("musl-toolchain-13.2.0")
+exports=("sbin/mount" "sbin/umount" "sbin/blkid" "sbin/fdisk" "bin/lscpu" "bin/nsenter" "bin/unshare")
+source=("https://www.kernel.org/pub/linux/utils/util-linux/v2.40/util-linux-2.40.2.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/util-linux-2.40.2"
+    CC=bingux-gcc ./configure --prefix=/ \
+        --disable-shared --enable-static \
+        --without-python --without-systemd --without-udev \
+        --disable-nls --without-tinfo --without-ncursesw \
+        --disable-pylibmount --disable-lastlog2 \
+        CFLAGS="-static -O2" LDFLAGS="-static" 2>/dev/null
+    make -j$(nproc) 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/util-linux-2.40.2"
+    mkdir -p "$PKGDIR/bin" "$PKGDIR/sbin"
+    for b in mount umount lsblk blkid fdisk sfdisk mkswap; do
+        [ -f "$b" ] && cp "$b" "$PKGDIR/sbin/" && chmod +x "$PKGDIR/sbin/$b"
+    done
+    for b in lscpu lsmem lsns nsenter unshare flock getopt hexdump; do
+        [ -f "$b" ] && cp "$b" "$PKGDIR/bin/" && chmod +x "$PKGDIR/bin/$b"
+    done
+}

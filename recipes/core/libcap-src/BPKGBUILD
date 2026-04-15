@@ -1,0 +1,29 @@
+pkgscope="bingux"
+pkgname="libcap-src"
+pkgver="2.70"
+pkgarch="x86_64-linux"
+pkgdesc="libcap — POSIX capabilities library and tools"
+license="GPL-2.0"
+depends=()
+makedepends=("musl-toolchain-13.2.0")
+exports=("bin/getcap" "bin/setcap" "bin/getpcaps")
+source=("https://git.kernel.org/pub/scm/libs/libcap/libcap.git/snapshot/libcap-2.70.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/libcap-2.70"
+    make BUILD_CC=gcc CC=bingux-gcc \
+        CFLAGS="-static -O2" LDFLAGS="-static" \
+        DYNAMIC=no SHARED=no lib=lib prefix=/ \
+        -C libcap 2>&1 | tail -3
+    make BUILD_CC=gcc CC=bingux-gcc \
+        CFLAGS="-static -O2" LDFLAGS="-static" \
+        DYNAMIC=no SHARED=no lib=lib prefix=/ \
+        -C progs 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/libcap-2.70"
+    mkdir -p "$PKGDIR/bin" "$PKGDIR/lib" "$PKGDIR/include/sys"
+    cp libcap/libcap.a "$PKGDIR/lib/"
+    cp progs/getcap progs/setcap progs/getpcaps "$PKGDIR/bin/"
+    chmod +x "$PKGDIR/bin"/*
+}
