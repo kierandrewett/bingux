@@ -1,0 +1,66 @@
+pkgscope="bingux"
+pkgname="pkg-list"
+pkgver="1.0.0"
+pkgarch="x86_64-linux"
+pkgdesc="pkg-list — native C package lister for Bingux"
+license="MIT"
+depends=()
+exports=("bin/pkg-list")
+source=()
+sha256sums=()
+build() {
+    cat > "$SRCDIR/pkg-list.c" << 'C'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <dirent.h>
+#include <sys/stat.h>
+
+int main() {
+    char *store = getenv("BPKG_STORE_ROOT");
+    if (!store) store = "/system/packages";
+    
+    DIR *d = opendir(store);
+    if (!d) { fprintf(stderr, "cannot open %s\n", store); return 1; }
+    
+    int count = 0;
+    struct dirent *e;
+    printf("%-30s %s\n", "PACKAGE", "SIZE");
+    printf("%-30s %s\n", "-------", "----");
+    
+    while ((e = readdir(d)) != NULL) {
+        if (e->d_name[0] == '.') continue;
+        char path[4096];
+        snprintf(path, sizeof(path), "%s/%s", store, e->d_name);
+        
+        // Calculate directory size
+        long total = 0;
+        DIR *pd = opendir(path);
+        if (pd) {
+            struct dirent *pe;
+            while ((pe = readdir(pd)) != NULL) {
+                char fp[4096];
+                snprintf(fp, sizeof(fp), "%s/%s", path, pe->d_name);
+                struct stat st;
+                if (stat(fp, &st) == 0 && S_ISREG(st.st_mode))
+                    total += st.st_size;
+            }
+            closedir(pd);
+        }
+        
+        char size[32];
+        if (total > 1024*1024) snprintf(size, sizeof(size), "%.1fM", total/1048576.0);
+        else if (total > 1024) snprintf(size, sizeof(size), "%.1fK", total/1024.0);
+        else snprintf(size, sizeof(size), "%ldB", total);
+        
+        printf("%-30s %s\n", e->d_name, size);
+        count++;
+    }
+    closedir(d);
+    printf("\n%d packages\n", count);
+    return 0;
+}
+C
+    bingux-gcc -o "$BUILDDIR/pkg-list" "$SRCDIR/pkg-list.c"
+}
+package() { mkdir -p "$PKGDIR/bin"; cp "$BUILDDIR/pkg-list" "$PKGDIR/bin/pkg-list"; chmod +x "$PKGDIR/bin/pkg-list"; }
