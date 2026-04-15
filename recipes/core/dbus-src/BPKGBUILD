@@ -1,0 +1,28 @@
+pkgscope="bingux"
+pkgname="dbus-src"
+pkgver="1.14.10"
+pkgarch="x86_64-linux"
+pkgdesc="D-Bus — message bus system"
+license="AFL-2.1"
+depends=("expat-src-2.6.4")
+makedepends=("musl-toolchain-13.2.0")
+exports=("bin/dbus-daemon")
+source=("https://dbus.freedesktop.org/releases/dbus/dbus-1.14.10.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/dbus-1.14.10"
+    EXPAT="$BPKG_STORE_ROOT/expat-src-2.6.4-x86_64-linux"
+    CC=bingux-gcc ./configure --prefix=/ \
+        --enable-static --disable-shared \
+        --disable-systemd --disable-tests --disable-selinux --disable-apparmor \
+        --with-xml=expat \
+        CFLAGS="-static -O2 -I$EXPAT/include" LDFLAGS="-static -L$EXPAT/lib" \
+        EXPAT_CFLAGS="-I$EXPAT/include" EXPAT_LIBS="-L$EXPAT/lib -lexpat" 2>/dev/null
+    make -j$(nproc) 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/dbus-1.14.10"
+    mkdir -p "$PKGDIR/bin"
+    cp bus/dbus-daemon "$PKGDIR/bin/"
+    chmod +x "$PKGDIR/bin/dbus-daemon"
+}
