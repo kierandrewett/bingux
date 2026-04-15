@@ -1,0 +1,27 @@
+pkgscope="bingux"
+pkgname="texinfo-src"
+pkgver="7.1.1"
+pkgarch="x86_64-linux"
+pkgdesc="GNU texinfo — documentation system"
+license="GPL-3.0"
+depends=("ncurses-6.5")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/makeinfo" "bin/info")
+source=("https://ftpmirror.gnu.org/texinfo/texinfo-7.1.1.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/texinfo-7.1.1"
+    NCURSES="/tmp/bingux-bootstrap-store/ncurses-6.5-x86_64-linux"
+    CC=bingux-gcc ./configure --prefix=/ --disable-nls \
+        CFLAGS="-static -I$NCURSES/include" \
+        LDFLAGS="-static -L$NCURSES/lib -Wl,--allow-multiple-definition" \
+        2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -L$NCURSES/lib -lncursesw -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/texinfo-7.1.1"
+    mkdir -p "$PKGDIR/bin"
+    cp info/info "$PKGDIR/bin/info" 2>/dev/null || true
+    cp info/ginfo "$PKGDIR/bin/info" 2>/dev/null || true
+    chmod +x "$PKGDIR/bin/"* 2>/dev/null
+}
