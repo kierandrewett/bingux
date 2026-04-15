@@ -28,9 +28,7 @@ echo "    Tools ready"
 # --- Phase 2: Build packages ---
 echo ""
 echo "==> Phase 2: Building packages"
-source "$ROOT_DIR/bootstrap/stage2/iso/build-test-iso.sh" --packages-only 2>/dev/null || {
-    # If build-test-iso.sh doesn't support --packages-only, build inline
-    build_pkg() {
+build_pkg() {
         local name="$1" version="$2" url="$3" script="$4" export="$5"
         local dir="$STORE/${name}-${version}-x86_64-linux"
         [ -d "$dir" ] && return
@@ -38,7 +36,13 @@ source "$ROOT_DIR/bootstrap/stage2/iso/build-test-iso.sh" --packages-only 2>/dev
         local work="$ISO_WORK/work/$name/src"
         mkdir -p "$work" "$ISO_WORK/work/$name/pkg"
         local filename="${url##*/}"
-        [ -f "$CACHE/$filename" ] || curl -fSL -o "$CACHE/$filename" "$url" 2>&1
+        if [ ! -f "$CACHE/$filename" ]; then
+            if ! curl -fSL -o "$CACHE/$filename" "$url" 2>&1; then
+                echo "      WARN: download failed, skipping $name"
+                rm -f "$CACHE/$filename"
+                return
+            fi
+        fi
         case "$filename" in
             *.tar.gz|*.tgz) tar xzf "$CACHE/$filename" -C "$work" ;;
             *) cp "$CACHE/$filename" "$work/$filename" ;;
@@ -62,13 +66,32 @@ TOML
         cp -a "$pkgdir" "$dir"
     }
 
-    build_pkg "jq" "1.7.1" "https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64" \
-        'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/jq-linux-amd64" "$PKGDIR/bin/jq"; chmod +x "$PKGDIR/bin/jq"' "bin/jq"
-    build_pkg "ripgrep" "14.1.1" "https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-musl.tar.gz" \
-        'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/ripgrep-14.1.1-x86_64-unknown-linux-musl/rg" "$PKGDIR/bin/rg"; chmod +x "$PKGDIR/bin/rg"' "bin/rg"
-    build_pkg "fd" "10.2.0" "https://github.com/sharkdp/fd/releases/download/v10.2.0/fd-v10.2.0-x86_64-unknown-linux-musl.tar.gz" \
-        'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/fd-v10.2.0-x86_64-unknown-linux-musl/fd" "$PKGDIR/bin/fd"; chmod +x "$PKGDIR/bin/fd"' "bin/fd"
-}
+build_pkg "jq" "1.7.1" "https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/jq-linux-amd64" "$PKGDIR/bin/jq"; chmod +x "$PKGDIR/bin/jq"' "bin/jq"
+build_pkg "ripgrep" "14.1.1" "https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ripgrep-14.1.1-x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/ripgrep-14.1.1-x86_64-unknown-linux-musl/rg" "$PKGDIR/bin/rg"; chmod +x "$PKGDIR/bin/rg"' "bin/rg"
+build_pkg "fd" "10.2.0" "https://github.com/sharkdp/fd/releases/download/v10.2.0/fd-v10.2.0-x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/fd-v10.2.0-x86_64-unknown-linux-musl/fd" "$PKGDIR/bin/fd"; chmod +x "$PKGDIR/bin/fd"' "bin/fd"
+build_pkg "bat" "0.24.0" "https://github.com/sharkdp/bat/releases/download/v0.24.0/bat-v0.24.0-x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/bat-v0.24.0-x86_64-unknown-linux-musl/bat" "$PKGDIR/bin/bat"; chmod +x "$PKGDIR/bin/bat"' "bin/bat"
+build_pkg "eza" "0.20.14" "https://github.com/eza-community/eza/releases/download/v0.20.14/eza_x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/eza" "$PKGDIR/bin/eza"; chmod +x "$PKGDIR/bin/eza"' "bin/eza"
+build_pkg "delta" "0.18.2" "https://github.com/dandavison/delta/releases/download/0.18.2/delta-0.18.2-x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/delta-0.18.2-x86_64-unknown-linux-musl/delta" "$PKGDIR/bin/delta"; chmod +x "$PKGDIR/bin/delta"' "bin/delta"
+build_pkg "zoxide" "0.9.6" "https://github.com/ajeetdsouza/zoxide/releases/download/v0.9.6/zoxide-0.9.6-x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/zoxide" "$PKGDIR/bin/zoxide"; chmod +x "$PKGDIR/bin/zoxide"' "bin/zoxide"
+build_pkg "fzf" "0.57.0" "https://github.com/junegunn/fzf/releases/download/v0.57.0/fzf-0.57.0-linux_amd64.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/fzf" "$PKGDIR/bin/fzf"; chmod +x "$PKGDIR/bin/fzf"' "bin/fzf"
+build_pkg "dust" "1.1.1" "https://github.com/bootandy/dust/releases/download/v1.1.1/dust-v1.1.1-x86_64-unknown-linux-musl.tar.gz" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/dust-v1.1.1-x86_64-unknown-linux-musl/dust" "$PKGDIR/bin/dust"; chmod +x "$PKGDIR/bin/dust"' "bin/dust"
+
+# Neovim (self-contained release)
+build_pkg "neovim" "0.10.4" "https://github.com/neovim/neovim/releases/download/v0.10.4/nvim-linux-x86_64.tar.gz" \
+    'mkdir -p "$PKGDIR/bin" "$PKGDIR/lib" "$PKGDIR/share"; cp "$SRCDIR/nvim-linux-x86_64/bin/nvim" "$PKGDIR/bin/nvim"; chmod +x "$PKGDIR/bin/nvim"; cp -a "$SRCDIR/nvim-linux-x86_64/lib/"* "$PKGDIR/lib/" 2>/dev/null || true; cp -a "$SRCDIR/nvim-linux-x86_64/share/"* "$PKGDIR/share/" 2>/dev/null || true' "bin/nvim"
+
+# curl (static binary from moparisthebest)
+build_pkg "curl" "8.11.1" "https://github.com/moparisthebest/static-curl/releases/download/v8.11.1/curl-amd64" \
+    'mkdir -p "$PKGDIR/bin"; cp "$SRCDIR/curl-amd64" "$PKGDIR/bin/curl"; chmod +x "$PKGDIR/bin/curl"' "bin/curl"
 
 echo "    Packages: $(ls "$STORE" 2>/dev/null | wc -l)"
 
