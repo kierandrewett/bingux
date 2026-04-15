@@ -1,0 +1,27 @@
+pkgscope="bingux"
+pkgname="screen-src"
+pkgver="4.9.1"
+pkgarch="x86_64-linux"
+pkgdesc="GNU Screen — terminal multiplexer"
+license="GPL-3.0"
+depends=("ncurses-6.5")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/screen")
+source=("https://ftpmirror.gnu.org/screen/screen-4.9.1.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/screen-4.9.1"
+    NCURSES="/tmp/bingux-bootstrap-store/ncurses-6.5-x86_64-linux"
+    CC=bingux-gcc ./configure --prefix=/ --disable-pam \
+        CFLAGS="-static -I$NCURSES/include -I$NCURSES/include/ncursesw" \
+        LDFLAGS="-static -L$NCURSES/lib -Wl,--allow-multiple-definition" \
+        LIBS="-lncursesw" \
+        2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -L$NCURSES/lib -lncursesw -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/screen-4.9.1"
+    mkdir -p "$PKGDIR/bin"
+    cp screen "$PKGDIR/bin/screen"
+    chmod +x "$PKGDIR/bin/screen"
+}
