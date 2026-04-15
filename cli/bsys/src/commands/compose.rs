@@ -164,7 +164,54 @@ pub fn history() {
 }
 
 pub fn diff(gen1: u64, gen2: u64) {
-    output::status("diff", &format!("would diff generations {gen1} and {gen2}"));
+    let profiles = default_profiles_root();
+    let gen1_dir = profiles.join(gen1.to_string());
+    let gen2_dir = profiles.join(gen2.to_string());
+
+    if !gen1_dir.exists() {
+        output::status("error", &format!("generation {gen1} not found"));
+        return;
+    }
+    if !gen2_dir.exists() {
+        output::status("error", &format!("generation {gen2} not found"));
+        return;
+    }
+
+    // Read generation.toml from each
+    let gen1_meta = std::fs::read_to_string(gen1_dir.join("generation.toml")).unwrap_or_default();
+    let gen2_meta = std::fs::read_to_string(gen2_dir.join("generation.toml")).unwrap_or_default();
+
+    // Extract package lists
+    let gen1_pkgs: std::collections::HashSet<String> = gen1_meta.lines()
+        .filter(|l| l.starts_with("id = \""))
+        .map(|l| l.trim_start_matches("id = \"").trim_end_matches('"').to_string())
+        .collect();
+    let gen2_pkgs: std::collections::HashSet<String> = gen2_meta.lines()
+        .filter(|l| l.starts_with("id = \""))
+        .map(|l| l.trim_start_matches("id = \"").trim_end_matches('"').to_string())
+        .collect();
+
+    output::status("diff", &format!("generation {gen1} → {gen2}"));
+
+    // Added packages
+    for pkg in gen2_pkgs.difference(&gen1_pkgs) {
+        output::status("+", pkg);
+    }
+
+    // Removed packages
+    for pkg in gen1_pkgs.difference(&gen2_pkgs) {
+        output::status("-", pkg);
+    }
+
+    // Unchanged
+    let unchanged = gen1_pkgs.intersection(&gen2_pkgs).count();
+    if unchanged > 0 {
+        output::status("=", &format!("{unchanged} packages unchanged"));
+    }
+
+    if gen1_pkgs == gen2_pkgs {
+        output::status("diff", "no package changes between generations");
+    }
 }
 
 pub fn upgrade(package: Option<&str>, all: bool) {
