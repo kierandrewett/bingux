@@ -127,13 +127,26 @@ build() {
         scripts/config --enable CONFIG_VIRTIO_MMIO
     fi
 
+    # ── GCC 15 compatibility patches ──────────────────────────────────
+    # GCC 15 defaults to C23 where bool/true/false are keywords.
+    # The EFI stub and compressed boot stages override KBUILD_CFLAGS
+    # without -std=gnu11, causing build failures. Patch them.
+    if [ "$($CC -dumpversion 2>/dev/null | cut -d. -f1)" -ge 15 ] 2>/dev/null; then
+        echo "==> Applying GCC 15 compatibility fixes"
+        sed -i 's/^KBUILD_CFLAGS := -m\$(BITS)/KBUILD_CFLAGS := -std=gnu11 -m$(BITS)/' \
+            arch/x86/boot/compressed/Makefile
+        sed -i 's/+= -m\$(BITS) -D__KERNEL__/+= -std=gnu11 -m$(BITS) -D__KERNEL__/' \
+            drivers/firmware/efi/libstub/Makefile
+    fi
+
     make olddefconfig ARCH=x86_64
 
+    # KCFLAGS="-Wno-error" handles remaining GCC 15 -Werror promotions
     echo "==> Building bzImage with $(nproc) jobs..."
-    make -j$(nproc) ARCH=x86_64 CC="$CC" bzImage
+    make -j$(nproc) ARCH=x86_64 CC="$CC" KCFLAGS="-Wno-error" bzImage
 
     echo "==> Building modules..."
-    make -j$(nproc) ARCH=x86_64 CC="$CC" modules
+    make -j$(nproc) ARCH=x86_64 CC="$CC" KCFLAGS="-Wno-error" modules
 }
 
 package() {

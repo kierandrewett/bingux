@@ -1,0 +1,41 @@
+From: Bingux <bingux@localhost>
+Subject: [PATCH] x86: add -std=gnu11 to EFI stub and compressed boot Makefiles for GCC 15
+
+GCC 15 defaults to C23, where bool/true/false are reserved keywords.
+The EFI stub and compressed boot stage override KBUILD_CFLAGS without
+inheriting -std=gnu11 from the main kernel build, causing build failures
+with GCC 15 on kernel 6.12.x.
+
+This patch adds -std=gnu11 to both locations.
+
+---
+ arch/x86/boot/compressed/Makefile          | 2 +-
+ drivers/firmware/efi/libstub/Makefile       | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/x86/boot/compressed/Makefile b/arch/x86/boot/compressed/Makefile
+index abcdef..123456 100644
+--- a/arch/x86/boot/compressed/Makefile
++++ b/arch/x86/boot/compressed/Makefile
+@@ -24,7 +24,7 @@
+ # case of cross compiling, as it has the '--target=' flag, which is needed to
+ # avoid errors with '-march=i386', and future flags may depend on the target to
+ # be valid.
+-KBUILD_CFLAGS := -m$(BITS) -O2 $(CLANG_FLAGS)
++KBUILD_CFLAGS := -std=gnu11 -m$(BITS) -O2 $(CLANG_FLAGS)
+ KBUILD_CFLAGS += -fno-strict-aliasing -fPIE
+ KBUILD_CFLAGS += -Wundef
+ KBUILD_CFLAGS += -DDISABLE_BRANCH_PROFILING
+diff --git a/drivers/firmware/efi/libstub/Makefile b/drivers/firmware/efi/libstub/Makefile
+index abcdef..654321 100644
+--- a/drivers/firmware/efi/libstub/Makefile
++++ b/drivers/firmware/efi/libstub/Makefile
+@@ -11,7 +11,7 @@ cflags-y			:= $(KBUILD_CFLAGS)
+
+ cflags-$(CONFIG_X86_32)		:= -march=i386
+ cflags-$(CONFIG_X86_64)		:= -mcmodel=small
+-cflags-$(CONFIG_X86)		+= -m$(BITS) -D__KERNEL__ \
++cflags-$(CONFIG_X86)		+= -std=gnu11 -m$(BITS) -D__KERNEL__ \
+ 				   -fPIC -fno-strict-aliasing -mno-red-zone \
+ 				   -mno-mmx -mno-sse -fshort-wchar \
+ 				   -Wno-pointer-sign \
