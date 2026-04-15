@@ -120,6 +120,11 @@ if grep -q "init.systemd" /proc/cmdline 2>/dev/null && [ -f "$SYSTEMD_BIN" ]; th
     mount -t cgroup2 cgroup2 /sys/fs/cgroup 2>/dev/null || true
     mkdir -p /run/systemd /var/log/journal /var/run /var/tmp /etc/systemd /run/dbus
 
+    # Ensure serial console device exists
+    [ -c /dev/ttyS0 ] || mknod /dev/ttyS0 c 4 64 2>/dev/null || true
+    [ -c /dev/console ] || mknod /dev/console c 5 1 2>/dev/null || true
+    [ -c /dev/null ] || mknod /dev/null c 1 3 2>/dev/null || true
+
     # Symlink systemd tools into /usr/bin so unit files can find them
     SYSD="/system/packages/systemd-src-256.11-x86_64-linux"
     mkdir -p /usr/bin /usr/sbin
