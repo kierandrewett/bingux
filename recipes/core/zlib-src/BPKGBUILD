@@ -1,0 +1,27 @@
+pkgscope="bingux"
+pkgname="zlib"
+pkgver="1.3.1"
+pkgarch="x86_64-linux"
+pkgdesc="zlib compression library — compiled from source"
+license="Zlib"
+
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+
+exports=("lib/libz.a" "lib/libz.so.1")
+
+source=("https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/zlib-1.3.1"
+    CC=bingux-gcc ./configure --prefix=/ --static 2>/dev/null
+    make -j1 CC=bingux-gcc AR="ar" RANLIB="ranlib" 2>&1 | tail -3
+}
+
+package() {
+    cd "$SRCDIR/zlib-1.3.1"
+    mkdir -p "$PKGDIR/lib" "$PKGDIR/include"
+    cp libz.a "$PKGDIR/lib/"
+    cp zlib.h zconf.h "$PKGDIR/include/"
+}

@@ -54,7 +54,7 @@ All 11 sprints from the original plan are implemented. See git log for details.
 - [x] Test: data persists across reboots, package still there
 
 ### Phase E: Improve bsys build for real-world packages
-- [ ] Download and compile `zlib` from source (real library dependency)
+- [x] Download and compile `zlib` from source (1.3.1) from source (real library dependency)
 - [ ] Download and compile `ncurses` from source
 - [ ] Download and compile `readline` from source
 - [ ] Build `bash` from source using zlib + readline + ncurses
