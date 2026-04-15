@@ -430,13 +430,13 @@ if ! mksquashfs -help 2>&1 | grep -q zstd; then
     COMP="gzip"
 fi
 
+SQFS_ARGS=(-comp "$COMP" -b 256K -noappend -no-exports -no-recovery)
+if [ "$COMP" = "zstd" ]; then
+    SQFS_ARGS+=(-Xcompression-level 19)
+fi
+
 mksquashfs "$ROOTFS" "$ISO_ROOT/bingux/root.sqfs" \
-    -comp "$COMP" \
-    -b 256K \
-    -Xcompression-level 19 \
-    -noappend \
-    -no-exports \
-    -no-recovery \
+    "${SQFS_ARGS[@]}" \
     2>&1 | tail -3
 
 echo "    root.sqfs: $(du -h "$ISO_ROOT/bingux/root.sqfs" | cut -f1) ($COMP compressed)"

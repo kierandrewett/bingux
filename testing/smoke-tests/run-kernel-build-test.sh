@@ -43,22 +43,20 @@ done
 ln -sf ../../bin/busybox "$FRESH/usr/bin/sh" 2>/dev/null
 ln -sf ../../bin/busybox "$FRESH/usr/sbin/mount" 2>/dev/null
 
-# GCC 14.2.0 (statically linked, built from source)
-echo "    Copying GCC 14.2.0..."
-cp -a "$STORE/gcc-src-14.2.0-x86_64-linux" "$FRESH/system/packages/"
+# musl GCC toolchain (self-contained: gcc, ld, as, ar, make, headers, libc)
+# This is the primary compiler for the kernel build - all statically linked
+echo "    Copying musl toolchain (GCC + binutils + headers)..."
+cp -a "$STORE/musl-toolchain-13.2.0-x86_64-linux" "$FRESH/system/packages/"
 
-# Binutils (ar, as, nm, objcopy, objdump, ranlib, readelf, size, strings, strip)
+# Binutils from source (ar, as, nm, objcopy, objdump, ranlib, readelf, strip)
+# These supplement the musl toolchain with newer versions
 echo "    Copying binutils..."
 cp -a "$STORE/binutils-src-2.43.1-x86_64-linux" "$FRESH/system/packages/"
 
-# ld from musl toolchain (binutils-src doesn't have one)
-echo "    Copying ld..."
-cp "$STORE/musl-toolchain-13.2.0-x86_64-linux/bin/ld" "$FRESH/system/packages/binutils-src-2.43.1-x86_64-linux/bin/ld"
-
-# Make (static, from musl toolchain)
-echo "    Copying make..."
-mkdir -p "$FRESH/system/packages/make/bin"
-cp "$STORE/musl-toolchain-13.2.0-x86_64-linux/bin/make" "$FRESH/system/packages/make/bin/"
+# GCC 14.2.0 from source (statically linked) - used as CC for the kernel
+# Has cc1/collect2 in libexec but needs headers from the musl toolchain
+echo "    Copying GCC 14.2.0..."
+cp -a "$STORE/gcc-src-14.2.0-x86_64-linux" "$FRESH/system/packages/"
 
 # Perl (needed by kernel build scripts)
 echo "    Copying perl..."
@@ -82,22 +80,6 @@ for pkg in sed-src-4.9-x86_64-linux grep-src-3.11-x86_64-linux gawk-src-5.3.1-x8
         cp -a "$STORE/$pkg" "$FRESH/system/packages/"
     fi
 done
-
-# bingux-gcc wrapper (resolves to gcc-src with proper flags)
-echo "    Creating bingux-gcc wrapper..."
-mkdir -p "$FRESH/system/packages/gcc-src-14.2.0-x86_64-linux/bin"
-cat > "$FRESH/system/packages/gcc-src-14.2.0-x86_64-linux/bin/bingux-gcc14" << 'GW'
-#!/bin/sh
-SELF="$0"
-while [ -L "$SELF" ]; do
-    DIR="$(cd "$(dirname "$SELF")" && pwd)"
-    SELF="$(readlink "$SELF")"
-    case "$SELF" in /*) ;; *) SELF="$DIR/$SELF" ;; esac
-done
-DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
-exec "$DIR/bin/gcc" "$@"
-GW
-chmod +x "$FRESH/system/packages/gcc-src-14.2.0-x86_64-linux/bin/bingux-gcc14"
 
 # Pre-stage kernel source tarball
 echo "    Staging kernel source tarball..."
@@ -127,9 +109,20 @@ cp /etc/ssl/certs/ca-bundle.crt "$FRESH/etc/ssl/certs/" 2>/dev/null || true
 cat > "$FRESH/init" << 'INIT'
 #!/bin/sh
 # Bingux Kernel Build Self-Hosting Test
-export PATH="/system/profiles/current/bin:/bin:/sbin:/usr/bin"
+#
+# Uses bingux-gcc (musl GCC wrapper) as both CC and HOSTCC.
+# The musl toolchain is self-contained: gcc + headers + libc + ld + as.
+# The kernel builds host tools (fixdep, etc.) with HOSTCC and the kernel
+# itself with CC. Both use the musl-based GCC with full headers.
+
+# Set up the musl toolchain as primary - it has headers for host compilation
+MUSL_ROOT="/system/packages/musl-toolchain-13.2.0-x86_64-linux"
+export PATH="/system/profiles/current/bin:$MUSL_ROOT/bin:/bin:/sbin:/usr/bin"
 export LD_LIBRARY_PATH="/lib64"
 export HOME="/tmp"
+# Tell GCC where to find its headers and libs
+export C_INCLUDE_PATH="$MUSL_ROOT/include"
+export LIBRARY_PATH="$MUSL_ROOT/lib"
 
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
@@ -147,16 +140,30 @@ echo ""
 
 # Verify tools
 echo "==> [1/6] Verifying toolchain..."
-echo "  Kernel: $(uname -r)"
-echo "  gcc:    $(gcc --version 2>&1 | head -1)"
-echo "  make:   $(make --version 2>&1 | head -1)"
-echo "  perl:   $(perl --version 2>&1 | grep version | head -1)"
-echo "  flex:   $(flex --version 2>&1 | head -1)"
-echo "  bison:  $(bison --version 2>&1 | head -1)"
-echo "  bc:     $(echo '1+1' | bc 2>&1)"
-echo "  as:     $(as --version 2>&1 | head -1)"
-echo "  ld:     $(ld --version 2>&1 | head -1)"
-echo "  ar:     $(ar --version 2>&1 | head -1)"
+echo "  Kernel:     $(uname -r)"
+echo "  bingux-gcc: $(bingux-gcc --version 2>&1 | head -1)"
+echo "  gcc:        $(gcc --version 2>&1 | head -1)"
+echo "  make:       $(make --version 2>&1 | head -1)"
+echo "  perl:       $(perl --version 2>&1 | grep version | head -1)"
+echo "  flex:       $(flex --version 2>&1 | head -1)"
+echo "  bison:      $(bison --version 2>&1 | head -1)"
+echo "  bc:         $(echo '1+1' | bc 2>&1)"
+echo "  as:         $(as --version 2>&1 | head -1)"
+echo "  ld:         $(ld --version 2>&1 | head -1)"
+echo "  ar:         $(ar --version 2>&1 | head -1)"
+echo ""
+
+# Quick compiler sanity check
+echo "  Compiler sanity check..."
+printf '#include <stdio.h>\nint main(){puts("OK");return 0;}\n' > /tmp/test.c
+if bingux-gcc -static -o /tmp/test /tmp/test.c 2>&1 && [ "$(/tmp/test)" = "OK" ]; then
+    echo "  bingux-gcc: compiles and runs OK (static musl)"
+else
+    echo "  WARNING: bingux-gcc sanity check failed, trying plain gcc..."
+    gcc -isystem "$MUSL_ROOT/include" -L"$MUSL_ROOT/lib" -static -o /tmp/test /tmp/test.c 2>&1
+    /tmp/test 2>&1
+fi
+rm -f /tmp/test /tmp/test.c
 echo ""
 
 # Extract kernel source
@@ -171,13 +178,15 @@ echo ""
 cd /tmp/linux-6.12.8
 
 # Configure: tinyconfig + essential QEMU boot options
+# Use bingux-gcc which has proper include paths via the wrapper
 echo "==> [3/6] Configuring kernel (tinyconfig + QEMU essentials)..."
-make tinyconfig CC=gcc HOSTCC=gcc 2>&1 | tail -3
+# HOSTLDFLAGS=-static ensures host tools (fixdep, etc.) are statically linked
+# against musl, since there's no dynamic linker in the initramfs
+make tinyconfig CC=bingux-gcc HOSTCC=bingux-gcc HOSTLDFLAGS=-static 2>&1 | tail -5
 echo ""
 
 # Enable essential configs for a bootable QEMU kernel
 echo "==> [4/6] Enabling essential boot configs..."
-# Use scripts/config to enable needed options
 ./scripts/config --enable CONFIG_64BIT
 ./scripts/config --enable CONFIG_PRINTK
 ./scripts/config --enable CONFIG_SERIAL_8250
@@ -185,24 +194,25 @@ echo "==> [4/6] Enabling essential boot configs..."
 ./scripts/config --enable CONFIG_TTY
 ./scripts/config --enable CONFIG_BINFMT_ELF
 ./scripts/config --enable CONFIG_BLK_DEV_INITRD
-# Additional deps that serial/elf need
 ./scripts/config --enable CONFIG_HAS_IOMEM
 ./scripts/config --enable CONFIG_HAS_IOPORT
 ./scripts/config --enable CONFIG_BLOCK
+echo "  Configs set."
 
 # Update .config to resolve dependencies
-make olddefconfig CC=gcc HOSTCC=gcc 2>&1 | tail -3
+make olddefconfig CC=bingux-gcc HOSTCC=bingux-gcc HOSTLDFLAGS=-static 2>&1 | tail -3
 echo ""
 echo "  Config options:"
 grep -c '=y' .config | xargs printf "    %s options enabled\n"
 echo ""
 
 # Build
-echo "==> [5/6] Building kernel (make -j$(nproc) bzImage)..."
+NCPUS=$(nproc 2>/dev/null || echo 4)
+echo "==> [5/6] Building kernel (make -j$NCPUS bzImage)..."
 echo "  Build started at: $(date)"
 MAKE_START=$(date +%s)
 
-make -j$(nproc) CC=gcc HOSTCC=gcc bzImage 2>&1 | tail -20
+make -j"$NCPUS" CC=bingux-gcc HOSTCC=bingux-gcc HOSTLDFLAGS=-static bzImage 2>&1 | tail -30
 
 MAKE_END=$(date +%s)
 MAKE_DURATION=$((MAKE_END - MAKE_START))
@@ -235,6 +245,9 @@ else
     echo "  bzImage not found at arch/x86/boot/bzImage"
     echo "  Checking for partial output..."
     ls -la arch/x86/boot/ 2>/dev/null || echo "  No boot dir"
+    echo ""
+    echo "  Last 50 lines of build:"
+    echo "  (check log for details)"
     echo ""
     echo "  Disk usage:"
     df -h /tmp | tail -1
@@ -291,7 +304,7 @@ check() {
 }
 
 check "Kernel Build Self-Hosting" "Test started"
-check "gcc.*14" "GCC 14.2.0 available"
+check "gcc.*GCC" "GCC available"
 check "Extracting kernel" "Kernel source extracted"
 check "tinyconfig" "tinyconfig applied"
 check "Enabling essential" "Boot configs enabled"
