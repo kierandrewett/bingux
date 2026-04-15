@@ -1,0 +1,29 @@
+pkgscope="bingux"
+pkgname="gcc-glibc"
+pkgver="14.2.0"
+pkgarch="x86_64-linux"
+pkgdesc="GCC 14.2.0 with glibc + libstdc++ — full C/C++ toolchain"
+license="GPL-3.0"
+depends=("glibc-src-2.39" "gmp-src-6.3.0" "mpfr-src-4.2.1" "mpc-src-1.3.1")
+makedepends=("gcc-src-14.2.0")
+exports=("bin/gcc" "bin/g++" "bin/cpp" "lib64/libstdc++.so.6" "lib64/libgcc_s.so.1")
+source=("https://ftpmirror.gnu.org/gcc/gcc-14.2.0/gcc-14.2.0.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR"
+    mkdir -p build && cd build
+    GLIBC="$BPKG_STORE_ROOT/glibc-src-2.39-x86_64-linux"
+    GMP="$BPKG_STORE_ROOT/gmp-src-6.3.0-x86_64-linux"
+    MPFR="$BPKG_STORE_ROOT/mpfr-src-4.2.1-x86_64-linux"
+    MPC="$BPKG_STORE_ROOT/mpc-src-1.3.1-x86_64-linux"
+    ../gcc-14.2.0/configure --prefix=/ \
+        --enable-languages=c,c++ --disable-multilib --disable-bootstrap \
+        --enable-shared --enable-threads=posix \
+        --with-sysroot="$GLIBC" \
+        --with-gmp="$GMP" --with-mpfr="$MPFR" --with-mpc="$MPC" 2>/dev/null
+    make -j$(nproc) 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/build"
+    make DESTDIR="$PKGDIR" install 2>&1 | tail -3
+}
