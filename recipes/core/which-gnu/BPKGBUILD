@@ -1,0 +1,22 @@
+pkgscope="bingux"
+pkgname="which-gnu"
+pkgver="2.21"
+pkgarch="x86_64-linux"
+pkgdesc="GNU which — compiled from source"
+license="GPL-3.0"
+depends=()
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/which")
+source=("https://ftpmirror.gnu.org/which/which-2.21.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/which-2.21"
+    CC=bingux-gcc ./configure --prefix=/ CFLAGS="-static" LDFLAGS="-static" 2>/dev/null
+    make -j1 CC=bingux-gcc 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/which-2.21"
+    mkdir -p "$PKGDIR/bin"
+    cp which "$PKGDIR/bin/which"
+    chmod +x "$PKGDIR/bin/which"
+}
