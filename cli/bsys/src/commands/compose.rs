@@ -38,7 +38,7 @@ pub fn apply() {
                 config.system.timezone, config.system.keymap
             ));
 
-            // Show what /etc/ files would be generated.
+            // Generate /etc/ configuration files from the system config.
             let etc_root = std::env::var("BSYS_ETC_ROOT")
                 .map(PathBuf::from)
                 .unwrap_or_else(|_| PathBuf::from("/etc"));
@@ -46,8 +46,9 @@ pub fn apply() {
             match etc_gen.generate_all(&config) {
                 Ok(files) => {
                     for f in &files {
-                        output::status("etc", &format!("would write {}", f.path.display()));
+                        output::status("etc", &format!("generated {}", f.path.display()));
                     }
+                    output::status("etc", &format!("{} files written", files.len()));
                 }
                 Err(e) => {
                     output::status("error", &format!("etc generation failed: {e}"));
