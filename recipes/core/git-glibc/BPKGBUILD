@@ -1,0 +1,99 @@
+pkgscope="bingux"
+pkgname="git-glibc"
+pkgver="2.47.1"
+pkgarch="x86_64-linux"
+pkgdesc="Git 2.47.1 — dynamically linked against glibc 2.39, with OpenSSL/curl/PCRE2"
+license="GPL-2.0"
+
+depends=("glibc-src-2.39")
+makedepends=("gcc-glibc-14.2.0" "openssl-src-3.4.1" "curl-src-8.11.1" "zlib-1.3.1" "pcre2-src-10.44" "expat-src-2.6.4")
+
+exports=("bin/git" "bin/scalar")
+
+source=("https://mirrors.edge.kernel.org/pub/software/scm/git/git-2.47.1.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/git-2.47.1"
+
+    GLIBC_PKG="/system/packages/glibc-src-2.39-x86_64-linux"
+    GCC_PKG="/system/packages/gcc-glibc-14.2.0-x86_64-linux"
+    OPENSSL_PKG="/system/packages/openssl-src-3.4.1-x86_64-linux"
+    CURL_PKG="/system/packages/curl-src-8.11.1-x86_64-linux"
+    ZLIB_PKG="/system/packages/zlib-1.3.1-x86_64-linux"
+    PCRE2_PKG="/system/packages/pcre2-src-10.44-x86_64-linux"
+    EXPAT_PKG="/system/packages/expat-src-2.6.4-x86_64-linux"
+    SYSROOT="$BUILDDIR/sysroot"
+
+    # Create sysroot combining glibc + kernel headers
+    mkdir -p "$SYSROOT/usr/include" "$SYSROOT/usr/lib"
+    cp -a "$GLIBC_PKG/include/"* "$SYSROOT/usr/include/"
+    cp -a "$GLIBC_PKG/lib/"* "$SYSROOT/usr/lib/"
+    ln -sf lib "$SYSROOT/usr/lib64"
+
+    # Fix libc.so linker script for build-time
+    cat > "$SYSROOT/usr/lib/libc.so" << 'LDSCRIPT'
+/* GNU ld script */
+OUTPUT_FORMAT(elf64-x86-64)
+GROUP ( libc.so.6 libc_nonshared.a  AS_NEEDED ( ld-linux-x86-64.so.2 ) )
+LDSCRIPT
+
+    # Git uses make directly (no autoconf).
+    # Static-link openssl, curl, zlib, pcre2, expat; dynamic-link glibc.
+    make -j"$(nproc)" \
+        CC="$GCC_PKG/bin/gcc --sysroot=$SYSROOT" \
+        CFLAGS="-O2 -I$OPENSSL_PKG/include -I$CURL_PKG/include -I$ZLIB_PKG/include -I$PCRE2_PKG/include -I$EXPAT_PKG/include" \
+        LDFLAGS="-Wl,--dynamic-linker=$GLIBC_PKG/lib/ld-linux-x86-64.so.2 -Wl,-rpath,$GLIBC_PKG/lib -L$OPENSSL_PKG/lib -L$CURL_PKG/lib -L$ZLIB_PKG/lib -L$PCRE2_PKG/lib -L$EXPAT_PKG/lib" \
+        prefix=/ \
+        NO_TCLTK=YesPlease \
+        NO_GETTEXT=YesPlease \
+        NO_PERL=YesPlease \
+        NO_PYTHON=YesPlease \
+        USE_LIBPCRE2=YesPlease \
+        LIBPCREDIR="$PCRE2_PKG" \
+        OPENSSLDIR="$OPENSSL_PKG" \
+        CURLDIR="$CURL_PKG" \
+        CURL_LDFLAGS="-L$CURL_PKG/lib -lcurl -L$OPENSSL_PKG/lib -lssl -lcrypto -L$ZLIB_PKG/lib -lz -lpthread -ldl" \
+        EXTLIBS="-lpcre2-8 -lz -lpthread -ldl" \
+        2>&1 | tail -3
+}
+
+package() {
+    cd "$SRCDIR/git-2.47.1"
+
+    GLIBC_PKG="/system/packages/glibc-src-2.39-x86_64-linux"
+    GCC_PKG="/system/packages/gcc-glibc-14.2.0-x86_64-linux"
+    OPENSSL_PKG="/system/packages/openssl-src-3.4.1-x86_64-linux"
+    CURL_PKG="/system/packages/curl-src-8.11.1-x86_64-linux"
+    ZLIB_PKG="/system/packages/zlib-1.3.1-x86_64-linux"
+    PCRE2_PKG="/system/packages/pcre2-src-10.44-x86_64-linux"
+    EXPAT_PKG="/system/packages/expat-src-2.6.4-x86_64-linux"
+    SYSROOT="$BUILDDIR/sysroot"
+
+    make install DESTDIR="$PKGDIR" \
+        CC="$GCC_PKG/bin/gcc --sysroot=$SYSROOT" \
+        CFLAGS="-O2 -I$OPENSSL_PKG/include -I$CURL_PKG/include -I$ZLIB_PKG/include -I$PCRE2_PKG/include -I$EXPAT_PKG/include" \
+        LDFLAGS="-Wl,--dynamic-linker=$GLIBC_PKG/lib/ld-linux-x86-64.so.2 -Wl,-rpath,$GLIBC_PKG/lib -L$OPENSSL_PKG/lib -L$CURL_PKG/lib -L$ZLIB_PKG/lib -L$PCRE2_PKG/lib -L$EXPAT_PKG/lib" \
+        prefix=/ \
+        NO_TCLTK=YesPlease \
+        NO_GETTEXT=YesPlease \
+        NO_PERL=YesPlease \
+        NO_PYTHON=YesPlease \
+        USE_LIBPCRE2=YesPlease \
+        LIBPCREDIR="$PCRE2_PKG" \
+        OPENSSLDIR="$OPENSSL_PKG" \
+        CURLDIR="$CURL_PKG" \
+        CURL_LDFLAGS="-L$CURL_PKG/lib -lcurl -L$OPENSSL_PKG/lib -lssl -lcrypto -L$ZLIB_PKG/lib -lz -lpthread -ldl" \
+        EXTLIBS="-lpcre2-8 -lz -lpthread -ldl" \
+        2>&1 | tail -3
+
+    # Patchelf all ELF binaries
+    PATCHELF="/system/packages/patchelf-0.18.0-x86_64-linux/bin/patchelf"
+    find "$PKGDIR" -type f -executable | while read bin; do
+        if file "$bin" | grep -q "ELF.*executable"; then
+            $PATCHELF --set-interpreter "$GLIBC_PKG/lib/ld-linux-x86-64.so.2" \
+                      --set-rpath "$GLIBC_PKG/lib" \
+                      "$bin" 2>/dev/null || true
+        fi
+    done
+}

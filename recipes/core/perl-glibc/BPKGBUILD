@@ -1,0 +1,84 @@
+pkgscope="bingux"
+pkgname="perl-glibc"
+pkgver="5.40.0"
+pkgarch="x86_64-linux"
+pkgdesc="Perl 5.40.0 — dynamically linked against glibc 2.39"
+license="Artistic-2.0"
+
+depends=("glibc-src-2.39")
+makedepends=("gcc-glibc-14.2.0")
+
+exports=("bin/perl" "bin/cpan" "bin/perldoc" "bin/json_pp")
+
+source=("https://www.cpan.org/src/5.0/perl-5.40.0.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/perl-5.40.0"
+
+    GLIBC_PKG="/system/packages/glibc-src-2.39-x86_64-linux"
+    GCC_PKG="/system/packages/gcc-glibc-14.2.0-x86_64-linux"
+    SYSROOT="$BUILDDIR/sysroot"
+
+    # Create sysroot combining glibc + kernel headers
+    mkdir -p "$SYSROOT/usr/include" "$SYSROOT/usr/lib"
+    cp -a "$GLIBC_PKG/include/"* "$SYSROOT/usr/include/"
+    cp -a "$GLIBC_PKG/lib/"* "$SYSROOT/usr/lib/"
+    ln -sf lib "$SYSROOT/usr/lib64"
+
+    # Fix libc.so linker script for build-time
+    cat > "$SYSROOT/usr/lib/libc.so" << 'LDSCRIPT'
+/* GNU ld script */
+OUTPUT_FORMAT(elf64-x86-64)
+GROUP ( libc.so.6 libc_nonshared.a  AS_NEEDED ( ld-linux-x86-64.so.2 ) )
+LDSCRIPT
+
+    # Perl's Configure uses -lcrypt by default, but glibc 2.39 removed libcrypt
+    # (moved to libxcrypt). Disable crypt and locale to avoid build issues.
+    ./Configure -des \
+        -Dprefix=/ \
+        -Dcc="$GCC_PKG/bin/gcc --sysroot=$SYSROOT" \
+        -Dccflags="-O2 -DNO_LOCALE" \
+        -Dldflags="-Wl,--dynamic-linker=$GLIBC_PKG/lib/ld-linux-x86-64.so.2 -Wl,-rpath,$GLIBC_PKG/lib" \
+        -Dccdlflags="-Wl,-rpath,$GLIBC_PKG/lib" \
+        -Dlddlflags="-shared -Wl,-rpath,$GLIBC_PKG/lib" \
+        -Dlibs="-lpthread -lm -ldl -lutil" \
+        -Duseshrplib \
+        -Dusedevel \
+        -Dman1dir=none -Dman3dir=none \
+        -Ui_db -Ui_gdbm -Ui_ndbm \
+        -Ud_crypt \
+        -Uuselocale \
+        2>&1 | tail -5
+
+    make -j"$(nproc)" 2>&1 | tail -3
+}
+
+package() {
+    cd "$SRCDIR/perl-5.40.0"
+    make install DESTDIR="$PKGDIR"
+
+    PATCHELF="/system/packages/patchelf-0.18.0-x86_64-linux/bin/patchelf"
+    GLIBC_PKG="/system/packages/glibc-src-2.39-x86_64-linux"
+    COREDIR="$PKGDIR/lib/5.40.0/x86_64-linux/CORE"
+
+    # Patchelf perl binary
+    $PATCHELF --set-interpreter "$GLIBC_PKG/lib/ld-linux-x86-64.so.2" \
+              --set-rpath "$GLIBC_PKG/lib:$COREDIR" \
+              "$PKGDIR/bin/perl5.40.0"
+
+    # Patchelf libperl.so
+    $PATCHELF --set-rpath "$GLIBC_PKG/lib" \
+              "$COREDIR/libperl.so"
+
+    # Patchelf all .so extension modules
+    find "$PKGDIR/lib" -name "*.so" -type f -exec \
+        $PATCHELF --set-rpath "$GLIBC_PKG/lib:$COREDIR" {} \; 2>/dev/null || true
+
+    # Create unversioned symlinks
+    cd "$PKGDIR/bin"
+    for f in *5.40.0; do
+        base="${f%5.40.0}"
+        [ ! -e "$base" ] && ln -sf "$f" "$base"
+    done
+}

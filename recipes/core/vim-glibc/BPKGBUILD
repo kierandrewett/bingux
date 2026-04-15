@@ -1,0 +1,90 @@
+pkgscope="bingux"
+pkgname="vim-glibc"
+pkgver="9.1"
+pkgarch="x86_64-linux"
+pkgdesc="Vim 9.1 — dynamically linked against glibc 2.39"
+license="Vim"
+
+depends=("glibc-src-2.39" "ncurses-6.5")
+makedepends=("gcc-glibc-14.2.0")
+
+exports=("bin/vim" "bin/vi" "bin/view" "bin/xxd")
+
+source=("https://github.com/vim/vim/archive/refs/tags/v9.1.0000.tar.gz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/vim-9.1.0000"
+
+    GLIBC_PKG="/system/packages/glibc-src-2.39-x86_64-linux"
+    GCC_PKG="/system/packages/gcc-glibc-14.2.0-x86_64-linux"
+    NCURSES_PKG="/system/packages/ncurses-6.5-x86_64-linux"
+    SYSROOT="$BUILDDIR/sysroot"
+
+    # Create sysroot combining glibc + kernel headers
+    mkdir -p "$SYSROOT/usr/include" "$SYSROOT/usr/lib"
+    cp -a "$GLIBC_PKG/include/"* "$SYSROOT/usr/include/"
+    cp -a "$GLIBC_PKG/lib/"* "$SYSROOT/usr/lib/"
+    ln -sf lib "$SYSROOT/usr/lib64"
+
+    # Fix libc.so linker script for build-time
+    cat > "$SYSROOT/usr/lib/libc.so" << 'LDSCRIPT'
+/* GNU ld script */
+OUTPUT_FORMAT(elf64-x86-64)
+GROUP ( libc.so.6 libc_nonshared.a  AS_NEEDED ( ld-linux-x86-64.so.2 ) )
+LDSCRIPT
+
+    export CC="$GCC_PKG/bin/gcc --sysroot=$SYSROOT"
+    export CFLAGS="-O2 -I$NCURSES_PKG/include"
+    export LDFLAGS="-Wl,--dynamic-linker=$GLIBC_PKG/lib/ld-linux-x86-64.so.2 -Wl,-rpath,$GLIBC_PKG/lib -L$NCURSES_PKG/lib -Wl,-rpath,$NCURSES_PKG/lib"
+    export LIBS="-lncursesw -ltinfo"
+    export vim_cv_toupper_broken=no
+    export vim_cv_terminfo=yes
+    export vim_cv_tgetent=zero
+    export vim_cv_getcwd_broken=no
+    export vim_cv_stat_ignores_slash=no
+    export vim_cv_memmove_handles_overlap=yes
+
+    ./configure --prefix=/ \
+        --with-tlib=ncursesw \
+        --enable-multibyte \
+        --disable-gui \
+        --disable-gpm \
+        --disable-sysmouse \
+        --without-x \
+        --disable-nls \
+        --disable-selinux \
+        --disable-acl \
+        2>/dev/null
+
+    # Fix conflicting termcap declarations (ncurses const vs vim non-const)
+    sed -i '/extern.*tgoto/d; /extern.*tgetent/d; /extern.*tgetflag/d; /extern.*tgetnum/d; /extern.*tputs/d; /extern.*tgetstr/d' src/auto/osdef.h
+
+    make -j"$(nproc)" 2>&1 | tail -3
+}
+
+package() {
+    cd "$SRCDIR/vim-9.1.0000"
+    mkdir -p "$PKGDIR/bin" "$PKGDIR/share/vim"
+    cp src/vim "$PKGDIR/bin/vim"
+    cp src/xxd/xxd "$PKGDIR/bin/xxd" 2>/dev/null || true
+    chmod +x "$PKGDIR/bin/"*
+    ln -sf vim "$PKGDIR/bin/vi"
+    ln -sf vim "$PKGDIR/bin/view"
+
+    # Copy runtime files (syntax highlighting, etc.)
+    cp -a runtime/* "$PKGDIR/share/vim/" 2>/dev/null || true
+
+    # Set final PT_INTERP and RUNPATH
+    PATCHELF="/system/packages/patchelf-0.18.0-x86_64-linux/bin/patchelf"
+    GLIBC_PKG="/system/packages/glibc-src-2.39-x86_64-linux"
+    NCURSES_PKG="/system/packages/ncurses-6.5-x86_64-linux"
+    $PATCHELF --set-interpreter "$GLIBC_PKG/lib/ld-linux-x86-64.so.2" \
+              --set-rpath "$GLIBC_PKG/lib:$NCURSES_PKG/lib" \
+              "$PKGDIR/bin/vim"
+    if [ -f "$PKGDIR/bin/xxd" ]; then
+        $PATCHELF --set-interpreter "$GLIBC_PKG/lib/ld-linux-x86-64.so.2" \
+                  --set-rpath "$GLIBC_PKG/lib" \
+                  "$PKGDIR/bin/xxd"
+    fi
+}
