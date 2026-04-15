@@ -31,10 +31,14 @@ MODULE_AUTHOR("Bingux Project");
 MODULE_DESCRIPTION("Hide FHS compatibility dirs from ls /");
 MODULE_VERSION("1.0");
 
-/* Directories to hide from root listing */
+/* Directories to hide from root listing.
+ * These are FHS compatibility symlinks — they work but don't
+ * appear in ls /. The visible root is: dev proc sys system users
+ */
 static const char *hidden_names[] = {
 	"bin", "sbin", "lib", "lib64", "usr", "opt",
-	"home", "var", "mnt", "media", "srv",
+	"etc", "home", "root", "var", "run", "tmp",
+	"mnt", "media", "srv", "boot", "init",
 	NULL
 };
 

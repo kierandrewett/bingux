@@ -33,27 +33,41 @@ impl SystemPaths {
     /// Recipe repository (git-managed).
     pub const RECIPES: &str = "/system/recipes";
 
-    /// Runtime state: package database, build locks, per-service state dirs.
+    // ── /system/state/ ───────────────────────────────────────────
+
+    /// Root of all system state.
     pub const STATE: &str = "/system/state";
 
+    /// Persistent state — survives reboots (package DB, build locks).
+    pub const STATE_PERSISTENT: &str = "/system/state/persistent";
+
     /// SQLite package database.
-    pub const DB: &str = "/system/state/db.sqlite";
+    pub const DB: &str = "/system/state/persistent/db.sqlite";
 
     /// Build lock directory.
-    pub const LOCKS: &str = "/system/state/locks";
+    pub const LOCKS: &str = "/system/state/persistent/locks";
+
+    /// Ephemeral state — tmpfs, cleared on reboot (sockets, PIDs, runtime).
+    pub const STATE_EPHEMERAL: &str = "/system/state/ephemeral";
+
+    /// Bingux daemon runtime (sockets, PID files).
+    pub const STATE_EPHEMERAL_BINGUX: &str = "/system/state/ephemeral/bingux";
+
+    /// System volatile package state (cleared on reboot).
+    pub const VOLATILE_TOML: &str = "/system/state/ephemeral/bingux/volatile.toml";
+
+    // ── /system/boot/ and /system/modules/ ─────────────────────
+
+    /// Kernel and initramfs.
+    pub const BOOT: &str = "/system/boot";
+
+    /// Kernel modules and firmware.
+    pub const MODULES: &str = "/system/modules";
 
     // ── /users/ (persistent, per-user) ─────────────────────────
 
     /// Top-level user home directories.
     pub const USERS: &str = "/users";
-
-    // ── Ephemeral (regenerated on boot) ────────────────────────
-
-    /// Volatile runtime directory (tmpfs).
-    pub const RUN: &str = "/run/bingux";
-
-    /// System volatile package state (cleared on reboot).
-    pub const RUN_SYSTEM_VOLATILE: &str = "/run/bingux/system/volatile.toml";
 
     /// Per-package metadata directory name inside each package.
     pub const BPKG_META_DIR: &str = ".bpkg";
@@ -89,7 +103,7 @@ pub struct UserPaths {
     pub permissions: PathBuf,
     /// Per-package sandboxed home directories: `~/.config/bingux/state/`
     pub state: PathBuf,
-    /// Volatile user state (cleared on logout): `/run/bingux/user/<uid>/`
+    /// Volatile user state (cleared on reboot): `/system/state/ephemeral/user/<uid>/`
     pub run_volatile: PathBuf,
 }
 
@@ -106,7 +120,9 @@ impl UserPaths {
             profile_current: bingux_config.join("profiles/current"),
             permissions: bingux_config.join("permissions"),
             state: bingux_config.join("state"),
-            run_volatile: PathBuf::from("/run/bingux/user").join(uid.to_string()),
+            run_volatile: PathBuf::from(SystemPaths::STATE_EPHEMERAL)
+                .join("user")
+                .join(uid.to_string()),
             home,
             bingux_config,
         }
@@ -160,7 +176,7 @@ mod tests {
         );
         assert_eq!(
             paths.run_volatile,
-            PathBuf::from("/run/bingux/user/1000")
+            PathBuf::from("/system/state/ephemeral/user/1000")
         );
     }
 
