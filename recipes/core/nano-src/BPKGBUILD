@@ -1,0 +1,27 @@
+pkgscope="bingux"
+pkgname="nano-src"
+pkgver="8.3"
+pkgarch="x86_64-linux"
+pkgdesc="GNU nano — text editor, compiled from source"
+license="GPL-3.0"
+depends=("ncurses-6.5")
+makedepends=("musl-toolchain-11.2.1")
+exports=("bin/nano")
+source=("https://ftpmirror.gnu.org/nano/nano-8.3.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/nano-8.3"
+    NCURSES="/tmp/bingux-bootstrap-store/ncurses-6.5-x86_64-linux"
+    CC=bingux-gcc ./configure --prefix=/ --disable-nls --disable-utf8 \
+        --disable-browser --disable-speller \
+        CFLAGS="-static -I$NCURSES/include -I$NCURSES/include/ncursesw" \
+        LDFLAGS="-static -L$NCURSES/lib -Wl,--allow-multiple-definition" \
+        LIBS="-lncursesw" 2>/dev/null
+    make -j1 CC=bingux-gcc LDFLAGS="-static -L$NCURSES/lib -lncursesw -Wl,--allow-multiple-definition" 2>&1 | tail -3
+}
+package() {
+    cd "$SRCDIR/nano-8.3"
+    mkdir -p "$PKGDIR/bin"
+    cp src/nano "$PKGDIR/bin/nano"
+    chmod +x "$PKGDIR/bin/nano"
+}
