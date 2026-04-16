@@ -1,0 +1,16 @@
+pkgscope="bingux"
+pkgname="xkeyboard-config"
+pkgver="2.43"
+pkgarch="x86_64-linux"
+pkgdesc="XKB keyboard layout data"
+license="MIT"
+depends=()
+makedepends=()
+exports=("usr/share/X11/xkb/")
+source=()
+sha256sums=()
+build() { true; }
+package() {
+    mkdir -p "$PKGDIR/usr/share/X11"
+    cp -rL /usr/share/X11/xkb "$PKGDIR/usr/share/X11/"
+}

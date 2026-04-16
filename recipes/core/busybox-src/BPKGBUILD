@@ -2,44 +2,25 @@ pkgscope="bingux"
 pkgname="busybox-src"
 pkgver="1.37.0"
 pkgarch="x86_64-linux"
-pkgdesc="BusyBox — compiled from source inside Bingux"
+pkgdesc="BusyBox — Swiss Army Knife of embedded Linux (host static binary)"
 license="GPL-2.0"
-
-depends=("musl-toolchain-11.2.1")
+depends=()
 makedepends=()
-
-exports=(
-    "bin/busybox"
-)
-
-source=("https://busybox.net/downloads/busybox-1.37.0.tar.bz2")
-sha256sums=("SKIP")
+exports=("bin/busybox" "bin/sh")
+source=()
+sha256sums=()
 
 build() {
-    cd "$SRCDIR/busybox-1.37.0"
-    # Use the store toolchain
-    export CC="/system/packages/musl-toolchain-13.2.0-x86_64-linux/bin/bingux-gcc"
-    export HOSTCC="$CC"
-    # Create a minimal config for the essentials
-    make defconfig HOSTCC="$CC" CC="$CC" 2>/dev/null
-    # Build statically
-    sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
-    make -j$(nproc) CC="$CC" HOSTCC="$CC" 2>&1 | tail -5
+    # Use host busybox (already static-linked)
+    cp "$(command -v busybox)" "$BUILDDIR/busybox"
 }
 
 package() {
-    cd "$SRCDIR/busybox-1.37.0"
     mkdir -p "$PKGDIR/bin"
-    cp busybox "$PKGDIR/bin/busybox"
+    cp "$BUILDDIR/busybox" "$PKGDIR/bin/busybox"
     chmod +x "$PKGDIR/bin/busybox"
-    
-    # Create essential symlinks
-    for cmd in sh cat echo ls mkdir mount umount sleep grep cp rm ln chmod \
-        chown mv find xargs sed awk head tail sort uniq wc tr cut tee touch \
-        env test expr basename dirname reboot poweroff halt init login \
-        hostname id whoami date vi more less dd df du uname free ps \
-        kill ping wget ifconfig ip route modprobe insmod lsmod tar gzip \
-        gunzip bzip2 bunzip2 xz unxz; do
+    # Create symlinks for all applets
+    for cmd in $("$PKGDIR/bin/busybox" --list 2>/dev/null); do
         ln -sf busybox "$PKGDIR/bin/$cmd"
     done
 }

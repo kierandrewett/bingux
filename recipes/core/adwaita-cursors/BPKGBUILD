@@ -1,0 +1,17 @@
+pkgscope="bingux"
+pkgname="adwaita-cursors"
+pkgver="46.2"
+pkgarch="x86_64-linux"
+pkgdesc="Adwaita cursor theme"
+license="LGPL-3.0"
+depends=()
+makedepends=()
+exports=("share/icons/Adwaita/cursors/")
+source=()
+sha256sums=()
+build() { true; }
+package() {
+    mkdir -p "$PKGDIR/share/icons/Adwaita"
+    cp -a /usr/share/icons/Adwaita/cursors "$PKGDIR/share/icons/Adwaita/"
+    cp /usr/share/icons/Adwaita/index.theme "$PKGDIR/share/icons/Adwaita/" 2>/dev/null || true
+}

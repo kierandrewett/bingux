@@ -1,0 +1,22 @@
+pkgscope="bingux"
+pkgname="fonts-liberation"
+pkgver="2.1.5"
+pkgarch="x86_64-linux"
+pkgdesc="Liberation fonts"
+license="OFL-1.1"
+depends=()
+makedepends=()
+exports=("usr/share/fonts/")
+source=()
+sha256sums=()
+build() {
+    # Copy fonts into builddir
+    mkdir -p "$BUILDDIR/fonts"
+    for fam in liberation-sans-fonts liberation-mono-fonts liberation-serif-fonts; do
+        [ -d "/usr/share/fonts/$fam" ] && cp -a "/usr/share/fonts/$fam" "$BUILDDIR/fonts/"
+    done
+}
+package() {
+    mkdir -p "$PKGDIR/usr/share/fonts"
+    cp -a "$BUILDDIR/fonts/"* "$PKGDIR/usr/share/fonts/" 2>/dev/null || true
+}

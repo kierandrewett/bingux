@@ -155,6 +155,12 @@ ALL_PKGS=(
     libcap-src-2.70 libunistring-src-1.3
     shared-mime-info-src-2.4 iso-codes-src-4.17.0
     hicolor-icon-theme-src-0.17
+    # System utilities
+    busybox-src-1.37.0
+    ca-certificates-2025.04
+    fonts-liberation-2.1.5
+    xkeyboard-config-2.43
+    adwaita-cursors-46.2
 )
 
 for pkg in "${ALL_PKGS[@]}"; do
@@ -239,42 +245,12 @@ if [ ! -d "$PROFILE" ] && [ ! -L "$PROFILE" ]; then
 fi
 log "Profile created at $PROFILE"
 
-# 4d. Post-profile additions
-# TODO: these should become proper bsys packages
+# 4d. Post-profile: host glibc (needed until binaries are patchelf'd)
 PROFILE_DIR=$(readlink -f "$ROOTFS/system/profiles/current" 2>/dev/null || echo "$ROOTFS/system/profiles/1")
-
-# Busybox (static — needed for init shebang + basic utils)
-log "Adding busybox..."
-cp "$(command -v busybox)" "$PROFILE_DIR/bin/busybox"
-chmod +x "$PROFILE_DIR/bin/busybox"
-# Create essential busybox symlinks
-for cmd in sh ash mount umount mkdir ln ls cat echo chmod sleep ip insmod mknod grep sed printf ps kill test head wc find tr; do
-    ln -sf busybox "$PROFILE_DIR/bin/$cmd" 2>/dev/null || true
-done
-log "Adding host runtime data to profile..."
-
-# Host glibc (needed until all binaries are patchelf'd to store glibc)
+log "Adding host glibc to profile..."
 mkdir -p "$PROFILE_DIR/lib64"
 cp /lib64/ld-linux-x86-64.so.2 "$PROFILE_DIR/lib64/" 2>/dev/null || true
 cp /lib64/libc.so.6 "$PROFILE_DIR/lib64/" 2>/dev/null || true
-
-# XKB keyboard data
-if [ -d /usr/share/X11/xkb ]; then
-    mkdir -p "$PROFILE_DIR/usr/share/X11"
-    cp -rL /usr/share/X11/xkb "$PROFILE_DIR/usr/share/X11/"
-fi
-
-# Fonts
-mkdir -p "$PROFILE_DIR/usr/share/fonts"
-cp -a /usr/share/fonts/liberation-sans "$PROFILE_DIR/usr/share/fonts/" 2>/dev/null || true
-cp -a /usr/share/fonts/liberation-mono "$PROFILE_DIR/usr/share/fonts/" 2>/dev/null || true
-
-# Cursor theme
-if [ -d /usr/share/icons/Adwaita/cursors ]; then
-    mkdir -p "$PROFILE_DIR/share/icons/Adwaita"
-    cp -a /usr/share/icons/Adwaita/cursors "$PROFILE_DIR/share/icons/Adwaita/"
-    cp /usr/share/icons/Adwaita/index.theme "$PROFILE_DIR/share/icons/Adwaita/" 2>/dev/null || true
-fi
 
 # SSL certificates
 mkdir -p "$PROFILE_DIR/share/ssl"

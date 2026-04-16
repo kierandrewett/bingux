@@ -1,0 +1,18 @@
+pkgscope="bingux"
+pkgname="ca-certificates"
+pkgver="2025.04"
+pkgarch="x86_64-linux"
+pkgdesc="CA root certificates for TLS"
+license="MPL-2.0"
+depends=()
+makedepends=()
+exports=("share/ssl/ca-bundle.crt")
+source=()
+sha256sums=()
+build() { true; }
+package() {
+    mkdir -p "$PKGDIR/share/ssl"
+    # Copy from host (these are Mozilla's CA bundle)
+    cp /etc/pki/tls/certs/ca-bundle.crt "$PKGDIR/share/ssl/" 2>/dev/null || \
+    cp /etc/ssl/certs/ca-certificates.crt "$PKGDIR/share/ssl/ca-bundle.crt" 2>/dev/null
+}
