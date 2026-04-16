@@ -183,6 +183,9 @@ keymap = "gb"
 keep = [
 $(printf "$KEEP_LIST")
 ]
+
+[services]
+enable = []
 TOML
 
 # 4c. Compose system profile via bsys apply
