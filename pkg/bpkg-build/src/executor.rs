@@ -110,28 +110,74 @@ impl BuildExecutor {
         debug!("executing script in {}", working_dir.display());
 
         let start = Instant::now();
-        // Build PATH: include dependency bin/ directories + parent PATH.
-        let mut path_parts: Vec<String> = Vec::new();
 
-        // Add store dependency bin/ directories to PATH
+        // Collect dependency paths from the package store.
+        let mut path_parts: Vec<String> = Vec::new();
+        let mut pkg_config_parts: Vec<String> = Vec::new();
+        let mut include_parts: Vec<String> = Vec::new();
+        let mut lib_parts: Vec<String> = Vec::new();
+
         let store_root = std::env::var("BPKG_STORE_ROOT").unwrap_or_default();
         if !store_root.is_empty() {
             if let Ok(entries) = std::fs::read_dir(&store_root) {
                 for entry in entries.flatten() {
-                    let bin_dir = entry.path().join("bin");
+                    let pkg = entry.path();
+
+                    // PATH: <store>/<pkg>/bin
+                    let bin_dir = pkg.join("bin");
                     if bin_dir.is_dir() {
                         path_parts.push(bin_dir.to_string_lossy().to_string());
+                    }
+
+                    // PKG_CONFIG_PATH: <store>/<pkg>/lib/pkgconfig + share/pkgconfig
+                    let pc_lib = pkg.join("lib/pkgconfig");
+                    if pc_lib.is_dir() {
+                        pkg_config_parts.push(pc_lib.to_string_lossy().to_string());
+                    }
+                    let pc_lib64 = pkg.join("lib64/pkgconfig");
+                    if pc_lib64.is_dir() {
+                        pkg_config_parts.push(pc_lib64.to_string_lossy().to_string());
+                    }
+                    let pc_share = pkg.join("share/pkgconfig");
+                    if pc_share.is_dir() {
+                        pkg_config_parts.push(pc_share.to_string_lossy().to_string());
+                    }
+
+                    // Include paths for CFLAGS/CPPFLAGS
+                    let inc_dir = pkg.join("include");
+                    if inc_dir.is_dir() {
+                        include_parts.push(pkg.to_string_lossy().to_string());
+                    }
+
+                    // Library paths for LDFLAGS and linker rpath-link
+                    let lib_dir = pkg.join("lib");
+                    if lib_dir.is_dir() {
+                        lib_parts.push(lib_dir.to_string_lossy().to_string());
+                    }
+                    let lib64_dir = pkg.join("lib64");
+                    if lib64_dir.is_dir() {
+                        lib_parts.push(lib64_dir.to_string_lossy().to_string());
                     }
                 }
             }
         }
 
-        // Add parent PATH
+        // Parent PATH goes FIRST — host tools must take priority over
+        // store binaries which may be patchelf'd for a different glibc.
         let parent_path = std::env::var("PATH")
             .unwrap_or_else(|_| "/bin:/usr/bin:/sbin:/usr/sbin".to_string());
-        path_parts.push(parent_path);
+        let mut final_path_parts = vec![parent_path];
+        final_path_parts.extend(path_parts);
 
-        let path = path_parts.join(":");
+        let path = final_path_parts.join(":");
+        let pkg_config_path = pkg_config_parts.join(":");
+
+        // Build LDFLAGS with -L and -Wl,-rpath-link for each lib dir
+        let ldflags: String = lib_parts
+            .iter()
+            .map(|d| format!("-L{d} -Wl,-rpath-link,{d}"))
+            .collect::<Vec<_>>()
+            .join(" ");
 
         // Try bash first, fall back to sh (busybox environments may not have bash)
         let shell = if std::path::Path::new("/bin/bash").exists()
@@ -150,6 +196,9 @@ impl BuildExecutor {
             .env("SRCDIR", &env.srcdir)
             .env("BUILDDIR", &env.builddir)
             .env("PKGDIR", &env.pkgdir)
+            .env("PKG_CONFIG_PATH", &pkg_config_path)
+            .env("PKG_CONFIG_LIBDIR", "") // Don't search host system pkgconfig
+            .env("BPKG_STORE_ROOT", &store_root)
             .output()?;
         let duration = start.elapsed();
 
