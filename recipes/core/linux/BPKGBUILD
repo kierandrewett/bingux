@@ -46,7 +46,7 @@ build() {
     make olddefconfig
 
     # GCC 15 introduces new warnings that older kernels trigger as errors
-    export KCFLAGS="-Wno-error=unterminated-string-initialization -Wno-error=default-const-init-unsafe"
+    export KCFLAGS="-Wno-error=unterminated-string-initialization"
     make -j$(nproc)
 }
 
