@@ -50,12 +50,49 @@ setup_env() {
     export PKG_CONFIG_PATH="$(make_pkgconfig_path)"
     export CFLAGS="-O2 -pipe"
     export CXXFLAGS="-O2 -pipe"
-    export LDFLAGS=""
+    # Ensure store libs are found before host libs for autotools builds
+    local ldpaths=""
+    for d in "$STORE"/glib-src-*/lib "$STORE"/cairo-src-*/lib "$STORE"/pango-src-*/lib \
+             "$STORE"/gdk-pixbuf-src-*/lib "$STORE"/gtk3-src-*/lib \
+             "$STORE"/harfbuzz-src-*/lib "$STORE"/freetype-shared-src-*/lib \
+             "$STORE"/fontconfig-shared-src-*/lib "$STORE"/fribidi-src-*/lib \
+             "$STORE"/libepoxy-src-*/lib "$STORE"/at-spi2-core-src-*/lib \
+             "$STORE"/libxfce4util-src-*/lib "$STORE"/xfconf-src-*/lib \
+             "$STORE"/libxfce4ui-src-*/lib "$STORE"/garcon-src-*/lib \
+             "$STORE"/exo-src-*/lib "$STORE"/libnotify-src-*/lib \
+             "$STORE"/libgudev-src-*/lib "$STORE"/vte-src-*/lib \
+             "$STORE"/graphene-src-*/lib "$STORE"/pixman-glibc-*/lib \
+             "$STORE"/wayland-src-*/lib "$STORE"/xkbcommon-src-*/lib \
+             "$STORE"/libpng-glibc-*/lib "$STORE"/libffi-glibc-*/lib \
+             "$STORE"/zlib-glibc-*/lib "$STORE"/expat-glibc-*/lib \
+             "$STORE"/dbus-src-*/lib; do
+        [ -d "$d" ] && ldpaths="${ldpaths:+$ldpaths }-L$d"
+    done
+    # Add both -L and -Wl,-rpath-link so transitive deps resolve from store
+    local rpaths=""
+    for d in "$STORE"/glib-src-*/lib "$STORE"/cairo-src-*/lib "$STORE"/pango-src-*/lib \
+             "$STORE"/gdk-pixbuf-src-*/lib "$STORE"/gtk3-src-*/lib \
+             "$STORE"/harfbuzz-src-*/lib "$STORE"/freetype-shared-src-*/lib \
+             "$STORE"/fontconfig-shared-src-*/lib "$STORE"/fribidi-src-*/lib \
+             "$STORE"/libepoxy-src-*/lib "$STORE"/at-spi2-core-src-*/lib \
+             "$STORE"/libxfce4util-src-*/lib "$STORE"/xfconf-src-*/lib \
+             "$STORE"/libxfce4ui-src-*/lib "$STORE"/garcon-src-*/lib \
+             "$STORE"/exo-src-*/lib "$STORE"/libnotify-src-*/lib \
+             "$STORE"/vte-src-*/lib "$STORE"/graphene-src-*/lib \
+             "$STORE"/pixman-glibc-*/lib "$STORE"/wayland-src-*/lib \
+             "$STORE"/xkbcommon-src-*/lib "$STORE"/libpng-glibc-*/lib \
+             "$STORE"/libffi-glibc-*/lib "$STORE"/zlib-glibc-*/lib; do
+        [ -d "$d" ] && rpaths="${rpaths:+$rpaths }-Wl,-rpath-link,$d"
+    done
+    export LDFLAGS="$ldpaths $rpaths"
+    unset LD_LIBRARY_PATH
     # Use host tools only — store binaries are patchelf'd for Bingux glibc
     # Dependencies are found via pkg-config, not blanket -I/-L flags
     export PATH="/usr/bin:/usr/sbin:/usr/local/bin:/home/kieran/.local/bin"
     export CC=gcc
     export CXX=g++
+    # Prevent pkg-config from finding host system libs
+    export PKG_CONFIG_LIBDIR=""
 }
 
 pkg_installed() {
@@ -223,9 +260,9 @@ if [ "$PKG_NUM" -ge "$START_FROM" ] && ! pkg_installed "fontconfig-shared-src-2.
     cd "$SRC"
     setup_env
     ./configure --prefix="$DEST" --enable-shared --disable-static \
-        --disable-docs 2>&1 | tail -10
+        --disable-docs --disable-cache-build 2>&1 | tail -10
     make -j"$JOBS" 2>&1 | tail -5
-    make install 2>&1 | tail -5
+    make install RUN_FC_CACHE_TEST=false 2>&1 | tail -5
     echo "  -> Installed fontconfig (shared)"
 fi
 
@@ -328,7 +365,7 @@ if [ "$PKG_NUM" -ge "$START_FROM" ] && ! pkg_installed "at-spi2-core-src-2.54.0-
         --libdir=lib --buildtype=release \
         -Ddefault_library=shared \
         -Dintrospection=disabled \
-        -Dx11=false -Ddocs=false \
+        -Dx11=disabled -Ddocs=false \
         -Dsystemd_user_dir=/tmp/unused 2>&1 | tail -20
     ninja -C _build -j"$JOBS" 2>&1 | tail -10
     DESTDIR="" ninja -C _build install 2>&1 | tail -5
@@ -387,7 +424,7 @@ if [ "$PKG_NUM" -ge "$START_FROM" ] && ! pkg_installed "gtk3-src-3.24.43-x86_64-
         -Dexamples=false -Dgtk_doc=false \
         -Dman=false \
         -Dcolord=no \
-        -Dprint_backends=none 2>&1 | tail -30
+        -Dprint_backends=file 2>&1 | tail -30
     ninja -C _build -j"$JOBS" 2>&1 | tail -10
     DESTDIR="" ninja -C _build install 2>&1 | tail -5
     echo "  -> Installed GTK3 (Wayland-only)"
@@ -422,7 +459,7 @@ if [ "$PKG_NUM" -ge "$START_FROM" ] && ! pkg_installed "libgudev-src-238-x86_64-
         --libdir=lib --buildtype=release \
         -Ddefault_library=shared \
         -Dintrospection=disabled \
-        -Dtests=false -Dvapi=disabled 2>&1 | tail -10
+        -Dtests=disabled -Dvapi=disabled 2>&1 | tail -10
     ninja -C _build -j"$JOBS" 2>&1 | tail -5
     DESTDIR="" ninja -C _build install 2>&1 | tail -5
     echo "  -> Installed libgudev"
@@ -438,9 +475,10 @@ if [ "$PKG_NUM" -ge "$START_FROM" ] && ! pkg_installed "vte-src-0.74.2-x86_64-li
     meson setup _build "$SRC" --prefix="$DEST" \
         --libdir=lib --buildtype=release \
         -Ddefault_library=shared \
-        -Dintrospection=false \
+        -Dgir=false \
         -Dgtk3=true -Dgtk4=false \
         -Ddocs=false -Dvapi=false \
+        -Dgnutls=false -Dicu=false \
         -D_systemd=false 2>&1 | tail -20
     ninja -C _build -j"$JOBS" 2>&1 | tail -10
     DESTDIR="" ninja -C _build install 2>&1 | tail -5
@@ -531,7 +569,7 @@ if [ "$PKG_NUM" -ge "$START_FROM" ] && ! pkg_installed "thunar-src-4.20.0-x86_64
     cd "$SRC"
     setup_env
     ./configure --prefix="$DEST" --disable-static --disable-debug \
-        --disable-introspection 2>&1 | tail -10
+        --disable-introspection --disable-x11 --enable-wayland 2>&1 | tail -10
     make -j"$JOBS" 2>&1 | tail -5
     make install 2>&1 | tail -5
     echo "  -> Installed thunar"
@@ -604,7 +642,8 @@ if [ "$PKG_NUM" -ge "$START_FROM" ] && ! pkg_installed "xfce4-terminal-src-1.1.3
     SRC=$(extract "$(download https://archive.xfce.org/src/apps/xfce4-terminal/1.1/xfce4-terminal-1.1.3.tar.bz2)" xfce4-terminal)
     cd "$SRC"
     setup_env
-    ./configure --prefix="$DEST" --disable-static --disable-debug 2>&1 | tail -10
+    ./configure --prefix="$DEST" --disable-static --disable-debug \
+        --disable-x11 --enable-wayland 2>&1 | tail -10
     make -j"$JOBS" 2>&1 | tail -5
     make install 2>&1 | tail -5
     echo "  -> Installed xfce4-terminal"
