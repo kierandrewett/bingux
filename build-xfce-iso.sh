@@ -227,15 +227,21 @@ cp /usr/bin/curl "$PROFILE/bin/" 2>/dev/null || true
 
 # 4h. Resolve ALL transitive library dependencies from host
 log "Resolving library dependencies..."
-for pass in 1 2 3; do
-    for target in "$PROFILE"/bin/* "$PROFILE"/lib/*.so*; do
-        [ -f "$target" ] || continue
-        ldd "$target" 2>/dev/null | awk '{print $3}' | grep '^/' | while read dep; do
-            fname=$(basename "$dep")
-            [ -f "$PROFILE/lib/$fname" ] && continue
-            cp "$dep" "$PROFILE/lib/" 2>/dev/null && true
-        done
+# Collect all needed libs in one pass using ldd on key binaries
+{
+    for target in "$PROFILE"/bin/xfce4-panel "$PROFILE"/bin/xfce4-terminal \
+                  "$PROFILE"/bin/thunar "$PROFILE"/bin/labwc "$PROFILE"/bin/foot \
+                  "$PROFILE"/bin/seatd "$PROFILE"/bin/dbus-daemon "$PROFILE"/bin/curl \
+                  "$PROFILE"/bin/grim; do
+        [ -f "$target" ] && ldd "$target" 2>/dev/null
     done
+    for target in "$PROFILE"/lib/libgtk-3.so* "$PROFILE"/lib/libgio-2.0.so* \
+                  "$PROFILE"/lib/libvte-2.91.so*; do
+        [ -f "$target" ] && ldd "$target" 2>/dev/null
+    done
+} | awk '{print $3}' | grep '^/' | sort -u | while read -r dep; do
+    fname=$(basename "$dep")
+    [ -f "$PROFILE/lib/$fname" ] || cp "$dep" "$PROFILE/lib/" 2>/dev/null || true
 done
 # Remove glibc base libs (must come from lib64, not lib)
 rm -f "$PROFILE/lib/libc.so"* "$PROFILE/lib/libm.so"* "$PROFILE/lib/libdl.so"* \
@@ -459,34 +465,28 @@ menuentry "Bingux v2 — XFCE Desktop (Verbose)" {
 }
 GRUB
 
-if [ "$ISO_TOOL" = "grub-mkrescue" ] || [ "$ISO_TOOL" = "grub2-mkrescue" ]; then
+if command -v xorriso &>/dev/null && { [ "$ISO_TOOL" = "grub-mkrescue" ] || [ "$ISO_TOOL" = "grub2-mkrescue" ]; }; then
     log "Building ISO with $ISO_TOOL..."
     "$ISO_TOOL" -o "$OUTPUT" "$ISO_ROOT" 2>&1 | tail -5
 else
-    log "Building ISO manually with genisoimage..."
-    genisoimage -o "$OUTPUT" \
-        -b boot/grub/grub.cfg \
-        -no-emul-boot \
-        -R -J -V "BINGUX_LIVE" \
-        "$ISO_ROOT" 2>&1 | tail -5 || {
-        # Fallback: just tar it and explain
-        log "genisoimage failed, creating tar archive instead"
-        tar czf "${OUTPUT%.iso}.tar.gz" -C "$ISO_ROOT" .
-        OUTPUT="${OUTPUT%.iso}.tar.gz"
-    }
+    log "xorriso not available — skipping ISO creation"
+    log "You can boot directly with kernel+initrd (faster anyway):"
+    OUTPUT="(no ISO — use kernel+initrd below)"
 fi
 
 step "BUILD COMPLETE"
 echo ""
-echo "  ISO: $OUTPUT ($(du -sh "$OUTPUT" | awk '{print $1}'))"
+if [ -f "$OUTPUT" ]; then
+    echo "  ISO: $OUTPUT ($(du -sh "$OUTPUT" | awk '{print $1}'))"
+    echo ""
+    echo "  Boot with QEMU:"
+    echo "    qemu-system-x86_64 -enable-kvm -m 4G -smp 2 \\"
+    echo "      -cdrom $OUTPUT \\"
+    echo "      -device virtio-gpu-pci -vga std \\"
+    echo "      -nic user,model=virtio-net-pci"
+fi
 echo ""
-echo "  Boot with QEMU:"
-echo "    qemu-system-x86_64 -enable-kvm -m 4G -smp 2 \\"
-echo "      -cdrom $OUTPUT \\"
-echo "      -device virtio-gpu-pci -vga std \\"
-echo "      -nic user,model=virtio-net-pci"
-echo ""
-echo "  Or boot kernel+initrd directly (faster):"
+echo "  Boot kernel+initrd directly (recommended):"
 echo "    qemu-system-x86_64 -enable-kvm -m 4G -smp 2 \\"
 echo "      -kernel $ISO_ROOT/boot/vmlinuz \\"
 echo "      -initrd $ISO_ROOT/boot/initramfs.img \\"
