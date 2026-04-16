@@ -24,6 +24,12 @@ build() {
     fi
 
     make olddefconfig
+
+    # Disable modules known to fail with newer GCC on older kernel source
+    scripts/config --disable CONFIG_DRM_AMDGPU
+    scripts/config --disable CONFIG_DRM_NOUVEAU
+    make olddefconfig
+
     make -j$(nproc)
 }
 
