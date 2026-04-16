@@ -206,9 +206,14 @@ if [ ! -d "$PROFILE" ] && [ ! -L "$PROFILE" ]; then
 fi
 log "Profile created at $PROFILE"
 
-# 4d. Post-profile: add host runtime data not yet packaged
-# TODO: these should become proper bsys packages (fonts, cursors, xkb, ssl-certs)
+# 4d. Post-profile additions
+# TODO: these should become proper bsys packages
 PROFILE_DIR=$(readlink -f "$ROOTFS/system/profiles/current" 2>/dev/null || echo "$ROOTFS/system/profiles/1")
+
+# Busybox (static — needed for init shebang)
+log "Adding busybox..."
+cp "$(command -v busybox)" "$PROFILE_DIR/bin/busybox"
+chmod +x "$PROFILE_DIR/bin/busybox"
 log "Adding host runtime data to profile..."
 
 # Host glibc (needed until all binaries are patchelf'd to store glibc)
