@@ -129,7 +129,15 @@ impl BuildExecutor {
                     let pkg_name = pkg.file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_default();
-                    if pkg_name.contains("-glibc-") {
+                    // Skip patchelf'd packages and the store's glibc — these
+                    // are built for a different ABI and would poison the host
+                    // linker/loader if added to LD_LIBRARY_PATH or PKG_CONFIG_PATH.
+                    if pkg_name.contains("-glibc-")
+                        || pkg_name.starts_with("glibc-")
+                        || pkg_name.starts_with("gcc-src-")
+                        || pkg_name.starts_with("gcc-glibc-")
+                        || pkg_name.starts_with("musl-")
+                    {
                         continue;
                     }
 
@@ -208,6 +216,9 @@ impl BuildExecutor {
             .env("PKGDIR", &env.pkgdir)
             .env("PKG_CONFIG_PATH", &pkg_config_path)
             .env("BPKG_STORE_ROOT", &store_root)
+            // LD_LIBRARY_PATH so the linker can resolve transitive shared lib
+            // deps during autotools link tests and libtool builds.
+            .env("LD_LIBRARY_PATH", &lib_parts.join(":"))
             .output()?;
         let duration = start.elapsed();
 

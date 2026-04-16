@@ -17,4 +17,5 @@ build() {
 package() {
     cd "$SRCDIR/xfce4-panel-4.20.0"
     make DESTDIR="$PKGDIR" install
+    find "$PKGDIR" -name "*.la" -delete
 }

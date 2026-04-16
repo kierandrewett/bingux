@@ -11,10 +11,13 @@ source=("https://archive.xfce.org/src/apps/xfce4-terminal/1.1/xfce4-terminal-1.1
 sha256sums=("SKIP")
 build() {
     cd "$SRCDIR/xfce4-terminal-1.1.3"
-    ./configure --prefix=/ --disable-static --disable-debug --disable-x11 --enable-wayland
-    make -j$(nproc)
+    # gtk-layer-shell header lives in a non-standard include subdir
+    GLS_INC="$BPKG_STORE_ROOT/gtk-layer-shell-src-0.9.0-x86_64-linux/include"
+    CFLAGS="$CFLAGS -I$GLS_INC" ./configure --prefix=/ --disable-static --disable-debug --disable-x11 --enable-wayland
+    CFLAGS="$CFLAGS -I$GLS_INC" make -j$(nproc)
 }
 package() {
     cd "$SRCDIR/xfce4-terminal-1.1.3"
     make DESTDIR="$PKGDIR" install
+    find "$PKGDIR" -name "*.la" -delete
 }

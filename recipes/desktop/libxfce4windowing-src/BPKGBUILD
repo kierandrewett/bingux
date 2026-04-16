@@ -17,4 +17,5 @@ build() {
 package() {
     cd "$SRCDIR/libxfce4windowing-4.20.5"
     make DESTDIR="$PKGDIR" install
+    find "$PKGDIR" -name "*.la" -delete
 }
