@@ -88,13 +88,48 @@ else
     log "Kernel built: $KERNEL"
 fi
 
-# ── Phase 2: XFCE Stack (29 packages) ────────────────────────────────
+# ── Phase 2: XFCE Stack (25 packages via bsys) ──────────────────────
 step "Phase 2: XFCE Desktop Stack"
-if [ -d "$STORE/gtk3-src-3.24.43-x86_64-linux" ] && [ -d "$STORE/xfce4-panel-src-4.20.0-x86_64-linux" ]; then
-    log "XFCE stack already built"
-else
-    log "Building XFCE stack (this takes ~15-20 minutes)..."
-    bash "$SCRIPT_DIR/bootstrap/stage2/build-xfce-stack.sh"
+log "Building XFCE stack via bsys (skips already-built packages)..."
+
+# Build bsys-cli if needed
+BSYS="$SCRIPT_DIR/target/release/bsys-cli"
+if [ ! -x "$BSYS" ]; then
+    log "Building bsys-cli..."
+    cargo build --release --manifest-path="$SCRIPT_DIR/Cargo.toml" --bin bsys-cli 2>&1 | tail -3
+fi
+
+export BPKG_STORE_ROOT="$STORE"
+export BSYS_CACHE_DIR="$CACHE"
+
+# Build order (dependency chain)
+DESKTOP_PKGS=(
+    glib-src fribidi-src harfbuzz-src cairo-src pango-src
+    gdk-pixbuf-src libepoxy-src graphene-src at-spi2-core-src
+    gtk3-src libnotify-src libgudev-src vte-src gtk-layer-shell-src
+    libxfce4util-src xfconf-src libxfce4ui-src libxfce4windowing-src
+    garcon-src exo-src thunar-src xfce4-panel-src
+    xfce4-settings-src xfce4-terminal-src grim-src
+)
+
+BUILT=0 SKIPPED=0 FAILED=0
+for pkg in "${DESKTOP_PKGS[@]}"; do
+    result=$("$BSYS" build "$SCRIPT_DIR/recipes/desktop/$pkg/BPKGBUILD" 2>&1)
+    if echo "$result" | grep -q "ok: built"; then
+        log "  Built: $pkg"
+        BUILT=$((BUILT+1))
+    elif echo "$result" | grep -q "already exists"; then
+        SKIPPED=$((SKIPPED+1))
+    else
+        echo "  FAILED: $pkg"
+        echo "$result" | tail -3
+        FAILED=$((FAILED+1))
+    fi
+done
+log "XFCE stack: $BUILT built, $SKIPPED cached, $FAILED failed"
+if [ "$FAILED" -gt 0 ]; then
+    echo "ERROR: Some packages failed to build. Check output above."
+    exit 1
 fi
 
 # ── Phase 3: bingux_compat kernel module ─────────────────────────────
