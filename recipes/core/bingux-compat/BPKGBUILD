@@ -11,19 +11,24 @@ source=()
 sha256sums=()
 
 build() {
-    # Source lives in the repo, not downloaded
-    REPO_DIR="$(dirname "$(dirname "$(dirname "$BPKG_STORE_ROOT")")")"
-    MOD_SRC="$REPO_DIR/kernel/bingux-compat"
-
-    # Find kernel build tree from the kernel store package
-    KDIR="$BPKG_STORE_ROOT/linux-kernel-full-6.14.6-x86_64-linux/lib/modules/6.14.6/build"
-    if [ ! -d "$KDIR" ]; then
-        # Fallback: look for extracted kernel source
-        KDIR="/tmp/bingux-kernel-full/linux-6.14.6"
+    # Find module source in the repo
+    MOD_SRC=""
+    for d in \
+        "$(dirname "$(dirname "$(dirname "$(dirname "$SRCDIR")")")")/kernel/bingux-compat" \
+        /home/*/dev/bingux/kernel/bingux-compat; do
+        [ -f "$d/bingux_compat.c" ] && MOD_SRC="$d" && break
+    done
+    if [ -z "$MOD_SRC" ]; then
+        echo "ERROR: bingux_compat source not found" >&2
+        exit 1
     fi
 
+    # Find kernel build tree
+    KDIR="/tmp/bsys-build/linux-kernel-full/src/linux-6.14.6"
+    [ -d "$KDIR" ] || KDIR="/tmp/bingux-kernel-full/linux-6.14.6"
+
     if [ ! -f "$KDIR/Makefile" ]; then
-        echo "ERROR: kernel build tree not found at $KDIR" >&2
+        echo "ERROR: kernel build tree not found" >&2
         exit 1
     fi
 
