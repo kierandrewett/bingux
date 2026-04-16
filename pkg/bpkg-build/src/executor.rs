@@ -123,6 +123,16 @@ impl BuildExecutor {
                 for entry in entries.flatten() {
                     let pkg = entry.path();
 
+                    // Skip patchelf'd packages built for a different glibc.
+                    // These have "-glibc-" in their name and can't be used
+                    // for linking on the host.
+                    let pkg_name = pkg.file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    if pkg_name.contains("-glibc-") {
+                        continue;
+                    }
+
                     // PATH: <store>/<pkg>/bin
                     let bin_dir = pkg.join("bin");
                     if bin_dir.is_dir() {
@@ -197,7 +207,6 @@ impl BuildExecutor {
             .env("BUILDDIR", &env.builddir)
             .env("PKGDIR", &env.pkgdir)
             .env("PKG_CONFIG_PATH", &pkg_config_path)
-            .env("PKG_CONFIG_LIBDIR", "") // Don't search host system pkgconfig
             .env("BPKG_STORE_ROOT", &store_root)
             .output()?;
         let duration = start.elapsed();
