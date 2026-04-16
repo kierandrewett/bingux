@@ -192,12 +192,45 @@ enable = []
 TOML
 
 # 4c. Compose system profile via bsys apply
+# Use chroot-style paths so symlinks point to /system/packages/... (runtime path)
+# not /tmp/.../rootfs/system/packages/... (build host path)
 log "Composing system profile..."
-BSYS_CONFIG_PATH="$ROOTFS/system/config/system.toml" \
-BSYS_PROFILES_ROOT="$ROOTFS/system/profiles" \
-BSYS_PACKAGES_ROOT="$ROOTFS/system/packages" \
-BPKG_STORE_ROOT="$ROOTFS/system/packages" \
-"$BSYS" apply 2>&1 | grep -E '\[bsys\]'
+
+# Create temporary bind mount or symlink so bsys can find packages at /system
+if [ ! -d /system/packages ] || [ "$(readlink -f /system/packages 2>/dev/null)" != "$(readlink -f "$ROOTFS/system/packages")" ]; then
+    NEEDS_CLEANUP=true
+    sudo mount --bind "$ROOTFS/system" /system 2>/dev/null || {
+        # No sudo — use symlink approach: run with rootfs as seen from /
+        # Fall back: fix symlinks after generation
+        NEEDS_CLEANUP=false
+    }
+fi
+
+if [ "${NEEDS_CLEANUP:-false}" = true ]; then
+    BSYS_CONFIG_PATH="/system/config/system.toml" \
+    BSYS_PROFILES_ROOT="/system/profiles" \
+    BSYS_PACKAGES_ROOT="/system/packages" \
+    BPKG_STORE_ROOT="/system/packages" \
+    "$BSYS" apply 2>&1 | grep -E '\[bsys\]'
+    sudo umount /system 2>/dev/null || true
+else
+    # Can't bind mount — run with host paths then fix symlinks
+    BSYS_CONFIG_PATH="$ROOTFS/system/config/system.toml" \
+    BSYS_PROFILES_ROOT="$ROOTFS/system/profiles" \
+    BSYS_PACKAGES_ROOT="$ROOTFS/system/packages" \
+    BPKG_STORE_ROOT="$ROOTFS/system/packages" \
+    "$BSYS" apply 2>&1 | grep -E '\[bsys\]'
+
+    # Fix symlinks: rewrite host paths to runtime paths
+    log "Fixing profile symlinks for runtime..."
+    find "$ROOTFS/system/profiles" -type l | while read -r link; do
+        target=$(readlink "$link")
+        if echo "$target" | grep -q "$ROOTFS"; then
+            new_target=$(echo "$target" | sed "s|$ROOTFS||")
+            ln -sf "$new_target" "$link"
+        fi
+    done
+fi
 
 PROFILE="$ROOTFS/system/profiles/current"
 if [ ! -d "$PROFILE" ] && [ ! -L "$PROFILE" ]; then

@@ -72,6 +72,10 @@ pub fn tool_definitions() -> Vec<ToolDefinition> {
                         "description": "Enable VGA (std) alongside virtio-GPU for VT support",
                         "default": false
                     },
+                    "iso": {
+                        "type": "string",
+                        "description": "Path to an ISO image to attach as a CD-ROM drive (-cdrom)"
+                    },
                     "extra_args": {
                         "type": "array",
                         "items": {"type": "string"},
@@ -311,6 +315,7 @@ async fn handle_boot(args: Value, state: &mut ServerState) -> Result<Value> {
         append: args.get("append").and_then(|v| v.as_str()).map(String::from),
         virtio_gpu: args.get("virtio_gpu").and_then(|v| v.as_bool()).unwrap_or(false),
         vga: args.get("vga").and_then(|v| v.as_bool()).unwrap_or(false),
+        iso: args.get("iso").and_then(|v| v.as_str()).map(PathBuf::from),
         extra_args: args.get("extra_args")
             .and_then(|v| v.as_array())
             .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())

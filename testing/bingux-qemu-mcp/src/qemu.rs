@@ -46,6 +46,11 @@ impl QemuInstance {
                 ));
         }
 
+        // CD-ROM / ISO image
+        if let Some(ref iso) = config.iso {
+            cmd.arg("-cdrom").arg(iso);
+        }
+
         // Kernel + initrd direct boot
         if let Some(ref kernel) = config.kernel {
             cmd.arg("-kernel").arg(kernel);

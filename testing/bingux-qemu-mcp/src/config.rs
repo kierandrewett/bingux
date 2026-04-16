@@ -44,6 +44,10 @@ pub struct LaunchConfig {
     #[serde(default)]
     pub vga: bool,
 
+    /// Path to an ISO image to attach as a CD-ROM drive.
+    #[serde(default)]
+    pub iso: Option<PathBuf>,
+
     /// Extra QEMU arguments passed verbatim.
     #[serde(default)]
     pub extra_args: Vec<String>,
@@ -74,6 +78,7 @@ impl Default for LaunchConfig {
             append: None,
             virtio_gpu: false,
             vga: false,
+            iso: None,
             extra_args: Vec::new(),
         }
     }
