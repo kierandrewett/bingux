@@ -281,8 +281,9 @@ AUTO
 # ── Phase 5: Write init script ───────────────────────────────────────
 step "Phase 5: Writing init script"
 cat > "$ROOTFS/init" << 'INITEOF'
-#!/system/profiles/1/bin/busybox sh
-export PATH="/system/profiles/current/bin:/system/profiles/1/bin"
+#!/system/packages/busybox-src-1.37.0-x86_64-linux/bin/busybox sh
+# Init PATH: busybox store path first (direct, no shim), then profile (dispatch)
+export PATH="/system/packages/busybox-src-1.37.0-x86_64-linux/bin:/system/profiles/current/bin"
 export HOME="/users/root"
 export TERM=xterm-256color
 export XDG_RUNTIME_DIR="/system/state/ephemeral/xdg"
