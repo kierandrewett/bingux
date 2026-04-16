@@ -46,7 +46,9 @@ build() {
     make olddefconfig
 
     # GCC 15 introduces new warnings that older kernels trigger as errors
-    export KCFLAGS="-Wno-error=unterminated-string-initialization"
+    # GCC 15 defaults to C23 where bool/true/false are keywords — kernel 6.12
+    # redefines them which is now illegal. Force GNU11 mode.
+    export KCFLAGS="-Wno-error=unterminated-string-initialization -std=gnu11"
     make -j$(nproc)
 }
 
