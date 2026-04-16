@@ -12,7 +12,7 @@ sha256sums=("SKIP")
 
 build() {
     cd "$SRCDIR/glib-2.82.4"
-    meson setup build --prefix=/ \
+    meson setup build --prefix=/ --libdir=lib \
         -Ddefault_library=shared \
         -Dtests=false -Dintrospection=disabled \
         -Dlibmount=disabled -Dman-pages=disabled \
@@ -26,7 +26,8 @@ package() {
     DESTDIR="$PKGDIR" ninja -C build install
     # Normalize lib64 → lib
     if [ -d "$PKGDIR/lib64" ]; then
-        cp -a "$PKGDIR/lib64/"* "$PKGDIR/lib/" 2>/dev/null || true
+        mkdir -p "$PKGDIR/lib"
+        cp -a "$PKGDIR/lib64/"* "$PKGDIR/lib/"
         rm -rf "$PKGDIR/lib64"
     fi
 }

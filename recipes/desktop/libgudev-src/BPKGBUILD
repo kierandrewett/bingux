@@ -11,7 +11,7 @@ source=("https://download.gnome.org/sources/libgudev/238/libgudev-238.tar.xz")
 sha256sums=("SKIP")
 build() {
     cd "$SRCDIR/libgudev-238"
-    meson setup build --prefix=/ -Ddefault_library=shared \
+    meson setup build --prefix=/ --libdir=lib -Ddefault_library=shared \
         -Dintrospection=disabled -Dtests=disabled -Dvapi=disabled
     ninja -C build -j$(nproc)
 }

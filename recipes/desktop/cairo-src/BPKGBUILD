@@ -12,7 +12,7 @@ sha256sums=("SKIP")
 
 build() {
     cd "$SRCDIR/cairo-1.18.2"
-    meson setup build --prefix=/ \
+    meson setup build --prefix=/ --libdir=lib \
         -Ddefault_library=shared \
         -Dtests=disabled -Dgtk_doc=false \
         -Dspectre=disabled -Dsymbol-lookup=disabled

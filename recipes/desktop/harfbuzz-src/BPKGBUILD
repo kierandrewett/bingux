@@ -12,7 +12,7 @@ sha256sums=("SKIP")
 
 build() {
     cd "$SRCDIR/harfbuzz-10.1.0"
-    meson setup build --prefix=/ \
+    meson setup build --prefix=/ --libdir=lib \
         -Ddefault_library=shared \
         -Dglib=enabled -Dfreetype=enabled \
         -Dcairo=disabled -Dicu=disabled \

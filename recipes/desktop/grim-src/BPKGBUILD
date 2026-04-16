@@ -11,7 +11,7 @@ source=("https://github.com/emersion/grim/releases/download/v1.4.0/grim-1.4.0.ta
 sha256sums=("SKIP")
 build() {
     cd "$SRCDIR/grim-1.4.0"
-    meson setup build --prefix=/ -Ddefault_library=shared -Djpeg=disabled -Dman-pages=disabled
+    meson setup build --prefix=/ --libdir=lib -Ddefault_library=shared -Djpeg=disabled -Dman-pages=disabled
     ninja -C build -j$(nproc)
 }
 package() {

@@ -11,7 +11,7 @@ source=("https://download.gnome.org/sources/graphene/1.10/graphene-1.10.8.tar.xz
 sha256sums=("SKIP")
 build() {
     cd "$SRCDIR/graphene-1.10.8"
-    meson setup build --prefix=/ -Ddefault_library=shared \
+    meson setup build --prefix=/ --libdir=lib -Ddefault_library=shared \
         -Dtests=false -Dinstalled_tests=false -Dintrospection=disabled -Dgobject_types=true
     ninja -C build -j$(nproc)
 }

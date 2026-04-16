@@ -11,7 +11,7 @@ source=("https://github.com/wmww/gtk-layer-shell/archive/refs/tags/v0.9.0.tar.gz
 sha256sums=("SKIP")
 build() {
     cd "$SRCDIR/gtk-layer-shell-0.9.0"
-    meson setup build --prefix=/ -Ddefault_library=shared \
+    meson setup build --prefix=/ --libdir=lib -Ddefault_library=shared \
         -Dintrospection=false -Dvapi=false -Ddocs=false -Dtests=false -Dexamples=false
     ninja -C build -j$(nproc)
 }

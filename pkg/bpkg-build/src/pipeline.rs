@@ -145,6 +145,17 @@ impl BuildPipeline {
             warn!("recipe has no package() function");
         }
 
+        // 4b. Rewrite pkg-config files so they reference the store path.
+        //
+        // Recipes use --prefix=/ which is correct for the Bingux package
+        // layout (files are relative to the package store dir). But this
+        // makes .pc files contain prefix=/ which resolves to the root
+        // filesystem during builds. We rewrite prefix to the actual store
+        // path so pkg-config returns correct -I and -L flags.
+        let store_dir_name = format!("{}-{}-{}", recipe.pkgname, recipe.pkgver, recipe.pkgarch);
+        let store_path_preview = self.config.store_root.join(&store_dir_name);
+        rewrite_pkgconfig_prefix(&env.pkgdir, &store_path_preview);
+
         // 5. Patchelf ELF binaries.
         let scan_result = scan_package_dir(&env.pkgdir)?;
         let mut patched_count = 0;
@@ -372,6 +383,53 @@ fn find_patchelf_bin(store: &PackageStore) -> String {
         }
     }
     "patchelf".to_string()
+}
+
+/// Rewrite `prefix=/` in .pc files to point to the actual store path.
+///
+/// This is necessary because packages are built with `--prefix=/` (files
+/// relative to the package root), but pkg-config needs absolute paths to
+/// find headers and libraries during other packages' builds.
+fn rewrite_pkgconfig_prefix(pkgdir: &Path, store_path: &Path) {
+    let prefix_replacement = format!("prefix={}", store_path.display());
+
+    for pc_dir in &["lib/pkgconfig", "lib64/pkgconfig", "share/pkgconfig"] {
+        let dir = pkgdir.join(pc_dir);
+        if !dir.is_dir() {
+            continue;
+        }
+
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().map_or(false, |e| e == "pc") {
+                    if let Ok(contents) = std::fs::read_to_string(&path) {
+                        // Replace prefix=/ with prefix=<store_path>
+                        // Be careful to only replace the prefix= line, not paths containing /
+                        let new_contents = contents
+                            .lines()
+                            .map(|line| {
+                                if line.starts_with("prefix=") {
+                                    prefix_replacement.as_str()
+                                } else {
+                                    line
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n");
+
+                        if new_contents != contents {
+                            let _ = std::fs::write(&path, new_contents);
+                            tracing::debug!(
+                                "rewrote pkg-config prefix in {}",
+                                path.file_name().unwrap_or_default().to_string_lossy()
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]

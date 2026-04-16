@@ -12,7 +12,7 @@ sha256sums=("SKIP")
 
 build() {
     cd "$SRCDIR/gtk+-3.24.43"
-    meson setup build --prefix=/ \
+    meson setup build --prefix=/ --libdir=lib \
         -Ddefault_library=shared \
         -Dx11_backend=false \
         -Dwayland_backend=true \

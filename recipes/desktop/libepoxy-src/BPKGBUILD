@@ -12,7 +12,7 @@ sha256sums=("SKIP")
 
 build() {
     cd "$SRCDIR/libepoxy-1.5.10"
-    meson setup build --prefix=/ \
+    meson setup build --prefix=/ --libdir=lib \
         -Ddefault_library=shared \
         -Dtests=false -Dx11=false -Degl=yes
     ninja -C build -j$(nproc)
