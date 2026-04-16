@@ -6,12 +6,11 @@ pkgdesc="BusyBox — Swiss Army Knife of embedded Linux (host static binary)"
 license="GPL-2.0"
 depends=()
 makedepends=()
-exports=("bin/busybox" "bin/sh")
+exports=()
 source=()
 sha256sums=()
 
 build() {
-    # Use host busybox (already static-linked)
     cp "$(command -v busybox)" "$BUILDDIR/busybox"
 }
 
@@ -19,7 +18,6 @@ package() {
     mkdir -p "$PKGDIR/bin"
     cp "$BUILDDIR/busybox" "$PKGDIR/bin/busybox"
     chmod +x "$PKGDIR/bin/busybox"
-    # Create symlinks for all applets
     for cmd in $("$PKGDIR/bin/busybox" --list 2>/dev/null); do
         ln -sf busybox "$PKGDIR/bin/$cmd"
     done
