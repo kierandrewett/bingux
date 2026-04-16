@@ -1,0 +1,21 @@
+pkgscope="bingux"
+pkgname="libgudev-src"
+pkgver="238"
+pkgarch="x86_64-linux"
+pkgdesc="libgudev — GObject bindings for libudev"
+license="LGPL-2.1"
+depends=("glib-src-2.82.4")
+makedepends=()
+exports=("lib/libgudev-1.0.so.0")
+source=("https://download.gnome.org/sources/libgudev/238/libgudev-238.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/libgudev-238"
+    meson setup build --prefix=/ -Ddefault_library=shared \
+        -Dintrospection=disabled -Dtests=disabled -Dvapi=disabled
+    ninja -C build -j$(nproc)
+}
+package() {
+    cd "$SRCDIR/libgudev-238"
+    DESTDIR="$PKGDIR" ninja -C build install
+}

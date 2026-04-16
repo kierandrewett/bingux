@@ -1,0 +1,20 @@
+pkgscope="bingux"
+pkgname="exo-src"
+pkgver="4.20.0"
+pkgarch="x86_64-linux"
+pkgdesc="Exo — XFCE extension library"
+license="LGPL-2.1"
+depends=("libxfce4util-src-4.20.0" "libxfce4ui-src-4.20.0" "gtk3-src-3.24.43" "glib-src-2.82.4")
+makedepends=()
+exports=("lib/libexo-2.so.0")
+source=("https://archive.xfce.org/src/xfce/exo/4.20/exo-4.20.0.tar.bz2")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/exo-4.20.0"
+    ./configure --prefix=/ --disable-static --disable-debug
+    make -j$(nproc)
+}
+package() {
+    cd "$SRCDIR/exo-4.20.0"
+    make DESTDIR="$PKGDIR" install
+}

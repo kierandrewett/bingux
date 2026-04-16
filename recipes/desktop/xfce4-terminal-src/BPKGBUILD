@@ -1,0 +1,20 @@
+pkgscope="bingux"
+pkgname="xfce4-terminal-src"
+pkgver="1.1.3"
+pkgarch="x86_64-linux"
+pkgdesc="xfce4-terminal — XFCE terminal emulator"
+license="GPL-2.0"
+depends=("libxfce4ui-src-4.20.0" "xfconf-src-4.20.0" "vte-src-0.74.2" "gtk3-src-3.24.43" "glib-src-2.82.4" "gtk-layer-shell-src-0.9.0")
+makedepends=("intltool-0.51.0")
+exports=("bin/xfce4-terminal")
+source=("https://archive.xfce.org/src/apps/xfce4-terminal/1.1/xfce4-terminal-1.1.3.tar.bz2")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/xfce4-terminal-1.1.3"
+    ./configure --prefix=/ --disable-static --disable-debug --disable-x11 --enable-wayland
+    make -j$(nproc)
+}
+package() {
+    cd "$SRCDIR/xfce4-terminal-1.1.3"
+    make DESTDIR="$PKGDIR" install
+}

@@ -1,0 +1,27 @@
+pkgscope="bingux"
+pkgname="harfbuzz-src"
+pkgver="10.1.0"
+pkgarch="x86_64-linux"
+pkgdesc="HarfBuzz — text shaping engine"
+license="MIT"
+depends=("glib-src-2.82.4" "freetype-src-2.13.3")
+makedepends=()
+exports=("lib/libharfbuzz.so.0" "lib/libharfbuzz-subset.so.0")
+source=("https://github.com/harfbuzz/harfbuzz/releases/download/10.1.0/harfbuzz-10.1.0.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/harfbuzz-10.1.0"
+    meson setup build --prefix=/ \
+        -Ddefault_library=shared \
+        -Dglib=enabled -Dfreetype=enabled \
+        -Dcairo=disabled -Dicu=disabled \
+        -Dgobject=disabled -Dintrospection=disabled \
+        -Dtests=disabled -Ddocs=disabled
+    ninja -C build -j$(nproc)
+}
+
+package() {
+    cd "$SRCDIR/harfbuzz-10.1.0"
+    DESTDIR="$PKGDIR" ninja -C build install
+}

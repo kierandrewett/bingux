@@ -1,0 +1,21 @@
+pkgscope="bingux"
+pkgname="graphene-src"
+pkgver="1.10.8"
+pkgarch="x86_64-linux"
+pkgdesc="Graphene — thin layer of types for graphic libraries"
+license="MIT"
+depends=("glib-src-2.82.4")
+makedepends=()
+exports=("lib/libgraphene-1.0.so.0")
+source=("https://download.gnome.org/sources/graphene/1.10/graphene-1.10.8.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/graphene-1.10.8"
+    meson setup build --prefix=/ -Ddefault_library=shared \
+        -Dtests=false -Dinstalled_tests=false -Dintrospection=disabled -Dgobject_types=true
+    ninja -C build -j$(nproc)
+}
+package() {
+    cd "$SRCDIR/graphene-1.10.8"
+    DESTDIR="$PKGDIR" ninja -C build install
+}

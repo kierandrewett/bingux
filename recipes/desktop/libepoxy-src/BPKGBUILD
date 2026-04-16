@@ -1,0 +1,24 @@
+pkgscope="bingux"
+pkgname="libepoxy-src"
+pkgver="1.5.10"
+pkgarch="x86_64-linux"
+pkgdesc="libepoxy — OpenGL function pointer management"
+license="MIT"
+depends=("mesa-src-24.3.4")
+makedepends=()
+exports=("lib/libepoxy.so.0")
+source=("https://download.gnome.org/sources/libepoxy/1.5/libepoxy-1.5.10.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/libepoxy-1.5.10"
+    meson setup build --prefix=/ \
+        -Ddefault_library=shared \
+        -Dtests=false -Dx11=false -Degl=yes
+    ninja -C build -j$(nproc)
+}
+
+package() {
+    cd "$SRCDIR/libepoxy-1.5.10"
+    DESTDIR="$PKGDIR" ninja -C build install
+}

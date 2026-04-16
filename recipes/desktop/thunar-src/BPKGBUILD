@@ -1,0 +1,25 @@
+pkgscope="bingux"
+pkgname="thunar-src"
+pkgver="4.20.0"
+pkgarch="x86_64-linux"
+pkgdesc="Thunar — XFCE file manager"
+license="GPL-2.0"
+depends=("libxfce4ui-src-4.20.0" "exo-src-4.20.0" "garcon-src-4.20.0" "gtk3-src-3.24.43" "glib-src-2.82.4" "gdk-pixbuf-src-2.42.12")
+makedepends=()
+exports=("bin/thunar")
+source=("https://archive.xfce.org/src/xfce/thunar/4.20/thunar-4.20.0.tar.bz2")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/thunar-4.20.0"
+    # Patch unconditional X11 includes for Wayland-only build
+    for f in thunar/thunar-session-client.c thunar/thunar-standard-view.c plugins/thunar-wallpaper/twp-provider.c; do
+        [ -f "$f" ] && sed -i 's|#include <gdk/gdkx.h>|#ifdef GDK_WINDOWING_X11\n#include <gdk/gdkx.h>\n#endif|' "$f"
+    done
+    sed -i 's|gdk_x11_set_sm_client_id (id);|#ifdef GDK_WINDOWING_X11\n  gdk_x11_set_sm_client_id (id);\n#endif|' thunar/thunar-session-client.c 2>/dev/null || true
+    ./configure --prefix=/ --disable-static --disable-debug --disable-introspection --disable-x11 --enable-wayland --disable-wallpaper-plugin
+    make -j$(nproc)
+}
+package() {
+    cd "$SRCDIR/thunar-4.20.0"
+    make DESTDIR="$PKGDIR" install
+}

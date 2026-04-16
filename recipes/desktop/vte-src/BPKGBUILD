@@ -1,0 +1,22 @@
+pkgscope="bingux"
+pkgname="vte-src"
+pkgver="0.74.2"
+pkgarch="x86_64-linux"
+pkgdesc="VTE — virtual terminal emulator widget"
+license="LGPL-2.1"
+depends=("gtk3-src-3.24.43" "glib-src-2.82.4" "pango-src-1.54.0" "pcre2-src-10.44")
+makedepends=()
+exports=("lib/libvte-2.91.so.0")
+source=("https://download.gnome.org/sources/vte/0.74/vte-0.74.2.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/vte-0.74.2"
+    meson setup build --prefix=/ -Ddefault_library=shared \
+        -Dgir=false -Dgtk3=true -Dgtk4=false \
+        -Ddocs=false -Dvapi=false -Dgnutls=false -Dicu=false -D_systemd=false
+    ninja -C build -j$(nproc)
+}
+package() {
+    cd "$SRCDIR/vte-0.74.2"
+    DESTDIR="$PKGDIR" ninja -C build install
+}

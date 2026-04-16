@@ -1,0 +1,20 @@
+pkgscope="bingux"
+pkgname="libxfce4windowing-src"
+pkgver="4.20.5"
+pkgarch="x86_64-linux"
+pkgdesc="libxfce4windowing — XFCE Wayland window management"
+license="LGPL-2.1"
+depends=("libxfce4util-src-4.20.0" "gtk3-src-3.24.43" "glib-src-2.82.4" "wayland-src-1.23.1")
+makedepends=()
+exports=("lib/libxfce4windowing-0.so.0" "lib/libxfce4windowingui-0.so.0")
+source=("https://archive.xfce.org/src/xfce/libxfce4windowing/4.20/libxfce4windowing-4.20.5.tar.bz2")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/libxfce4windowing-4.20.5"
+    ./configure --prefix=/ --disable-static --disable-debug --disable-introspection --disable-x11 --enable-wayland
+    make -j$(nproc)
+}
+package() {
+    cd "$SRCDIR/libxfce4windowing-4.20.5"
+    make DESTDIR="$PKGDIR" install
+}

@@ -1,0 +1,24 @@
+pkgscope="bingux"
+pkgname="fribidi-src"
+pkgver="1.0.16"
+pkgarch="x86_64-linux"
+pkgdesc="GNU FriBidi — Unicode bidirectional algorithm library"
+license="LGPL-2.1"
+depends=()
+makedepends=()
+exports=("lib/libfribidi.so.0")
+source=("https://github.com/fribidi/fribidi/releases/download/v1.0.16/fribidi-1.0.16.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/fribidi-1.0.16"
+    meson setup build --prefix=/ \
+        -Ddefault_library=shared \
+        -Dtests=false -Ddocs=false
+    ninja -C build -j$(nproc)
+}
+
+package() {
+    cd "$SRCDIR/fribidi-1.0.16"
+    DESTDIR="$PKGDIR" ninja -C build install
+}

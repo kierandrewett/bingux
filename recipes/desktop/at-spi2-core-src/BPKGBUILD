@@ -1,0 +1,26 @@
+pkgscope="bingux"
+pkgname="at-spi2-core-src"
+pkgver="2.54.0"
+pkgarch="x86_64-linux"
+pkgdesc="AT-SPI2 — accessibility toolkit core"
+license="LGPL-2.1"
+depends=("glib-src-2.82.4" "dbus-src-1.14.10")
+makedepends=()
+exports=("lib/libatk-1.0.so.0" "lib/libatspi.so.0")
+source=("https://download.gnome.org/sources/at-spi2-core/2.54/at-spi2-core-2.54.0.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/at-spi2-core-2.54.0"
+    meson setup build --prefix=/ \
+        -Ddefault_library=shared \
+        -Dintrospection=disabled \
+        -Dx11=disabled -Ddocs=false \
+        -Dsystemd_user_dir=/tmp/unused
+    ninja -C build -j$(nproc)
+}
+
+package() {
+    cd "$SRCDIR/at-spi2-core-2.54.0"
+    DESTDIR="$PKGDIR" ninja -C build install
+}

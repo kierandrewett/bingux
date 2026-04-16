@@ -1,0 +1,20 @@
+pkgscope="bingux"
+pkgname="garcon-src"
+pkgver="4.20.0"
+pkgarch="x86_64-linux"
+pkgdesc="Garcon — XFCE menu library"
+license="LGPL-2.1"
+depends=("libxfce4util-src-4.20.0" "gtk3-src-3.24.43" "glib-src-2.82.4")
+makedepends=()
+exports=("lib/libgarcon-1.so.0" "lib/libgarcon-gtk3-1.so.0")
+source=("https://archive.xfce.org/src/xfce/garcon/4.20/garcon-4.20.0.tar.bz2")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/garcon-4.20.0"
+    ./configure --prefix=/ --disable-static --disable-debug --disable-introspection
+    make -j$(nproc)
+}
+package() {
+    cd "$SRCDIR/garcon-4.20.0"
+    make DESTDIR="$PKGDIR" install
+}

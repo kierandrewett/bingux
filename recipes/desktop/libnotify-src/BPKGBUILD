@@ -1,0 +1,21 @@
+pkgscope="bingux"
+pkgname="libnotify-src"
+pkgver="0.8.3"
+pkgarch="x86_64-linux"
+pkgdesc="libnotify — desktop notification library"
+license="LGPL-2.1"
+depends=("gtk3-src-3.24.43" "glib-src-2.82.4" "gdk-pixbuf-src-2.42.12")
+makedepends=()
+exports=("lib/libnotify.so.4")
+source=("https://download.gnome.org/sources/libnotify/0.8/libnotify-0.8.3.tar.xz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/libnotify-0.8.3"
+    meson setup build --prefix=/ -Ddefault_library=shared \
+        -Dintrospection=disabled -Dgtk_doc=false -Dtests=false -Dman=false -Ddocbook_docs=disabled
+    ninja -C build -j$(nproc)
+}
+package() {
+    cd "$SRCDIR/libnotify-0.8.3"
+    DESTDIR="$PKGDIR" ninja -C build install
+}

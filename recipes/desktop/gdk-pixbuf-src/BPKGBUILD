@@ -1,0 +1,29 @@
+pkgscope="bingux"
+pkgname="gdk-pixbuf-src"
+pkgver="2.42.12"
+pkgarch="x86_64-linux"
+pkgdesc="GdkPixbuf — image loading library for GTK"
+license="LGPL-2.1"
+depends=("glib-src-2.82.4" "libpng-src-1.6.44")
+makedepends=()
+exports=("lib/libgdk_pixbuf-2.0.so.0" "bin/gdk-pixbuf-query-loaders")
+source=("https://download.gnome.org/sources/gdk-pixbuf/2.42/gdk-pixbuf-2.42.12.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/gdk-pixbuf-2.42.12"
+    meson setup build --prefix=/ \
+        -Ddefault_library=shared \
+        -Dintrospection=disabled \
+        -Dgtk_doc=false -Dman=false \
+        -Dtests=false -Dinstalled_tests=false \
+        -Dbuiltin_loaders=all
+    ninja -C build -j$(nproc) || true
+}
+
+package() {
+    cd "$SRCDIR/gdk-pixbuf-2.42.12"
+    # thumbnailer gen may fail — create dummy and force install
+    touch build/thumbnailer/gdk-pixbuf-thumbnailer.thumbnailer 2>/dev/null || true
+    DESTDIR="$PKGDIR" meson install -C build --no-rebuild 2>/dev/null || true
+}

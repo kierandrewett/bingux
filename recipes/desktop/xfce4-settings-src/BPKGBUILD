@@ -1,0 +1,20 @@
+pkgscope="bingux"
+pkgname="xfce4-settings-src"
+pkgver="4.20.0"
+pkgarch="x86_64-linux"
+pkgdesc="xfce4-settings — XFCE settings manager"
+license="GPL-2.0"
+depends=("libxfce4ui-src-4.20.0" "xfconf-src-4.20.0" "exo-src-4.20.0" "gtk3-src-3.24.43" "glib-src-2.82.4" "libnotify-src-0.8.3" "xkbcommon-src-1.7.0")
+makedepends=()
+exports=("bin/xfce4-settings-manager")
+source=("https://archive.xfce.org/src/xfce/xfce4-settings/4.20/xfce4-settings-4.20.0.tar.bz2")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/xfce4-settings-4.20.0"
+    ./configure --prefix=/ --disable-static --disable-debug --disable-x11 --enable-wayland --disable-xrandr --disable-xcursor
+    make -j$(nproc)
+}
+package() {
+    cd "$SRCDIR/xfce4-settings-4.20.0"
+    make DESTDIR="$PKGDIR" install
+}

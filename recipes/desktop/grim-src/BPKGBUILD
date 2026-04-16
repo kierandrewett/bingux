@@ -1,0 +1,20 @@
+pkgscope="bingux"
+pkgname="grim-src"
+pkgver="1.4.0"
+pkgarch="x86_64-linux"
+pkgdesc="grim — Wayland screenshot tool"
+license="MIT"
+depends=("wayland-src-1.23.1" "wayland-protocols-src-1.38" "pixman-src-0.43.4")
+makedepends=()
+exports=("bin/grim")
+source=("https://github.com/emersion/grim/releases/download/v1.4.0/grim-1.4.0.tar.gz")
+sha256sums=("SKIP")
+build() {
+    cd "$SRCDIR/grim-1.4.0"
+    meson setup build --prefix=/ -Ddefault_library=shared -Djpeg=disabled -Dman-pages=disabled
+    ninja -C build -j$(nproc)
+}
+package() {
+    cd "$SRCDIR/grim-1.4.0"
+    DESTDIR="$PKGDIR" ninja -C build install
+}

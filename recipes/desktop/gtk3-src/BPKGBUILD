@@ -1,0 +1,35 @@
+pkgscope="bingux"
+pkgname="gtk3-src"
+pkgver="3.24.43"
+pkgarch="x86_64-linux"
+pkgdesc="GTK3 — GIMP Toolkit (Wayland-only)"
+license="LGPL-2.1"
+depends=("glib-src-2.82.4" "cairo-src-1.18.2" "pango-src-1.54.0" "gdk-pixbuf-src-2.42.12" "libepoxy-src-1.5.10" "at-spi2-core-src-2.54.0" "wayland-src-1.23.1" "wayland-protocols-src-1.38" "xkbcommon-src-1.7.0" "mesa-src-24.3.4")
+makedepends=()
+exports=("lib/libgtk-3.so.0" "lib/libgdk-3.so.0")
+source=("https://download.gnome.org/sources/gtk+/3.24/gtk+-3.24.43.tar.xz")
+sha256sums=("SKIP")
+
+build() {
+    cd "$SRCDIR/gtk+-3.24.43"
+    meson setup build --prefix=/ \
+        -Ddefault_library=shared \
+        -Dx11_backend=false \
+        -Dwayland_backend=true \
+        -Dbroadway_backend=false \
+        -Dintrospection=false \
+        -Ddemos=false -Dtests=false \
+        -Dexamples=false -Dgtk_doc=false \
+        -Dman=false -Dcolord=no \
+        -Dprint_backends=file
+    ninja -C build -j$(nproc)
+}
+
+package() {
+    cd "$SRCDIR/gtk+-3.24.43"
+    DESTDIR="$PKGDIR" ninja -C build install
+    if [ -d "$PKGDIR/lib64" ]; then
+        cp -a "$PKGDIR/lib64/"* "$PKGDIR/lib/" 2>/dev/null || true
+        rm -rf "$PKGDIR/lib64"
+    fi
+}
