@@ -45,6 +45,8 @@ build() {
     scripts/config --enable CONFIG_INET
     make olddefconfig
 
+    # GCC 15 introduces new warnings that older kernels trigger as errors
+    export KCFLAGS="-Wno-error=unterminated-string-initialization -Wno-error=default-const-init-unsafe"
     make -j$(nproc)
 }
 
