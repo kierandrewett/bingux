@@ -291,8 +291,8 @@ export WLR_RENDERER=pixman
 export WLR_LIBINPUT_NO_DEVICES=1
 export LIBSEAT_BACKEND=seatd
 
-LOCALE=$(/system/profiles/1/bin/busybox grep '^locale' /system/config/system.toml 2>/dev/null | /system/profiles/1/bin/busybox sed 's/.*= *"\(.*\)"/\1/')
-KEYMAP=$(/system/profiles/1/bin/busybox grep '^keymap' /system/config/system.toml 2>/dev/null | /system/profiles/1/bin/busybox sed 's/.*= *"\(.*\)"/\1/')
+LOCALE=$(/system/packages/busybox-src-1.37.0-x86_64-linux/bin/busybox grep '^locale' /system/config/system.toml 2>/dev/null | /system/packages/busybox-src-1.37.0-x86_64-linux/bin/busybox sed 's/.*= *"\(.*\)"/\1/')
+KEYMAP=$(/system/packages/busybox-src-1.37.0-x86_64-linux/bin/busybox grep '^keymap' /system/config/system.toml 2>/dev/null | /system/packages/busybox-src-1.37.0-x86_64-linux/bin/busybox sed 's/.*= *"\(.*\)"/\1/')
 export LANG="${LOCALE:-C.UTF-8}"
 export LC_ALL="${LOCALE:-C.UTF-8}"
 export XKB_DEFAULT_LAYOUT="${KEYMAP:-gb}"
