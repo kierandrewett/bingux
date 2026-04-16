@@ -169,7 +169,10 @@ log "Copied $(ls -d "$ROOTFS/system/packages/"*/ 2>/dev/null | wc -l) packages"
 log "Writing system.toml..."
 KEEP_LIST=""
 for pkg in "${ALL_PKGS[@]}"; do
-    KEEP_LIST="${KEEP_LIST}  \"${pkg}\",\n"
+    # Extract package name (strip version: "glib-src-2.82.4" → "glib-src")
+    # Name is everything up to the last dash-followed-by-digit
+    pkg_name=$(echo "$pkg" | sed 's/-[0-9][0-9.]*$//')
+    KEEP_LIST="${KEEP_LIST}  \"${pkg_name}\",\n"
 done
 
 cat > "$ROOTFS/system/config/system.toml" << TOML
