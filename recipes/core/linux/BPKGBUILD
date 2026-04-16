@@ -46,9 +46,10 @@ build() {
     make olddefconfig
 
     # GCC 15 introduces new warnings that older kernels trigger as errors
-    # GCC 15 compatibility: suppress new warnings and disable -Werror
-    # (kernel 6.12.8 + GCC 15 has too many new warning types)
+    # GCC 15 compatibility: disable -Werror and EFI stub (C23 bool conflict)
     scripts/config --disable CONFIG_WERROR
+    scripts/config --disable CONFIG_EFI
+    scripts/config --disable CONFIG_EFI_STUB
     make olddefconfig
     export KCFLAGS="-Wno-error"
     make -j$(nproc)
