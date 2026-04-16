@@ -156,6 +156,7 @@ ALL_PKGS=(
     shared-mime-info-src-2.4 iso-codes-src-4.17.0
     hicolor-icon-theme-src-0.17
     # System utilities
+    bxc-shim-0.1.0
     busybox-src-1.37.0
     ca-certificates-2025.04
     fonts-liberation-2.1.5
@@ -324,8 +325,8 @@ test -c /dev/tty1 || mknod /dev/tty1 c 4 1 2>/dev/null
 test -c /dev/tty7 || mknod /dev/tty7 c 4 7 2>/dev/null
 chmod 666 /dev/tty* 2>/dev/null
 
-# Load bingux_compat
-insmod /system/profiles/current/lib/modules/bingux_compat.ko 2>/dev/null
+# Load bingux_compat (directly from store — system-level, no sandbox)
+insmod /system/packages/bingux-compat-1.1-x86_64-linux/lib/modules/bingux_compat.ko 2>/dev/null
 
 # Generate /etc
 printf 'root:x:0:0:root:/users/root:/bin/sh\nnobody:x:65534:65534:nobody:/:/sbin/nologin\n' > /etc/passwd
@@ -374,11 +375,7 @@ DBUS
 dbus-daemon --config-file=/system/state/ephemeral/etc/dbus-session.conf --fork --address="unix:path=/run/dbus-session" 2>/dev/null
 export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/dbus-session"
 
-# GPU modules (harmless if built-in)
-# GPU modules (harmless failures if built-in to kernel)
-insmod /system/profiles/current/lib/modules/virtio_dma_buf.ko 2>/dev/null
-insmod /system/profiles/current/lib/modules/virtio-gpu.ko 2>/dev/null
-insmod /system/profiles/current/lib/modules/virtio_input.ko 2>/dev/null
+# GPU modules — built-in to kernel (defconfig), no insmod needed
 
 # udev
 systemd-udevd --daemon 2>/dev/null
