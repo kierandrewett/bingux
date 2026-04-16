@@ -52,57 +52,51 @@ else
 fi
 log "ISO tool: $ISO_TOOL"
 
-# ── Phase 1: Kernel ──────────────────────────────────────────────────
-step "Phase 1: Kernel"
-KERNEL="$STORE/linux-kernel-full-6.12.8-x86_64-linux/boot/vmlinuz"
-if [ -f "$KERNEL" ]; then
-    log "Kernel already built: $KERNEL"
-else
-    log "Building kernel 6.12.8..."
-    KSRC=/tmp/bingux-kernel-full/linux-6.12.8
-    if [ ! -d "$KSRC" ]; then
-        if [ ! -f "$CACHE/linux-6.12.8.tar.xz" ]; then
-            curl -fSL -o "$CACHE/linux-6.12.8.tar.xz" \
-                https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.8.tar.xz
-        fi
-        mkdir -p /tmp/bingux-kernel-full
-        tar xf "$CACHE/linux-6.12.8.tar.xz" -C /tmp/bingux-kernel-full
-    fi
-
-    # Use host kernel config as base, enable everything needed
-    if [ -f "$SCRIPT_DIR/kernel/bingux-kernel-config/config-full" ]; then
-        cp "$SCRIPT_DIR/kernel/bingux-kernel-config/config-full" "$KSRC/.config"
-    else
-        # Use host config
-        cp /boot/config-$(uname -r) "$KSRC/.config" 2>/dev/null || make -C "$KSRC" defconfig
-    fi
-    make -C "$KSRC" olddefconfig
-    make -C "$KSRC" -j$(nproc)
-
-    # Install kernel
-    KDEST="$STORE/linux-kernel-full-6.12.8-x86_64-linux"
-    mkdir -p "$KDEST/boot" "$KDEST/lib/modules/6.12.8"
-    cp "$KSRC/arch/x86/boot/bzImage" "$KDEST/boot/vmlinuz"
-    cp "$KSRC/.config" "$KDEST/boot/config"
-    KERNEL="$KDEST/boot/vmlinuz"
-    log "Kernel built: $KERNEL"
-fi
-
-# ── Phase 2: XFCE Stack (25 packages via bsys) ──────────────────────
-step "Phase 2: XFCE Desktop Stack"
-log "Building XFCE stack via bsys (skips already-built packages)..."
-
-# Build bsys-cli if needed
+# ── Build bsys-cli (needed for all phases) ──────────────────────────
 BSYS="$SCRIPT_DIR/target/release/bsys-cli"
 if [ ! -x "$BSYS" ]; then
-    log "Building bsys-cli..."
+    step "Building bsys-cli"
     cargo build --release --manifest-path="$SCRIPT_DIR/Cargo.toml" --bin bsys-cli 2>&1 | tail -3
 fi
 
 export BPKG_STORE_ROOT="$STORE"
 export BSYS_CACHE_DIR="$CACHE"
 
-# Build order (dependency chain)
+# Helper: build a package via bsys, report status
+bsys_build() {
+    local recipe="$1" name="$2"
+    local result
+    result=$("$BSYS" build "$recipe" 2>&1)
+    if echo "$result" | grep -q "ok: built"; then
+        log "  Built: $name"
+        return 0
+    elif echo "$result" | grep -q "already exists"; then
+        log "  Cached: $name"
+        return 0
+    else
+        echo "  FAILED: $name"
+        echo "$result" | tail -5
+        return 1
+    fi
+}
+
+# ── Phase 1: Kernel ──────────────────────────────────────────────────
+step "Phase 1: Kernel"
+KERNEL="$STORE/linux-kernel-full-6.12.8-x86_64-linux/boot/vmlinuz"
+bsys_build "$SCRIPT_DIR/recipes/core/linux/BPKGBUILD" "linux-kernel-full-6.12.8" || {
+    echo "ERROR: Kernel build failed"; exit 1
+}
+
+# ── Phase 2: bingux_compat kernel module ─────────────────────────────
+step "Phase 2: bingux_compat kernel module"
+bsys_build "$SCRIPT_DIR/recipes/core/bingux-compat/BPKGBUILD" "bingux-compat-1.1" || {
+    echo "ERROR: bingux_compat module build failed"; exit 1
+}
+
+# ── Phase 3: XFCE Stack (25 packages via bsys) ──────────────────────
+step "Phase 3: XFCE Desktop Stack"
+log "Building XFCE stack via bsys..."
+
 DESKTOP_PKGS=(
     glib-src fribidi-src harfbuzz-src cairo-src pango-src
     gdk-pixbuf-src libepoxy-src graphene-src at-spi2-core-src
@@ -112,69 +106,27 @@ DESKTOP_PKGS=(
     xfce4-settings-src xfce4-terminal-src grim-src
 )
 
-BUILT=0 SKIPPED=0 FAILED=0
+FAILED=0
 for pkg in "${DESKTOP_PKGS[@]}"; do
-    result=$("$BSYS" build "$SCRIPT_DIR/recipes/desktop/$pkg/BPKGBUILD" 2>&1)
-    if echo "$result" | grep -q "ok: built"; then
-        log "  Built: $pkg"
-        BUILT=$((BUILT+1))
-    elif echo "$result" | grep -q "already exists"; then
-        SKIPPED=$((SKIPPED+1))
-    else
-        echo "  FAILED: $pkg"
-        echo "$result" | tail -3
-        FAILED=$((FAILED+1))
-    fi
+    bsys_build "$SCRIPT_DIR/recipes/desktop/$pkg/BPKGBUILD" "$pkg" || FAILED=$((FAILED+1))
 done
-log "XFCE stack: $BUILT built, $SKIPPED cached, $FAILED failed"
 if [ "$FAILED" -gt 0 ]; then
-    echo "ERROR: Some packages failed to build. Check output above."
+    echo "ERROR: $FAILED packages failed to build."
     exit 1
-fi
-
-# ── Phase 3: bingux_compat kernel module ─────────────────────────────
-step "Phase 3: bingux_compat kernel module"
-COMPAT_MOD="$SCRIPT_DIR/kernel/bingux-compat/bingux_compat.ko"
-KSRC=/tmp/bingux-kernel-full/linux-6.12.8
-if [ -f "$COMPAT_MOD" ] && [ -f "$KSRC/Module.symvers" ]; then
-    log "bingux_compat module already built"
-else
-    log "Building bingux_compat module..."
-    if [ ! -f "$KSRC/Module.symvers" ]; then
-        log "Need kernel build tree for module building, using KBUILD_MODPOST_WARN=1"
-    fi
-    make -C "$SCRIPT_DIR/kernel/bingux-compat" \
-        KDIR="$KSRC" KBUILD_MODPOST_WARN=1 2>&1 | tail -5
-    log "Module built: $COMPAT_MOD"
 fi
 
 # ── Phase 4: Assemble rootfs ─────────────────────────────────────────
 step "Phase 4: Assemble live rootfs"
 rm -rf "$ROOTFS"
-mkdir -p "$ROOTFS"/{io,system/{config,kernel/{proc,sys},modules,state/ephemeral,tmp,profiles/1/{bin,lib,lib64,sbin,usr,share}},users/root/.config/labwc}
+mkdir -p "$ROOTFS"/{io,system/{config,kernel/{proc,sys},packages,state/ephemeral,tmp,profiles},users/root/.config/labwc}
 
-PROFILE="$ROOTFS/system/profiles/1"
-ln -sf 1 "$ROOTFS/system/profiles/current"
-
-# 4a. Copy busybox (static)
-log "Copying busybox..."
-if [ -f "$STORE/bash-glibc-5.2.21-x86_64-linux/bin/busybox" ]; then
-    cp "$STORE/bash-glibc-5.2.21-x86_64-linux/bin/busybox" "$PROFILE/bin/"
-elif command -v busybox &>/dev/null; then
-    cp "$(command -v busybox)" "$PROFILE/bin/"
-else
-    echo "ERROR: busybox not found"
-    exit 1
-fi
-
-# 4b. Copy host glibc/ld-linux into lib64
-log "Copying host glibc..."
-cp /lib64/ld-linux-x86-64.so.2 "$PROFILE/lib64/"
-cp /lib64/libc.so.6 "$PROFILE/lib64/"
-
-# 4c. Copy XFCE stack libraries (from our builds + host deps)
-log "Copying XFCE libraries..."
-XFCE_PKGS=(
+# 4a. Copy packages into rootfs store
+log "Copying packages to rootfs store..."
+ALL_PKGS=(
+    # Kernel + module
+    linux-kernel-full-6.12.8
+    bingux-compat-1.1
+    # Desktop stack
     glib-src-2.82.4 fribidi-src-1.0.16 harfbuzz-src-10.1.0
     freetype-shared-src-2.13.3 fontconfig-shared-src-2.15.0
     cairo-src-1.18.2 pango-src-1.54.0 gdk-pixbuf-src-2.42.12
@@ -186,130 +138,115 @@ XFCE_PKGS=(
     exo-src-4.20.0 thunar-src-4.20.0 xfce4-panel-src-4.20.0
     xfce4-settings-src-4.20.0 xfce4-terminal-src-1.1.3
     grim-src-1.4.0
+    # Wayland/compositor stack (from bootstrap)
+    wayland-src-1.23.1 wayland-protocols-src-1.38
+    wlroots-src-0.18.2 labwc-src-0.8.2 seatd-src-0.9.1
+    foot-src-1.19.0 fcft-src-3.1.9
+    xkbcommon-src-1.7.0 libdrm-src-2.4.123
+    pixman-src-0.43.4 mesa-src-24.3.4
+    libinput-src-1.27.0 libevdev-src-1.13.3 mtdev-src-1.1.7
+    libdisplay-info-src-0.2.0
+    # Core
+    dbus-src-1.14.10 systemd-src-256.11
+    alsa-lib-src-1.2.12 pipewire-src-1.2.7
+    libffi-src-3.4.6 pcre2-src-10.44
+    zlib-1.3.1 expat-src-2.6.4 libpng-src-1.6.44
+    bzip2-src-1.0.8 openssl-src-3.4.1
+    libcap-src-2.70 libunistring-src-1.3
+    shared-mime-info-src-2.4 iso-codes-src-4.17.0
+    hicolor-icon-theme-src-0.17
 )
 
-for pkg in "${XFCE_PKGS[@]}"; do
+for pkg in "${ALL_PKGS[@]}"; do
     pkgdir="$STORE/${pkg}-x86_64-linux"
-    [ -d "$pkgdir" ] || continue
-    [ -d "$pkgdir/lib" ] && cp -an "$pkgdir/lib/"*.so* "$PROFILE/lib/" 2>/dev/null || true
-    [ -d "$pkgdir/bin" ] && cp -an "$pkgdir/bin/"* "$PROFILE/bin/" 2>/dev/null || true
-    [ -d "$pkgdir/libexec" ] && { mkdir -p "$PROFILE/libexec"; cp -an "$pkgdir/libexec/"* "$PROFILE/libexec/" 2>/dev/null || true; }
-    [ -d "$pkgdir/share" ] && cp -an "$pkgdir/share/"* "$PROFILE/share/" 2>/dev/null || true
-    for subdir in gio gdk-pixbuf-2.0 gtk-3.0 xfce4; do
-        [ -d "$pkgdir/lib/$subdir" ] && cp -an "$pkgdir/lib/$subdir" "$PROFILE/lib/" 2>/dev/null || true
-    done
+    if [ -d "$pkgdir" ]; then
+        cp -a "$pkgdir" "$ROOTFS/system/packages/"
+    fi
+done
+log "Copied $(ls -d "$ROOTFS/system/packages/"*/ 2>/dev/null | wc -l) packages"
+
+# 4b. Write system.toml with package list
+log "Writing system.toml..."
+KEEP_LIST=""
+for pkg in "${ALL_PKGS[@]}"; do
+    KEEP_LIST="${KEEP_LIST}  \"${pkg}\",\n"
 done
 
-# 4d. Copy xfconfd
-if [ -d "$STORE/xfconf-src-4.20.0-x86_64-linux/lib/xfce4" ]; then
-    mkdir -p "$PROFILE/lib/xfce4/xfconf"
-    cp "$STORE/xfconf-src-4.20.0-x86_64-linux/lib/xfce4/xfconf/xfconfd" "$PROFILE/lib/xfce4/xfconf/"
-    ln -sf ../lib/xfce4/xfconf/xfconfd "$PROFILE/bin/xfconfd"
-fi
-
-# 4e. Copy labwc, foot, seatd from store
-for pkg in labwc-src-0.8.2 labwc-glibc-0.8.2 foot-src-1.19.0 foot-glibc-1.19.0 seatd-src-0.9.1 seatd-glibc-0.9.1; do
-    pkgdir="$STORE/${pkg}-x86_64-linux"
-    [ -d "$pkgdir" ] || continue
-    [ -d "$pkgdir/bin" ] && cp -an "$pkgdir/bin/"* "$PROFILE/bin/" 2>/dev/null || true
-    for libdir in "$pkgdir/lib" "$pkgdir/lib64"; do
-        [ -d "$libdir" ] && cp -an "$libdir/"*.so* "$PROFILE/lib/" 2>/dev/null || true
-    done
-done
-
-# 4f. Copy host dbus
-log "Copying dbus..."
-cp /usr/bin/dbus-daemon "$PROFILE/bin/"
-cp /usr/bin/dbus-send "$PROFILE/bin/" 2>/dev/null || true
-
-# 4g. Copy host curl (for networking)
-cp /usr/bin/curl "$PROFILE/bin/" 2>/dev/null || true
-
-# 4h. Resolve ALL transitive library dependencies from host
-log "Resolving library dependencies..."
-# Collect all needed libs in one pass using ldd on key binaries
-{
-    for target in "$PROFILE"/bin/xfce4-panel "$PROFILE"/bin/xfce4-terminal \
-                  "$PROFILE"/bin/thunar "$PROFILE"/bin/labwc "$PROFILE"/bin/foot \
-                  "$PROFILE"/bin/seatd "$PROFILE"/bin/dbus-daemon "$PROFILE"/bin/curl \
-                  "$PROFILE"/bin/grim; do
-        [ -f "$target" ] && ldd "$target" 2>/dev/null
-    done
-    for target in "$PROFILE"/lib/libgtk-3.so* "$PROFILE"/lib/libgio-2.0.so* \
-                  "$PROFILE"/lib/libvte-2.91.so*; do
-        [ -f "$target" ] && ldd "$target" 2>/dev/null
-    done
-} | awk '{print $3}' | grep '^/' | sort -u | while read -r dep; do
-    fname=$(basename "$dep")
-    [ -f "$PROFILE/lib/$fname" ] || cp "$dep" "$PROFILE/lib/" 2>/dev/null || true
-done
-# Remove glibc base libs (must come from lib64, not lib)
-rm -f "$PROFILE/lib/libc.so"* "$PROFILE/lib/libm.so"* "$PROFILE/lib/libdl.so"* \
-      "$PROFILE/lib/librt.so"* "$PROFILE/lib/libpthread.so"* "$PROFILE/lib/libresolv.so"* \
-      "$PROFILE/lib/libcrypt.so"*
-
-log "Libraries: $(ls "$PROFILE/lib/"*.so* 2>/dev/null | wc -l)"
-
-# 4i. Copy host pixbuf loaders
-if [ -d /usr/lib64/gdk-pixbuf-2.0 ]; then
-    cp -a /usr/lib64/gdk-pixbuf-2.0 "$PROFILE/lib/"
-    sed -i "s|/usr/lib64/gdk-pixbuf-2.0|/system/profiles/current/lib/gdk-pixbuf-2.0|g" \
-        "$PROFILE/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache" 2>/dev/null || true
-fi
-
-# 4j. Copy cursor theme + icons
-if [ -d /usr/share/icons/Adwaita/cursors ]; then
-    mkdir -p "$PROFILE/share/icons/Adwaita"
-    cp -a /usr/share/icons/Adwaita/cursors "$PROFILE/share/icons/Adwaita/"
-    cp /usr/share/icons/Adwaita/index.theme "$PROFILE/share/icons/Adwaita/" 2>/dev/null || true
-fi
-
-# 4k. Copy XKB data
-if [ -d /usr/share/X11/xkb ]; then
-    mkdir -p "$PROFILE/usr/share/X11"
-    cp -rL /usr/share/X11/xkb "$PROFILE/usr/share/X11/"
-fi
-
-# 4l. Copy fonts
-if [ -d /usr/share/fonts ]; then
-    mkdir -p "$PROFILE/usr/share/fonts"
-    cp -a /usr/share/fonts/liberation-sans "$PROFILE/usr/share/fonts/" 2>/dev/null || true
-    cp -a /usr/share/fonts/liberation-mono "$PROFILE/usr/share/fonts/" 2>/dev/null || true
-    cp -a /usr/share/fonts/google-noto "$PROFILE/usr/share/fonts/" 2>/dev/null || \
-    cp -a /usr/share/fonts/dejavu-sans-fonts "$PROFILE/usr/share/fonts/" 2>/dev/null || true
-fi
-
-# 4m. Copy SSL certs
-mkdir -p "$PROFILE/share/ssl"
-cp /etc/pki/tls/certs/ca-bundle.crt "$PROFILE/share/ssl/" 2>/dev/null || \
-cp /etc/ssl/certs/ca-certificates.crt "$PROFILE/share/ssl/ca-bundle.crt" 2>/dev/null || true
-
-# 4n. Compile GLib schemas
-log "Compiling GLib schemas..."
-if [ -d "$PROFILE/share/glib-2.0/schemas" ]; then
-    LD_LIBRARY_PATH="$PROFILE/lib" "$PROFILE/bin/glib-compile-schemas" \
-        "$PROFILE/share/glib-2.0/schemas/" 2>/dev/null || true
-fi
-
-# 4o. Generate MIME database
-log "Generating MIME database..."
-if command -v update-mime-database &>/dev/null && [ -d "$PROFILE/share/mime" ]; then
-    update-mime-database "$PROFILE/share/mime" 2>/dev/null || true
-fi
-
-# 4p. Copy bingux_compat module
-cp "$SCRIPT_DIR/kernel/bingux-compat/bingux_compat.ko" "$ROOTFS/system/modules/"
-
-# 4q. System config
-cat > "$ROOTFS/system/config/system.toml" << 'TOML'
+cat > "$ROOTFS/system/config/system.toml" << TOML
 [system]
 hostname = "bingux"
 locale = "en_GB.UTF-8"
 timezone = "Europe/London"
 keymap = "gb"
+
+[packages]
+keep = [
+$(printf "$KEEP_LIST")
+]
 TOML
 
-# 4r. labwc autostart
+# 4c. Compose system profile via bsys apply
+log "Composing system profile..."
+BSYS_CONFIG_PATH="$ROOTFS/system/config/system.toml" \
+BSYS_PROFILES_ROOT="$ROOTFS/system/profiles" \
+BSYS_PACKAGES_ROOT="$ROOTFS/system/packages" \
+BPKG_STORE_ROOT="$ROOTFS/system/packages" \
+"$BSYS" apply 2>&1 | grep -E '\[bsys\]'
+
+PROFILE="$ROOTFS/system/profiles/current"
+if [ ! -d "$PROFILE" ] && [ ! -L "$PROFILE" ]; then
+    echo "ERROR: bsys apply failed to create profile"
+    exit 1
+fi
+log "Profile created at $PROFILE"
+
+# 4d. Post-profile: add host runtime data not yet packaged
+# TODO: these should become proper bsys packages (fonts, cursors, xkb, ssl-certs)
+PROFILE_DIR=$(readlink -f "$ROOTFS/system/profiles/current" 2>/dev/null || echo "$ROOTFS/system/profiles/1")
+log "Adding host runtime data to profile..."
+
+# Host glibc (needed until all binaries are patchelf'd to store glibc)
+mkdir -p "$PROFILE_DIR/lib64"
+cp /lib64/ld-linux-x86-64.so.2 "$PROFILE_DIR/lib64/" 2>/dev/null || true
+cp /lib64/libc.so.6 "$PROFILE_DIR/lib64/" 2>/dev/null || true
+
+# XKB keyboard data
+if [ -d /usr/share/X11/xkb ]; then
+    mkdir -p "$PROFILE_DIR/usr/share/X11"
+    cp -rL /usr/share/X11/xkb "$PROFILE_DIR/usr/share/X11/"
+fi
+
+# Fonts
+mkdir -p "$PROFILE_DIR/usr/share/fonts"
+cp -a /usr/share/fonts/liberation-sans "$PROFILE_DIR/usr/share/fonts/" 2>/dev/null || true
+cp -a /usr/share/fonts/liberation-mono "$PROFILE_DIR/usr/share/fonts/" 2>/dev/null || true
+
+# Cursor theme
+if [ -d /usr/share/icons/Adwaita/cursors ]; then
+    mkdir -p "$PROFILE_DIR/share/icons/Adwaita"
+    cp -a /usr/share/icons/Adwaita/cursors "$PROFILE_DIR/share/icons/Adwaita/"
+    cp /usr/share/icons/Adwaita/index.theme "$PROFILE_DIR/share/icons/Adwaita/" 2>/dev/null || true
+fi
+
+# SSL certificates
+mkdir -p "$PROFILE_DIR/share/ssl"
+cp /etc/pki/tls/certs/ca-bundle.crt "$PROFILE_DIR/share/ssl/" 2>/dev/null || \
+cp /etc/ssl/certs/ca-certificates.crt "$PROFILE_DIR/share/ssl/ca-bundle.crt" 2>/dev/null || true
+
+# 4e. Compile GLib schemas (profile needs compiled schemas)
+log "Compiling GLib schemas..."
+SCHEMA_DIR="$PROFILE_DIR/share/glib-2.0/schemas"
+if [ -d "$SCHEMA_DIR" ]; then
+    glib-compile-schemas "$SCHEMA_DIR" 2>/dev/null || true
+fi
+
+# 4f. Generate MIME database
+log "Generating MIME database..."
+if command -v update-mime-database &>/dev/null && [ -d "$PROFILE_DIR/share/mime" ]; then
+    update-mime-database "$PROFILE_DIR/share/mime" 2>/dev/null || true
+fi
+
+# 4g. labwc autostart
 cat > "$ROOTFS/users/root/.config/labwc/autostart" << 'AUTO'
 # XFCE Desktop on Bingux
 xfce4-panel &
@@ -364,7 +301,7 @@ test -c /dev/tty7 || mknod /dev/tty7 c 4 7 2>/dev/null
 chmod 666 /dev/tty* 2>/dev/null
 
 # Load bingux_compat
-insmod /system/modules/bingux_compat.ko 2>/dev/null
+insmod /system/profiles/current/lib/modules/bingux_compat.ko 2>/dev/null
 
 # Generate /etc
 printf 'root:x:0:0:root:/users/root:/bin/sh\nnobody:x:65534:65534:nobody:/:/sbin/nologin\n' > /etc/passwd
@@ -414,9 +351,10 @@ dbus-daemon --config-file=/system/state/ephemeral/etc/dbus-session.conf --fork -
 export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/dbus-session"
 
 # GPU modules (harmless if built-in)
-insmod /system/modules/kernel/virtio_dma_buf.ko 2>/dev/null
-insmod /system/modules/kernel/virtio-gpu.ko 2>/dev/null
-insmod /system/modules/kernel/virtio_input.ko 2>/dev/null
+# GPU modules (harmless failures if built-in to kernel)
+insmod /system/profiles/current/lib/modules/virtio_dma_buf.ko 2>/dev/null
+insmod /system/profiles/current/lib/modules/virtio-gpu.ko 2>/dev/null
+insmod /system/profiles/current/lib/modules/virtio_input.ko 2>/dev/null
 
 # udev
 systemd-udevd --daemon 2>/dev/null

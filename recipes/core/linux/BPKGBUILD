@@ -1,22 +1,37 @@
 pkgscope="bingux"
-pkgname="linux"
+pkgname="linux-kernel-full"
 pkgver="6.12.8"
 pkgarch="x86_64-linux"
-pkgdesc="Linux kernel image and modules"
+pkgdesc="Linux kernel — full hardware config with built-in drivers"
 license="GPL-2.0"
-
 depends=()
-exports=(
-    "boot/vmlinuz"
-    "lib/modules/${pkgver}/"
-)
-
-source=("https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${pkgver}.tar.xz")
+makedepends=()
+exports=("boot/vmlinuz" "boot/config" "lib/modules/6.12.8/")
+source=("https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.8.tar.xz")
 sha256sums=("SKIP")
 
+build() {
+    cd "$SRCDIR/linux-6.12.8"
+
+    # Use Bingux kernel config if available, else host config, else defconfig
+    SCRIPT_DIR="${BPKG_STORE_ROOT%/*}"
+    if [ -f "$SCRIPT_DIR/bingux/kernel/bingux-kernel-config/config-full" ]; then
+        cp "$SCRIPT_DIR/bingux/kernel/bingux-kernel-config/config-full" .config
+    elif [ -f /boot/config-$(uname -r) ]; then
+        cp /boot/config-$(uname -r) .config
+    else
+        make defconfig
+    fi
+
+    make olddefconfig
+    make -j$(nproc)
+}
+
 package() {
-    mkdir -p "$PKGDIR/boot" "$PKGDIR/lib/modules/${pkgver}"
-    # In practice, this would build the kernel with Bingux defconfig
-    # or extract a pre-built kernel image
-    echo "TODO: build or extract kernel image"
+    cd "$SRCDIR/linux-6.12.8"
+    mkdir -p "$PKGDIR/boot" "$PKGDIR/lib/modules/6.12.8"
+    cp arch/x86/boot/bzImage "$PKGDIR/boot/vmlinuz"
+    cp .config "$PKGDIR/boot/config"
+    # Install modules (if any are built as modules)
+    make INSTALL_MOD_PATH="$PKGDIR" modules_install 2>/dev/null || true
 }
