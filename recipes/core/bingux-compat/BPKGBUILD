@@ -4,7 +4,7 @@ pkgver="1.1"
 pkgarch="x86_64-linux"
 pkgdesc="bingux_compat — kernel module for FHS path translation"
 license="GPL-2.0"
-depends=("linux-kernel-full-6.12.8")
+depends=("linux-kernel-full-6.14.6")
 makedepends=()
 exports=("lib/modules/bingux_compat.ko")
 source=()
@@ -16,10 +16,10 @@ build() {
     MOD_SRC="$REPO_DIR/kernel/bingux-compat"
 
     # Find kernel build tree from the kernel store package
-    KDIR="$BPKG_STORE_ROOT/linux-kernel-full-6.12.8-x86_64-linux/lib/modules/6.12.8/build"
+    KDIR="$BPKG_STORE_ROOT/linux-kernel-full-6.14.6-x86_64-linux/lib/modules/6.14.6/build"
     if [ ! -d "$KDIR" ]; then
         # Fallback: look for extracted kernel source
-        KDIR="/tmp/bingux-kernel-full/linux-6.12.8"
+        KDIR="/tmp/bingux-kernel-full/linux-6.14.6"
     fi
 
     if [ ! -f "$KDIR/Makefile" ]; then

@@ -82,8 +82,8 @@ bsys_build() {
 
 # ── Phase 1: Kernel ──────────────────────────────────────────────────
 step "Phase 1: Kernel"
-KERNEL="$STORE/linux-kernel-full-6.12.8-x86_64-linux/boot/vmlinuz"
-bsys_build "$SCRIPT_DIR/recipes/core/linux/BPKGBUILD" "linux-kernel-full-6.12.8" || {
+KERNEL="$STORE/linux-kernel-full-6.14.6-x86_64-linux/boot/vmlinuz"
+bsys_build "$SCRIPT_DIR/recipes/core/linux/BPKGBUILD" "linux-kernel-full-6.14.6" || {
     echo "ERROR: Kernel build failed"; exit 1
 }
 
@@ -124,7 +124,7 @@ mkdir -p "$ROOTFS"/{io,system/{config,kernel/{proc,sys},packages,state/ephemeral
 log "Copying packages to rootfs store..."
 ALL_PKGS=(
     # Kernel + module
-    linux-kernel-full-6.12.8
+    linux-kernel-full-6.14.6
     bingux-compat-1.1
     # Desktop stack
     glib-src-2.82.4 fribidi-src-1.0.16 harfbuzz-src-10.1.0

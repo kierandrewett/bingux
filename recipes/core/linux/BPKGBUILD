@@ -1,19 +1,19 @@
 pkgscope="bingux"
 pkgname="linux-kernel-full"
-pkgver="6.12.8"
+pkgver="6.14.6"
 pkgarch="x86_64-linux"
-pkgdesc="Linux kernel — full hardware config with built-in drivers"
+pkgdesc="Linux kernel — Bingux defconfig with virtio/DRM/framebuffer support"
 license="GPL-2.0"
 depends=()
 makedepends=()
-exports=("boot/vmlinuz" "boot/config" "lib/modules/6.12.8/")
-source=("https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.8.tar.xz")
+exports=("boot/vmlinuz" "boot/config")
+source=("https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.14.6.tar.xz")
 sha256sums=("SKIP")
 
 build() {
-    cd "$SRCDIR/linux-6.12.8"
+    cd "$SRCDIR/linux-6.14.6"
 
-    # Start from defconfig (minimal, works with any GCC version)
+    # Start from defconfig (minimal, reliable)
     make defconfig
 
     # Enable hardware support needed for Bingux
@@ -23,8 +23,6 @@ build() {
     scripts/config --enable CONFIG_VIRTIO_CONSOLE
     scripts/config --enable CONFIG_DRM
     scripts/config --enable CONFIG_DRM_VIRTIO_GPU
-    scripts/config --enable CONFIG_DRM_VIRTIO_GPU_KMS
-    scripts/config --enable CONFIG_DRM_FBDEV_EMULATION
     scripts/config --enable CONFIG_FRAMEBUFFER_CONSOLE
     scripts/config --enable CONFIG_VT
     scripts/config --enable CONFIG_VT_CONSOLE
@@ -35,31 +33,22 @@ build() {
     scripts/config --enable CONFIG_SERIAL_8250
     scripts/config --enable CONFIG_SERIAL_8250_CONSOLE
     scripts/config --enable CONFIG_EXT4_FS
-    scripts/config --enable CONFIG_VFAT_FS
-    scripts/config --enable CONFIG_ISO9660_FS
-    scripts/config --enable CONFIG_CGROUPS
     scripts/config --enable CONFIG_BLK_DEV_INITRD
     scripts/config --enable CONFIG_RD_GZIP
     scripts/config --enable CONFIG_MODULES
     scripts/config --enable CONFIG_NET
     scripts/config --enable CONFIG_INET
+    scripts/config --disable CONFIG_WERROR
     make olddefconfig
 
-    # GCC 15 introduces new warnings that older kernels trigger as errors
-    # GCC 15 compatibility: disable -Werror and EFI stub (C23 bool conflict)
-    scripts/config --disable CONFIG_WERROR
-    scripts/config --disable CONFIG_EFI
-    scripts/config --disable CONFIG_EFI_STUB
-    make olddefconfig
-    export KCFLAGS="-Wno-error"
     make -j$(nproc)
 }
 
 package() {
-    cd "$SRCDIR/linux-6.12.8"
-    mkdir -p "$PKGDIR/boot" "$PKGDIR/lib/modules/6.12.8"
+    cd "$SRCDIR/linux-6.14.6"
+    mkdir -p "$PKGDIR/boot"
     cp arch/x86/boot/bzImage "$PKGDIR/boot/vmlinuz"
     cp .config "$PKGDIR/boot/config"
-    # Install modules (if any are built as modules)
+    # Install modules (if any built as modules)
     make INSTALL_MOD_PATH="$PKGDIR" modules_install 2>/dev/null || true
 }
