@@ -243,10 +243,14 @@ log "Profile created at $PROFILE"
 # TODO: these should become proper bsys packages
 PROFILE_DIR=$(readlink -f "$ROOTFS/system/profiles/current" 2>/dev/null || echo "$ROOTFS/system/profiles/1")
 
-# Busybox (static — needed for init shebang)
+# Busybox (static — needed for init shebang + basic utils)
 log "Adding busybox..."
 cp "$(command -v busybox)" "$PROFILE_DIR/bin/busybox"
 chmod +x "$PROFILE_DIR/bin/busybox"
+# Create essential busybox symlinks
+for cmd in sh ash mount umount mkdir ln ls cat echo chmod sleep ip insmod mknod grep sed printf ps kill test head wc find tr; do
+    ln -sf busybox "$PROFILE_DIR/bin/$cmd" 2>/dev/null || true
+done
 log "Adding host runtime data to profile..."
 
 # Host glibc (needed until all binaries are patchelf'd to store glibc)
