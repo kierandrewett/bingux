@@ -13,21 +13,36 @@ sha256sums=("SKIP")
 build() {
     cd "$SRCDIR/linux-6.12.8"
 
-    # Use Bingux kernel config if available, else host config, else defconfig
-    SCRIPT_DIR="${BPKG_STORE_ROOT%/*}"
-    if [ -f "$SCRIPT_DIR/bingux/kernel/bingux-kernel-config/config-full" ]; then
-        cp "$SCRIPT_DIR/bingux/kernel/bingux-kernel-config/config-full" .config
-    elif [ -f /boot/config-$(uname -r) ]; then
-        cp /boot/config-$(uname -r) .config
-    else
-        make defconfig
-    fi
+    # Start from defconfig (minimal, works with any GCC version)
+    make defconfig
 
-    make olddefconfig
-
-    # Disable modules known to fail with newer GCC on older kernel source
-    scripts/config --disable CONFIG_DRM_AMDGPU
-    scripts/config --disable CONFIG_DRM_NOUVEAU
+    # Enable hardware support needed for Bingux
+    scripts/config --enable CONFIG_VIRTIO_PCI
+    scripts/config --enable CONFIG_VIRTIO_BLK
+    scripts/config --enable CONFIG_VIRTIO_NET
+    scripts/config --enable CONFIG_VIRTIO_CONSOLE
+    scripts/config --enable CONFIG_DRM
+    scripts/config --enable CONFIG_DRM_VIRTIO_GPU
+    scripts/config --enable CONFIG_DRM_VIRTIO_GPU_KMS
+    scripts/config --enable CONFIG_DRM_FBDEV_EMULATION
+    scripts/config --enable CONFIG_FRAMEBUFFER_CONSOLE
+    scripts/config --enable CONFIG_VT
+    scripts/config --enable CONFIG_VT_CONSOLE
+    scripts/config --enable CONFIG_INPUT_EVDEV
+    scripts/config --enable CONFIG_DEVTMPFS
+    scripts/config --enable CONFIG_DEVTMPFS_MOUNT
+    scripts/config --enable CONFIG_TMPFS
+    scripts/config --enable CONFIG_SERIAL_8250
+    scripts/config --enable CONFIG_SERIAL_8250_CONSOLE
+    scripts/config --enable CONFIG_EXT4_FS
+    scripts/config --enable CONFIG_VFAT_FS
+    scripts/config --enable CONFIG_ISO9660_FS
+    scripts/config --enable CONFIG_CGROUPS
+    scripts/config --enable CONFIG_BLK_DEV_INITRD
+    scripts/config --enable CONFIG_RD_GZIP
+    scripts/config --enable CONFIG_MODULES
+    scripts/config --enable CONFIG_NET
+    scripts/config --enable CONFIG_INET
     make olddefconfig
 
     make -j$(nproc)
