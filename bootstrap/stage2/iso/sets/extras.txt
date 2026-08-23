@@ -1,4 +1,0 @@
-firefox
-neovim
-ripgrep
-python

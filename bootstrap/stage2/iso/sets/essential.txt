@@ -1,9 +1,0 @@
-glibc
-linux
-systemd
-bash
-coreutils
-bpkg
-bsys
-bxc
-bingux-gated
