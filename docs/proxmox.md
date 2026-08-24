@@ -1,14 +1,16 @@
 # Proxmox validation
 
-Bingux validates a bootable installation ISO on Proxmox. The Proxmox command is
-developer tooling. It is exposed as `nix run .#pve-test`; it is not installed in
-a Bingux host or profile.
+Bingux builds a bootable installation ISO for disposable Proxmox validation.
+This repository does not contain a Proxmox API client. Use an
+operator-owned runner or the Proxmox API directly. Keep the runner and its
+credentials outside this repository.
 
-The command uploads an ISO as `content=iso`, creates a 64 GiB disposable VM
-named `bingux-install-<vmid>` and tagged `bingux-pve-test`, attaches the ISO as
-`ide2`, sets `ide2;scsi0` as the boot order, and starts the VM with 8 vCPUs and
-8192 MiB of memory by default. It does not install NixOS automatically. Use the
-Proxmox console to complete and inspect the installation.
+The validation runner must upload the ISO as `content=iso`, create a 64 GiB
+disposable VM with the name `bingux-install-<vmid>` and tag `bingux-pve-test`,
+attach the ISO as `ide2`, set `ide2;scsi0` as the boot order, and start the VM
+with 8 vCPUs and 8192 MiB of memory by default. It must not install NixOS
+automatically. Use the Proxmox console to complete and inspect the
+installation.
 
 ## Build an installation ISO
 
@@ -57,9 +59,9 @@ development, use an existing secret manager or a temporary mode-0600 file that
 is outside this repository. The profile SOPS bootstrap process is defined in
 `docs/architecture.md`.
 
-`bingux.secrets.entries` defaults to a root-owned `0400` file. A command run
-from the profile user shell cannot read that default. Give the profile user
-ownership when the token is used by `nix run`:
+`bingux.secrets.entries` defaults to a root-owned `0400` file. An external
+runner started by the profile user cannot read that default. Give the profile
+user ownership when the runner reads the token:
 
 ```nix
 bingux.secrets.entries.pve-api-token = {
@@ -69,7 +71,7 @@ bingux.secrets.entries.pve-api-token = {
 };
 ```
 
-The command needs these environment variables:
+The runner needs these environment variables:
 
 | Variable | Meaning |
 | --- | --- |
@@ -116,73 +118,40 @@ the capabilities required by this workflow:
 Do not grant an administrator role or put the token secret in the command line,
 repository, or evidence directory.
 
-## Validate before creating a VM
+## Validation sequence
 
-Run a dry run first. It checks command arguments and prints the intended API
-sequence, including every POST field. It does not read the token file or contact
-Proxmox.
+Use this sequence with the external runner or the Proxmox API. The repository
+does not prescribe a runner command or an evidence directory.
 
-```sh
-nix run .#pve-test -- create \
-    --iso "$iso" \
-    --evidence-dir "$state_dir/bingux/pve-evidence" \
-    --dry-run
-```
+1. Build the profile-specific ISO with the command in
+   [Build an installation ISO](#build-an-installation-iso).
+2. Run the runner's dry-run mode, if it has one. Confirm the ISO path, target
+   node, storage names, bridge, VM name, and ownership tag. A dry run must not
+   read the token file or contact Proxmox.
+3. Upload the ISO to the selected storage with `content=iso`. Wait for the
+   upload task to reach a terminal result before creating the VM.
+4. Allocate a disposable VM on the selected node. Set the name to
+   `bingux-install-<vmid>`, set the tag to `bingux-pve-test`, allocate the
+   configured disk, attach the ISO as `ide2`, set `ide2;scsi0` as the boot
+   order, and attach the configured VirtIO bridge.
+5. Start the VM and wait for the start task to reach a terminal result. Retain
+   redacted task records outside this repository.
+6. Inspect the console and verify the installer boot, systemd units, session
+   files, portal, desktop shell, tray, dock, notifications, OSD, and search
+   paths.
+7. Before cleanup, read the VM configuration and verify both the exact
+   `bingux-install-<vmid>` name and the `bingux-pve-test` tag. Refuse cleanup
+   when either value does not match.
+8. Read the power state. Delete a stopped owned VM directly. For a running
+   owned VM, request the QEMU graceful-shutdown endpoint and wait for its task.
+   If graceful shutdown fails or times out, request the explicit QEMU stop
+   endpoint and wait for that task before deleting the VM.
+9. If a shutdown task has an unknown or non-terminal result, do not issue the
+   delete request. Retain the VM and evidence for manual inspection.
 
-Build the focused command check before use:
-
-```sh
-nix build .#checks.x86_64-linux.pve-development-tool
-```
-
-## Create and inspect the VM
-
-Create the VM only after the dry run is correct:
-
-```sh
-nix run .#pve-test -- create \
-    --iso "$iso" \
-    --evidence-dir "$state_dir/bingux/pve-evidence"
-```
-
-The command prints the allocated VMID and a new evidence directory. It writes
-redacted Proxmox task records there. It does not destroy a VM that starts
-successfully. Inspect the Proxmox console, then verify the installer boot,
-systemd units, session files, portal, desktop shell, tray, dock, notification,
-OSD, and search paths.
-
-Use `--destroy-on-failure` only for a failed creation that has written evidence.
-The command starts automatic cleanup only after every request that can change
-the VM has a terminal task result. A terminal non-OK result can trigger cleanup.
-If the create or start request is still running, times out, or has an unknown
-result, the command retains the VM and evidence for manual inspection. It
-deletes only a VM with the Bingux name and tag. The uploaded ISO remains in
-Proxmox storage by design. Remove it only after the validation evidence is
-retained.
-
-Destroy the VM explicitly when testing is complete:
-
-```sh
-nix run .#pve-test -- destroy \
-    --vmid <allocated-vmid> \
-    --evidence-dir "$state_dir/bingux/pve-evidence"
-```
-
-Destroy first verifies that the VM is named `bingux-install-<vmid>` and tagged
-`bingux-pve-test`. It refuses all other VMs, including VMs created by an older
-Bingux version without the tag. Remove an older disposable VM manually after
-you verify its identity. For an owned VM, it reads the power state. It deletes
-an already stopped VM without a power request. For a running VM, it requests
-the QEMU graceful-shutdown endpoint and waits for its task to finish before
-deleting the VM. If graceful shutdown fails or times out, it requests the
-explicit QEMU stop endpoint and waits for that task before issuing the delete.
-If both shutdown attempts fail, the delete is not attempted. The fallback is
-destructive, so use it only for a disposable VM.
-
-The dry-run plan shows the ownership check, state probe, graceful shutdown,
-bounded task wait, force-stop fallback, and delete sequence without contacting
-Proxmox. All cleanup evidence stays in the local evidence directory and is
-redacted before it is written.
+The uploaded ISO remains in Proxmox storage by design. Remove it only after
+the validation evidence is retained. Keep cleanup evidence redacted and
+outside this repository.
 
 ## Sources
 
