@@ -40,14 +40,14 @@ This file tracks implementation work. A checked item means the related configura
 ## Phase 4: Gnoblin flake integration
 
 - [ ] Add a reproducible Gnoblin flake package and NixOS module in `~/dev/gnoblin`.
-- [ ] Add the minimal, versioned `org.gnoblin.Shell` Super-release signal.
+- [x] Add the minimal, versioned `org.gnoblin.Shell` Super-release signal.
 - [ ] Disable Gnoblin-native notification and OSD ownership for the Bingux session.
 - [ ] Expose the custom Gnoblin session to the display manager.
 - [ ] Build Gnoblin through the Bingux flake with a local-input override.
 
 ## Phase 5: Bingux desktop shell
 
-- [ ] Define the versioned desktop-shell and search-provider contracts.
+- [x] Define the versioned desktop-shell and search-provider contracts.
 - [ ] Add the layer-shell top bar with clock, tray, metrics, privacy, input, network, audio, and power controls.
 - [ ] Add the dock with foreign-toplevel window actions, application menus, window counts, scroll cycling, and launch behaviour.
 - [ ] Add the Super-release Spotlight surface and provider host.

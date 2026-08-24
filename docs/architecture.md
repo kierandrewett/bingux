@@ -45,7 +45,16 @@ A profile that selects Gnoblin needs these stable integration points:
 - Gnoblin implements `zwlr_layer_shell_v1` for externally owned layer-shell surfaces.
 - Gnoblin implements `zwlr_foreign_toplevel_manager_v1` so an external dock can list and control application windows.
 - Gnoblin must not own the notification or on-screen-display user interface for this session. Bingux provides those surfaces when the profile selects its desktop shell.
-- Gnoblin emits a versioned `org.gnoblin.Shell` D-Bus signal when the Super key is released. The Bingux search service uses this signal to show its search surface. Holding Super has no action in the shell.
+- Gnoblin emits `org.gnoblin.Shell.SuperReleased` on `/org/gnoblin/Shell`
+  after Super is released with no other input. Its `(ut)` payload is
+  `[protocolVersion, monotonicUsec]`. Bingux supports protocol version `1`
+  only and ignores other versions. The event is a one-way edge, not key state.
+  The Bingux search service uses it to show the search surface. Holding Super
+  has no action in the shell.
 - The Bingux desktop-shell process owns its own layer-shell surfaces. It does not patch or depend on GNOME Shell UI.
+
+`docs/desktop-shell.md` defines the Bingux desktop-shell, socket, and
+search-provider contracts. It is the source of truth for the interface between
+the shell and its provider host.
 
 The exact D-Bus method and signal names must be documented in Gnoblin before Bingux consumes them. This keeps the protocol explicit and lets another profile use a different desktop choice without a compatibility layer.
