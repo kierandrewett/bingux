@@ -1,6 +1,8 @@
+mod gnoblin;
+
 use bingux_statusd::{
-    Metrics, byte_rate, cpu_percent, metrics_json, parse_cpu_stat, parse_meminfo,
-    parse_network_totals,
+    DesktopState, Metrics, byte_rate, cpu_percent, metrics_with_desktop_state_json, parse_cpu_stat,
+    parse_meminfo, parse_network_totals,
 };
 use std::{
     env, fs,
@@ -19,6 +21,12 @@ use std::{
 const SOCKET_NAME: &str = "metrics-v1.sock";
 const SAMPLE_INTERVAL: Duration = Duration::from_secs(1);
 const MAX_CLIENTS: usize = 16;
+const EVENT_QUEUE_CAPACITY: usize = MAX_CLIENTS + 8;
+
+pub(crate) enum Event {
+    Client(UnixStream),
+    DesktopState(DesktopState),
+}
 
 struct RawSample {
     cpu: bingux_statusd::CpuSample,
@@ -86,12 +94,13 @@ fn main() {
 fn run() -> io::Result<()> {
     let listener = bind_socket()?;
     eprintln!("[bingux-statusd] metrics socket ready");
-    let (sender, receiver) = mpsc::sync_channel(MAX_CLIENTS);
+    let (sender, receiver) = mpsc::sync_channel(EVENT_QUEUE_CAPACITY);
+    let client_sender = sender.clone();
     thread::spawn(move || {
         for connection in listener.incoming() {
             match connection {
                 Ok(stream) => {
-                    if sender.send(stream).is_err() {
+                    if client_sender.send(Event::Client(stream)).is_err() {
                         return;
                     }
                 }
@@ -102,15 +111,25 @@ fn run() -> io::Result<()> {
             }
         }
     });
+    gnoblin::start_state_subscriber(sender);
 
     let mut sampler = Sampler::new();
-    let mut latest_record = metrics_json(sampler.sample()?);
+    let mut latest_metrics = sampler.sample()?;
+    let mut desktop_state = DesktopState::default();
+    let mut latest_record = record_json(latest_metrics, &desktop_state)?;
     let mut clients = Vec::new();
     let mut next_sample = Instant::now() + SAMPLE_INTERVAL;
 
+
     loop {
         if next_sample <= Instant::now() {
-            publish_sample(&mut sampler, &mut latest_record, &mut clients)?;
+            publish_sample(
+                &mut sampler,
+                &mut latest_metrics,
+                &desktop_state,
+                &mut latest_record,
+                &mut clients,
+            )?;
             next_sample += SAMPLE_INTERVAL;
 
             if next_sample <= Instant::now() {
@@ -122,7 +141,7 @@ fn run() -> io::Result<()> {
 
         let timeout = next_sample.saturating_duration_since(Instant::now());
         match receiver.recv_timeout(timeout) {
-            Ok(mut client) => {
+            Ok(Event::Client(mut client)) => {
                 if clients.len() < MAX_CLIENTS
                     && client.set_nonblocking(true).is_ok()
                     && write_record(&mut client, &latest_record)
@@ -130,9 +149,14 @@ fn run() -> io::Result<()> {
                     clients.push(client);
                 }
             }
+            Ok(Event::DesktopState(state)) => {
+                desktop_state = state;
+                latest_record = record_json(latest_metrics, &desktop_state)?;
+                publish_record(&mut clients, &latest_record);
+            }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                return Err(io::Error::other("socket accept thread stopped"));
+                return Err(io::Error::other("event source stopped"));
             }
         }
     }
@@ -140,12 +164,24 @@ fn run() -> io::Result<()> {
 
 fn publish_sample(
     sampler: &mut Sampler,
+    latest_metrics: &mut Metrics,
+    desktop_state: &DesktopState,
     latest_record: &mut String,
     clients: &mut Vec<UnixStream>,
 ) -> io::Result<()> {
-    *latest_record = metrics_json(sampler.sample()?);
-    clients.retain_mut(|client| write_record(client, latest_record));
+    *latest_metrics = sampler.sample()?;
+    *latest_record = record_json(*latest_metrics, desktop_state)?;
+    publish_record(clients, latest_record);
     Ok(())
+}
+
+fn publish_record(clients: &mut Vec<UnixStream>, record: &str) {
+    clients.retain_mut(|client| write_record(client, record));
+}
+
+fn record_json(metrics: Metrics, desktop_state: &DesktopState) -> io::Result<String> {
+    metrics_with_desktop_state_json(metrics, desktop_state)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
 }
 
 fn bind_socket() -> io::Result<UnixListener> {

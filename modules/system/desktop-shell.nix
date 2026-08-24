@@ -78,7 +78,13 @@ in
                 assertion = config.bingux.desktop.enable;
                 message = "bingux.desktopShell requires bingux.desktop.enable";
             }
+            {
+                assertion = config.bingux.desktop.gnoblin.enable;
+                message = "bingux.desktopShell requires bingux.desktop.gnoblin.enable.";
+            }
         ];
+
+        programs.dconf.enable = true;
 
         home-manager.users.${config.bingux.user.name} = {
             programs.quickshell = {
@@ -90,6 +96,11 @@ in
                     target = cfg.systemdTarget;
                 };
             };
+
+            dconf.settings."org/gnoblin/shell".disabled-features = [
+                "notifications"
+                "osd"
+            ];
 
             xdg.configFile."quickshell/${cfg.configName}" = {
                 source = shellSource;

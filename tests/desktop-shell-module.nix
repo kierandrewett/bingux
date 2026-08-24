@@ -21,6 +21,7 @@ let
             {
                 bingux = {
                     desktop.enable = true;
+                    desktop.gnoblin.enable = true;
                     desktopShell.enable = true;
                     desktopShell.dock.pinnedApps = [ "org.example.Terminal" ];
                     user.name = "shell";
@@ -43,6 +44,15 @@ let
         host.config.home-manager.users.shell.xdg.configFile."quickshell/bingux/ProfileSettings.qml";
 in
 assert quickshell.enable;
+assert host.config.programs.dconf.enable;
+assert
+    builtins.map (
+        feature: feature.value
+    ) host.config.home-manager.users.shell.dconf.settings."org/gnoblin/shell".disabled-features.value
+    == [
+        "notifications"
+        "osd"
+    ];
 assert quickshell.activeConfig == "bingux";
 assert quickshell.systemd.enable;
 assert builtins.pathExists "${toString shellConfig.source}/shell.qml";

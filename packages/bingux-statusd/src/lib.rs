@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::time::Duration;
 
 /// CPU tick counters from the aggregate `cpu` line in `/proc/stat`.
@@ -31,6 +32,35 @@ pub struct Metrics {
     pub transmit_bytes_per_second: Option<f64>,
 }
 
+/// One GNOME Shell input source exposed by the Gnoblin control interface.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct InputSource {
+    #[serde(rename = "type")]
+    pub source_type: String,
+    pub id: String,
+    #[serde(rename = "shortName")]
+    pub short_name: String,
+    #[serde(rename = "displayName")]
+    pub display_name: String,
+}
+
+/// The three privacy states exposed by the Gnoblin control interface.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct PrivacyState {
+    pub screen_sharing: bool,
+    pub microphone_in_use: bool,
+    pub location_in_use: bool,
+}
+
+/// Desktop state that supplements the sampled local system metrics.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct DesktopState {
+    pub available: bool,
+    pub input_sources: Vec<InputSource>,
+    pub current_input_source: Option<InputSource>,
+    pub privacy: PrivacyState,
+}
+
 /// Encode a newline-delimited JSON metrics record for the local shell socket.
 pub fn metrics_json(metrics: Metrics) -> String {
     format!(
@@ -41,6 +71,33 @@ pub fn metrics_json(metrics: Metrics) -> String {
         format_optional_number(metrics.receive_bytes_per_second),
         format_optional_number(metrics.transmit_bytes_per_second),
     )
+}
+
+/// Encode metrics and GNOME Shell state in one newline-delimited socket record.
+///
+/// This uses a separate serializer for the text-bearing state so an input
+/// source name cannot corrupt the JSON stream.
+pub fn metrics_with_desktop_state_json(
+    metrics: Metrics,
+    desktop_state: &DesktopState,
+) -> Result<String, serde_json::Error> {
+    let input_sources = serde_json::to_string(&desktop_state.input_sources)?;
+    let current_input_source = serde_json::to_string(&desktop_state.current_input_source)?;
+
+    Ok(format!(
+        "{{\"protocolVersion\":1,\"type\":\"metrics\",\"cpuPercent\":{},\"memoryTotalBytes\":{},\"memoryUsedBytes\":{},\"networkReceiveBytesPerSecond\":{},\"networkTransmitBytesPerSecond\":{},\"desktopStateAvailable\":{},\"inputSources\":{},\"currentInputSource\":{},\"screenSharing\":{},\"microphoneInUse\":{},\"locationInUse\":{}}}\n",
+        format_optional_number(metrics.cpu_percent),
+        metrics.memory_total_bytes,
+        metrics.memory_used_bytes,
+        format_optional_number(metrics.receive_bytes_per_second),
+        format_optional_number(metrics.transmit_bytes_per_second),
+        desktop_state.available,
+        input_sources,
+        current_input_source,
+        desktop_state.privacy.screen_sharing,
+        desktop_state.privacy.microphone_in_use,
+        desktop_state.privacy.location_in_use,
+    ))
 }
 
 /// Parse one aggregate CPU accounting sample from `/proc/stat`.
@@ -188,8 +245,8 @@ fn parse_u64(value: Option<&str>) -> Result<u64, &'static str> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Metrics, byte_rate, cpu_percent, metrics_json, parse_cpu_stat, parse_meminfo,
-        parse_network_totals,
+        DesktopState, InputSource, Metrics, PrivacyState, byte_rate, cpu_percent, metrics_json,
+        metrics_with_desktop_state_json, parse_cpu_stat, parse_meminfo, parse_network_totals,
     };
 
     #[test]
@@ -253,4 +310,45 @@ mod tests {
             "{\"protocolVersion\":1,\"type\":\"metrics\",\"cpuPercent\":12.50,\"memoryTotalBytes\":16777216,\"memoryUsedBytes\":12582912,\"networkReceiveBytesPerSecond\":1234.00,\"networkTransmitBytesPerSecond\":null}\n",
         );
     }
+
+    #[test]
+    fn serialises_gnoblin_state_with_a_metrics_record() {
+        let record = metrics_with_desktop_state_json(
+            Metrics {
+                cpu_percent: Some(12.5),
+                memory_total_bytes: 16_777_216,
+                memory_used_bytes: 12_582_912,
+                receive_bytes_per_second: Some(1_234.0),
+                transmit_bytes_per_second: None,
+            },
+            &DesktopState {
+                available: true,
+                input_sources: vec![InputSource {
+                    source_type: "xkb".to_owned(),
+                    id: "gb".to_owned(),
+                    short_name: "en".to_owned(),
+                    display_name: "English \"United Kingdom\"".to_owned(),
+                }],
+                current_input_source: Some(InputSource {
+                    source_type: "xkb".to_owned(),
+                    id: "gb".to_owned(),
+                    short_name: "en".to_owned(),
+                    display_name: "English \"United Kingdom\"".to_owned(),
+                }),
+                privacy: PrivacyState {
+                    screen_sharing: true,
+                    microphone_in_use: false,
+                    location_in_use: true,
+                },
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            record,
+            "{\"protocolVersion\":1,\"type\":\"metrics\",\"cpuPercent\":12.50,\"memoryTotalBytes\":16777216,\"memoryUsedBytes\":12582912,\"networkReceiveBytesPerSecond\":1234.00,\"networkTransmitBytesPerSecond\":null,\"desktopStateAvailable\":true,\"inputSources\":[{\"type\":\"xkb\",\"id\":\"gb\",\"shortName\":\"en\",\"displayName\":\"English \\\"United Kingdom\\\"\"}],\"currentInputSource\":{\"type\":\"xkb\",\"id\":\"gb\",\"shortName\":\"en\",\"displayName\":\"English \\\"United Kingdom\\\"\"},\"screenSharing\":true,\"microphoneInUse\":false,\"locationInUse\":true}\n",
+        );
+    }
+
+
 }
