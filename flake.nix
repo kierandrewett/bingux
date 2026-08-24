@@ -58,6 +58,12 @@
                 modules = [ ./hosts/vm ];
             };
 
+            checks = forAllSystems (system: {
+                desktop-shell-module = import ./tests/desktop-shell-module.nix {
+                    inherit inputs self system;
+                };
+            });
+
             formatter = forAllSystems (
                 system:
                 let
