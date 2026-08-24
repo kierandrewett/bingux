@@ -17,7 +17,7 @@ QtObject {
     readonly property int maxTimeoutMs: 30000
     property var visibleEntries: []
     property var queuedEntries: []
-    property var watchedNotifications: []
+    property var notificationWatchers: []
     property var expiryTimer
     property var notificationServer
 
@@ -81,12 +81,15 @@ QtObject {
     function replaceExistingNotification(notification) {
         const timeout = timeoutFor(notification);
         const replacement = entryFor(notification, timeout > 0 ? Date.now() + timeout : 0);
+        const replacedNotifications = [];
         let replaced = false;
         const visible = [];
         const queued = [];
         for (let index = 0; index < visibleEntries.length; index += 1) {
             const entry = visibleEntries[index];
             if (entry.notification.id === notification.id) {
+                if (entry.notification !== notification)
+                    replacedNotifications.push(entry.notification);
                 if (!replaced) {
                     visible.push(replacement);
                     replaced = true;
@@ -98,6 +101,8 @@ QtObject {
         for (let index = 0; index < queuedEntries.length; index += 1) {
             const entry = queuedEntries[index];
             if (entry.notification.id === notification.id) {
+                if (entry.notification !== notification)
+                    replacedNotifications.push(entry.notification);
                 if (!replaced) {
                     queued.push(replacement);
                     replaced = true;
@@ -111,6 +116,9 @@ QtObject {
 
         visibleEntries = visible;
         queuedEntries = queued;
+        for (let index = 0; index < replacedNotifications.length; index += 1)
+            unwatchNotification(replacedNotifications[index]);
+
         return true;
     }
 
@@ -146,40 +154,57 @@ QtObject {
     }
 
     function unwatchNotification(notification) {
-        const watched = [];
+        const retained = [];
         let changed = false;
-        for (let index = 0; index < watchedNotifications.length; index += 1) {
-            if (watchedNotifications[index] === notification)
-                changed = true;
-            else
-                watched.push(watchedNotifications[index]);
+        for (let index = 0; index < notificationWatchers.length; index += 1) {
+            const watcher = notificationWatchers[index];
+            if (watcher.notification !== notification) {
+                retained.push(watcher);
+                continue;
+            }
+
+            changed = true;
+            for (let signalIndex = 0; signalIndex < watcher.resetSignals.length; signalIndex += 1) {
+                const signal = watcher.resetSignals[signalIndex];
+                if (signal && signal.disconnect)
+                    signal.disconnect(watcher.reset);
+            }
+            if (notification.closed && notification.closed.disconnect)
+                notification.closed.disconnect(watcher.closed);
         }
         if (changed)
-            watchedNotifications = watched;
-
+            notificationWatchers = retained;
     }
 
     function watchNotification(notification) {
-        for (let index = 0; index < watchedNotifications.length; index += 1) {
-            if (watchedNotifications[index] === notification)
-                return ;
-
+        for (let index = 0; index < notificationWatchers.length; index += 1) {
+            if (notificationWatchers[index].notification === notification)
+                return;
         }
-        watchedNotifications = watchedNotifications.concat([notification]);
+
         const reset = function reset() {
             root.resetExpiry(notification);
         };
+        const closed = function closed(_reason) {
+            root.remove(notification);
+        };
+        const watcher = {
+            "closed": closed,
+            "notification": notification,
+            "reset": reset,
+            "resetSignals": []
+        };
+        notificationWatchers = notificationWatchers.concat([watcher]);
+
         const changeSignals = ["expireTimeoutChanged", "appNameChanged", "appIconChanged", "summaryChanged", "bodyChanged", "urgencyChanged", "actionsChanged", "hasActionIconsChanged", "residentChanged", "transientChanged", "desktopEntryChanged", "imageChanged", "hasInlineReplyChanged", "inlineReplyPlaceholderChanged", "hintsChanged"];
         for (let index = 0; index < changeSignals.length; index += 1) {
             const signal = notification[changeSignals[index]];
-            if (signal && signal.connect)
+            if (signal && signal.connect) {
                 signal.connect(reset);
-
+                watcher.resetSignals.push(signal);
+            }
         }
-        notification.closed.connect(function(_reason) {
-            root.unwatchNotification(notification);
-            root.remove(notification);
-        });
+        notification.closed.connect(closed);
     }
 
     function promoteNextNotification() {
@@ -248,6 +273,7 @@ QtObject {
         const wasVisible = visibleEntries.some(function(entry) {
             return entry.notification === notification;
         });
+        unwatchNotification(notification);
         visibleEntries = removeFrom(visibleEntries, notification);
         queuedEntries = removeFrom(queuedEntries, notification);
         if (wasVisible)

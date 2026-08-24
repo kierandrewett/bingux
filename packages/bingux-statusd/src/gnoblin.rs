@@ -9,8 +9,12 @@ const OBJECT_PATH: &str = "/org/gnoblin/Shell";
 const INTERFACE: &str = "org.gnoblin.Shell";
 const INITIAL_RECONNECT_DELAY: Duration = Duration::from_millis(250);
 const MAX_RECONNECT_DELAY: Duration = Duration::from_secs(5);
-// This covers the bounded OSD tuple with protocol padding and rejects a large
-// session-bus message before zbus allocates its text values.
+// Reject oversized OSD messages before deserialization and bound text-bearing
+// input-source state before it reaches the shell socket.
+const MAX_INPUT_SOURCES: usize = 32;
+const MAX_INPUT_SOURCE_FIELD_BYTES: usize = 128;
+const MAX_INPUT_SOURCE_TOTAL_BYTES: usize = 4 * 1024;
+const MAX_INPUT_SOURCE_BODY_BYTES: usize = 64 * 1024;
 const MAX_OSD_SIGNAL_BODY_BYTES: u32 = 4 * 1024;
 
 type InputSourceTuple = (String, String, String, String);
@@ -116,18 +120,47 @@ fn publish_osd_request(request: OsdRequestTuple, sender: &SyncSender<Event>) -> 
 }
 
 async fn read_snapshot(proxy: &Proxy<'_>) -> Result<DesktopState, String> {
-    let input_sources: Vec<InputSourceTuple> = proxy
-        .call("ListInputSources", &())
+    let input_sources_reply = proxy
+        .call_method("ListInputSources", &())
         .await
         .map_err(|error| error.to_string())?;
-    let current_input_source: InputSourceTuple = proxy
-        .call("GetCurrentInputSource", &())
+    if input_sources_reply.body().len() > MAX_INPUT_SOURCE_BODY_BYTES {
+        return Err("Gnoblin returned an oversized input source response".to_owned());
+    }
+    let input_sources: Vec<InputSourceTuple> = input_sources_reply
+        .body()
+        .deserialize()
+        .map_err(|error| error.to_string())?;
+
+    let current_input_source_reply = proxy
+        .call_method("GetCurrentInputSource", &())
         .await
         .map_err(|error| error.to_string())?;
-    let (screen_sharing, microphone_in_use, location_in_use): (bool, bool, bool) = proxy
-        .call("GetPrivacyState", &())
+    if current_input_source_reply.body().len() > MAX_INPUT_SOURCE_BODY_BYTES {
+        return Err("Gnoblin returned an oversized input source response".to_owned());
+    }
+    let current_input_source: InputSourceTuple = current_input_source_reply
+        .body()
+        .deserialize()
+        .map_err(|error| error.to_string())?;
+
+    let privacy_reply = proxy
+        .call_method("GetPrivacyState", &())
         .await
         .map_err(|error| error.to_string())?;
+    if privacy_reply.body().len() > MAX_INPUT_SOURCE_BODY_BYTES {
+        return Err("Gnoblin returned an oversized desktop-state response".to_owned());
+    }
+    let (screen_sharing, microphone_in_use, location_in_use): (bool, bool, bool) = privacy_reply
+        .body()
+        .deserialize()
+        .map_err(|error| error.to_string())?;
+
+    if !input_sources_are_valid(&input_sources)
+        || !input_source_tuple_is_valid(&current_input_source)
+    {
+        return Err("Gnoblin returned an oversized or invalid input source".to_owned());
+    }
 
     Ok(DesktopState {
         available: true,
@@ -153,7 +186,6 @@ fn osd_request_from_tuple(request: OsdRequestTuple) -> Option<OsdRequest> {
 fn has_supported_osd_body_size(body_len: u32) -> bool {
     body_len <= MAX_OSD_SIGNAL_BODY_BYTES
 }
-
 fn input_source(source: InputSourceTuple) -> InputSource {
     let (source_type, id, short_name, display_name) = source;
 
@@ -171,6 +203,32 @@ fn input_source_or_none(source: InputSourceTuple) -> Option<InputSource> {
     } else {
         Some(input_source(source))
     }
+}
+
+fn input_sources_are_valid(sources: &[InputSourceTuple]) -> bool {
+    sources.len() <= MAX_INPUT_SOURCES
+        && sources
+            .iter()
+            .try_fold(0usize, |total, source| {
+                if !input_source_tuple_is_valid(source) {
+                    return None;
+                }
+
+                total
+                    .checked_add(source.0.len())
+                    .and_then(|total| total.checked_add(source.1.len()))
+                    .and_then(|total| total.checked_add(source.2.len()))
+                    .and_then(|total| total.checked_add(source.3.len()))
+            })
+            .is_some_and(|total| total <= MAX_INPUT_SOURCE_TOTAL_BYTES)
+}
+
+fn input_source_tuple_is_valid(source: &InputSourceTuple) -> bool {
+    [&source.0, &source.1, &source.2, &source.3]
+        .into_iter()
+        .all(|value| {
+            value.len() <= MAX_INPUT_SOURCE_FIELD_BYTES && !value.chars().any(char::is_control)
+        })
 }
 
 fn is_osd_signal(signal: &zbus::Message) -> bool {
@@ -195,7 +253,8 @@ fn is_desktop_state_signal_name(name: Option<&str>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        InputSourceTuple, input_source_or_none, is_desktop_state_signal_name, is_osd_signal_name,
+        InputSourceTuple, input_source_or_none, input_source_tuple_is_valid,
+        input_sources_are_valid, is_desktop_state_signal_name, is_osd_signal_name,
         osd_request_from_tuple,
     };
 
@@ -258,6 +317,27 @@ mod tests {
         assert!(!is_osd_signal_name(Some("InputSourceChanged")));
         assert!(!is_osd_signal_name(Some("OsdClosed")));
         assert!(!is_osd_signal_name(None));
+    }
+    #[test]
+    fn rejects_oversized_input_source_state() {
+        let oversized_source = ("x".repeat(129), String::new(), String::new(), String::new());
+        assert!(!input_sources_are_valid(&[oversized_source]));
+        assert!(!input_source_tuple_is_valid(&(
+            String::new(),
+            String::new(),
+            String::new(),
+            "line\nbreak".to_owned(),
+        )));
+        assert!(!input_sources_are_valid(
+            &(0..33)
+                .map(|index| (
+                    index.to_string(),
+                    String::new(),
+                    String::new(),
+                    String::new()
+                ))
+                .collect::<Vec<InputSourceTuple>>()
+        ));
     }
 
     #[test]

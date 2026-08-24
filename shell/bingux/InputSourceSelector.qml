@@ -18,7 +18,7 @@ Item {
         if (!metrics.desktopStateAvailable || metrics.inputSourceLabel === "")
             return "KB --";
 
-        return "KB " + metrics.inputSourceLabel.toUpperCase();
+        return "KB " + metrics.inputSourceLabel.toUpperCase().slice(0, 32);
     }
 
     function currentSourceIndex() {
@@ -126,6 +126,7 @@ Item {
         anchors.centerIn: parent
         color: root.metrics.desktopStateAvailable ? "#d9dee8" : "#8b94a3"
         font.pixelSize: 12
+        textFormat: Text.PlainText
         text: root.displayLabel
     }
 
@@ -243,6 +244,7 @@ Item {
                             color: "#edf1f7"
                             elide: Text.ElideRight
                             font.pixelSize: 13
+                            textFormat: Text.PlainText
                             text: sourceAction.modelData.displayName
 
                             anchors {

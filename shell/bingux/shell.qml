@@ -173,29 +173,45 @@ ShellRoot {
                 metrics: metrics
             }
 
-            Rectangle {
-                width: 5
-                height: 5
-                radius: width / 2
-                color: metrics.available ? "#8cc265" : "#8b94a3"
-            }
+            Item {
+                id: metricDisplay
 
-            Text {
-                color: metrics.available ? "#d9dee8" : "#8b94a3"
-                font.pixelSize: 12
-                text: metrics.cpuLabel
-            }
+                visible: profileSettings.metricsEnabled
+                implicitWidth: metricRow.implicitWidth
+                implicitHeight: metricRow.implicitHeight
+                width: visible ? implicitWidth : 0
+                height: visible ? implicitHeight : 0
 
-            Text {
-                color: metrics.available ? "#d9dee8" : "#8b94a3"
-                font.pixelSize: 12
-                text: metrics.memoryLabel
-            }
+                Row {
+                    id: metricRow
 
-            Text {
-                color: metrics.available ? "#d9dee8" : "#8b94a3"
-                font.pixelSize: 12
-                text: metrics.networkLabel
+                    spacing: 12
+
+                    Rectangle {
+                        width: 5
+                        height: 5
+                        radius: width / 2
+                        color: metrics.available ? "#8cc265" : "#8b94a3"
+                    }
+
+                    Text {
+                        color: metrics.available ? "#d9dee8" : "#8b94a3"
+                        font.pixelSize: 12
+                        text: metrics.cpuLabel
+                    }
+
+                    Text {
+                        color: metrics.available ? "#d9dee8" : "#8b94a3"
+                        font.pixelSize: 12
+                        text: metrics.memoryLabel
+                    }
+
+                    Text {
+                        color: metrics.available ? "#d9dee8" : "#8b94a3"
+                        font.pixelSize: 12
+                        text: metrics.networkLabel
+                    }
+                }
             }
 
             InputSourceSelector {

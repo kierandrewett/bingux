@@ -2,7 +2,7 @@
 
 ## Scope
 
-The Bingux desktop shell is an optional profile feature. It supplies the top bar, dock, search surface, notification surface, and on-screen display for a Gnoblin session. It is not a compositor and it does not modify GNOME Shell UI.
+The Bingux desktop shell is an optional profile feature. It supplies the top bar, dock, search surface, notification surface, and on-screen display for a Gnoblin session. The top bar includes clock, tray, metrics, privacy, input, network, audio, and power indicators. It is not a compositor and it does not modify GNOME Shell UI.
 
 The reference implementation uses Quickshell 0.3.x for layer-shell surfaces. Quickshell already supplies `zwlr_layer_shell_v1`, `zwlr_foreign_toplevel_manager_v1`, StatusNotifierItem menus, desktop-entry actions, and the desktop-notification service. Bingux pins the exact Quickshell package through its flake lock.
 
@@ -22,7 +22,7 @@ Gnoblin org.gnoblin.Shell.SuperReleased
       Quickshell bingux desktop-shell process
 ```
 
-`bingux-searchd` is the sole consumer of the Gnoblin D-Bus signal. The QML process does not parse D-Bus output or start ad-hoc monitors. It connects to one local Unix socket and renders typed records from the daemon.
+`bingux-searchd` is the sole consumer of the Gnoblin `SuperReleased` D-Bus signal. `bingux-statusd` owns the Gnoblin OSD and desktop-state signal subscription. The QML process does not parse D-Bus output or start ad-hoc monitors. It connects to local Unix sockets and renders typed records from the daemons.
 
 The shell and daemon run as the profile user. The socket directory has mode `0700`. The socket has mode `0600`. The service does not listen on TCP or another network transport.
 
@@ -122,12 +122,16 @@ only the visible card stack.
 ## Desktop UI rules
 
 - The top bar is a top-layer surface with a positive exclusive zone.
-- The dock is a bottom-layer surface. It must not reserve work area unless a profile explicitly selects that behaviour.
+- The dock is a top-layer surface anchored to the bottom edge. It must not reserve work area unless a profile explicitly selects that behaviour.
 - Search is an overlay surface. It asks for on-demand keyboard focus only while visible. It returns focus when it closes.
 - Notifications and on-screen displays are overlay surfaces with no keyboard focus.
 - All icon controls have at least a 24 by 24 pixel pointer target.
 - Search supports typing, Up and Down, Enter, and Escape. Escape closes the surface and clears transient selection.
 - The tray uses StatusNotifierItem and DBusMenu support. Right-click menus must come from the item when it exposes one.
+- A profile with `bingux.networking.tailscale.enable` starts the official
+  `tailscale systray` client as the profile user. It publishes a
+  StatusNotifierItem, so the tray displays its state and delegates left-click
+  and right-click menus without a Bingux-specific Tailscale implementation.
 - Dock actions use `.desktop` entry actions. Gnoblin does not currently export a dynamic application-menu protocol for foreign toplevels. Do not claim that arbitrary in-window menus are available until a separate, versioned Gnoblin interface exists.
 
 ## Search socket protocol v1
@@ -210,6 +214,26 @@ A query request is:
 
 The completed record has `complete: true`. It can contain an empty `results` array. The daemon must discard results for a request that the client has superseded with a later request.
 
+The shell sends `cancel` for an active query or activation when it replaces or closes the search
+surface:
+
+```json
+{
+  "protocolVersion": 1,
+  "type": "cancel",
+  "requestId": "q-01"
+}
+```
+
+`cancel` is idempotent and produces no response. It applies only to the current request for the
+same socket client. The daemon removes the chat route and releases its admission permit
+immediately. A queued or running worker still drains the bounded work item, but it cannot deliver
+a response after the route is cancelled. An HTTPS chat request that has already started cannot be
+safely retracted. The daemon keeps at most four bounded worker executions and a bounded queue until
+each worker returns. Provider protocol v1 has no cancellation record. If the daemon has already sent
+an external activation to its provider, it cannot stop that provider action. It still discards the
+later completion or failure event.
+
 Activation is separate from a query:
 
 ```json
@@ -263,8 +287,9 @@ version policy. Bingux discovers manifests only from configured profile paths. I
 ```
 
 `id` matches `[a-z0-9]+(?:-[a-z0-9]+)*` and contains at most 64 bytes. `command` is a non-empty
-argument array. The host does not pass a shell string. `startup` is `eager` or `lazy`. `priority` is
-an integer from 0 to 1000. `timeoutMs` is an integer from 1 to 10,000.
+argument array whose program path is absolute. Arguments must not be empty or contain NUL. The host
+does not pass a shell string. `startup` is `eager` or `lazy`. `priority` is an integer from 0 to 1000.
+`timeoutMs` is an integer from 1 to 10,000. Bingux rejects manifest files larger than 64 KiB.
 
 The provider protocol uses newline-delimited UTF-8 JSON on standard input and standard output.
 Each record is at most 64 KiB. The host sends this record after it starts a provider:
@@ -338,14 +363,17 @@ Activation is a separate provider record:
 
 The provider responds with `{"protocolVersion":1,"type":"activated","activationId":"provider-activation-01"}`
 or with one `error` record containing the matching `queryId` or `activationId`. Valid provider
-error codes are `invalid-request`, `unavailable`, and `provider-failed`.
+error codes are `invalid-request`, `unavailable`, and `provider-failed`. Provider protocol v1 has
+no cancellation record. The host drops an activation that it has not sent to the provider. It
+cannot retract an activation record that it has already sent.
 
 The host starts eager providers before the first query, runs provider queries concurrently, and
 enforces each manifest timeout. A malformed, oversized, out-of-order, or version-mismatched
 provider record stops that provider and reports `provider-failed` for the affected request. A
 provider must not make a network request on the query path. Weather reads a local cache. AI chat is
 explicit user work after activation and has no instant-result promise. SQLite providers must use
-configured, parameterised queries.
+configured, read-only queries with `?1` for the search text and `LIMIT ?2` for the result bound.
+SQLite reads accept only regular files and stop after the built-in query deadline.
 
 Provider code and manifests are trusted profile software. They run with the profile user
 permissions. A manifest must not contain a secret. A provider that needs a credential receives a
@@ -354,6 +382,23 @@ profile-declared runtime secret path or environment variable from SOPS-Nix confi
 ## Performance rule
 
 For the built-in application and calculation indexes, a warm query request must produce its first result record within 10 ms and its completed record within 30 ms at the 95th percentile. The benchmark measures daemon socket request to response. It does not treat compositor paint time or remote provider work as part of this target.
+
+Focused protocol and unit checks cover the search daemon and status/OSD paths; the
+Nix desktop-shell module check also asserts that the notification and OSD surfaces
+are configured. These checks do not establish runtime or VM behaviour.
+
+Run the local socket regression benchmark from the repository root:
+
+```sh
+cargo test --release --manifest-path packages/bingux-searchd/Cargo.toml \
+  measures_warm_socket_query_latency -- --ignored --nocapture
+# [benchmark] warm socket query: p95=<nanoseconds> max=<nanoseconds> samples=200
+```
+
+The benchmark is ignored by default and starts no application or file index worker, so filesystem scanning cannot affect
+a sample. It warms only a calculation completion path and measures write, daemon dispatch, result encoding, socket
+delivery, and JSON decoding. It does not prove the latency of a populated application index, filesystem search, SQLite,
+external providers, or compositor paint. The Proxmox desktop exercise must measure those paths on the installed system.
 
 File discovery uses `rg --files` or an equivalent background index refresh. It does not walk the file system synchronously for each keypress.
 

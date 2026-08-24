@@ -11,7 +11,8 @@ QtObject {
     property double now: Date.now()
     property string connectionState: "unavailable"
     property int reconnectDelay: 250
-
+    readonly property int maxInputSources: 32
+    readonly property int maxInputSourceFieldLength: 128
     readonly property bool available: latest !== null && now - lastUpdatedAt <= 3000
     readonly property string socketPath: {
         const runtimeDirectory = Quickshell.env("XDG_RUNTIME_DIR");
@@ -40,7 +41,8 @@ QtObject {
             return "";
         }
 
-        return source.shortName !== "" ? source.shortName : source.id;
+        const label = source.shortName !== "" ? source.shortName : source.id;
+        return label.slice(0, 32);
     }
 
     function formatBytes(bytes) {
@@ -74,11 +76,15 @@ QtObject {
             && typeof source.type === "string"
             && typeof source.id === "string"
             && typeof source.shortName === "string"
-            && typeof source.displayName === "string";
+            && typeof source.displayName === "string"
+            && source.type.length <= root.maxInputSourceFieldLength
+            && source.id.length <= root.maxInputSourceFieldLength
+            && source.shortName.length <= root.maxInputSourceFieldLength
+            && source.displayName.length <= root.maxInputSourceFieldLength;
     }
 
     function isInputSourceList(sources) {
-        if (!Array.isArray(sources)) {
+        if (!Array.isArray(sources) || sources.length > root.maxInputSources) {
             return false;
         }
 

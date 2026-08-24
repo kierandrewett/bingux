@@ -14,6 +14,7 @@ let
 
         QtObject {
             readonly property bool dockEnabled: ${lib.boolToString cfg.dock.enable}
+            readonly property bool metricsEnabled: ${lib.boolToString cfg.metrics.enable}
             readonly property var pinnedApps: ${builtins.toJSON cfg.dock.pinnedApps}
             readonly property string gnoblinCtlPath: "${lib.getExe' config.programs.gnoblin.package "gnoblinctl"}"
         }
@@ -26,11 +27,15 @@ let
             commands = cfg.search.commands;
             fileRoots = cfg.search.fileRoots;
             providerManifestPaths = map toString cfg.search.providerManifests;
-            sqliteSources = map (
-                source: {
-                    inherit (source) id displayName databasePath query activationCommand;
-                }
-            ) cfg.search.sqliteSources;
+            sqliteSources = map (source: {
+                inherit (source)
+                    id
+                    displayName
+                    databasePath
+                    query
+                    activationCommand
+                    ;
+            }) cfg.search.sqliteSources;
             weather = cfg.search.weather;
             ai = cfg.search.ai;
         }
@@ -61,7 +66,7 @@ in
         };
 
         metrics = {
-            enable = lib.mkEnableOption "the Bingux desktop-shell metrics service" // {
+            enable = lib.mkEnableOption "the Bingux top-bar metrics display" // {
                 default = true;
             };
 
@@ -83,7 +88,6 @@ in
                 defaultText = lib.literalExpression "pkgs.callPackage ./packages/bingux-searchd { }";
                 description = "The package that owns the Bingux search socket and provider lifecycle.";
             };
-
 
             commands = {
                 applicationLauncher = lib.mkOption {
@@ -258,12 +262,13 @@ in
 
             xdg.configFile."quickshell/${cfg.configName}/ProfileSettings.qml".source = profileSettings;
 
-            # Each daemon creates its own socket in the shared runtime directory.
-            # A shared systemd RuntimeDirectory could remove the other daemon's socket on stop.
-            systemd.user.services = lib.optionalAttrs cfg.metrics.enable {
+            # Statusd owns the OSD bridge as well as metric collection. Keep it
+            # active when the top-bar metric display is disabled, otherwise Gnoblin
+            # native OSD is disabled without a Bingux replacement.
+            systemd.user.services = {
                 bingux-statusd = {
                     Unit = {
-                        Description = "Bingux desktop-shell metrics service";
+                        Description = "Bingux desktop-shell status and OSD bridge";
                         After = [ "graphical-session-pre.target" ];
                         PartOf = [ cfg.systemdTarget ];
                     };
@@ -282,7 +287,8 @@ in
 
                     Install.WantedBy = [ cfg.systemdTarget ];
                 };
-            } // lib.optionalAttrs cfg.search.enable {
+            }
+            // lib.optionalAttrs cfg.search.enable {
                 bingux-searchd = {
                     Unit = {
                         Description = "Bingux desktop search provider service";

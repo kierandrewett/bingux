@@ -17,12 +17,14 @@ let
         modules = [
             inputs.home-manager.nixosModules.home-manager
             inputs.sops-nix.nixosModules.sops
+            inputs.nix-flatpak.nixosModules.nix-flatpak
             self.nixosModules.default
             {
                 bingux = {
                     desktop.enable = true;
                     desktop.gnoblin.enable = true;
                     desktopShell.enable = true;
+                    desktopShell.metrics.enable = false;
                     desktopShell.dock.pinnedApps = [ "org.example.Terminal" ];
                     user.name = "shell";
                 };
@@ -72,6 +74,9 @@ assert builtins.pathExists "${toString shellConfig.source}/OsdSurface.qml";
 assert builtins.pathExists (toString profileSettings.source);
 assert
     builtins.match "(.|\n)*org.example.Terminal(.|\n)*" (builtins.readFile profileSettings.source)
+    != null;
+assert
+    builtins.match "(.|\n)*metricsEnabled: false(.|\n)*" (builtins.readFile profileSettings.source)
     != null;
 assert
     builtins.match "(.|\n)*import QtQuick(.|\n)*gnoblinCtlPath(.|\n)*" (

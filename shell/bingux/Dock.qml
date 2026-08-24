@@ -20,6 +20,10 @@ PanelWindow {
         const exactEntry = DesktopEntries.byId(appId);
         return exactEntry ? exactEntry : DesktopEntries.heuristicLookup(appId);
     }
+    function menuLabel(value, fallback) {
+        const text = typeof value === "string" && value.length > 0 ? value : fallback;
+        return text.slice(0, 256);
+    }
 
     function refreshAppGroups() {
         const groups = [];
@@ -281,7 +285,7 @@ PanelWindow {
                                     delegate: MenuAction {
                                         required property var modelData
 
-                                        label: modelData.name
+                                        label: root.menuLabel(modelData.name, "Application action")
                                         onTriggered: {
                                             modelData.execute();
                                             dockButton.menuOpen = false;
@@ -303,7 +307,7 @@ PanelWindow {
                                     delegate: MenuAction {
                                         required property var modelData
 
-                                        label: modelData.title || dockButton.modelData.id
+                                        label: root.menuLabel(modelData.title, dockButton.modelData.id)
                                         onTriggered: {
                                             modelData.activate();
                                             dockButton.menuOpen = false;
@@ -366,6 +370,7 @@ PanelWindow {
             color: "#edf1f7"
             elide: Text.ElideRight
             font.pixelSize: 13
+            textFormat: Text.PlainText
             text: action.label
 
             anchors {
