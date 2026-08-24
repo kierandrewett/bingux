@@ -173,7 +173,9 @@ Valid codes are `invalid-request`, `unsupported-protocol`, `unavailable`, `provi
 
 ## Search-provider contract v1
 
-A provider is a long-lived, profile-trusted process. Its manifest is JSON and follows the same version policy. Bingux discovers manifests only from configured profile paths. It does not scan `PATH`, a network location, or arbitrary writable directories.
+A provider is a long-lived, profile-trusted process. Its manifest is JSON and follows the same
+version policy. Bingux discovers manifests only from configured profile paths. It does not scan
+`PATH`, a network location, or arbitrary writable directories.
 
 ```json
 {
@@ -188,13 +190,91 @@ A provider is a long-lived, profile-trusted process. Its manifest is JSON and fo
 }
 ```
 
-`id` matches `[a-z0-9]+(?:-[a-z0-9]+)*`. `command` is a non-empty argument array. The host does not pass a shell string. `startup` is `eager` or `lazy`. `priority` is an integer from 0 to 1000. `timeoutMs` is an integer from 1 to 10,000.
+`id` matches `[a-z0-9]+(?:-[a-z0-9]+)*`. `command` is a non-empty argument array. The host does
+not pass a shell string. `startup` is `eager` or `lazy`. `priority` is an integer from 0 to 1000.
+`timeoutMs` is an integer from 1 to 10,000.
 
-After start, the host sends one `hello` record. A provider must return an accepted `hello` record with the same protocol version. Query and result records use the socket result shape above, with a provider-local `queryId`. A provider returns `complete: true` for every accepted query, including an empty result set.
+The provider protocol uses newline-delimited UTF-8 JSON on standard input and standard output.
+Each record is at most 64 KiB. The host sends this record after it starts a provider:
 
-The host starts eager providers before the first query. It runs providers concurrently, applies their timeout, and keeps cached indexes in memory. A provider must not perform a network request on the query path. Weather reads a local cache. AI chat is explicit user work after activation and has no instant-result promise. SQLite providers must use configured, parameterised queries.
+```json
+{
+  "protocolVersion": 1,
+  "type": "hello",
+  "hostId": "bingux-searchd"
+}
+```
 
-Provider code and manifests are trusted profile software. They run with the profile user permissions. A manifest must not contain a secret. A provider that needs a credential receives a profile-declared runtime secret path or environment variable from SOPS-Nix configuration.
+The provider must return this record before the manifest timeout:
+
+```json
+{
+  "protocolVersion": 1,
+  "type": "hello",
+  "accepted": true
+}
+```
+
+The host gives each provider query a provider-local `queryId` that matches the same ASCII rule as
+`requestId`. A provider must return one or more result records, then exactly one completion record:
+
+```json
+{
+  "protocolVersion": 1,
+  "type": "query",
+  "queryId": "provider-query-01",
+  "query": "firefox",
+  "limit": 20
+}
+```
+
+```json
+{
+  "protocolVersion": 1,
+  "type": "results",
+  "queryId": "provider-query-01",
+  "complete": false,
+  "results": [
+    {
+      "resultId": "firefox.desktop",
+      "kind": "application",
+      "title": "Firefox",
+      "subtitle": "Web browser",
+      "icon": "firefox",
+      "score": 0.98
+    }
+  ]
+}
+```
+
+Provider-local `resultId` values match `[A-Za-z0-9._:-]{1,128}`. The host maps them to short-lived
+opaque socket result identifiers. It never sends a provider command or executable text to QML.
+
+Activation is a separate provider record:
+
+```json
+{
+  "protocolVersion": 1,
+  "type": "activate",
+  "activationId": "provider-activation-01",
+  "resultId": "firefox.desktop"
+}
+```
+
+The provider responds with `{"protocolVersion":1,"type":"activated","activationId":"provider-activation-01"}`
+or with one `error` record containing the matching `queryId` or `activationId`. Valid provider
+error codes are `invalid-request`, `unavailable`, and `provider-failed`.
+
+The host starts eager providers before the first query, runs provider queries concurrently, and
+enforces each manifest timeout. A malformed, oversized, out-of-order, or version-mismatched
+provider record stops that provider and reports `provider-failed` for the affected request. A
+provider must not make a network request on the query path. Weather reads a local cache. AI chat is
+explicit user work after activation and has no instant-result promise. SQLite providers must use
+configured, parameterised queries.
+
+Provider code and manifests are trusted profile software. They run with the profile user
+permissions. A manifest must not contain a secret. A provider that needs a credential receives a
+profile-declared runtime secret path or environment variable from SOPS-Nix configuration.
 
 ## Performance rule
 
