@@ -5,13 +5,13 @@ use crate::protocol::{
 };
 use anyhow::{Context, Result, bail};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::{self, BufRead, BufReader, Write},
     path::PathBuf,
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, SyncSender, TryRecvError},
     },
@@ -21,6 +21,7 @@ use std::{
 const COMMAND_CAPACITY: usize = 64;
 const READER_CAPACITY: usize = 32;
 const MAX_PENDING: usize = 64;
+const MAX_READER_EVENTS_PER_PROGRESS: usize = READER_CAPACITY;
 const INITIAL_BACKOFF: Duration = Duration::from_millis(250);
 const MAX_BACKOFF: Duration = Duration::from_secs(5);
 const TICK: Duration = Duration::from_millis(50);
@@ -47,8 +48,13 @@ pub enum ExternalEvent {
         activation_id: String,
     },
 }
+
+struct ProviderEndpoint {
+    commands: SyncSender<WorkerCommand>,
+    cancelled_queries: Arc<Mutex<BTreeSet<String>>>,
+}
 pub struct ExternalProviders {
-    providers: BTreeMap<String, SyncSender<WorkerCommand>>,
+    providers: BTreeMap<String, ProviderEndpoint>,
     stop: Arc<AtomicBool>,
     workers: Vec<JoinHandle<()>>,
 }
@@ -56,23 +62,32 @@ impl ExternalProviders {
     pub fn start(manifest_paths: &[PathBuf], events: SyncSender<ExternalEvent>) -> Result<Self> {
         let manifests = load_manifests(manifest_paths)?;
         let stop = Arc::new(AtomicBool::new(false));
-        let mut providers: BTreeMap<String, SyncSender<WorkerCommand>> = BTreeMap::new();
+        let mut providers: BTreeMap<String, ProviderEndpoint> = BTreeMap::new();
         let mut workers: Vec<JoinHandle<()>> = Vec::with_capacity(manifests.len());
         for manifest in manifests {
             let id = manifest.id.clone();
             let (tx, rx) = mpsc::sync_channel(COMMAND_CAPACITY);
+            let cancelled_queries = Arc::new(Mutex::new(BTreeSet::new()));
             let worker_stop = Arc::clone(&stop);
             let worker_events = events.clone();
+            let worker_cancellations = Arc::clone(&cancelled_queries);
             let name = format!("bingux-search-provider-{id}");
-            let worker = thread::Builder::new()
-                .name(name)
-                .spawn(move || Worker::new(manifest, rx, worker_events, worker_stop).run());
+            let worker = thread::Builder::new().name(name).spawn(move || {
+                Worker::new(
+                    manifest,
+                    rx,
+                    worker_events,
+                    worker_stop,
+                    worker_cancellations,
+                )
+                .run()
+            });
             let worker = match worker {
                 Ok(worker) => worker,
                 Err(error) => {
                     stop.store(true, Ordering::Release);
-                    for tx in providers.values() {
-                        let _ = tx.try_send(WorkerCommand::Shutdown);
+                    for provider in providers.values() {
+                        let _ = provider.commands.try_send(WorkerCommand::Shutdown);
                     }
                     for worker in workers {
                         let _ = worker.join();
@@ -80,7 +95,13 @@ impl ExternalProviders {
                     return Err(error).context("could not start external provider worker");
                 }
             };
-            providers.insert(id, tx);
+            providers.insert(
+                id,
+                ProviderEndpoint {
+                    commands: tx,
+                    cancelled_queries,
+                },
+            );
             workers.push(worker);
         }
         Ok(Self {
@@ -89,34 +110,51 @@ impl ExternalProviders {
             workers,
         })
     }
-    pub fn query(&self, query_id: String, query: String, limit: u8) -> usize {
+    pub fn query(&self, query_id: String, query: String, limit: u8) -> BTreeSet<String> {
         self.providers
-            .values()
-            .filter(|tx| {
-                tx.try_send(WorkerCommand::Query {
-                    query_id: query_id.clone(),
-                    query: query.clone(),
-                    limit,
+            .iter()
+            .filter_map(|(provider_id, provider)| {
+                provider
+                    .commands
+                    .try_send(WorkerCommand::Query {
+                        query_id: query_id.clone(),
+                        query: query.clone(),
+                        limit,
+                    })
+                    .ok()
+                    .map(|()| provider_id.clone())
+            })
+            .collect()
+    }
+
+    pub fn cancel_query(&self, query_id: &str, provider_ids: &BTreeSet<String>) {
+        for provider_id in provider_ids {
+            let Some(provider) = self.providers.get(provider_id) else {
+                continue;
+            };
+            if let Ok(mut cancelled) = provider.cancelled_queries.lock() {
+                cancelled.insert(query_id.to_owned());
+            }
+        }
+    }
+
+    pub fn activate(&self, provider_id: &str, activation_id: String, result_id: String) -> bool {
+        self.providers.get(provider_id).is_some_and(|provider| {
+            provider
+                .commands
+                .try_send(WorkerCommand::Activate {
+                    activation_id,
+                    result_id,
                 })
                 .is_ok()
-            })
-            .count()
-    }
-    pub fn activate(&self, provider_id: &str, activation_id: String, result_id: String) -> bool {
-        self.providers.get(provider_id).is_some_and(|tx| {
-            tx.send(WorkerCommand::Activate {
-                activation_id,
-                result_id,
-            })
-            .is_ok()
         })
     }
 }
 impl Drop for ExternalProviders {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
-        for tx in self.providers.values() {
-            let _ = tx.try_send(WorkerCommand::Shutdown);
+        for provider in self.providers.values() {
+            let _ = provider.commands.try_send(WorkerCommand::Shutdown);
         }
         for worker in self.workers.drain(..) {
             let _ = worker.join();
@@ -186,6 +224,7 @@ impl PendingRequest {
 struct PendingQuery {
     query: String,
     limit: u8,
+    result_count: usize,
     deadline: Instant,
     sent: bool,
 }
@@ -215,6 +254,7 @@ impl Pending {
             PendingQuery {
                 query,
                 limit,
+                result_count: 0,
                 deadline,
                 sent: false,
             },
@@ -276,6 +316,10 @@ impl Pending {
             }
         }
     }
+
+    fn cancel_query(&mut self, query_id: &str) -> bool {
+        self.queries.remove(query_id).is_some()
+    }
     fn deadline(&self) -> Option<Instant> {
         self.queries
             .values()
@@ -302,6 +346,7 @@ struct Worker {
     commands: Receiver<WorkerCommand>,
     events: SyncSender<ExternalEvent>,
     stop: Arc<AtomicBool>,
+    cancelled_queries: Arc<Mutex<BTreeSet<String>>>,
     reader_events: Receiver<ReaderEvent>,
     reader_tx: SyncSender<ReaderEvent>,
     pending: Pending,
@@ -316,6 +361,7 @@ impl Worker {
         commands: Receiver<WorkerCommand>,
         events: SyncSender<ExternalEvent>,
         stop: Arc<AtomicBool>,
+        cancelled_queries: Arc<Mutex<BTreeSet<String>>>,
     ) -> Self {
         let (reader_tx, reader_events) = mpsc::sync_channel(READER_CAPACITY);
         Self {
@@ -323,6 +369,7 @@ impl Worker {
             commands,
             events,
             stop,
+            cancelled_queries,
             reader_events,
             reader_tx,
             pending: Pending::default(),
@@ -359,8 +406,9 @@ impl Worker {
         self.kill();
     }
     fn progress(&mut self, now: Instant) {
-        self.read(now);
+        self.cancel_pending_queries();
         self.expire(now);
+        self.read(now);
         self.start(now);
         self.write_pending(now)
     }
@@ -382,6 +430,9 @@ impl Worker {
         matches!(self.manifest.startup, ProviderStartup::Eager) || !self.pending.empty()
     }
     fn accept_query(&mut self, query_id: String, query: String, limit: u8, now: Instant) {
+        if self.take_cancellation(&query_id) {
+            return;
+        }
         let deadline = now + Duration::from_millis(self.manifest.timeout_ms.into());
         if !self.pending.query(query_id.clone(), query, limit, deadline) {
             self.emit(ExternalEvent::QueryFailed {
@@ -392,6 +443,30 @@ impl Worker {
         }
         self.progress(now)
     }
+    fn take_cancellation(&self, query_id: &str) -> bool {
+        self.cancelled_queries
+            .lock()
+            .ok()
+            .is_some_and(|mut cancelled| cancelled.remove(query_id))
+    }
+
+    fn cancel_pending_queries(&mut self) {
+        let Ok(mut cancelled) = self.cancelled_queries.lock() else {
+            return;
+        };
+        let cancelled_ids = self
+            .pending
+            .queries
+            .keys()
+            .filter(|query_id| cancelled.contains(*query_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        for query_id in cancelled_ids {
+            self.pending.cancel_query(&query_id);
+            cancelled.remove(&query_id);
+        }
+    }
+
     fn accept_activation(&mut self, activation_id: String, result_id: String, now: Instant) {
         let deadline = now + Duration::from_millis(self.manifest.timeout_ms.into());
         if !self
@@ -473,7 +548,7 @@ impl Worker {
     }
     fn read(&mut self, now: Instant) {
         let mut corrupt = false;
-        loop {
+        for _ in 0..MAX_READER_EVENTS_PER_PROGRESS {
             match self.reader_events.try_recv() {
                 Ok(event)
                     if self
@@ -485,24 +560,26 @@ impl Worker {
                         ProviderResponse::Hello => {
                             if let Some(child) = self.child.as_mut() {
                                 if child.ready {
-                                    corrupt = true
+                                    corrupt = true;
                                 } else {
                                     child.ready = true;
-                                    self.backoff = INITIAL_BACKOFF
+                                    self.backoff = INITIAL_BACKOFF;
                                 }
                             }
                         }
                         response => {
                             if !self.child.as_ref().is_some_and(|child| child.ready) {
-                                corrupt = true
-                            } else if let Some(mut external) =
-                                route(&self.manifest.id, &mut self.pending, response)
-                            {
-                                prioritize(&mut external, self.manifest.priority);
-                                self.backoff = INITIAL_BACKOFF;
-                                self.emit(external)
+                                corrupt = true;
                             } else {
-                                corrupt = true
+                                match route(&self.manifest.id, &mut self.pending, now, response) {
+                                    Route::Event(mut external) => {
+                                        prioritize(&mut external, self.manifest.priority);
+                                        self.backoff = INITIAL_BACKOFF;
+                                        self.emit(external);
+                                    }
+                                    Route::Ignored => {}
+                                    Route::Corrupt => corrupt = true,
+                                }
                             }
                         }
                     }
@@ -520,13 +597,19 @@ impl Worker {
             corrupt = true;
         }
         if corrupt {
-            self.failed(now)
+            self.failed(now);
         }
     }
+
     fn expire(&mut self, now: Instant) {
-        for event in expire(&self.manifest.id, &mut self.pending, now) {
-            self.emit(event)
+        let expired = expire(&self.manifest.id, &mut self.pending, now);
+        if expired.is_empty() {
+            return;
         }
+        for event in expired {
+            self.emit(event);
+        }
+        self.failed(now);
     }
     fn failed(&mut self, now: Instant) {
         self.kill();
@@ -663,56 +746,101 @@ fn bounded_line(reader: &mut impl BufRead, line: &mut Vec<u8>) -> io::Result<Lin
         }
     }
 }
+enum Route {
+    Event(ExternalEvent),
+    Ignored,
+    Corrupt,
+}
+
 fn route(
     provider_id: &str,
     pending: &mut Pending,
+    now: Instant,
     response: ProviderResponse,
-) -> Option<ExternalEvent> {
+) -> Route {
     match response {
         ProviderResponse::Results {
             query_id,
             complete,
-            results,
+            mut results,
         } => {
-            if !pending.queries.contains_key(&query_id) {
-                return None;
+            let Some(query) = pending.queries.get_mut(&query_id) else {
+                return Route::Ignored;
+            };
+            if !query.sent {
+                return Route::Corrupt;
             }
+            if query.deadline <= now {
+                return Route::Ignored;
+            }
+            let remaining = usize::from(query.limit).saturating_sub(query.result_count);
+            results.truncate(remaining);
+            query.result_count += results.len();
             if complete {
                 pending.queries.remove(&query_id);
             }
-            Some(ExternalEvent::Results {
-                provider_id: provider_id.into(),
-                query_id,
-                complete,
-                results,
-            })
-        }
-        ProviderResponse::Activated { activation_id } => pending
-            .activations
-            .remove(&activation_id)
-            .map(|_| ExternalEvent::Activated {
-                provider_id: provider_id.into(),
-                activation_id,
-            }),
-        ProviderResponse::Error(error) => {
-            match error.correlation {
-                ProviderErrorCorrelation::Query { query_id } => pending
-                    .queries
-                    .remove(&query_id)
-                    .map(|_| ExternalEvent::QueryFailed {
-                        provider_id: provider_id.into(),
-                        query_id,
-                    }),
-                ProviderErrorCorrelation::Activation { activation_id } => pending
-                    .activations
-                    .remove(&activation_id)
-                    .map(|_| ExternalEvent::ActivationFailed {
-                        provider_id: provider_id.into(),
-                        activation_id,
-                    }),
+            if results.is_empty() && !complete {
+                Route::Ignored
+            } else {
+                Route::Event(ExternalEvent::Results {
+                    provider_id: provider_id.into(),
+                    query_id,
+                    complete,
+                    results,
+                })
             }
         }
-        ProviderResponse::Hello => None,
+        ProviderResponse::Activated { activation_id } => {
+            let Some(activation) = pending.activations.get(&activation_id) else {
+                return Route::Ignored;
+            };
+            if !activation.sent {
+                return Route::Corrupt;
+            }
+            if activation.deadline <= now {
+                return Route::Ignored;
+            }
+            pending.activations.remove(&activation_id);
+            Route::Event(ExternalEvent::Activated {
+                provider_id: provider_id.into(),
+                activation_id,
+            })
+        }
+        ProviderResponse::Error(error) => match error.correlation {
+            ProviderErrorCorrelation::Query { query_id } => {
+                let Some(query) = pending.queries.get(&query_id) else {
+                    return Route::Ignored;
+                };
+                if !query.sent {
+                    return Route::Corrupt;
+                }
+                if query.deadline <= now {
+                    return Route::Ignored;
+                }
+                pending.queries.remove(&query_id);
+                Route::Event(ExternalEvent::QueryFailed {
+                    provider_id: provider_id.into(),
+                    query_id,
+                })
+            }
+            ProviderErrorCorrelation::Activation { activation_id } => {
+                let Some(activation) = pending.activations.get(&activation_id) else {
+                    return Route::Ignored;
+                };
+                if !activation.sent {
+                    return Route::Corrupt;
+                }
+                if activation.deadline <= now {
+                    return Route::Ignored;
+                }
+                pending.activations.remove(&activation_id);
+                Route::Event(ExternalEvent::ActivationFailed {
+                    provider_id: provider_id.into(),
+                    activation_id,
+                })
+            }
+        },
+        ProviderResponse::Hello => Route::Corrupt,
     }
 }
 fn prioritize(event: &mut ExternalEvent, priority: u16) {
@@ -804,21 +932,33 @@ mod tests {
         assert_eq!(args, ["--serve"])
     }
     #[test]
-    fn responses_route_only_for_pending_ids() {
+    fn responses_route_only_for_sent_pending_ids() {
         let now = Instant::now();
         let mut pending = Pending::default();
-        assert!(pending.query("query-1".into(), "notes".into(), 10, now));
+        assert!(pending.query(
+            "query-1".into(),
+            "notes".into(),
+            10,
+            now + Duration::from_secs(1),
+        ));
+        let request = PendingRequest::Query {
+            query_id: "query-1".into(),
+            query: "notes".into(),
+            limit: 10,
+        };
+        pending.sent(&request);
         assert!(matches!(
             route(
                 "notes",
                 &mut pending,
+                now,
                 ProviderResponse::Results {
                     query_id: "query-1".into(),
                     complete: false,
                     results: vec![result()]
                 }
             ),
-            Some(ExternalEvent::Results {
+            Route::Event(ExternalEvent::Results {
                 complete: false,
                 ..
             })
@@ -828,26 +968,120 @@ mod tests {
             route(
                 "notes",
                 &mut pending,
+                now,
                 ProviderResponse::Results {
                     query_id: "query-1".into(),
                     complete: true,
                     results: vec![]
                 }
             ),
-            Some(ExternalEvent::Results { complete: true, .. })
+            Route::Event(ExternalEvent::Results { complete: true, .. })
         ));
-        assert!(
+        assert!(matches!(
             route(
                 "notes",
                 &mut pending,
+                now,
                 ProviderResponse::Results {
                     query_id: "query-1".into(),
                     complete: true,
                     results: vec![]
                 }
-            )
-            .is_none()
-        )
+            ),
+            Route::Ignored
+        ));
+    }
+
+    #[test]
+    fn rejects_responses_for_unsent_requests() {
+        let now = Instant::now();
+        let mut pending = Pending::default();
+        assert!(pending.query("query-1".into(), "notes".into(), 10, now));
+
+        assert!(matches!(
+            route(
+                "notes",
+                &mut pending,
+                now,
+                ProviderResponse::Results {
+                    query_id: "query-1".into(),
+                    complete: false,
+                    results: vec![result()]
+                }
+            ),
+            Route::Corrupt
+        ));
+    }
+
+    #[test]
+    fn caps_results_across_partial_provider_records() {
+        let now = Instant::now();
+        let mut pending = Pending::default();
+        assert!(pending.query(
+            "query-1".into(),
+            "notes".into(),
+            1,
+            now + Duration::from_secs(1),
+        ));
+        pending.sent(&PendingRequest::Query {
+            query_id: "query-1".into(),
+            query: "notes".into(),
+            limit: 1,
+        });
+
+        let Route::Event(ExternalEvent::Results { results, .. }) = route(
+            "notes",
+            &mut pending,
+            now,
+            ProviderResponse::Results {
+                query_id: "query-1".into(),
+                complete: false,
+                results: vec![result(), result()],
+            },
+        ) else {
+            panic!("first result batch must route");
+        };
+        assert_eq!(results.len(), 1);
+        assert!(matches!(
+            route(
+                "notes",
+                &mut pending,
+                now,
+                ProviderResponse::Results {
+                    query_id: "query-1".into(),
+                    complete: false,
+                    results: vec![result()]
+                }
+            ),
+            Route::Ignored
+        ));
+        assert!(matches!(
+            route(
+                "notes",
+                &mut pending,
+                now,
+                ProviderResponse::Results {
+                    query_id: "query-1".into(),
+                    complete: true,
+                    results: vec![result()]
+                }
+            ),
+            Route::Event(ExternalEvent::Results {
+                complete: true,
+                results,
+                ..
+            }) if results.is_empty()
+        ));
+    }
+
+    #[test]
+    fn cancellation_removes_an_unfinished_query() {
+        let now = Instant::now();
+        let mut pending = Pending::default();
+        assert!(pending.query("query-1".into(), "notes".into(), 10, now));
+
+        assert!(pending.cancel_query("query-1"));
+        assert!(pending.unsent().is_empty());
     }
     #[test]
     fn timeout_and_failure_clear_pending() {

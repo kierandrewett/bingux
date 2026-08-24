@@ -195,13 +195,23 @@ impl Runtime {
     }
 
     fn broadcast(&self, event: DaemonEvent) {
-        let Ok(mut clients) = self.clients.lock() else {
-            return;
+        let disconnected = {
+            let Ok(clients) = self.clients.lock() else {
+                return;
+            };
+            clients
+                .iter()
+                .filter_map(|(client_id, sender)| {
+                    sender
+                        .try_send(event.clone())
+                        .is_err()
+                        .then_some(*client_id)
+                })
+                .collect::<Vec<_>>()
         };
-        clients.retain(|_, sender| match sender.try_send(event.clone()) {
-            Ok(()) | Err(TrySendError::Full(_)) => true,
-            Err(TrySendError::Disconnected(_)) => false,
-        });
+        for client_id in disconnected {
+            self.disconnect_client(client_id);
+        }
     }
 
     fn enqueue_event(
@@ -226,9 +236,22 @@ impl Runtime {
             .ok()
             .and_then(|mut client_queries| client_queries.remove(&client_id));
         if let Some(query_id) = previous_query {
-            if let Ok(mut queries) = self.queries.lock() {
-                queries.remove(&query_id);
-            }
+            self.cancel_query(&query_id, client_id);
+        }
+    }
+
+    fn cancel_query(&self, query_id: &str, client_id: u64) {
+        let tracker = self
+            .queries
+            .lock()
+            .ok()
+            .and_then(|mut queries| queries.remove(query_id));
+        if let Some(tracker) = tracker {
+            self.external
+                .cancel_query(query_id, &tracker.provider_ids());
+        }
+        if let Ok(mut activations) = self.activations.lock() {
+            activations.remove_query(client_id, query_id);
         }
     }
 
@@ -332,6 +355,7 @@ impl Runtime {
             request.query.clone(),
             request.limit,
         );
+        tracker.set_provider_ids(accepted_external.clone());
         let mut candidates = self.local.query(&request.query, usize::from(request.limit));
         if let Some(weather) = &self.weather {
             if let Some(result) = weather.query(&request.query) {
@@ -346,18 +370,20 @@ impl Runtime {
         if !self.query_is_active(client_id, &provider_query_id)
             || generation.load(Ordering::Acquire) != current_generation
         {
-            self.remove_query(&provider_query_id, client_id);
+            self.cancel_query(&provider_query_id, client_id);
             return;
         }
 
-        let results = self.register_candidates(client_id, candidates, usize::from(request.limit));
+        let result_limit = tracker.reserve_result_slots(candidates.len());
+        let results =
+            self.register_candidates(client_id, &provider_query_id, candidates, result_limit);
         if !self.enqueue_query_event(
             client_id,
             &provider_query_id,
             &sender,
             DaemonEvent::Results {
                 request_id: request.request_id.clone(),
-                complete: accepted_external == 0,
+                complete: accepted_external.is_empty(),
                 elapsed_usec: elapsed_usec(tracker.started),
                 results,
             },
@@ -366,20 +392,15 @@ impl Runtime {
             return;
         }
 
-        if accepted_external == 0 {
+        if accepted_external.is_empty() {
             self.remove_query(&provider_query_id, client_id);
             return;
         }
-        self.initialise_external_query(&provider_query_id, tracker, accepted_external);
+        self.initialise_external_query(tracker);
     }
 
-    fn initialise_external_query(
-        &self,
-        query_id: &str,
-        tracker: Arc<QueryTracker>,
-        expected: usize,
-    ) {
-        for event in tracker.initialise(expected) {
+    fn initialise_external_query(&self, tracker: Arc<QueryTracker>) {
+        for event in tracker.initialise() {
             self.route_external_event(event);
         }
     }
@@ -429,7 +450,7 @@ impl Runtime {
                 }) else {
                     return;
                 };
-                let candidates = results
+                let candidates: Vec<Candidate> = results
                     .into_iter()
                     .filter(|result| result.validate().is_ok())
                     .map(|result| Candidate {
@@ -441,8 +462,13 @@ impl Runtime {
                         result,
                     })
                     .collect();
-                let daemon_results =
-                    self.register_candidates(tracker.client_id, candidates, tracker.limit);
+                let result_limit = tracker.reserve_result_slots(candidates.len());
+                let daemon_results = self.register_candidates(
+                    tracker.client_id,
+                    &query_id_for_removal,
+                    candidates,
+                    result_limit,
+                );
                 if !self.enqueue_query_event(
                     tracker.client_id,
                     &query_id_for_removal,
@@ -521,6 +547,7 @@ impl Runtime {
     fn register_candidates(
         &self,
         client_id: u64,
+        query_id: &str,
         candidates: Vec<Candidate>,
         limit: usize,
     ) -> Vec<DaemonResult> {
@@ -547,23 +574,13 @@ impl Runtime {
             if result.validate().is_err() {
                 continue;
             }
-            activations.insert(result_id, client_id, candidate.activation);
+            activations.insert(result_id, client_id, query_id, candidate.activation);
             results.push(result);
         }
         results
     }
 
     fn start_activation(
-        &self,
-        client_id: u64,
-        sender: SyncSender<DaemonEvent>,
-        request: ActivateRequest,
-    ) {
-        self.cancel_client_query(client_id);
-        self.run_activation(client_id, sender, request);
-    }
-
-    fn run_activation(
         &self,
         client_id: u64,
         sender: SyncSender<DaemonEvent>,
@@ -585,7 +602,17 @@ impl Runtime {
             );
             return;
         };
+        self.cancel_client_query(client_id);
+        self.run_activation(client_id, sender, request, activation);
+    }
 
+    fn run_activation(
+        &self,
+        client_id: u64,
+        sender: SyncSender<DaemonEvent>,
+        request: ActivateRequest,
+        activation: Activation,
+    ) {
         match activation {
             Activation::Spawn { program, arguments } => {
                 let event = if launch_program(&program, &arguments).is_ok() {
@@ -716,8 +743,10 @@ struct QueryTracker {
 }
 
 struct QueryTrackerState {
+    provider_ids: BTreeSet<String>,
     expected: Option<usize>,
     completed_providers: BTreeSet<String>,
+    reserved_results: usize,
     buffered_events: Vec<ExternalEvent>,
 }
 
@@ -735,18 +764,42 @@ impl QueryTracker {
             sender,
             started: Instant::now(),
             state: Mutex::new(QueryTrackerState {
+                provider_ids: BTreeSet::new(),
                 expected: None,
                 completed_providers: BTreeSet::new(),
+                reserved_results: 0,
                 buffered_events: Vec::new(),
             }),
         }
     }
 
-    fn initialise(&self, expected: usize) -> Vec<ExternalEvent> {
+    fn set_provider_ids(&self, provider_ids: BTreeSet<String>) {
+        if let Ok(mut state) = self.state.lock() {
+            state.provider_ids = provider_ids;
+        }
+    }
+
+    fn provider_ids(&self) -> BTreeSet<String> {
+        self.state
+            .lock()
+            .map(|state| state.provider_ids.clone())
+            .unwrap_or_default()
+    }
+
+    fn reserve_result_slots(&self, requested: usize) -> usize {
+        let Ok(mut state) = self.state.lock() else {
+            return 0;
+        };
+        let granted = requested.min(self.limit.saturating_sub(state.reserved_results));
+        state.reserved_results += granted;
+        granted
+    }
+
+    fn initialise(&self) -> Vec<ExternalEvent> {
         let Ok(mut state) = self.state.lock() else {
             return Vec::new();
         };
-        state.expected = Some(expected);
+        state.expected = Some(state.provider_ids.len());
         std::mem::take(&mut state.buffered_events)
     }
 
@@ -766,14 +819,21 @@ impl QueryTracker {
         let Ok(mut state) = self.state.lock() else {
             return None;
         };
-        let Some(expected) = state.expected else {
+        if state.expected.is_none() {
             state.buffered_events.push(event);
             return None;
-        };
+        }
+        if !state.provider_ids.contains(provider_id) {
+            return None;
+        }
         if complete {
             state.completed_providers.insert(provider_id.clone());
         }
-        Some(state.completed_providers.len() >= expected)
+        Some(
+            state
+                .expected
+                .is_some_and(|expected| state.completed_providers.len() >= expected),
+        )
     }
 }
 
@@ -785,12 +845,19 @@ struct ActivationRegistry {
 
 struct RegisteredActivation {
     client_id: u64,
+    query_id: String,
     activation: Activation,
     expires_at: Instant,
 }
 
 impl ActivationRegistry {
-    fn insert(&mut self, result_id: String, client_id: u64, activation: Activation) {
+    fn insert(
+        &mut self,
+        result_id: String,
+        client_id: u64,
+        query_id: &str,
+        activation: Activation,
+    ) {
         self.remove_expired();
         while self.entries.len() >= MAX_ACTIVATIONS {
             let Some(oldest) = self.order.pop_front() else {
@@ -803,6 +870,7 @@ impl ActivationRegistry {
             result_id,
             RegisteredActivation {
                 client_id,
+                query_id: query_id.to_owned(),
                 activation,
                 expires_at: Instant::now() + ACTIVATION_TTL,
             },
@@ -815,6 +883,13 @@ impl ActivationRegistry {
             return None;
         }
         self.entries.remove(result_id).map(|entry| entry.activation)
+    }
+
+    fn remove_query(&mut self, client_id: u64, query_id: &str) {
+        self.entries
+            .retain(|_, entry| entry.client_id != client_id || entry.query_id.as_str() != query_id);
+        self.order
+            .retain(|result_id| self.entries.contains_key(result_id));
     }
 
     fn remove_expired(&mut self) {
@@ -1016,4 +1091,34 @@ fn rank_candidates(candidates: &mut Vec<Candidate>, limit: usize) {
             .then_with(|| left.result.result_id.cmp(&right.result.result_id))
     });
     candidates.truncate(limit);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn query_cancellation_removes_only_that_queries_activations() {
+        let mut activations = ActivationRegistry::default();
+        activations.insert("old".into(), 1, "q-old", Activation::None);
+        activations.insert("current".into(), 1, "q-current", Activation::None);
+
+        activations.remove_query(1, "q-old");
+
+        assert!(activations.take("old", 1).is_none());
+        assert!(matches!(
+            activations.take("current", 1),
+            Some(Activation::None)
+        ));
+    }
+
+    #[test]
+    fn query_tracker_reserves_the_result_limit_across_batches() {
+        let (sender, _receiver) = mpsc::sync_channel(1);
+        let tracker = QueryTracker::new(1, "q-01".into(), 3, sender);
+
+        assert_eq!(tracker.reserve_result_slots(2), 2);
+        assert_eq!(tracker.reserve_result_slots(2), 1);
+        assert_eq!(tracker.reserve_result_slots(1), 0);
+    }
 }
