@@ -10,6 +10,8 @@ use std::fmt;
 
 pub const PROTOCOL_VERSION: u8 = 1;
 pub const MAX_RECORD_BYTES: usize = 64 * 1024;
+pub const MAX_RESULT_DISPLAY_BYTES: usize = 24 * 1024;
+pub const MAX_PROVIDER_ID_BYTES: usize = 64;
 pub const MAX_QUERY_BYTES: usize = 512;
 pub const MIN_QUERY_LIMIT: u8 = 1;
 pub const MAX_QUERY_LIMIT: u8 = 50;
@@ -165,6 +167,7 @@ pub struct ProviderResult {
 impl ProviderResult {
     pub fn validate(&self) -> ProtocolResult<()> {
         validate_provider_result_id(&self.result_id)?;
+        validate_result_display_text(&self.title, &self.subtitle, &self.icon)?;
         validate_score(self.score)
     }
 }
@@ -186,6 +189,7 @@ impl DaemonResult {
     pub fn validate(&self) -> ProtocolResult<()> {
         validate_opaque_result_id(&self.result_id)?;
         validate_provider_id(&self.provider_id)?;
+        validate_result_display_text(&self.title, &self.subtitle, &self.icon)?;
         validate_score(self.score)
     }
 }
@@ -535,18 +539,7 @@ pub fn encode_daemon_event_line(event: &DaemonEvent) -> ProtocolResult<Vec<u8>> 
             complete,
             elapsed_usec,
             results,
-        } => {
-            validate_request_id(request_id)?;
-            results.iter().try_for_each(DaemonResult::validate)?;
-            encode_line(&DaemonResultsWire {
-                protocol_version: PROTOCOL_VERSION,
-                record_type: "results",
-                request_id,
-                complete: *complete,
-                elapsed_usec: *elapsed_usec,
-                results,
-            })
-        }
+        } => encode_daemon_results_line(request_id, *complete, *elapsed_usec, results),
         DaemonEvent::Activated { request_id } => {
             validate_request_id(request_id)?;
             encode_line(&ActivatedWire {
@@ -566,6 +559,87 @@ pub fn encode_daemon_event_line(event: &DaemonEvent) -> ProtocolResult<Vec<u8>> 
             })
         }
     }
+}
+
+/// Serializes a daemon event into one or more valid transport records.
+///
+/// Result events can contain enough individually valid results to exceed a single record. The
+/// transport stays within its record limit by sending result batches and marking only the final
+/// batch as complete.
+pub fn encode_daemon_event_lines(event: &DaemonEvent) -> ProtocolResult<Vec<Vec<u8>>> {
+    let DaemonEvent::Results {
+        request_id,
+        complete,
+        elapsed_usec,
+        results,
+    } = event
+    else {
+        return Ok(vec![encode_daemon_event_line(event)?]);
+    };
+
+    validate_request_id(request_id)?;
+    results.iter().try_for_each(DaemonResult::validate)?;
+    if results.is_empty() {
+        return Ok(vec![encode_daemon_results_line(
+            request_id,
+            *complete,
+            *elapsed_usec,
+            results,
+        )?]);
+    }
+
+    let mut ranges = Vec::new();
+    let mut start = 0;
+    while start < results.len() {
+        let mut end = start + 1;
+        while end <= results.len() {
+            match encode_daemon_results_line(request_id, false, *elapsed_usec, &results[start..end])
+            {
+                Ok(_) => end += 1,
+                Err(error) if error.kind() == ProtocolErrorKind::RecordTooLarge => break,
+                Err(error) => return Err(error),
+            }
+        }
+
+        let end = end - 1;
+        if end == start {
+            return Err(ProtocolError::new(ProtocolErrorKind::RecordTooLarge));
+        }
+        ranges.push(start..end);
+        start = end;
+    }
+
+    let range_count = ranges.len();
+    ranges
+        .into_iter()
+        .enumerate()
+        .map(|(index, range)| {
+            encode_daemon_results_line(
+                request_id,
+                *complete && index + 1 == range_count,
+                *elapsed_usec,
+                &results[range],
+            )
+        })
+        .collect()
+}
+
+fn encode_daemon_results_line(
+    request_id: &str,
+    complete: bool,
+    elapsed_usec: u64,
+    results: &[DaemonResult],
+) -> ProtocolResult<Vec<u8>> {
+    validate_request_id(request_id)?;
+    results.iter().try_for_each(DaemonResult::validate)?;
+    encode_line(&DaemonResultsWire {
+        protocol_version: PROTOCOL_VERSION,
+        record_type: "results",
+        request_id,
+        complete,
+        elapsed_usec,
+        results,
+    })
 }
 
 /// Serializes one daemon request to a provider and appends the newline delimiter.
@@ -679,6 +753,7 @@ fn validate_request_id(value: &str) -> ProtocolResult<()> {
 fn validate_provider_id(value: &str) -> ProtocolResult<()> {
     let bytes = value.as_bytes();
     if bytes.is_empty()
+        || bytes.len() > MAX_PROVIDER_ID_BYTES
         || bytes[0] == b'-'
         || bytes.last() == Some(&b'-')
         || bytes.windows(2).any(|window| window == b"--")
@@ -702,6 +777,22 @@ fn validate_provider_result_id(value: &str) -> ProtocolResult<()> {
         Ok(())
     } else {
         Err(ProtocolError::new(ProtocolErrorKind::InvalidIdentifier))
+    }
+}
+
+fn validate_result_display_text(title: &str, subtitle: &str, icon: &str) -> ProtocolResult<()> {
+    let total_bytes = title
+        .len()
+        .saturating_add(subtitle.len())
+        .saturating_add(icon.len());
+    if total_bytes <= MAX_RESULT_DISPLAY_BYTES
+        && [title, subtitle, icon]
+            .iter()
+            .all(|value| !value.chars().any(char::is_control))
+    {
+        Ok(())
+    } else {
+        Err(ProtocolError::new(ProtocolErrorKind::InvalidResult))
     }
 }
 
@@ -1007,5 +1098,46 @@ mod tests {
             line,
             b"{\"protocolVersion\":1,\"type\":\"query\",\"queryId\":\"provider-query-01\",\"query\":\"firefox\",\"limit\":20}\n"
         );
+    }
+
+    #[test]
+    fn rejects_provider_results_that_exceed_the_display_text_budget() {
+        let title = "x".repeat(MAX_RESULT_DISPLAY_BYTES + 1);
+        let record = format!(
+            r#"{{"protocolVersion":1,"type":"results","queryId":"q-01","complete":true,"results":[{{"resultId":"note-1","kind":"action","title":"{title}","subtitle":"","icon":"","score":1}}]}}"#
+        );
+
+        let error = parse_provider_response(record.as_bytes())
+            .expect_err("oversized display text must not enter the daemon");
+
+        assert_eq!(error.kind(), ProtocolErrorKind::InvalidResult);
+    }
+
+    #[test]
+    fn splits_result_events_before_the_transport_record_limit() {
+        let results = (0..50)
+            .map(|index| DaemonResult {
+                result_id: format!("r{index}"),
+                provider_id: "notes".to_owned(),
+                kind: ResultKind::Database,
+                title: "x".repeat(2_048),
+                subtitle: String::new(),
+                icon: "note".to_owned(),
+                score: 1.0,
+            })
+            .collect();
+        let lines = encode_daemon_event_lines(&DaemonEvent::Results {
+            request_id: "q-01".to_owned(),
+            complete: true,
+            elapsed_usec: 1,
+            results,
+        })
+        .expect("result event can be split into valid records");
+
+        assert!(lines.len() > 1);
+        assert!(lines.iter().all(|line| line.len() <= MAX_RECORD_BYTES + 1));
+        let final_record: Value =
+            serde_json::from_slice(lines.last().expect("at least one line")).expect("valid JSON");
+        assert_eq!(final_record["complete"], true);
     }
 }

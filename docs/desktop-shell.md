@@ -190,9 +190,9 @@ version policy. Bingux discovers manifests only from configured profile paths. I
 }
 ```
 
-`id` matches `[a-z0-9]+(?:-[a-z0-9]+)*`. `command` is a non-empty argument array. The host does
-not pass a shell string. `startup` is `eager` or `lazy`. `priority` is an integer from 0 to 1000.
-`timeoutMs` is an integer from 1 to 10,000.
+`id` matches `[a-z0-9]+(?:-[a-z0-9]+)*` and contains at most 64 bytes. `command` is a non-empty
+argument array. The host does not pass a shell string. `startup` is `eager` or `lazy`. `priority` is
+an integer from 0 to 1000. `timeoutMs` is an integer from 1 to 10,000.
 
 The provider protocol uses newline-delimited UTF-8 JSON on standard input and standard output.
 Each record is at most 64 KiB. The host sends this record after it starts a provider:
@@ -247,8 +247,11 @@ The host gives each provider query a provider-local `queryId` that matches the s
 }
 ```
 
-Provider-local `resultId` values match `[A-Za-z0-9._:-]{1,128}`. The host maps them to short-lived
-opaque socket result identifiers. It never sends a provider command or executable text to QML.
+Provider-local `resultId` values match `[A-Za-z0-9._:-]{1,128}`. The combined UTF-8 byte length of
+`title`, `subtitle`, and `icon` must not exceed 24 KiB, and these fields must not contain control
+characters. The host maps them to short-lived opaque socket result identifiers. It may split a
+provider result batch into multiple socket records to keep each record within 64 KiB. It never sends
+a provider command or executable text to QML.
 
 Activation is a separate provider record:
 

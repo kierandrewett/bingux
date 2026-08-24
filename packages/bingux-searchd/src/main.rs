@@ -5,7 +5,7 @@ use bingux_searchd::{
     gnoblin::{self, Event as GnoblinEvent},
     protocol::{
         ActivateRequest, DaemonErrorCode, DaemonEvent, DaemonResult, IntegrationState,
-        ProviderResult, QueryRequest, ShellRequest, encode_daemon_event_line, parse_shell_request,
+        ProviderResult, QueryRequest, ShellRequest, encode_daemon_event_lines, parse_shell_request,
     },
     providers::{Activation, Candidate, LocalProviders},
     server::{bind_listener, read_record},
@@ -943,19 +943,21 @@ fn handle_client(runtime: Arc<Runtime>, client_id: u64, stream: UnixStream) {
 fn write_client_events(stream: UnixStream, receiver: Receiver<DaemonEvent>) {
     let mut writer = std::io::BufWriter::new(stream);
     for event in receiver {
-        let record = match encode_daemon_event_line(&event) {
-            Ok(record) => record,
+        let records = match encode_daemon_event_lines(&event) {
+            Ok(records) => records,
             Err(error) => {
                 eprintln!("[bingux-searchd] could not encode daemon event: {error}");
                 return;
             }
         };
-        if writer
-            .write_all(&record)
-            .and_then(|()| writer.flush())
-            .is_err()
-        {
-            return;
+        for record in records {
+            if writer
+                .write_all(&record)
+                .and_then(|()| writer.flush())
+                .is_err()
+            {
+                return;
+            }
         }
     }
 }
