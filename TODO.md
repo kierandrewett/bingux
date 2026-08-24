@@ -15,18 +15,18 @@ This file tracks implementation work. A checked item means the related configura
 - [x] Confirm that the current Bingux tree is empty and preserve `banks/`.
 - [x] Map Gnoblin layer-shell, foreign-toplevel, and Super-key integration points.
 - [x] Identify Fedora, Flatpak, Cargo, pipx, and global Node package inventory sources.
-- [ ] Verify all selected Nix inputs, package attributes, and NixOS module interfaces.
+- [x] Verify all selected Nix inputs, package attributes, and NixOS module interfaces.
 - [ ] Record the cross-repository Gnoblin-to-Bingux protocol contract.
 
 ## Phase 2: Reproducible NixOS foundation
 
-- [ ] Add a pinned flake with NixOS, Home Manager, SOPS-Nix, Flatpak, CachyOS kernel, and Gnoblin inputs.
-- [ ] Add a generic host constructor and profile schema.
-- [ ] Add a VM host that needs no machine-specific disk configuration.
+- [x] Add a pinned flake with NixOS, Home Manager, SOPS-Nix, Flatpak, CachyOS kernel, and Gnoblin inputs.
+- [x] Add a generic host constructor and profile schema.
+- [x] Add a VM host that needs no machine-specific disk configuration.
 - [ ] Add the generic system, networking, audio, graphics, and Nix modules.
 - [ ] Add configurable CachyOS kernel variants and safe compiler-performance defaults.
 - [ ] Add a profile-local SOPS layout and an age bootstrap path without plaintext secrets.
-- [ ] Evaluate the base flake and build the VM closure.
+- [x] Evaluate the base flake and build the VM closure.
 
 ## Phase 3: Kieran profile and migration
 
