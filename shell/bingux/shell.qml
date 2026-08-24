@@ -59,6 +59,7 @@ ShellRoot {
 
         WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "bingux-top-bar"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
 
         Text {
             anchors {
@@ -92,6 +93,10 @@ ShellRoot {
                 parentWindow: topBar
             }
 
+            PrivacyIndicators {
+                metrics: metrics
+            }
+
 
             Rectangle {
                 width: 5
@@ -116,6 +121,11 @@ ShellRoot {
                 color: metrics.available ? "#d9dee8" : "#8b94a3"
                 font.pixelSize: 12
                 text: metrics.networkLabel
+            }
+
+            InputSourceSelector {
+                metrics: metrics
+                gnoblinCtlPath: profileSettings.gnoblinCtlPath
             }
 
             SystemIndicators {

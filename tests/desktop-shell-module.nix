@@ -60,9 +60,14 @@ assert builtins.pathExists "${toString shellConfig.source}/Metrics.qml";
 assert builtins.pathExists "${toString shellConfig.source}/Tray.qml";
 assert builtins.pathExists "${toString shellConfig.source}/SystemIndicators.qml";
 assert builtins.pathExists "${toString shellConfig.source}/Dock.qml";
+assert builtins.pathExists "${toString shellConfig.source}/InputSourceSelector.qml";
+assert builtins.pathExists "${toString shellConfig.source}/PrivacyIndicators.qml";
 assert builtins.pathExists (toString profileSettings.source);
 assert
     builtins.match "(.|\n)*org.example.Terminal(.|\n)*" (builtins.readFile profileSettings.source)
+    != null;
+assert
+    builtins.match "(.|\n)*import QtQuick(.|\n)*gnoblinCtlPath(.|\n)*" (builtins.readFile profileSettings.source)
     != null;
 assert host.config.services.upower.enable;
 assert statusService.Service.RuntimeDirectory == "bingux";

@@ -15,6 +15,7 @@ let
         QtObject {
             readonly property bool dockEnabled: ${lib.boolToString cfg.dock.enable}
             readonly property var pinnedApps: ${builtins.toJSON cfg.dock.pinnedApps}
+            readonly property string gnoblinCtlPath: "${lib.getExe' config.programs.gnoblin.package "gnoblinctl"}"
         }
     '';
     statusdPackage = pkgs.callPackage ../../packages/bingux-statusd { };

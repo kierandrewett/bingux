@@ -27,6 +27,22 @@ QtObject {
         ? "NET RX " + formatRate(latest.networkReceiveBytesPerSecond) + " TX " + formatRate(latest.networkTransmitBytesPerSecond)
         : "NET --"
 
+    readonly property bool desktopStateAvailable: available && latest.desktopStateAvailable
+    readonly property var inputSources: desktopStateAvailable ? latest.inputSources : []
+    readonly property var currentInputSource: desktopStateAvailable ? latest.currentInputSource : null
+    readonly property bool screenSharing: desktopStateAvailable && latest.screenSharing
+    readonly property bool microphoneInUse: desktopStateAvailable && latest.microphoneInUse
+    readonly property bool locationInUse: desktopStateAvailable && latest.locationInUse
+    readonly property string inputSourceLabel: {
+        const source = currentInputSource;
+
+        if (source === null) {
+            return "";
+        }
+
+        return source.shortName !== "" ? source.shortName : source.id;
+    }
+
     function formatBytes(bytes) {
         const units = ["B", "K", "M", "G", "T"];
         let unitIndex = 0;
@@ -52,6 +68,42 @@ QtObject {
         return value === null || isFiniteNumber(value);
     }
 
+    function isInputSource(source) {
+        return source !== null
+            && typeof source === "object"
+            && typeof source.type === "string"
+            && typeof source.id === "string"
+            && typeof source.shortName === "string"
+            && typeof source.displayName === "string";
+    }
+
+    function isInputSourceList(sources) {
+        if (!Array.isArray(sources)) {
+            return false;
+        }
+
+        for (let index = 0; index < sources.length; index += 1) {
+            if (!isInputSource(sources[index])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    function isDesktopStateRecord(record) {
+        if (typeof record.desktopStateAvailable === "undefined") {
+            return true;
+        }
+
+        return typeof record.desktopStateAvailable === "boolean"
+            && isInputSourceList(record.inputSources)
+            && (record.currentInputSource === null || isInputSource(record.currentInputSource))
+            && typeof record.screenSharing === "boolean"
+            && typeof record.microphoneInUse === "boolean"
+            && typeof record.locationInUse === "boolean";
+    }
+
     function isMetricsRecord(record) {
         return record !== null
             && typeof record === "object"
@@ -65,7 +117,8 @@ QtObject {
             && record.memoryTotalBytes >= 0
             && record.memoryUsedBytes >= 0
             && record.memoryUsedBytes <= record.memoryTotalBytes
-            && (record.cpuPercent === null || (record.cpuPercent >= 0 && record.cpuPercent <= 100));
+            && (record.cpuPercent === null || (record.cpuPercent >= 0 && record.cpuPercent <= 100))
+            && isDesktopStateRecord(record);
     }
 
     function ingest(recordText) {
