@@ -1,55 +1,37 @@
+import QtQuick
 import Quickshell
 import Quickshell.Io
-import QtQuick
 
 Item {
     id: root
 
     required property var metrics
-
     required property string gnoblinCtlPath
     property bool menuOpen: false
     property int selectedIndex: -1
     property string selectedSourceKey: ""
     property bool selectionExplicit: false
-
     property string lastError: ""
-
     readonly property var sources: metrics.desktopStateAvailable ? metrics.inputSources : []
     readonly property bool canSelect: metrics.desktopStateAvailable && sources.length > 0 && !inputProcess.running
     readonly property string displayLabel: {
-        if (!metrics.desktopStateAvailable || metrics.inputSourceLabel === "") {
+        if (!metrics.desktopStateAvailable || metrics.inputSourceLabel === "")
             return "KB --";
-        }
 
         return "KB " + metrics.inputSourceLabel.toUpperCase();
     }
 
-    implicitWidth: inputLabel.implicitWidth + 12
-    implicitHeight: 24
-    width: implicitWidth
-    height: implicitHeight
-    activeFocusOnTab: true
-    Accessible.name: metrics.desktopStateAvailable
-        ? "Keyboard layout " + (metrics.currentInputSource === null ? "unavailable" : metrics.currentInputSource.displayName)
-        : "Keyboard layout unavailable"
-    Accessible.role: Accessible.Button
-
     function currentSourceIndex() {
         const current = metrics.currentInputSource;
-
-        if (current === null) {
+        if (current === null)
             return 0;
-        }
 
         for (let index = 0; index < sources.length; index += 1) {
             const source = sources[index];
-
-            if (source.type === current.type && source.id === current.id) {
+            if (source.type === current.type && source.id === current.id)
                 return index;
-            }
-        }
 
+        }
         return 0;
     }
 
@@ -64,35 +46,30 @@ Item {
     }
 
     function reconcileSelection() {
-        if (!menuOpen) {
-            return;
-        }
+        if (!menuOpen)
+            return ;
 
         if (sources.length === 0) {
             setSelectedIndex(-1, false);
             menuOpen = false;
-            return;
+            return ;
         }
-
         if (!selectionExplicit) {
             setSelectedIndex(currentSourceIndex(), false);
-            return;
+            return ;
         }
-
         for (let index = 0; index < sources.length; index += 1) {
             if (sourceKey(sources[index]) === selectedSourceKey) {
                 selectedIndex = index;
-                return;
+                return ;
             }
         }
-
         setSelectedIndex(currentSourceIndex(), false);
     }
 
     function openMenu() {
-        if (!canSelect) {
-            return;
-        }
+        if (!canSelect)
+            return ;
 
         setSelectedIndex(currentSourceIndex(), false);
         lastError = "";
@@ -100,30 +77,41 @@ Item {
     }
 
     function selectSource(source) {
-        if (inputProcess.running) {
-            return;
-        }
+        if (inputProcess.running)
+            return ;
 
         lastError = "";
         inputProcess.exec([root.gnoblinCtlPath, "set-input-source", source.type, source.id]);
     }
 
     function selectCurrentSource() {
-        if (selectedIndex < 0 || selectedIndex >= sources.length) {
-            return;
-        }
+        if (selectedIndex < 0 || selectedIndex >= sources.length)
+            return ;
 
         selectSource(sources[selectedIndex]);
     }
 
+    implicitWidth: inputLabel.implicitWidth + 12
+    implicitHeight: 24
+    width: implicitWidth
+    height: implicitHeight
+    activeFocusOnTab: true
+    Accessible.name: metrics.desktopStateAvailable ? "Keyboard layout " + (metrics.currentInputSource === null ? "unavailable" : metrics.currentInputSource.displayName) : "Keyboard layout unavailable"
+    Accessible.role: Accessible.Button
     onSourcesChanged: reconcileSelection()
+    Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Space) {
+            root.openMenu();
+            event.accepted = true;
+        }
+    }
 
     Connections {
-        target: metrics
-
         function onCurrentInputSourceChanged() {
             root.reconcileSelection();
         }
+
+        target: metrics
     }
 
     Rectangle {
@@ -147,17 +135,9 @@ Item {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
         cursorShape: root.canSelect ? Qt.PointingHandCursor : Qt.ArrowCursor
-
         onClicked: {
             root.forceActiveFocus();
             root.openMenu();
-        }
-    }
-
-    Keys.onPressed: function(event) {
-        if (event.key === Qt.Key_Return || event.key === Qt.Key_Space) {
-            root.openMenu();
-            event.accepted = true;
         }
     }
 
@@ -165,11 +145,10 @@ Item {
         id: inputProcess
 
         onExited: function(exitCode) {
-            if (exitCode === 0) {
+            if (exitCode === 0)
                 root.menuOpen = false;
-            } else {
+            else
                 root.lastError = "Could not change keyboard layout";
-            }
         }
     }
 
@@ -181,6 +160,11 @@ Item {
         implicitHeight: menuSurface.implicitHeight
         color: "transparent"
         grabFocus: true
+        onVisibleChanged: {
+            if (!visible)
+                root.menuOpen = false;
+
+        }
 
         anchor {
             item: root
@@ -189,13 +173,6 @@ Item {
             adjustment: PopupAdjustment.Flip | PopupAdjustment.Slide
             margins.top: 6
         }
-
-        onVisibleChanged: {
-            if (!visible) {
-                root.menuOpen = false;
-            }
-        }
-
 
         Rectangle {
             id: menuSurface
@@ -206,7 +183,6 @@ Item {
             radius: 8
             color: "#202632"
             focus: true
-
             Keys.onPressed: function(event) {
                 if (event.key === Qt.Key_Escape) {
                     root.menuOpen = false;
@@ -226,12 +202,12 @@ Item {
             Column {
                 id: menuColumn
 
+                spacing: 2
+
                 anchors {
                     fill: parent
                     margins: 6
                 }
-
-                spacing: 2
 
                 Text {
                     width: parent.width
@@ -264,6 +240,11 @@ Item {
                         }
 
                         Text {
+                            color: "#edf1f7"
+                            elide: Text.ElideRight
+                            font.pixelSize: 13
+                            text: sourceAction.modelData.displayName
+
                             anchors {
                                 left: parent.left
                                 right: parent.right
@@ -272,10 +253,6 @@ Item {
                                 verticalCenter: parent.verticalCenter
                             }
 
-                            color: "#edf1f7"
-                            elide: Text.ElideRight
-                            font.pixelSize: 13
-                            text: sourceAction.modelData.displayName
                         }
 
                         MouseArea {
@@ -287,7 +264,9 @@ Item {
                             enabled: root.canSelect
                             onClicked: root.selectSource(sourceAction.modelData)
                         }
+
                     }
+
                 }
 
                 Text {
@@ -302,7 +281,11 @@ Item {
                     topPadding: 4
                     bottomPadding: 4
                 }
+
             }
+
         }
+
     }
+
 }
