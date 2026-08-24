@@ -81,6 +81,7 @@
                 in
                 {
                     bingux-statusd = pkgs.callPackage ./packages/bingux-statusd { };
+                    bingux-searchd = pkgs.callPackage ./packages/bingux-searchd { };
                 }
             );
 

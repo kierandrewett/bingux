@@ -1,0 +1,509 @@
+import Quickshell
+import Quickshell.Wayland
+import QtQuick
+
+PanelWindow {
+    id: root
+
+    readonly property int resultLimit: 20
+    readonly property bool serviceReady: searchSocket.connectionState === "ready"
+    readonly property bool loading: activeRequestId !== "" && !queryComplete
+    readonly property string statusText: {
+        if (queryError !== "") {
+            return queryError;
+        }
+
+        if (!serviceReady) {
+            return "Search unavailable.";
+        }
+
+        if (activationPending) {
+            return "Opening…";
+        }
+
+        if (searchInput.text === "") {
+            return "Type to search.";
+        }
+
+        if (loading) {
+            return "Searching…";
+        }
+
+        if (queryComplete && results.length === 0) {
+            return "No matches.";
+        }
+
+        return "";
+    }
+
+    property string activeRequestId: ""
+    property string activeActivationRequestId: ""
+    property var results: []
+    property int selectedIndex: -1
+    property bool queryComplete: false
+    property bool activationPending: false
+    property string queryError: ""
+
+    visible: false
+    color: "transparent"
+    exclusiveZone: 0
+    focusable: visible
+
+    anchors {
+        top: true
+        bottom: true
+        left: true
+        right: true
+    }
+
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.namespace: "bingux-search"
+    WlrLayershell.keyboardFocus: root.visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+
+    function clearResults() {
+        results = [];
+        selectedIndex = -1;
+        queryComplete = false;
+    }
+
+    function showSearch() {
+        if (!visible) {
+            activeRequestId = "";
+            activeActivationRequestId = "";
+            activationPending = false;
+            queryError = "";
+            clearResults();
+            searchInput.text = "";
+            visible = true;
+        }
+
+        searchInput.forceActiveFocus();
+    }
+
+    function closeSearch() {
+        activeRequestId = "";
+        activeActivationRequestId = "";
+        activationPending = false;
+        queryError = "";
+        clearResults();
+        searchInput.text = "";
+        visible = false;
+    }
+
+    function submitQuery() {
+        activeRequestId = "";
+        activeActivationRequestId = "";
+        activationPending = false;
+        queryError = "";
+        clearResults();
+
+        if (!visible || searchInput.text === "") {
+            return;
+        }
+
+        if (!searchSocket.isValidQuery(searchInput.text)) {
+            queryError = "Search text is too long.";
+            return;
+        }
+
+        if (!serviceReady) {
+            return;
+        }
+
+        const requestId = searchSocket.sendQuery(searchInput.text, resultLimit);
+        if (requestId === "") {
+            queryError = "Search unavailable.";
+            return;
+        }
+
+        activeRequestId = requestId;
+    }
+
+    function compareResults(left, right) {
+        if (left.score !== right.score) {
+            return left.score > right.score ? -1 : 1;
+        }
+
+        if (left.providerId !== right.providerId) {
+            return left.providerId < right.providerId ? -1 : 1;
+        }
+
+        if (left.title !== right.title) {
+            return left.title < right.title ? -1 : 1;
+        }
+
+        return left.resultId < right.resultId ? -1 : left.resultId > right.resultId ? 1 : 0;
+    }
+
+    function mergeResults(incoming) {
+        const selectedResultId = selectedIndex >= 0 && selectedIndex < results.length
+            ? results[selectedIndex].resultId
+            : "";
+        const updated = results.slice();
+
+        for (let incomingIndex = 0; incomingIndex < incoming.length; incomingIndex += 1) {
+            const result = incoming[incomingIndex];
+            let existingIndex = -1;
+
+            for (let resultIndex = 0; resultIndex < updated.length; resultIndex += 1) {
+                if (updated[resultIndex].resultId === result.resultId) {
+                    existingIndex = resultIndex;
+                    break;
+                }
+            }
+
+            if (existingIndex >= 0) {
+                updated[existingIndex] = result;
+            } else {
+                updated.push(result);
+            }
+        }
+
+        updated.sort(compareResults);
+        if (updated.length > resultLimit) {
+            updated.splice(resultLimit);
+        }
+
+        results = updated;
+        let retainedIndex = -1;
+        for (let resultIndex = 0; resultIndex < results.length; resultIndex += 1) {
+            if (results[resultIndex].resultId === selectedResultId) {
+                retainedIndex = resultIndex;
+                break;
+            }
+        }
+
+        if (retainedIndex >= 0) {
+            selectedIndex = retainedIndex;
+        } else if (results.length > 0) {
+            selectedIndex = 0;
+        } else {
+            selectedIndex = -1;
+        }
+    }
+
+    function moveSelection(delta) {
+        if (results.length === 0) {
+            return;
+        }
+
+        const baseIndex = selectedIndex < 0 ? 0 : selectedIndex;
+        selectedIndex = (baseIndex + delta + results.length) % results.length;
+        resultsList.positionViewAtIndex(selectedIndex, ListView.Contain);
+    }
+
+    function activateSelected() {
+        if (selectedIndex < 0 || selectedIndex >= results.length || activationPending) {
+            return;
+        }
+
+        activateResult(results[selectedIndex].resultId);
+    }
+
+    function activateResult(resultId) {
+        if (activationPending) {
+            return;
+        }
+
+        activeRequestId = "";
+        queryComplete = true;
+        queryError = "";
+        const requestId = searchSocket.activate(resultId);
+        if (requestId === "") {
+            queryError = "Search unavailable.";
+            return;
+        }
+
+        activeActivationRequestId = requestId;
+        activationPending = true;
+    }
+
+    function errorMessage(code) {
+        if (code === "unavailable") {
+            return "Search unavailable.";
+        }
+
+        if (code === "unknown-result") {
+            return "Result unavailable.";
+        }
+
+        if (code === "invalid-request") {
+            return "Search failed.";
+        }
+
+        if (code === "unsupported-protocol") {
+            return "Search needs an update.";
+        }
+
+        return "Search failed.";
+    }
+
+    onVisibleChanged: {
+        if (visible) {
+            searchInput.forceActiveFocus();
+        }
+    }
+
+    SearchSocket {
+        id: searchSocket
+    }
+
+    Connections {
+        target: searchSocket
+
+        function onShowSearch() {
+            root.showSearch();
+        }
+
+        function onConnectionStateChanged() {
+            if (searchSocket.connectionState !== "ready") {
+                root.activeRequestId = "";
+                root.activeActivationRequestId = "";
+                root.activationPending = false;
+                root.queryError = "";
+                root.clearResults();
+                return;
+            }
+
+            if (root.visible && searchInput.text !== "") {
+                root.submitQuery();
+            }
+        }
+
+        function onResultsReceived(requestId, incoming, complete) {
+            if (requestId !== root.activeRequestId || root.queryComplete) {
+                return;
+            }
+
+            root.mergeResults(incoming);
+            root.queryComplete = complete;
+        }
+
+        function onRequestFailed(requestId, code) {
+            if (requestId === root.activeActivationRequestId) {
+                root.activeActivationRequestId = "";
+                root.activationPending = false;
+                root.queryError = root.errorMessage(code);
+                return;
+            }
+
+            if (requestId === root.activeRequestId) {
+                if (code === "provider-failed" && root.results.length > 0) {
+                    root.queryError = "Some search sources are unavailable.";
+                    return;
+                }
+
+                root.activeRequestId = "";
+                root.clearResults();
+                root.queryError = root.errorMessage(code);
+            }
+        }
+
+        function onActivationCompleted(requestId) {
+            if (requestId === root.activeActivationRequestId) {
+                root.closeSearch();
+            }
+        }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        color: "#8c000000"
+
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton
+            onClicked: root.closeSearch()
+        }
+    }
+
+    Rectangle {
+        id: surface
+
+        width: Math.max(0, Math.min(560, root.width - 32))
+        height: content.implicitHeight + 24
+        radius: 10
+        color: "#202632"
+        border.width: 1
+        border.color: "#344158"
+
+        anchors {
+            top: parent.top
+            topMargin: Math.max(48, Math.min(128, root.height / 6))
+            horizontalCenter: parent.horizontalCenter
+        }
+
+        Column {
+            id: content
+
+            anchors {
+                fill: parent
+                margins: 12
+            }
+
+            spacing: 8
+
+            Rectangle {
+                id: searchFieldSurface
+
+                width: parent.width
+                height: 46
+                radius: 6
+                color: "#171a21"
+                border.width: 1
+                border.color: searchInput.activeFocus ? "#d9dee8" : "#344158"
+
+                Text {
+                    anchors {
+                        left: parent.left
+                        right: parent.right
+                        leftMargin: 14
+                        rightMargin: 14
+                        verticalCenter: parent.verticalCenter
+                    }
+
+                    visible: searchInput.text === ""
+                    color: "#8b94a3"
+                    font.pixelSize: 14
+                    text: "Search Bingux"
+                    textFormat: Text.PlainText
+                    elide: Text.ElideRight
+                }
+
+                TextInput {
+                    id: searchInput
+
+                    anchors {
+                        fill: parent
+                        leftMargin: 14
+                        rightMargin: 14
+                    }
+
+                    activeFocusOnTab: true
+                    focus: root.visible
+                    clip: true
+                    color: "#f5f7fa"
+                    font.pixelSize: 14
+                    maximumLength: 512
+                    readOnly: root.activationPending
+                    selectByMouse: true
+                    selectionColor: "#344158"
+                    selectedTextColor: "#f5f7fa"
+                    verticalAlignment: TextInput.AlignVCenter
+                    Accessible.name: "Search"
+
+                    onTextChanged: root.submitQuery()
+
+                    Keys.onPressed: function(event) {
+                        if (event.key === Qt.Key_Escape) {
+                            root.closeSearch();
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Up) {
+                            root.moveSelection(-1);
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Down) {
+                            root.moveSelection(1);
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                            if (root.selectedIndex >= 0 && root.selectedIndex < root.results.length) {
+                                root.activateSelected();
+                                event.accepted = true;
+                            } else if (root.queryError !== "" && searchInput.text !== "") {
+                                root.submitQuery();
+                                event.accepted = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            ListView {
+                id: resultsList
+
+                width: parent.width
+                height: visible ? Math.min(contentHeight, 300) : 0
+                visible: root.results.length > 0
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                currentIndex: root.selectedIndex
+                interactive: contentHeight > height
+                model: root.results
+
+                delegate: Item {
+                    id: resultRow
+
+                    required property var modelData
+
+                    width: resultsList.width
+                    height: 54
+                    Accessible.name: resultRow.modelData.title
+                        + (resultRow.modelData.subtitle === "" ? "" : ", " + resultRow.modelData.subtitle)
+                    Accessible.role: Accessible.Button
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 6
+                        color: resultMouse.containsMouse || root.selectedIndex === index ? "#344158" : "transparent"
+                    }
+
+                    Column {
+                        anchors {
+                            left: parent.left
+                            right: parent.right
+                            leftMargin: 10
+                            rightMargin: 10
+                            verticalCenter: parent.verticalCenter
+                        }
+
+                        spacing: 2
+
+                        Text {
+                            width: parent.width
+                            color: "#edf1f7"
+                            elide: Text.ElideRight
+                            font.pixelSize: 13
+                            text: resultRow.modelData.title
+                            textFormat: Text.PlainText
+                        }
+
+                        Text {
+                            width: parent.width
+                            visible: resultRow.modelData.subtitle !== ""
+                            color: "#aeb8ca"
+                            elide: Text.ElideRight
+                            font.pixelSize: 12
+                            text: resultRow.modelData.subtitle
+                            textFormat: Text.PlainText
+                        }
+                    }
+
+                    MouseArea {
+                        id: resultMouse
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton
+                        enabled: !root.activationPending
+                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+
+                        onEntered: {
+                            root.selectedIndex = index;
+                            resultsList.positionViewAtIndex(index, ListView.Contain);
+                        }
+                        onClicked: root.activateResult(resultRow.modelData.resultId)
+                    }
+                }
+            }
+
+            Text {
+                width: parent.width
+                visible: root.statusText !== ""
+                color: root.queryError !== "" || !root.serviceReady ? "#f4a340" : "#8b94a3"
+                font.pixelSize: 12
+                text: root.statusText
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+            }
+        }
+    }
+}

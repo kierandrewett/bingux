@@ -40,6 +40,7 @@ let
     quickshell = host.config.home-manager.users.shell.programs.quickshell;
     shellConfig = host.config.home-manager.users.shell.xdg.configFile."quickshell/bingux";
     statusService = host.config.home-manager.users.shell.systemd.user.services.bingux-statusd;
+    searchService = host.config.home-manager.users.shell.systemd.user.services.bingux-searchd;
     profileSettings =
         host.config.home-manager.users.shell.xdg.configFile."quickshell/bingux/ProfileSettings.qml";
 in
@@ -70,8 +71,15 @@ assert
     builtins.match "(.|\n)*import QtQuick(.|\n)*gnoblinCtlPath(.|\n)*" (builtins.readFile profileSettings.source)
     != null;
 assert host.config.services.upower.enable;
-assert statusService.Service.RuntimeDirectory == "bingux";
+assert !(statusService.Service ? RuntimeDirectory);
+assert !(searchService.Service ? RuntimeDirectory);
+assert searchService.Service.RestrictAddressFamilies == [
+    "AF_UNIX"
+    "AF_INET"
+    "AF_INET6"
+];
 assert statusService.Install.WantedBy == [ "graphical-session.target" ];
+assert searchService.Install.WantedBy == [ "graphical-session.target" ];
 pkgs.runCommand "bingux-desktop-shell-module-check" { } ''
     touch "$out"
 ''

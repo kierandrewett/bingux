@@ -29,12 +29,20 @@ ShellRoot {
             + padTime(timestamp.getSeconds());
     }
 
+    function openSearch() {
+        searchOverlay.showSearch();
+    }
+
     ProfileSettings {
         id: profileSettings
     }
 
     Metrics {
         id: metrics
+    }
+
+    SearchOverlay {
+        id: searchOverlay
     }
 
     Timer {
@@ -61,16 +69,77 @@ ShellRoot {
         WlrLayershell.namespace: "bingux-top-bar"
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
 
-        Text {
+        Row {
             anchors {
                 left: parent.left
                 leftMargin: 12
                 verticalCenter: parent.verticalCenter
             }
 
-            color: "#d9dee8"
-            font.pixelSize: 13
-            text: "Bingux"
+            spacing: 8
+
+            Text {
+                color: "#d9dee8"
+                font.pixelSize: 13
+                text: "Bingux"
+            }
+
+            Item {
+                id: searchButton
+
+                implicitWidth: searchButtonContents.implicitWidth + 12
+                implicitHeight: 24
+                width: implicitWidth
+                height: implicitHeight
+                activeFocusOnTab: true
+                Accessible.name: "Open search"
+                Accessible.role: Accessible.Button
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 4
+                    color: (searchButtonMouse.containsMouse || searchButton.activeFocus) ? "#2b3545" : "transparent"
+                }
+
+                Row {
+                    id: searchButtonContents
+
+                    anchors.centerIn: parent
+                    spacing: 4
+
+                    IconImage {
+                        implicitSize: 14
+                        source: Quickshell.iconPath("system-search-symbolic", "edit-find-symbolic")
+                    }
+
+                    Text {
+                        color: "#d9dee8"
+                        font.pixelSize: 12
+                        text: "Search"
+                    }
+                }
+
+                MouseArea {
+                    id: searchButtonMouse
+
+                    anchors.fill: parent
+                    acceptedButtons: Qt.LeftButton
+                    cursorShape: Qt.PointingHandCursor
+                    hoverEnabled: true
+
+                    onClicked: {
+                        searchButton.forceActiveFocus();
+                        root.openSearch();
+                    }
+                }
+
+                Keys.onPressed: function(event) {
+                    if (event.key === Qt.Key_Return || event.key === Qt.Key_Space) {
+                        root.openSearch();
+                        event.accepted = true;
+                    }
+                }
+            }
         }
 
         Text {
