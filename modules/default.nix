@@ -8,6 +8,7 @@
         ./system/nix.nix
         ./system/performance.nix
         ./system/secrets.nix
+        ./system/packages.nix
         ./system/user.nix
     ];
 }
