@@ -119,8 +119,7 @@ impl SqliteSourceConfig {
         require_absolute_path(&self.database_path, "SQLite database path")?;
 
         let query = self.query.trim_start();
-        let lower_query = query.to_ascii_lowercase();
-        if !(lower_query.starts_with("select") || lower_query.starts_with("with")) {
+        if !is_read_only_sqlite_query(query) {
             bail!("SQLite query must be read-only");
         }
 
@@ -222,6 +221,193 @@ fn is_provider_id(value: &str) -> bool {
     saw_character && !previous_hyphen
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum CommonTableExpressionState {
+    BeforeAs,
+    AfterAs,
+    Body,
+    AfterBody,
+}
+
+fn is_read_only_sqlite_query(query: &str) -> bool {
+    let bytes = query.as_bytes();
+    let mut index = 0;
+    let Some(first_word) = next_sql_word(bytes, &mut index) else {
+        return false;
+    };
+
+    if first_word.eq_ignore_ascii_case(b"select") {
+        return true;
+    }
+    if !first_word.eq_ignore_ascii_case(b"with") {
+        return false;
+    }
+
+    let mut state = CommonTableExpressionState::BeforeAs;
+    let mut depth: usize = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            byte if byte.is_ascii_whitespace() => index += 1,
+            b'-' if bytes.get(index + 1) == Some(&b'-') => {
+                index = skip_line_comment(bytes, index + 2);
+            }
+            b'/' if bytes.get(index + 1) == Some(&b'*') => {
+                let Some(next_index) = skip_block_comment(bytes, index + 2) else {
+                    return false;
+                };
+                index = next_index;
+            }
+            b'\'' | b'"' | b'`' => {
+                let Some(next_index) = skip_quoted_sql(bytes, index, bytes[index]) else {
+                    return false;
+                };
+                index = next_index;
+            }
+            b'[' => {
+                let Some(next_index) = skip_bracketed_identifier(bytes, index) else {
+                    return false;
+                };
+                index = next_index;
+            }
+            b'(' => {
+                depth += 1;
+                if depth == 1 && state == CommonTableExpressionState::AfterAs {
+                    state = CommonTableExpressionState::Body;
+                }
+                index += 1;
+            }
+            b')' => {
+                let Some(next_depth) = depth.checked_sub(1) else {
+                    return false;
+                };
+                depth = next_depth;
+                if depth == 0 && state == CommonTableExpressionState::Body {
+                    state = CommonTableExpressionState::AfterBody;
+                }
+                index += 1;
+            }
+            b',' if depth == 0 && state == CommonTableExpressionState::AfterBody => {
+                state = CommonTableExpressionState::BeforeAs;
+                index += 1;
+            }
+            byte if is_sql_word_start(byte) => {
+                let start = index;
+                index += 1;
+                while bytes
+                    .get(index)
+                    .is_some_and(|byte| is_sql_word_continue(*byte))
+                {
+                    index += 1;
+                }
+                if depth != 0 {
+                    continue;
+                }
+
+                let word = &bytes[start..index];
+                match state {
+                    CommonTableExpressionState::BeforeAs if word.eq_ignore_ascii_case(b"as") => {
+                        state = CommonTableExpressionState::AfterAs;
+                    }
+                    CommonTableExpressionState::AfterBody => {
+                        return word.eq_ignore_ascii_case(b"select");
+                    }
+                    _ => {}
+                }
+            }
+            _ => index += 1,
+        }
+    }
+
+    false
+}
+
+fn next_sql_word<'a>(bytes: &'a [u8], index: &mut usize) -> Option<&'a [u8]> {
+    while *index < bytes.len() {
+        match bytes[*index] {
+            byte if byte.is_ascii_whitespace() => *index += 1,
+            b'-' if bytes.get(*index + 1) == Some(&b'-') => {
+                *index = skip_line_comment(bytes, *index + 2);
+            }
+            b'/' if bytes.get(*index + 1) == Some(&b'*') => {
+                *index = skip_block_comment(bytes, *index + 2)?;
+            }
+            b'\'' | b'"' | b'`' => {
+                *index = skip_quoted_sql(bytes, *index, bytes[*index])?;
+            }
+            b'[' => {
+                *index = skip_bracketed_identifier(bytes, *index)?;
+            }
+            byte if is_sql_word_start(byte) => {
+                let start = *index;
+                *index += 1;
+                while bytes
+                    .get(*index)
+                    .is_some_and(|byte| is_sql_word_continue(*byte))
+                {
+                    *index += 1;
+                }
+                return Some(&bytes[start..*index]);
+            }
+            _ => *index += 1,
+        }
+    }
+
+    None
+}
+
+fn is_sql_word_start(byte: u8) -> bool {
+    byte.is_ascii_alphabetic() || byte == b'_'
+}
+
+fn is_sql_word_continue(byte: u8) -> bool {
+    is_sql_word_start(byte) || byte.is_ascii_digit() || byte == b'$'
+}
+
+fn skip_line_comment(bytes: &[u8], mut index: usize) -> usize {
+    while bytes.get(index).is_some_and(|byte| *byte != b'\n') {
+        index += 1;
+    }
+    index
+}
+
+fn skip_block_comment(bytes: &[u8], mut index: usize) -> Option<usize> {
+    while index + 1 < bytes.len() {
+        if bytes[index] == b'*' && bytes[index + 1] == b'/' {
+            return Some(index + 2);
+        }
+        index += 1;
+    }
+    None
+}
+
+fn skip_quoted_sql(bytes: &[u8], mut index: usize, delimiter: u8) -> Option<usize> {
+    index += 1;
+    while index < bytes.len() {
+        if bytes[index] == delimiter {
+            index += 1;
+            if bytes.get(index) == Some(&delimiter) {
+                index += 1;
+            } else {
+                return Some(index);
+            }
+        } else {
+            index += 1;
+        }
+    }
+    None
+}
+
+fn skip_bracketed_identifier(bytes: &[u8], mut index: usize) -> Option<usize> {
+    index += 1;
+    while index < bytes.len() {
+        if bytes[index] == b']' {
+            return Some(index + 1);
+        }
+        index += 1;
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::{AiConfig, SearchCommands, SearchConfig, SqliteSourceConfig, WeatherConfig};
@@ -271,6 +457,28 @@ mod tests {
         config.sqlite_sources[0].query = "DELETE FROM note WHERE title = ?1 LIMIT ?2".to_owned();
 
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_mutating_sqlite_queries_with_common_table_expressions() {
+        for query in [
+            "WITH matching AS (SELECT id FROM note WHERE title LIKE ?1) DELETE FROM note WHERE id IN matching RETURNING ?2",
+            "WITH matching AS (SELECT id FROM note WHERE title LIKE ?1) UPDATE note SET title = title WHERE id IN matching RETURNING ?2",
+            "WITH matching AS (SELECT id FROM note WHERE title LIKE ?1) INSERT INTO note (title) VALUES (?2)",
+        ] {
+            let mut config = valid_config();
+            config.sqlite_sources[0].query = query.to_owned();
+
+            assert!(config.validate().is_err(), "{query}");
+        }
+    }
+
+    #[test]
+    fn accepts_a_read_only_common_table_expression() {
+        let mut config = valid_config();
+        config.sqlite_sources[0].query = "WITH matching AS (SELECT id FROM note WHERE title LIKE ?1 AND 'delete' = 'delete') SELECT id, title, body FROM note WHERE id IN matching LIMIT ?2".to_owned();
+
+        assert!(config.validate().is_ok());
     }
 
     #[test]
