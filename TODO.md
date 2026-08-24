@@ -51,9 +51,12 @@ This file tracks implementation work. A checked item means the related configura
 - [x] Add the layer-shell top bar with clock, tray, metrics, privacy, input, network, audio, and power controls.
 - [x] Add the dock with foreign-toplevel window actions, application menus, window counts, scroll cycling, and launch behaviour.
 - [ ] Add the Super-release Spotlight surface and provider host.
-- [ ] Add indexed application, file, SQLite, calculation, weather-cache, and AI providers.
+  - [ ] Implement the bounded local socket server and Super-release subscriber.
+  - [ ] Implement versioned provider manifests and concurrent provider lifecycle management.
+  - [ ] Implement indexed application, file, SQLite, calculation, weather-cache, and AI providers.
+  - [ ] Implement the keyboard-first Quickshell search surface and activation flow.
+  - [ ] Add warm-query latency benchmarks and protocol tests.
 - [ ] Add native notifications and OSD surfaces with no dependence on GNOME Shell UI.
-- [ ] Add benchmark coverage for warm indexed search latency.
 
 ## Phase 6: Proxmox validation
 
