@@ -30,8 +30,18 @@ in
                 cargo
                 rustfmt
                 clippy
+                cargo-audit
+                cargo-generate
+                cargo-llvm-cov
+                sqlx-cli
+                trunk
+                sccache
                 gcc
                 clang
+                clang-tools
+                ccache
+                gdb
+                mold
                 cmake
                 ninja
                 gnumake
@@ -39,6 +49,10 @@ in
                 nodejs
                 typescript
                 pnpm
+                bun
+                esbuild
+                prettier
+                sass
 
                 # Rootless container tooling.
                 podman
@@ -63,6 +77,11 @@ in
                 zip
                 direnv
                 tmux
+                just
+                zellij
+                fastfetch
+                lsof
+                mosh
                 btop
                 zoxide
                 age

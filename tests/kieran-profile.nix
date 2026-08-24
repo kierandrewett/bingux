@@ -13,6 +13,10 @@ let
     };
     inputSources =
         host.config.home-manager.users.kieran.dconf.settings."org/gnome/desktop/input-sources".sources;
+    flatpakRemoteNames = builtins.map (
+        remote: remote.name
+    ) host.config.bingux.packages.flatpaks.remotes;
+    flatpakApps = host.config.bingux.packages.flatpaks.apps;
 in
 assert host.config.bingux.profile.name == "kieran";
 assert host.config.bingux.desktop.enable;
@@ -51,7 +55,19 @@ assert
 assert host.config.home-manager.users.kieran.programs.quickshell.enable;
 assert builtins.any (remote: remote.name == "flathub-beta") host.config.services.flatpak.remotes;
 assert builtins.elem pkgs.rustc host.config.bingux.packages.system;
+assert builtins.elem pkgs.cargo-audit host.config.bingux.packages.system;
+assert builtins.elem pkgs.cargo-generate host.config.bingux.packages.system;
+assert builtins.elem pkgs.cargo-llvm-cov host.config.bingux.packages.system;
+assert builtins.elem pkgs.sqlx-cli host.config.bingux.packages.system;
+assert builtins.elem pkgs.ccache host.config.bingux.packages.system;
+assert builtins.elem pkgs.gdb host.config.bingux.packages.system;
+assert builtins.elem pkgs.bun host.config.bingux.packages.system;
+assert builtins.elem pkgs.prettier host.config.bingux.packages.system;
+assert builtins.elem pkgs.zellij host.config.bingux.packages.system;
 assert builtins.elem pkgs.vscodium host.config.bingux.packages.user;
+assert builtins.all (
+    app: builtins.elem app.origin flatpakRemoteNames
+) flatpakApps;
 assert host.config.services.flatpak.enable;
 assert builtins.any (
     app: app.appId == "md.obsidian.Obsidian"

@@ -68,6 +68,24 @@ in
 
     config = lib.mkMerge [
         {
+            assertions = [
+                {
+                    assertion =
+                        let
+                            remoteNames = map (remote: remote.name) cfg.flatpaks.remotes;
+                            allowedOrigins =
+                                if cfg.flatpaks.remotes == [ ] then
+                                    [ "flathub" ]
+                                else
+                                    remoteNames;
+                        in
+                        builtins.all (
+                            app: builtins.elem app.origin allowedOrigins
+                        ) cfg.flatpaks.apps;
+                    message = "Every declared Flatpak origin must be flathub when no custom remotes are declared, or match a declared remote name.";
+                }
+            ];
+
             environment.systemPackages = cfg.system;
             home-manager.users.${config.bingux.user.name}.home.packages = cfg.user;
 
