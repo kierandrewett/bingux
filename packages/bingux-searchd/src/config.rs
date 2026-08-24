@@ -257,10 +257,17 @@ fn has_result_limit(query: &str) -> bool {
             continue;
         }
         let value_end = value_index + 2;
-        if !bytes
+        if bytes
             .get(value_end)
             .is_some_and(|byte| is_sql_word_continue(*byte))
         {
+            continue;
+        }
+
+        let Some(after_value) = skip_sql_trivia(bytes, value_end) else {
+            continue;
+        };
+        if matches!(bytes.get(after_value), None | Some(b')') | Some(b';')) {
             return true;
         }
     }
@@ -529,6 +536,15 @@ mod tests {
                 .to_owned();
 
         assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn rejects_a_sqlite_query_that_uses_the_limit_parameter_as_an_offset() {
+        let mut config = valid_config();
+        config.sqlite_sources[0].query =
+            "SELECT id, title, body FROM note WHERE title LIKE ?1 LIMIT ?2, -1".to_owned();
+
+        assert!(config.validate().is_err());
     }
 
     #[test]
