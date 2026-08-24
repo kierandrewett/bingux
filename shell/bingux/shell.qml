@@ -84,6 +84,10 @@ ShellRoot {
 
             spacing: 12
 
+            Tray {
+                parentWindow: topBar
+            }
+
             Rectangle {
                 width: 5
                 height: 5

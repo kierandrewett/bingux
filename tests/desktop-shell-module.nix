@@ -44,6 +44,7 @@ assert quickshell.activeConfig == "bingux";
 assert quickshell.systemd.enable;
 assert builtins.pathExists "${toString shellConfig.source}/shell.qml";
 assert builtins.pathExists "${toString shellConfig.source}/Metrics.qml";
+assert builtins.pathExists "${toString shellConfig.source}/Tray.qml";
 assert statusService.Service.RuntimeDirectory == "bingux";
 assert statusService.Install.WantedBy == [ "graphical-session.target" ];
 pkgs.runCommand "bingux-desktop-shell-module-check" { } ''
