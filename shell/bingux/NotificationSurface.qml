@@ -1,18 +1,46 @@
+import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import QtQuick
+import Quickshell.Widgets
 
 PanelWindow {
     id: root
 
     required property var state
 
+    function hasDefaultAction(notification) {
+        for (let index = 0; index < notification.actions.length; index += 1) {
+            if (notification.actions[index].identifier === "default")
+                return true;
+
+        }
+        return false;
+    }
+
+    function invokeDefaultAction(notification) {
+        for (let index = 0; index < notification.actions.length; index += 1) {
+            const action = notification.actions[index];
+            if (action.identifier === "default") {
+                action.invoke();
+                return ;
+            }
+        }
+    }
+
+    function hasSecondaryAction(notification) {
+        for (let index = 0; index < notification.actions.length; index += 1) {
+            if (notification.actions[index].identifier !== "default")
+                return true;
+
+        }
+        return false;
+    }
+
     color: "transparent"
     focusable: false
     visible: state.visibleEntries.length > 0
     exclusionMode: ExclusionMode.Ignore
     surfaceFormat.opaque: false
-
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "bingux-notifications"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
@@ -22,40 +50,6 @@ PanelWindow {
         bottom: true
         left: true
         right: true
-    }
-
-    mask: Region {
-        item: notificationColumn
-    }
-
-    function hasDefaultAction(notification) {
-        for (let index = 0; index < notification.actions.length; index += 1) {
-            if (notification.actions[index].identifier === "default") {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    function invokeDefaultAction(notification) {
-        for (let index = 0; index < notification.actions.length; index += 1) {
-            const action = notification.actions[index];
-            if (action.identifier === "default") {
-                action.invoke();
-                return;
-            }
-        }
-    }
-
-    function hasSecondaryAction(notification) {
-        for (let index = 0; index < notification.actions.length; index += 1) {
-            if (notification.actions[index].identifier !== "default") {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     Column {
@@ -86,6 +80,8 @@ PanelWindow {
                 border.color: "#3d485e"
                 Accessible.name: notification.appName + ": " + notification.summary
                 Accessible.role: defaultActionAvailable ? Accessible.Button : Accessible.StaticText
+                Accessible.focusable: defaultActionAvailable
+                Accessible.onPressAction: root.invokeDefaultAction(notification)
 
                 MouseArea {
                     anchors.fill: parent
@@ -115,10 +111,7 @@ PanelWindow {
                             height: 24
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
-                            source: Quickshell.iconPath(
-                                notificationCard.notification.appIcon,
-                                "dialog-information-symbolic",
-                            )
+                            source: Quickshell.iconPath(notificationCard.notification.appIcon, "dialog-information-symbolic")
                         }
 
                         Text {
@@ -143,6 +136,8 @@ PanelWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             Accessible.name: "Dismiss notification"
                             Accessible.role: Accessible.Button
+                            Accessible.focusable: true
+                            Accessible.onPressAction: root.state.dismiss(notificationCard.notification)
 
                             IconImage {
                                 anchors.centerIn: parent
@@ -156,7 +151,9 @@ PanelWindow {
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: root.state.dismiss(notificationCard.notification)
                             }
+
                         }
+
                     }
 
                     Text {
@@ -165,8 +162,10 @@ PanelWindow {
                         elide: Text.ElideRight
                         font.pixelSize: 15
                         font.weight: Font.DemiBold
+                        maximumLineCount: 2
                         text: notificationCard.notification.summary || "Notification"
                         textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
                     }
 
                     Text {
@@ -202,6 +201,8 @@ PanelWindow {
                                 visible: modelData.identifier !== "default"
                                 Accessible.name: modelData.text
                                 Accessible.role: Accessible.Button
+                                Accessible.focusable: true
+                                Accessible.onPressAction: actionButton.modelData.invoke()
 
                                 Text {
                                     id: actionLabel
@@ -223,11 +224,23 @@ PanelWindow {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: actionButton.modelData.invoke()
                                 }
+
                             }
+
                         }
+
                     }
+
                 }
+
             }
+
         }
+
     }
+
+    mask: Region {
+        item: notificationColumn
+    }
+
 }

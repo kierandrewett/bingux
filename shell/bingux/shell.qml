@@ -1,6 +1,7 @@
+import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import QtQuick
+import Quickshell.Widgets
 
 ShellRoot {
     id: root
@@ -16,17 +17,7 @@ ShellRoot {
     function formatClock(timestamp) {
         const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
         const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        return weekdays[timestamp.getDay()]
-            + " "
-            + padTime(timestamp.getDate())
-            + " "
-            + months[timestamp.getMonth()]
-            + " "
-            + padTime(timestamp.getHours())
-            + ":"
-            + padTime(timestamp.getMinutes())
-            + ":"
-            + padTime(timestamp.getSeconds());
+        return weekdays[timestamp.getDay()] + " " + padTime(timestamp.getDate()) + " " + months[timestamp.getMonth()] + " " + padTime(timestamp.getHours()) + ":" + padTime(timestamp.getMinutes()) + ":" + padTime(timestamp.getSeconds());
     }
 
     function openSearch() {
@@ -45,6 +36,22 @@ ShellRoot {
         id: searchOverlay
     }
 
+    NotificationState {
+        id: notificationState
+    }
+
+    NotificationSurface {
+        state: notificationState
+    }
+
+    OsdState {
+        id: osdState
+    }
+
+    OsdSurface {
+        state: osdState
+    }
+
     Timer {
         interval: 1000
         repeat: true
@@ -55,28 +62,27 @@ ShellRoot {
     PanelWindow {
         id: topBar
 
+        exclusiveZone: root.topBarHeight
+        implicitHeight: root.topBarHeight
+        color: "#171a21"
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.namespace: "bingux-top-bar"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+
         anchors {
             top: true
             left: true
             right: true
         }
 
-        exclusiveZone: root.topBarHeight
-        implicitHeight: root.topBarHeight
-        color: "#171a21"
-
-        WlrLayershell.layer: WlrLayer.Top
-        WlrLayershell.namespace: "bingux-top-bar"
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
-
         Row {
+            spacing: 8
+
             anchors {
                 left: parent.left
                 leftMargin: 12
                 verticalCenter: parent.verticalCenter
             }
-
-            spacing: 8
 
             Text {
                 color: "#d9dee8"
@@ -94,6 +100,12 @@ ShellRoot {
                 activeFocusOnTab: true
                 Accessible.name: "Open search"
                 Accessible.role: Accessible.Button
+                Keys.onPressed: function(event) {
+                    if (event.key === Qt.Key_Return || event.key === Qt.Key_Space) {
+                        root.openSearch();
+                        event.accepted = true;
+                    }
+                }
 
                 Rectangle {
                     anchors.fill: parent
@@ -117,6 +129,7 @@ ShellRoot {
                         font.pixelSize: 12
                         text: "Search"
                     }
+
                 }
 
                 MouseArea {
@@ -126,20 +139,14 @@ ShellRoot {
                     acceptedButtons: Qt.LeftButton
                     cursorShape: Qt.PointingHandCursor
                     hoverEnabled: true
-
                     onClicked: {
                         searchButton.forceActiveFocus();
                         root.openSearch();
                     }
                 }
 
-                Keys.onPressed: function(event) {
-                    if (event.key === Qt.Key_Return || event.key === Qt.Key_Space) {
-                        root.openSearch();
-                        event.accepted = true;
-                    }
-                }
             }
+
         }
 
         Text {
@@ -150,13 +157,13 @@ ShellRoot {
         }
 
         Row {
+            spacing: 12
+
             anchors {
                 right: parent.right
                 rightMargin: 12
                 verticalCenter: parent.verticalCenter
             }
-
-            spacing: 12
 
             Tray {
                 parentWindow: topBar
@@ -165,7 +172,6 @@ ShellRoot {
             PrivacyIndicators {
                 metrics: metrics
             }
-
 
             Rectangle {
                 width: 5
@@ -199,11 +205,14 @@ ShellRoot {
 
             SystemIndicators {
             }
+
         }
+
     }
 
     Dock {
         settings: profileSettings
         visible: profileSettings.dockEnabled
     }
+
 }

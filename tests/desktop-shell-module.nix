@@ -63,21 +63,27 @@ assert builtins.pathExists "${toString shellConfig.source}/SystemIndicators.qml"
 assert builtins.pathExists "${toString shellConfig.source}/Dock.qml";
 assert builtins.pathExists "${toString shellConfig.source}/InputSourceSelector.qml";
 assert builtins.pathExists "${toString shellConfig.source}/PrivacyIndicators.qml";
+assert builtins.pathExists "${toString shellConfig.source}/NotificationState.qml";
+assert builtins.pathExists "${toString shellConfig.source}/NotificationSurface.qml";
+assert builtins.pathExists "${toString shellConfig.source}/OsdState.qml";
+assert builtins.pathExists "${toString shellConfig.source}/OsdSurface.qml";
 assert builtins.pathExists (toString profileSettings.source);
 assert
     builtins.match "(.|\n)*org.example.Terminal(.|\n)*" (builtins.readFile profileSettings.source)
     != null;
 assert
-    builtins.match "(.|\n)*import QtQuick(.|\n)*gnoblinCtlPath(.|\n)*" (builtins.readFile profileSettings.source)
-    != null;
+    builtins.match "(.|\n)*import QtQuick(.|\n)*gnoblinCtlPath(.|\n)*" (
+        builtins.readFile profileSettings.source
+    ) != null;
 assert host.config.services.upower.enable;
 assert !(statusService.Service ? RuntimeDirectory);
 assert !(searchService.Service ? RuntimeDirectory);
-assert searchService.Service.RestrictAddressFamilies == [
-    "AF_UNIX"
-    "AF_INET"
-    "AF_INET6"
-];
+assert
+    searchService.Service.RestrictAddressFamilies == [
+        "AF_UNIX"
+        "AF_INET"
+        "AF_INET6"
+    ];
 assert statusService.Install.WantedBy == [ "graphical-session.target" ];
 assert searchService.Install.WantedBy == [ "graphical-session.target" ];
 pkgs.runCommand "bingux-desktop-shell-module-check" { } ''

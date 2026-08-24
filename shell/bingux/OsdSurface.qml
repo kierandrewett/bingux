@@ -1,55 +1,41 @@
+import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import QtQuick
+import Quickshell.Widgets
 
 QtObject {
     id: root
 
     required property QtObject state
-
-    function monitorIndexFor(screen) {
-        for (let index = 0; index < Quickshell.screens.length; index += 1) {
-            if (Quickshell.screens[index] === screen) {
-                return index;
-            }
-        }
-
-        return -1;
-    }
+    property var osdWindows
 
     function labelFor(request) {
-        if (request.label.length > 0) {
+        if (request.label.length > 0)
             return request.label;
-        }
 
-        if (request.icon.indexOf("audio-") === 0) {
+        if (request.icon.indexOf("audio-") === 0)
             return "Volume";
-        }
 
-        if (request.icon.indexOf("display-brightness") === 0) {
+        if (request.icon.indexOf("display-brightness") === 0)
             return "Brightness";
-        }
 
-        if (request.icon.indexOf("keyboard-brightness") === 0) {
+        if (request.icon.indexOf("keyboard-brightness") === 0)
             return "Keyboard brightness";
-        }
 
-        if (request.icon.indexOf("microphone-") === 0) {
+        if (request.icon.indexOf("microphone-") === 0)
             return "Microphone";
-        }
 
         return "System control";
     }
 
-    Variants {
-        variants: Quickshell.screens
+    osdWindows: Variants {
+        model: Quickshell.screens
 
         PanelWindow {
             id: osdWindow
 
             property var modelData
-            readonly property int monitorIndex: root.monitorIndexFor(modelData)
-            readonly property var request: monitorIndex >= 0 ? root.state.requestForMonitor(monitorIndex) : null
+            readonly property var request: root.state.requestForOutputName(modelData.name)
             readonly property bool hasLevel: request !== null && request.maxLevel > 0 && request.level >= 0
             readonly property real levelFraction: hasLevel ? Math.min(1, request.level / request.maxLevel) : 0
             readonly property string percentLabel: hasLevel ? Math.round(levelFraction * 100) + "%" : ""
@@ -60,7 +46,6 @@ QtObject {
             visible: request !== null
             exclusionMode: ExclusionMode.Ignore
             surfaceFormat.opaque: false
-
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.namespace: "bingux-osd"
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
@@ -72,31 +57,11 @@ QtObject {
                 right: true
             }
 
-            mask: Region {
-                item: clickThroughTarget
-            }
-
-            onRequestChanged: {
-                if (request !== null) {
-                    hideTimer.scheduledRequest = request;
-                    hideTimer.restart();
-                }
-            }
-
             Item {
                 id: clickThroughTarget
+
                 width: 0
                 height: 0
-            }
-
-            Timer {
-                id: hideTimer
-
-                property var scheduledRequest: null
-
-                interval: 1500
-                repeat: false
-                onTriggered: root.state.clearRequest(osdWindow.monitorIndex, scheduledRequest)
             }
 
             Rectangle {
@@ -126,14 +91,11 @@ QtObject {
                     IconImage {
                         anchors.verticalCenter: parent.verticalCenter
                         implicitSize: 28
-                        source: Quickshell.iconPath(
-                            osdWindow.request ? osdWindow.request.icon : "dialog-information-symbolic",
-                            "dialog-information-symbolic",
-                        )
+                        source: Quickshell.iconPath(osdWindow.request ? osdWindow.request.icon : "dialog-information-symbolic", "dialog-information-symbolic")
                     }
 
                     Text {
-                        width: parent.width - 42 - percentLabel.width
+                        width: parent.width - 28 - parent.spacing - (percentLabel.visible ? percentLabel.width + parent.spacing : 0)
                         anchors.verticalCenter: parent.verticalCenter
                         color: "#e7edf7"
                         elide: Text.ElideRight
@@ -152,6 +114,7 @@ QtObject {
                         text: osdWindow.percentLabel
                         visible: osdWindow.hasLevel
                     }
+
                 }
 
                 Rectangle {
@@ -172,8 +135,17 @@ QtObject {
                         radius: parent.radius
                         color: "#8ab4f8"
                     }
+
                 }
+
             }
+
+            mask: Region {
+                item: clickThroughTarget
+            }
+
         }
+
     }
+
 }
