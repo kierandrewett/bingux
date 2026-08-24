@@ -17,6 +17,8 @@ let
         remote: remote.name
     ) host.config.bingux.packages.flatpaks.remotes;
     flatpakApps = host.config.bingux.packages.flatpaks.apps;
+    tailscaleSystray =
+        host.config.home-manager.users.kieran.systemd.user.services.bingux-tailscale-systray;
 in
 assert host.config.bingux.profile.name == "kieran";
 assert host.config.bingux.desktop.enable;
@@ -25,6 +27,8 @@ assert host.config.bingux.desktopShell.enable;
 assert host.config.bingux.secrets.enable;
 assert host.config.programs.gnoblin.enable;
 assert host.config.services.displayManager.defaultSession == "gnoblin";
+assert host.config.bingux.networking.tailscale.enable;
+assert host.config.services.tailscale.enable;
 assert host.config.programs.dconf.enable;
 assert inputSources.type == "a(ss)";
 assert
@@ -65,9 +69,11 @@ assert builtins.elem pkgs.bun host.config.bingux.packages.system;
 assert builtins.elem pkgs.prettier host.config.bingux.packages.system;
 assert builtins.elem pkgs.zellij host.config.bingux.packages.system;
 assert builtins.elem pkgs.vscodium host.config.bingux.packages.user;
-assert builtins.all (
-    app: builtins.elem app.origin flatpakRemoteNames
-) flatpakApps;
+assert tailscaleSystray.Service.ExecStart == [ "${pkgs.tailscale}/bin/tailscale systray" ];
+assert tailscaleSystray.Service.NoNewPrivileges;
+assert !(tailscaleSystray.Service ? PrivateTmp);
+assert tailscaleSystray.Install.WantedBy == [ "graphical-session.target" ];
+assert builtins.all (app: builtins.elem app.origin flatpakRemoteNames) flatpakApps;
 assert host.config.services.flatpak.enable;
 assert builtins.any (
     app: app.appId == "md.obsidian.Obsidian"

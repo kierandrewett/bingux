@@ -111,6 +111,8 @@ in
         # an age key exists and the profile has a SOPS recipient.
         secrets.enable = true;
 
+        networking.tailscale.enable = true;
+
         desktop = {
             enable = true;
             gnoblin.enable = true;

@@ -46,6 +46,8 @@ let
 in
 assert quickshell.enable;
 assert host.config.programs.dconf.enable;
+assert !host.config.bingux.networking.tailscale.enable;
+assert !(host.config.home-manager.users.shell.systemd.user.services ? bingux-tailscale-systray);
 assert
     builtins.map (
         feature: feature.value
