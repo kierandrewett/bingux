@@ -22,6 +22,7 @@ let
                 bingux = {
                     desktop.enable = true;
                     desktopShell.enable = true;
+                    desktopShell.dock.pinnedApps = [ "org.example.Terminal" ];
                     user.name = "shell";
                 };
 
@@ -38,6 +39,8 @@ let
     quickshell = host.config.home-manager.users.shell.programs.quickshell;
     shellConfig = host.config.home-manager.users.shell.xdg.configFile."quickshell/bingux";
     statusService = host.config.home-manager.users.shell.systemd.user.services.bingux-statusd;
+    profileSettings =
+        host.config.home-manager.users.shell.xdg.configFile."quickshell/bingux/ProfileSettings.qml";
 in
 assert quickshell.enable;
 assert quickshell.activeConfig == "bingux";
@@ -46,6 +49,11 @@ assert builtins.pathExists "${toString shellConfig.source}/shell.qml";
 assert builtins.pathExists "${toString shellConfig.source}/Metrics.qml";
 assert builtins.pathExists "${toString shellConfig.source}/Tray.qml";
 assert builtins.pathExists "${toString shellConfig.source}/SystemIndicators.qml";
+assert builtins.pathExists "${toString shellConfig.source}/Dock.qml";
+assert builtins.pathExists (toString profileSettings.source);
+assert
+    builtins.match "(.|\n)*org.example.Terminal(.|\n)*" (builtins.readFile profileSettings.source)
+    != null;
 assert host.config.services.upower.enable;
 assert statusService.Service.RuntimeDirectory == "bingux";
 assert statusService.Install.WantedBy == [ "graphical-session.target" ];

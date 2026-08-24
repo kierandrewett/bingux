@@ -29,6 +29,10 @@ ShellRoot {
             + padTime(timestamp.getSeconds());
     }
 
+    ProfileSettings {
+        id: profileSettings
+    }
+
     Metrics {
         id: metrics
     }
@@ -117,5 +121,10 @@ ShellRoot {
             SystemIndicators {
             }
         }
+    }
+
+    Dock {
+        settings: profileSettings
+        visible: profileSettings.dockEnabled
     }
 }

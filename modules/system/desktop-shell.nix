@@ -5,6 +5,18 @@
     ...
 }:
 let
+    shellSource = lib.cleanSourceWith {
+        src = ../../shell/bingux;
+        filter = path: type: builtins.baseNameOf path != "ProfileSettings.qml";
+    };
+    profileSettings = pkgs.writeText "bingux-${cfg.configName}-profile-settings.qml" ''
+        import QtQuick
+
+        QtObject {
+            readonly property bool dockEnabled: ${lib.boolToString cfg.dock.enable}
+            readonly property var pinnedApps: ${builtins.toJSON cfg.dock.pinnedApps}
+        }
+    '';
     statusdPackage = pkgs.callPackage ../../packages/bingux-statusd { };
     cfg = config.bingux.desktopShell;
 in
@@ -43,6 +55,21 @@ in
                 description = "The metrics service package that supplies CPU, memory, and network samples.";
             };
         };
+        dock = {
+            enable = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = "Enable the Bingux dock for the selected profile.";
+            };
+
+            pinnedApps = lib.mkOption {
+                type = lib.types.listOf lib.types.str;
+                default = [ ];
+                example = [ "org.wezfurlong.wezterm" ];
+                description = "Wayland application IDs or desktop-entry IDs that stay visible in the Bingux dock.";
+            };
+        };
+
     };
 
     config = lib.mkIf cfg.enable {
@@ -65,9 +92,11 @@ in
             };
 
             xdg.configFile."quickshell/${cfg.configName}" = {
-                source = ../../shell/bingux;
+                source = shellSource;
                 recursive = true;
             };
+
+            xdg.configFile."quickshell/${cfg.configName}/ProfileSettings.qml".source = profileSettings;
 
             systemd.user.services = lib.optionalAttrs cfg.metrics.enable {
                 bingux-statusd = {
