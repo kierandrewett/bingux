@@ -69,6 +69,16 @@
                 modules = [ ./hosts/vm ];
             };
 
+            packages = forAllSystems (
+                system:
+                let
+                    pkgs = nixpkgs.legacyPackages.${system};
+                in
+                {
+                    bingux-statusd = pkgs.callPackage ./packages/bingux-statusd { };
+                }
+            );
+
             checks = forAllSystems (
                 system:
                 {

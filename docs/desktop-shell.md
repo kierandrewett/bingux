@@ -28,6 +28,31 @@ The shell and daemon run as the profile user. The socket directory has mode `070
 
 A missing or unsupported Gnoblin D-Bus service is an unavailable integration point. The daemon must retry with bounded backoff and report an unavailable state to the shell. It must not emulate the Super key or subscribe to the development-only Mutter key signal.
 
+## Metrics socket protocol v1
+
+`bingux-statusd` samples `/proc/stat`, `/proc/meminfo`, and `/proc/net/dev` once per second. It publishes
+newline-delimited UTF-8 JSON records at `$XDG_RUNTIME_DIR/bingux/metrics-v1.sock`.
+
+The service sends the most recent record when a client connects. It then sends one record after each sample. The
+first record after service start has `null` CPU and network rates because there is no previous sample. The socket
+directory has mode `0700`, and the socket has mode `0600`.
+
+```json
+{
+  "protocolVersion": 1,
+  "type": "metrics",
+  "cpuPercent": 17.25,
+  "memoryTotalBytes": 67331813376,
+  "memoryUsedBytes": 34184560640,
+  "networkReceiveBytesPerSecond": 306151.62,
+  "networkTransmitBytesPerSecond": 62684.49
+}
+```
+
+`cpuPercent`, `networkReceiveBytesPerSecond`, and `networkTransmitBytesPerSecond` can be `null`. The QML client
+must retain a received sample for no more than three seconds. It must then show the metric as unavailable while it
+reconnects with bounded backoff. A metrics failure must not stop the top bar, tray, or search interface.
+
 ## Desktop UI rules
 
 - The top bar is a top-layer surface with a positive exclusive zone.

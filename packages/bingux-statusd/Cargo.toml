@@ -1,0 +1,14 @@
+[package]
+name = "bingux-statusd"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "Low-overhead metrics feed for the Bingux desktop shell"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "bingux-statusd"
+path = "src/main.rs"

@@ -5,6 +5,7 @@
     ...
 }:
 let
+    statusdPackage = pkgs.callPackage ../../packages/bingux-statusd { };
     cfg = config.bingux.desktopShell;
 in
 {
@@ -28,6 +29,19 @@ in
             type = lib.types.str;
             default = "graphical-session.target";
             description = "The user-systemd target that owns the desktop-shell process.";
+        };
+
+        metrics = {
+            enable = lib.mkEnableOption "the Bingux desktop-shell metrics service" // {
+                default = true;
+            };
+
+            package = lib.mkOption {
+                type = lib.types.package;
+                default = statusdPackage;
+                defaultText = lib.literalExpression "pkgs.callPackage ./packages/bingux-statusd { }";
+                description = "The metrics service package that supplies CPU, memory, and network samples.";
+            };
         };
     };
 
@@ -53,6 +67,32 @@ in
             xdg.configFile."quickshell/${cfg.configName}" = {
                 source = ../../shell/bingux;
                 recursive = true;
+            };
+
+            systemd.user.services = lib.optionalAttrs cfg.metrics.enable {
+                bingux-statusd = {
+                    Unit = {
+                        Description = "Bingux desktop-shell metrics service";
+                        After = [ "graphical-session-pre.target" ];
+                        PartOf = [ cfg.systemdTarget ];
+                    };
+
+                    Service = {
+                        ExecStart = lib.getExe cfg.metrics.package;
+                        NoNewPrivileges = true;
+                        PrivateTmp = true;
+                        ProtectHome = "read-only";
+                        ProtectSystem = "strict";
+                        Restart = "on-failure";
+                        RestartSec = "1s";
+                        RestrictAddressFamilies = [ "AF_UNIX" ];
+                        RuntimeDirectory = "bingux";
+                        RuntimeDirectoryMode = "0700";
+                        UMask = "0077";
+                    };
+
+                    Install.WantedBy = [ cfg.systemdTarget ];
+                };
             };
         };
     };
