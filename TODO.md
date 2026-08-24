@@ -16,7 +16,7 @@ This file tracks implementation work. A checked item means the related configura
 - [x] Map Gnoblin layer-shell, foreign-toplevel, and Super-key integration points.
 - [x] Identify Fedora, Flatpak, Cargo, pipx, and global Node package inventory sources.
 - [x] Verify all selected Nix inputs, package attributes, and NixOS module interfaces.
-- [ ] Record the cross-repository Gnoblin-to-Bingux protocol contract.
+- [x] Record the cross-repository Gnoblin-to-Bingux protocol contract.
 
 ## Phase 2: Reproducible NixOS foundation
 

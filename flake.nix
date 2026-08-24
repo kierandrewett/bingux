@@ -25,7 +25,7 @@
             inputs.nixpkgs.follows = "nixpkgs";
         };
 
-        # This stays a source input until Gnoblin exports its own flake.
+        # Available only to profiles that select Gnoblin until it exports a flake.
         gnoblin-src = {
             url = "github:kierandrewett/gnoblin";
             flake = false;
