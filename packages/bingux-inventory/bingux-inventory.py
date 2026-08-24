@@ -456,6 +456,7 @@ def _inventory_json(pretty: bool) -> str:
 
 def _write_atomic(path_text: str, content: str) -> None:
     path = Path(path_text)
+    path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{path.name}.",
         dir=str(path.parent),
