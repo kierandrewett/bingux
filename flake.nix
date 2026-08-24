@@ -1,5 +1,11 @@
 {
     description = "Bingux: a profile-driven NixOS configuration framework";
+    # Keep the upstream CachyOS binary cache available during first builds.
+    # Nix asks the caller to accept this flake configuration.
+    nixConfig = {
+        extra-substituters = [ "https://attic.xuyh0120.win/lantian" ];
+        extra-trusted-public-keys = [ "lantian:EeAUQ+W+6r7EtwnmYjeVwx5kOGEBpjlBfPlzGlTNvHc=" ];
+    };
 
     inputs = {
         nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -25,10 +31,9 @@
             inputs.nixpkgs.follows = "nixpkgs";
         };
 
-        gnoblin = {
-            url = "github:kierandrewett/gnoblin";
-            inputs.nixpkgs.follows = "nixpkgs";
-        };
+        # Gnoblin pairs its pinned Mutter and GNOME Shell sources with this
+        # matching Nixpkgs revision. It must not follow Bingux's rolling input.
+        gnoblin.url = "github:kierandrewett/gnoblin";
     };
 
     outputs =
