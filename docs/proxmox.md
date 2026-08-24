@@ -27,6 +27,21 @@ current NixOS `image.modules` interface for this output. The CachyOS profile
 installer disables ZFS support because its kernel module and the Nixpkgs ZFS
 userspace package do not have a supported matching version.
 
+## Proxmox-installed system output
+
+Use the PVE host output when installing the system onto a Proxmox disk:
+
+```sh
+nix build --no-link --print-out-paths \
+    .#nixosConfigurations.bingux-kieran-pve-vm.config.system.build.toplevel
+```
+
+The PVE host output keeps the standalone `bingux-kieran-vm` output unchanged.
+It disables the `qemu-vm.nix` 9p shared-directory mounts because Proxmox does
+not provide those devices, and it selects `/dev/sda` as the bootloader device
+for the validation disk. Use `bingux-kieran-vm` for the NixOS-generated
+standalone QEMU VM, where the `virtio-root` boot device and 9p mounts exist.
+
 ## CachyOS binary cache
 
 When a profile selects a CachyOS kernel, Bingux configures the CachyOS cache in
