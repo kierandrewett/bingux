@@ -48,8 +48,8 @@ This file tracks implementation work. A checked item means the related configura
 ## Phase 5: Bingux desktop shell
 
 - [x] Define the versioned desktop-shell and search-provider contracts.
-- [ ] Add the layer-shell top bar with clock, tray, metrics, privacy, input, network, audio, and power controls.
-- [ ] Add the dock with foreign-toplevel window actions, application menus, window counts, scroll cycling, and launch behaviour.
+- [x] Add the layer-shell top bar with clock, tray, metrics, privacy, input, network, audio, and power controls.
+- [x] Add the dock with foreign-toplevel window actions, application menus, window counts, scroll cycling, and launch behaviour.
 - [ ] Add the Super-release Spotlight surface and provider host.
 - [ ] Add indexed application, file, SQLite, calculation, weather-cache, and AI providers.
 - [ ] Add native notifications and OSD surfaces with no dependence on GNOME Shell UI.
