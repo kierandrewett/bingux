@@ -32,6 +32,116 @@ pub struct Metrics {
     pub transmit_bytes_per_second: Option<f64>,
 }
 
+/// The only OSD record version accepted from Gnoblin and sent to shell clients.
+pub const OSD_PROTOCOL_VERSION: u32 = 2;
+
+// These byte limits keep a fully JSON-escaped OSD record well below Quickshell's
+// 64 KiB line limit.
+const MAX_OSD_ICON_BYTES: usize = 256;
+const MAX_OSD_LABEL_BYTES: usize = 2_048;
+const MAX_OSD_OUTPUT_NAME_BYTES: usize = 128;
+const MAX_OSD_OUTPUT_NAMES: usize = 16;
+const MAX_OSD_OUTPUT_NAME_BYTES_TOTAL: usize = 1_024;
+
+/// OSD records are published only on the separate osd-v2 socket so existing
+/// metrics-v1 clients never receive an unexpected record type.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OsdRequest {
+    monitor_index: i32,
+    output_names: Vec<String>,
+    icon: String,
+    label: String,
+    level: f64,
+    max_level: f64,
+}
+
+impl OsdRequest {
+    /// Construct an OSD request only when it stays within the shell socket boundary.
+    pub fn new(
+        monitor_index: i32,
+        output_names: Vec<String>,
+        icon: String,
+        label: String,
+        level: f64,
+        max_level: f64,
+    ) -> Option<Self> {
+        if monitor_index < 0
+            || !output_names_are_valid(&output_names)
+            || !level.is_finite()
+            || level < -1.0
+            || !max_level.is_finite()
+            || max_level < -1.0
+            || icon.len() > MAX_OSD_ICON_BYTES
+            || label.len() > MAX_OSD_LABEL_BYTES
+            || contains_control_characters(&icon)
+            || contains_control_characters(&label)
+        {
+            return None;
+        }
+
+        Some(Self {
+            monitor_index,
+            output_names,
+            icon,
+            label,
+            level,
+            max_level,
+        })
+    }
+}
+
+fn output_names_are_valid(output_names: &[String]) -> bool {
+    if output_names.is_empty()
+        || output_names.len() > MAX_OSD_OUTPUT_NAMES
+        || output_names.iter().map(String::len).sum::<usize>() > MAX_OSD_OUTPUT_NAME_BYTES_TOTAL
+    {
+        return false;
+    }
+
+    output_names.iter().enumerate().all(|(index, output_name)| {
+        !output_name.is_empty()
+            && output_name.len() <= MAX_OSD_OUTPUT_NAME_BYTES
+            && !contains_control_characters(output_name)
+            && !output_names[..index].contains(output_name)
+    })
+}
+
+fn contains_control_characters(value: &str) -> bool {
+    value.chars().any(char::is_control)
+}
+
+#[derive(Serialize)]
+struct OsdRecord<'a> {
+    #[serde(rename = "protocolVersion")]
+    protocol_version: u32,
+    #[serde(rename = "type")]
+    record_type: &'static str,
+    #[serde(rename = "monitorIndex")]
+    monitor_index: i32,
+    #[serde(rename = "outputNames")]
+    output_names: &'a [String],
+    icon: &'a str,
+    label: &'a str,
+    level: f64,
+    #[serde(rename = "maxLevel")]
+    max_level: f64,
+}
+
+/// Encode a newline-delimited JSON OSD v2 record for the transient shell socket.
+pub fn osd_json(request: &OsdRequest) -> Result<String, serde_json::Error> {
+    serde_json::to_string(&OsdRecord {
+        protocol_version: OSD_PROTOCOL_VERSION,
+        record_type: "osd",
+        monitor_index: request.monitor_index,
+        output_names: &request.output_names,
+        icon: &request.icon,
+        label: &request.label,
+        level: request.level,
+        max_level: request.max_level,
+    })
+    .map(|record| format!("{record}\n"))
+}
+
 /// One GNOME Shell input source exposed by the Gnoblin control interface.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct InputSource {
@@ -245,8 +355,9 @@ fn parse_u64(value: Option<&str>) -> Result<u64, &'static str> {
 #[cfg(test)]
 mod tests {
     use super::{
-        DesktopState, InputSource, Metrics, PrivacyState, byte_rate, cpu_percent, metrics_json,
-        metrics_with_desktop_state_json, parse_cpu_stat, parse_meminfo, parse_network_totals,
+        DesktopState, InputSource, Metrics, OsdRequest, PrivacyState, byte_rate, cpu_percent,
+        metrics_json, metrics_with_desktop_state_json, osd_json, parse_cpu_stat, parse_meminfo,
+        parse_network_totals,
     };
 
     #[test]
@@ -312,6 +423,188 @@ mod tests {
     }
 
     #[test]
+    fn rejects_non_finite_osd_values() {
+        assert!(
+            OsdRequest::new(
+                0,
+                output_names(),
+                String::new(),
+                String::new(),
+                f64::NAN,
+                1.0,
+            )
+            .is_none()
+        );
+        assert!(
+            OsdRequest::new(
+                0,
+                output_names(),
+                String::new(),
+                String::new(),
+                0.5,
+                f64::INFINITY,
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn rejects_osd_values_outside_the_shell_range() {
+        assert!(
+            OsdRequest::new(-1, output_names(), String::new(), String::new(), 0.5, 1.0,).is_none()
+        );
+        assert!(
+            OsdRequest::new(0, output_names(), String::new(), String::new(), -1.01, 1.0,).is_none()
+        );
+        assert!(
+            OsdRequest::new(0, output_names(), String::new(), String::new(), 0.5, -1.01,).is_none()
+        );
+    }
+
+    #[test]
+    fn rejects_osd_text_with_control_characters() {
+        assert!(
+            OsdRequest::new(
+                0,
+                output_names(),
+                "audio\nvolume".to_owned(),
+                String::new(),
+                0.5,
+                1.0,
+            )
+            .is_none()
+        );
+        assert!(
+            OsdRequest::new(
+                0,
+                output_names(),
+                String::new(),
+                "Volume\u{0000}".to_owned(),
+                0.5,
+                1.0,
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_osd_output_names() {
+        assert!(OsdRequest::new(0, vec![], String::new(), String::new(), 0.5, 1.0).is_none());
+        assert!(
+            OsdRequest::new(
+                0,
+                vec![String::new()],
+                String::new(),
+                String::new(),
+                0.5,
+                1.0
+            )
+            .is_none()
+        );
+        assert!(
+            OsdRequest::new(
+                0,
+                vec!["DP-1".to_owned(), "DP-1".to_owned()],
+                String::new(),
+                String::new(),
+                0.5,
+                1.0,
+            )
+            .is_none()
+        );
+        assert!(
+            OsdRequest::new(
+                0,
+                vec!["DP-\n1".to_owned()],
+                String::new(),
+                String::new(),
+                0.5,
+                1.0,
+            )
+            .is_none()
+        );
+        assert!(
+            OsdRequest::new(
+                0,
+                vec!["é".repeat(65)],
+                String::new(),
+                String::new(),
+                0.5,
+                1.0,
+            )
+            .is_none()
+        );
+        assert!(
+            OsdRequest::new(
+                0,
+                (0..17).map(|index| format!("DP-{index}")).collect(),
+                String::new(),
+                String::new(),
+                0.5,
+                1.0,
+            )
+            .is_none()
+        );
+
+        assert!(
+            OsdRequest::new(
+                0,
+                (0..9)
+                    .map(|index| format!("{index:03}-{}", "D".repeat(124)))
+                    .collect(),
+                String::new(),
+                String::new(),
+                0.5,
+                1.0,
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn accepts_empty_osd_text() {
+        assert!(
+            OsdRequest::new(0, output_names(), String::new(), String::new(), 0.5, 1.0).is_some()
+        );
+    }
+
+    #[test]
+    fn rejects_osd_text_over_the_utf8_byte_limit() {
+        assert!(
+            OsdRequest::new(0, output_names(), "é".repeat(129), String::new(), 0.5, 1.0).is_none()
+        );
+        assert!(
+            OsdRequest::new(
+                0,
+                output_names(),
+                String::new(),
+                "é".repeat(1_025),
+                0.5,
+                1.0
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn serialises_a_transient_osd_record_for_the_shell() {
+        let request = OsdRequest::new(
+            0,
+            output_names(),
+            "audio-volume-high-symbolic".to_owned(),
+            String::new(),
+            0.75,
+            1.0,
+        )
+        .unwrap();
+
+        assert_eq!(
+            osd_json(&request).unwrap(),
+            "{\"protocolVersion\":2,\"type\":\"osd\",\"monitorIndex\":0,\"outputNames\":[\"DP-1\"],\"icon\":\"audio-volume-high-symbolic\",\"label\":\"\",\"level\":0.75,\"maxLevel\":1.0}\n",
+        );
+    }
+
+    #[test]
     fn serialises_gnoblin_state_with_a_metrics_record() {
         let record = metrics_with_desktop_state_json(
             Metrics {
@@ -350,5 +643,7 @@ mod tests {
         );
     }
 
-
+    fn output_names() -> Vec<String> {
+        vec!["DP-1".to_owned()]
+    }
 }

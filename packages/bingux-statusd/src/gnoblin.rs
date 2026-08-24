@@ -1,11 +1,7 @@
 use crate::Event;
-use bingux_statusd::{DesktopState, InputSource, PrivacyState};
+use bingux_statusd::{DesktopState, InputSource, OSD_PROTOCOL_VERSION, OsdRequest, PrivacyState};
 use futures_util::{FutureExt, StreamExt};
-use std::{
-    sync::mpsc::SyncSender,
-    thread,
-    time::Duration,
-};
+use std::{sync::mpsc::SyncSender, thread, time::Duration};
 use zbus::{Connection, Proxy};
 
 const BUS_NAME: &str = "org.gnoblin.Shell";
@@ -13,10 +9,15 @@ const OBJECT_PATH: &str = "/org/gnoblin/Shell";
 const INTERFACE: &str = "org.gnoblin.Shell";
 const INITIAL_RECONNECT_DELAY: Duration = Duration::from_millis(250);
 const MAX_RECONNECT_DELAY: Duration = Duration::from_secs(5);
+// This covers the bounded OSD tuple with protocol padding and rejects a large
+// session-bus message before zbus allocates its text values.
+const MAX_OSD_SIGNAL_BODY_BYTES: u32 = 4 * 1024;
 
 type InputSourceTuple = (String, String, String, String);
+// Gnoblin org.gnoblin.Shell.OsdRequested payload: (uissddas).
+type OsdRequestTuple = (u32, i32, String, String, f64, f64, Vec<String>);
 
-/// Start the session-bus subscriber that supplies Gnoblin desktop state.
+/// Start the session-bus subscriber for Gnoblin desktop state and OSD requests.
 pub fn start_state_subscriber(sender: SyncSender<Event>) {
     thread::spawn(move || {
         async_io::block_on(run_state_subscriber(sender));
@@ -32,7 +33,10 @@ async fn run_state_subscriber(sender: SyncSender<Event>) {
             Err(error) => eprintln!("[bingux-statusd] Gnoblin state unavailable: {error}"),
         }
 
-        if sender.send(Event::DesktopState(DesktopState::default())).is_err() {
+        if sender
+            .send(Event::DesktopState(DesktopState::default()))
+            .is_err()
+        {
             return;
         }
 
@@ -45,7 +49,9 @@ async fn subscribe_to_gnoblin(
     sender: &SyncSender<Event>,
     reconnect_delay: &mut Duration,
 ) -> Result<(), String> {
-    let connection = Connection::session().await.map_err(|error| error.to_string())?;
+    let connection = Connection::session()
+        .await
+        .map_err(|error| error.to_string())?;
     let proxy = Proxy::new(&connection, BUS_NAME, OBJECT_PATH, INTERFACE)
         .await
         .map_err(|error| error.to_string())?;
@@ -80,6 +86,12 @@ async fn subscribe_to_gnoblin(
 
                 if is_desktop_state_signal(&signal) {
                     publish_snapshot(&proxy, sender).await?;
+                } else if is_osd_signal(&signal)
+                    && has_supported_osd_body_size(signal.header().primary().body_len())
+                {
+                    if let Ok(request) = signal.body().deserialize::<OsdRequestTuple>() {
+                        publish_osd_request(request, sender)?;
+                    }
                 }
             }
         }
@@ -91,6 +103,16 @@ async fn publish_snapshot(proxy: &Proxy<'_>, sender: &SyncSender<Event>) -> Resu
     sender
         .send(Event::DesktopState(state))
         .map_err(|_| "desktop-state receiver stopped".to_owned())
+}
+
+fn publish_osd_request(request: OsdRequestTuple, sender: &SyncSender<Event>) -> Result<(), String> {
+    let Some(request) = osd_request_from_tuple(request) else {
+        return Ok(());
+    };
+
+    sender
+        .send(Event::OsdRequest(request))
+        .map_err(|_| "OSD receiver stopped".to_owned())
 }
 
 async fn read_snapshot(proxy: &Proxy<'_>) -> Result<DesktopState, String> {
@@ -119,6 +141,19 @@ async fn read_snapshot(proxy: &Proxy<'_>) -> Result<DesktopState, String> {
     })
 }
 
+fn osd_request_from_tuple(request: OsdRequestTuple) -> Option<OsdRequest> {
+    let (protocol_version, monitor_index, icon, label, level, max_level, output_names) = request;
+    if protocol_version != OSD_PROTOCOL_VERSION {
+        return None;
+    }
+
+    OsdRequest::new(monitor_index, output_names, icon, label, level, max_level)
+}
+
+fn has_supported_osd_body_size(body_len: u32) -> bool {
+    body_len <= MAX_OSD_SIGNAL_BODY_BYTES
+}
+
 fn input_source(source: InputSourceTuple) -> InputSource {
     let (source_type, id, short_name, display_name) = source;
 
@@ -138,6 +173,14 @@ fn input_source_or_none(source: InputSourceTuple) -> Option<InputSource> {
     }
 }
 
+fn is_osd_signal(signal: &zbus::Message) -> bool {
+    is_osd_signal_name(signal.header().member().as_ref().map(|name| name.as_str()))
+}
+
+fn is_osd_signal_name(name: Option<&str>) -> bool {
+    matches!(name, Some("OsdRequested"))
+}
+
 fn is_desktop_state_signal(signal: &zbus::Message) -> bool {
     is_desktop_state_signal_name(signal.header().member().as_ref().map(|name| name.as_str()))
 }
@@ -149,14 +192,72 @@ fn is_desktop_state_signal_name(name: Option<&str>) -> bool {
     )
 }
 
-
 #[cfg(test)]
 mod tests {
-    use super::{InputSourceTuple, input_source_or_none, is_desktop_state_signal_name};
+    use super::{
+        InputSourceTuple, input_source_or_none, is_desktop_state_signal_name, is_osd_signal_name,
+        osd_request_from_tuple,
+    };
 
     #[test]
     fn treats_an_empty_gnoblin_input_source_as_unavailable() {
         assert_eq!(input_source_or_none(empty_input_source()), None);
+    }
+
+    #[test]
+    fn accepts_v2_osd_requests_with_finite_values() {
+        assert!(
+            osd_request_from_tuple((
+                2,
+                0,
+                "audio-volume-high-symbolic".to_owned(),
+                String::new(),
+                0.75,
+                1.0,
+                output_names(),
+            ))
+            .is_some()
+        );
+    }
+
+    #[test]
+    fn rejects_unsupported_or_non_finite_osd_requests() {
+        assert!(
+            osd_request_from_tuple((1, 0, String::new(), String::new(), 0.5, 1.0, output_names()))
+                .is_none()
+        );
+        assert!(
+            osd_request_from_tuple((
+                2,
+                0,
+                String::new(),
+                String::new(),
+                f64::NAN,
+                1.0,
+                output_names()
+            ))
+            .is_none()
+        );
+        assert!(
+            osd_request_from_tuple((
+                2,
+                0,
+                String::new(),
+                String::new(),
+                0.5,
+                f64::NEG_INFINITY,
+                output_names(),
+            ))
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn selects_only_the_gnoblin_osd_signal() {
+        assert!(is_osd_signal_name(Some("OsdRequested")));
+        assert!(!is_osd_signal_name(Some("InputSourceChanged")));
+        assert!(!is_osd_signal_name(Some("OsdClosed")));
+        assert!(!is_osd_signal_name(None));
     }
 
     #[test]
@@ -170,5 +271,9 @@ mod tests {
 
     fn empty_input_source() -> InputSourceTuple {
         (String::new(), String::new(), String::new(), String::new())
+    }
+
+    fn output_names() -> Vec<String> {
+        vec!["DP-1".to_owned()]
     }
 }
