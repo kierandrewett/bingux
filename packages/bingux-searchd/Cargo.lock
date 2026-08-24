@@ -191,6 +191,7 @@ dependencies = [
  "async-io",
  "futures-util",
  "ignore",
+ "libc",
  "meval",
  "rusqlite",
  "serde",

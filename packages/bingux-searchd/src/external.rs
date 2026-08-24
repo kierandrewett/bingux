@@ -5,15 +5,16 @@ use crate::protocol::{
 };
 use anyhow::{Context, Result, bail};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     fs,
     io::{self, BufRead, BufReader, Write},
+    os::unix::process::CommandExt,
     path::PathBuf,
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
-        mpsc::{self, Receiver, SyncSender, TryRecvError},
+        mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError},
     },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
@@ -21,6 +22,8 @@ use std::{
 const COMMAND_CAPACITY: usize = 64;
 const READER_CAPACITY: usize = 32;
 const MAX_PENDING: usize = 64;
+const MAX_PARTIAL_OUTBOX_EVENTS: usize = MAX_PENDING;
+const MAX_TERMINAL_OUTBOX_EVENTS: usize = MAX_PENDING;
 const MAX_READER_EVENTS_PER_PROGRESS: usize = READER_CAPACITY;
 const INITIAL_BACKOFF: Duration = Duration::from_millis(250);
 const MAX_BACKOFF: Duration = Duration::from_secs(5);
@@ -330,7 +333,8 @@ impl Pending {
 }
 struct Session {
     child: Child,
-    stdin: ChildStdin,
+    writer_tx: SyncSender<Vec<u8>>,
+    writer: JoinHandle<()>,
     reader: JoinHandle<()>,
     failed: Arc<AtomicBool>,
     generation: u64,
@@ -341,6 +345,63 @@ struct ReaderEvent {
     generation: u64,
     response: ProviderResponse,
 }
+
+// Partial result batches can be shed under backpressure. The worker stops command acceptance
+// while it drains this FIFO, so one terminal slot per pending request keeps completions bounded.
+#[derive(Default)]
+struct Outbox {
+    events: VecDeque<ExternalEvent>,
+    partial_count: usize,
+    terminal_count: usize,
+}
+
+impl Outbox {
+    fn enqueue(&mut self, event: ExternalEvent) -> bool {
+        if is_terminal_event(&event) {
+            if self.terminal_count >= MAX_TERMINAL_OUTBOX_EVENTS {
+                return false;
+            }
+            self.terminal_count += 1;
+        } else {
+            if self.partial_count >= MAX_PARTIAL_OUTBOX_EVENTS {
+                return false;
+            }
+            self.partial_count += 1;
+        }
+        self.events.push_back(event);
+        true
+    }
+
+    fn pop_front(&mut self) -> Option<ExternalEvent> {
+        let event = self.events.pop_front()?;
+        if is_terminal_event(&event) {
+            self.terminal_count -= 1;
+        } else {
+            self.partial_count -= 1;
+        }
+        Some(event)
+    }
+
+    fn push_front(&mut self, event: ExternalEvent) {
+        if is_terminal_event(&event) {
+            self.terminal_count += 1;
+        } else {
+            self.partial_count += 1;
+        }
+        self.events.push_front(event);
+    }
+
+    fn clear(&mut self) {
+        self.events.clear();
+        self.partial_count = 0;
+        self.terminal_count = 0;
+    }
+
+    fn is_empty(&self) -> bool {
+        self.events.is_empty()
+    }
+}
+
 struct Worker {
     manifest: ProviderManifest,
     commands: Receiver<WorkerCommand>,
@@ -350,11 +411,13 @@ struct Worker {
     reader_events: Receiver<ReaderEvent>,
     reader_tx: SyncSender<ReaderEvent>,
     pending: Pending,
+    outbox: Outbox,
     child: Option<Session>,
     next_start: Instant,
     backoff: Duration,
     generation: u64,
 }
+
 impl Worker {
     fn new(
         manifest: ProviderManifest,
@@ -373,18 +436,24 @@ impl Worker {
             reader_events,
             reader_tx,
             pending: Pending::default(),
+            outbox: Outbox::default(),
             child: None,
             next_start: Instant::now(),
             backoff: INITIAL_BACKOFF,
             generation: 0,
         }
     }
+
     fn run(mut self) {
         if matches!(self.manifest.startup, ProviderStartup::Eager) {
             self.progress(Instant::now());
         }
         while !self.stop.load(Ordering::Acquire) {
             self.progress(Instant::now());
+            if !self.outbox.is_empty() {
+                thread::sleep(TICK);
+                continue;
+            }
             match self.commands.recv_timeout(self.wake(Instant::now())) {
                 Ok(WorkerCommand::Query {
                     query_id,
@@ -405,12 +474,15 @@ impl Worker {
         }
         self.kill();
     }
+
     fn progress(&mut self, now: Instant) {
+        self.flush_events();
         self.cancel_pending_queries();
         self.expire(now);
         self.read(now);
         self.start(now);
-        self.write_pending(now)
+        self.write_pending(now);
+        self.flush_events();
     }
     fn wake(&self, now: Instant) -> Duration {
         let mut wait = TICK;
@@ -491,22 +563,34 @@ impl Worker {
             return;
         };
         let (Some(stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
-            let _ = child.kill();
-            let _ = child.wait();
+            stop_process_group(&mut child);
             self.failed(now);
             return;
         };
         self.generation = self.generation.wrapping_add(1);
         let failed = Arc::new(AtomicBool::new(false));
-        let reader = start_reader(
+        let (writer_tx, writer_rx) = mpsc::sync_channel(COMMAND_CAPACITY);
+        let Ok(writer) = start_writer(stdin, writer_rx, Arc::clone(&failed)) else {
+            stop_process_group(&mut child);
+            self.failed(now);
+            return;
+        };
+        let Ok(reader) = start_reader(
             stdout,
             self.reader_tx.clone(),
             Arc::clone(&failed),
             self.generation,
-        );
+        ) else {
+            drop(writer_tx);
+            stop_process_group(&mut child);
+            drop(writer);
+            self.failed(now);
+            return;
+        };
         self.child = Some(Session {
             child,
-            stdin,
+            writer_tx,
+            writer,
             reader,
             failed,
             generation: self.generation,
@@ -514,7 +598,7 @@ impl Worker {
             ready: false,
         });
         if self.write(&ProviderRequest::Hello).is_err() {
-            self.failed(now)
+            self.failed(now);
         }
     }
     fn write_pending(&mut self, now: Instant) {
@@ -524,27 +608,28 @@ impl Worker {
         for request in self.pending.unsent() {
             match self.write(&request.request()) {
                 Ok(()) => self.pending.sent(&request),
+                Err(WriteError::Full) => return,
                 Err(WriteError::Encode) => {
                     self.pending.remove(&request);
                     self.emit(request.failure(&self.manifest.id));
                 }
-                Err(WriteError::Io) => {
+                Err(WriteError::Disconnected) => {
                     self.failed(now);
                     return;
                 }
             }
         }
     }
+
     fn write(&mut self, request: &ProviderRequest) -> std::result::Result<(), WriteError> {
         let line = encode_provider_request_line(request).map_err(|_| WriteError::Encode)?;
-        let Some(child) = self.child.as_mut() else {
-            return Err(WriteError::Io);
+        let Some(child) = self.child.as_ref() else {
+            return Err(WriteError::Disconnected);
         };
-        child
-            .stdin
-            .write_all(&line)
-            .and_then(|()| child.stdin.flush())
-            .map_err(|_| WriteError::Io)
+        child.writer_tx.try_send(line).map_err(|error| match error {
+            TrySendError::Full(_) => WriteError::Full,
+            TrySendError::Disconnected(_) => WriteError::Disconnected,
+        })
     }
     fn read(&mut self, now: Instant) {
         let mut corrupt = false;
@@ -623,19 +708,48 @@ impl Worker {
         let Some(mut child) = self.child.take() else {
             return;
         };
-        drop(child.stdin);
-        let _ = child.child.kill();
-        let _ = child.child.wait();
-        let _ = child.reader.join();
+        drop(child.writer_tx);
+        stop_process_group(&mut child.child);
+        drop(child.reader);
+        drop(child.writer);
     }
-    fn emit(&self, event: ExternalEvent) {
-        let _ = self.events.send(event);
+    fn emit(&mut self, event: ExternalEvent) {
+        if self.outbox.enqueue(event) {
+            self.flush_events();
+        }
+    }
+
+    fn flush_events(&mut self) {
+        while let Some(event) = self.outbox.pop_front() {
+            match self.events.try_send(event) {
+                Ok(()) => {}
+                Err(TrySendError::Full(event)) => {
+                    self.outbox.push_front(event);
+                    return;
+                }
+                Err(TrySendError::Disconnected(_)) => {
+                    self.outbox.clear();
+                    return;
+                }
+            }
+        }
     }
 }
+
+fn is_terminal_event(event: &ExternalEvent) -> bool {
+    match event {
+        ExternalEvent::Results { complete, .. } => *complete,
+        ExternalEvent::QueryFailed { .. }
+        | ExternalEvent::Activated { .. }
+        | ExternalEvent::ActivationFailed { .. } => true,
+    }
+}
+
 #[derive(Clone, Copy)]
 enum WriteError {
     Encode,
-    Io,
+    Full,
+    Disconnected,
 }
 fn load_manifests(paths: &[PathBuf]) -> Result<Vec<ProviderManifest>> {
     let mut manifests = Vec::with_capacity(paths.len());
@@ -669,44 +783,80 @@ fn provider_command(manifest: &ProviderManifest) -> Command {
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stderr(Stdio::null())
+        .process_group(0);
     command
 }
+
+fn stop_process_group(child: &mut Child) {
+    let Ok(process_group) = i32::try_from(child.id()) else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return;
+    };
+    // SAFETY: process_group is the positive PID of a child started in its own process group.
+    let _ = unsafe { libc::kill(-process_group, libc::SIGKILL) };
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+fn start_writer(
+    mut stdin: ChildStdin,
+    records: Receiver<Vec<u8>>,
+    failed: Arc<AtomicBool>,
+) -> io::Result<JoinHandle<()>> {
+    thread::Builder::new()
+        .name("bingux-search-provider-writer".into())
+        .spawn(move || {
+            for record in records {
+                if stdin
+                    .write_all(&record)
+                    .and_then(|()| stdin.flush())
+                    .is_err()
+                {
+                    failed.store(true, Ordering::Release);
+                    return;
+                }
+            }
+        })
+}
+
 fn start_reader(
     stdout: ChildStdout,
     events: SyncSender<ReaderEvent>,
     failed: Arc<AtomicBool>,
     generation: u64,
-) -> JoinHandle<()> {
-    thread::spawn(move || {
-        let mut reader = BufReader::new(stdout);
-        let mut line = Vec::with_capacity(1024);
-        loop {
-            match bounded_line(&mut reader, &mut line) {
-                Ok(Line::Record) => {
-                    line.pop();
-                    let Ok(response) = parse_provider_response(&line) else {
-                        failed.store(true, Ordering::Release);
-                        return;
-                    };
-                    if events
-                        .try_send(ReaderEvent {
-                            generation,
-                            response,
-                        })
-                        .is_err()
-                    {
+) -> io::Result<JoinHandle<()>> {
+    thread::Builder::new()
+        .name("bingux-search-provider-reader".into())
+        .spawn(move || {
+            let mut reader = BufReader::new(stdout);
+            let mut line = Vec::with_capacity(1024);
+            loop {
+                match bounded_line(&mut reader, &mut line) {
+                    Ok(Line::Record) => {
+                        line.pop();
+                        let Ok(response) = parse_provider_response(&line) else {
+                            failed.store(true, Ordering::Release);
+                            return;
+                        };
+                        if events
+                            .send(ReaderEvent {
+                                generation,
+                                response,
+                            })
+                            .is_err()
+                        {
+                            return;
+                        }
+                    }
+                    Ok(Line::Eof | Line::Unterminated | Line::TooLong) | Err(_) => {
                         failed.store(true, Ordering::Release);
                         return;
                     }
                 }
-                Ok(Line::Eof | Line::Unterminated | Line::TooLong) | Err(_) => {
-                    failed.store(true, Ordering::Release);
-                    return;
-                }
             }
-        }
-    })
+        })
 }
 #[derive(Clone, Copy)]
 enum Line {
@@ -1109,5 +1259,105 @@ mod tests {
             panic!("results event")
         };
         assert!(results[0].score > 0.8 && results[0].score <= 1.)
+    }
+
+    #[test]
+    fn outbox_reserves_terminal_space_when_partial_queue_is_full() {
+        let mut outbox = Outbox::default();
+        for index in 0..MAX_PARTIAL_OUTBOX_EVENTS {
+            assert!(outbox.enqueue(ExternalEvent::Results {
+                provider_id: "notes".into(),
+                query_id: format!("query-{index}"),
+                complete: false,
+                results: vec![result()],
+            }));
+        }
+
+        assert!(outbox.enqueue(ExternalEvent::Results {
+            provider_id: "notes".into(),
+            query_id: "query-complete".into(),
+            complete: true,
+            results: vec![],
+        }));
+
+        assert_eq!(outbox.partial_count, MAX_PARTIAL_OUTBOX_EVENTS);
+        assert!(outbox.events.iter().any(|event| {
+            matches!(
+                event,
+                ExternalEvent::Results {
+                    query_id,
+                    complete: true,
+                    ..
+                } if query_id == "query-complete"
+            )
+        }));
+    }
+
+    #[test]
+    fn outbox_uses_fixed_capacity_queues() {
+        let mut outbox = Outbox::default();
+        for index in 0..MAX_PARTIAL_OUTBOX_EVENTS {
+            assert!(outbox.enqueue(ExternalEvent::Results {
+                provider_id: "notes".into(),
+                query_id: format!("partial-{index}"),
+                complete: false,
+                results: vec![result()],
+            }));
+        }
+        assert!(!outbox.enqueue(ExternalEvent::Results {
+            provider_id: "notes".into(),
+            query_id: "partial-overflow".into(),
+            complete: false,
+            results: vec![result()],
+        }));
+
+        for index in 0..MAX_TERMINAL_OUTBOX_EVENTS {
+            assert!(outbox.enqueue(ExternalEvent::QueryFailed {
+                provider_id: "notes".into(),
+                query_id: format!("terminal-{index}"),
+            }));
+        }
+        assert!(!outbox.enqueue(ExternalEvent::QueryFailed {
+            provider_id: "notes".into(),
+            query_id: "terminal-overflow".into(),
+        }));
+
+        assert_eq!(outbox.partial_count, MAX_PARTIAL_OUTBOX_EVENTS);
+        assert_eq!(outbox.terminal_count, MAX_TERMINAL_OUTBOX_EVENTS);
+    }
+
+    #[test]
+    fn outbox_keeps_partial_and_terminal_events_in_arrival_order() {
+        let mut outbox = Outbox::default();
+        assert!(outbox.enqueue(ExternalEvent::Results {
+            provider_id: "notes".into(),
+            query_id: "first".into(),
+            complete: false,
+            results: vec![result()],
+        }));
+        assert!(outbox.enqueue(ExternalEvent::QueryFailed {
+            provider_id: "notes".into(),
+            query_id: "second".into(),
+        }));
+        assert!(outbox.enqueue(ExternalEvent::Results {
+            provider_id: "notes".into(),
+            query_id: "third".into(),
+            complete: false,
+            results: vec![result()],
+        }));
+
+        assert!(matches!(
+            outbox.pop_front(),
+            Some(ExternalEvent::Results { query_id, .. }) if query_id == "first"
+        ));
+        assert!(matches!(
+            outbox.pop_front(),
+            Some(ExternalEvent::QueryFailed { query_id, .. }) if query_id == "second"
+        ));
+        assert!(matches!(
+            outbox.pop_front(),
+            Some(ExternalEvent::Results { query_id, .. }) if query_id == "third"
+        ));
+        assert!(outbox.is_empty());
     }
 }
