@@ -42,9 +42,6 @@ in
         i18n.defaultLocale = cfg.locale;
         console.keyMap = cfg.keyMap;
 
-        networking.networkmanager.enable = lib.mkDefault true;
-        networking.firewall.enable = lib.mkDefault true;
-
         services.timesyncd.enable = lib.mkDefault true;
         services.fwupd.enable = true;
 

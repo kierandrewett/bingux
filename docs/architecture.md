@@ -15,7 +15,7 @@ Bingux is a NixOS configuration framework. It provides reusable system modules a
 
 ## Selection rules
 
-The generic configuration must not imply a personal selection. In particular, it must not enable a desktop environment, a window manager, an application list, a login user, an external service, or an unsafe performance setting.
+The generic configuration can set safe shared operating-system defaults, such as firewall and network behaviour. It must not enable profile-specific desktop UI, application sets, user-specific services, system identity, or an unsafe performance setting.
 
 The flake can pin sources that only one profile uses. Pinning a source makes it reproducible. It does not enable that source in a generic configuration. A profile must import and configure every optional source that it uses.
 
@@ -24,6 +24,17 @@ The flake can pin sources that only one profile uses. Pinning a source makes it 
 `modules/system/performance.nix` supports Nixpkgs Zen and XanMod package sets plus pinned CachyOS BORE variants. The default remains the Nixpkgs kernel. The user must select another package set in a profile or host.
 
 CPU vulnerability mitigations remain enabled by default. `bingux.performance.disableCpuMitigations` is opt-in and must only be set after a local threat-model decision.
+
+## Profile secrets
+
+A profile stores encrypted secret data in `profiles/<name>/secrets/`. It configures `bingux.secrets.defaultSopsFile` with that encrypted file and declares each decrypted file through `bingux.secrets.entries`.
+
+The first host bootstrap has two stages:
+
+1. Enable `bingux.secrets` with no entries, then run `sudo bingux-secrets-init` on the host. The command creates the root-owned age private key outside the Nix store and prints only its public recipient.
+2. Add that public recipient to `profiles/<name>/secrets/.sops.yaml`, encrypt the profile secret file locally, declare its entries, and deploy the profile again.
+
+Commit the encrypted file and public recipients. Do not commit an age private key, a plaintext secret file, or a copied `/run/secrets/` file. Keep `bingux.secrets.age.generateKey` disabled after bootstrap. If the private key is lost, a replacement key cannot decrypt existing profile secrets.
 
 ## Gnoblin profile contract
 
