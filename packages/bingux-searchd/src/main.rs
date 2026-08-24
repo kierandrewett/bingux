@@ -4,8 +4,9 @@ use bingux_searchd::{
     external::{ExternalEvent, ExternalProviders},
     gnoblin::{self, Event as GnoblinEvent},
     protocol::{
-        ActivateRequest, DaemonErrorCode, DaemonEvent, DaemonResult, IntegrationState,
-        ProviderResult, QueryRequest, ShellRequest, encode_daemon_event_lines, parse_shell_request,
+        ActivateRequest, DaemonErrorCode, DaemonEvent, DaemonResult, IntegrationState, ProtocolError,
+        ProtocolErrorKind, QueryRequest, ShellRequest, encode_daemon_event_lines, parse_shell_request,
+        shell_request_id,
     },
     providers::{Activation, Candidate, LocalProviders},
     server::{bind_listener, read_record},
@@ -36,6 +37,7 @@ const QUERY_WORKER_COUNT: usize = 2;
 const QUERY_QUEUE_CAPACITY: usize = 64;
 const MAX_ACTIVATIONS: usize = 512;
 const ACTIVATION_TTL: Duration = Duration::from_secs(120);
+const PROTOCOL_ERROR_REQUEST_ID: &str = "protocol-error";
 
 fn main() {
     if let Err(error) = run() {
@@ -968,6 +970,17 @@ fn accept_clients(listener: UnixListener, runtime: Arc<Runtime>) -> Result<()> {
     Ok(())
 }
 
+fn client_rejection_event(record: &[u8], error: ProtocolError) -> DaemonEvent {
+    let code = match error.kind() {
+        ProtocolErrorKind::UnsupportedProtocol => DaemonErrorCode::UnsupportedProtocol,
+        _ => DaemonErrorCode::InvalidRequest,
+    };
+    let request_id =
+        shell_request_id(record).unwrap_or_else(|| PROTOCOL_ERROR_REQUEST_ID.to_owned());
+
+    DaemonEvent::Error { request_id, code }
+}
+
 fn handle_client(runtime: Arc<Runtime>, client_id: u64, stream: UnixStream) {
     let Ok(writer_stream) = stream.try_clone() else {
         return;
@@ -997,7 +1010,19 @@ fn handle_client(runtime: Arc<Runtime>, client_id: u64, stream: UnixStream) {
     loop {
         let record = match read_record(&mut reader) {
             Ok(Some(record)) => record,
-            Ok(None) | Err(_) => break,
+            Ok(None) => break,
+            Err(error) => {
+                eprintln!("[bingux-searchd] rejected client record: {error}");
+                runtime.enqueue_event(
+                    client_id,
+                    &sender,
+                    DaemonEvent::Error {
+                        request_id: PROTOCOL_ERROR_REQUEST_ID.to_owned(),
+                        code: DaemonErrorCode::InvalidRequest,
+                    },
+                );
+                break;
+            }
         };
         match parse_shell_request(&record) {
             Ok(ShellRequest::Query(request)) => {
@@ -1008,7 +1033,13 @@ fn handle_client(runtime: Arc<Runtime>, client_id: u64, stream: UnixStream) {
             }
             Err(error) => {
                 eprintln!("[bingux-searchd] rejected client record: {error}");
-                break;
+                if !runtime.enqueue_event(
+                    client_id,
+                    &sender,
+                    client_rejection_event(&record, error),
+                ) {
+                    break;
+                }
             }
         }
     }
@@ -1112,6 +1143,50 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn rejected_client_record_returns_a_correlated_invalid_request_error() {
+        let record =
+            br#"{"protocolVersion":1,"type":"query","requestId":"q-01","query":123,"limit":20}"#;
+        let error = parse_shell_request(record).expect_err("query must be text");
+
+        assert_eq!(
+            client_rejection_event(record, error),
+            DaemonEvent::Error {
+                request_id: "q-01".into(),
+                code: DaemonErrorCode::InvalidRequest,
+            }
+        );
+    }
+
+    #[test]
+    fn malformed_client_record_uses_the_protocol_error_request_id() {
+        let record = b"{invalid json";
+        let error = parse_shell_request(record).expect_err("record is not JSON");
+
+        assert_eq!(
+            client_rejection_event(record, error),
+            DaemonEvent::Error {
+                request_id: PROTOCOL_ERROR_REQUEST_ID.into(),
+                code: DaemonErrorCode::InvalidRequest,
+            }
+        );
+    }
+
+
+    #[test]
+    fn unsupported_client_protocol_returns_the_compatibility_error_code() {
+        let record =
+            br#"{"protocolVersion":2,"type":"query","requestId":"q-01","query":"firefox","limit":20}"#;
+        let error = parse_shell_request(record).expect_err("protocol version two is unsupported");
+
+        assert_eq!(
+            client_rejection_event(record, error),
+            DaemonEvent::Error {
+                request_id: "q-01".into(),
+                code: DaemonErrorCode::UnsupportedProtocol,
+            }
+        );
+    }
     #[test]
     fn query_tracker_reserves_the_result_limit_across_batches() {
         let (sender, _receiver) = mpsc::sync_channel(1);

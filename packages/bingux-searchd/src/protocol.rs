@@ -311,6 +311,18 @@ pub fn parse_shell_request(record: &[u8]) -> ProtocolResult<ShellRequest> {
     }
 }
 
+/// Returns a valid request identifier from a rejected shell record when one is available.
+///
+/// The daemon uses this to correlate a safe error response without accepting any other part of
+/// the request.
+pub fn shell_request_id(record: &[u8]) -> Option<String> {
+    let value = parse_record(record).ok()?;
+    let object = as_object(&value).ok()?;
+    let request_id = object.get("requestId")?.as_str()?;
+    validate_request_id(request_id).ok()?;
+    Some(request_id.to_owned())
+}
+
 /// Parses and validates one provider manifest JSON document.
 pub fn parse_provider_manifest(record: &[u8]) -> ProtocolResult<ProviderManifest> {
     let value = parse_record(record)?;
@@ -1000,6 +1012,17 @@ mod tests {
         .expect_err("spaces are not valid request identifiers");
 
         assert_eq!(error.kind(), ProtocolErrorKind::InvalidIdentifier);
+    }
+
+    #[test]
+    fn extracts_a_valid_request_id_from_an_otherwise_invalid_shell_request() {
+        let request_id = shell_request_id(
+            br#"{"protocolVersion":1,"type":"query","requestId":"q-01","query":123,"limit":20}"#,
+        );
+
+        assert_eq!(request_id.as_deref(), Some("q-01"));
+        assert_eq!(shell_request_id(br#"{"requestId":"bad id"}"#), None);
+        assert_eq!(shell_request_id(b"{invalid json"), None);
     }
 
     #[test]
