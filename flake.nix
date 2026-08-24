@@ -105,7 +105,12 @@
 
             checks = forAllSystems (
                 system:
-                nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
+                {
+                    module-evaluation = import ./tests/module-evaluation.nix {
+                        inherit inputs self system;
+                    };
+                }
+                // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
                     desktop-shell-module = import ./tests/desktop-shell-module.nix {
                         inherit inputs self system;
                     };
