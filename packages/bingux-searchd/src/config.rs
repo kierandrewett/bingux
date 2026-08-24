@@ -130,8 +130,8 @@ impl SqliteSourceConfig {
         }
 
         if query.contains(';')
-            || !query.contains("?1")
-            || !query.contains("?2")
+            || !has_sql_parameter(query, b'1')
+            || !has_sql_parameter(query, b'2')
             || !has_result_limit(query)
         {
             bail!("SQLite query must contain ?1, LIMIT ?2, and only one statement");
@@ -237,6 +237,46 @@ enum CommonTableExpressionState {
     AfterAs,
     Body,
     AfterBody,
+}
+
+fn has_sql_parameter(query: &str, parameter: u8) -> bool {
+    let bytes = query.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            byte if byte.is_ascii_whitespace() => index += 1,
+            b'-' if bytes.get(index + 1) == Some(&b'-') => {
+                index = skip_line_comment(bytes, index + 2);
+            }
+            b'/' if bytes.get(index + 1) == Some(&b'*') => {
+                let Some(next_index) = skip_block_comment(bytes, index + 2) else {
+                    return false;
+                };
+                index = next_index;
+            }
+            b'\'' | b'"' | b'`' => {
+                let Some(next_index) = skip_quoted_sql(bytes, index, bytes[index]) else {
+                    return false;
+                };
+                index = next_index;
+            }
+            b'[' => {
+                let Some(next_index) = skip_bracketed_identifier(bytes, index) else {
+                    return false;
+                };
+                index = next_index;
+            }
+            b'?' if bytes.get(index + 1) == Some(&parameter)
+                && !bytes
+                    .get(index + 2)
+                    .is_some_and(|byte| is_sql_word_continue(*byte)) =>
+            {
+                return true;
+            }
+            _ => index += 1,
+        }
+    }
+    false
 }
 
 fn has_result_limit(query: &str) -> bool {
@@ -524,6 +564,24 @@ mod tests {
         let mut config = valid_config();
         config.sqlite_sources[0].query =
             "SELECT id, title, body FROM note WHERE title LIKE ?1 /* LIMIT ?2 */".to_owned();
+
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_sqlite_placeholder_text_inside_a_string() {
+        let mut config = valid_config();
+        config.sqlite_sources[0].query =
+            "SELECT id, title, body FROM note WHERE title LIKE 'literal ?1' LIMIT ?2".to_owned();
+
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_sqlite_placeholder_text_inside_a_comment() {
+        let mut config = valid_config();
+        config.sqlite_sources[0].query =
+            "SELECT id, title, body FROM note WHERE title LIKE ?1 /* ?2 */ LIMIT 10".to_owned();
 
         assert!(config.validate().is_err());
     }

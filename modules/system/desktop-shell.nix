@@ -188,7 +188,7 @@ in
                         options = {
                             endpoint = lib.mkOption {
                                 type = lib.types.str;
-                                description = "HTTPS OpenAI-compatible chat-completions endpoint.";
+                                description = "HTTPS OpenAI-compatible chat-completions endpoint without credentials, query parameters, or fragments.";
                             };
 
                             model = lib.mkOption {

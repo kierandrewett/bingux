@@ -158,6 +158,7 @@ pub fn validate_endpoint(endpoint: &str) -> Result<()> {
     if endpoint.is_empty()
         || endpoint.len() > MAX_AI_ENDPOINT_BYTES
         || endpoint.chars().any(char::is_control)
+        || endpoint.contains('#')
     {
         bail!("AI endpoint is invalid");
     }
@@ -167,6 +168,15 @@ pub fn validate_endpoint(endpoint: &str) -> Result<()> {
         .map_err(|_| anyhow::anyhow!("AI endpoint is invalid"))?;
     if endpoint.scheme_str() != Some("https") || endpoint.authority().is_none() {
         bail!("AI endpoint must use HTTPS");
+    }
+    if endpoint
+        .authority()
+        .is_some_and(|authority| authority.as_str().contains('@'))
+        || endpoint
+            .path_and_query()
+            .is_some_and(|path| path.as_str().contains('?'))
+    {
+        bail!("AI endpoint must not contain credentials or query parameters");
     }
     Ok(())
 }
@@ -215,7 +225,7 @@ fn truncate_utf8(value: &str, maximum_bytes: usize) -> String {
 mod tests {
     use super::{
         ChatHistory, MAX_API_KEY_BYTES, MAX_CHAT_HISTORY_EXCHANGES, MAX_CHAT_RESPONSE_BYTES,
-        parse_first_response, read_api_key_file,
+        parse_first_response, read_api_key_file, validate_endpoint,
     };
     use std::{
         fs,
@@ -241,6 +251,18 @@ mod tests {
         assert!(read_api_key_file(&path).is_err());
 
         fs::remove_file(path).expect("remove oversized key");
+    }
+
+    #[test]
+    fn rejects_ai_endpoints_that_embed_credentials_or_query_parameters() {
+        for endpoint in [
+            "https://user:secret@example.test/v1/chat",
+            "https://example.test/v1/chat?api_key=secret",
+            "https://example.test/v1/chat#fragment",
+        ] {
+            assert!(validate_endpoint(endpoint).is_err(), "{endpoint}");
+        }
+        assert!(validate_endpoint("https://example.test/v1/chat").is_ok());
     }
 
     #[test]
