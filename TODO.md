@@ -78,4 +78,4 @@ This file tracks implementation work. A checked item means the related configura
 - [x] Simplify code where review finds real complexity or duplication; keep intentional repetition unchanged.
 - [x] Run all flake checks, Rust tests, and the relevant NixOS VM test.
 - [x] Update architecture, profile, package-management, secrets, and Proxmox operations documentation.
-- [ ] Commit each validated increment with a conventional commit message.
+- [x] Commit each validated increment with a conventional commit message.
