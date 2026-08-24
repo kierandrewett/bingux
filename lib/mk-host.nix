@@ -29,7 +29,7 @@ inputs.nixpkgs.lib.nixosSystem {
         inputs.home-manager.nixosModules.home-manager
         inputs.sops-nix.nixosModules.sops
         inputs.nix-flatpak.nixosModules.nix-flatpak
-        ../modules
+        self.nixosModules.default
         profileImport
         {
             networking.hostName = hostName;

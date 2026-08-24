@@ -30,19 +30,19 @@ This file tracks implementation work. A checked item means the related configura
 
 ## Phase 3: Kieran profile and migration
 
-- [ ] Add the Kieran profile as a consumer of the generic profile interface.
+- [x] Add the Kieran profile as a consumer of the generic profile interface.
 - [ ] Add declarative Rust, C++, TypeScript, container, and terminal toolchains.
 - [ ] Add a curated application set and Flatpak declarations.
 - [ ] Add an inventory command that exports current Fedora, Flatpak, Cargo, pipx, and Node application candidates without private configuration.
 - [ ] Document temporary and declarative package installation.
-- [ ] Evaluate the Kieran VM profile.
+- [x] Evaluate the Kieran VM profile.
 
 ## Phase 4: Gnoblin flake integration
 
-- [ ] Add a reproducible Gnoblin flake package and NixOS module in `~/dev/gnoblin`.
+- [x] Add a reproducible Gnoblin flake package and NixOS module in `~/dev/gnoblin`.
 - [x] Add the minimal, versioned `org.gnoblin.Shell` Super-release signal.
 - [ ] Disable Gnoblin-native notification and OSD ownership for the Bingux session.
-- [ ] Expose the custom Gnoblin session to the display manager.
+- [x] Expose the custom Gnoblin session to the display manager.
 - [ ] Build Gnoblin through the Bingux flake with a local-input override.
 
 ## Phase 5: Bingux desktop shell

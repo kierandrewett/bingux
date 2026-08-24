@@ -25,10 +25,9 @@
             inputs.nixpkgs.follows = "nixpkgs";
         };
 
-        # Available only to profiles that select Gnoblin until it exports a flake.
-        gnoblin-src = {
+        gnoblin = {
             url = "github:kierandrewett/gnoblin";
-            flake = false;
+            inputs.nixpkgs.follows = "nixpkgs";
         };
     };
 
@@ -49,7 +48,12 @@
         {
             lib.mkHost = mkHost;
 
-            nixosModules.default = import ./modules;
+            nixosModules.default = {
+                imports = [
+                    inputs.gnoblin.nixosModules.default
+                    ./modules
+                ];
+            };
 
             nixosConfigurations.bingux-vm = mkHost {
                 system = "x86_64-linux";
@@ -58,11 +62,26 @@
                 modules = [ ./hosts/vm ];
             };
 
-            checks = forAllSystems (system: {
-                desktop-shell-module = import ./tests/desktop-shell-module.nix {
-                    inherit inputs self system;
-                };
-            });
+            nixosConfigurations.bingux-kieran-vm = mkHost {
+                system = "x86_64-linux";
+                hostName = "bingux-kieran-vm";
+                profile = "kieran";
+                modules = [ ./hosts/vm ];
+            };
+
+            checks = forAllSystems (
+                system:
+                {
+                    desktop-shell-module = import ./tests/desktop-shell-module.nix {
+                        inherit inputs self system;
+                    };
+                }
+                // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
+                    kieran-profile = import ./tests/kieran-profile.nix {
+                        inherit inputs self system;
+                    };
+                }
+            );
 
             formatter = forAllSystems (
                 system:

@@ -17,7 +17,7 @@ let
         modules = [
             inputs.home-manager.nixosModules.home-manager
             inputs.sops-nix.nixosModules.sops
-            ../modules
+            self.nixosModules.default
             {
                 bingux = {
                     desktop.enable = true;
