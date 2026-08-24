@@ -1,0 +1,13 @@
+/target/
+/.cache/
+/result
+/result-*
+*.qcow2
+*.qcow2.zst
+*.agekey
+/secrets/keys/
+/profiles/*/hardware-configuration.nix
+/profiles/*/secrets/*.dec.yaml
+/banks/
+.env
+.env.*
