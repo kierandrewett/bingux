@@ -8,28 +8,28 @@ PanelWindow {
 
     required property var state
 
-    function hasDefaultAction(notification) {
-        for (let index = 0; index < notification.actions.length; index += 1) {
-            if (notification.actions[index].identifier === "default")
+    function hasDefaultAction(entry) {
+        for (let index = 0; index < entry.actions.length; index += 1) {
+            if (entry.actions[index].defaultAction)
                 return true;
 
         }
         return false;
     }
 
-    function invokeDefaultAction(notification) {
-        for (let index = 0; index < notification.actions.length; index += 1) {
-            const action = notification.actions[index];
-            if (action.identifier === "default") {
-                action.invoke();
+    function invokeDefaultAction(entry) {
+        for (let index = 0; index < entry.actions.length; index += 1) {
+            const action = entry.actions[index];
+            if (action.defaultAction) {
+                action.action.invoke();
                 return ;
             }
         }
     }
 
-    function hasSecondaryAction(notification) {
-        for (let index = 0; index < notification.actions.length; index += 1) {
-            if (notification.actions[index].identifier !== "default")
+    function hasSecondaryAction(entry) {
+        for (let index = 0; index < entry.actions.length; index += 1) {
+            if (!entry.actions[index].defaultAction)
                 return true;
 
         }
@@ -69,8 +69,9 @@ PanelWindow {
                 id: notificationCard
 
                 required property var modelData
-                readonly property var notification: modelData.notification
-                readonly property bool defaultActionAvailable: root.hasDefaultAction(notification)
+                readonly property var entry: modelData
+                readonly property var notification: entry.notification
+                readonly property bool defaultActionAvailable: root.hasDefaultAction(entry)
 
                 width: notificationColumn.width
                 height: cardContents.implicitHeight + 28
@@ -78,17 +79,17 @@ PanelWindow {
                 color: "#202632"
                 border.width: 1
                 border.color: "#3d485e"
-                Accessible.name: notification.appName + ": " + notification.summary
+                Accessible.name: entry.appName + ": " + entry.summary
                 Accessible.role: defaultActionAvailable ? Accessible.Button : Accessible.StaticText
                 Accessible.focusable: defaultActionAvailable
-                Accessible.onPressAction: root.invokeDefaultAction(notification)
+                Accessible.onPressAction: root.invokeDefaultAction(entry)
 
                 MouseArea {
                     anchors.fill: parent
                     hoverEnabled: true
                     enabled: notificationCard.defaultActionAvailable
                     cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: root.invokeDefaultAction(notificationCard.notification)
+                    onClicked: root.invokeDefaultAction(notificationCard.entry)
                 }
 
                 Column {
@@ -111,7 +112,7 @@ PanelWindow {
                             height: 24
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
-                            source: Quickshell.iconPath(notificationCard.notification.appIcon, "dialog-information-symbolic")
+                            source: Quickshell.iconPath(notificationCard.entry.appIcon, "dialog-information-symbolic")
                         }
 
                         Text {
@@ -123,7 +124,7 @@ PanelWindow {
                             color: "#b9c5d6"
                             elide: Text.ElideRight
                             font.pixelSize: 12
-                            text: notificationCard.notification.appName || notificationCard.notification.desktopEntry || "Notification"
+                            text: notificationCard.entry.appName || notificationCard.entry.desktopEntry || "Notification"
                             textFormat: Text.PlainText
                         }
 
@@ -163,19 +164,19 @@ PanelWindow {
                         font.pixelSize: 15
                         font.weight: Font.DemiBold
                         maximumLineCount: 2
-                        text: notificationCard.notification.summary || "Notification"
+                        text: notificationCard.entry.summary || "Notification"
                         textFormat: Text.PlainText
                         wrapMode: Text.Wrap
                     }
 
                     Text {
                         width: parent.width
-                        visible: notificationCard.notification.body.length > 0
+                        visible: notificationCard.entry.body.length > 0
                         color: "#c6d0df"
                         font.pixelSize: 13
                         lineHeight: 1.2
                         maximumLineCount: 3
-                        text: notificationCard.notification.body
+                        text: notificationCard.entry.body
                         textFormat: Text.PlainText
                         wrapMode: Text.Wrap
                     }
@@ -183,11 +184,11 @@ PanelWindow {
                     Flow {
                         width: parent.width
                         height: visible ? implicitHeight : 0
-                        visible: root.hasSecondaryAction(notificationCard.notification)
+                        visible: root.hasSecondaryAction(notificationCard.entry)
                         spacing: 6
 
                         Repeater {
-                            model: notificationCard.notification.actions
+                            model: notificationCard.entry.actions
 
                             delegate: Rectangle {
                                 id: actionButton
@@ -198,11 +199,11 @@ PanelWindow {
                                 height: visible ? 30 : 0
                                 radius: 6
                                 color: actionMouse.containsMouse ? "#3b4b66" : "#303b50"
-                                visible: modelData.identifier !== "default"
+                                visible: !modelData.defaultAction
                                 Accessible.name: modelData.text
                                 Accessible.role: Accessible.Button
                                 Accessible.focusable: true
-                                Accessible.onPressAction: actionButton.modelData.invoke()
+                                Accessible.onPressAction: modelData.action.invoke()
 
                                 Text {
                                     id: actionLabel
@@ -222,7 +223,7 @@ PanelWindow {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: actionButton.modelData.invoke()
+                                    onClicked: actionButton.modelData.action.invoke()
                                 }
 
                             }

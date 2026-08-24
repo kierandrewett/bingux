@@ -6,6 +6,13 @@ QtObject {
 
     readonly property int maxVisibleNotifications: 3
     readonly property int maxQueuedNotifications: 32
+    readonly property int maxApplicationNameLength: 128
+    readonly property int maxIconNameLength: 256
+    readonly property int maxSummaryLength: 256
+    readonly property int maxBodyLength: 2048
+    readonly property int maxActionTextLength: 128
+    readonly property int maxActionsPerNotification: 8
+    readonly property int maxScannedActions: 32
     readonly property int defaultTimeoutMs: 5000
     readonly property int maxTimeoutMs: 30000
     property var visibleEntries: []
@@ -13,6 +20,53 @@ QtObject {
     property var watchedNotifications: []
     property var expiryTimer
     property var notificationServer
+
+    function boundedText(value, maxLength) {
+        const text = String(value || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim();
+        if (text.length <= maxLength)
+            return text;
+
+        return text.slice(0, Math.max(0, maxLength - 3)) + "...";
+    }
+
+    function projectActions(notification) {
+        const sourceActions = notification.actions || [];
+        const projected = [];
+        let defaultAction = null;
+        const actionCount = Math.min(sourceActions.length, maxScannedActions);
+        for (let index = 0; index < actionCount; index += 1) {
+            const action = sourceActions[index];
+            const entry = {
+                "action": action,
+                "defaultAction": action.identifier === "default",
+                "text": boundedText(action.text, maxActionTextLength)
+            };
+            if (entry.defaultAction) {
+                if (defaultAction === null)
+                    defaultAction = entry;
+            } else if (projected.length < maxActionsPerNotification) {
+                projected.push(entry);
+            }
+        }
+
+        if (defaultAction !== null)
+            projected.unshift(defaultAction);
+
+        return projected;
+    }
+
+    function entryFor(notification, deadline) {
+        return {
+            "notification": notification,
+            "deadline": deadline,
+            "appName": boundedText(notification.appName, maxApplicationNameLength),
+            "desktopEntry": boundedText(notification.desktopEntry, maxApplicationNameLength),
+            "appIcon": boundedText(notification.appIcon, maxIconNameLength),
+            "summary": boundedText(notification.summary, maxSummaryLength),
+            "body": boundedText(notification.body, maxBodyLength),
+            "actions": projectActions(notification)
+        };
+    }
 
     function removeFrom(entries, notification) {
         const result = [];
@@ -26,10 +80,7 @@ QtObject {
 
     function replaceExistingNotification(notification) {
         const timeout = timeoutFor(notification);
-        const replacement = {
-            "notification": notification,
-            "deadline": timeout > 0 ? Date.now() + timeout : 0
-        };
+        const replacement = entryFor(notification, timeout > 0 ? Date.now() + timeout : 0);
         let replaced = false;
         const visible = [];
         const queued = [];
@@ -72,10 +123,7 @@ QtObject {
         for (let index = 0; index < visibleEntries.length; index += 1) {
             const entry = visibleEntries[index];
             if (entry.notification === notification) {
-                visible.push({
-                    "notification": entry.notification,
-                    "deadline": deadline
-                });
+                visible.push(entryFor(entry.notification, deadline));
                 changed = true;
             } else {
                 visible.push(entry);
@@ -84,10 +132,7 @@ QtObject {
         for (let index = 0; index < queuedEntries.length; index += 1) {
             const entry = queuedEntries[index];
             if (entry.notification === notification) {
-                queued.push({
-                    "notification": entry.notification,
-                    "deadline": deadline
-                });
+                queued.push(entryFor(entry.notification, deadline));
                 changed = true;
             } else {
                 queued.push(entry);
@@ -186,10 +231,7 @@ QtObject {
             return ;
         }
         const timeout = timeoutFor(notification);
-        const entry = {
-            "notification": notification,
-            "deadline": timeout > 0 ? Date.now() + timeout : 0
-        };
+        const entry = entryFor(notification, timeout > 0 ? Date.now() + timeout : 0);
         if (visibleEntries.length < maxVisibleNotifications) {
             watchNotification(notification);
             visibleEntries = [entry].concat(visibleEntries);
