@@ -6,17 +6,23 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import selectors
+import signal
 from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Iterable, Sequence
 from typing import Any
 
 SCHEMA_VERSION = 2
 COMMAND_TIMEOUT_SECONDS = 15.0
+MAX_COMMAND_OUTPUT_BYTES = 4 * 1024 * 1024
+COMMAND_READ_CHUNK_BYTES = 64 * 1024
+PROCESS_STOP_TIMEOUT_SECONDS = 1.0
 PackageRecord = dict[str, str]
 Command = tuple[str, ...]
 
@@ -91,31 +97,82 @@ def _sorted_records(records: Iterable[PackageRecord]) -> list[PackageRecord]:
     ]
 
 
+def _stop_process(process: subprocess.Popen[bytes]) -> None:
+    """Stop a command and its children without waiting indefinitely."""
+
+    if process.poll() is None:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    try:
+        process.wait(timeout=PROCESS_STOP_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+
+
 def _run_command(command: Command) -> str | None:
-    """Run one static, local listing command and return only its standard output."""
+    """Run one static, local listing command with bounded output and time."""
 
     if not command or shutil.which(command[0]) is None:
         return None
 
     try:
-        result = subprocess.run(
+        process = subprocess.Popen(
             list(command),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
-            check=False,
             shell=False,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=COMMAND_TIMEOUT_SECONDS,
+            start_new_session=True,
         )
-    except (OSError, subprocess.SubprocessError):
+    except OSError:
         return None
 
-    if result.returncode != 0 and not result.stdout.strip():
+    assert process.stdout is not None
+    output = bytearray()
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ)
+    deadline = time.monotonic() + COMMAND_TIMEOUT_SECONDS
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                _stop_process(process)
+                return None
+
+            ready = selector.select(timeout=min(remaining, 0.1))
+            if not ready:
+                continue
+
+            chunk = os.read(
+                process.stdout.fileno(),
+                min(COMMAND_READ_CHUNK_BYTES, MAX_COMMAND_OUTPUT_BYTES + 1 - len(output)),
+            )
+            if not chunk:
+                break
+            output.extend(chunk)
+            if len(output) > MAX_COMMAND_OUTPUT_BYTES:
+                _stop_process(process)
+                return None
+
+        try:
+            return_code = process.wait(timeout=max(0.0, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            _stop_process(process)
+            return None
+    except (OSError, selectors.SelectorError):
+        _stop_process(process)
         return None
-    return result.stdout
+    finally:
+        selector.close()
+        process.stdout.close()
+
+    text = output.decode("utf-8", errors="replace")
+    if return_code != 0 and not text.strip():
+        return None
+    return text
 
 
 def _parse_tabular(text: str) -> list[PackageRecord]:
