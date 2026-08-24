@@ -88,6 +88,7 @@ ShellRoot {
                 parentWindow: topBar
             }
 
+
             Rectangle {
                 width: 5
                 height: 5
@@ -111,6 +112,9 @@ ShellRoot {
                 color: metrics.available ? "#d9dee8" : "#8b94a3"
                 font.pixelSize: 12
                 text: metrics.networkLabel
+            }
+
+            SystemIndicators {
             }
         }
     }

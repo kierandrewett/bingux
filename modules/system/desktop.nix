@@ -80,6 +80,11 @@ in
                 pulse.enable = true;
                 wireplumber.enable = true;
             };
+
+        })
+
+        (lib.mkIf cfg.enable {
+            services.upower.enable = true;
         })
     ];
 }
