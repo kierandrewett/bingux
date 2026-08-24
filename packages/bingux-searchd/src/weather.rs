@@ -7,6 +7,7 @@ use std::{
 };
 
 const OPEN_METEO_FORECAST_URL: &str = "https://api.open-meteo.com/v1/forecast";
+const MAX_WEATHER_RESPONSE_BODY_BYTES: u64 = 32 * 1024;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// A background-refreshed cache of current weather conditions for one configured location.
@@ -80,7 +81,11 @@ fn fetch_weather(config: &crate::config::WeatherConfig) -> Result<WeatherSnapsho
             .build(),
     );
     let mut response = agent.get(&url).call()?;
-    let response: OpenMeteoResponse = response.body_mut().read_json()?;
+    let response: OpenMeteoResponse = response
+        .body_mut()
+        .with_config()
+        .limit(MAX_WEATHER_RESPONSE_BODY_BYTES)
+        .read_json()?;
     let current = response.current;
 
     if !current.temperature_2m.is_finite()

@@ -7,9 +7,9 @@ use anyhow::{Context, Result, bail};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     fs,
-    io::{self, BufRead, BufReader, Write},
+    io::{self, BufRead, BufReader, Read, Write},
     os::unix::process::CommandExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     sync::{
         Arc, Mutex,
@@ -29,6 +29,9 @@ const INITIAL_BACKOFF: Duration = Duration::from_millis(250);
 const MAX_BACKOFF: Duration = Duration::from_secs(5);
 const TICK: Duration = Duration::from_millis(50);
 const PRIORITY_WEIGHT: f64 = 0.001;
+const CANCELLATION_TTL: Duration = Duration::from_secs(11);
+const MAX_CANCELLED_REQUESTS: usize = COMMAND_CAPACITY + MAX_PENDING;
+const MAX_PROVIDER_MANIFEST_BYTES: u64 = 64 * 1024;
 
 #[derive(Debug, Clone)]
 pub enum ExternalEvent {
@@ -52,9 +55,62 @@ pub enum ExternalEvent {
     },
 }
 
+#[derive(Debug, Default)]
+pub struct QueryDispatch {
+    pub accepted: BTreeSet<String>,
+    pub rejected: BTreeSet<String>,
+}
+
+#[derive(Default)]
+struct CancelledRequests {
+    queries: BTreeMap<String, Instant>,
+    activations: BTreeMap<String, Instant>,
+}
+impl CancelledRequests {
+    fn insert_query(&mut self, query_id: String, now: Instant) {
+        self.prune(now);
+        if !self.queries.contains_key(&query_id) {
+            self.evict_if_full();
+        }
+        self.queries.insert(query_id, now + CANCELLATION_TTL);
+    }
+
+    fn insert_activation(&mut self, activation_id: String, now: Instant) {
+        self.prune(now);
+        if !self.activations.contains_key(&activation_id) {
+            self.evict_if_full();
+        }
+        self.activations
+            .insert(activation_id, now + CANCELLATION_TTL);
+    }
+
+    fn take_query(&mut self, query_id: &str, now: Instant) -> bool {
+        self.prune(now);
+        self.queries.remove(query_id).is_some()
+    }
+
+    fn take_activation(&mut self, activation_id: &str, now: Instant) -> bool {
+        self.prune(now);
+        self.activations.remove(activation_id).is_some()
+    }
+
+    fn evict_if_full(&mut self) {
+        while self.queries.len() + self.activations.len() >= MAX_CANCELLED_REQUESTS {
+            if self.queries.pop_first().is_none() {
+                self.activations.pop_first();
+            }
+        }
+    }
+
+    fn prune(&mut self, now: Instant) {
+        self.queries.retain(|_, expires_at| *expires_at > now);
+        self.activations.retain(|_, expires_at| *expires_at > now);
+    }
+}
+
 struct ProviderEndpoint {
     commands: SyncSender<WorkerCommand>,
-    cancelled_queries: Arc<Mutex<BTreeSet<String>>>,
+    cancelled_requests: Arc<Mutex<CancelledRequests>>,
 }
 pub struct ExternalProviders {
     providers: BTreeMap<String, ProviderEndpoint>,
@@ -70,10 +126,10 @@ impl ExternalProviders {
         for manifest in manifests {
             let id = manifest.id.clone();
             let (tx, rx) = mpsc::sync_channel(COMMAND_CAPACITY);
-            let cancelled_queries = Arc::new(Mutex::new(BTreeSet::new()));
+            let cancelled_requests = Arc::new(Mutex::new(CancelledRequests::default()));
             let worker_stop = Arc::clone(&stop);
             let worker_events = events.clone();
-            let worker_cancellations = Arc::clone(&cancelled_queries);
+            let worker_cancellations = Arc::clone(&cancelled_requests);
             let name = format!("bingux-search-provider-{id}");
             let worker = thread::Builder::new().name(name).spawn(move || {
                 Worker::new(
@@ -102,7 +158,7 @@ impl ExternalProviders {
                 id,
                 ProviderEndpoint {
                     commands: tx,
-                    cancelled_queries,
+                    cancelled_requests,
                 },
             );
             workers.push(worker);
@@ -113,31 +169,44 @@ impl ExternalProviders {
             workers,
         })
     }
-    pub fn query(&self, query_id: String, query: String, limit: u8) -> BTreeSet<String> {
-        self.providers
-            .iter()
-            .filter_map(|(provider_id, provider)| {
-                provider
-                    .commands
-                    .try_send(WorkerCommand::Query {
-                        query_id: query_id.clone(),
-                        query: query.clone(),
-                        limit,
-                    })
-                    .ok()
-                    .map(|()| provider_id.clone())
-            })
-            .collect()
+    pub fn query(&self, query_id: String, query: String, limit: u8) -> QueryDispatch {
+        let mut dispatch = QueryDispatch::default();
+        for (provider_id, provider) in &self.providers {
+            let command = WorkerCommand::Query {
+                query_id: query_id.clone(),
+                query: query.clone(),
+                limit,
+            };
+            if provider.commands.try_send(command).is_ok() {
+                dispatch.accepted.insert(provider_id.clone());
+            } else {
+                dispatch.rejected.insert(provider_id.clone());
+            }
+        }
+        dispatch
     }
 
     pub fn cancel_query(&self, query_id: &str, provider_ids: &BTreeSet<String>) {
         for provider_id in provider_ids {
-            let Some(provider) = self.providers.get(provider_id) else {
-                continue;
-            };
-            if let Ok(mut cancelled) = provider.cancelled_queries.lock() {
-                cancelled.insert(query_id.to_owned());
-            }
+            self.cancel_query_for_provider(provider_id, query_id);
+        }
+    }
+
+    pub fn cancel_activation(&self, provider_id: &str, activation_id: &str) {
+        let Some(provider) = self.providers.get(provider_id) else {
+            return;
+        };
+        if let Ok(mut cancelled) = provider.cancelled_requests.lock() {
+            cancelled.insert_activation(activation_id.to_owned(), Instant::now());
+        }
+    }
+
+    fn cancel_query_for_provider(&self, provider_id: &str, query_id: &str) {
+        let Some(provider) = self.providers.get(provider_id) else {
+            return;
+        };
+        if let Ok(mut cancelled) = provider.cancelled_requests.lock() {
+            cancelled.insert_query(query_id.to_owned(), Instant::now());
         }
     }
 
@@ -280,19 +349,25 @@ impl Pending {
     }
     fn unsent(&self) -> Vec<PendingRequest> {
         let mut requests = Vec::with_capacity(self.len());
-        requests.extend(self.queries.iter().filter_map(|(id, p)| {
-            (!p.sent).then(|| PendingRequest::Query {
-                query_id: id.clone(),
-                query: p.query.clone(),
-                limit: p.limit,
-            })
-        }));
-        requests.extend(self.activations.iter().filter_map(|(id, p)| {
-            (!p.sent).then(|| PendingRequest::Activate {
-                activation_id: id.clone(),
-                result_id: p.result_id.clone(),
-            })
-        }));
+        requests.extend(
+            self.queries
+                .iter()
+                .filter(|&(_, pending)| !pending.sent)
+                .map(|(id, pending)| PendingRequest::Query {
+                    query_id: id.clone(),
+                    query: pending.query.clone(),
+                    limit: pending.limit,
+                }),
+        );
+        requests.extend(
+            self.activations
+                .iter()
+                .filter(|&(_, pending)| !pending.sent)
+                .map(|(id, pending)| PendingRequest::Activate {
+                    activation_id: id.clone(),
+                    result_id: pending.result_id.clone(),
+                }),
+        );
         requests
     }
     fn sent(&mut self, request: &PendingRequest) {
@@ -322,6 +397,10 @@ impl Pending {
 
     fn cancel_query(&mut self, query_id: &str) -> bool {
         self.queries.remove(query_id).is_some()
+    }
+
+    fn cancel_activation(&mut self, activation_id: &str) -> bool {
+        self.activations.remove(activation_id).is_some()
     }
     fn deadline(&self) -> Option<Instant> {
         self.queries
@@ -407,7 +486,7 @@ struct Worker {
     commands: Receiver<WorkerCommand>,
     events: SyncSender<ExternalEvent>,
     stop: Arc<AtomicBool>,
-    cancelled_queries: Arc<Mutex<BTreeSet<String>>>,
+    cancelled_requests: Arc<Mutex<CancelledRequests>>,
     reader_events: Receiver<ReaderEvent>,
     reader_tx: SyncSender<ReaderEvent>,
     pending: Pending,
@@ -424,7 +503,7 @@ impl Worker {
         commands: Receiver<WorkerCommand>,
         events: SyncSender<ExternalEvent>,
         stop: Arc<AtomicBool>,
-        cancelled_queries: Arc<Mutex<BTreeSet<String>>>,
+        cancelled_requests: Arc<Mutex<CancelledRequests>>,
     ) -> Self {
         let (reader_tx, reader_events) = mpsc::sync_channel(READER_CAPACITY);
         Self {
@@ -432,7 +511,7 @@ impl Worker {
             commands,
             events,
             stop,
-            cancelled_queries,
+            cancelled_requests,
             reader_events,
             reader_tx,
             pending: Pending::default(),
@@ -477,7 +556,7 @@ impl Worker {
 
     fn progress(&mut self, now: Instant) {
         self.flush_events();
-        self.cancel_pending_queries();
+        self.cancel_pending_requests(now);
         self.expire(now);
         self.read(now);
         self.start(now);
@@ -502,7 +581,7 @@ impl Worker {
         matches!(self.manifest.startup, ProviderStartup::Eager) || !self.pending.empty()
     }
     fn accept_query(&mut self, query_id: String, query: String, limit: u8, now: Instant) {
-        if self.take_cancellation(&query_id) {
+        if self.take_query_cancellation(&query_id, now) {
             return;
         }
         let deadline = now + Duration::from_millis(self.manifest.timeout_ms.into());
@@ -515,31 +594,51 @@ impl Worker {
         }
         self.progress(now)
     }
-    fn take_cancellation(&self, query_id: &str) -> bool {
-        self.cancelled_queries
+
+    fn take_query_cancellation(&self, query_id: &str, now: Instant) -> bool {
+        self.cancelled_requests
             .lock()
             .ok()
-            .is_some_and(|mut cancelled| cancelled.remove(query_id))
+            .is_some_and(|mut cancelled| cancelled.take_query(query_id, now))
     }
 
-    fn cancel_pending_queries(&mut self) {
-        let Ok(mut cancelled) = self.cancelled_queries.lock() else {
+    fn take_activation_cancellation(&self, activation_id: &str, now: Instant) -> bool {
+        self.cancelled_requests
+            .lock()
+            .ok()
+            .is_some_and(|mut cancelled| cancelled.take_activation(activation_id, now))
+    }
+
+    fn cancel_pending_requests(&mut self, now: Instant) {
+        let Ok(mut cancelled) = self.cancelled_requests.lock() else {
             return;
         };
-        let cancelled_ids = self
+        let cancelled_queries = self
             .pending
             .queries
             .keys()
-            .filter(|query_id| cancelled.contains(*query_id))
+            .filter(|query_id| cancelled.take_query(query_id, now))
             .cloned()
             .collect::<Vec<_>>();
-        for query_id in cancelled_ids {
+        let cancelled_activations = self
+            .pending
+            .activations
+            .keys()
+            .filter(|activation_id| cancelled.take_activation(activation_id, now))
+            .cloned()
+            .collect::<Vec<_>>();
+        for query_id in cancelled_queries {
             self.pending.cancel_query(&query_id);
-            cancelled.remove(&query_id);
+        }
+        for activation_id in cancelled_activations {
+            self.pending.cancel_activation(&activation_id);
         }
     }
 
     fn accept_activation(&mut self, activation_id: String, result_id: String, now: Instant) {
+        if self.take_activation_cancellation(&activation_id, now) {
+            return;
+        }
         let deadline = now + Duration::from_millis(self.manifest.timeout_ms.into());
         if !self
             .pending
@@ -751,11 +850,25 @@ enum WriteError {
     Full,
     Disconnected,
 }
+fn read_bounded_file(path: &Path, max_bytes: u64) -> io::Result<Vec<u8>> {
+    let file = fs::File::open(path)?;
+    let mut content = Vec::new();
+    file.take(max_bytes.saturating_add(1))
+        .read_to_end(&mut content)?;
+    if content.len() as u64 > max_bytes {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "file exceeds configured size limit",
+        ));
+    }
+    Ok(content)
+}
+
 fn load_manifests(paths: &[PathBuf]) -> Result<Vec<ProviderManifest>> {
     let mut manifests = Vec::with_capacity(paths.len());
     let mut ids = BTreeMap::new();
     for path in paths {
-        let content = fs::read(path)
+        let content = read_bounded_file(path, MAX_PROVIDER_MANIFEST_BYTES)
             .with_context(|| format!("could not read provider manifest {}", path.display()))?;
         let manifest = parse_provider_manifest(&content)
             .with_context(|| format!("could not parse provider manifest {}", path.display()))?;
@@ -1006,12 +1119,14 @@ fn expire(provider_id: &str, pending: &mut Pending, now: Instant) -> Vec<Externa
     let queries = pending
         .queries
         .iter()
-        .filter_map(|(id, p)| (p.deadline <= now).then(|| id.clone()))
+        .filter(|&(_, pending)| pending.deadline <= now)
+        .map(|(id, _)| id.clone())
         .collect::<Vec<_>>();
     let activations = pending
         .activations
         .iter()
-        .filter_map(|(id, p)| (p.deadline <= now).then(|| id.clone()))
+        .filter(|&(_, pending)| pending.deadline <= now)
+        .map(|(id, _)| id.clone())
         .collect::<Vec<_>>();
     let mut events = Vec::with_capacity(queries.len() + activations.len());
     for query_id in queries {
@@ -1225,13 +1340,93 @@ mod tests {
     }
 
     #[test]
-    fn cancellation_removes_an_unfinished_query() {
+    fn cancellation_removes_unfinished_queries_and_activations() {
         let now = Instant::now();
         let mut pending = Pending::default();
         assert!(pending.query("query-1".into(), "notes".into(), 10, now));
+        assert!(pending.activate("activation-1".into(), "note-1".into(), now));
 
         assert!(pending.cancel_query("query-1"));
+        assert!(pending.cancel_activation("activation-1"));
         assert!(pending.unsent().is_empty());
+    }
+
+    #[test]
+    fn cancellation_markers_are_typed_expire_and_stay_bounded() {
+        let now = Instant::now();
+        let mut cancelled = CancelledRequests::default();
+
+        cancelled.insert_query("expired".into(), now);
+        assert!(!cancelled.take_query("expired", now + CANCELLATION_TTL));
+
+        cancelled.insert_query("shared-id".into(), now);
+        cancelled.insert_activation("shared-id".into(), now);
+        assert!(cancelled.take_query("shared-id", now));
+        assert!(cancelled.take_activation("shared-id", now));
+
+        for index in 0..=MAX_CANCELLED_REQUESTS {
+            cancelled.insert_query(format!("query-{index}"), now);
+        }
+        assert_eq!(
+            cancelled.queries.len() + cancelled.activations.len(),
+            MAX_CANCELLED_REQUESTS
+        );
+    }
+
+    #[test]
+    fn cancellation_drops_queued_and_pending_activations() {
+        let now = Instant::now();
+        let cancellations = Arc::new(Mutex::new(CancelledRequests::default()));
+        let (_commands, command_receiver) = mpsc::sync_channel(1);
+        let (events, event_receiver) = mpsc::sync_channel(1);
+        let mut worker = Worker::new(
+            manifest(),
+            command_receiver,
+            events,
+            Arc::new(AtomicBool::new(false)),
+            Arc::clone(&cancellations),
+        );
+
+        cancellations
+            .lock()
+            .expect("cancellation lock")
+            .insert_activation("queued".into(), now);
+        worker.accept_activation("queued".into(), "note-1".into(), now);
+        assert!(worker.pending.empty());
+
+        assert!(worker.pending.activate(
+            "pending".into(),
+            "note-1".into(),
+            now + Duration::from_secs(1)
+        ));
+        cancellations
+            .lock()
+            .expect("cancellation lock")
+            .insert_activation("pending".into(), now);
+        worker.cancel_pending_requests(now);
+        assert!(worker.pending.empty());
+        assert!(event_receiver.try_recv().is_err());
+    }
+
+    #[test]
+    fn query_reports_a_full_provider_command_queue() {
+        let (commands, _receiver) = mpsc::sync_channel(0);
+        let external = ExternalProviders {
+            providers: BTreeMap::from([(
+                "notes".into(),
+                ProviderEndpoint {
+                    commands,
+                    cancelled_requests: Arc::new(Mutex::new(CancelledRequests::default())),
+                },
+            )]),
+            stop: Arc::new(AtomicBool::new(false)),
+            workers: Vec::new(),
+        };
+
+        let dispatch = external.query("query-1".into(), "notes".into(), 10);
+
+        assert!(dispatch.accepted.is_empty());
+        assert_eq!(dispatch.rejected, BTreeSet::from(["notes".into()]));
     }
     #[test]
     fn timeout_and_failure_clear_pending() {

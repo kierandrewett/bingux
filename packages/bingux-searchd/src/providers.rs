@@ -1,13 +1,14 @@
 use anyhow::{Context, Result};
 use ignore::WalkBuilder;
-use rusqlite::{Connection, OpenFlags, params};
+use rusqlite::{Connection, OpenFlags, params, types::ValueRef};
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::config::SearchConfig;
 use crate::matching::score_normalized;
@@ -17,9 +18,16 @@ use crate::protocol::{ProviderResult, ResultKind};
 const MAX_APPLICATION_INDEX_ENTRIES: usize = 4_096;
 /// Upper bound for cached file entries, preventing an unbounded configured root from consuming memory.
 const MAX_FILE_INDEX_ENTRIES: usize = 20_000;
+/// Upper bound for all filesystem entries inspected during one application-index refresh.
+const MAX_APPLICATION_WALK_ENTRIES: usize = 32_768;
+/// Upper bound for all filesystem entries inspected during one file-index refresh.
+const MAX_FILE_WALK_ENTRIES: usize = 131_072;
 const APPLICATION_INDEX_REFRESH_INTERVAL: Duration = Duration::from_secs(900);
 const FILE_INDEX_REFRESH_INTERVAL: Duration = Duration::from_secs(300);
+const MAX_DESKTOP_FILE_BYTES: u64 = 64 * 1024;
 const MAX_DISPLAY_BYTES: usize = 16 * 1024;
+const MAX_RESULT_ID_BYTES: usize = 128;
+const SQLITE_QUERY_TIMEOUT: Duration = Duration::from_millis(50);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Candidate {
@@ -41,6 +49,9 @@ pub enum Activation {
         provider_id: String,
         result_id: String,
     },
+    Chat {
+        prompt: String,
+    },
     None,
 }
 
@@ -48,6 +59,7 @@ pub struct LocalProviders {
     applications: Arc<RwLock<Vec<IndexedCandidate>>>,
     files: Arc<RwLock<Vec<IndexedCandidate>>>,
     sqlite_sources: Vec<SqliteSource>,
+    ai_enabled: bool,
 }
 
 #[derive(Clone)]
@@ -73,31 +85,43 @@ struct DesktopEntry {
 
 impl LocalProviders {
     pub fn new(config: &SearchConfig) -> Result<Self> {
+        Self::new_with_index_workers(config, true)
+    }
+
+    /// Constructs a local provider set without application and file indexes.
+    pub fn new_without_index_workers(config: &SearchConfig) -> Result<Self> {
+        Self::new_with_index_workers(config, false)
+    }
+
+    fn new_with_index_workers(config: &SearchConfig, start_index_workers: bool) -> Result<Self> {
         let applications = Arc::new(RwLock::new(Vec::new()));
         let files = Arc::new(RwLock::new(Vec::new()));
-        let application_directories = xdg_application_directories();
-        let application_launcher = config.commands.application_launcher.clone();
-        let file_roots = config.file_roots.clone();
-        let file_opener = config.commands.file_opener.clone();
+        if start_index_workers {
+            let application_directories = xdg_application_directories();
+            let application_launcher = config.commands.application_launcher.clone();
+            let file_roots = config.file_roots.clone();
+            let file_opener = config.commands.file_opener.clone();
 
-        start_index_worker(
-            "bingux-search-app-index",
-            Arc::clone(&applications),
-            APPLICATION_INDEX_REFRESH_INTERVAL,
-            move || index_applications(&application_directories, &application_launcher),
-        )
-        .context("could not start the application search index worker")?;
-        start_index_worker(
-            "bingux-search-file-index",
-            Arc::clone(&files),
-            FILE_INDEX_REFRESH_INTERVAL,
-            move || index_files(&file_roots, &file_opener),
-        )
-        .context("could not start the file search index worker")?;
+            start_index_worker(
+                "bingux-search-app-index",
+                Arc::clone(&applications),
+                APPLICATION_INDEX_REFRESH_INTERVAL,
+                move || index_applications(&application_directories, &application_launcher),
+            )
+            .context("could not start the application search index worker")?;
+            start_index_worker(
+                "bingux-search-file-index",
+                Arc::clone(&files),
+                FILE_INDEX_REFRESH_INTERVAL,
+                move || index_files(&file_roots, &file_opener),
+            )
+            .context("could not start the file search index worker")?;
+        }
 
         Ok(Self {
             applications,
             files,
+            ai_enabled: config.ai.is_some(),
             sqlite_sources: config
                 .sqlite_sources
                 .iter()
@@ -134,12 +158,38 @@ impl LocalProviders {
         for source in &self.sqlite_sources {
             candidates.extend(query_sqlite_source(source, query, &normalized_query, limit));
         }
+        if self.ai_enabled {
+            if let Some(candidate) = quick_chat_candidate(query) {
+                candidates.push(candidate);
+            }
+        }
         if let Some(candidate) = calculation_candidate(query) {
             candidates.push(candidate);
         }
         rank_and_limit(&mut candidates, limit);
         candidates
     }
+}
+
+fn quick_chat_candidate(query: &str) -> Option<Candidate> {
+    let prompt = quick_chat_prompt(query)?;
+    Some(Candidate {
+        provider_id: "ai".to_owned(),
+        result: ProviderResult {
+            result_id: "quick-chat".to_owned(),
+            kind: ResultKind::Chat,
+            title: "Ask AI".to_owned(),
+            subtitle: "Ask the configured assistant".to_owned(),
+            icon: "dialog-question-symbolic".to_owned(),
+            score: 1.0,
+        },
+        activation: Activation::Chat { prompt },
+    })
+}
+
+fn quick_chat_prompt(query: &str) -> Option<String> {
+    let prompt = query.trim().strip_prefix('?')?.trim();
+    (!prompt.is_empty()).then(|| prompt.to_owned())
 }
 
 fn start_index_worker(
@@ -272,9 +322,17 @@ fn index_applications(
     application_launcher: &[String],
 ) -> Vec<IndexedCandidate> {
     let mut applications = BTreeMap::new();
+    let mut walked_entries = 0;
 
     'directories: for directory in directories {
-        for entry in filtered_walk(directory).filter_map(std::result::Result::ok) {
+        for entry in filtered_walk(directory) {
+            walked_entries += 1;
+            if walked_entries > MAX_APPLICATION_WALK_ENTRIES {
+                break 'directories;
+            }
+            let Ok(entry) = entry else {
+                continue;
+            };
             if applications.len() >= MAX_APPLICATION_INDEX_ENTRIES {
                 break 'directories;
             }
@@ -297,7 +355,7 @@ fn index_applications(
             if applications.contains_key(&desktop_id) {
                 continue;
             }
-            let Ok(contents) = fs::read_to_string(path) else {
+            let Some(contents) = read_bounded_text(path, MAX_DESKTOP_FILE_BYTES) else {
                 continue;
             };
             let Some(entry) = parse_desktop_entry(&contents) else {
@@ -406,8 +464,16 @@ fn index_files(roots: &[PathBuf], file_opener: &[String]) -> Vec<IndexedCandidat
     let mut files = BTreeMap::new();
     let mut result_ids = BTreeSet::new();
 
+    let mut walked_entries = 0;
     'roots: for root in roots {
-        for entry in filtered_walk(root).filter_map(std::result::Result::ok) {
+        for entry in filtered_walk(root) {
+            walked_entries += 1;
+            if walked_entries > MAX_FILE_WALK_ENTRIES {
+                break 'roots;
+            }
+            let Ok(entry) = entry else {
+                continue;
+            };
             if files.len() >= MAX_FILE_INDEX_ENTRIES {
                 break 'roots;
             }
@@ -499,10 +565,23 @@ fn query_sqlite_source(
     normalized_query: &str,
     limit: usize,
 ) -> Vec<Candidate> {
+    let Ok(metadata) = fs::metadata(&source.database_path) else {
+        return Vec::new();
+    };
+    if !metadata.is_file() {
+        return Vec::new();
+    }
     let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
     let Ok(connection) = Connection::open_with_flags(&source.database_path, flags) else {
         return Vec::new();
     };
+    let deadline = Instant::now() + SQLITE_QUERY_TIMEOUT;
+    if connection
+        .progress_handler(1_000, Some(move || Instant::now() >= deadline))
+        .is_err()
+    {
+        return Vec::new();
+    }
     let Ok(mut statement) = connection.prepare(&source.query) else {
         return Vec::new();
     };
@@ -520,14 +599,28 @@ fn query_sqlite_source(
         let Ok(Some(row)) = rows.next() else {
             break;
         };
-        let (Ok(result_id), Ok(title)) = (row.get::<_, String>(0), row.get::<_, String>(1)) else {
+        let Some(result_id) = row
+            .get_ref(0)
+            .ok()
+            .and_then(|value| bounded_sqlite_text(value, MAX_RESULT_ID_BYTES))
+        else {
+            continue;
+        };
+        let Some(title) = row
+            .get_ref(1)
+            .ok()
+            .and_then(|value| bounded_sqlite_text(value, MAX_DISPLAY_BYTES))
+        else {
             continue;
         };
         let subtitle = if column_count >= 3 {
-            row.get::<_, Option<String>>(2)
-                .ok()
-                .flatten()
-                .unwrap_or_default()
+            let Ok(value) = row.get_ref(2) else {
+                continue;
+            };
+            let Some(subtitle) = bounded_sqlite_optional_text(value, MAX_DISPLAY_BYTES) else {
+                continue;
+            };
+            subtitle
         } else {
             String::new()
         };
@@ -777,6 +870,33 @@ impl<'a> ArithmeticParser<'a> {
         self.input.get(self.position).copied()
     }
 }
+fn read_bounded_text(path: &Path, max_bytes: u64) -> Option<String> {
+    let mut file = File::open(path).ok()?;
+    let mut contents = String::new();
+    file.by_ref()
+        .take(max_bytes.saturating_add(1))
+        .read_to_string(&mut contents)
+        .ok()?;
+    (contents.len() as u64 <= max_bytes).then_some(contents)
+}
+
+fn bounded_sqlite_text(value: ValueRef<'_>, max_bytes: usize) -> Option<String> {
+    let ValueRef::Text(bytes) = value else {
+        return None;
+    };
+    if bytes.len() > max_bytes {
+        return None;
+    }
+    String::from_utf8(bytes.to_vec()).ok()
+}
+
+fn bounded_sqlite_optional_text(value: ValueRef<'_>, max_bytes: usize) -> Option<String> {
+    if matches!(value, ValueRef::Null) {
+        Some(String::new())
+    } else {
+        bounded_sqlite_text(value, max_bytes)
+    }
+}
 
 fn safe_display_text(value: &str) -> bool {
     value.len() <= MAX_DISPLAY_BYTES && !value.contains('\0')
@@ -785,11 +905,13 @@ fn safe_display_text(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        Activation, Candidate, append_activation, calculation_candidate,
-        desktop_id_from_relative_path, evaluate_calculation, parse_desktop_entry, rank_and_limit,
+        Activation, Candidate, append_activation, bounded_sqlite_optional_text,
+        bounded_sqlite_text, calculation_candidate, desktop_id_from_relative_path,
+        evaluate_calculation, parse_desktop_entry, quick_chat_candidate, rank_and_limit,
         sqlite_activation,
     };
     use crate::protocol::{ProviderResult, ResultKind};
+    use rusqlite::types::ValueRef;
     use std::path::Path;
 
     fn candidate(provider_id: &str, result_id: &str, title: &str, score: f64) -> Candidate {
@@ -805,6 +927,23 @@ mod tests {
             },
             activation: Activation::None,
         }
+    }
+
+    #[test]
+    fn offers_chat_only_for_nonempty_question_prompts() {
+        let candidate = quick_chat_candidate("  ? explain Rust ownership  ").expect("quick chat");
+
+        assert_eq!(candidate.provider_id, "ai");
+        assert_eq!(candidate.result.kind, ResultKind::Chat);
+        assert_eq!(candidate.result.score, 1.0);
+        assert_eq!(
+            candidate.activation,
+            Activation::Chat {
+                prompt: "explain Rust ownership".to_owned(),
+            }
+        );
+        assert!(quick_chat_candidate("explain Rust ownership").is_none());
+        assert!(quick_chat_candidate(" ?   ").is_none());
     }
 
     #[test]
@@ -904,6 +1043,19 @@ mod tests {
                     "org.example.Editor.desktop".to_owned()
                 ],
             }
+        );
+    }
+    #[test]
+    fn bounds_sqlite_text_before_allocating_owned_strings() {
+        assert_eq!(
+            bounded_sqlite_text(ValueRef::Text(b"record-7"), 16),
+            Some("record-7".to_owned())
+        );
+        assert!(bounded_sqlite_text(ValueRef::Text(b"too long"), 3).is_none());
+        assert!(bounded_sqlite_text(ValueRef::Blob(b"record-7"), 16).is_none());
+        assert_eq!(
+            bounded_sqlite_optional_text(ValueRef::Null, 16),
+            Some(String::new())
         );
     }
 }

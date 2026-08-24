@@ -6,13 +6,14 @@
 
 use serde::Serialize;
 use serde_json::{Map, Value};
-use std::fmt;
+use std::{fmt, path::Path, sync::Arc};
 
 pub const PROTOCOL_VERSION: u8 = 1;
 pub const MAX_RECORD_BYTES: usize = 64 * 1024;
 pub const MAX_RESULT_DISPLAY_BYTES: usize = 24 * 1024;
 pub const MAX_PROVIDER_ID_BYTES: usize = 64;
 pub const MAX_QUERY_BYTES: usize = 512;
+pub const MAX_CHAT_RESPONSE_BYTES: usize = 12 * 1024;
 pub const MIN_QUERY_LIMIT: u8 = 1;
 pub const MAX_QUERY_LIMIT: u8 = 50;
 pub const HOST_ID: &str = "bingux-searchd";
@@ -148,9 +149,21 @@ impl ActivateRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CancelRequest {
+    pub request_id: String,
+}
+
+impl CancelRequest {
+    pub fn validate(&self) -> ProtocolResult<()> {
+        validate_request_id(&self.request_id)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShellRequest {
     Query(QueryRequest),
     Activate(ActivateRequest),
+    Cancel(CancelRequest),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -209,7 +222,14 @@ impl ProviderManifest {
     pub fn validate(&self) -> ProtocolResult<()> {
         validate_provider_id(&self.id)
             .map_err(|_| ProtocolError::new(ProtocolErrorKind::InvalidManifest))?;
-        if self.command.is_empty()
+        let Some(program) = self.command.first() else {
+            return Err(ProtocolError::new(ProtocolErrorKind::InvalidManifest));
+        };
+        if !Path::new(program).is_absolute()
+            || self
+                .command
+                .iter()
+                .any(|argument| argument.is_empty() || argument.contains('\0'))
             || self.priority > 1_000
             || self.timeout_ms == 0
             || self.timeout_ms > 10_000
@@ -263,6 +283,10 @@ pub enum DaemonEvent {
     Activated {
         request_id: String,
     },
+    ChatResponse {
+        request_id: String,
+        message: Arc<str>,
+    },
     Error {
         request_id: String,
         code: DaemonErrorCode,
@@ -306,6 +330,13 @@ pub fn parse_shell_request(record: &[u8]) -> ProtocolResult<ShellRequest> {
             };
             request.validate()?;
             Ok(ShellRequest::Activate(request))
+        }
+        "cancel" => {
+            let request = CancelRequest {
+                request_id: required_string(object, "requestId")?.to_owned(),
+            };
+            request.validate()?;
+            Ok(ShellRequest::Cancel(request))
         }
         _ => Err(ProtocolError::new(ProtocolErrorKind::UnknownRecordType)),
     }
@@ -560,6 +591,19 @@ pub fn encode_daemon_event_line(event: &DaemonEvent) -> ProtocolResult<Vec<u8>> 
                 request_id,
             })
         }
+        DaemonEvent::ChatResponse {
+            request_id,
+            message,
+        } => {
+            validate_request_id(request_id)?;
+            validate_chat_response_message(message.as_ref())?;
+            encode_line(&ChatResponseWire {
+                protocol_version: PROTOCOL_VERSION,
+                record_type: "chat-response",
+                request_id,
+                message: message.as_ref(),
+            })
+        }
         DaemonEvent::Error { request_id, code } => {
             validate_request_id(request_id)?;
             encode_line(&DaemonErrorWire {
@@ -750,7 +794,7 @@ fn parse_provider_error_code(value: &str) -> ProtocolResult<ProviderErrorCode> {
 }
 
 fn validate_request_id(value: &str) -> ProtocolResult<()> {
-    if value.len() >= 1
+    if !value.is_empty()
         && value.len() <= 64
         && value
             .bytes()
@@ -780,7 +824,7 @@ fn validate_provider_id(value: &str) -> ProtocolResult<()> {
 }
 
 fn validate_provider_result_id(value: &str) -> ProtocolResult<()> {
-    if value.len() >= 1
+    if !value.is_empty()
         && value.len() <= 128
         && value
             .bytes()
@@ -821,6 +865,17 @@ fn validate_query(value: &str) -> ProtocolResult<()> {
         Ok(())
     } else {
         Err(ProtocolError::new(ProtocolErrorKind::InvalidQuery))
+    }
+}
+
+pub(crate) fn validate_chat_response_message(value: &str) -> ProtocolResult<()> {
+    if !value.is_empty()
+        && value.len() <= MAX_CHAT_RESPONSE_BYTES
+        && !value.chars().any(char::is_control)
+    {
+        Ok(())
+    } else {
+        Err(ProtocolError::new(ProtocolErrorKind::InvalidField))
     }
 }
 
@@ -900,6 +955,16 @@ struct ActivatedWire<'a> {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+struct ChatResponseWire<'a> {
+    protocol_version: u8,
+    #[serde(rename = "type")]
+    record_type: &'static str,
+    request_id: &'a str,
+    message: &'a str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct DaemonErrorWire<'a> {
     protocol_version: u8,
     #[serde(rename = "type")]
@@ -956,6 +1021,20 @@ mod tests {
                 request_id: "q-01".into(),
                 query: "firefox".into(),
                 limit: 20,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_a_valid_shell_cancellation() {
+        let request =
+            parse_shell_request(br#"{"protocolVersion":1,"type":"cancel","requestId":"q-01"}"#)
+                .expect("valid cancellation request");
+
+        assert_eq!(
+            request,
+            ShellRequest::Cancel(CancelRequest {
+                request_id: "q-01".into(),
             })
         );
     }
@@ -1092,6 +1171,29 @@ mod tests {
         .expect_err("manifest identifier and numeric bounds must be validated");
 
         assert_eq!(error.kind(), ProtocolErrorKind::InvalidManifest);
+    }
+    #[test]
+    fn rejects_provider_manifest_commands_that_use_path_lookup() {
+        let error = parse_provider_manifest(
+            br#"{"kind":"bingux.search-provider","protocolVersion":1,"id":"apps","displayName":"Applications","command":["bingux-provider-apps"],"startup":"eager","priority":100,"timeoutMs":20}"#,
+        )
+        .expect_err("provider programs must use absolute paths");
+
+        assert_eq!(error.kind(), ProtocolErrorKind::InvalidManifest);
+    }
+
+    #[test]
+    fn encodes_chat_responses_with_an_opaque_request_id() {
+        let line = encode_daemon_event_line(&DaemonEvent::ChatResponse {
+            request_id: "opaque_client-id_42".into(),
+            message: "Answer".into(),
+        })
+        .expect("valid chat response");
+
+        assert_eq!(
+            line,
+            b"{\"protocolVersion\":1,\"type\":\"chat-response\",\"requestId\":\"opaque_client-id_42\",\"message\":\"Answer\"}\n"
+        );
     }
 
     #[test]

@@ -1,4 +1,6 @@
 use anyhow::{Context, Result, bail};
+
+use crate::ai::validate_endpoint;
 use serde::Deserialize;
 use std::{
     fs,
@@ -8,6 +10,7 @@ use std::{
 const PROTOCOL_VERSION: u32 = 1;
 const MAX_FILE_ROOTS: usize = 32;
 const MAX_PROVIDER_MANIFESTS: usize = 64;
+const MAX_SQLITE_SOURCES: usize = 32;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -79,9 +82,12 @@ impl SearchConfig {
         if self.file_roots.len() > MAX_FILE_ROOTS {
             bail!("search configuration contains too many file roots");
         }
-
         if self.provider_manifest_paths.len() > MAX_PROVIDER_MANIFESTS {
             bail!("search configuration contains too many provider manifests");
+        }
+
+        if self.sqlite_sources.len() > MAX_SQLITE_SOURCES {
+            bail!("search configuration contains too many SQLite sources");
         }
 
         for path in self.file_roots.iter().chain(&self.provider_manifest_paths) {
@@ -123,8 +129,12 @@ impl SqliteSourceConfig {
             bail!("SQLite query must be read-only");
         }
 
-        if query.contains(';') || !query.contains("?1") || !query.contains("?2") {
-            bail!("SQLite query must contain ?1 and ?2 and only one statement");
+        if query.contains(';')
+            || !query.contains("?1")
+            || !query.contains("?2")
+            || !has_result_limit(query)
+        {
+            bail!("SQLite query must contain ?1, LIMIT ?2, and only one statement");
         }
 
         if let Some(program) = self.activation_command.first() {
@@ -162,11 +172,12 @@ impl WeatherConfig {
 
 impl AiConfig {
     fn validate(&self) -> Result<()> {
-        if !self.endpoint.starts_with("https://") {
-            bail!("AI endpoint must use HTTPS");
-        }
+        validate_endpoint(&self.endpoint)?;
 
-        if self.model.trim().is_empty() || self.model.len() > 256 {
+        if self.model.trim().is_empty()
+            || self.model.len() > 256
+            || self.model.chars().any(char::is_control)
+        {
             bail!("AI model is invalid");
         }
 
@@ -202,7 +213,6 @@ fn require_absolute_path(path: &Path, name: &str) -> Result<()> {
 
     Ok(())
 }
-
 fn is_provider_id(value: &str) -> bool {
     let mut previous_hyphen = false;
     let mut saw_character = false;
@@ -227,6 +237,50 @@ enum CommonTableExpressionState {
     AfterAs,
     Body,
     AfterBody,
+}
+
+fn has_result_limit(query: &str) -> bool {
+    let bytes = query.as_bytes();
+    let mut index = 0;
+    while let Some(word) = next_sql_word(bytes, &mut index) {
+        if !word.eq_ignore_ascii_case(b"limit") {
+            continue;
+        }
+
+        let Some(value_index) = skip_sql_trivia(bytes, index) else {
+            continue;
+        };
+        if !bytes
+            .get(value_index..)
+            .is_some_and(|value| value.starts_with(b"?2"))
+        {
+            continue;
+        }
+        let value_end = value_index + 2;
+        if !bytes
+            .get(value_end)
+            .is_some_and(|byte| is_sql_word_continue(*byte))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+fn skip_sql_trivia(bytes: &[u8], mut index: usize) -> Option<usize> {
+    loop {
+        match bytes.get(index) {
+            Some(byte) if byte.is_ascii_whitespace() => index += 1,
+            Some(b'-') if bytes.get(index + 1) == Some(&b'-') => {
+                index = skip_line_comment(bytes, index + 2);
+            }
+            Some(b'/') if bytes.get(index + 1) == Some(&b'*') => {
+                index = skip_block_comment(bytes, index + 2)?;
+            }
+            Some(_) => return Some(index),
+            None => return Some(index),
+        }
+    }
 }
 
 fn is_read_only_sqlite_query(query: &str) -> bool {
@@ -449,6 +503,32 @@ mod tests {
     #[test]
     fn accepts_a_valid_profile_configuration() {
         assert!(valid_config().validate().is_ok());
+    }
+    #[test]
+    fn rejects_a_sqlite_query_without_a_result_limit() {
+        let mut config = valid_config();
+        config.sqlite_sources[0].query =
+            "SELECT id, title, body FROM note WHERE title LIKE ?1".to_owned();
+
+        assert!(config.validate().is_err());
+    }
+    #[test]
+    fn rejects_a_sqlite_query_with_limit_text_only_in_a_comment() {
+        let mut config = valid_config();
+        config.sqlite_sources[0].query =
+            "SELECT id, title, body FROM note WHERE title LIKE ?1 /* LIMIT ?2 */".to_owned();
+
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn accepts_a_sqlite_query_with_comments_before_the_result_limit() {
+        let mut config = valid_config();
+        config.sqlite_sources[0].query =
+            "SELECT id, title, body FROM note WHERE title LIKE ?1 LIMIT /* bounded */ ?2"
+                .to_owned();
+
+        assert!(config.validate().is_ok());
     }
 
     #[test]

@@ -20,11 +20,13 @@ rustPlatform.buildRustPackage {
 
     postFixup = ''
         wrapProgram "$out/bin/bingux-searchd" \
-            --prefix PATH : ${lib.makeBinPath [
-                glib
-                ripgrep
-                wl-clipboard
-            ]}
+            --prefix PATH : ${
+                lib.makeBinPath [
+                    glib
+                    ripgrep
+                    wl-clipboard
+                ]
+            }
     '';
 
     meta = {
