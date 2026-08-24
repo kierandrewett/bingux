@@ -45,6 +45,20 @@ A profile that selects Gnoblin needs these stable integration points:
 - Gnoblin implements `zwlr_layer_shell_v1` for externally owned layer-shell surfaces.
 - Gnoblin implements `zwlr_foreign_toplevel_manager_v1` so an external dock can list and control application windows.
 - Gnoblin must not own the notification or on-screen-display user interface for this session. Bingux provides those surfaces when the profile selects its desktop shell.
+- Gnoblin sets `hasNotifications` to `false` for the Bingux session mode. This
+  removes native MessageTray banners but leaves the notification backend and
+  portal support available to an external notification service.
+- Gnoblin emits `org.gnoblin.Shell.OsdRequested` on
+  `/org/gnoblin/Shell` when its master OSD feature or a matching `osd-*`
+  feature suppresses a native OSD request. Its `(uissddas)` payload is
+  `[protocolVersion, monitorIndex, icon, label, level, maxLevel, outputNames]`.
+  Bingux supports protocol version `2` only. `outputNames` identifies the
+  physical Mutter connectors in the target logical monitor. Gnoblin logs and
+  drops a suppressed OSD that has no usable handoff. It does not restore native
+  OSD ownership after a failed handoff. When Gnoblin renders an OSD itself, it
+  emits no handoff signal.
+  `bingux-statusd` validates the signal and forwards it through the local OSD
+  socket. The QML process does not subscribe to the D-Bus interface directly.
 - Gnoblin emits `org.gnoblin.Shell.SuperReleased` on `/org/gnoblin/Shell`
   after Super is released with no other input. Its `(ut)` payload is
   `[protocolVersion, monotonicUsec]`. Bingux supports protocol version `1`

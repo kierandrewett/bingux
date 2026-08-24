@@ -53,6 +53,72 @@ directory has mode `0700`, and the socket has mode `0600`.
 must retain a received sample for no more than three seconds. It must then show the metric as unavailable while it
 reconnects with bounded backoff. A metrics failure must not stop the top bar, tray, or search interface.
 
+## OSD socket protocol v2
+
+Gnoblin emits a standard on-screen-display request only when its native OSD is
+disabled for the session or for that OSD type. `bingux-statusd` is the sole
+consumer of this D-Bus signal. It validates the request and publishes one
+newline-delimited UTF-8 JSON record to
+`$XDG_RUNTIME_DIR/bingux/osd-v2.sock`.
+
+OSD records are transient. The daemon does not cache them. A new socket client
+receives only requests that arrive after its connection. The socket directory
+has mode `0700`, and the socket has mode `0600`.
+
+```json
+{
+  "protocolVersion": 2,
+  "type": "osd",
+  "monitorIndex": 0,
+  "outputNames": ["DP-1"],
+  "icon": "audio-volume-high-symbolic",
+  "label": "Volume",
+  "level": 0.75,
+  "maxLevel": 1
+}
+```
+
+`monitorIndex` identifies the request that a later OSD replaces. The shell must
+not use it to select a screen. `outputNames` is a non-empty list of the physical
+Mutter connector names in the logical monitor. It has at most 16 unique names.
+Each name has at most 128 UTF-8 bytes, the total is at most 1024 bytes, and no
+name contains a control character. Quickshell exposes the same connector as a
+`ShellScreen.name`, so the shell renders the request on every matching screen
+and must not fall back to a positional screen index.
+
+`icon` is a themed icon name or an empty string. `icon` has at most 256 UTF-8
+bytes. `label` has at most 2048 UTF-8 bytes. Neither string contains a control
+character. `level` and `maxLevel` are finite values no less than `-1`. The shell
+shows the level bar only when `maxLevel` is greater than zero and `level` is
+non-negative. It clamps the displayed percentage to 100.
+
+The shell keeps one request per monitor and replaces it when the next request
+for that monitor arrives. It expires every request after 1.5 seconds, including
+a request whose output is not currently connected. The OSD surface has no
+keyboard focus and an empty pointer region. It cannot block an application
+input event.
+
+## Notification ownership
+
+Gnoblin disables its MessageTray UI in a Bingux session. The Bingux Quickshell
+process owns the desktop-notification service. It supports plain-text body
+content and notification actions. It does not advertise markup, hyperlinks,
+images, inline replies, action icons, or persistence because this shell does
+not yet provide a notification centre.
+
+The shell shows at most three notification cards at one time. It queues at most
+32 later notifications and observes the notification expiry time while queued.
+It uses a five-second default for an application timeout of `-1` and limits a
+positive application timeout to 30 seconds. A timeout of `0` remains until an
+application closes it or the user dismisses it. A full queue expires the newly
+received notification.
+
+When an application replaces a notification ID, the shell keeps the card in its
+current visible or queued position and calculates a new expiry from the
+replacement timeout.
+Notification cards do not request keyboard focus. Their pointer mask contains
+only the visible card stack.
+
 ## Desktop UI rules
 
 - The top bar is a top-layer surface with a positive exclusive zone.
@@ -165,11 +231,17 @@ An error record is:
   "type": "error",
   "requestId": "q-01",
   "code": "invalid-request",
-  "message": "query must contain at most 512 bytes"
+  "message": "request is invalid"
 }
 ```
 
 Valid codes are `invalid-request`, `unsupported-protocol`, `unavailable`, `provider-failed`, and `unknown-result`. Error messages must not include a command line, secret, or stack trace.
+
+For a rejected record with a valid `requestId`, the daemon returns that identifier. If it cannot
+parse a valid identifier, it returns `requestId: "protocol-error"`. Clients must treat that value
+as a connection-level protocol error, not as a response to an application request. The daemon
+continues after a rejected complete record. It sends this error and closes the connection after an
+invalid or oversized transport record.
 
 ## Search-provider contract v1
 
@@ -297,4 +369,6 @@ Version 1 records contain `protocolVersion: 1`. New optional fields can be added
 - Quickshell foreign toplevels: <https://quickshell.org/docs/v0.3.0/types/Quickshell.Wayland/ToplevelManager/>
 - Quickshell StatusNotifierItem support: <https://quickshell.org/docs/v0.3.0/types/Quickshell.Services.SystemTray/SystemTrayItem/>
 - Quickshell notification server: <https://quickshell.org/docs/v0.3.0/types/Quickshell.Services.Notifications/NotificationServer/>
+- Quickshell notification lifetime and action API: <https://quickshell.org/docs/v0.3.0/types/Quickshell.Services.Notifications/Notification/>
+- Quickshell layer-shell pointer masks: <https://quickshell.org/docs/v0.3.0/types/Quickshell/QsWindow/>
 - Gnoblin interface source: `~/dev/gnoblin/src/gnome-shell-overlay/js/ui/components/gnoblinControl.js`
