@@ -70,6 +70,20 @@
                 profile = "generic";
                 modules = [ ./hosts/vm ];
             };
+            nixosConfigurations.bingux-pve-vm = mkHost {
+                system = "x86_64-linux";
+                hostName = "bingux-pve-vm";
+                profile = "generic";
+                modules = [ ./hosts/pve-vm.nix ];
+            };
+
+            nixosConfigurations.bingux-kieran-pve-vm = mkHost {
+                system = "x86_64-linux";
+                hostName = "bingux-kieran-pve-vm";
+                profile = "kieran";
+                modules = [ ./hosts/pve-vm.nix ];
+            };
+
 
             nixosConfigurations.bingux-kieran-vm = mkHost {
                 system = "x86_64-linux";
