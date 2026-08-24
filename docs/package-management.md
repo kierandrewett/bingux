@@ -14,13 +14,31 @@ unmanaged or transient software into permanent profile state. Safe declaration
 generation requires provenance, such as explicit ownership and source/origin
 metadata, in addition to package name and version.
 
+Run the inventory command from the repository root:
+
+```sh
+nix run .#bingux-inventory -- --pretty --output "$HOME/.local/state/bingux/inventory.json"
+```
+
+The command does not use the network. It writes a JSON document atomically when
+`--output` is used. The document has `schemaVersion` and a `sources` object.
+Sources include the available RPM or DNF, Flatpak, Cargo, pipx, npm, Bun, and Nix
+profile collectors. A missing package manager is omitted from `sources`. A
+write failure returns a non-zero status.
+
 ## Permanent packages
 
 Use `bingux.packages.system` when a program is needed by system services,
 administrators, or every user. Use `bingux.packages.user` for a profile user's
 desktop and command-line applications.
 
-For example, add a package to `profiles/kieran/default.nix`:
+The Kieran profile currently places Rust, C++, TypeScript, container, source-control,
+terminal, and related workstation tooling in `bingux.packages.system`. Its graphical
+workstation applications are in `bingux.packages.user`. Both options are list options;
+a package declaration in a profile is merged with existing list definitions rather
+than replacing the list.
+
+For example, append a user package in `profiles/kieran/default.nix`:
 
 ```nix
 bingux.packages.user = with pkgs; [

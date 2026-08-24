@@ -73,15 +73,9 @@ in
                     assertion =
                         let
                             remoteNames = map (remote: remote.name) cfg.flatpaks.remotes;
-                            allowedOrigins =
-                                if cfg.flatpaks.remotes == [ ] then
-                                    [ "flathub" ]
-                                else
-                                    remoteNames;
+                            allowedOrigins = if cfg.flatpaks.remotes == [ ] then [ "flathub" ] else remoteNames;
                         in
-                        builtins.all (
-                            app: builtins.elem app.origin allowedOrigins
-                        ) cfg.flatpaks.apps;
+                        builtins.all (app: builtins.elem app.origin allowedOrigins) cfg.flatpaks.apps;
                     message = "Every declared Flatpak origin must be flathub when no custom remotes are declared, or match a declared remote name.";
                 }
             ];

@@ -1,11 +1,5 @@
 {
     description = "Bingux: a profile-driven NixOS configuration framework";
-    # Keep the upstream CachyOS binary cache available during first builds.
-    # Nix asks the caller to accept this flake configuration.
-    nixConfig = {
-        extra-substituters = [ "https://attic.xuyh0120.win/lantian" ];
-        extra-trusted-public-keys = [ "lantian:EeAUQ+W+6r7EtwnmYjeVwx5kOGEBpjlBfPlzGlTNvHc=" ];
-    };
 
     inputs = {
         nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -26,11 +20,6 @@
 
         nix-cachyos-kernel.url = "github:xddxdd/nix-cachyos-kernel/release";
 
-        nixos-generators = {
-            url = "github:nix-community/nixos-generators";
-            inputs.nixpkgs.follows = "nixpkgs";
-        };
-
         # Gnoblin pairs its pinned Mutter and GNOME Shell sources with this
         # matching Nixpkgs revision. It must not follow Bingux's rolling input.
         gnoblin.url = "github:kierandrewett/gnoblin";
@@ -48,10 +37,25 @@
                 "aarch64-linux"
             ];
             forAllSystems = nixpkgs.lib.genAttrs systems;
-            mkHost = import ./lib/mk-host.nix { inherit inputs self; };
+            host = import ./lib/mk-host.nix { inherit inputs self; };
+            inherit (host) mkHost mkHostModules;
+
+
+            mkInstallerImage =
+                {
+                    hostName,
+                    profile,
+                }:
+                (mkHost {
+                    system = "x86_64-linux";
+                    inherit hostName profile;
+                    modules = [ ./hosts/iso ];
+                }).config.system.build.images.bingux-installer;
         in
         {
-            lib.mkHost = mkHost;
+            lib = {
+                inherit mkHost mkHostModules;
+            };
 
             nixosModules.default = {
                 imports = [
@@ -74,6 +78,7 @@
                 modules = [ ./hosts/vm ];
             };
 
+
             packages = forAllSystems (
                 system:
                 let
@@ -82,18 +87,32 @@
                 {
                     bingux-statusd = pkgs.callPackage ./packages/bingux-statusd { };
                     bingux-searchd = pkgs.callPackage ./packages/bingux-searchd { };
+                    bingux-inventory = pkgs.callPackage ./packages/bingux-inventory { };
+                }
+                // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
+                    bingux-generic-install-iso = mkInstallerImage {
+                        hostName = "bingux-install";
+                        profile = "generic";
+                    };
+
+                    bingux-kieran-install-iso = mkInstallerImage {
+                        hostName = "bingux-kieran-install";
+                        profile = "kieran";
+                    };
                 }
             );
 
+
             checks = forAllSystems (
                 system:
-                {
+                nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
                     desktop-shell-module = import ./tests/desktop-shell-module.nix {
                         inherit inputs self system;
                     };
-                }
-                // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
                     kieran-profile = import ./tests/kieran-profile.nix {
+                        inherit inputs self system;
+                    };
+                    installer-image = import ./tests/installer-image.nix {
                         inherit inputs self system;
                     };
                 }

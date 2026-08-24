@@ -1,6 +1,7 @@
 {
     config,
     lib,
+    pkgs,
     ...
 }:
 let
@@ -14,6 +15,10 @@ in
             {
                 assertion = config.bingux.desktop.enable;
                 message = "bingux.desktop.gnoblin requires bingux.desktop.enable";
+            }
+            {
+                assertion = pkgs.stdenv.hostPlatform.system == "x86_64-linux";
+                message = "bingux.desktop.gnoblin currently supports x86_64-linux only";
             }
         ];
 
