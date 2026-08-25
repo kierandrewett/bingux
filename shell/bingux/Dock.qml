@@ -8,6 +8,7 @@ PanelWindow {
 
     required property var settings
     property var appGroups: []
+    property string pendingLaunchGroupId: ""
 
     function normaliseAppId(appId) {
         if (!appId || appId.length === 0)
@@ -18,7 +19,14 @@ PanelWindow {
 
     function desktopEntryFor(appId) {
         const exactEntry = DesktopEntries.byId(appId);
-        return exactEntry ? exactEntry : DesktopEntries.heuristicLookup(appId);
+        if (exactEntry)
+            return exactEntry;
+
+        const suffixedEntry = DesktopEntries.byId(appId + ".desktop");
+        if (suffixedEntry)
+            return suffixedEntry;
+
+        return DesktopEntries.heuristicLookup(appId);
     }
     function menuLabel(value, fallback) {
         const text = typeof value === "string" && value.length > 0 ? value : fallback;
@@ -34,13 +42,19 @@ PanelWindow {
             if (normalisedAppId.length === 0 && fallbackId.length === 0)
                 return -1;
 
-            const groupId = normalisedAppId.length > 0 ? normalisedAppId : fallbackId;
-            if (groupIndexes[groupId] !== undefined)
+            const desktopEntry = normalisedAppId.length > 0 ? root.desktopEntryFor(normalisedAppId) : null;
+            const desktopEntryIdentity = desktopEntry ? root.normaliseAppId(desktopEntry.startupClass || desktopEntry.id) : "";
+            const groupId = desktopEntryIdentity.length > 0 ? desktopEntryIdentity : normalisedAppId.length > 0 ? normalisedAppId : fallbackId;
+            if (groupIndexes[groupId] !== undefined) {
+                const existingGroup = groups[groupIndexes[groupId]];
+                if (!existingGroup.desktopEntry && desktopEntry)
+                    existingGroup.desktopEntry = desktopEntry;
                 return groupIndexes[groupId];
+            }
 
             const group = {
                 "id": groupId,
-                "desktopEntry": normalisedAppId.length > 0 ? root.desktopEntryFor(normalisedAppId) : null,
+                "desktopEntry": desktopEntry,
                 "windows": []
             };
             groupIndexes[groupId] = groups.length;
@@ -53,7 +67,8 @@ PanelWindow {
         }
         for (let index = 0; index < toplevels.length; index++) {
             const toplevel = toplevels[index];
-            const fallbackId = "toplevel-" + index;
+            const hasAppId = typeof toplevel.appId === "string" && toplevel.appId.length > 0;
+            const fallbackId = !hasAppId && root.pendingLaunchGroupId.length > 0 ? root.pendingLaunchGroupId : "toplevel-" + index;
             const groupIndex = addGroup(toplevel.appId, fallbackId);
             groups[groupIndex].windows.push(toplevel);
         }
@@ -61,9 +76,12 @@ PanelWindow {
     }
 
     function launch(group) {
-        if (group.desktopEntry)
-            group.desktopEntry.execute();
+        if (!group.desktopEntry)
+            return ;
 
+        root.pendingLaunchGroupId = group.id;
+        pendingLaunchTimer.restart();
+        group.desktopEntry.execute();
     }
 
     function activeWindow(group) {
@@ -106,6 +124,13 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "bingux-dock"
     Component.onCompleted: root.refreshAppGroups()
+    Timer {
+        id: pendingLaunchTimer
+
+        interval: 3000
+        repeat: false
+        onTriggered: root.pendingLaunchGroupId = ""
+    }
 
     anchors {
         bottom: true
