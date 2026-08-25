@@ -7,6 +7,7 @@
 }:
 let
     cfg = config.bingux.performance;
+    hostSystem = pkgs.stdenv.hostPlatform.system;
 
     cachyosPackageSets = {
         cachyos-latest = "linuxPackages-cachyos-latest";
@@ -23,7 +24,12 @@ let
         xanmod-stable = pkgs.linuxPackages_xanmod_stable;
     };
 
+    kernelChoices =
+        [ "nixpkgs" ]
+        ++ builtins.attrNames nixpkgsPackageSets
+        ++ builtins.attrNames cachyosPackageSets;
     isCachyosKernel = builtins.hasAttr cfg.kernel cachyosPackageSets;
+    usesX86_64V3 = cfg.kernel == "cachyos-bore-lto-x86_64-v3";
     selectedKernelPackages =
         if isCachyosKernel then
             lib.attrByPath [
@@ -40,11 +46,15 @@ in
         enable = lib.mkEnableOption "the Bingux workstation performance profile";
 
         kernel = lib.mkOption {
-            type = lib.types.enum (
-                [ "nixpkgs" ] ++ builtins.attrNames nixpkgsPackageSets ++ builtins.attrNames cachyosPackageSets
-            );
+            type = lib.types.enum kernelChoices;
             default = "nixpkgs";
             description = "The kernel package set. Zen and XanMod come from Nixpkgs; CachyOS selections use its pinned upstream overlay.";
+        };
+
+        allowX86_64V3 = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Allow selecting a CachyOS kernel that requires x86-64-v3 CPU features.";
         };
 
         cpuGovernor = lib.mkOption {
@@ -76,6 +86,18 @@ in
     };
 
     config = lib.mkMerge [
+        {
+            assertions = [
+                {
+                    assertion = !usesX86_64V3 || cfg.allowX86_64V3;
+                    message = "The x86-64-v3 CachyOS kernel requires bingux.performance.allowX86_64V3 = true.";
+                }
+                {
+                    assertion = !cfg.enableAmdPstate || hostSystem == "x86_64-linux";
+                    message = "bingux.performance.enableAmdPstate is only supported on x86_64-linux hosts.";
+                }
+            ];
+        }
         (lib.mkIf isCachyosKernel {
             nixpkgs.overlays = [ inputs.nix-cachyos-kernel.overlays.pinned ];
             nix.settings = {

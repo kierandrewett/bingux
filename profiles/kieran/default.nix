@@ -124,6 +124,7 @@ in
         performance = {
             enable = true;
             kernel = "cachyos-bore-lto-x86_64-v3";
+            allowX86_64V3 = true;
             cpuGovernor = "performance";
             enableAmdPstate = true;
         };

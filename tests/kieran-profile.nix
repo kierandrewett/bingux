@@ -31,6 +31,8 @@ assert host.config.bingux.networking.tailscale.enable;
 assert host.config.services.tailscale.enable;
 assert host.config.programs.dconf.enable;
 assert builtins.elem "wheel" host.config.users.users.kieran.extraGroups;
+assert host.config.bingux.performance.kernel == "cachyos-bore-lto-x86_64-v3";
+assert host.config.bingux.performance.allowX86_64V3;
 assert inputSources.type == "a(ss)";
 assert
     builtins.map (source: builtins.map (entry: entry.value) source.value) inputSources.value == [
