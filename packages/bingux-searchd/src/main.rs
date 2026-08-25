@@ -1942,8 +1942,15 @@ mod tests {
 
     #[test]
     fn copies_clipboard_text_and_reaps_the_helper() {
-        copy_to_clipboard(&["/bin/cat".to_owned()], "copied text")
-            .expect("clipboard helper should receive and close stdin");
+        copy_to_clipboard(
+            &[
+                "/bin/sh".to_owned(),
+                "-c".to_owned(),
+                "IFS=; read -r value; [ \"$value\" = \"copied text\" ]".to_owned(),
+            ],
+            "copied text",
+        )
+        .expect("clipboard helper should receive and close stdin");
     }
 
     #[test]
