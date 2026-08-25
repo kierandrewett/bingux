@@ -31,8 +31,8 @@ Item {
                 height: 24
 
                 function showMenu(mouse) {
-                    const position = trayButton.mapToItem(root.parentWindow.contentItem, mouse.x, mouse.y);
-                    modelData.display(root.parentWindow, position.x, position.y);
+                    const position = trayButton.mapToItem(null, mouse.x, mouse.y);
+                    modelData.display(root.parentWindow, Math.round(position.x), Math.round(position.y));
                 }
 
                 IconImage {
