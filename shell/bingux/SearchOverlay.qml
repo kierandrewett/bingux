@@ -69,6 +69,17 @@ PanelWindow {
 
     }
 
+    function focusSearchInput() {
+        if (!visible)
+            return ;
+
+        searchInput.forceActiveFocus();
+        Qt.callLater(function() {
+            if (root.visible)
+                searchInput.forceActiveFocus();
+        });
+    }
+
     function showSearch() {
         if (!visible) {
             activeRequestId = "";
@@ -80,7 +91,7 @@ PanelWindow {
             searchInput.text = "";
             visible = true;
         }
-        searchInput.forceActiveFocus();
+        focusSearchInput();
     }
 
     function closeSearch() {
@@ -287,8 +298,7 @@ PanelWindow {
     WlrLayershell.keyboardFocus: root.visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     onVisibleChanged: {
         if (visible)
-            searchInput.forceActiveFocus();
-
+            focusSearchInput();
     }
 
     anchors {
