@@ -452,8 +452,14 @@ pub fn parse_provider_response(record: &[u8]) -> ProtocolResult<ProviderResponse
             let query_id = required_string(object, "queryId")?.to_owned();
             validate_request_id(&query_id)?;
             let complete = required_bool(object, "complete")?;
-            let results = required_array(object, "results")
-                .and_then(|entries| entries.iter().map(parse_provider_result).collect())?;
+            let entries = required_array(object, "results")?;
+            if entries.len() > usize::from(MAX_QUERY_LIMIT) {
+                return Err(ProtocolError::new(ProtocolErrorKind::InvalidResult));
+            }
+            let results = entries
+                .iter()
+                .map(parse_provider_result)
+                .collect::<ProtocolResult<Vec<_>>>()?;
             Ok(ProviderResponse::Results {
                 query_id,
                 complete,
@@ -923,7 +929,11 @@ fn validate_opaque_result_id(value: &str) -> ProtocolResult<()> {
 }
 
 fn validate_query(value: &str) -> ProtocolResult<()> {
-    if value.len() <= MAX_QUERY_BYTES {
+    if !value.is_empty()
+        && !value.trim().is_empty()
+        && value.len() <= MAX_QUERY_BYTES
+        && !value.chars().any(char::is_control)
+    {
         Ok(())
     } else {
         Err(ProtocolError::new(ProtocolErrorKind::InvalidQuery))
@@ -1134,6 +1144,22 @@ mod tests {
     }
 
     #[test]
+    fn rejects_empty_whitespace_and_control_character_queries() {
+        for query in ["", "   ", "\u{0001}"] {
+            let record = serde_json::json!({
+                "protocolVersion": 1,
+                "type": "query",
+                "requestId": "q-01",
+                "query": query,
+                "limit": 20,
+            });
+            let error = parse_shell_request(record.to_string().as_bytes())
+                .expect_err("invalid query text must fail");
+            assert_eq!(error.kind(), ProtocolErrorKind::InvalidQuery);
+        }
+    }
+
+    #[test]
     fn rejects_query_limits_outside_the_contract_range() {
         for limit in ["0", "51", "1.5"] {
             let record = format!(
@@ -1321,6 +1347,26 @@ mod tests {
 
         let error = parse_provider_response(record.as_bytes())
             .expect_err("oversized display text must not enter the daemon");
+
+        assert_eq!(error.kind(), ProtocolErrorKind::InvalidResult);
+    }
+
+    #[test]
+    fn rejects_provider_result_batches_over_the_query_limit() {
+        let results = (0..=MAX_QUERY_LIMIT)
+            .map(|index| {
+                format!(
+                    r#"{{"resultId":"result-{index}","kind":"action","title":"Result {index}","subtitle":"","icon":"","score":1}}"#
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        let record = format!(
+            r#"{{"protocolVersion":1,"type":"results","queryId":"q-01","complete":true,"results":[{results}]}}"#
+        );
+
+        let error = parse_provider_response(record.as_bytes())
+            .expect_err("provider result batches must honor the query limit");
 
         assert_eq!(error.kind(), ProtocolErrorKind::InvalidResult);
     }

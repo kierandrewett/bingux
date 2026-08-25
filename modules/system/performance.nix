@@ -1,5 +1,6 @@
 {
     config,
+    hostSystem,
     inputs,
     lib,
     pkgs,
@@ -7,9 +8,9 @@
 }:
 let
     cfg = config.bingux.performance;
-    hostSystem = pkgs.stdenv.hostPlatform.system;
+    isX86_64 = hostSystem == "x86_64-linux";
 
-    cachyosPackageSets = {
+    cachyosPackageSets = lib.optionalAttrs isX86_64 {
         cachyos-latest = "linuxPackages-cachyos-latest";
         cachyos-latest-lto = "linuxPackages-cachyos-latest-lto";
         cachyos-bore = "linuxPackages-cachyos-bore";
@@ -17,7 +18,7 @@ let
         cachyos-bore-lto-x86_64-v3 = "linuxPackages-cachyos-bore-lto-x86_64-v3";
     };
 
-    nixpkgsPackageSets = {
+    nixpkgsPackageSets = lib.optionalAttrs isX86_64 {
         zen = pkgs.linuxPackages_zen;
         xanmod = pkgs.linuxPackages_xanmod;
         xanmod-latest = pkgs.linuxPackages_xanmod_latest;
@@ -111,7 +112,6 @@ in
         })
 
         (lib.mkIf cfg.enable {
-            hardware.cpu.amd.updateMicrocode = lib.mkDefault true;
             powerManagement.cpuFreqGovernor = cfg.cpuGovernor;
             services.irqbalance.enable = true;
 
@@ -130,9 +130,14 @@ in
             };
         })
 
-        (lib.mkIf cfg.enableAmdPstate {
+        (lib.mkIf (cfg.enable && isX86_64) {
+            hardware.cpu.amd.updateMicrocode = lib.mkDefault true;
+        })
+
+        (lib.mkIf (cfg.enableAmdPstate && isX86_64) {
             boot.kernelParams = [ "amd_pstate=active" ];
         })
+
 
         (lib.mkIf cfg.disableCpuMitigations {
             boot.kernelParams = [ "mitigations=off" ];

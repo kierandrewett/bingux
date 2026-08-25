@@ -110,7 +110,12 @@ in
             services.flatpak = {
                 enable = true;
                 packages = map (app: {
-                    inherit (app) appId origin flatpakref sha256;
+                    inherit (app)
+                        appId
+                        origin
+                        flatpakref
+                        sha256
+                        ;
                 }) cfg.flatpaks.apps;
             };
         })

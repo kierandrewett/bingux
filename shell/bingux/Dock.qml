@@ -8,7 +8,9 @@ PanelWindow {
 
     required property var settings
     property var appGroups: []
+    property var emptyAppIdGroupAssociations: []
     property string pendingLaunchGroupId: ""
+    property var pendingLaunchToplevel: null
 
     function normaliseAppId(appId) {
         if (!appId || appId.length === 0)
@@ -31,6 +33,68 @@ PanelWindow {
     function menuLabel(value, fallback) {
         const text = typeof value === "string" && value.length > 0 ? value : fallback;
         return text.slice(0, 256);
+    }
+
+    function associatedGroupIdFor(toplevel) {
+        const associations = root.emptyAppIdGroupAssociations;
+        for (let index = 0; index < associations.length; index++) {
+            const association = associations[index];
+            if (association.toplevel === toplevel)
+                return association.groupId;
+
+        }
+        return "";
+    }
+
+    function toplevelGroupId(toplevel) {
+        const appId = toplevel && typeof toplevel.appId === "string" ? toplevel.appId : "";
+        const normalisedAppId = root.normaliseAppId(appId);
+
+        const desktopEntry = root.desktopEntryFor(normalisedAppId);
+        const desktopEntryIdentity = desktopEntry ? root.normaliseAppId(desktopEntry.startupClass || desktopEntry.id) : "";
+        return desktopEntryIdentity.length > 0 ? desktopEntryIdentity : normalisedAppId;
+    }
+
+    function associatePendingLaunchToplevel(toplevel) {
+        const toplevelGroupId = root.toplevelGroupId(toplevel);
+        if (!toplevel || root.pendingLaunchGroupId.length === 0)
+            return;
+
+        if (toplevelGroupId.length > 0) {
+            if (toplevelGroupId !== root.pendingLaunchGroupId)
+                return;
+
+            if (root.pendingLaunchToplevel) {
+                root.removeToplevelAssociation(root.pendingLaunchToplevel);
+                root.pendingLaunchToplevel = null;
+            }
+            root.pendingLaunchGroupId = "";
+            pendingLaunchTimer.stop();
+            return;
+        }
+
+        if (root.pendingLaunchToplevel || root.associatedGroupIdFor(toplevel).length > 0)
+            return;
+
+        const groupId = root.pendingLaunchGroupId;
+        const associations = root.emptyAppIdGroupAssociations.slice();
+        associations.push({
+            "toplevel": toplevel,
+            "groupId": groupId
+        });
+        root.emptyAppIdGroupAssociations = associations;
+        root.pendingLaunchToplevel = toplevel;
+    }
+
+    function removeToplevelAssociation(toplevel) {
+        const associations = [];
+        const currentAssociations = root.emptyAppIdGroupAssociations;
+        for (let index = 0; index < currentAssociations.length; index++) {
+            if (currentAssociations[index].toplevel !== toplevel)
+                associations.push(currentAssociations[index]);
+
+        }
+        root.emptyAppIdGroupAssociations = associations;
     }
 
     function refreshAppGroups() {
@@ -68,7 +132,8 @@ PanelWindow {
         for (let index = 0; index < toplevels.length; index++) {
             const toplevel = toplevels[index];
             const hasAppId = typeof toplevel.appId === "string" && toplevel.appId.length > 0;
-            const fallbackId = !hasAppId && root.pendingLaunchGroupId.length > 0 ? root.pendingLaunchGroupId : "toplevel-" + index;
+            const associatedGroupId = root.associatedGroupIdFor(toplevel);
+            const fallbackId = !hasAppId && associatedGroupId.length > 0 ? associatedGroupId : "toplevel-" + index;
             const groupIndex = addGroup(toplevel.appId, fallbackId);
             groups[groupIndex].windows.push(toplevel);
         }
@@ -79,6 +144,10 @@ PanelWindow {
         if (!group.desktopEntry)
             return ;
 
+        if (root.pendingLaunchToplevel) {
+            root.removeToplevelAssociation(root.pendingLaunchToplevel);
+            root.pendingLaunchToplevel = null;
+        }
         root.pendingLaunchGroupId = group.id;
         pendingLaunchTimer.restart();
         group.desktopEntry.execute();
@@ -129,7 +198,14 @@ PanelWindow {
 
         interval: 3000
         repeat: false
-        onTriggered: root.pendingLaunchGroupId = ""
+        onTriggered: {
+            if (root.pendingLaunchToplevel) {
+                root.removeToplevelAssociation(root.pendingLaunchToplevel);
+                root.pendingLaunchToplevel = null;
+            }
+            root.pendingLaunchGroupId = "";
+            root.refreshAppGroups();
+        }
     }
 
     anchors {
@@ -355,11 +431,18 @@ PanelWindow {
     }
 
     Connections {
-        function onObjectInsertedPost() {
+        function onObjectInsertedPost(object, index) {
+            root.associatePendingLaunchToplevel(object);
             root.refreshAppGroups();
         }
 
-        function onObjectRemovedPost() {
+        function onObjectRemovedPost(object, index) {
+            root.removeToplevelAssociation(object);
+            if (root.pendingLaunchToplevel === object) {
+                root.pendingLaunchToplevel = null;
+                root.pendingLaunchGroupId = "";
+                pendingLaunchTimer.stop();
+            }
             root.refreshAppGroups();
         }
 

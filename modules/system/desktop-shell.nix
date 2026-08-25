@@ -274,7 +274,6 @@ in
             # active when the top-bar metric display is disabled, otherwise Gnoblin
             # native OSD is disabled without a Bingux replacement.
 
-
             # Both daemons use the same runtime directory. A dedicated unit
             # owns its lifecycle so a daemon restart cannot remove the other
             # daemon's socket.

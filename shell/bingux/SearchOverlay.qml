@@ -138,7 +138,7 @@ PanelWindow {
             return ;
 
         if (!searchSocket.isValidQuery(query)) {
-            queryError = "Search text is too long.";
+            queryError = query.trim() === "" ? "Enter search text." : "Search text is invalid.";
             return ;
         }
         if (!serviceReady)

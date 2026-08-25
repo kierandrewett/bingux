@@ -12,6 +12,7 @@ Bingux is a NixOS configuration framework. It provides reusable system modules a
 | Profile | `profiles/<name>/` | Selects personal software, user data, secrets, and optional desktop integration. |
 
 `lib/mk-host.nix` imports the generic modules, then one selected profile, then host-specific modules. The selected profile is the user-specific NixOS module boundary: it can set the supported `bingux.*` options and supported NixOS or Home Manager options needed by that profile. Host modules must not contain personal configuration.
+`mkHost` also passes the target system to generic modules as the `hostSystem` special argument. This keeps hardware-specific performance defaults evaluable for cross-architecture checks without deriving the target from an overlay-dependent package set. Direct `nixosSystem` users that import `nixosModules.default` must pass the same `hostSystem` value in `specialArgs`.
 
 ## Selection rules
 
@@ -26,6 +27,7 @@ desktop base.
 
 ## Kernel and performance policy
 
+The alternative kernel choices and AMD active P-state setting are restricted to x86_64 hosts. Generic aarch64 evaluation keeps the Nixpkgs kernel and does not add AMD microcode or P-state settings.
 `modules/system/performance.nix` supports Nixpkgs Zen and XanMod package sets plus pinned CachyOS BORE variants. The default remains the Nixpkgs kernel. The user must select another package set in a profile or host.
 
 CPU vulnerability mitigations remain enabled by default. `bingux.performance.disableCpuMitigations` is opt-in and must only be set after a local threat-model decision.
@@ -118,9 +120,13 @@ credentials and destructive infrastructure operations outside the system
 configuration repository.
 
 The repository currently exposes no real hardware host. The installer image
-outputs are x86_64-only. `hosts/iso/default.nix` disables ZFS only when the
-selected kernel name starts with `cachyos-`; Kieran selects CachyOS, while the
-generic profile keeps the default Nixpkgs kernel.
+outputs are x86_64-only. Each installer derivation exposes the same
+`passthru.config.image.filePath` and `passthru.filePath`: `iso/bingux-generic.iso`
+for generic and `iso/bingux-kieran.iso` for Kieran. `nix build --no-link
+--print-out-paths` returns the output directory; append that `filePath` before
+passing an ISO to a validation runner. `hosts/iso/default.nix` disables ZFS only
+when the selected kernel name starts with `cachyos-`; Kieran selects CachyOS,
+while the generic profile keeps the default Nixpkgs kernel.
 
 ## Installation images and Proxmox
 
@@ -133,4 +139,6 @@ Proxmox validation uses the installer ISO and an external operator-owned
 runner. The runner must upload the ISO, create a disposable VM with an
 ownership name and tag, boot it, retain redacted task evidence, and delete the
 VM only after validation. `docs/proxmox.md` defines the required secret
-boundary and API sequence.
+boundary and API sequence. This repository contains no live Proxmox or VM
+result; direct tray, dock, notification, and OSD interactions remain future
+runtime evidence.

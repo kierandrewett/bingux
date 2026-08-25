@@ -37,8 +37,8 @@ in
                 trusted-users = lib.mkForce [
                     "root"
                 ];
-            };
 
+            };
             gc = {
                 automatic = true;
                 dates = "weekly";

@@ -17,9 +17,12 @@ installation.
 Build the profile-specific ISO without creating a `result` symlink:
 
 ```sh
-iso=$(nix build --no-link --print-out-paths .#bingux-kieran-install-iso)
-state_dir="${XDG_STATE_HOME:-$HOME/.local/state}"
-test -r "$iso"
+iso_output=$(nix build --no-link --print-out-paths .#bingux-kieran-install-iso)
+iso="$iso_output/iso/bingux-kieran.iso"
+test -f "$iso"
+test -s "$iso"
+iso_bytes=$(wc -c < "$iso")
+printf 'ISO bytes: %s\n' "$iso_bytes"
 ```
 
 Use `.#bingux-generic-install-iso` to test the generic profile. Bingux uses the
@@ -152,8 +155,9 @@ does not prescribe a runner command or an evidence directory.
 5. Start the VM and wait for the start task to reach a terminal result. Retain
    redacted task records outside this repository.
 6. Inspect the console and verify the installer boot, systemd units, session
-   files, portal, desktop shell, tray, dock, notifications, OSD, and search
-   paths.
+   files, portal, desktop shell, and search paths. Direct tray, dock, notification,
+   and OSD interactions remain unverified until a future disposable VM run; do not
+   treat source or focused checks as runtime evidence.
 7. Before cleanup, read the VM configuration and verify both the exact
    `bingux-install-<vmid>` name and the `bingux-pve-test` tag. Refuse cleanup
    when either value does not match.

@@ -18,8 +18,13 @@ use std::{
     env,
     ffi::OsStr,
     io::{BufReader, Write},
-    os::fd::AsRawFd,
-    os::unix::net::{UnixListener, UnixStream},
+    os::{
+        fd::AsRawFd,
+        unix::{
+            net::{UnixListener, UnixStream},
+            process::CommandExt,
+        },
+    },
     path::PathBuf,
     process::{Child, Command, Stdio},
     sync::{
@@ -1791,6 +1796,7 @@ fn copy_to_clipboard(command: &[String], text: &str) -> std::io::Result<()> {
     };
     let mut child = Command::new(program)
         .args(arguments)
+        .process_group(0)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -1875,6 +1881,10 @@ fn set_nonblocking(file: &impl AsRawFd) -> std::io::Result<()> {
 }
 
 fn terminate_child(child: &mut Child) {
+    let process_group = -(child.id() as libc::pid_t);
+    unsafe {
+        libc::kill(process_group, libc::SIGKILL);
+    }
     let _ = child.kill();
     let _ = child.wait();
 }
@@ -1964,6 +1974,44 @@ mod tests {
 
         assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
         assert!(started.elapsed() < Duration::from_secs(3));
+    }
+
+    #[test]
+    fn times_out_a_clipboard_helper_process_group() {
+        let pid_path = std::env::temp_dir().join(format!(
+            "bingux-searchd-clipboard-child-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&pid_path);
+        let escaped_path = pid_path.to_string_lossy().replace('\'', "'\\''");
+        let command = format!(
+            "sleep 10 & child=$!; printf '%s' \"$child\" > '{escaped_path}'; wait \"$child\""
+        );
+
+        let error = copy_to_clipboard(
+            &["/bin/sh".to_owned(), "-c".to_owned(), command],
+            "copied text",
+        )
+        .expect_err("a clipboard process group must time out");
+        assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
+
+        let child_pid = std::fs::read_to_string(&pid_path)
+            .expect("clipboard child PID should be recorded")
+            .trim()
+            .parse::<u32>()
+            .expect("clipboard child PID should be numeric");
+        let child_proc = std::path::Path::new("/proc").join(child_pid.to_string());
+        for _ in 0..100 {
+            if !child_proc.exists() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        let _ = std::fs::remove_file(pid_path);
+        assert!(
+            !child_proc.exists(),
+            "clipboard descendant survived timeout"
+        );
     }
 
     #[test]

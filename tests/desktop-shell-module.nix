@@ -9,6 +9,7 @@ let
         inherit system;
 
         specialArgs = {
+            hostSystem = system;
             inherit inputs self;
             hostName = "desktop-shell-check";
             profile = "desktop-shell-check";
@@ -51,6 +52,8 @@ let
             Tray.qml \
             SystemIndicators.qml \
             Dock.qml \
+            SearchOverlay.qml \
+            SearchSocket.qml \
             InputSourceSelector.qml \
             PrivacyIndicators.qml \
             NotificationState.qml \
@@ -61,8 +64,27 @@ let
         do
             test -f "${shellConfig.source}/$file"
         done
+        grep -Fq "ProfileSettings {" "${shellConfig.source}/shell.qml"
+        grep -Fq "Tray {" "${shellConfig.source}/shell.qml"
+        grep -Fq "NotificationSurface {" "${shellConfig.source}/shell.qml"
+        grep -Fq "OsdSurface {" "${shellConfig.source}/shell.qml"
+        grep -Fq "settings: profileSettings" "${shellConfig.source}/shell.qml"
+        grep -Fq "visible: profileSettings.dockEnabled" "${shellConfig.source}/shell.qml"
+        grep -Fq "visible: profileSettings.metricsEnabled" "${shellConfig.source}/shell.qml"
+        grep -Fq "gnoblinCtlPath: profileSettings.gnoblinCtlPath" "${shellConfig.source}/shell.qml"
+        grep -Fq "timeoutPath: profileSettings.timeoutPath" "${shellConfig.source}/shell.qml"
+        grep -Fq "acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton" "${shellConfig.source}/Tray.qml"
+        grep -Fq "modelData.secondaryActivate()" "${shellConfig.source}/Tray.qml"
+        grep -Fq "onWheel: function(wheel)" "${shellConfig.source}/Dock.qml"
+        grep -Fq "Qt.MiddleButton" "${shellConfig.source}/Dock.qml"
+        grep -Fq "Qt.RightButton" "${shellConfig.source}/Dock.qml"
+        grep -Fq "modelData.desktopEntry.actions" "${shellConfig.source}/Dock.qml"
+        grep -Fq "model: dockButton.modelData.windows" "${shellConfig.source}/Dock.qml"
+        grep -Fq "onRead: function(data)" "${shellConfig.source}/SearchSocket.qml"
         grep -Fq "org.example.Terminal" "${shellConfig.source}/ProfileSettings.qml"
+        grep -Fq "dockEnabled: true" "${shellConfig.source}/ProfileSettings.qml"
         grep -Fq "metricsEnabled: false" "${shellConfig.source}/ProfileSettings.qml"
+        grep -Fq "timeoutPath" "${shellConfig.source}/ProfileSettings.qml"
         grep -Fq "gnoblinCtlPath" "${shellConfig.source}/ProfileSettings.qml"
         touch "$out"
     '';
@@ -90,14 +112,16 @@ assert runtimeService.Unit.PartOf == [ "graphical-session.target" ];
 assert runtimeService.Install.WantedBy == [ "graphical-session.target" ];
 assert !(statusService.Service ? RuntimeDirectory);
 assert !(searchService.Service ? RuntimeDirectory);
-assert statusService.Unit.After == [
-    "graphical-session-pre.target"
-    "bingux-runtime-dir.service"
-];
-assert searchService.Unit.After == [
-    "graphical-session-pre.target"
-    "bingux-runtime-dir.service"
-];
+assert
+    statusService.Unit.After == [
+        "graphical-session-pre.target"
+        "bingux-runtime-dir.service"
+    ];
+assert
+    searchService.Unit.After == [
+        "graphical-session-pre.target"
+        "bingux-runtime-dir.service"
+    ];
 assert statusService.Unit.Requires == [ "bingux-runtime-dir.service" ];
 assert searchService.Unit.Requires == [ "bingux-runtime-dir.service" ];
 assert

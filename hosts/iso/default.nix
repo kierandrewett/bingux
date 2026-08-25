@@ -10,7 +10,7 @@
                 "${modulesPath}/installer/cd-dvd/installation-cd-base.nix"
             ];
 
-            image.fileName = "bingux-${config.bingux.profile.name}.iso";
+            image.baseName = lib.mkForce "bingux-${config.bingux.profile.name}";
 
             # CachyOS kernel sets do not provide a ZFS module that matches the
             # Nixpkgs ZFS userspace package. Do not build an unsupported installer.

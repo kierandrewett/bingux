@@ -7,6 +7,7 @@ let
     host = inputs.nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs = {
+            hostSystem = system;
             inherit inputs self;
             hostName = "module-evaluation-check";
             profile = "none";

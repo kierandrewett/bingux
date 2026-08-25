@@ -135,7 +135,10 @@ QtObject {
     }
 
     function isValidQuery(query) {
-        return typeof query === "string" && utf8ByteLength(query) <= maxQueryBytes;
+        return typeof query === "string"
+            && query.trim().length > 0
+            && utf8ByteLength(query) <= maxQueryBytes
+            && !/[\u0000-\u001f\u007f-\u009f]/.test(query);
     }
 
     function isValidLimit(limit) {

@@ -21,8 +21,23 @@ let
         host.config.home-manager.users.kieran.systemd.user.services.bingux-tailscale-systray;
 in
 assert host.config.bingux.profile.name == "kieran";
+assert host.config.bingux.system.timeZone == "Europe/London";
+assert host.config.time.timeZone == "Europe/London";
+assert host.config.bingux.system.locale == "en_GB.UTF-8";
+assert host.config.i18n.defaultLocale == "en_GB.UTF-8";
+assert host.config.console.keyMap == "uk";
+assert host.config.bingux.user.name == "kieran";
+assert host.config.bingux.user.fullName == "Kieran Drewett";
+assert host.config.bingux.user.home == "/home/kieran";
+assert host.config.users.users.kieran.isNormalUser;
+assert host.config.users.users.kieran.description == "Kieran Drewett";
+assert host.config.users.users.kieran.home == "/home/kieran";
+assert builtins.elem "wheel" host.config.users.users.kieran.extraGroups;
 assert host.config.bingux.desktop.enable;
 assert host.config.bingux.desktop.gnoblin.enable;
+assert host.config.hardware.graphics.enable;
+assert host.config.services.pipewire.enable;
+assert host.config.xdg.portal.enable;
 assert host.config.bingux.desktopShell.enable;
 assert host.config.bingux.secrets.enable;
 assert host.config.programs.gnoblin.enable;
@@ -30,7 +45,14 @@ assert host.config.services.displayManager.defaultSession == "gnoblin";
 assert host.config.bingux.networking.tailscale.enable;
 assert host.config.services.tailscale.enable;
 assert host.config.programs.dconf.enable;
-assert builtins.elem "wheel" host.config.users.users.kieran.extraGroups;
+assert host.config.bingux.user.admin;
+assert host.config.nix.settings."trusted-users" == [ "root" ];
+assert host.config.bingux.performance.enable;
+assert host.config.bingux.performance.cpuGovernor == "performance";
+assert host.config.bingux.performance.enableAmdPstate;
+assert host.config.zramSwap.enable;
+assert builtins.elem "amd_pstate=active" host.config.boot.kernelParams;
+assert !(builtins.elem "mitigations=off" host.config.boot.kernelParams);
 assert host.config.bingux.performance.kernel == "cachyos-bore-lto-x86_64-v3";
 assert host.config.bingux.performance.allowX86_64V3;
 assert inputSources.type == "a(ss)";
@@ -62,9 +84,7 @@ assert
 assert host.config.home-manager.users.kieran.programs.quickshell.enable;
 assert builtins.any (remote: remote.name == "flathub-beta") host.config.services.flatpak.remotes;
 assert builtins.any (
-    remote:
-    remote.name == "firefox-nightly"
-    && remote.args == "--no-gpg-verify"
+    remote: remote.name == "firefox-nightly" && remote.args == "--no-gpg-verify"
 ) host.config.bingux.packages.flatpaks.remotes;
 assert builtins.elem pkgs.rustc host.config.bingux.packages.system;
 assert builtins.elem pkgs.cargo-audit host.config.bingux.packages.system;
@@ -89,9 +109,7 @@ assert builtins.any (
     && app.flatpakref == "https://releases.silverbullet.plus/flatpak/silverbullet.flatpakref"
     && app.sha256 == "sha256-C6LBX3goh/tf7ftAme4otfxAWlpgXWev1TsTIcdhNA8="
 ) flatpakApps;
-assert builtins.any (
-    app: app.appId == "md.obsidian.Obsidian"
-) flatpakApps;
+assert builtins.any (app: app.appId == "md.obsidian.Obsidian") flatpakApps;
 pkgs.runCommand "bingux-kieran-profile-check" { } ''
     touch "$out"
 ''

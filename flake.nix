@@ -44,7 +44,6 @@
             host = import ./lib/mk-host.nix { inherit inputs self; };
             inherit (host) mkHost mkHostModules;
 
-
             mkInstallerImage =
                 {
                     hostName,
@@ -88,14 +87,12 @@
                 modules = [ ./hosts/pve-vm.nix ];
             };
 
-
             nixosConfigurations.bingux-kieran-vm = mkHost {
                 system = "x86_64-linux";
                 hostName = "bingux-kieran-vm";
                 profile = "kieran";
                 modules = [ ./hosts/vm ];
             };
-
 
             packages = forAllSystems (
                 system:
@@ -120,12 +117,16 @@
                 }
             );
 
-
             checks = forAllSystems (
                 system:
                 {
                     module-evaluation = import ./tests/module-evaluation.nix {
                         inherit inputs self system;
+                    };
+                }
+                // nixpkgs.lib.optionalAttrs (system == "aarch64-linux") {
+                    performance-architecture = import ./tests/performance-architecture.nix {
+                        inherit inputs self;
                     };
                 }
                 // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {

@@ -38,6 +38,7 @@ let
             inherit system;
 
             specialArgs = {
+                hostSystem = system;
                 inherit
                     inputs
                     self
