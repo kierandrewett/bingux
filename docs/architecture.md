@@ -109,6 +109,8 @@ The current flake exposes these outputs:
 | `packages.<system>.bingux-statusd` | — | `x86_64-linux`, `aarch64-linux` | Status daemon package. |
 | `packages.<system>.bingux-searchd` | — | `x86_64-linux`, `aarch64-linux` | Search daemon package. |
 | `packages.<system>.bingux-inventory` | — | `x86_64-linux`, `aarch64-linux` | Inventory package. |
+| `packages.x86_64-linux.bingux-generic-install-iso` | `generic` | `x86_64-linux` | Generic NixOS installation image for VM or hardware installation. |
+| `packages.x86_64-linux.bingux-kieran-install-iso` | `kieran` | `x86_64-linux` | Kieran-profile NixOS installation image for VM or hardware installation. |
 
 The repository does not expose a Proxmox API client. Use an operator-owned
 runner or the Proxmox API directly for disposable VM validation. This keeps
