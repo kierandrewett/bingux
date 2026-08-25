@@ -292,7 +292,6 @@ PanelWindow {
     visible: false
     color: "transparent"
     exclusiveZone: 0
-    focusable: true
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "bingux-search"
     WlrLayershell.keyboardFocus: root.visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
