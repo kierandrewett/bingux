@@ -41,6 +41,7 @@ let
     };
     quickshell = host.config.home-manager.users.shell.programs.quickshell;
     shellConfig = host.config.home-manager.users.shell.xdg.configFile."quickshell/bingux";
+    runtimeService = host.config.home-manager.users.shell.systemd.user.services.bingux-runtime-dir;
     statusService = host.config.home-manager.users.shell.systemd.user.services.bingux-statusd;
     searchService = host.config.home-manager.users.shell.systemd.user.services.bingux-searchd;
     shellSourceCheck = pkgs.runCommand "bingux-desktop-shell-source-check" { } ''
@@ -81,8 +82,24 @@ assert
 assert quickshell.activeConfig == "bingux";
 assert quickshell.systemd.enable;
 assert host.config.services.upower.enable;
-assert statusService.Service.RuntimeDirectory == "bingux";
-assert searchService.Service.RuntimeDirectory == "bingux";
+assert runtimeService.Service.Type == "oneshot";
+assert runtimeService.Service.RemainAfterExit;
+assert runtimeService.Service.RuntimeDirectory == "bingux";
+assert runtimeService.Service.RuntimeDirectoryMode == "0700";
+assert runtimeService.Unit.PartOf == [ "graphical-session.target" ];
+assert runtimeService.Install.WantedBy == [ "graphical-session.target" ];
+assert !(statusService.Service ? RuntimeDirectory);
+assert !(searchService.Service ? RuntimeDirectory);
+assert statusService.Unit.After == [
+    "graphical-session-pre.target"
+    "bingux-runtime-dir.service"
+];
+assert searchService.Unit.After == [
+    "graphical-session-pre.target"
+    "bingux-runtime-dir.service"
+];
+assert statusService.Unit.Requires == [ "bingux-runtime-dir.service" ];
+assert searchService.Unit.Requires == [ "bingux-runtime-dir.service" ];
 assert
     searchService.Service.RestrictAddressFamilies == [
         "AF_UNIX"

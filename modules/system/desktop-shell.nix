@@ -274,6 +274,9 @@ in
             # native OSD is disabled without a Bingux replacement.
 
 
+            # Both daemons use the same runtime directory. A dedicated unit
+            # owns its lifecycle so a daemon restart cannot remove the other
+            # daemon's socket.
             systemd.user.services = {
                 # User-systemd does not always import the session's Qt platform
                 # selection before graphical-session.target. Select Wayland
@@ -282,10 +285,31 @@ in
                     "QT_QPA_PLATFORM=wayland"
                 ];
 
+                bingux-runtime-dir = {
+                    Unit = {
+                        Description = "Bingux desktop runtime directory";
+                        PartOf = [ cfg.systemdTarget ];
+                    };
+
+                    Service = {
+                        Type = "oneshot";
+                        ExecStart = lib.getExe' pkgs.coreutils "true";
+                        RemainAfterExit = true;
+                        RuntimeDirectory = "bingux";
+                        RuntimeDirectoryMode = "0700";
+                    };
+
+                    Install.WantedBy = [ cfg.systemdTarget ];
+                };
+
                 bingux-statusd = {
                     Unit = {
                         Description = "Bingux desktop-shell status and OSD bridge";
-                        After = [ "graphical-session-pre.target" ];
+                        After = [
+                            "graphical-session-pre.target"
+                            "bingux-runtime-dir.service"
+                        ];
+                        Requires = [ "bingux-runtime-dir.service" ];
                         PartOf = [ cfg.systemdTarget ];
                     };
 
@@ -298,8 +322,6 @@ in
                         ReadWritePaths = [ "%t/bingux" ];
                         Restart = "on-failure";
                         RestartSec = "1s";
-                        RuntimeDirectory = "bingux";
-                        RuntimeDirectoryMode = "0700";
                         RestrictAddressFamilies = [ "AF_UNIX" ];
                         UMask = "0077";
                     };
@@ -311,7 +333,11 @@ in
                 bingux-searchd = {
                     Unit = {
                         Description = "Bingux desktop search provider service";
-                        After = [ "graphical-session-pre.target" ];
+                        After = [
+                            "graphical-session-pre.target"
+                            "bingux-runtime-dir.service"
+                        ];
+                        Requires = [ "bingux-runtime-dir.service" ];
                         PartOf = [ cfg.systemdTarget ];
                     };
 
@@ -324,8 +350,6 @@ in
                         ReadWritePaths = [ "%t/bingux" ];
                         Restart = "on-failure";
                         RestartSec = "1s";
-                        RuntimeDirectory = "bingux";
-                        RuntimeDirectoryMode = "0700";
                         RestrictAddressFamilies = [
                             "AF_UNIX"
                             "AF_INET"
