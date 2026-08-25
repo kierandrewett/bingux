@@ -32,6 +32,12 @@ in
             default = [ ];
             description = "Additional system groups required by profile software.";
         };
+
+        admin = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Whether the profile user receives administrative wheel-group access.";
+        };
     };
 
     config = {
@@ -44,8 +50,8 @@ in
                     "audio"
                     "networkmanager"
                     "video"
-                    "wheel"
                 ]
+                ++ lib.optional cfg.admin "wheel"
                 ++ cfg.extraGroups
             );
             shell = pkgs.zsh;

@@ -21,6 +21,7 @@ in
         user = {
             name = "kieran";
             fullName = "Kieran Drewett";
+            admin = true;
         };
 
         packages = {

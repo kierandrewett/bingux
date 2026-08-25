@@ -34,9 +34,8 @@ in
                 builders-use-substitutes = true;
                 cores = cfg.buildCores;
                 max-jobs = cfg.maxBuildJobs;
-                trusted-users = [
+                trusted-users = lib.mkForce [
                     "root"
-                    "@wheel"
                 ];
             };
 

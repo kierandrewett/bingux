@@ -30,6 +30,7 @@ assert host.config.services.displayManager.defaultSession == "gnoblin";
 assert host.config.bingux.networking.tailscale.enable;
 assert host.config.services.tailscale.enable;
 assert host.config.programs.dconf.enable;
+assert builtins.elem "wheel" host.config.users.users.kieran.extraGroups;
 assert inputSources.type == "a(ss)";
 assert
     builtins.map (source: builtins.map (entry: entry.value) source.value) inputSources.value == [

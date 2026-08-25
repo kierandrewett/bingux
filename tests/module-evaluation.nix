@@ -28,6 +28,8 @@ assert host.config.bingux.desktop.gnoblin.enable == false;
 assert host.config.bingux.desktopShell.enable == false;
 assert host.config.bingux.secrets.enable == false;
 assert host.config.bingux.performance.enable == false;
+assert host.config.nix.settings."trusted-users" == [ "root" ];
+assert !(builtins.elem "wheel" host.config.users.users.bingux.extraGroups);
 pkgs.runCommand "bingux-module-evaluation-check" { } ''
     touch "$out"
 ''
