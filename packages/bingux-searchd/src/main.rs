@@ -556,7 +556,7 @@ impl Runtime {
         }
 
         if dispatch.accepted.is_empty() {
-            self.remove_query(&provider_query_id, client_id);
+            self.finish_query(&provider_query_id, client_id);
             return;
         }
         self.release_external_query(tracker);
@@ -575,7 +575,7 @@ impl Runtime {
         }
     }
 
-    fn remove_query(&self, query_id: &str, client_id: u64) {
+    fn finish_query(&self, query_id: &str, client_id: u64) {
         if let Ok(mut queries) = self.queries.lock() {
             queries.remove(query_id);
         }
@@ -587,6 +587,10 @@ impl Runtime {
                 client_queries.remove(&client_id);
             }
         }
+    }
+
+    fn remove_query(&self, query_id: &str, client_id: u64) {
+        self.finish_query(query_id, client_id);
         if let Ok(mut activations) = self.activations.lock() {
             activations.remove_query(client_id, query_id);
         }
@@ -675,7 +679,7 @@ impl Runtime {
                     return;
                 }
                 if query_complete {
-                    self.remove_query(&query_id_for_removal, tracker.client_id);
+                    self.finish_query(&query_id_for_removal, tracker.client_id);
                 }
             }
             ExternalEvent::QueryFailed {
@@ -730,7 +734,7 @@ impl Runtime {
                             results: Vec::new(),
                         },
                     );
-                    self.remove_query(&query_id, tracker.client_id);
+                    self.finish_query(&query_id, tracker.client_id);
                 }
             }
             ExternalEvent::Activated {
@@ -2207,6 +2211,40 @@ mod tests {
                 .take("r-01", 1)
                 .is_none()
         );
+    }
+    #[test]
+    fn query_completion_preserves_registered_activations_for_launch() {
+        let runtime = test_runtime();
+        let (sender, _receiver) = mpsc::sync_channel(1);
+        let tracker = Arc::new(QueryTracker::new(1, "q-02".into(), 2, sender));
+        runtime
+            .queries
+            .lock()
+            .expect("query registry lock")
+            .insert("q-02".into(), tracker);
+        runtime
+            .client_queries
+            .lock()
+            .expect("client query registry lock")
+            .insert(1, "q-02".into());
+        runtime
+            .activations
+            .lock()
+            .expect("activation registry lock")
+            .insert("r-02".into(), 1, "q-02", Activation::None);
+
+        runtime.finish_query("q-02", 1);
+
+        assert!(!runtime.query_is_active(1, "q-02"));
+        assert!(runtime.query_tracker("q-02").is_none());
+        assert!(matches!(
+            runtime
+                .activations
+                .lock()
+                .expect("activation registry lock")
+                .take("r-02", 1),
+            Some(Activation::None)
+        ));
     }
 
     #[test]
