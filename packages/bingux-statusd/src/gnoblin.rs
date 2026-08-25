@@ -79,7 +79,10 @@ async fn subscribe_to_gnoblin(
         futures_util::select! {
             owner_change = owner_changes.next().fuse() => {
                 match owner_change {
-                    Some(_) => return Err("Gnoblin session service owner changed".to_owned()),
+                    Some(Some(_)) => publish_snapshot(&proxy, sender).await?,
+                    Some(None) => sender
+                        .send(Event::DesktopState(DesktopState::default()))
+                        .map_err(|_| "desktop-state receiver stopped".to_owned())?,
                     None => return Err("Gnoblin session owner stream closed".to_owned()),
                 }
             }

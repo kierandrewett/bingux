@@ -59,6 +59,14 @@ async fn subscribe_to_gnoblin(
         .await
         .map_err(|error| error.to_string())?;
 
+    // Confirm that the well-known name is owned before publishing Ready. The
+    // signal stream remains valid across owner changes, so a shell restart does
+    // not require a new connection and does not create an avoidable gap.
+    proxy
+        .call_method("Ping", &())
+        .await
+        .map_err(|error| error.to_string())?;
+
     *reconnect_delay = INITIAL_RECONNECT_DELAY;
     sender
         .send(Event::Ready)
@@ -68,7 +76,12 @@ async fn subscribe_to_gnoblin(
         futures_util::select! {
             owner_change = owner_changes.next().fuse() => {
                 match owner_change {
-                    Some(_) => return Err("Gnoblin session service owner changed".to_owned()),
+                    Some(Some(_)) => sender
+                        .send(Event::Ready)
+                        .map_err(|_| "search event receiver stopped".to_owned())?,
+                    Some(None) => sender
+                        .send(Event::Unavailable)
+                        .map_err(|_| "search event receiver stopped".to_owned())?,
                     None => return Err("Gnoblin session owner stream closed".to_owned()),
                 }
             }
