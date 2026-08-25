@@ -102,13 +102,13 @@ The current flake exposes these outputs:
 
 | Output | Profile or host | System | Purpose |
 | --- | --- | --- | --- |
-| `nixosConfigurations.bingux-vm` | `generic` | `x86_64-linux` | NixOS VM test host. |
-| `nixosConfigurations.bingux-kieran-vm` | `kieran` | `x86_64-linux` | Kieran-profile NixOS VM test host. |
+| `nixosConfigurations.bingux-vm` | `generic` | `x86_64-linux` | NixOS-generated VM test host. |
+| `nixosConfigurations.bingux-pve-vm` | `generic` | `x86_64-linux` | Proxmox-installed generic validation host. |
+| `nixosConfigurations.bingux-kieran-vm` | `kieran` | `x86_64-linux` | NixOS-generated Kieran-profile VM test host. |
+| `nixosConfigurations.bingux-kieran-pve-vm` | `kieran` | `x86_64-linux` | Proxmox-installed Kieran-profile validation host. |
 | `packages.<system>.bingux-statusd` | — | `x86_64-linux`, `aarch64-linux` | Status daemon package. |
 | `packages.<system>.bingux-searchd` | — | `x86_64-linux`, `aarch64-linux` | Search daemon package. |
 | `packages.<system>.bingux-inventory` | — | `x86_64-linux`, `aarch64-linux` | Inventory package. |
-| `packages.x86_64-linux.bingux-generic-install-iso` | `generic` | `x86_64-linux` | Installer image, embedding `bingux-generic.iso`. |
-| `packages.x86_64-linux.bingux-kieran-install-iso` | `kieran` | `x86_64-linux` | Installer image, embedding `bingux-kieran.iso`. |
 
 The repository does not expose a Proxmox API client. Use an operator-owned
 runner or the Proxmox API directly for disposable VM validation. This keeps

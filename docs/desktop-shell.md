@@ -4,9 +4,9 @@
 
 The Bingux desktop shell is an optional profile feature. It supplies the top bar, dock, search surface, notification surface, and on-screen display for a Gnoblin session. The top bar includes clock, tray, metrics, privacy, input, network, audio, and power indicators. It is not a compositor and it does not modify GNOME Shell UI.
 
-The reference implementation uses Quickshell 0.3.x for layer-shell surfaces. Quickshell already supplies `zwlr_layer_shell_v1`, `zwlr_foreign_toplevel_manager_v1`, StatusNotifierItem menus, desktop-entry actions, and the desktop-notification service. Bingux pins the exact Quickshell package through its flake lock.
+The reference implementation uses Quickshell 0.2.1 for layer-shell surfaces. Quickshell supplies `zwlr_layer_shell_v1`, `zwlr_foreign_toplevel_manager_v1`, StatusNotifierItem menus, desktop-entry actions, and the desktop-notification service used by this shell. Bingux pins the exact Quickshell package through its flake lock.
 
-Quickshell is pre-1.0. Bingux source must target one pinned Quickshell release line. A Quickshell update is a deliberate compatibility change, not an automatic API promise.
+Quickshell is pre-1.0. Bingux source must target the pinned 0.2.1 release line. A Quickshell update is a deliberate compatibility change, not an automatic API promise.
 
 ## Process model
 
@@ -408,12 +408,12 @@ Version 1 records contain `protocolVersion: 1`. New optional fields can be added
 
 ## Sources
 
-- Quickshell installation and package guidance: <https://quickshell.org/docs/v0.3.0/guide/install-setup/>
-- Quickshell distribution and version guidance: <https://quickshell.org/docs/v0.3.0/guide/distribution/>
-- Quickshell layer-shell surfaces: <https://quickshell.org/docs/v0.3.0/types/Quickshell/PanelWindow/>
-- Quickshell foreign toplevels: <https://quickshell.org/docs/v0.3.0/types/Quickshell.Wayland/ToplevelManager/>
-- Quickshell StatusNotifierItem support: <https://quickshell.org/docs/v0.3.0/types/Quickshell.Services.SystemTray/SystemTrayItem/>
-- Quickshell notification server: <https://quickshell.org/docs/v0.3.0/types/Quickshell.Services.Notifications/NotificationServer/>
-- Quickshell notification lifetime and action API: <https://quickshell.org/docs/v0.3.0/types/Quickshell.Services.Notifications/Notification/>
-- Quickshell layer-shell pointer masks: <https://quickshell.org/docs/v0.3.0/types/Quickshell/QsWindow/>
+- Quickshell installation and package guidance: <https://quickshell.org/docs/v0.2.1/guide/install-setup/>
+- Quickshell distribution and version guidance: <https://quickshell.org/docs/v0.2.1/guide/distribution/>
+- Quickshell layer-shell surfaces: <https://quickshell.org/docs/v0.2.1/types/Quickshell/PanelWindow/>
+- Quickshell foreign toplevels: <https://quickshell.org/docs/v0.2.1/types/Quickshell.Wayland/ToplevelManager/>
+- Quickshell StatusNotifierItem support: <https://quickshell.org/docs/v0.2.1/types/Quickshell.Services.SystemTray/SystemTrayItem/>
+- Quickshell notification server: <https://quickshell.org/docs/v0.2.1/types/Quickshell.Services.Notifications/NotificationServer/>
+- Quickshell notification lifetime and action API: <https://quickshell.org/docs/v0.2.1/types/Quickshell.Services.Notifications/Notification/>
+- Quickshell layer-shell pointer masks: <https://quickshell.org/docs/v0.2.1/types/Quickshell/QsWindow/>
 - Gnoblin interface source: `~/dev/gnoblin/src/gnome-shell-overlay/js/ui/components/gnoblinControl.js`
