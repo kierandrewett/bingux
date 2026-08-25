@@ -33,7 +33,7 @@ let
                     home = {
                         username = "shell";
                         homeDirectory = "/home/shell";
-                        stateVersion = "26.05";
+                        stateVersion = "25.11";
                     };
                 };
             }
@@ -83,8 +83,8 @@ assert
         builtins.readFile profileSettings.source
     ) != null;
 assert host.config.services.upower.enable;
-assert !(statusService.Service ? RuntimeDirectory);
-assert !(searchService.Service ? RuntimeDirectory);
+assert statusService.Service.RuntimeDirectory == "bingux";
+assert searchService.Service.RuntimeDirectory == "bingux";
 assert
     searchService.Service.RestrictAddressFamilies == [
         "AF_UNIX"

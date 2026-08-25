@@ -19,6 +19,11 @@ The generic configuration can set safe shared operating-system defaults, such as
 
 The flake can pin sources that only one profile uses. Pinning a source makes it reproducible. A flake may import an optional module globally to expose its options; the selected profile must still enable and configure the source it uses.
 
+The parent flake uses the NixOS 25.11 and Home Manager `release-25.11`
+branches. Gnoblin builds the GNOME 49 stack and does not support mixing it with
+a different GNOME major version. Keep these inputs aligned when updating the
+desktop base.
+
 ## Kernel and performance policy
 
 `modules/system/performance.nix` supports Nixpkgs Zen and XanMod package sets plus pinned CachyOS BORE variants. The default remains the Nixpkgs kernel. The user must select another package set in a profile or host.

@@ -17,7 +17,7 @@ let
             inputs.nix-flatpak.nixosModules.nix-flatpak
             self.nixosModules.default
             {
-                system.stateVersion = "26.05";
+                system.stateVersion = "25.11";
             }
         ];
     };

@@ -12,4 +12,12 @@
     # Proxmox presents the validation disk as /dev/sda rather than the
     # virtio-root device used by the standalone qemu-vm output.
     virtualisation.bootLoaderDevice = lib.mkForce "/dev/sda";
+    # Proxmox validation boots this GPT disk with OVMF. Install GRUB in the
+    # removable EFI path so the VM does not need persistent EFI variables.
+    boot.loader.grub = {
+        efiSupport = lib.mkForce true;
+        efiInstallAsRemovable = lib.mkForce true;
+        devices = lib.mkForce [ "nodev" ];
+    };
+    boot.loader.efi.canTouchEfiVariables = lib.mkForce false;
 }

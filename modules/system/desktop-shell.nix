@@ -261,11 +261,19 @@ in
             };
 
             xdg.configFile."quickshell/${cfg.configName}/ProfileSettings.qml".source = profileSettings;
-
             # Statusd owns the OSD bridge as well as metric collection. Keep it
             # active when the top-bar metric display is disabled, otherwise Gnoblin
             # native OSD is disabled without a Bingux replacement.
+
+
             systemd.user.services = {
+                # User-systemd does not always import the session's Qt platform
+                # selection before graphical-session.target. Select Wayland
+                # explicitly so Qt does not attempt an unavailable X11 backend.
+                quickshell.Service.Environment = [
+                    "QT_QPA_PLATFORM=wayland"
+                ];
+
                 bingux-statusd = {
                     Unit = {
                         Description = "Bingux desktop-shell status and OSD bridge";
@@ -279,8 +287,11 @@ in
                         PrivateTmp = true;
                         ProtectHome = "read-only";
                         ProtectSystem = "strict";
+                        ReadWritePaths = [ "%t/bingux" ];
                         Restart = "on-failure";
                         RestartSec = "1s";
+                        RuntimeDirectory = "bingux";
+                        RuntimeDirectoryMode = "0700";
                         RestrictAddressFamilies = [ "AF_UNIX" ];
                         UMask = "0077";
                     };
@@ -302,8 +313,11 @@ in
                         PrivateTmp = true;
                         ProtectHome = "read-only";
                         ProtectSystem = "strict";
+                        ReadWritePaths = [ "%t/bingux" ];
                         Restart = "on-failure";
                         RestartSec = "1s";
+                        RuntimeDirectory = "bingux";
+                        RuntimeDirectoryMode = "0700";
                         RestrictAddressFamilies = [
                             "AF_UNIX"
                             "AF_INET"

@@ -12,7 +12,7 @@ in
     options.bingux.system = {
         stateVersion = lib.mkOption {
             type = lib.types.str;
-            default = "26.05";
+            default = "25.11";
             description = "The NixOS state version for a new Bingux installation.";
         };
 

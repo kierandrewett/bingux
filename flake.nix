@@ -2,10 +2,10 @@
     description = "Bingux: a profile-driven NixOS configuration framework";
 
     inputs = {
-        nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+        nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
 
         home-manager = {
-            url = "github:nix-community/home-manager";
+            url = "github:nix-community/home-manager/release-25.11";
             inputs.nixpkgs.follows = "nixpkgs";
         };
 
@@ -20,9 +20,13 @@
 
         nix-cachyos-kernel.url = "github:xddxdd/nix-cachyos-kernel/release";
 
-        # Gnoblin pairs its pinned Mutter and GNOME Shell sources with this
-        # matching Nixpkgs revision. It must not follow Bingux's rolling input.
-        gnoblin.url = "github:kierandrewett/gnoblin";
+        # Gnoblin pairs its pinned Mutter and GNOME Shell sources with the
+        # matching Nixpkgs GNOME major. Keep the parent input aligned so GDM,
+        # gnome-session, portals, and the Gnoblin package use one stack.
+        gnoblin = {
+            url = "github:kierandrewett/gnoblin";
+            inputs.nixpkgs.follows = "nixpkgs";
+        };
     };
 
     outputs =
