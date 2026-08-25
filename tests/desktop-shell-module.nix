@@ -43,8 +43,28 @@ let
     shellConfig = host.config.home-manager.users.shell.xdg.configFile."quickshell/bingux";
     statusService = host.config.home-manager.users.shell.systemd.user.services.bingux-statusd;
     searchService = host.config.home-manager.users.shell.systemd.user.services.bingux-searchd;
-    profileSettings =
-        host.config.home-manager.users.shell.xdg.configFile."quickshell/bingux/ProfileSettings.qml";
+    shellSourceCheck = pkgs.runCommand "bingux-desktop-shell-source-check" { } ''
+        for file in \
+            shell.qml \
+            Metrics.qml \
+            Tray.qml \
+            SystemIndicators.qml \
+            Dock.qml \
+            InputSourceSelector.qml \
+            PrivacyIndicators.qml \
+            NotificationState.qml \
+            NotificationSurface.qml \
+            OsdState.qml \
+            OsdSurface.qml \
+            ProfileSettings.qml
+        do
+            test -f "${shellConfig.source}/$file"
+        done
+        grep -Fq "org.example.Terminal" "${shellConfig.source}/ProfileSettings.qml"
+        grep -Fq "metricsEnabled: false" "${shellConfig.source}/ProfileSettings.qml"
+        grep -Fq "gnoblinCtlPath" "${shellConfig.source}/ProfileSettings.qml"
+        touch "$out"
+    '';
 in
 assert quickshell.enable;
 assert host.config.programs.dconf.enable;
@@ -60,28 +80,6 @@ assert
     ];
 assert quickshell.activeConfig == "bingux";
 assert quickshell.systemd.enable;
-assert builtins.pathExists "${toString shellConfig.source}/shell.qml";
-assert builtins.pathExists "${toString shellConfig.source}/Metrics.qml";
-assert builtins.pathExists "${toString shellConfig.source}/Tray.qml";
-assert builtins.pathExists "${toString shellConfig.source}/SystemIndicators.qml";
-assert builtins.pathExists "${toString shellConfig.source}/Dock.qml";
-assert builtins.pathExists "${toString shellConfig.source}/InputSourceSelector.qml";
-assert builtins.pathExists "${toString shellConfig.source}/PrivacyIndicators.qml";
-assert builtins.pathExists "${toString shellConfig.source}/NotificationState.qml";
-assert builtins.pathExists "${toString shellConfig.source}/NotificationSurface.qml";
-assert builtins.pathExists "${toString shellConfig.source}/OsdState.qml";
-assert builtins.pathExists "${toString shellConfig.source}/OsdSurface.qml";
-assert builtins.pathExists (toString profileSettings.source);
-assert
-    builtins.match "(.|\n)*org.example.Terminal(.|\n)*" (builtins.readFile profileSettings.source)
-    != null;
-assert
-    builtins.match "(.|\n)*metricsEnabled: false(.|\n)*" (builtins.readFile profileSettings.source)
-    != null;
-assert
-    builtins.match "(.|\n)*import QtQuick(.|\n)*gnoblinCtlPath(.|\n)*" (
-        builtins.readFile profileSettings.source
-    ) != null;
 assert host.config.services.upower.enable;
 assert statusService.Service.RuntimeDirectory == "bingux";
 assert searchService.Service.RuntimeDirectory == "bingux";
@@ -93,6 +91,4 @@ assert
     ];
 assert statusService.Install.WantedBy == [ "graphical-session.target" ];
 assert searchService.Install.WantedBy == [ "graphical-session.target" ];
-pkgs.runCommand "bingux-desktop-shell-module-check" { } ''
-    touch "$out"
-''
+shellSourceCheck

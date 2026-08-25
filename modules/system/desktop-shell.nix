@@ -5,7 +5,7 @@
     ...
 }:
 let
-    shellSource = lib.cleanSourceWith {
+    shellFiles = lib.cleanSourceWith {
         src = ../../shell/bingux;
         filter = path: type: builtins.baseNameOf path != "ProfileSettings.qml";
     };
@@ -18,6 +18,15 @@ let
             readonly property var pinnedApps: ${builtins.toJSON cfg.dock.pinnedApps}
             readonly property string gnoblinCtlPath: "${lib.getExe' config.programs.gnoblin.package "gnoblinctl"}"
         }
+    '';
+    # QuickShell resolves the root QML file to its store directory before it
+    # resolves local component types. Put the generated profile settings file
+    # in that same immutable directory instead of relying on a separate home
+    # configuration symlink.
+    shellSource = pkgs.runCommand "bingux-${cfg.configName}-shell" { } ''
+        mkdir -p "$out"
+        cp -R ${shellFiles}/. "$out/"
+        cp ${profileSettings} "$out/ProfileSettings.qml"
     '';
     statusdPackage = pkgs.callPackage ../../packages/bingux-statusd { };
     searchdPackage = pkgs.callPackage ../../packages/bingux-searchd { };
@@ -260,7 +269,6 @@ in
                 recursive = true;
             };
 
-            xdg.configFile."quickshell/${cfg.configName}/ProfileSettings.qml".source = profileSettings;
             # Statusd owns the OSD bridge as well as metric collection. Keep it
             # active when the top-bar metric display is disabled, otherwise Gnoblin
             # native OSD is disabled without a Bingux replacement.
