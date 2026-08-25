@@ -9,6 +9,21 @@ const SUPER_RELEASE_PROTOCOL_VERSION: u32 = 1;
 const INITIAL_RECONNECT_DELAY: Duration = Duration::from_millis(250);
 const MAX_RECONNECT_DELAY: Duration = Duration::from_secs(5);
 
+#[derive(Debug, PartialEq, Eq)]
+enum OwnerChangeAction {
+    Revalidate,
+    Unavailable,
+    StreamClosed,
+}
+
+fn owner_change_action<T>(owner_change: Option<Option<T>>) -> OwnerChangeAction {
+    match owner_change {
+        Some(Some(_)) => OwnerChangeAction::Revalidate,
+        Some(None) => OwnerChangeAction::Unavailable,
+        None => OwnerChangeAction::StreamClosed,
+    }
+}
+
 #[derive(Debug)]
 pub enum Event {
     Ready,
@@ -60,8 +75,8 @@ async fn subscribe_to_gnoblin(
         .map_err(|error| error.to_string())?;
 
     // Confirm that the well-known name is owned before publishing Ready. The
-    // signal stream remains valid across owner changes, so a shell restart does
-    // not require a new connection and does not create an avoidable gap.
+    // signal stream remains valid across owner changes, but each new owner must
+    // pass the health check before the bridge publishes Ready.
     proxy
         .call_method("Ping", &())
         .await
@@ -75,14 +90,22 @@ async fn subscribe_to_gnoblin(
     loop {
         futures_util::select! {
             owner_change = owner_changes.next().fuse() => {
-                match owner_change {
-                    Some(Some(_)) => sender
-                        .send(Event::Ready)
-                        .map_err(|_| "search event receiver stopped".to_owned())?,
-                    Some(None) => sender
+                match owner_change_action(owner_change) {
+                    OwnerChangeAction::Revalidate => {
+                        proxy
+                            .call_method("Ping", &())
+                            .await
+                            .map_err(|error| error.to_string())?;
+                        sender
+                            .send(Event::Ready)
+                            .map_err(|_| "search event receiver stopped".to_owned())?;
+                    }
+                    OwnerChangeAction::Unavailable => sender
                         .send(Event::Unavailable)
                         .map_err(|_| "search event receiver stopped".to_owned())?,
-                    None => return Err("Gnoblin session owner stream closed".to_owned()),
+                    OwnerChangeAction::StreamClosed => {
+                        return Err("Gnoblin session owner stream closed".to_owned());
+                    }
                 }
             }
             signal = signals.next().fuse() => {
@@ -113,7 +136,23 @@ fn super_release_timestamp(signal: &zbus::Message) -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::SUPER_RELEASE_PROTOCOL_VERSION;
+    use super::{OwnerChangeAction, SUPER_RELEASE_PROTOCOL_VERSION, owner_change_action};
+
+    #[test]
+    fn revalidates_each_new_owner_before_ready() {
+        assert_eq!(
+            owner_change_action(Some(Some(()))),
+            OwnerChangeAction::Revalidate
+        );
+        assert_eq!(
+            owner_change_action(Some(None::<()>)),
+            OwnerChangeAction::Unavailable
+        );
+        assert_eq!(
+            owner_change_action(None::<Option<()>>),
+            OwnerChangeAction::StreamClosed
+        );
+    }
 
     #[test]
     fn supports_only_the_documented_gnoblin_signal_version() {

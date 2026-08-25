@@ -79,7 +79,13 @@ async fn subscribe_to_gnoblin(
         futures_util::select! {
             owner_change = owner_changes.next().fuse() => {
                 match owner_change {
-                    Some(Some(_)) => publish_snapshot(&proxy, sender).await?,
+                    Some(Some(_)) => {
+                        proxy
+                            .call_method("Ping", &())
+                            .await
+                            .map_err(|error| error.to_string())?;
+                        publish_snapshot(&proxy, sender).await?;
+                    }
                     Some(None) => sender
                         .send(Event::DesktopState(DesktopState::default()))
                         .map_err(|_| "desktop-state receiver stopped".to_owned())?,
