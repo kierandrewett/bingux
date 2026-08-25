@@ -70,7 +70,7 @@ This file tracks implementation work. A checked item means the related configura
 - [x] Record the validation VM identifier (`100`) and retain the runtime evidence.
 - [ ] Destroy the validation VM after the remaining GUI workflow evidence is complete.
 
-> VM `100` (`bingux-install-100`) is running on the operator-owned Proxmox host and has been rebuilt from the current source. The system services, status socket, search socket, and Quickshell restart have been checked. Fresh GUI interaction checks remain blocked because the available Proxmox WebSocket console transport is refused on port 8006 and returns `502 Bad Gateway` through the HTTPS proxy. Do not destroy the VM until the remaining GUI evidence is captured or the operator explicitly accepts the reduced validation scope.
+> VM `100` (`bingux-install-100`) is running on the operator-owned Proxmox host and has been rebuilt from the current source. The system services, status socket, search socket, and Quickshell restart have been checked. Fresh GUI interaction checks remain blocked because the `/api2/json/nodes/pve/qemu/100/vncwebsocket` endpoint refuses the direct port-8006 connection and returns `502 Bad Gateway` when the HTTPS proxy attempts the WebSocket upgrade. Do not destroy the VM until the remaining GUI evidence is captured or the operator explicitly accepts the reduced validation scope.
 >
 > The repository intentionally has no Proxmox API client. Use an operator-owned runner and a token read from the environment or SOPS for future VM operations.
 
