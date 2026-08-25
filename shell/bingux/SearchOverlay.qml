@@ -631,7 +631,7 @@ PanelWindow {
                     Rectangle {
                         anchors.fill: parent
                         radius: 6
-                        color: resultMouse.containsMouse || root.selectedIndex === index ? "#344158" : "transparent"
+                        color: resultMouse.containsMouse || (root.selectedIndex >= 0 && root.selectedIndex < root.displayedResults.length && root.displayedResults[root.selectedIndex].resultId === resultRow.modelData.resultId) ? "#344158" : "transparent"
                     }
 
                     Column {
