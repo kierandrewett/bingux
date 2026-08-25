@@ -284,7 +284,7 @@ PanelWindow {
     focusable: visible
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "bingux-search"
-    WlrLayershell.keyboardFocus: root.visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: root.visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     onVisibleChanged: {
         if (visible)
             searchInput.forceActiveFocus();
