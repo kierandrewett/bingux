@@ -62,15 +62,17 @@ This file tracks implementation work. A checked item means the related configura
 ## Phase 6: Proxmox validation
 
 - [x] Define the external Proxmox validation boundary, secret requirements, and ownership sequence.
-- [ ] Build the x86_64 NixOS installation ISO and create an isolated Bingux VM, retaining runtime evidence.
-- [ ] Boot the VM, check the systemd units, session files, portal, and desktop-shell services.
+- [x] Build the x86_64 NixOS installation ISO and create an isolated Bingux VM, retaining runtime evidence.
+- [x] Boot the VM, check the systemd units, session files, portal, and desktop-shell services.
 - [ ] Exercise tray, dock, notification, OSD, Super-release, and search workflows in the VM.
-- [ ] Record the VM identifier and destroy it only after validation evidence is retained.
+  - [x] Exercise the status and search sockets, and retain visual evidence for the top bar and Super-release search surface.
+  - [ ] Complete fresh tray, dock, notification, and OSD interaction checks through a working graphical console.
+- [x] Record the validation VM identifier (`100`) and retain the runtime evidence.
+- [ ] Destroy the validation VM after the remaining GUI workflow evidence is complete.
 
-> Live Proxmox VM creation and GUI workflow exercise remain pending. The repository
-> intentionally has no Proxmox API client. The current shell has no configured
-> `PVE_API_TOKEN_ID` or token file, so live validation cannot start until an
-> operator-owned runner and complete environment are available.
+> VM `100` (`bingux-install-100`) is running on the operator-owned Proxmox host and has been rebuilt from the current source. The system services, status socket, search socket, and Quickshell restart have been checked. Fresh GUI interaction checks remain blocked because the available Proxmox WebSocket console transport is refused on port 8006 and returns `502 Bad Gateway` through the HTTPS proxy. Do not destroy the VM until the remaining GUI evidence is captured or the operator explicitly accepts the reduced validation scope.
+>
+> The repository intentionally has no Proxmox API client. Use an operator-owned runner and a token read from the environment or SOPS for future VM operations.
 
 ## Phase 7: Review and hand-off
 
