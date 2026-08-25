@@ -247,6 +247,8 @@ Activation is separate from a query:
 
 The shell never receives an executable command from a result. The daemon resolves the short-lived `resultId` and performs or forwards the action. It returns `activated` or an `error` record. A stale or unknown result ID fails without action.
 
+Calculation activations copy the calculation result text to the configured `commands.clipboard` argument vector. The daemon writes UTF-8 text to the helper's standard input, closes the input, waits for a successful exit, and reports `provider-failed` on a write, exit, or two-second timeout failure. The command is profile-owned configuration and is never constructed from shell input.
+
 An error record is:
 
 ```json
@@ -381,11 +383,10 @@ profile-declared runtime secret path or environment variable from SOPS-Nix confi
 
 ## Performance rule
 
-For the built-in application and calculation indexes, a warm query request must produce its first result record within 10 ms and its completed record within 30 ms at the 95th percentile. The benchmark measures daemon socket request to response. It does not treat compositor paint time or remote provider work as part of this target.
-
 Focused protocol and unit checks cover the search daemon and status/OSD paths; the
-Nix desktop-shell module check also asserts that the notification and OSD surfaces
-are configured. These checks do not establish runtime or VM behaviour.
+Nix desktop-shell module check also asserts that the notification and OSD surfaces are configured.
+The QML client repeats record and field-boundary validation in `SearchSocket.qml`, but the Nix checks
+do not execute QML functions. These checks do not establish runtime or VM behaviour.
 
 Run the local socket regression benchmark from the repository root:
 
@@ -404,7 +405,9 @@ File discovery uses `rg --files` or an equivalent background index refresh. It d
 
 ## Version policy
 
-Version 1 records contain `protocolVersion: 1`. New optional fields can be added in version 1. A required-field change, changed field meaning, or removed field requires a new protocol version and a separate socket path. The v1 host rejects other versions rather than guessing.
+Version 1 records contain `protocolVersion: 1` and use closed field sets. An added or removed field,
+a changed field meaning, or a required-field change requires a new protocol version and a separate
+socket path. The v1 host rejects unknown fields and other versions rather than guessing.
 
 ## Sources
 

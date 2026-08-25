@@ -12,6 +12,7 @@ pub const PROTOCOL_VERSION: u8 = 1;
 pub const MAX_RECORD_BYTES: usize = 64 * 1024;
 pub const MAX_RESULT_DISPLAY_BYTES: usize = 24 * 1024;
 pub const MAX_PROVIDER_ID_BYTES: usize = 64;
+pub const MAX_OPAQUE_RESULT_ID_BYTES: usize = 128;
 pub const MAX_QUERY_BYTES: usize = 512;
 pub const MAX_CHAT_RESPONSE_BYTES: usize = 12 * 1024;
 pub const MIN_QUERY_LIMIT: u8 = 1;
@@ -313,8 +314,13 @@ pub fn parse_shell_request(record: &[u8]) -> ProtocolResult<ShellRequest> {
     let object = as_object(&value)?;
     validate_protocol_version(object)?;
 
-    match required_string(object, "type")? {
+    let record_type = required_string(object, "type")?;
+    match record_type {
         "query" => {
+            reject_unknown_fields(
+                object,
+                &["protocolVersion", "type", "requestId", "query", "limit"],
+            )?;
             let request = QueryRequest {
                 request_id: required_string(object, "requestId")?.to_owned(),
                 query: required_string(object, "query")?.to_owned(),
@@ -324,6 +330,10 @@ pub fn parse_shell_request(record: &[u8]) -> ProtocolResult<ShellRequest> {
             Ok(ShellRequest::Query(request))
         }
         "activate" => {
+            reject_unknown_fields(
+                object,
+                &["protocolVersion", "type", "requestId", "resultId"],
+            )?;
             let request = ActivateRequest {
                 request_id: required_string(object, "requestId")?.to_owned(),
                 result_id: required_string(object, "resultId")?.to_owned(),
@@ -332,6 +342,7 @@ pub fn parse_shell_request(record: &[u8]) -> ProtocolResult<ShellRequest> {
             Ok(ShellRequest::Activate(request))
         }
         "cancel" => {
+            reject_unknown_fields(object, &["protocolVersion", "type", "requestId"])?;
             let request = CancelRequest {
                 request_id: required_string(object, "requestId")?.to_owned(),
             };
@@ -358,6 +369,20 @@ pub fn shell_request_id(record: &[u8]) -> Option<String> {
 pub fn parse_provider_manifest(record: &[u8]) -> ProtocolResult<ProviderManifest> {
     let value = parse_record(record)?;
     let object = as_object(&value)?;
+    reject_unknown_fields(
+        object,
+        &[
+            "protocolVersion",
+            "kind",
+            "id",
+            "displayName",
+            "command",
+            "startup",
+            "priority",
+            "timeoutMs",
+        ],
+    )
+    .map_err(|_| ProtocolError::new(ProtocolErrorKind::InvalidManifest))?;
     validate_protocol_version(object).map_err(|error| match error.kind() {
         ProtocolErrorKind::UnsupportedProtocol => error,
         _ => ProtocolError::new(ProtocolErrorKind::InvalidManifest),
@@ -409,8 +434,10 @@ pub fn parse_provider_response(record: &[u8]) -> ProtocolResult<ProviderResponse
     let object = as_object(&value)?;
     validate_protocol_version(object)?;
 
-    match required_string(object, "type")? {
+    let record_type = required_string(object, "type")?;
+    match record_type {
         "hello" => {
+            reject_unknown_fields(object, &["protocolVersion", "type", "accepted"])?;
             if required_bool(object, "accepted")? {
                 Ok(ProviderResponse::Hello)
             } else {
@@ -418,6 +445,10 @@ pub fn parse_provider_response(record: &[u8]) -> ProtocolResult<ProviderResponse
             }
         }
         "results" => {
+            reject_unknown_fields(
+                object,
+                &["protocolVersion", "type", "queryId", "complete", "results"],
+            )?;
             let query_id = required_string(object, "queryId")?.to_owned();
             validate_request_id(&query_id)?;
             let complete = required_bool(object, "complete")?;
@@ -430,11 +461,25 @@ pub fn parse_provider_response(record: &[u8]) -> ProtocolResult<ProviderResponse
             })
         }
         "activated" => {
+            reject_unknown_fields(object, &["protocolVersion", "type", "activationId"])?;
             let activation_id = required_string(object, "activationId")?.to_owned();
             validate_request_id(&activation_id)?;
             Ok(ProviderResponse::Activated { activation_id })
         }
-        "error" => parse_provider_error(object).map(ProviderResponse::Error),
+        "error" => {
+            reject_unknown_fields(
+                object,
+                &[
+                    "protocolVersion",
+                    "type",
+                    "queryId",
+                    "activationId",
+                    "code",
+                    "message",
+                ],
+            )?;
+            parse_provider_error(object).map(ProviderResponse::Error)
+        }
         _ => Err(ProtocolError::new(ProtocolErrorKind::UnknownRecordType)),
     }
 }
@@ -442,6 +487,11 @@ pub fn parse_provider_response(record: &[u8]) -> ProtocolResult<ProviderResponse
 fn parse_provider_result(value: &Value) -> ProtocolResult<ProviderResult> {
     let object =
         as_object(value).map_err(|_| ProtocolError::new(ProtocolErrorKind::InvalidResult))?;
+    reject_unknown_fields(
+        object,
+        &["resultId", "kind", "title", "subtitle", "icon", "score"],
+    )
+    .map_err(|_| ProtocolError::new(ProtocolErrorKind::InvalidResult))?;
     let result = ProviderResult {
         result_id: required_string(object, "resultId")?.to_owned(),
         kind: parse_result_kind(required_string(object, "kind")?)?,
@@ -492,6 +542,13 @@ fn as_object(value: &Value) -> ProtocolResult<&Map<String, Value>> {
     value
         .as_object()
         .ok_or_else(|| ProtocolError::new(ProtocolErrorKind::ExpectedObject))
+}
+fn reject_unknown_fields(object: &Map<String, Value>, allowed: &[&str]) -> ProtocolResult<()> {
+    if object.keys().any(|name| !allowed.contains(&name.as_str())) {
+        Err(ProtocolError::new(ProtocolErrorKind::InvalidField))
+    } else {
+        Ok(())
+    }
 }
 
 fn required_string<'a>(object: &'a Map<String, Value>, name: &str) -> ProtocolResult<&'a str> {
@@ -853,10 +910,15 @@ fn validate_result_display_text(title: &str, subtitle: &str, icon: &str) -> Prot
 }
 
 fn validate_opaque_result_id(value: &str) -> ProtocolResult<()> {
-    if value.is_empty() {
-        Err(ProtocolError::new(ProtocolErrorKind::InvalidIdentifier))
-    } else {
+    if !value.is_empty()
+        && value.len() <= MAX_OPAQUE_RESULT_ID_BYTES
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-'))
+    {
         Ok(())
+    } else {
+        Err(ProtocolError::new(ProtocolErrorKind::InvalidIdentifier))
     }
 }
 
@@ -1091,6 +1153,31 @@ mod tests {
         .expect_err("spaces are not valid request identifiers");
 
         assert_eq!(error.kind(), ProtocolErrorKind::InvalidIdentifier);
+    }
+
+    #[test]
+    fn rejects_unknown_shell_fields() {
+        let error = parse_shell_request(
+            br#"{"protocolVersion":1,"type":"query","requestId":"q-01","query":"firefox","limit":20,"extra":true}"#,
+        )
+        .expect_err("unknown fields must fail closed");
+
+        assert_eq!(error.kind(), ProtocolErrorKind::InvalidField);
+    }
+
+    #[test]
+    fn bounds_opaque_result_identifiers() {
+        for result_id in [
+            "result id".to_owned(),
+            "x".repeat(MAX_OPAQUE_RESULT_ID_BYTES + 1),
+        ] {
+            let record = format!(
+                r#"{{"protocolVersion":1,"type":"activate","requestId":"a-01","resultId":"{result_id}"}}"#
+            );
+            let error =
+                parse_shell_request(record.as_bytes()).expect_err("unsafe result ID must fail");
+            assert_eq!(error.kind(), ProtocolErrorKind::InvalidIdentifier);
+        }
     }
 
     #[test]

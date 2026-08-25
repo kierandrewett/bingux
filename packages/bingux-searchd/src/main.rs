@@ -18,6 +18,7 @@ use std::{
     env,
     ffi::OsStr,
     io::{BufReader, Write},
+    os::fd::AsRawFd,
     os::unix::net::{UnixListener, UnixStream},
     path::PathBuf,
     process::{Child, Command, Stdio},
@@ -46,6 +47,9 @@ const MAX_BUFFERED_EXTERNAL_EVENTS: usize = 64;
 
 const MAX_REAPED_PROGRAMS: usize = 128;
 const PROGRAM_REAPER_POLL_INTERVAL: Duration = Duration::from_millis(100);
+const CLIPBOARD_TIMEOUT: Duration = Duration::from_secs(2);
+const CLIPBOARD_POLL_INTERVAL: Duration = Duration::from_millis(10);
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("[bingux-searchd] {error:#}");
@@ -1792,19 +1796,87 @@ fn copy_to_clipboard(command: &[String], text: &str) -> std::io::Result<()> {
         .stderr(Stdio::null())
         .spawn()?;
     let Some(mut stdin) = child.stdin.take() else {
+        terminate_child(&mut child);
         return Err(std::io::Error::new(
             std::io::ErrorKind::BrokenPipe,
             "clipboard process did not expose standard input",
         ));
     };
-    stdin.write_all(text.as_bytes())?;
-    drop(stdin);
-    let status = child.wait()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(std::io::Error::other("clipboard process failed"))
+    if let Err(error) = set_nonblocking(&stdin) {
+        terminate_child(&mut child);
+        return Err(error);
     }
+    let payload = text.as_bytes();
+    let deadline = Instant::now() + CLIPBOARD_TIMEOUT;
+    let mut written = 0;
+    while written < payload.len() {
+        match stdin.write(&payload[written..]) {
+            Ok(0) => {
+                terminate_child(&mut child);
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    "clipboard process closed standard input",
+                ));
+            }
+            Ok(count) => written += count,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                if Instant::now() >= deadline {
+                    terminate_child(&mut child);
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        "clipboard process timed out while reading",
+                    ));
+                }
+                thread::sleep(CLIPBOARD_POLL_INTERVAL);
+            }
+            Err(error) => {
+                terminate_child(&mut child);
+                return Err(error);
+            }
+        }
+    }
+    drop(stdin);
+
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                return if status.success() {
+                    Ok(())
+                } else {
+                    Err(std::io::Error::other("clipboard process failed"))
+                };
+            }
+            Ok(None) if Instant::now() >= deadline => {
+                terminate_child(&mut child);
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "clipboard process timed out",
+                ));
+            }
+            Ok(None) => thread::sleep(CLIPBOARD_POLL_INTERVAL),
+            Err(error) => {
+                terminate_child(&mut child);
+                return Err(error);
+            }
+        }
+    }
+}
+
+fn set_nonblocking(file: &impl AsRawFd) -> std::io::Result<()> {
+    let descriptor = file.as_raw_fd();
+    let flags = unsafe { libc::fcntl(descriptor, libc::F_GETFL) };
+    if flags < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    if unsafe { libc::fcntl(descriptor, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+fn terminate_child(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn elapsed_usec(started: Instant) -> u64 {
@@ -1866,6 +1938,25 @@ mod tests {
             .expect("read daemon event")
             .expect("daemon event before socket closes");
         serde_json::from_slice(&record).expect("decode daemon event")
+    }
+
+    #[test]
+    fn copies_clipboard_text_and_reaps_the_helper() {
+        copy_to_clipboard(&["/bin/cat".to_owned()], "copied text")
+            .expect("clipboard helper should receive and close stdin");
+    }
+
+    #[test]
+    fn times_out_a_clipboard_helper_that_does_not_exit() {
+        let started = Instant::now();
+        let error = copy_to_clipboard(
+            &["/bin/sh".to_owned(), "-c".to_owned(), "sleep 10".to_owned()],
+            "copied text",
+        )
+        .expect_err("a hanging clipboard helper must time out");
+
+        assert_eq!(error.kind(), std::io::ErrorKind::TimedOut);
+        assert!(started.elapsed() < Duration::from_secs(3));
     }
 
     #[test]

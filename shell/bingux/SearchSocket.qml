@@ -7,6 +7,9 @@ QtObject {
 
     readonly property int protocolVersion: 1
     readonly property int maxRecordBytes: 64 * 1024
+    readonly property int maxResultDisplayBytes: 24 * 1024
+    readonly property int maxProviderIdBytes: 64
+    readonly property int maxOpaqueResultIdBytes: 128
     readonly property int maxQueryBytes: 512
     readonly property int maxChatMessageBytes: 12 * 1024
     readonly property int minimumLimit: 1
@@ -100,7 +103,19 @@ QtObject {
     }
 
     function isNonnegativeInteger(value) {
-        return isFiniteNumber(value) && value >= 0 && Math.floor(value) === value;
+        return isFiniteNumber(value) && Number.isSafeInteger(value) && value >= 0;
+    }
+
+    function hasOnlyFields(value, fields) {
+        if (!isObject(value))
+            return false;
+
+        const keys = Object.keys(value);
+        for (let index = 0; index < keys.length; index += 1) {
+            if (fields.indexOf(keys[index]) === -1)
+                return false;
+        }
+        return true;
     }
 
     function isValidRequestId(value) {
@@ -108,7 +123,15 @@ QtObject {
     }
 
     function isValidProviderId(value) {
-        return typeof value === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
+        return typeof value === "string" && value.length <= maxProviderIdBytes && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
+    }
+
+    function isValidOpaqueResultId(value) {
+        return typeof value === "string" && /^[A-Za-z0-9._:-]{1,128}$/.test(value);
+    }
+
+    function isSafeDisplayText(value) {
+        return typeof value === "string" && utf8ByteLength(value) <= maxResultDisplayBytes && !/[\u0000-\u001f\u007f-\u009f]/.test(value);
     }
 
     function isValidQuery(query) {
@@ -121,7 +144,7 @@ QtObject {
 
     function isValidResult(result) {
         const kinds = ["application", "file", "folder", "database", "calculation", "weather", "chat", "action"];
-        return isObject(result) && typeof result.resultId === "string" && result.resultId.length > 0 && isValidProviderId(result.providerId) && kinds.indexOf(result.kind) !== -1 && typeof result.title === "string" && typeof result.subtitle === "string" && typeof result.icon === "string" && isFiniteNumber(result.score) && result.score >= 0 && result.score <= 1;
+        return hasOnlyFields(result, ["resultId", "providerId", "kind", "title", "subtitle", "icon", "score"]) && isValidOpaqueResultId(result.resultId) && isValidProviderId(result.providerId) && kinds.indexOf(result.kind) !== -1 && isSafeDisplayText(result.title) && isSafeDisplayText(result.subtitle) && isSafeDisplayText(result.icon) && utf8ByteLength(result.title) + utf8ByteLength(result.subtitle) + utf8ByteLength(result.icon) <= maxResultDisplayBytes && isFiniteNumber(result.score) && result.score >= 0 && result.score <= 1;
     }
 
     function isCommonRecord(record) {
@@ -129,41 +152,40 @@ QtObject {
     }
 
     function isShowSearchRecord(record) {
-        return isCommonRecord(record) && record.type === "show-search" && typeof record.monotonicUsec === "string" && /^[0-9]+$/.test(record.monotonicUsec);
+        return isCommonRecord(record) && hasOnlyFields(record, ["protocolVersion", "type", "monotonicUsec"]) && record.type === "show-search" && typeof record.monotonicUsec === "string" && /^[0-9]+$/.test(record.monotonicUsec);
     }
 
     function isIntegrationStateRecord(record) {
-        return isCommonRecord(record) && record.type === "integration-state" && record.name === "gnoblin-super-release" && (record.state === "ready" || record.state === "unavailable");
+        return isCommonRecord(record) && hasOnlyFields(record, ["protocolVersion", "type", "name", "state"]) && record.type === "integration-state" && record.name === "gnoblin-super-release" && (record.state === "ready" || record.state === "unavailable");
     }
 
     function isResultsRecord(record) {
-        if (!isCommonRecord(record) || record.type !== "results" || !isValidRequestId(record.requestId) || typeof record.complete !== "boolean" || !isNonnegativeInteger(record.elapsedUsec) || !Array.isArray(record.results))
+        if (!isCommonRecord(record) || !hasOnlyFields(record, ["protocolVersion", "type", "requestId", "complete", "elapsedUsec", "results"]) || record.type !== "results" || !isValidRequestId(record.requestId) || typeof record.complete !== "boolean" || !isNonnegativeInteger(record.elapsedUsec) || !Array.isArray(record.results) || record.results.length > maximumLimit)
             return false;
 
         for (let index = 0; index < record.results.length; index += 1) {
             if (!isValidResult(record.results[index]))
                 return false;
-
         }
         return true;
     }
 
     function isErrorRecord(record) {
         const codes = ["invalid-request", "unsupported-protocol", "unavailable", "provider-failed", "unknown-result"];
-        return isCommonRecord(record) && record.type === "error" && isValidRequestId(record.requestId) && codes.indexOf(record.code) !== -1 && typeof record.message === "string";
+        return isCommonRecord(record) && hasOnlyFields(record, ["protocolVersion", "type", "requestId", "code", "message"]) && record.type === "error" && isValidRequestId(record.requestId) && codes.indexOf(record.code) !== -1 && isSafeDisplayText(record.message);
     }
 
     function isActivatedRecord(record) {
-        return isCommonRecord(record) && record.type === "activated" && isValidRequestId(record.requestId);
+        return isCommonRecord(record) && hasOnlyFields(record, ["protocolVersion", "type", "requestId"]) && record.type === "activated" && isValidRequestId(record.requestId);
     }
 
     function isValidChatMessage(message) {
         const trimmed = typeof message === "string" ? message.trim() : "";
-        return typeof message === "string" && trimmed !== "" && utf8ByteLength(trimmed) <= maxChatMessageBytes && !/[\u0000-\u001f\u007f-\u009f]/.test(message);
+        return typeof message === "string" && trimmed !== "" && utf8ByteLength(message) <= maxChatMessageBytes && !/[\u0000-\u001f\u007f-\u009f]/.test(message);
     }
 
     function isChatResponseRecord(record) {
-        return isCommonRecord(record) && record.type === "chat-response" && isValidRequestId(record.requestId) && isValidChatMessage(record.message);
+        return isCommonRecord(record) && hasOnlyFields(record, ["protocolVersion", "type", "requestId", "message"]) && record.type === "chat-response" && isValidRequestId(record.requestId) && isValidChatMessage(record.message);
     }
 
     function acceptRecord(record) {
@@ -250,7 +272,7 @@ QtObject {
     }
 
     function activate(resultId) {
-        if (typeof resultId !== "string" || resultId.length === 0)
+        if (!isValidOpaqueResultId(resultId))
             return "";
 
         const requestId = nextRequestId("a");
