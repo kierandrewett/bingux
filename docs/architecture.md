@@ -139,6 +139,8 @@ Proxmox validation uses the installer ISO and an external operator-owned
 runner. The runner must upload the ISO, create a disposable VM with an
 ownership name and tag, boot it, retain redacted task evidence, and delete the
 VM only after validation. `docs/proxmox.md` defines the required secret
-boundary and API sequence. This repository contains no live Proxmox or VM
-result; direct tray, dock, notification, and OSD interactions remain future
-runtime evidence.
+boundary and API sequence. The final owned VM run is destroyed after validation
+and left no live VM result in this repository. It produced runtime evidence for
+search, dock, tray, and notifications; the headless guest could not produce a
+Gnoblin `OsdRequested` event, so OSD producer behaviour still needs a
+hardware-backed session.

@@ -155,9 +155,12 @@ does not prescribe a runner command or an evidence directory.
 5. Start the VM and wait for the start task to reach a terminal result. Retain
    redacted task records outside this repository.
 6. Inspect the console and verify the installer boot, systemd units, session
-   files, portal, desktop shell, and search paths. Direct tray, dock, notification,
-   and OSD interactions remain unverified until a future disposable VM run; do not
-   treat source or focused checks as runtime evidence.
+   files, portal, desktop shell, and search paths. The final owned VM run
+   exercised the search overlay, application activation, dock menu and window
+   cycling, Tailscale tray registration, and desktop notifications. The
+   headless VM did not expose a hardware event that makes Gnoblin emit
+   `OsdRequested`; verify that producer path on a physical or hardware-backed
+   session before treating OSD runtime behaviour as proven.
 7. Before cleanup, read the VM configuration and verify both the exact
    `bingux-install-<vmid>` name and the `bingux-pve-test` tag. Refuse cleanup
    when either value does not match.
