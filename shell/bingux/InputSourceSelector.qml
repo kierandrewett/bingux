@@ -227,7 +227,7 @@ Item {
                         id: sourceAction
 
                         required property var modelData
-
+                        required property int index
                         width: parent.width
                         height: 34
                         Accessible.name: sourceAction.modelData.displayName
