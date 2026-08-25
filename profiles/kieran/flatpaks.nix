@@ -5,31 +5,29 @@
     remotes = [
         {
             name = "flathub";
-            location = "https://dl.flathub.org/repo/";
+            location = "https://dl.flathub.org/repo/flathub.flatpakrepo";
         }
         {
             name = "flathub-beta";
-            location = "https://dl.flathub.org/beta-repo/";
+            location = "https://dl.flathub.org/beta-repo/flathub-beta.flatpakrepo";
         }
         {
             name = "feather";
-            location = "https://featherwallet.org/flatpak";
+            location = "https://featherwallet.org/flatpak/.flatpakrepo";
         }
         {
             name = "firefox-nightly";
             location = "https://kierandrewett.github.io/firefox-nightly-flatpak/";
+            args = "--no-gpg-verify";
         }
         {
             name = "marcterm";
             location = "https://marc2332.github.io/term";
+            args = "--no-gpg-verify";
         }
         {
             name = "orion-beta";
-            location = "https://flatpak.orionbrowser.com/repo/beta/";
-        }
-        {
-            name = "silverbullet";
-            location = "https://releases.silverbullet.plus/flatpak/repo";
+            location = "https://flatpak.orionbrowser.com/orion-beta.flatpakrepo";
         }
     ];
 
@@ -102,7 +100,8 @@
         }
         {
             appId = "plus.silverbullet.desktop";
-            origin = "silverbullet";
+            flatpakref = "https://releases.silverbullet.plus/flatpak/silverbullet.flatpakref";
+            sha256 = "sha256-C6LBX3goh/tf7ftAme4otfxAWlpgXWev1TsTIcdhNA8=";
         }
     ];
 }

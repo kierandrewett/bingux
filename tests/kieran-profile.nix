@@ -58,6 +58,11 @@ assert
     == [ "<Shift><Super>space" ];
 assert host.config.home-manager.users.kieran.programs.quickshell.enable;
 assert builtins.any (remote: remote.name == "flathub-beta") host.config.services.flatpak.remotes;
+assert builtins.any (
+    remote:
+    remote.name == "firefox-nightly"
+    && remote.args == "--no-gpg-verify"
+) host.config.bingux.packages.flatpaks.remotes;
 assert builtins.elem pkgs.rustc host.config.bingux.packages.system;
 assert builtins.elem pkgs.cargo-audit host.config.bingux.packages.system;
 assert builtins.elem pkgs.cargo-generate host.config.bingux.packages.system;
@@ -76,8 +81,14 @@ assert tailscaleSystray.Install.WantedBy == [ "graphical-session.target" ];
 assert builtins.all (app: builtins.elem app.origin flatpakRemoteNames) flatpakApps;
 assert host.config.services.flatpak.enable;
 assert builtins.any (
+    app:
+    app.appId == "plus.silverbullet.desktop"
+    && app.flatpakref == "https://releases.silverbullet.plus/flatpak/silverbullet.flatpakref"
+    && app.sha256 == "sha256-C6LBX3goh/tf7ftAme4otfxAWlpgXWev1TsTIcdhNA8="
+) flatpakApps;
+assert builtins.any (
     app: app.appId == "md.obsidian.Obsidian"
-) host.config.bingux.packages.flatpaks.apps;
+) flatpakApps;
 pkgs.runCommand "bingux-kieran-profile-check" { } ''
     touch "$out"
 ''

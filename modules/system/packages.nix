@@ -14,6 +14,18 @@ let
                 default = "flathub";
                 description = "The Flatpak remote that provides the declared application; it defaults to flathub.";
             };
+
+            flatpakref = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "A Flatpak reference URL used to install an application with its signed remote metadata.";
+            };
+
+            sha256 = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "The SRI SHA-256 hash for a declared Flatpak reference URL.";
+            };
         };
     };
 
@@ -27,6 +39,12 @@ let
             location = lib.mkOption {
                 type = lib.types.str;
                 description = "The Flatpak repository URL for this remote.";
+            };
+
+            args = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = null;
+                description = "Extra arguments passed to flatpak remote-add, for example --no-gpg-verify for an unsigned remote.";
             };
         };
     };
@@ -92,7 +110,7 @@ in
             services.flatpak = {
                 enable = true;
                 packages = map (app: {
-                    inherit (app) appId origin;
+                    inherit (app) appId origin flatpakref sha256;
                 }) cfg.flatpaks.apps;
             };
         })

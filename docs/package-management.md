@@ -81,6 +81,26 @@ apps = [
 ];
 ```
 
+For applications distributed as a signed Flatpak reference, declare the
+reference URL and its SRI hash. The reference supplies the repository metadata
+and signing key:
+
+```nix
+apps = [
+    {
+        appId = "plus.silverbullet.desktop";
+        flatpakref = "https://example.invalid/app.flatpakref";
+        sha256 = "sha256-...";
+    }
+];
+```
+
+Use a `.flatpakrepo` URL for a signed remote when the publisher provides one.
+Only set a remote's `args = "--no-gpg-verify"` when the publisher documents an
+unsigned repository. This disables repository signature verification and must
+not be used as a general workaround for a missing key.
+
+
 Do not use an undeclared remote. If a profile declares any remotes, it must also
 include every remote that its application declarations need. Bingux does not
 remove Flatpaks that are not declared by the profile.
