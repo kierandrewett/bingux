@@ -230,7 +230,6 @@ PanelWindow {
                         implicitWidth: 240
                         implicitHeight: menuSurface.implicitHeight
                         color: "transparent"
-                        grabFocus: true
                         onVisibleChanged: {
                             if (!visible)
                                 dockButton.menuOpen = false;

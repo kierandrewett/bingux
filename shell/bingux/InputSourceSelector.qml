@@ -160,7 +160,6 @@ Item {
         implicitWidth: 220
         implicitHeight: menuSurface.implicitHeight
         color: "transparent"
-        grabFocus: true
         onVisibleChanged: {
             if (!visible)
                 root.menuOpen = false;
