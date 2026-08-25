@@ -1,6 +1,6 @@
 import QtQuick
 import Quickshell
-import Quickshell.Networking
+import Quickshell.Io
 import Quickshell.Services.Pipewire
 import Quickshell.Services.UPower
 import Quickshell.Widgets
@@ -11,63 +11,120 @@ Item {
     readonly property int controlSize: 24
     readonly property var audioSink: Pipewire.defaultAudioSink
     readonly property var battery: UPower.displayDevice
-    readonly property var connectedWifi: connectedDevice(DeviceType.Wifi)
-    readonly property var connectedWired: connectedDevice(DeviceType.Wired)
+    property string networkState: "unknown"
     readonly property bool audioAvailable: audioSink !== null && audioSink.ready && audioSink.audio !== null
     readonly property bool audioMuted: audioAvailable && audioSink.audio.muted
     readonly property real audioVolume: audioAvailable ? audioSink.audio.volume : 0
     readonly property bool laptopBatteryAvailable: battery !== null && battery.ready && battery.isLaptopBattery
 
-    implicitWidth: indicatorRow.implicitWidth
-    implicitHeight: indicatorRow.implicitHeight
-    width: implicitWidth
-    height: implicitHeight
+    function updateNetworkState(output) {
+        let nextState = "offline";
+        const lines = output.trim().split("\n");
 
-    function connectedDevice(type) {
-        const devices = Networking.devices.values;
+        for (let index = 0; index < lines.length; index += 1) {
+            const fields = lines[index].split(":");
 
-        for (let index = 0; index < devices.length; index += 1) {
-            const device = devices[index];
+            if (fields.length < 3 || !fields[2].startsWith("connected")) {
+                continue;
+            }
 
-            if (device.type === type && device.connected) {
-                return device;
+            if (fields[1] === "wifi" || fields[1] === "802-11-wireless") {
+                nextState = "wifi";
+                break;
+            }
+
+            if (fields[1] === "ethernet") {
+                nextState = "wired";
+                continue;
+            }
+
+            if (fields[1] === "tun" && nextState === "offline") {
+                nextState = "vpn";
+            } else if (nextState === "offline") {
+                nextState = "network";
             }
         }
 
-        return null;
+        networkState = nextState;
     }
 
     function networkIconName() {
-        if (connectedWifi !== null) {
+        if (networkState === "wifi") {
             return "network-wireless-signal-excellent-symbolic";
         }
 
-        if (connectedWired !== null) {
+        if (networkState === "wired") {
             return "network-wired-symbolic";
         }
 
-        if (!Networking.wifiEnabled) {
-            return "network-wireless-disabled-symbolic";
+        if (networkState === "vpn") {
+            return "network-vpn-symbolic";
+        }
+
+        if (networkState === "network") {
+            return "network-transmit-receive-symbolic";
         }
 
         return "network-offline-symbolic";
     }
 
     function networkAccessibleName() {
-        if (connectedWifi !== null) {
+        if (networkState === "wifi") {
             return "Wireless network connected";
         }
 
-        if (connectedWired !== null) {
+        if (networkState === "wired") {
             return "Wired network connected";
         }
 
-        if (!Networking.wifiEnabled) {
-            return "Wireless network disabled";
+        if (networkState === "vpn") {
+            return "VPN connected";
         }
 
-        return "No network connection";
+        if (networkState === "network") {
+            return "Network connected";
+        }
+
+        if (networkState === "offline") {
+            return "No network connection";
+        }
+
+        return "Network status unavailable";
     }
+
+    Process {
+        id: networkProcess
+
+        command: [ "nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device" ]
+        stdout: StdioCollector {
+            onStreamFinished: root.updateNetworkState(this.text)
+        }
+
+        onExited: function(exitCode) {
+            if (exitCode !== 0) {
+                root.networkState = "unknown";
+            }
+        }
+
+        Component.onCompleted: running = true
+    }
+
+    Timer {
+        interval: 5000
+        repeat: true
+        running: true
+        onTriggered: {
+            if (!networkProcess.running) {
+                networkProcess.running = true;
+            }
+        }
+    }
+
+    implicitWidth: indicatorRow.implicitWidth
+    implicitHeight: indicatorRow.implicitHeight
+    width: implicitWidth
+    height: implicitHeight
+
 
     function audioIconName() {
         if (!audioAvailable || audioMuted || audioVolume <= 0.01) {
