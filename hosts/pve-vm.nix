@@ -20,6 +20,10 @@
         devices = lib.mkForce [ "nodev" ];
     };
     boot.loader.efi.canTouchEfiVariables = lib.mkForce false;
+    # The disposable PVE guest can block during zram setup with the selected
+    # CachyOS kernel under QEMU. Keep zram enabled in real profiles, but avoid
+    # making the validation host unbootable.
+    zramSwap.enable = lib.mkForce false;
     fileSystems."/boot" = {
         device = "/dev/sda1";
         fsType = "vfat";
