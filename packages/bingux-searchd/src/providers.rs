@@ -339,10 +339,11 @@ fn index_applications(
             let Some(file_type) = entry.file_type() else {
                 continue;
             };
-            if file_type.is_symlink() || !file_type.is_file() {
+            let path = entry.path();
+            let is_file = file_type.is_file() || (file_type.is_symlink() && path.is_file());
+            if !is_file {
                 continue;
             }
-            let path = entry.path();
             if path.extension().and_then(|extension| extension.to_str()) != Some("desktop") {
                 continue;
             }
@@ -907,8 +908,8 @@ mod tests {
     use super::{
         Activation, Candidate, append_activation, bounded_sqlite_optional_text,
         bounded_sqlite_text, calculation_candidate, desktop_id_from_relative_path,
-        evaluate_calculation, parse_desktop_entry, quick_chat_candidate, rank_and_limit,
-        sqlite_activation,
+        evaluate_calculation, index_applications, parse_desktop_entry, quick_chat_candidate,
+        rank_and_limit, sqlite_activation,
     };
     use crate::protocol::{ProviderResult, ResultKind};
     use rusqlite::types::ValueRef;
@@ -927,6 +928,42 @@ mod tests {
             },
             activation: Activation::None,
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn indexes_desktop_files_exported_through_file_symlinks() {
+        use std::fs::{create_dir_all, remove_dir_all, write};
+        use std::os::unix::fs::symlink;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let root = std::env::temp_dir().join(format!(
+            "bingux-searchd-symlink-test-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system clock is before Unix epoch")
+                .as_nanos(),
+        ));
+        let application_directory = root.join("applications");
+        create_dir_all(&application_directory).expect("create application directory");
+        let source = root.join("source.desktop");
+        write(
+            &source,
+            "[Desktop Entry]\nName=Exported\nComment=Symlinked app\nIcon=exported\nExec=exported\nType=Application\n",
+        )
+        .expect("write desktop entry");
+        symlink(&source, application_directory.join("exported.desktop"))
+            .expect("create desktop entry symlink");
+
+        let indexed = index_applications(
+            std::slice::from_ref(&application_directory),
+            &["/nix/store/example/bin/gtk-launch".to_owned()],
+        );
+
+        remove_dir_all(&root).expect("remove test directory");
+        assert_eq!(indexed.len(), 1);
+        assert_eq!(indexed[0].candidate.result.title, "Exported");
     }
 
     #[test]
