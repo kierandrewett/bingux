@@ -47,11 +47,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1787578934,
-        "narHash": "sha256-rMbg/W6QBy43/7V58oYjxc+4ilYmKYx6wZ9W4Y4/DhM=",
+        "lastModified": 1787635527,
+        "narHash": "sha256-Pn23KsMJ26mFF3TjSPGwXlI+azBPgqXg9ivFENtVUaI=",
         "owner": "kierandrewett",
         "repo": "gnoblin",
-        "rev": "41ddef4405001687d9d5cc21398d0a048d633fdc",
+        "rev": "db7d07e5f9f84a02076367e5f985a6bce6e4c6b3",
         "type": "github"
       },
       "original": {
