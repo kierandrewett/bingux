@@ -5,7 +5,9 @@ use bingux_statusd::{
     osd_json, parse_cpu_stat, parse_meminfo, parse_network_totals,
 };
 use std::{
-    env, fs,
+    env,
+    ffi::OsString,
+    fs,
     io::{self, Read, Write},
     os::unix::{
         fs::{FileTypeExt, PermissionsExt},
@@ -231,11 +233,22 @@ fn start_client_listener(
 }
 
 fn bind_socket(socket_name: &str) -> io::Result<UnixListener> {
-    let runtime_directory = env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "XDG_RUNTIME_DIR is not set"))?;
+    let runtime_directory = runtime_directory_from(env::var_os("XDG_RUNTIME_DIR"))?;
 
     bind_socket_in(&runtime_directory.join("bingux"), socket_name)
+}
+
+fn runtime_directory_from(value: Option<OsString>) -> io::Result<PathBuf> {
+    let runtime_directory = value
+        .map(PathBuf::from)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "XDG_RUNTIME_DIR is not set"))?;
+    if !runtime_directory.is_absolute() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "XDG_RUNTIME_DIR must be absolute",
+        ));
+    }
+    Ok(runtime_directory)
 }
 
 fn bind_socket_in(directory: &Path, socket_name: &str) -> io::Result<UnixListener> {
@@ -334,7 +347,7 @@ fn read_proc<T>(path: &str, parse: impl FnOnce(&str) -> Result<T, &'static str>)
 
 #[cfg(test)]
 mod tests {
-    use super::{bind_socket_in, prune_disconnected_clients};
+    use super::{bind_socket_in, prune_disconnected_clients, runtime_directory_from};
     use std::{
         env, fs,
         io::ErrorKind,
@@ -383,6 +396,13 @@ mod tests {
         prune_disconnected_clients(&mut clients);
 
         assert_eq!(clients.len(), 1);
+    }
+
+    #[test]
+    fn rejects_relative_runtime_directories() {
+        let error = runtime_directory_from(Some("relative".into())).unwrap_err();
+
+        assert_eq!(error.kind(), ErrorKind::InvalidInput);
     }
 
     #[test]
