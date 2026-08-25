@@ -75,6 +75,8 @@ let
         grep -Fq "timeoutPath: profileSettings.timeoutPath" "${shellConfig.source}/shell.qml"
         grep -Fq "acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton" "${shellConfig.source}/Tray.qml"
         grep -Fq "modelData.secondaryActivate()" "${shellConfig.source}/Tray.qml"
+        grep -Fq "usesFallbackIcon" "${shellConfig.source}/Tray.qml"
+        grep -Fq "QsMenuAnchor" "${shellConfig.source}/Tray.qml"
         grep -Fq "onWheel: function(wheel)" "${shellConfig.source}/Dock.qml"
         grep -Fq "Qt.MiddleButton" "${shellConfig.source}/Dock.qml"
         grep -Fq "Qt.RightButton" "${shellConfig.source}/Dock.qml"
