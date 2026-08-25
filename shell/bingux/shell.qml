@@ -78,6 +78,7 @@ ShellRoot {
         }
 
         Row {
+            id: leftControls
             spacing: 8
 
             anchors {
@@ -150,16 +151,24 @@ ShellRoot {
             }
 
         }
-
         Text {
-            anchors.centerIn: parent
+            id: clockText
+            x: {
+                const centredX = (parent.width - implicitWidth) / 2;
+                const rightAlignedX = rightControls.x - implicitWidth - 12;
+                const leftAlignedX = leftControls.x + leftControls.width + 12;
+                return Math.max(leftAlignedX, Math.min(centredX, rightAlignedX));
+            }
             color: "#f5f7fa"
             font.pixelSize: 14
             text: root.formattedTime
+
+            anchors.verticalCenter: parent.verticalCenter
         }
 
         Row {
-            spacing: 12
+            id: rightControls
+            spacing: 4
 
             anchors {
                 right: parent.right
