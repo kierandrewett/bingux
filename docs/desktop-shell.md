@@ -22,7 +22,7 @@ Gnoblin org.gnoblin.Shell.SuperReleased
       Quickshell bingux desktop-shell process
 ```
 
-`bingux-searchd` is the sole consumer of the Gnoblin `SuperReleased` D-Bus signal. `bingux-statusd` owns the Gnoblin OSD and desktop-state signal subscription. The QML process does not parse D-Bus output or start ad-hoc monitors. It connects to local Unix sockets and renders typed records from the daemons.
+`bingux-searchd` is the sole consumer of the Gnoblin `SuperReleased` D-Bus signal. `bingux-statusd` owns the Gnoblin OSD and desktop-state signal subscription. The QML process does not parse Gnoblin D-Bus output or start long-lived daemon monitors. It connects to local Unix sockets and renders typed records from the daemons. `SystemIndicators` also runs a bounded `nmcli` probe to identify the current NetworkManager connection type; the probe is killed after two seconds and is retried every five seconds.
 
 The shell and daemon run as the profile user. The socket directory has mode `0700`. The socket has mode `0600`. The service does not listen on TCP or another network transport.
 

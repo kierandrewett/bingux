@@ -7,8 +7,8 @@ import Quickshell.Widgets
 
 Item {
     id: root
-
     readonly property int controlSize: 24
+    property string timeoutPath: "timeout"
     readonly property var audioSink: Pipewire.defaultAudioSink
     readonly property var battery: UPower.displayDevice
     property string networkState: "unknown"
@@ -95,7 +95,7 @@ Item {
     Process {
         id: networkProcess
 
-        command: [ "nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device" ]
+        command: [root.timeoutPath, "2s", "nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device"]
         stdout: StdioCollector {
             onStreamFinished: root.updateNetworkState(this.text)
         }
@@ -155,6 +155,10 @@ Item {
     }
 
     function batteryAccessibleName() {
+        if (!laptopBatteryAvailable) {
+            return "Battery status unavailable";
+        }
+
         const percentage = Math.round(battery.percentage);
         return UPower.onBattery ? "Battery " + percentage + " percent, discharging" : "Battery " + percentage + " percent, charging";
     }
@@ -230,7 +234,7 @@ Item {
             IconImage {
                 anchors.centerIn: parent
                 implicitSize: 16
-                source: Quickshell.iconPath(root.battery.iconName, "battery-missing-symbolic")
+                source: Quickshell.iconPath(root.laptopBatteryAvailable ? root.battery.iconName : "battery-missing-symbolic", "battery-missing-symbolic")
             }
         }
     }

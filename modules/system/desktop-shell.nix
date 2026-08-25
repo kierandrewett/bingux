@@ -16,6 +16,7 @@ let
             readonly property bool dockEnabled: ${lib.boolToString cfg.dock.enable}
             readonly property bool metricsEnabled: ${lib.boolToString cfg.metrics.enable}
             readonly property var pinnedApps: ${builtins.toJSON cfg.dock.pinnedApps}
+            readonly property string timeoutPath: "${lib.getExe' pkgs.coreutils "timeout"}"
             readonly property string gnoblinCtlPath: "${lib.getExe' config.programs.gnoblin.package "gnoblinctl"}"
         }
     '';

@@ -220,6 +220,7 @@ ShellRoot {
             }
 
             SystemIndicators {
+                timeoutPath: profileSettings.timeoutPath
             }
 
         }
