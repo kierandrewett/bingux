@@ -20,4 +20,9 @@
         devices = lib.mkForce [ "nodev" ];
     };
     boot.loader.efi.canTouchEfiVariables = lib.mkForce false;
+    fileSystems."/boot" = {
+        device = "/dev/sda1";
+        fsType = "vfat";
+        options = [ "umask=0077" ];
+    };
 }
