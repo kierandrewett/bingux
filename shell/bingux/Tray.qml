@@ -7,11 +7,11 @@ Item {
     id: root
 
     required property var parentWindow
-    readonly property int maximumItems: 12
-    property var visibleItems: []
+    readonly property int maximumVisibleItems: 12
+    property var trayItems: []
 
     function refreshItems() {
-        root.visibleItems = SystemTray.items.values.slice(0, root.maximumItems);
+        root.trayItems = SystemTray.items.values;
     }
 
     Component.onCompleted: root.refreshItems()
@@ -23,21 +23,25 @@ Item {
         }
     }
 
-    implicitWidth: Math.min(trayRow.implicitWidth, root.maximumItems * 26)
+    implicitWidth: Math.min(trayRow.contentWidth, root.maximumVisibleItems * 26)
     implicitHeight: trayRow.implicitHeight
     width: implicitWidth
     height: implicitHeight
     clip: true
 
-    Row {
+    ListView {
         id: trayRow
 
-        width: implicitWidth
-        height: implicitHeight
+        width: root.width
+        height: 24
+        implicitWidth: Math.min(contentWidth, root.maximumVisibleItems * 26)
+        implicitHeight: 24
+        orientation: ListView.Horizontal
         spacing: 2
-
-        Repeater {
-            model: root.visibleItems
+        clip: true
+        interactive: contentWidth > width
+        boundsBehavior: Flickable.StopAtBounds
+        model: root.trayItems
 
             delegate: Item {
                 id: trayButton
@@ -70,13 +74,13 @@ Item {
                         return false;
 
                     if (icon.startsWith("image://"))
-                        return /^image:\/\/[A-Za-z0-9._-]+\/[A-Za-z0-9._?=&/-]+$/.test(icon);
+                        return /^image:\/\/[A-Za-z0-9._-]+\/[A-Za-z0-9._?=&:/-]+$/.test(icon);
 
                     return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(icon);
                 }
 
                 function iconSource(icon) {
-                    return root.isSafeIconSource(icon) ? icon : Quickshell.iconPath("application-x-executable", "application-x-executable");
+                    return trayButton.isSafeIconSource(icon) ? icon : Quickshell.iconPath("application-x-executable", "application-x-executable");
                 }
 
                 width: 24
@@ -143,7 +147,7 @@ Item {
 
                     menu: trayButton.modelData.menu
                     anchor.item: trayButton
-                    anchor.edges: Edges.Top
+                    anchor.edges: Edges.Bottom
                     anchor.gravity: Edges.Bottom
                     anchor.adjustment: PopupAdjustment.Flip | PopupAdjustment.Slide
                 }
@@ -167,10 +171,15 @@ Item {
                     }
 
                     onWheel: function(wheel) {
-                        trayButton.modelData.scroll(wheel.angleDelta.y, false);
+                        if (trayRow.contentWidth > trayRow.width) {
+                            const delta = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.angleDelta.x;
+                            trayRow.contentX = Math.max(0, Math.min(trayRow.contentWidth - trayRow.width, trayRow.contentX - delta));
+                            wheel.accepted = true;
+                        } else {
+                            trayButton.modelData.scroll(wheel.angleDelta.y, false);
+                        }
                     }
                 }
             }
         }
-    }
 }

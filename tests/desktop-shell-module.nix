@@ -77,7 +77,7 @@ let
         grep -Fq "modelData.secondaryActivate()" "${shellConfig.source}/Tray.qml"
         grep -Fq "usesFallbackIcon" "${shellConfig.source}/Tray.qml"
         grep -Fq "QsMenuAnchor" "${shellConfig.source}/Tray.qml"
-        grep -Fq "maximumItems" "${shellConfig.source}/Tray.qml"
+        grep -Fq "maximumVisibleItems" "${shellConfig.source}/Tray.qml"
         grep -Fq "isSafeIconSource" "${shellConfig.source}/Tray.qml"
         grep -Fq "onWheel: function(wheel)" "${shellConfig.source}/Dock.qml"
         grep -Fq "Qt.MiddleButton" "${shellConfig.source}/Dock.qml"
