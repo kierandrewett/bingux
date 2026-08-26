@@ -7,11 +7,27 @@ Item {
     id: root
 
     required property var parentWindow
+    readonly property int maximumItems: 12
+    property var visibleItems: []
 
-    implicitWidth: trayRow.implicitWidth
+    function refreshItems() {
+        root.visibleItems = SystemTray.items.values.slice(0, root.maximumItems);
+    }
+
+    Component.onCompleted: root.refreshItems()
+
+    Connections {
+        target: SystemTray.items
+        function onValuesChanged() {
+            root.refreshItems();
+        }
+    }
+
+    implicitWidth: Math.min(trayRow.implicitWidth, root.maximumItems * 26)
     implicitHeight: trayRow.implicitHeight
     width: implicitWidth
     height: implicitHeight
+    clip: true
 
     Row {
         id: trayRow
@@ -21,7 +37,7 @@ Item {
         spacing: 2
 
         Repeater {
-            model: SystemTray.items
+            model: root.visibleItems
 
             delegate: Item {
                 id: trayButton
@@ -49,6 +65,19 @@ Item {
                     const icon = modelData.icon;
                     return isTailscaleItem && (typeof icon !== "string" || icon.length === 0 || icon.startsWith("image://"));
                 }
+                function isSafeIconSource(icon) {
+                    if (typeof icon !== "string" || icon.length === 0 || icon.length > 256 || /[\u0000-\u001f\u007f-\u009f]/.test(icon))
+                        return false;
+
+                    if (icon.startsWith("image://"))
+                        return /^image:\/\/[A-Za-z0-9._-]+\/[A-Za-z0-9._?=&/-]+$/.test(icon);
+
+                    return /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(icon);
+                }
+
+                function iconSource(icon) {
+                    return root.isSafeIconSource(icon) ? icon : Quickshell.iconPath("application-x-executable", "application-x-executable");
+                }
 
                 width: 24
                 height: 24
@@ -57,7 +86,7 @@ Item {
                     visible: !trayButton.usesFallbackIcon
                     anchors.centerIn: parent
                     implicitSize: 18
-                    source: trayButton.modelData.icon
+                    source: trayButton.iconSource(trayButton.modelData.icon)
                 }
 
                 Item {
