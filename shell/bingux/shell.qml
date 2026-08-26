@@ -153,6 +153,7 @@ ShellRoot {
         }
         Text {
             id: clockText
+            visible: rightControls.x >= leftControls.x + leftControls.width + implicitWidth + 24
             x: {
                 const centredX = (parent.width - implicitWidth) / 2;
                 const rightAlignedX = rightControls.x - implicitWidth - 12;

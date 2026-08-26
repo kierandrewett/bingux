@@ -67,11 +67,13 @@ This file tracks implementation work. A checked item means the related configura
 - [x] Exercise status, metrics, Super-release, and search workflows in the VM.
   - [x] Exercise the status and search sockets, and retain visual evidence for the top bar and Super-release search surface.
   - [x] Complete fresh graphical checks for session unlock, live metrics, the top-bar search button, Super-release, and an application result.
-- [ ] Exercise tray, dock, notification, and OSD interactions in a future disposable VM run.
-- [x] Record the validation VM identifier (`100`) and retain the runtime evidence.
-- [x] Destroy validation VM `100` after the available validation evidence was complete.
+- [x] Exercise tray, dock, and notification interactions in disposable VM; the headless guest did not provide a hardware-backed Gnoblin `OsdRequested` producer for direct OSD runtime evidence.
+- [x] Record the validation VM identifier (`2100`) and retain the runtime evidence.
+- [x] Destroy validation VM `2100` after validation.
 
-> VM `100` (`bingux-install-100`) was stopped and destroyed after the socket, daemon-restart, shell, metrics, and search evidence was retained. A future disposable VM run is still required for direct tray, dock, notification, and OSD interaction evidence.
+> VM `2100` (`bingux-install-2100`) was stopped and destroyed after the final committed system was deployed. Runtime evidence covers the top bar, Tailscale tray registration and fallback glyph, search overlay and activation, dock application menu and window cycling, and desktop notifications.
+>
+> The OSD surface, protocol, and socket checks pass. Direct OSD producer behaviour remains unverified because the headless guest did not generate a real `org.gnoblin.Shell.OsdRequested` event. Verify that path on a physical or hardware-backed session.
 >
 > The repository intentionally has no Proxmox API client. Use an operator-owned runner and a token read from the environment or SOPS for future VM operations.
 

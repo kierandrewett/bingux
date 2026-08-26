@@ -27,10 +27,27 @@ Item {
                 id: trayButton
 
                 required property var modelData
-                // Tailscale can expose a pixmap URL that the layer-shell image provider cannot render.
+                activeFocusOnTab: true
+                Accessible.role: Accessible.Button
+                Accessible.name: typeof modelData.tooltipTitle === "string" && modelData.tooltipTitle.length > 0 ? modelData.tooltipTitle : modelData.title
+                Keys.onPressed: function(event) {
+                    if (event.key === Qt.Key_Return || event.key === Qt.Key_Space) {
+                        if (modelData.onlyMenu && modelData.hasMenu)
+                            trayMenu.open();
+                        else
+                            modelData.activate();
+                        event.accepted = true;
+                    }
+                }
+                readonly property bool isTailscaleItem: {
+                    const id = typeof modelData.id === "string" ? modelData.id : "";
+                    const title = typeof modelData.title === "string" ? modelData.title.toLowerCase() : "";
+                    const tooltipTitle = typeof modelData.tooltipTitle === "string" ? modelData.tooltipTitle.toLowerCase() : "";
+                    return id.startsWith("systray_") && (title === "disconnected" || title.indexOf("tailscale") >= 0 || tooltipTitle.indexOf("tailscale") >= 0);
+                }
                 readonly property bool usesFallbackIcon: {
                     const icon = modelData.icon;
-                    return typeof icon !== "string" || icon.length === 0 || icon.startsWith("image://");
+                    return isTailscaleItem && (typeof icon !== "string" || icon.length === 0 || icon.startsWith("image://"));
                 }
 
                 width: 24
@@ -96,8 +113,10 @@ Item {
                     id: trayMenu
 
                     menu: trayButton.modelData.menu
-                    anchor.window: root.parentWindow
                     anchor.item: trayButton
+                    anchor.edges: Edges.Top
+                    anchor.gravity: Edges.Bottom
+                    anchor.adjustment: PopupAdjustment.Flip | PopupAdjustment.Slide
                 }
                 MouseArea {
                     anchors.fill: parent
