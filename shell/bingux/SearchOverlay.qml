@@ -27,7 +27,7 @@ PanelWindow {
         if (searchInput.text === "")
             return chatMode ? "Type a follow-up." : "Type to search.";
 
-        if (loading)
+        if (loading && displayedResults.length === 0)
             return "Searching…";
 
         if (queryComplete && results.length === 0)
@@ -40,6 +40,7 @@ PanelWindow {
     property var results: []
     property int selectedIndex: -1
     property bool keyboardSelection: false
+    property bool awaitingResults: false
     property bool queryComplete: false
     property bool activationPending: false
     property string queryError: ""
@@ -50,6 +51,7 @@ PanelWindow {
     property var displayedResults: []
 
     function clearResults() {
+        awaitingResults = false;
         keyboardSelection = false;
         results = [];
         displayedResults = [];
@@ -137,19 +139,29 @@ PanelWindow {
         activeActivationRequestId = "";
         activationPending = false;
         queryError = "";
-        clearResults();
-        if (!visible || searchInput.text === "")
-            return ;
+        results = [];
+        queryComplete = false;
+        keyboardSelection = false;
+        awaitingResults = true;
+        selectedIndex = displayedResults.length > 0 ? 0 : -1;
+        if (!visible || searchInput.text === "") {
+            clearResults();
+            return;
+        }
 
         if (!searchSocket.isValidQuery(query)) {
+            clearResults();
             queryError = query.trim() === "" ? "Enter search text." : "Search text is invalid.";
             return ;
         }
-        if (!serviceReady)
-            return ;
+        if (!serviceReady) {
+            clearResults();
+            return;
+        }
 
         const requestId = searchSocket.sendQuery(query, resultLimit);
         if (requestId === "") {
+            clearResults();
             queryError = "Search unavailable.";
             return ;
         }
@@ -169,7 +181,7 @@ PanelWindow {
         return left.resultId < right.resultId ? -1 : left.resultId > right.resultId ? 1 : 0;
     }
 
-    function mergeResults(incoming) {
+    function mergeResults(incoming, complete = false) {
         const selectedResultId = selectedIndex >= 0 && selectedIndex < displayedResults.length ? displayedResults[selectedIndex].resultId : "";
         const updated = results.slice();
         for (let incomingIndex = 0; incomingIndex < incoming.length; incomingIndex += 1) {
@@ -196,6 +208,10 @@ PanelWindow {
             updated.splice(resultLimit);
 
         results = updated;
+        // Empty provider batches must not erase the previous query's rows.
+        if (updated.length === 0 && !complete)
+            return;
+        awaitingResults = false;
         displayedResults = updated;
         const retainedIndex = keyboardSelection
             ? displayedResults.findIndex(result => result.resultId === selectedResultId)
@@ -253,7 +269,7 @@ PanelWindow {
     }
 
     function activateResult(result) {
-        if (activationPending || result === null || typeof result !== "object" || typeof result.resultId !== "string" || result.resultId === "")
+        if (awaitingResults || activationPending || result === null || typeof result !== "object" || typeof result.resultId !== "string" || result.resultId === "")
             return ;
 
         if (isChatResult(result)) {
@@ -335,7 +351,7 @@ PanelWindow {
             if (requestId !== root.activeRequestId || root.queryComplete)
                 return ;
 
-            root.mergeResults(incoming);
+            root.mergeResults(incoming, complete);
             root.queryComplete = complete;
         }
 
