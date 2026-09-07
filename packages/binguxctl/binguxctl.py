@@ -5,6 +5,7 @@ import json
 import math
 from pathlib import Path
 import os
+import re
 import subprocess
 import sys
 import time
@@ -37,9 +38,17 @@ def parser():
     capture.add_argument("--copy", action=argparse.BooleanOptionalAction, default=None)
     capture.add_argument("--region", nargs=4, type=int, metavar=("X", "Y", "WIDTH", "HEIGHT"))
     audio = commands.add_parser("audio", help="Control default output volume or microphone gain")
-    audio.add_argument("action", nargs="?", default="status", choices=["status", "volume", "up", "down", "mute", "unmute", "toggle"])
-    audio.add_argument("value", nargs="?", type=float)
+    audio.add_argument("action", nargs="?", default="status", choices=["status", "volume", "up", "down", "mute", "unmute", "toggle", "devices", "select"])
+    audio.add_argument("value", nargs="?", help="Percentage or device ID for select")
     audio.add_argument("--input", action="store_true", help="Control the default microphone")
+    for name, actions in (("network", ["status", "list", "refresh", "connect", "disconnect"]),
+                          ("bluetooth", ["status", "list", "on", "off", "toggle", "scan", "connect", "disconnect"]),
+                          ("power", ["status", "set"]),
+                          ("night-light", ["status", "on", "off", "toggle"]),
+                          ("awake", ["status", "on", "off", "toggle"])):
+        control = commands.add_parser(name, help=f"Control {name}")
+        control.add_argument("action", nargs="?", default="status", choices=actions)
+        control.add_argument("value", nargs="?")
     media = commands.add_parser("media", help="Control an MPRIS player")
     media.add_argument("action", nargs="?", default="status", choices=["list", "status", "play", "pause", "toggle", "next", "previous", "seek"])
     media.add_argument("value", nargs="?", type=float, help="Absolute position in seconds for seek")
@@ -56,9 +65,13 @@ def parser():
     for name in ("calendar", "controls", "metrics", "keyboard", "notifications"):
         command = commands.add_parser(name, help=f"Control {name}")
         actions = ["open", "close", "toggle", "status"]
+        if name == "controls": actions += ["page"]
         if name == "keyboard": actions += ["next", "previous"]
         if name == "notifications": actions += ["list", "dismiss", "clear", "invoke"]
         command.add_argument("action", nargs="?", default="toggle", choices=actions)
+        if name == "controls":
+            command.add_argument("page", nargs="?", choices=["network", "bluetooth", "audio", "display", "vpn", "power", "customise"])
+            command.add_argument("--input", action="store_true", help="Open the audio input page")
         if name == "notifications":
             command.add_argument("id", nargs="?")
             command.add_argument("action_id", nargs="?")
@@ -99,11 +112,29 @@ def invocation(args, cli):
         elif action == "open" and any(key not in ("kind", "target") for key in options):
             call = ["capture", "openOptions", json.dumps(options)]
         else: call = ["capture", "show", args.mode, args.target] if action == "open" else ["capture", {"toggle": "open"}.get(action, action)]
+    elif command == "controls":
+        if (action == "page") != (args.page is not None): cli.error("controls page requires a page name")
+        if args.input and args.page != "audio": cli.error("--input requires controls page audio")
+        call = ["actions", "page", args.page, str(args.input).lower()] if action == "page" else ["shell", "panel", "controls", action]
+    elif command == "audio" and action in ("devices", "select"):
+        if (action == "select") != (args.value is not None): cli.error("A device ID is required only for audio select")
+        call = ["actions", "device", "list" if action == "devices" else "select", str(args.input).lower(), args.value or ""]
+    elif command in ("network", "bluetooth", "power", "night-light", "awake"):
+        needs_value = action in ("connect", "disconnect", "scan", "set")
+        if needs_value != (args.value is not None): cli.error("This action " + ("requires a value" if needs_value else "takes no value"))
+        if command == "bluetooth":
+            if action == "scan" and args.value not in ("on", "off"): cli.error("bluetooth scan requires on or off")
+            if action in ("connect", "disconnect") and not re.fullmatch(r"(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}", args.value): cli.error("Use a Bluetooth device address from bluetooth list")
+        if command == "network" and needs_value and not re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", args.value): cli.error("Use a saved connection UUID from network list")
+        if command in ("power", "night-light", "awake"):
+            call = ["actions", "service", command, action, args.value or ""]
+        else: call = ["actions", command, "status" if command == "network" and action == "list" else action, args.value or ""]
     elif command == "audio":
         numeric = action in ("volume", "up", "down")
         if action == "volume" and args.value is None: cli.error("audio volume requires a percentage")
         if not numeric and args.value is not None: cli.error("This audio action takes no value")
-        value = args.value if args.value is not None else 5 if numeric else 0
+        try: value = float(args.value) if args.value is not None else 5 if numeric else 0
+        except ValueError: cli.error("Volume must be a number")
         if not math.isfinite(value) or not 0 <= value <= 100: cli.error("Volume must be between 0 and 100")
         call = ["actions", "audio", action, str(args.input).lower(), str(value)]
     elif command == "media":
@@ -143,7 +174,7 @@ def invocation(args, cli):
     return ["call", "--", *call]
 
 
-def execute(command, run=subprocess.run, sleep=time.sleep):
+def execute(command, run=subprocess.run, sleep=time.sleep, capture=False):
     for attempt in range(12):
         result = run(command, capture_output=True, text=True, timeout=10)
         output = (result.stdout + result.stderr).strip()
@@ -151,6 +182,7 @@ def execute(command, run=subprocess.run, sleep=time.sleep):
             sleep(.1)
             continue
         # Never repeat an uncertain result: a toggle or capture may have executed.
+        if any(line.lstrip().startswith("ERROR quickshell.ipc:") for line in output.splitlines()): raise RuntimeError(output)
         if result.returncode or output.startswith("No running instances") or output in ("Not ready to accept queries yet.", "Function not found.", "Target not found."):
             raise RuntimeError(output or f"Quickshell exited with status {result.returncode}")
         try:
@@ -159,10 +191,26 @@ def execute(command, run=subprocess.run, sleep=time.sleep):
             response = None
         if isinstance(response, dict) and response.get("ok") is False:
             raise RuntimeError(response.get("error", "Shell rejected the command"))
+        if capture:
+            if not isinstance(response, dict): raise RuntimeError("Expected a JSON response from the shell")
+            return response
         if result.stdout: print(result.stdout, end="" if result.stdout.endswith("\n") else "\n")
         if result.stderr: print(result.stderr, file=sys.stderr, end="")
         return 0
     raise RuntimeError("Shell is still reloading")
+
+
+def refresh_network(prefix, query=execute, sleep=time.sleep, monotonic=time.monotonic):
+    query([*prefix, "call", "--", "actions", "network", "refresh", ""], capture=True)
+    deadline = monotonic() + 15
+    while True:
+        state = query([*prefix, "call", "--", "actions", "network", "status", ""], capture=True)
+        if not state.get("busy"):
+            if state.get("error"): raise RuntimeError(state["error"])
+            if state.get("ready"):
+                return state
+        if monotonic() >= deadline: raise RuntimeError("Network refresh timed out; use network status to inspect progress")
+        sleep(.1)
 
 
 def main(argv=None):
@@ -172,7 +220,13 @@ def main(argv=None):
     path = args.path or (None if args.config else os.environ.get("BINGUX_CONFIG_PATH"))
     selection = ["--path", path] if path else ["--config", args.config or os.environ.get("BINGUX_CONFIG_NAME", "bingux")]
     try:
-        return execute([args.quickshell, "ipc", *selection, *call])
+        prefix = [args.quickshell, "ipc", *selection]
+        if args.command == "network" and args.action in ("list", "connect", "disconnect"):
+            state = refresh_network(prefix)
+            if args.action == "list":
+                print(json.dumps(state))
+                return 0
+        return execute([*prefix, *call])
     except (OSError, subprocess.TimeoutExpired, RuntimeError) as error:
         print(f"binguxctl: {error}", file=sys.stderr)
         return 1
