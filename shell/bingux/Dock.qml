@@ -1001,15 +1001,26 @@ PanelWindow {
                     verticalAlignment: Text.AlignVCenter
                 }
                 ActionButton {
+                    id: closeWindow
                     objectName: "closeWindowButton"
                     visible: action.closable
                     Layout.preferredWidth: 28
                     Layout.preferredHeight: 28
                     Layout.alignment: Qt.AlignVCenter
                     flat: true
+                    hoverEnabled: true
                     text: "×"
                     Accessible.name: "Close " + action.label
                     showFocusRing: action.navigation !== null && action.navigation.keyboardNavigation
+                    background: Rectangle {
+                        radius: closeWindow.cornerRadius
+                        // The menu row is already hovered underneath this
+                        // button, so use a brighter surface for its own state.
+                        color: closeWindow.down ? Qt.lighter(Theme.pressed, 1.2)
+                            : closeWindow.hovered ? Theme.pressed : "transparent"
+                        border.width: closeWindow.showFocusRing && closeWindow.activeFocus ? 2 : 0
+                        border.color: Theme.accent
+                    }
                     onClicked: {
                         if (action.navigation)
                             action.navigation.pointerActivate();
