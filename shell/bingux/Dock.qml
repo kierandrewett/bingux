@@ -563,7 +563,7 @@ PanelWindow {
 
                         anchors {
                             bottom: parent.bottom
-                            bottomMargin: -1
+                            bottomMargin: -2
                             horizontalCenter: parent.horizontalCenter
                         }
 
