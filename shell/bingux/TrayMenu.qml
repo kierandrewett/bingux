@@ -27,7 +27,7 @@ ShellPopup {
     ColumnLayout {
         anchors.fill: parent
         spacing: Theme.spaceSmall
-        Button {
+        ActionButton {
             visible: root.parents.length > 0
             text: "Back"
             Layout.fillWidth: true
@@ -65,7 +65,7 @@ ShellPopup {
                     visible: !entryButton.modelData.isSeparator
                     spacing: Theme.gap
                     Text { Layout.preferredWidth: 18; text: entryButton.modelData.checkState === Qt.Checked ? "✓" : ""; color: Theme.accent }
-                    Text { Layout.fillWidth: true; text: entryButton.text; textFormat: Text.PlainText; elide: Text.ElideRight; color: entryButton.enabled ? Theme.text : Theme.muted; font.pixelSize: Theme.fontSize }
+                    Text { Layout.fillWidth: true; text: entryButton.text; textFormat: Text.PlainText; elide: Text.ElideRight; color: entryButton.enabled ? Theme.text : Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize }
                     Text { text: entryButton.modelData.hasChildren ? "›" : ""; color: Theme.muted }
                 }
             }

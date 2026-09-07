@@ -14,15 +14,15 @@ ShellPopup {
         id: calendar
         width: parent.width
         spacing: Theme.padding
-        Text { text: root.today.toLocaleDateString(Qt.locale(), "dddd, d MMMM yyyy"); color: Theme.muted; font.pixelSize: Theme.fontSize; Layout.alignment: Qt.AlignHCenter }
+        Text { text: root.today.toLocaleDateString(Qt.locale(), "dddd, d MMMM yyyy"); color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize; Layout.alignment: Qt.AlignHCenter }
         RowLayout {
             Layout.fillWidth: true
             spacing: Theme.gap
-            Button { text: "‹"; Accessible.name: "Previous month"; onClicked: root.shiftMonth(-1) }
-            Text { Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; text: root.displayedMonth.toLocaleDateString(Qt.locale(), "MMMM yyyy"); color: Theme.text; font.pixelSize: 16; font.weight: Font.DemiBold }
-            Button { text: "›"; Accessible.name: "Next month"; onClicked: root.shiftMonth(1) }
+            ActionButton { text: "‹"; Accessible.name: "Previous month"; onClicked: root.shiftMonth(-1) }
+            Text { Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; text: root.displayedMonth.toLocaleDateString(Qt.locale(), "MMMM yyyy"); color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontHeading; font.weight: Font.DemiBold }
+            ActionButton { text: "›"; Accessible.name: "Next month"; onClicked: root.shiftMonth(1) }
         }
-        DayOfWeekRow { Layout.fillWidth: true; locale: Qt.locale(); delegate: Text { required property string shortName; text: shortName; color: Theme.muted; font.pixelSize: 12; horizontalAlignment: Text.AlignHCenter } }
+        DayOfWeekRow { Layout.fillWidth: true; locale: Qt.locale(); delegate: Text { required property string shortName; text: shortName; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall; horizontalAlignment: Text.AlignHCenter } }
         MonthGrid {
             id: grid
             Layout.fillWidth: true
@@ -41,11 +41,11 @@ ShellPopup {
                     text: parent.model.day
                     color: parent.model.today ? Theme.background : parent.model.month === grid.month ? Theme.text : Theme.muted
                     opacity: parent.model.month === grid.month ? 1 : 0.5
-                    font.pixelSize: Theme.fontSize
+                    font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
                     font.weight: parent.model.today ? Font.Bold : Font.Normal
                 }
             }
         }
-        Button { text: "Today"; Layout.alignment: Qt.AlignHCenter; onClicked: root.displayedMonth = new Date(root.today.getFullYear(), root.today.getMonth(), 1) }
+        ActionButton { text: "Today"; Layout.alignment: Qt.AlignHCenter; onClicked: root.displayedMonth = new Date(root.today.getFullYear(), root.today.getMonth(), 1) }
     }
 }

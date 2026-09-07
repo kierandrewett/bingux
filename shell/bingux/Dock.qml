@@ -214,7 +214,7 @@ PanelWindow {
         group.windows[nextIndex].activate();
     }
 
-    exclusiveZone: 0
+    exclusiveZone: implicitHeight
     implicitHeight: Theme.dockHeight + Theme.padding * 2
     mask: Region { item: dockSurface }
     color: "transparent"
@@ -246,7 +246,7 @@ PanelWindow {
         id: dockSurface
 
         anchors.centerIn: parent
-        width: Math.min(root.width - Theme.padding * 2, dockRow.implicitWidth + Theme.padding * 2)
+        width: Math.min(root.width - Theme.padding * 2, dockRow.implicitWidth + Theme.gap * 2)
         height: Theme.dockHeight
         radius: Theme.cardRadius + 4
         color: Theme.surface
@@ -256,8 +256,8 @@ PanelWindow {
 
         Flickable {
             anchors.fill: parent
-            anchors.leftMargin: Theme.padding
-            anchors.rightMargin: Theme.padding
+            anchors.leftMargin: Theme.gap
+            anchors.rightMargin: Theme.gap
             contentWidth: dockRow.implicitWidth
             contentHeight: height
             clip: true
@@ -287,7 +287,7 @@ PanelWindow {
                     }
 
                     Layout.preferredWidth: Theme.dockItemSize
-                    Layout.preferredHeight: Theme.dockHeight
+                    Layout.preferredHeight: Theme.dockItemSize
                     z: root.draggedId === modelData.id ? 2 : 0
                     transform: Translate { x: root.draggedId === dockButton.modelData.id ? root.dragOffset : 0 }
                     opacity: root.draggedId.length > 0 && root.draggedId !== modelData.id ? 0.65 : 1
@@ -298,17 +298,29 @@ PanelWindow {
                     Keys.onSpacePressed: root.toggleGroup(modelData)
                     Keys.onLeftPressed: event => { if (event.modifiers & Qt.ControlModifier) root.moveGroup(modelData.id, index - 1) }
                     Keys.onRightPressed: event => { if (event.modifiers & Qt.ControlModifier) root.moveGroup(modelData.id, index + 1) }
-                    ToolTip.visible: dockMouse.containsMouse && root.draggedId.length === 0
-                    ToolTip.delay: 600
-                    ToolTip.text: Accessible.name
+                    Timer {
+                        id: tooltipDelay
+                        interval: 500
+                        running: dockMouse.containsMouse && root.draggedId.length === 0 && !dockButton.menuOpen
+                        onTriggered: {
+                            tooltip.centreX = dockButton.mapToItem(root.contentItem, dockButton.width / 2, 0).x;
+                            tooltip.visible = true;
+                        }
+                        onRunningChanged: if (!running) tooltip.visible = false
+                    }
+                    DockTooltip {
+                        id: tooltip
+                        screen: root.screen
+                        text: dockButton.Accessible.name
+                    }
 
                     Rectangle {
-                        radius: 10
+                        radius: Theme.cardRadius + 4 - Theme.gap
                         color: dockButton.active ? Theme.elevated : dockMouse.containsMouse || dockButton.activeFocus ? Theme.hover : "transparent"
 
                         anchors {
                             fill: parent
-                            margins: Theme.gap
+                            margins: 0
                         }
 
                         Behavior on color {
@@ -336,7 +348,7 @@ PanelWindow {
 
                         anchors {
                             bottom: parent.bottom
-                            bottomMargin: Theme.gap
+                            bottomMargin: 0
                             horizontalCenter: parent.horizontalCenter
                         }
 
@@ -344,9 +356,9 @@ PanelWindow {
                             model: Math.min(4, dockButton.modelData.windows.length)
 
                             delegate: Rectangle {
-                                width: 4
-                                height: 4
-                                radius: width / 2
+                                width: dockButton.active ? 12 : 6
+                                height: 6
+                                radius: height / 2
                                 color: dockButton.active ? Theme.accent : Theme.muted
                             }
 
@@ -368,7 +380,7 @@ PanelWindow {
 
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-                        cursorShape: Qt.PointingHandCursor
+                        cursorShape: Qt.ArrowCursor
                         hoverEnabled: true
                         property real pressX: 0
                         property bool moved: false
@@ -542,7 +554,7 @@ PanelWindow {
         Text {
             color: Theme.text
             elide: Text.ElideRight
-            font.pixelSize: 13
+            font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
             textFormat: Text.PlainText
             text: action.label
 
@@ -561,7 +573,7 @@ PanelWindow {
 
             anchors.fill: parent
             hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
+            cursorShape: Qt.ArrowCursor
             onClicked: action.triggered()
         }
 

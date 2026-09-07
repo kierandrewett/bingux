@@ -23,7 +23,7 @@ Item {
         }
     }
 
-    implicitWidth: Math.min(trayRow.contentWidth, root.maximumVisibleItems * 26)
+    implicitWidth: Math.min(trayRow.contentWidth, root.maximumVisibleItems * 36)
     implicitHeight: trayRow.implicitHeight
     width: implicitWidth
     height: implicitHeight
@@ -33,11 +33,11 @@ Item {
         id: trayRow
 
         width: root.width
-        height: 24
-        implicitWidth: Math.min(contentWidth, root.maximumVisibleItems * 26)
-        implicitHeight: 24
+        height: Theme.barHeight
+        implicitWidth: Math.min(contentWidth, root.maximumVisibleItems * 36)
+        implicitHeight: Theme.barHeight
         orientation: ListView.Horizontal
-        spacing: 2
+        spacing: Theme.spaceSmall
         clip: true
         interactive: contentWidth > width
         boundsBehavior: Flickable.StopAtBounds
@@ -83,20 +83,20 @@ Item {
                     return trayButton.isSafeIconSource(icon) ? icon : Quickshell.iconPath("application-x-executable", "application-x-executable");
                 }
 
-                width: 24
-                height: 24
+                width: 32
+                height: Theme.barHeight
 
                 IconImage {
                     visible: !trayButton.usesFallbackIcon
                     anchors.centerIn: parent
-                    implicitSize: 18
+                    implicitSize: Theme.iconSize
                     source: trayButton.iconSource(trayButton.modelData.icon)
                 }
 
                 Item {
                     visible: trayButton.usesFallbackIcon
-                    width: 18
-                    height: 18
+                    width: 16
+                    height: 16
                     anchors.centerIn: parent
 
                     Rectangle {
@@ -104,7 +104,7 @@ Item {
                         y: 4
                         width: 2
                         height: 10
-                        color: "#8bd5ff"
+                        color: Theme.accent
                     }
 
                     Rectangle {
@@ -112,7 +112,7 @@ Item {
                         y: 12
                         width: 12
                         height: 2
-                        color: "#8bd5ff"
+                        color: Theme.accent
                     }
 
                     Rectangle {
@@ -121,7 +121,7 @@ Item {
                         width: 5
                         height: 5
                         radius: 2.5
-                        color: "#8bd5ff"
+                        color: Theme.accent
                     }
 
                     Rectangle {
@@ -130,7 +130,7 @@ Item {
                         width: 5
                         height: 5
                         radius: 2.5
-                        color: "#8bd5ff"
+                        color: Theme.accent
                     }
 
                     Rectangle {
@@ -139,7 +139,7 @@ Item {
                         width: 5
                         height: 5
                         radius: 2.5
-                        color: "#8bd5ff"
+                        color: Theme.accent
                     }
                 }
                 TrayMenu {
@@ -154,7 +154,7 @@ Item {
                 MouseArea {
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-                    cursorShape: Qt.PointingHandCursor
+                    cursorShape: Qt.ArrowCursor
 
                     onClicked: function(mouse) {
                         if (mouse.button === Qt.LeftButton) {
