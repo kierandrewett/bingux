@@ -6,8 +6,9 @@ PanelWindow {
     id: root
     property string text: ""
     property real centreX: screen ? screen.width / 2 : 0
-    implicitWidth: Math.min(320, label.implicitWidth + Theme.padding * 2)
-    implicitHeight: label.implicitHeight + Theme.gap * 2
+    implicitWidth: Math.min(320, Math.ceil(metrics.width) + Theme.padding * 2 + 2)
+    implicitHeight: Math.ceil(metrics.height) + Theme.gap * 2
+    TextMetrics { id: metrics; text: root.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize }
     visible: false
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore

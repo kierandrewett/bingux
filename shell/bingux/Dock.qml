@@ -306,7 +306,6 @@ PanelWindow {
                             tooltip.centreX = dockButton.mapToItem(root.contentItem, dockButton.width / 2, 0).x;
                             tooltip.visible = true;
                         }
-                        onRunningChanged: if (!running) tooltip.visible = false
                     }
                     DockTooltip {
                         id: tooltip
@@ -382,9 +381,10 @@ PanelWindow {
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                         cursorShape: Qt.ArrowCursor
                         hoverEnabled: true
+                        onExited: tooltip.visible = false
                         property real pressX: 0
                         property bool moved: false
-                        onPressed: function(mouse) { pressX = mouse.x; moved = false }
+                        onPressed: function(mouse) { pressX = mouse.x; moved = false; tooltip.visible = false }
                         onPositionChanged: function(mouse) {
                             if (!(pressedButtons & Qt.LeftButton)) return;
                             const offset = mouse.x - pressX + (root.draggedId === dockButton.modelData.id ? root.dragOffset : 0);
