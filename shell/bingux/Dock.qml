@@ -569,6 +569,8 @@ PanelWindow {
                     readonly property bool exiting: modelData.exiting === true
                     property bool presenceReady: false
                     property real transitionProgress: 1
+                    property int slideDirection: 1
+                    readonly property real slideOffset: slideDirection * Theme.dockIconSize * 0.35 * (1 - transitionProgress)
                     enabled: !exiting
                     onExitingChanged: {
                         if (!presenceReady)
@@ -581,6 +583,9 @@ PanelWindow {
                         animatePresence(exiting ? 0 : 1);
                     }
                     function animatePresence(destination) {
+                        // Keep the direction when reversing an unfinished transition.
+                        if (transitionProgress === 1)
+                            slideDirection = index < (dockItems.count - 1) / 2 ? -1 : 1;
                         presenceAnimation.stop();
                         entering = destination === 1;
                         presenceAnimation.from = transitionProgress;
@@ -627,8 +632,8 @@ PanelWindow {
                             }
                         }
                     ]
-                    transformOrigin: Item.Left
-                    scale: dockButton.transitionProgress * (root.draggedId === dockButton.modelData.id ? 1.06 : 1)
+                    transformOrigin: Item.Center
+                    scale: root.draggedId === dockButton.modelData.id ? 1.06 : 1
                     Behavior on scale {
                         enabled: !dockButton.entering && !dockButton.exiting
                         NumberAnimation {
@@ -671,6 +676,7 @@ PanelWindow {
                         // not to later title/window-count model updates.
                         if (modelData.entering) {
                             dockButton.entering = true;
+                            slideDirection = index < (root.appGroups.length - 1) / 2 ? -1 : 1;
                             transitionProgress = 0;
                             animatePresence(1);
                         }
@@ -684,83 +690,92 @@ PanelWindow {
                         }
                     }
 
-                    Rectangle {
-                        radius: Theme.insetRadius(dockSurface.radius, dockSurface.itemPadding)
-                        color: dockMouse.pressed ? Theme.pressed : dockMouse.containsMouse || dockButton.activeFocus ? Theme.hover : dockButton.active ? Theme.elevated : "transparent"
+                    Item {
+                        id: buttonVisual
+                        width: Theme.dockItemSize
+                        height: Theme.dockItemSize
+                        x: (dockButton.width - width) / 2 + dockButton.slideOffset
+                        anchors.verticalCenter: parent.verticalCenter
 
-                        anchors {
-                            fill: parent
-                            margins: 0
-                        }
-                    }
+                        Rectangle {
+                            radius: Theme.insetRadius(dockSurface.radius, dockSurface.itemPadding)
+                            color: dockMouse.pressed ? Theme.pressed : dockMouse.containsMouse || dockButton.activeFocus ? Theme.hover : dockButton.active ? Theme.elevated : "transparent"
 
-                    IconImage {
-                        id: dockIcon
-                        implicitSize: Theme.dockIconSize
-                        source: dockButton.modelData.desktopEntry ? Quickshell.iconPath(dockButton.modelData.desktopEntry.icon, "application-x-executable") : Quickshell.iconPath("application-x-executable", "application-x-executable")
-
-                        anchors {
-                            centerIn: parent
-                        }
-
-                    }
-
-                    ListView {
-                        id: windowIndicators
-                        implicitWidth: contentWidth
-                        width: contentWidth
-                        height: 8
-                        implicitHeight: 8
-                        visible: dockButton.modelData.windows.length > 0
-                        orientation: ListView.Horizontal
-                        spacing: 2
-                        interactive: false
-                        clip: false
-                        boundsBehavior: Flickable.StopAtBounds
-
-                        anchors {
-                            bottom: parent.bottom
-                            bottomMargin: -2
-                            horizontalCenter: parent.horizontalCenter
-                        }
-
-                        model: Math.min(4, dockButton.modelData.windows.length)
-                        add: Transition {
-                            ParallelAnimation {
-                                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
-                                NumberAnimation { property: "scale"; from: 0.55; to: 1; duration: 180; easing.type: Easing.OutBack }
+                            anchors {
+                                fill: parent
+                                margins: 0
                             }
                         }
-                        remove: Transition {
-                            ParallelAnimation {
-                                NumberAnimation { property: "opacity"; to: 0; duration: 140; easing.type: Easing.InCubic }
-                                NumberAnimation { property: "scale"; to: 0.55; duration: 140; easing.type: Easing.InCubic }
+
+                        IconImage {
+                            id: dockIcon
+                            implicitSize: Theme.dockIconSize
+                            source: dockButton.modelData.desktopEntry ? Quickshell.iconPath(dockButton.modelData.desktopEntry.icon, "application-x-executable") : Quickshell.iconPath("application-x-executable", "application-x-executable")
+
+                            anchors {
+                                centerIn: parent
                             }
-                        }
-                        displaced: Transition {
-                            NumberAnimation { properties: "x"; duration: 180; easing.type: Easing.OutCubic }
+
                         }
 
-                        delegate: Rectangle {
-                            required property int index
-                            readonly property var representedWindow: dockButton.modelData.windows[index]
-                            readonly property bool windowActive: !!representedWindow && representedWindow.activated
-                            width: windowActive ? 12 : 6
-                                height: 6
-                                radius: height / 2
-                                scale: windowActive ? 1.08 : 1
-                                opacity: 1
-                                color: windowActive ? Theme.accent : Theme.muted
-                                Behavior on width {
-                                    NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
-                                }
-                                Behavior on scale {
-                                    NumberAnimation { duration: 180; easing.type: Easing.OutBack }
-                                }
-                                Behavior on color {
-                                    ColorAnimation { duration: Theme.motion }
+                        ListView {
+                            id: windowIndicators
+                            implicitWidth: contentWidth
+                            width: contentWidth
+                            height: 8
+                            implicitHeight: 8
+                            visible: dockButton.modelData.windows.length > 0
+                            orientation: ListView.Horizontal
+                            spacing: 2
+                            interactive: false
+                            clip: false
+                            boundsBehavior: Flickable.StopAtBounds
+
+                            anchors {
+                                bottom: parent.bottom
+                                bottomMargin: -2
+                                horizontalCenter: parent.horizontalCenter
+                            }
+
+                            model: Math.min(4, dockButton.modelData.windows.length)
+                            add: Transition {
+                                ParallelAnimation {
+                                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
+                                    NumberAnimation { property: "scale"; from: 0.55; to: 1; duration: 180; easing.type: Easing.OutBack }
                                 }
                             }
+                            remove: Transition {
+                                ParallelAnimation {
+                                    NumberAnimation { property: "opacity"; to: 0; duration: 140; easing.type: Easing.InCubic }
+                                    NumberAnimation { property: "scale"; to: 0.55; duration: 140; easing.type: Easing.InCubic }
+                                }
+                            }
+                            displaced: Transition {
+                                NumberAnimation { properties: "x"; duration: 180; easing.type: Easing.OutCubic }
+                            }
+
+                            delegate: Rectangle {
+                                required property int index
+                                readonly property var representedWindow: dockButton.modelData.windows[index]
+                                readonly property bool windowActive: !!representedWindow && representedWindow.activated
+                                width: windowActive ? 12 : 6
+                                    height: 6
+                                    radius: height / 2
+                                    scale: windowActive ? 1.08 : 1
+                                    opacity: 1
+                                    color: windowActive ? Theme.accent : Theme.muted
+                                    Behavior on width {
+                                        NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                                    }
+                                    Behavior on scale {
+                                        NumberAnimation { duration: 180; easing.type: Easing.OutBack }
+                                    }
+                                    Behavior on color {
+                                        ColorAnimation { duration: Theme.motion }
+                                    }
+                                }
+
+                        }
 
                     }
 
