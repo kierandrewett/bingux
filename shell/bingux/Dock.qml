@@ -431,7 +431,7 @@ PanelWindow {
         Behavior on width {
             enabled: !Theme.reducedMotion
             NumberAnimation {
-                duration: Theme.motion
+                duration: Theme.motion * 2
                 easing.type: Easing.OutCubic
             }
         }
@@ -461,6 +461,7 @@ PanelWindow {
                     required property var modelData
                     required property int index
                     property alias menuOpen: appMenu.visible
+                    property bool entering: true
                     function publishRectangle() {
                         const position = dockIcon.mapToItem(root.contentItem, 0, 0);
                         const rect = root.visible
@@ -497,14 +498,20 @@ PanelWindow {
                             }
                         }
                     ]
-                    scale: root.draggedId === dockButton.modelData.id ? 1.06 : 1
+                    scale: dockButton.entering ? 0 : root.draggedId === dockButton.modelData.id ? 1.06 : 1
                     Behavior on scale {
                         NumberAnimation {
-                            duration: 140
+                            duration: Theme.motion * 2
                             easing.type: Easing.OutCubic
                         }
                     }
-                    opacity: root.draggedId.length > 0 && root.draggedId !== modelData.id ? 0.65 : 1
+                    opacity: dockButton.entering ? 0 : root.draggedId.length > 0 && root.draggedId !== modelData.id ? 0.65 : 1
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Theme.motion * 2
+                            easing.type: Easing.OutCubic
+                        }
+                    }
                     Behavior on x {
                         NumberAnimation {
                             duration: Theme.motion
@@ -518,6 +525,12 @@ PanelWindow {
                     Keys.onSpacePressed: root.toggleGroup(modelData)
                     Keys.onLeftPressed: event => { if (event.modifiers & Qt.ControlModifier) root.moveGroup(modelData.id, index - 1) }
                     Keys.onRightPressed: event => { if (event.modifiers & Qt.ControlModifier) root.moveGroup(modelData.id, index + 1) }
+                    Timer {
+                        id: entryTimer
+                        interval: 0
+                        running: true
+                        onTriggered: dockButton.entering = false
+                    }
                     Timer {
                         id: tooltipDelay
                         interval: root.tooltipVisible ? 0 : 500

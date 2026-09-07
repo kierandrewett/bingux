@@ -42,6 +42,24 @@ Item {
         interactive: contentWidth > width
         boundsBehavior: Flickable.StopAtBounds
         model: root.trayItems
+        add: Transition {
+            ParallelAnimation {
+                NumberAnimation {
+                    property: "opacity"
+                    from: 0
+                    to: 1
+                    duration: Theme.reducedMotion ? 0 : Theme.motion * 2
+                    easing.type: Easing.OutCubic
+                }
+                NumberAnimation {
+                    property: "scale"
+                    from: 0
+                    to: 1
+                    duration: Theme.reducedMotion ? 0 : Theme.motion * 2
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
 
             delegate: Item {
                 id: trayButton
