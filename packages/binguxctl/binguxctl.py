@@ -2,6 +2,8 @@
 """Control the running Bingux shell through its public Quickshell IPC."""
 import argparse
 import json
+import math
+from pathlib import Path
 import os
 import subprocess
 import sys
@@ -19,9 +21,35 @@ def parser():
     commands.add_parser("reload", help="Reload the shell configuration")
     commands.add_parser("list", help="List all public IPC targets and methods")
     capture = commands.add_parser("capture", help="Show, trigger or stop capture")
-    capture.add_argument("action", nargs="?", default="open", choices=["open", "toggle", "take", "stop", "cancel", "status"])
+    capture.add_argument("action", nargs="?", default="open", choices=["open", "toggle", "take", "stop", "cancel", "status", "configure", "options"])
     capture.add_argument("--mode", choices=["screenshot", "recording"], default="")
     capture.add_argument("--target", choices=["region", "screen", "window"], default="")
+    capture.add_argument("--fps", type=int, choices=[15, 30, 60])
+    capture.add_argument("--max-height", type=int, choices=[0, 720, 1080, 1440, 2160])
+    capture.add_argument("--delay", type=int, choices=[0, 1, 2, 3, 5, 10])
+    capture.add_argument("--quality", choices=["compact", "balanced", "high"])
+    capture.add_argument("--audio", choices=["none", "system", "microphone", "both"])
+    capture.add_argument("--format", choices=["png", "jpeg"])
+    capture.add_argument("--encoder", choices=["auto", "cpu"])
+    capture.add_argument("--backend", choices=["auto", "portal"])
+    capture.add_argument("--output", help="Output directory")
+    capture.add_argument("--cursor", action=argparse.BooleanOptionalAction, default=None)
+    capture.add_argument("--copy", action=argparse.BooleanOptionalAction, default=None)
+    capture.add_argument("--region", nargs=4, type=int, metavar=("X", "Y", "WIDTH", "HEIGHT"))
+    audio = commands.add_parser("audio", help="Control default output volume or microphone gain")
+    audio.add_argument("action", nargs="?", default="status", choices=["status", "volume", "up", "down", "mute", "unmute", "toggle"])
+    audio.add_argument("value", nargs="?", type=float)
+    audio.add_argument("--input", action="store_true", help="Control the default microphone")
+    media = commands.add_parser("media", help="Control an MPRIS player")
+    media.add_argument("action", nargs="?", default="status", choices=["list", "status", "play", "pause", "toggle", "next", "previous", "seek"])
+    media.add_argument("value", nargs="?", type=float, help="Absolute position in seconds for seek")
+    media.add_argument("--player", default="", help="Exact player ID from media list")
+    for name, actions in (("dock", ["list", "pin", "unpin", "move", "launch", "activate"]),
+                          ("windows", ["list", "activate", "minimize", "restore", "close"])):
+        control = commands.add_parser(name, help=f"Control {name} by ID")
+        control.add_argument("action", nargs="?", default="list", choices=actions)
+        control.add_argument("id", nargs="?")
+        if name == "dock": control.add_argument("position", nargs="?", type=int)
     search = commands.add_parser("search", help="Control search or set its query")
     search.add_argument("action", nargs="?", default="open", choices=["open", "close", "toggle", "status", "query"])
     search.add_argument("text", nargs="*")
@@ -29,7 +57,11 @@ def parser():
         command = commands.add_parser(name, help=f"Control {name}")
         actions = ["open", "close", "toggle", "status"]
         if name == "keyboard": actions += ["next", "previous"]
+        if name == "notifications": actions += ["list", "dismiss", "clear", "invoke"]
         command.add_argument("action", nargs="?", default="toggle", choices=actions)
+        if name == "notifications":
+            command.add_argument("id", nargs="?")
+            command.add_argument("action_id", nargs="?")
     emoji = commands.add_parser("emoji", help="Control the emoji picker")
     emoji.add_argument("action", nargs="?", default="open", choices=["open", "close", "status"])
     dnd = commands.add_parser("dnd", help="Set Do Not Disturb")
@@ -52,8 +84,45 @@ def invocation(args, cli):
     if command == "list": return ["show"]
     if command in ("status", "reload"): call = ["shell", command]
     elif command == "capture":
-        if action != "open" and (args.mode or args.target): cli.error("--mode and --target require capture open")
-        call = ["capture", "show", args.mode, args.target] if action == "open" else ["capture", {"toggle": "open"}.get(action, action)]
+        options = {key: getattr(args, key) for key in ("fps", "delay", "quality", "audio", "format", "encoder", "backend", "cursor", "copy") if getattr(args, key) is not None}
+        if args.mode: options["kind"] = args.mode
+        if args.target: options["target"] = args.target
+        if args.max_height is not None: options["maxHeight"] = args.max_height
+        if args.output is not None: options["directory"] = str(Path(args.output).expanduser().absolute())
+        if args.region is not None:
+            if min(args.region[:2]) < 0 or min(args.region[2:]) < 2: cli.error("Invalid capture region")
+            options["region"] = dict(zip(("x", "y", "width", "height"), args.region))
+        if action not in ("open", "configure") and options: cli.error("Capture options require open or configure")
+        if action == "configure":
+            if not options: cli.error("capture configure requires options; use capture options to inspect them")
+            call = ["capture", "configure", json.dumps(options)]
+        elif action == "open" and any(key not in ("kind", "target") for key in options):
+            call = ["capture", "openOptions", json.dumps(options)]
+        else: call = ["capture", "show", args.mode, args.target] if action == "open" else ["capture", {"toggle": "open"}.get(action, action)]
+    elif command == "audio":
+        numeric = action in ("volume", "up", "down")
+        if action == "volume" and args.value is None: cli.error("audio volume requires a percentage")
+        if not numeric and args.value is not None: cli.error("This audio action takes no value")
+        value = args.value if args.value is not None else 5 if numeric else 0
+        if not math.isfinite(value) or not 0 <= value <= 100: cli.error("Volume must be between 0 and 100")
+        call = ["actions", "audio", action, str(args.input).lower(), str(value)]
+    elif command == "media":
+        if action == "seek":
+            if args.value is None or not math.isfinite(args.value) or args.value < 0: cli.error("media seek requires non-negative seconds")
+        elif args.value is not None: cli.error("Only media seek accepts a position")
+        call = ["actions", "media", action, args.player, str(args.value or 0)]
+    elif command in ("dock", "windows"):
+        if (action == "list") != (args.id is None): cli.error("An item ID is required for actions and omitted for list")
+        if command == "dock":
+            if action == "move" and (args.position is None or args.position < 0): cli.error("dock move requires a zero-based position")
+            if action != "move" and args.position is not None: cli.error("Only dock move takes a position")
+        call = ["actions", "dock" if command == "dock" else "window", action, args.id or ""]
+        if command == "dock": call.append(str(args.position or 0))
+    elif command == "notifications" and action in ("list", "dismiss", "clear", "invoke"):
+        if (action in ("dismiss", "invoke")) != (args.id is not None): cli.error("Notification ID required only for dismiss or invoke")
+        if (action == "invoke") != (args.action_id is not None): cli.error("An action ID is required only for invoke")
+        call = ["actions", "notification", action, args.id or "", args.action_id or ""]
+    elif command == "notifications" and (args.id is not None or args.action_id is not None): cli.error("This notification action takes no ID")
     elif command == "search" and action == "query":
         if not args.text: cli.error("search query requires text")
         call = ["search", "query", " ".join(args.text)]

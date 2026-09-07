@@ -28,9 +28,26 @@ class ControlCommands(unittest.TestCase):
         self.assertEqual(self.route(["search", "query", text]), ["call", "--", "search", "query", text])
         self.assertEqual(self.route(["ipc", "example", "method", text]), ["call", "--", "example", "method", text])
 
+    def test_extended_commands_target_the_shared_actions(self):
+        self.assertEqual(self.route(["audio", "mute", "--input"]), ["call", "--", "actions", "audio", "mute", "true", "0"])
+        self.assertEqual(self.route(["media", "seek", "30", "--player", "org.mpris.MediaPlayer2.test"]),
+            ["call", "--", "actions", "media", "seek", "org.mpris.MediaPlayer2.test", "30.0"])
+        self.assertEqual(self.route(["notifications", "invoke", "session:3", "open"]),
+            ["call", "--", "actions", "notification", "invoke", "session:3", "open"])
+        self.assertEqual(self.route(["windows", "close", "instance:2"]), ["call", "--", "actions", "window", "close", "instance:2"])
+        self.assertEqual(self.route(["dock", "move", "app", "2"]), ["call", "--", "actions", "dock", "move", "app", "2"])
+
+    def test_capture_options_preserve_false_and_zero(self):
+        import json
+        call = self.route(["capture", "configure", "--no-copy", "--delay", "0", "--region", "0", "0", "20", "30"])
+        self.assertEqual(call[:4], ["call", "--", "capture", "configure"])
+        self.assertEqual(json.loads(call[4]), {"copy": False, "delay": 0, "region": {"x": 0, "y": 0, "width": 20, "height": 30}})
+
     def test_invalid_options_fail_before_ipc(self):
         for words in (["capture", "take", "--mode", "recording"], ["sidebar", "edge", "bottom"],
-                      ["sidebar", "open", "notes"], ["search", "query"], ["search", "open", "text"]):
+                      ["sidebar", "open", "notes"], ["search", "query"], ["search", "open", "text"], ["audio", "volume", "nan"], ["media", "seek", "inf"],
+                      ["notifications", "clear", "1"], ["notifications", "invoke", "1"], ["windows", "close"],
+                      ["dock", "move", "app", "-1"], ["capture", "configure"]):
             with self.subTest(words=words), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 self.route(words)
 
