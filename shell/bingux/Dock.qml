@@ -48,6 +48,7 @@ PanelWindow {
     property real dragOffset: 0
     property int dropIndex: -1
     property bool settlingDrag: false
+    property bool committingReorder: false
     property string settlingId: ""
     property int settlingTarget: -1
     property real settleOffset: 0
@@ -117,7 +118,8 @@ PanelWindow {
         ids.splice(source, 1); ids.splice(destination, 0, id);
         dockState.order = ids.concat(dockState.order.filter(old => ids.indexOf(old) < 0));
         dockState.sync();
-        refreshAppGroups();
+        refreshDebounce.stop();
+        refreshAppGroupsNow();
     }
 
     function groupIndex(id) {
@@ -230,7 +232,9 @@ PanelWindow {
     }
 
     function refreshAppGroups() {
-        refreshDebounce.restart();
+        // start() leaves an already pending frame in place. A busy window
+        // must not postpone all dock updates by repeatedly restarting it.
+        refreshDebounce.start();
     }
 
     function refreshAppGroupsNow() {
@@ -288,9 +292,9 @@ PanelWindow {
             const hasAppId = typeof toplevel.appId === "string" && toplevel.appId.length > 0;
             const associatedGroupId = root.associatedGroupIdFor(toplevel);
             const title = typeof toplevel.title === "string" ? toplevel.title.trim() : "";
-            const screens = toplevel.screens;
-            const hasNoOutput = screens && screens.length === 0;
-            if (toplevel.parent || (!hasAppId && title.length === 0 && associatedGroupId.length === 0) || (hasNoOutput && !toplevel.minimized && !toplevel.activated))
+            // Gnoblin does not emit optional foreign-toplevel output events.
+            // An empty screens list says nothing about window visibility.
+            if (toplevel.parent || (!hasAppId && title.length === 0 && associatedGroupId.length === 0))
                 continue;
 
             const fallbackId = !hasAppId && associatedGroupId.length > 0 ? associatedGroupId : "toplevel-" + index;
@@ -430,6 +434,7 @@ PanelWindow {
 
         const id = root.settlingId;
         const target = root.settlingTarget;
+        root.committingReorder = true;
         if (id.length > 0 && target >= 0 && target < root.appGroups.length)
             root.moveGroup(id, target);
 
@@ -442,6 +447,7 @@ PanelWindow {
         root.settleOffset = 0;
         root.draggedId = "";
         root.dropIndex = -1;
+        Qt.callLater(() => { root.committingReorder = false; });
     }
 
     function cancelDrag() {
@@ -517,7 +523,10 @@ PanelWindow {
 
             Repeater {
                 id: dockItems
-                model: root.appGroups
+                model: ScriptModel {
+                    values: root.appGroups
+                    objectProp: "id"
+                }
 
                 delegate: Item {
                     id: dockButton
@@ -525,8 +534,8 @@ PanelWindow {
                     required property var modelData
                     required property int index
                     property alias menuOpen: appMenu.visible
-                    property bool entering: modelData.entering === true
-                    property real transitionProgress: dockButton.entering ? 0 : 1
+                    property bool entering: false
+                    property real transitionProgress: 1
                     function publishRectangle() {
                         const position = dockIcon.mapToItem(root.contentItem, 0, 0);
                         const rect = root.visible
@@ -559,6 +568,7 @@ PanelWindow {
                             id: reorderTransform
                             x: root.liveReorderShift(dockButton.index, dockButton.modelData.id)
                             Behavior on x {
+                                enabled: !root.committingReorder
                                 NumberAnimation {
                                     duration: 180
                                     easing.type: Easing.OutCubic
@@ -583,12 +593,6 @@ PanelWindow {
                             easing.type: Easing.OutCubic
                         }
                     }
-                    Behavior on x {
-                        NumberAnimation {
-                            duration: Theme.motion
-                            easing.type: Easing.OutCubic
-                        }
-                    }
                     activeFocusOnTab: true
                     Accessible.role: Accessible.Button
                     Accessible.name: modelData.desktopEntry ? modelData.desktopEntry.name : modelData.id
@@ -607,8 +611,12 @@ PanelWindow {
                         onFinished: dockButton.entering = false
                     }
                     Component.onCompleted: {
-                        if (dockButton.entering)
+                        // Entry motion belongs to this delegate's lifetime,
+                        // not to later title/window-count model updates.
+                        if (modelData.entering) {
+                            dockButton.entering = true;
                             entryAnimation.start();
+                        }
                     }
                     Timer {
                         id: tooltipDelay
@@ -679,7 +687,7 @@ PanelWindow {
                         delegate: Rectangle {
                             required property int index
                             readonly property var representedWindow: dockButton.modelData.windows[index]
-                            readonly property bool windowActive: representedWindow !== null && representedWindow.activated
+                            readonly property bool windowActive: !!representedWindow && representedWindow.activated
                             width: windowActive ? 12 : 6
                                 height: 6
                                 radius: height / 2
@@ -755,8 +763,8 @@ PanelWindow {
                         onVisibleChanged: {
                             if (visible) {
                                 preferredX = dockButton.mapToItem(root.contentItem, 0, 0).x - popupWidth / 2 + dockButton.width / 2;
-                                const origin = dockIcon.mapToItem(appMenu.contentItem, dockIcon.width / 2, dockIcon.height / 2);
-                                appMenu.setRevealOrigin(origin.x, origin.y);
+                                // Use ShellPopup's card-local bottom-centre
+                                // origin; mapping across windows offsets it.
                                 menuNavigation.focusMenu();
                             }
                         }
@@ -868,6 +876,7 @@ PanelWindow {
                                         required property var modelData
 
                                         label: root.menuLabel(modelData && modelData.title, dockButton.modelData.id)
+                                        iconSource: dockIcon.source
                                         onTriggered: {
                                             if (modelData)
                                                 modelData.activate();
@@ -920,7 +929,9 @@ PanelWindow {
     }
 
     component MenuAction: ActionButton {
+        id: action
         readonly property bool menuEntry: true
+        property url iconSource: ""
         property var navigation: null
         showFocusRing: navigation !== null && navigation.keyboardNavigation && activeFocus
         flat: true
@@ -953,16 +964,29 @@ PanelWindow {
                 navigation.pointerActivate();
             triggered();
         }
-        contentItem: Text {
-            text: parent.label
-            textFormat: Text.PlainText
-            elide: Text.ElideRight
-            color: Theme.text
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize
-            verticalAlignment: Text.AlignVCenter
-            leftPadding: Theme.padding
-            rightPadding: Theme.padding
+        contentItem: Item {
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: Theme.padding
+                anchors.rightMargin: Theme.padding
+                spacing: Theme.gap
+                IconImage {
+                    visible: action.iconSource.toString().length > 0
+                    source: action.iconSource
+                    implicitSize: Theme.iconSize
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: action.label
+                    textFormat: Text.PlainText
+                    elide: Text.ElideRight
+                    color: Theme.text
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSize
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
         }
     }
 
