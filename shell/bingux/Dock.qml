@@ -284,6 +284,7 @@ PanelWindow {
             anchors.fill: parent
             anchors.leftMargin: Theme.gap
             anchors.rightMargin: Theme.gap
+            onContentXChanged: rectangleUpdate.restart()
             contentWidth: dockRow.implicitWidth
             contentHeight: height
             clip: true
