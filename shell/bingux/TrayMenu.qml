@@ -6,10 +6,10 @@ import Quickshell
 
 ShellPopup {
     id: root
-    property bool keyboardNavigation: false
     property var menu: null
     property var parents: []
     property var currentMenu: menu
+    readonly property bool keyboardNavigation: navigation.keyboardNavigation
     readonly property real monitorWidthLimit: screen ? Math.floor(screen.width * 0.30) : 576
     readonly property real measuredWidth: {
         let widest = 0;
@@ -25,29 +25,18 @@ ShellPopup {
     contentPadding: Theme.gap
     popupHeight: Math.min(620, entries.contentHeight + contentPadding * 2 + (parents.length ? 40 : 0))
     onMenuChanged: { parents = []; currentMenu = menu }
-    onVisibleChanged: if (visible) {
-        keyboardNavigation = false;
-        entries.currentIndex = -1;
-        entries.forceActiveFocus();
-    }
-    function moveSelection(delta) {
-        keyboardNavigation = true;
-        const count = entries.count;
-        let index = entries.currentIndex;
-        if (index < 0) index = delta > 0 ? -1 : 0;
-        for (let step = 0; step < count; step++) {
-            index = (index + delta + count) % count;
-            const entry = opener.children.values[index];
-            if (entry && entry.enabled && !entry.isSeparator) {
-                entries.currentIndex = index;
-                entries.positionViewAtIndex(index, ListView.Contain);
-                return;
-            }
-        }
-    }
+    onVisibleChanged: if (visible) navigation.focusMenu()
     // Populate menu entries while the tray icon is hovered, before a click
     // needs to show the menu surface.
     QsMenuOpener { id: opener; menu: root.currentMenu }
+    MenuNavigator {
+        id: navigation
+        entries: opener.children.values
+        view: entries
+        focusTarget: entries
+        onEscapeRequested: root.visible = false
+        onActivateRequested: root.activate(entry)
+    }
     Instantiator {
         id: menuTextMetrics
         model: opener.children
@@ -61,13 +50,13 @@ ShellPopup {
     function back() {
         if (!parents.length) { visible = false; return }
         const path = parents.slice(); currentMenu = path.pop(); parents = path;
+        navigation.focusMenu();
     }
     function activate(entry) {
         if (!entry || !entry.enabled || entry.isSeparator) return;
         if (entry.hasChildren) {
             parents = parents.concat([currentMenu]); currentMenu = entry;
-            entries.currentIndex = -1;
-            keyboardNavigation = false;
+            navigation.focusMenu();
         } else { entry.triggered(); visible = false }
     }
     ColumnLayout {
@@ -89,12 +78,12 @@ ShellPopup {
             spacing: 2
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar {}
-            Keys.onDownPressed: root.moveSelection(1)
-            Keys.onUpPressed: root.moveSelection(-1)
-            Keys.onReturnPressed: root.activate(currentItem ? currentItem.modelData : null)
-            Keys.onSpacePressed: root.activate(currentItem ? currentItem.modelData : null)
+            Keys.onDownPressed: function(event) { navigation.move(1); event.accepted = true }
+            Keys.onUpPressed: function(event) { navigation.move(-1); event.accepted = true }
+            Keys.onReturnPressed: function(event) { navigation.activateCurrent(); event.accepted = true }
+            Keys.onSpacePressed: function(event) { navigation.activateCurrent(); event.accepted = true }
             Keys.onLeftPressed: root.back()
-            Keys.onRightPressed: if (currentItem && currentItem.modelData.hasChildren) root.activate(currentItem.modelData)
+            Keys.onRightPressed: if (currentItem && currentItem.modelData.hasChildren) navigation.activateCurrent()
             delegate: ItemDelegate {
                 id: entryButton
                 required property var modelData
@@ -104,7 +93,10 @@ ShellPopup {
                 enabled: modelData.enabled && !modelData.isSeparator
                 text: modelData.text.replace(/&(.)/g, "$1")
                 Accessible.name: text
-                onClicked: root.activate(modelData)
+                onClicked: {
+                    navigation.pointerActivate();
+                    root.activate(modelData);
+                }
                 background: Rectangle {
                     radius: root.contentRadius
                     color: entryButton.down ? Theme.pressed : entryButton.enabled && (entryButton.hovered || (root.keyboardNavigation && entries.activeFocus && entries.currentIndex === entryButton.index)) ? Theme.hover : "transparent"

@@ -12,10 +12,11 @@ PanelWindow {
 
     required property var settings
     property var appGroups: []
-    property var dockGroups: []
+    // Keep live groups stable while the compositor publishes transient
+    // toplevels or changes the order of its foreign-toplevel list.
+    property var observedGroupOrder: []
     property bool appGroupsInitialised: false
     onAppGroupsChanged: rectangleUpdate.restart()
-    onDockGroupsChanged: rectangleUpdate.restart()
     onWidthChanged: rectangleUpdate.restart()
     onHeightChanged: rectangleUpdate.restart()
     onVisibleChanged: rectangleUpdate.restart()
@@ -41,7 +42,6 @@ PanelWindow {
             function onTitleChanged() { root.refreshAppGroups() }
             function onScreensChanged() { root.refreshAppGroups() }
             function onMinimizedChanged() { root.refreshAppGroups() }
-            function onActivatedChanged() { root.refreshAppGroups() }
         }
     }
     property string draggedId: ""
@@ -56,7 +56,9 @@ PanelWindow {
 
     Timer {
         id: refreshDebounce
-        interval: Theme.motion
+        // Coalesce compositor notifications into one frame without making a
+        // newly opened window feel delayed.
+        interval: 16
         onTriggered: root.refreshAppGroupsNow()
     }
 
@@ -234,11 +236,19 @@ PanelWindow {
     function refreshAppGroupsNow() {
         const previousGroups = root.appGroups;
         const previousIds = {};
-        for (const previousGroup of previousGroups)
+        const previousGroupsById = {};
+        for (const previousGroup of previousGroups) {
             previousIds[previousGroup.id] = true;
+            previousGroupsById[previousGroup.id] = previousGroup;
+        }
+        const observedOrder = root.observedGroupOrder.length > 0
+            ? root.observedGroupOrder.slice()
+            : previousGroups.map(group => group.id);
 
         const groups = [];
         const groupIndexes = {
+        };
+        const discoveryIndexes = {
         };
         const addGroup = function addGroup(appId, fallbackId) {
             const normalisedAppId = root.normaliseAppId(appId);
@@ -259,10 +269,10 @@ PanelWindow {
                 "id": groupId,
                 "desktopEntry": desktopEntry,
                 "windows": [],
-                "entering": false,
-                "exiting": false
+                "entering": false
             };
             groupIndexes[groupId] = groups.length;
+            discoveryIndexes[groupId] = groups.length;
             groups.push(group);
             return groupIndexes[groupId];
         };
@@ -291,44 +301,35 @@ PanelWindow {
         const order = dockState.order;
         groups.sort((a, b) => {
             const ai = order.indexOf(a.id), bi = order.indexOf(b.id);
-            return (ai < 0 ? order.length : ai) - (bi < 0 ? order.length : bi);
+            const configuredDifference = (ai < 0 ? order.length : ai) - (bi < 0 ? order.length : bi);
+            if (configuredDifference !== 0)
+                return configuredDifference;
+
+            const observedAi = observedOrder.indexOf(a.id), observedBi = observedOrder.indexOf(b.id);
+            const observedDifference = (observedAi < 0 ? observedOrder.length : observedAi) - (observedBi < 0 ? observedOrder.length : observedBi);
+            return observedDifference !== 0 ? observedDifference : discoveryIndexes[a.id] - discoveryIndexes[b.id];
         });
 
-        const activeIds = {};
         for (const group of groups) {
-            activeIds[group.id] = true;
+            const previousGroup = previousGroupsById[group.id];
+            if (previousGroup) {
+                const previousWindows = previousGroup.windows;
+                group.windows.sort((a, b) => {
+                    const ai = previousWindows.indexOf(a), bi = previousWindows.indexOf(b);
+                    return (ai < 0 ? previousWindows.length : ai) - (bi < 0 ? previousWindows.length : bi);
+                });
+            }
             group.entering = root.appGroupsInitialised && !previousIds[group.id];
         }
 
-        const displayGroups = groups.slice();
-        const insertedExits = {};
-        for (let index = 0; index < root.dockGroups.length; index++) {
-            const previousGroup = root.dockGroups[index];
-            if (activeIds[previousGroup.id] || insertedExits[previousGroup.id])
-                continue;
-
-            displayGroups.splice(Math.min(index, displayGroups.length), 0, {
-                "id": previousGroup.id,
-                "desktopEntry": previousGroup.desktopEntry,
-                "windows": previousGroup.windows,
-                "entering": false,
-                "exiting": true
-            });
-            insertedExits[previousGroup.id] = true;
+        const nextObservedOrder = observedOrder.slice();
+        for (const group of groups) {
+            if (nextObservedOrder.indexOf(group.id) < 0)
+                nextObservedOrder.push(group.id);
         }
-
+        root.observedGroupOrder = nextObservedOrder;
         root.appGroups = groups;
-        root.dockGroups = displayGroups;
         root.appGroupsInitialised = true;
-    }
-
-    function finishGroupExit(id) {
-        for (const group of root.appGroups) {
-            if (group.id === id)
-                return;
-        }
-
-        root.dockGroups = root.dockGroups.filter(group => group.id !== id || !group.exiting);
     }
 
     function launch(group) {
@@ -497,7 +498,7 @@ PanelWindow {
         color: Theme.surface
         border.width: 1
         border.color: Theme.outline
-        visible: root.dockGroups.length > 0
+        visible: root.appGroups.length > 0
 
         Flickable {
             anchors.fill: parent
@@ -516,7 +517,7 @@ PanelWindow {
 
             Repeater {
                 id: dockItems
-                model: root.dockGroups
+                model: root.appGroups
 
                 delegate: Item {
                     id: dockButton
@@ -525,8 +526,7 @@ PanelWindow {
                     required property int index
                     property alias menuOpen: appMenu.visible
                     property bool entering: modelData.entering === true
-                    property bool exiting: modelData.exiting === true
-                    property real transitionProgress: dockButton.exiting ? 1 : dockButton.entering ? 0 : 1
+                    property real transitionProgress: dockButton.entering ? 0 : 1
                     function publishRectangle() {
                         const position = dockIcon.mapToItem(root.contentItem, 0, 0);
                         const rect = root.visible
@@ -569,7 +569,7 @@ PanelWindow {
                     transformOrigin: Item.Left
                     scale: dockButton.transitionProgress * (root.draggedId === dockButton.modelData.id ? 1.06 : 1)
                     Behavior on scale {
-                        enabled: !dockButton.entering && !dockButton.exiting
+                        enabled: !dockButton.entering
                         NumberAnimation {
                             duration: Theme.motion
                             easing.type: Easing.OutCubic
@@ -577,7 +577,7 @@ PanelWindow {
                     }
                     opacity: dockButton.transitionProgress * (root.draggedId.length > 0 && root.draggedId !== modelData.id ? 0.65 : 1)
                     Behavior on opacity {
-                        enabled: !dockButton.entering && !dockButton.exiting
+                        enabled: !dockButton.entering
                         NumberAnimation {
                             duration: Theme.motion
                             easing.type: Easing.OutCubic
@@ -606,26 +606,14 @@ PanelWindow {
                         easing.type: Easing.OutCubic
                         onFinished: dockButton.entering = false
                     }
-                    NumberAnimation {
-                        id: exitAnimation
-                        target: dockButton
-                        property: "transitionProgress"
-                        from: 1
-                        to: 0
-                        duration: Theme.reducedMotion ? 0 : Theme.motion * 2
-                        easing.type: Easing.InCubic
-                        onFinished: root.finishGroupExit(dockButton.modelData.id)
-                    }
                     Component.onCompleted: {
                         if (dockButton.entering)
                             entryAnimation.start();
-                        else if (dockButton.exiting)
-                            exitAnimation.start();
                     }
                     Timer {
                         id: tooltipDelay
                         interval: root.tooltipVisible ? 0 : 500
-                        running: dockMouse.containsMouse && root.draggedId.length === 0 && !dockButton.menuOpen && !dockButton.entering && !dockButton.exiting
+                        running: dockMouse.containsMouse && root.draggedId.length === 0 && !dockButton.menuOpen && !dockButton.entering
                         onTriggered: {
                             root.showTooltip(dockButton);
                         }
@@ -715,7 +703,7 @@ PanelWindow {
                         id: dockMouse
 
                         anchors.fill: parent
-                        enabled: !dockButton.entering && !dockButton.exiting
+                        enabled: !dockButton.entering
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                         cursorShape: Qt.ArrowCursor
                         hoverEnabled: true
@@ -768,11 +756,16 @@ PanelWindow {
                             if (visible) {
                                 preferredX = dockButton.mapToItem(root.contentItem, 0, 0).x - popupWidth / 2 + dockButton.width / 2;
                                 const origin = dockIcon.mapToItem(appMenu.contentItem, dockIcon.width / 2, dockIcon.height / 2);
-                                appMenu.revealOriginX = origin.x;
-                                appMenu.revealOriginY = origin.y;
-                                appMenu.contentItem.forceActiveFocus();
-                                menuColumn.forceActiveFocus();
+                                appMenu.setRevealOrigin(origin.x, origin.y);
+                                menuNavigation.focusMenu();
                             }
+                        }
+
+                        MenuNavigator {
+                            id: menuNavigation
+                            entries: menuColumn.children
+                            focusTarget: menuColumn
+                            onEscapeRequested: dockButton.menuOpen = false
                         }
 
                         Rectangle {
@@ -785,15 +778,31 @@ PanelWindow {
 
                             ColumnLayout {
                                 id: menuColumn
-                                function moveSelection(delta) {
-                                    const actions = Array.from(children).filter(item => item.menuEntry === true && item.visible && item.enabled);
-                                    if (!actions.length) return;
-                                    let index = actions.findIndex(item => item.activeFocus);
-                                    if (index < 0) index = delta > 0 ? -1 : 0;
-                                    actions[(index + delta + actions.length) % actions.length].forceActiveFocus();
+
+                                // Keep the container keyboard-active when the
+                                // menu opens. Once an action is focused its
+                                // own handlers delegate to the same navigator.
+                                Keys.priority: Keys.BeforeItem
+                                Keys.onDownPressed: function(event) {
+                                    menuNavigation.move(1);
+                                    event.accepted = true;
                                 }
-                                Keys.onDownPressed: moveSelection(1)
-                                Keys.onUpPressed: moveSelection(-1)
+                                Keys.onUpPressed: function(event) {
+                                    menuNavigation.move(-1);
+                                    event.accepted = true;
+                                }
+                                Keys.onReturnPressed: function(event) {
+                                    menuNavigation.activateCurrent();
+                                    event.accepted = true;
+                                }
+                                Keys.onSpacePressed: function(event) {
+                                    menuNavigation.activateCurrent();
+                                    event.accepted = true;
+                                }
+                                Keys.onEscapePressed: function(event) {
+                                    menuNavigation.escapeRequested();
+                                    event.accepted = true;
+                                }
 
                                 spacing: 2
 
@@ -804,7 +813,7 @@ PanelWindow {
 
                                 MenuAction {
                                     cornerRadius: appMenu.contentRadius
-                                    navigationColumn: menuColumn
+                                    navigation: menuNavigation
                                     label: "Open new window"
                                     visible: dockButton.modelData.desktopEntry !== null
                                     onTriggered: {
@@ -829,7 +838,7 @@ PanelWindow {
 
                                     delegate: MenuAction {
                                     cornerRadius: appMenu.contentRadius
-                                        navigationColumn: menuColumn
+                                        navigation: menuNavigation
                                         required property var modelData
 
                                         label: root.menuLabel(modelData.name, "Application action")
@@ -855,7 +864,7 @@ PanelWindow {
 
                                     delegate: MenuAction {
                                     cornerRadius: appMenu.contentRadius
-                                        navigationColumn: menuColumn
+                                        navigation: menuNavigation
                                         required property var modelData
 
                                         label: root.menuLabel(modelData && modelData.title, dockButton.modelData.id)
@@ -912,7 +921,8 @@ PanelWindow {
 
     component MenuAction: ActionButton {
         readonly property bool menuEntry: true
-        property var navigationColumn: null
+        property var navigation: null
+        showFocusRing: navigation !== null && navigation.keyboardNavigation && activeFocus
         flat: true
         required property string label
         signal triggered()
@@ -921,18 +931,28 @@ PanelWindow {
         implicitHeight: 38
         Keys.priority: Keys.BeforeItem
         Keys.onDownPressed: function(event) {
-            if (navigationColumn) {
-                navigationColumn.moveSelection(1);
+            if (navigation) {
+                navigation.move(1);
                 event.accepted = true;
             }
         }
         Keys.onUpPressed: function(event) {
-            if (navigationColumn) {
-                navigationColumn.moveSelection(-1);
+            if (navigation) {
+                navigation.move(-1);
                 event.accepted = true;
             }
         }
-        onClicked: triggered()
+        Keys.onEscapePressed: function(event) {
+            if (navigation) {
+                navigation.escapeRequested();
+                event.accepted = true;
+            }
+        }
+        onClicked: {
+            if (navigation)
+                navigation.pointerActivate();
+            triggered();
+        }
         contentItem: Text {
             text: parent.label
             textFormat: Text.PlainText

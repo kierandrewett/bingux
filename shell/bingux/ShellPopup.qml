@@ -10,8 +10,8 @@ PanelWindow {
     property real preferredY: Theme.barHeight + Theme.gap
     property real cornerRadius: Theme.cardRadius
     property int contentPadding: Theme.padding
-    property real revealOriginX: card.x + card.width / 2
-    property real revealOriginY: card.y + card.height / 2
+    property real revealOriginX: card.width / 2
+    property real revealOriginY: card.height
     property real revealScale: 1
     readonly property real contentRadius: Theme.insetRadius(cornerRadius, contentPadding)
     property int popupWidth: 320
@@ -34,6 +34,11 @@ PanelWindow {
             reveal.restart();
         } else reveal.stop();
     }
+    function setRevealOrigin(x, y) {
+        const point = card.mapFromItem(root.contentItem, x, y);
+        revealOriginX = point.x;
+        revealOriginY = point.y;
+    }
     ParallelAnimation {
         id: reveal
         NumberAnimation { target: root; property: "revealScale"; from: 0.9; to: 1; duration: 160; easing.type: Easing.OutCubic }
@@ -52,8 +57,8 @@ PanelWindow {
         border.color: Theme.outline
         border.width: 1
         transform: Scale {
-            origin.x: root.revealOriginX - card.x
-            origin.y: root.revealOriginY - card.y
+            origin.x: root.revealOriginX
+            origin.y: root.revealOriginY
             xScale: root.revealScale
             yScale: root.revealScale
         }

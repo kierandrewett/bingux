@@ -6,6 +6,7 @@ Dock 1.0 Dock.qml
 DockTooltip 1.0 DockTooltip.qml
 InputSourceSelector 1.0 InputSourceSelector.qml
 Metrics 1.0 Metrics.qml
+MenuNavigator 1.0 MenuNavigator.qml
 NotificationState 1.0 NotificationState.qml
 NotificationSurface 1.0 NotificationSurface.qml
 OsdState 1.0 OsdState.qml

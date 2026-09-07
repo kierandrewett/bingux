@@ -164,7 +164,30 @@ Item {
         onVisibleChanged: {
             if (visible) {
                 preferredX = root.mapToItem(root.parentWindow.contentItem, 0, 0).x - popupWidth + root.width;
-                menuSurface.forceActiveFocus();
+                inputNavigation.focusMenu();
+                inputNavigation.currentIndex = root.selectedIndex;
+            }
+        }
+
+        MenuNavigator {
+            id: inputNavigation
+            entries: sourceRepeater
+            focusTarget: menuSurface
+            onEscapeRequested: root.menuOpen = false
+            onActivateRequested: {
+                if (entry && entry.sourceIndex >= 0 && entry.sourceIndex < root.sources.length)
+                    root.selectSource(root.sources[entry.sourceIndex]);
+            }
+        }
+
+        Connections {
+            target: inputNavigation
+            function onCurrentIndexChanged() {
+                if (!inputNavigation.keyboardNavigation)
+                    return;
+                const entry = inputNavigation.currentEntry;
+                if (entry && entry.sourceIndex >= 0)
+                    root.setSelectedIndex(entry.sourceIndex, true);
             }
         }
 
@@ -178,16 +201,16 @@ Item {
             focus: true
             Keys.onPressed: function(event) {
                 if (event.key === Qt.Key_Escape) {
-                    root.menuOpen = false;
+                    inputNavigation.escapeRequested();
                     event.accepted = true;
-                } else if (event.key === Qt.Key_Up && root.sources.length > 0) {
-                    root.setSelectedIndex((root.selectedIndex - 1 + root.sources.length) % root.sources.length, true);
+                } else if (event.key === Qt.Key_Up) {
+                    inputNavigation.move(-1);
                     event.accepted = true;
-                } else if (event.key === Qt.Key_Down && root.sources.length > 0) {
-                    root.setSelectedIndex((root.selectedIndex + 1) % root.sources.length, true);
+                } else if (event.key === Qt.Key_Down) {
+                    inputNavigation.move(1);
                     event.accepted = true;
                 } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Space) {
-                    root.selectCurrentSource();
+                    inputNavigation.activateCurrent();
                     event.accepted = true;
                 }
             }
@@ -214,6 +237,7 @@ Item {
                 }
 
                 Repeater {
+                    id: sourceRepeater
                     model: root.sources
 
                     delegate: Item {
@@ -221,6 +245,8 @@ Item {
 
                         required property var modelData
                         required property int index
+                        readonly property bool menuEntry: true
+                        readonly property int sourceIndex: index
                         Layout.fillWidth: true
                         Layout.preferredHeight: 38
                         Accessible.name: sourceAction.modelData.displayName
@@ -256,7 +282,28 @@ Item {
                             hoverEnabled: true
                             cursorShape: Qt.ArrowCursor
                             enabled: root.canSelect
-                            onClicked: root.selectSource(sourceAction.modelData)
+                            onClicked: {
+                                inputNavigation.pointerActivate();
+                                root.selectSource(sourceAction.modelData);
+                            }
+                        }
+
+                        Keys.priority: Keys.BeforeItem
+                        Keys.onDownPressed: function(event) {
+                            inputNavigation.move(1);
+                            event.accepted = true;
+                        }
+                        Keys.onUpPressed: function(event) {
+                            inputNavigation.move(-1);
+                            event.accepted = true;
+                        }
+                        Keys.onReturnPressed: function(event) {
+                            inputNavigation.activateCurrent();
+                            event.accepted = true;
+                        }
+                        Keys.onSpacePressed: function(event) {
+                            inputNavigation.activateCurrent();
+                            event.accepted = true;
                         }
 
                     }
