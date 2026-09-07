@@ -84,7 +84,7 @@ ShellRoot {
             for (let i = 0; i < dock.testItems.count; i++) {
                 const item = dock.testItems.itemAt(i);
                 if (item.modelData.id !== "dock-test-c") continue;
-                const frame = { progress: item.transitionProgress, scale: item.scale, slide: item.slideOffset,
+                const frame = { progress: item.transitionProgress, scale: item.scale, slide: item.slideOffset, z: item.z,
                     opacity: item.opacity, width: dock.testSurface.width };
                 if (item.modelData.exiting)
                     test.closingFrames.push(frame);
@@ -157,7 +157,7 @@ ShellRoot {
             case 4:
                 test.check(dock.testItems.itemAt(0) === test.savedItems[0] && dock.testItems.itemAt(1) === test.savedItems[1], "new app does not recreate existing buttons");
                 test.check(test.openingFrames.some(frame => frame.progress > 0 && frame.progress < 0.9), "opening app has intermediate animation frames");
-                test.check(test.openingFrames.some(frame => frame.opacity > 0 && frame.opacity < 0.9 && frame.slide > 0), "opening icon slides in from the right and fades in");
+                test.check(test.openingFrames.some(frame => frame.opacity > 0 && frame.opacity < 0.9 && frame.slide < 0 && frame.z < test.savedItems[1].z), "opening icon emerges from behind the previous item");
                 test.check(test.openingFrames.every(frame => frame.scale === 1), "opening icon retains full scale");
                 test.check(test.openingFrames.length > 1 && test.openingFrames[test.openingFrames.length - 1].width > test.openingFrames[0].width, "dock grows during entry");
                 manager.toplevels.values = [a, b];
@@ -167,7 +167,7 @@ ShellRoot {
             case 5:
                 test.sameItems("closing windows preserves surviving buttons");
                 test.check(test.closingFrames.some(frame => frame.progress > 0 && frame.progress < 0.9), "closing app has intermediate animation frames");
-                test.check(test.closingFrames.some(frame => frame.opacity > 0 && frame.opacity < 0.9 && frame.slide > 0), "closing icon slides out to the right and fades out");
+                test.check(test.closingFrames.some(frame => frame.opacity > 0 && frame.opacity < 0.9 && frame.slide < 0 && frame.z < test.savedItems[1].z), "closing icon retreats behind the previous item");
                 test.check(test.closingFrames.every(frame => frame.scale === 1), "closing icon retains full scale");
                 test.check(test.closingFrames.length > 1 && test.closingFrames[test.closingFrames.length - 1].width < test.closingFrames[0].width, "dock shrinks during departure");
                 test.check(dock.appGroups[0].windows.length === 1, "closed window removed from group");
@@ -247,7 +247,7 @@ ShellRoot {
                 steps.interval = 100;
                 break;
             case 14:
-                test.check(test.reopeningItem.exiting && test.reopeningItem.slideOffset < 0, "leftmost icon exits towards the left");
+                test.check(test.reopeningItem.exiting && test.reopeningItem.slideOffset > 0 && test.reopeningItem.z < test.savedItems[0].z, "leftmost icon retreats behind the next item");
                 test.check(test.reopeningItem.scale === 1, "left exit retains full scale");
                 steps.interval = 500;
                 break;

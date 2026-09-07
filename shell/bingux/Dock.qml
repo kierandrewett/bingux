@@ -570,7 +570,8 @@ PanelWindow {
                     property bool presenceReady: false
                     property real transitionProgress: 1
                     property int slideDirection: 1
-                    readonly property real slideOffset: slideDirection * Theme.dockIconSize * 0.35 * (1 - transitionProgress)
+                    // At zero slot width, align with the neighbouring icon's centre.
+                    readonly property real slideOffset: slideDirection * (Theme.dockItemSize / 2 + Theme.spaceSmall) * (1 - transitionProgress)
                     enabled: !exiting
                     onExitingChanged: {
                         if (!presenceReady)
@@ -585,7 +586,7 @@ PanelWindow {
                     function animatePresence(destination) {
                         // Keep the direction when reversing an unfinished transition.
                         if (transitionProgress === 1)
-                            slideDirection = index < (dockItems.count - 1) / 2 ? -1 : 1;
+                            slideDirection = dockItems.count < 2 ? 0 : index < (dockItems.count - 1) / 2 ? 1 : -1;
                         presenceAnimation.stop();
                         entering = destination === 1;
                         presenceAnimation.from = transitionProgress;
@@ -613,7 +614,7 @@ PanelWindow {
 
                     Layout.preferredWidth: Theme.dockItemSize * dockButton.transitionProgress
                     Layout.preferredHeight: Theme.dockItemSize
-                    z: root.draggedId === modelData.id ? 2 : 0
+                    z: root.draggedId === modelData.id ? 2 : entering || exiting ? 0 : 1
                     transform: [
                         Translate {
                             x: root.draggedId === dockButton.modelData.id
@@ -676,7 +677,7 @@ PanelWindow {
                         // not to later title/window-count model updates.
                         if (modelData.entering) {
                             dockButton.entering = true;
-                            slideDirection = index < (root.appGroups.length - 1) / 2 ? -1 : 1;
+                            slideDirection = root.appGroups.length < 2 ? 0 : index < (root.appGroups.length - 1) / 2 ? 1 : -1;
                             transitionProgress = 0;
                             animatePresence(1);
                         }
