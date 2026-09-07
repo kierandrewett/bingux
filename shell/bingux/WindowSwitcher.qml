@@ -3,7 +3,6 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
-import Quickshell.Widgets
 
 Scope {
     id: root
@@ -16,14 +15,25 @@ Scope {
     property var windows: []
     property int selected: 0
     property var activeScreen: Quickshell.screens[0] || null
+    readonly property int tileWidth: 108
+    readonly property int tileHeight: 116
+    readonly property int tileGap: Theme.gap
+    readonly property int cardPadding: Theme.padding
+    readonly property int cardRadius: 24
+    readonly property color cardSurface: "#fa242528"
+    readonly property color cardBorder: "#24ffffff"
+    readonly property color selectedSurface: "#364254"
     readonly property var selectedWindow: active && windows.length ? windows[selected] : null
-    readonly property int visibleCount: Math.max(1, Math.min(9, Math.floor(((activeScreen ? activeScreen.width : 1280) - 64) / 80)))
+    readonly property int visibleCount: Math.max(1, Math.min(7,
+        Math.floor(((activeScreen ? activeScreen.width : 1280) - 64 - cardPadding * 2 + tileGap) / (tileWidth + tileGap))))
     readonly property int firstVisible: Math.min(Math.max(0, selected - Math.floor(visibleCount / 2)), Math.max(0, windows.length - visibleCount))
     readonly property var visibleWindows: windows.slice(firstVisible, firstVisible + visibleCount)
     signal opening()
 
     function refresh(snapshot) {
         const live = snapshot.filter(window => window.title && (!window.parent || !snapshot.some(parent => parent.id === window.parent)));
+        // Resolve icons as windows change, before a shortcut reveals the card.
+        for (const window of live) OsIcons.resolve(iconFor(window));
         liveWindows = live;
         const previousIds = history.map(window => window.id);
         history = history.map(window => live.find(next => next.id === window.id)).filter(Boolean)
@@ -65,9 +75,15 @@ Scope {
         cancel();
         if (window && liveWindows.some(live => live.id === window.id)) shortcuts.activateWindow(window.id);
     }
+    function appFor(window) {
+        return window ? DesktopEntries.byId(window.appId) || DesktopEntries.byId(window.appId + ".desktop") : null;
+    }
+    function appName(window) {
+        const app = appFor(window);
+        return app && app.name ? app.name : window ? window.title : "";
+    }
     function iconFor(window) {
-        if (!window) return "";
-        const app = DesktopEntries.byId(window.appId) || DesktopEntries.byId(window.appId + ".desktop");
+        const app = appFor(window);
         return Quickshell.iconPath(app && app.icon ? app.icon : "application-x-executable", "application-x-executable");
     }
     Timer { id: reveal; interval: root.showDelay; onTriggered: if (root.active) root.shown = true }
@@ -90,8 +106,9 @@ Scope {
             const origin = iconRow.mapToItem(window.contentItem, 0, 0);
             x -= root.activeScreen.x + origin.x;
             y -= root.activeScreen.y + origin.y;
-            if (root.shown && button === 1 && x >= 0 && x < iconRow.width && y >= 0 && y < 76) {
-                root.selected = root.firstVisible + Math.floor(x / 80);
+            if (root.shown && button === 1 && x >= 0 && x < iconRow.width && y >= 0 && y < root.tileHeight
+                && x % (root.tileWidth + root.tileGap) < root.tileWidth) {
+                root.selected = root.firstVisible + Math.floor(x / (root.tileWidth + root.tileGap));
                 root.finish();
                 shortcuts.end();
             } else root.close();
@@ -144,43 +161,90 @@ Scope {
         mask: Region { width: 0; height: 0 }
         Rectangle {
             anchors.centerIn: parent
-            width: Math.max(272, iconRow.implicitWidth + 32)
-            height: 140
-            radius: 16
-            color: Qt.rgba(Theme.surface.r, Theme.surface.g, Theme.surface.b, 0.96)
+            width: Math.max(300, iconRow.implicitWidth + root.cardPadding * 2)
+            height: content.implicitHeight + root.cardPadding * 2
+            radius: root.cardRadius
+            color: root.cardSurface
             border.width: 1
-            border.color: Theme.outline
+            border.color: root.cardBorder
             ColumnLayout {
+                id: content
                 anchors.fill: parent
-                anchors.margins: 16
-                spacing: 12
+                anchors.margins: root.cardPadding
+                spacing: Theme.padding
                 RowLayout {
                     id: iconRow
                     Layout.alignment: Qt.AlignHCenter
-                    spacing: 4
+                    spacing: root.tileGap
                     Repeater {
                         model: root.visibleWindows
                         Rectangle {
                             required property var modelData
                             required property int index
-                            Layout.preferredWidth: 76
-                            Layout.preferredHeight: 76
-                            radius: Theme.insetRadius(16, 4)
-                            color: index + root.firstVisible === root.selected ? Theme.selection : "transparent"
-                            border.width: index + root.firstVisible === root.selected ? 1 : 0
-                            border.color: Theme.accent
-                            IconImage { anchors.centerIn: parent; implicitSize: 48; source: root.iconFor(modelData) }
+                            readonly property bool chosen: index + root.firstVisible === root.selected
+                            Layout.preferredWidth: root.tileWidth
+                            Layout.preferredHeight: root.tileHeight
+                            radius: Theme.insetRadius(root.cardRadius, root.cardPadding)
+                            color: chosen ? root.selectedSurface : "transparent"
+                            border.width: chosen ? 1 : 0
+                            border.color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.45)
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: Theme.padding
+                                spacing: Theme.gap
+                                OsIconImage {
+                                    Layout.alignment: Qt.AlignHCenter
+                                    Layout.preferredWidth: 64
+                                    Layout.preferredHeight: 64
+                                    implicitSize: 64
+                                    source: root.iconFor(modelData)
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 20
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSmall
+                                    font.weight: Font.Medium
+                                    color: chosen ? Theme.text : Theme.muted
+                                    elide: Text.ElideRight
+                                    text: root.appName(modelData)
+                                }
+                            }
                         }
                     }
                 }
-                Text {
+                Rectangle {
                     Layout.fillWidth: true
-                    horizontalAlignment: Text.AlignHCenter
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize
-                    color: Theme.text
-                    elide: Text.ElideRight
-                    text: (root.selectedWindow ? root.selectedWindow.title : "") + "   ·   " + (root.selected + 1) + " / " + root.windows.length
+                    implicitHeight: 1
+                    color: "#14ffffff"
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Theme.spaceSmall
+                    Layout.rightMargin: Theme.spaceSmall
+                    spacing: Theme.padding
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 20
+                        verticalAlignment: Text.AlignVCenter
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize
+                        font.weight: Font.Medium
+                        color: Theme.text
+                        elide: Text.ElideRight
+                        text: root.selectedWindow ? root.selectedWindow.title : ""
+                    }
+                    Text {
+                        Layout.preferredHeight: 20
+                        verticalAlignment: Text.AlignVCenter
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSmall
+                        color: Theme.muted
+                        text: (root.firstVisible > 0 ? "‹  " : "") + (root.selected + 1) + " / " + root.windows.length
+                            + (root.firstVisible + root.visibleCount < root.windows.length ? "  ›" : "")
+                    }
                 }
             }
         }

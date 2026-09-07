@@ -143,7 +143,8 @@ try:
     wait_for(lambda s: s['shown'])
     tap(1)
     key(56, False)
-    assert state()['focus'] == 'Switcher One' and not state()['visible'], 'Escape must not change focus'
+    cancelled = wait_for(lambda s: not s['visible'])
+    assert cancelled['focus'] == 'Switcher One', ('Escape must not change focus', cancelled)
     key(56, True)
     tap(15)
     wait_for(lambda s: s['shown'])
