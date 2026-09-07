@@ -98,6 +98,27 @@ PanelWindow {
         dockState.sync();
         refreshAppGroups();
     }
+
+    function groupIndex(id) {
+        for (let index = 0; index < root.appGroups.length; index++) {
+            if (root.appGroups[index].id === id)
+                return index;
+        }
+        return -1;
+    }
+
+    function liveReorderShift(index, id) {
+        const movingIndex = root.groupIndex(root.draggedId);
+        if (movingIndex < 0 || root.dropIndex < 0 || id === root.draggedId)
+            return 0;
+
+        const slot = Theme.dockItemSize + Theme.spaceSmall;
+        if (movingIndex < root.dropIndex && index > movingIndex && index <= root.dropIndex)
+            return -slot;
+        if (movingIndex > root.dropIndex && index >= root.dropIndex && index < movingIndex)
+            return slot;
+        return 0;
+    }
     property var emptyAppIdGroupAssociations: []
     property string pendingLaunchGroupId: ""
     property var pendingLaunchToplevel: null
@@ -285,11 +306,42 @@ PanelWindow {
 
     exclusiveZone: implicitHeight
     implicitHeight: Theme.dockHeight + Theme.padding * 2
-    mask: Region { item: dockSurface }
+    mask: Region { item: root.draggedId.length > 0 ? dragCapture : dockSurface }
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "bingux-dock"
     Component.onCompleted: root.refreshAppGroups()
+
+    Item {
+        id: dragCapture
+        anchors.fill: parent
+        visible: root.draggedId.length > 0
+        z: 100
+
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+            onReleased: root.finishDrag()
+            onCanceled: root.cancelDrag()
+        }
+    }
+
+    function finishDrag() {
+        const id = root.draggedId;
+        const target = root.dropIndex;
+        if (id.length > 0 && target >= 0 && target < root.appGroups.length)
+            root.moveGroup(id, target);
+        root.draggedId = "";
+        root.dragOffset = 0;
+        root.dropIndex = -1;
+    }
+
+    function cancelDrag() {
+        root.draggedId = "";
+        root.dragOffset = 0;
+        root.dropIndex = -1;
+    }
+
     Timer {
         id: pendingLaunchTimer
 
@@ -370,7 +422,28 @@ PanelWindow {
                     Layout.preferredWidth: Theme.dockItemSize
                     Layout.preferredHeight: Theme.dockItemSize
                     z: root.draggedId === modelData.id ? 2 : 0
-                    transform: Translate { x: root.draggedId === dockButton.modelData.id ? root.dragOffset : 0 }
+                    transform: [
+                        Translate {
+                            x: root.draggedId === dockButton.modelData.id ? root.dragOffset : 0
+                        },
+                        Translate {
+                            id: reorderTransform
+                            x: root.liveReorderShift(dockButton.index, dockButton.modelData.id)
+                            Behavior on x {
+                                NumberAnimation {
+                                    duration: 180
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+                        }
+                    ]
+                    scale: root.draggedId === dockButton.modelData.id ? 1.06 : 1
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: 140
+                            easing.type: Easing.OutCubic
+                        }
+                    }
                     opacity: root.draggedId.length > 0 && root.draggedId !== modelData.id ? 0.65 : 1
                     Behavior on x {
                         NumberAnimation {
@@ -423,9 +496,18 @@ PanelWindow {
 
                     }
 
-                    Row {
-                        spacing: 2
+                    ListView {
+                        id: windowIndicators
+                        implicitWidth: contentWidth
+                        width: contentWidth
+                        height: 8
+                        implicitHeight: 8
                         visible: dockButton.modelData.windows.length > 0
+                        orientation: ListView.Horizontal
+                        spacing: 2
+                        interactive: false
+                        clip: false
+                        boundsBehavior: Flickable.StopAtBounds
 
                         anchors {
                             bottom: parent.bottom
@@ -433,29 +515,46 @@ PanelWindow {
                             horizontalCenter: parent.horizontalCenter
                         }
 
-                        Repeater {
-                            model: Math.min(4, dockButton.modelData.windows.length)
-
-                            delegate: Rectangle {
-                                width: dockButton.active ? 12 : 6
-                                height: 6
-                                radius: height / 2
-                                color: dockButton.active ? Theme.accent : Theme.muted
+                        model: Math.min(4, dockButton.modelData.windows.length)
+                        add: Transition {
+                            ParallelAnimation {
+                                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.OutCubic }
+                                NumberAnimation { property: "scale"; from: 0.55; to: 1; duration: 180; easing.type: Easing.OutBack }
                             }
-
+                        }
+                        remove: Transition {
+                            ParallelAnimation {
+                                NumberAnimation { property: "opacity"; to: 0; duration: 140; easing.type: Easing.InCubic }
+                                NumberAnimation { property: "scale"; to: 0.55; duration: 140; easing.type: Easing.InCubic }
+                            }
+                        }
+                        displaced: Transition {
+                            NumberAnimation { properties: "x"; duration: 180; easing.type: Easing.OutCubic }
                         }
 
+                        delegate: Rectangle {
+                            required property int index
+                            readonly property var representedWindow: dockButton.modelData.windows[index]
+                            readonly property bool windowActive: representedWindow !== null && representedWindow.activated
+                            width: windowActive ? 12 : 6
+                                height: 6
+                                radius: height / 2
+                                scale: windowActive ? 1.08 : 1
+                                opacity: 1
+                                color: windowActive ? Theme.accent : Theme.muted
+                                Behavior on width {
+                                    NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                                }
+                                Behavior on scale {
+                                    NumberAnimation { duration: 180; easing.type: Easing.OutBack }
+                                }
+                                Behavior on color {
+                                    ColorAnimation { duration: Theme.motion }
+                                }
+                            }
+
                     }
 
-                    Rectangle {
-                        visible: root.dropIndex === dockButton.index && root.draggedId !== dockButton.modelData.id
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 3
-                        height: Theme.dockIconSize
-                        radius: 2
-                        color: Theme.accent
-                    }
                     MouseArea {
                         id: dockMouse
 
@@ -481,11 +580,12 @@ PanelWindow {
                             root.dropIndex = Math.max(0, Math.min(root.appGroups.length - 1, dockButton.index + Math.round(offset / (Theme.dockItemSize + Theme.spaceSmall))));
                         }
                         onReleased: {
-                            const id = root.draggedId, target = root.dropIndex;
-                            root.draggedId = ""; root.dragOffset = 0; root.dropIndex = -1;
-                            if (moved) root.moveGroup(id, target);
+                            if (moved)
+                                root.finishDrag();
+                            else
+                                root.cancelDrag();
                         }
-                        onCanceled: { root.draggedId = ""; root.dragOffset = 0; root.dropIndex = -1 }
+                        onCanceled: root.cancelDrag()
                         onClicked: function(mouse) {
                             if (moved) return;
                             if (mouse.button === Qt.LeftButton)
