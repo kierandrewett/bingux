@@ -139,3 +139,54 @@ output directory, cursor visibility, clipboard copying and region. Use
 Regions use logical coordinates relative to the selected capture screen. A
 region must fit the screen. Each request is validated in full before any
 preference changes, and options cannot change during an active capture.
+
+## Devices and desktop settings
+
+```sh
+binguxctl controls page network
+binguxctl controls page audio --input
+binguxctl audio devices
+binguxctl audio devices --input
+binguxctl audio select DEVICE_ID
+binguxctl network list
+binguxctl network connect CONNECTION_UUID
+binguxctl network disconnect CONNECTION_UUID
+binguxctl bluetooth list
+binguxctl bluetooth scan on
+binguxctl bluetooth connect AA:BB:CC:DD:EE:FF
+binguxctl power status
+binguxctl power set balanced
+binguxctl night-light on
+binguxctl awake on
+```
+
+Control-centre pages are `network`, `bluetooth`, `audio`, `display`, `vpn`,
+`power` and `customise`. Opening a page is idempotent. `--input` opens the
+microphone tab on the audio page. Audio device IDs are PipeWire node names
+from `audio devices`; pass `--input` to select a microphone.
+
+`network list` refreshes saved connections and nearby Wi-Fi networks, then
+waits up to 15 seconds for the results. `network status` returns cached state
+immediately. `network refresh` starts a refresh without waiting. Connect and
+disconnect first refresh the list, then operate on an exact saved connection
+UUID. Create new connections or enter passwords through Network settings.
+A failed connection remains visible in `network status` until the next
+explicit refresh or connection change.
+
+Bluetooth supports `on`, `off`, `toggle`, `status`, `list`, `scan on`,
+`scan off`, `connect ADDRESS` and `disconnect ADDRESS`. Connect requires an
+already paired, unblocked device. Command-started discovery stops after 30
+seconds. `scan off` does not stop discovery owned by another client or needed
+by the open Bluetooth page.
+
+Power profiles come from `power status`; unavailable profiles are rejected.
+Night Light and Keep Awake both support `on`, `off`, `toggle` and `status`.
+Keep Awake uses the same session inhibitor as the control centre and ends
+when the shell exits or reloads.
+
+Device and settings changes can return `{"ok":true,"pending":true}`. This
+means the request was accepted, not that the backend completed it. Inspect
+`status`, `audio devices`, or `bluetooth list` to confirm the resulting state.
+Network and desktop-service status include `busy` and `error`. Bluetooth
+reports each device's connection state. Commands never retry an operation
+when the connection closes or its result is uncertain.
