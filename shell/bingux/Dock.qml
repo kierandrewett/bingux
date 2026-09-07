@@ -521,20 +521,12 @@ PanelWindow {
 
                     Rectangle {
                         radius: Theme.insetRadius(dockSurface.radius, dockSurface.itemPadding)
-                        color: dockMouse.pressed ? Theme.pressed : dockButton.active ? Theme.elevated : dockMouse.containsMouse || dockButton.activeFocus ? Theme.hover : "transparent"
+                        color: dockMouse.pressed ? Theme.pressed : dockMouse.containsMouse || dockButton.activeFocus ? Theme.hover : dockButton.active ? Theme.elevated : "transparent"
 
                         anchors {
                             fill: parent
                             margins: 0
                         }
-
-                        Behavior on color {
-                            ColorAnimation {
-                                duration: Theme.motion
-                            }
-
-                        }
-
                     }
 
                     IconImage {
