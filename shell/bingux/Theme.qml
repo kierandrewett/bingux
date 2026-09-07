@@ -35,4 +35,5 @@ QtObject {
     readonly property int dockItemSize: 72
     readonly property int dockIconSize: 56
     readonly property int motion: 120
+    readonly property int launchTimeout: 3000
 }

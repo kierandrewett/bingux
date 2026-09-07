@@ -192,6 +192,14 @@ PanelWindow {
     }
     property var emptyAppIdGroupAssociations: []
     property string pendingLaunchGroupId: ""
+    property string launchFeedbackToken: ""
+    onPendingLaunchGroupIdChanged: {
+        if (pendingLaunchGroupId === "") {
+            LaunchFeedback.end(launchFeedbackToken);
+            launchFeedbackToken = "";
+        }
+    }
+    Component.onDestruction: LaunchFeedback.end(launchFeedbackToken)
     property var pendingLaunchToplevel: null
 
     function normaliseAppId(appId) {
@@ -417,6 +425,17 @@ PanelWindow {
             root.pendingLaunchToplevel = null;
         }
         root.pendingLaunchGroupId = group.id;
+        LaunchFeedback.end(root.launchFeedbackToken);
+        root.launchFeedbackToken = LaunchFeedback.begin(group.id, () => {
+            if (newWindow) {
+                const action = group.desktopEntry.actions.find(action => action.id === "new-window");
+                if (action) {
+                    action.execute();
+                    return;
+                }
+            }
+            group.desktopEntry.execute();
+        });
         pendingLaunchTimer.restart();
         root.dismissTooltip();
         for (let index = 0; index < dockItems.count; index++) {
@@ -426,14 +445,7 @@ PanelWindow {
                 break;
             }
         }
-        if (newWindow) {
-            const action = group.desktopEntry.actions.find(action => action.id === "new-window");
-            if (action) {
-                action.execute();
-                return;
-            }
-        }
-        group.desktopEntry.execute();
+
     }
 
     function activeWindow(group) {
@@ -560,7 +572,7 @@ PanelWindow {
     Timer {
         id: pendingLaunchTimer
 
-        interval: 3000
+        interval: Theme.launchTimeout
         repeat: false
         onTriggered: {
             if (root.pendingLaunchToplevel) {
@@ -857,7 +869,7 @@ PanelWindow {
                         anchors.bottomMargin: -(dockSurface.itemPadding + dockSurface.bottomGap)
                         enabled: !dockButton.entering
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-                        cursorShape: root.pendingLaunchGroupId === dockButton.modelData.id ? Qt.BusyCursor : Qt.ArrowCursor
+                        cursorShape: Qt.ArrowCursor
                         hoverEnabled: true
                         onEntered: root.tooltipEntered(dockButton)
                         onExited: {

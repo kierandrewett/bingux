@@ -43,6 +43,27 @@ PanelWindow {
     property bool awaitingResults: false
     property bool queryComplete: false
     property bool activationPending: false
+    readonly property bool launchCursorActive: visible && activationPending && !chatPending
+    property string launchFeedbackToken: ""
+    function endLaunchFeedback() {
+        LaunchFeedback.end(launchFeedbackToken);
+        launchFeedbackToken = "";
+    }
+    Component.onDestruction: endLaunchFeedback()
+    Timer {
+        interval: Theme.launchTimeout
+        running: root.launchCursorActive
+        onTriggered: {
+            const requestId = root.activeActivationRequestId;
+            root.activeActivationRequestId = "";
+            root.activationPending = false;
+            root.endLaunchFeedback();
+            root.queryError = "Opening timed out. Try again.";
+            if (requestId !== "")
+                searchSocket.cancel(requestId);
+        }
+    }
+
     property string queryError: ""
     property bool chatMode: false
     property bool chatPending: false
@@ -100,7 +121,11 @@ PanelWindow {
         focusSearchInput();
     }
 
-    function closeSearch() {
+    function closeSearch(keepLaunchFeedback = false) {
+        if (keepLaunchFeedback)
+            launchFeedbackToken = ""; // Gnoblin waits for the application window.
+        else
+            endLaunchFeedback();
         cancelPendingRequests();
         activeRequestId = "";
         activeActivationRequestId = "";
@@ -279,13 +304,21 @@ PanelWindow {
         activeRequestId = "";
         queryComplete = true;
         queryError = "";
-        const requestId = searchSocket.activate(result.resultId);
-        if (requestId === "") {
-            queryError = "Search unavailable.";
-            return ;
-        }
-        activeActivationRequestId = requestId;
+        endLaunchFeedback();
         activationPending = true;
+        const token = LaunchFeedback.begin(result.title || "", () => {
+            if (!root.activationPending || root.launchFeedbackToken !== token)
+                return;
+            const requestId = searchSocket.activate(result.resultId);
+            if (requestId === "") {
+                root.activationPending = false;
+                root.endLaunchFeedback();
+                root.queryError = "Search unavailable.";
+                return;
+            }
+            root.activeActivationRequestId = requestId;
+        });
+        launchFeedbackToken = token;
     }
 
     function errorMessage(code) {
@@ -333,6 +366,7 @@ PanelWindow {
 
         function onConnectionStateChanged() {
             if (searchSocket.connectionState !== "ready") {
+                root.endLaunchFeedback();
                 root.activeRequestId = "";
                 root.activeActivationRequestId = "";
                 root.activationPending = false;
@@ -357,6 +391,7 @@ PanelWindow {
 
         function onRequestFailed(requestId, code) {
             if (requestId === root.activeActivationRequestId) {
+                root.endLaunchFeedback();
                 root.activeActivationRequestId = "";
                 root.activationPending = false;
                 root.chatPending = false;
@@ -399,7 +434,7 @@ PanelWindow {
 
         function onActivationCompleted(requestId) {
             if (requestId === root.activeActivationRequestId && !root.chatPending)
-                root.closeSearch();
+                root.closeSearch(true);
 
         }
 

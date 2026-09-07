@@ -1,4 +1,5 @@
 singleton Theme 1.0 Theme.qml
+singleton LaunchFeedback 1.0 LaunchFeedback.qml
 ActionButton 1.0 ActionButton.qml
 CalendarPopup 1.0 CalendarPopup.qml
 ControlCentre 1.0 ControlCentre.qml

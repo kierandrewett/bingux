@@ -8,6 +8,9 @@ import tempfile
 
 
 root = Path(__file__).resolve().parent.parent
+test_name = os.environ.get("BINGUX_SHELL_TEST", "dock-state")
+if test_name not in ("dock-state", "search-launch-cursor"):
+    raise SystemExit("Unknown shell test")
 if not os.environ.get("WAYLAND_DISPLAY", "").startswith("gnoblin-gs-"):
     raise SystemExit("Run through Gnoblin scripts/run-gnome-shell.sh with GNOBLIN_TEST_DBUS_CLIENT.")
 with tempfile.TemporaryDirectory(prefix="bingux-dock-test-") as directory:
@@ -34,7 +37,12 @@ with tempfile.TemporaryDirectory(prefix="bingux-dock-test-") as directory:
                     property alias testMenu: appMenu
                     property alias testMouse: dockMouse""")
     dock_file.write_text(dock)
-    shutil.copy2(root / "tests/dock-state.qml", fixture / "shell.qml")
+    shutil.copy2(root / "tests/launch-feedback-mock.qml", fixture / "LaunchFeedback.qml")
+    if test_name == "search-launch-cursor":
+        shutil.copy2(root / "tests/search-launch-socket.qml", fixture / "SearchSocket.qml")
+        overlay_file = fixture / "SearchOverlay.qml"
+        overlay_file.write_text(overlay_file.read_text().replace("id: root", "id: root\n    property alias testSocket: searchSocket", 1))
+    shutil.copy2(root / ("tests/" + test_name + ".qml"), fixture / "shell.qml")
     environment = os.environ | {
         "QT_QPA_PLATFORM": "wayland",
         "QT_QUICK_BACKEND": "software",
@@ -48,5 +56,5 @@ with tempfile.TemporaryDirectory(prefix="bingux-dock-test-") as directory:
         raise SystemExit("Dock test timed out") from error
     output = result.stdout + result.stderr
     print(output)
-    if result.returncode != 0 or "DOCK_TEST_PASSED" not in output:
+    if result.returncode != 0 or ("DOCK_TEST_PASSED" if test_name == "dock-state" else "SEARCH_CURSOR_PASSED") not in output:
         raise SystemExit(1)

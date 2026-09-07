@@ -113,7 +113,7 @@ ShellRoot {
                     test.check(dock.testItems.count === 3 && dock.testItems.itemAt(2).transitionProgress === 1, "reduced motion adds full-size icon");
                     dock.launch({id: "dock-test-c", desktopEntry: {execute: () => { test.normalLaunches++; }}}, false);
                     test.check(!dock.testLaunchOverlay.visible && !dock.testLaunchEffect.running, "reduced motion skips launch animation");
-                    test.check(dock.testItems.itemAt(2).testMouse.cursorShape === Qt.BusyCursor, "reduced motion retains launch cursor feedback");
+                    test.check(!!dock.launchFeedbackToken && LaunchFeedback.active.length === 1, "reduced motion retains global launch cursor feedback");
                     manager.toplevels.values = [a, b];
                     manager.toplevels.objectRemovedPost(c, 2);
                     break;
@@ -225,10 +225,12 @@ ShellRoot {
                 const edgeX = button.mapToItem(dock.contentItem, button.width / 2, 0).x;
                 test.check(dock.testSurface.bottomGap === Theme.padding - Theme.spaceSmall, "dock sits four pixels lower");
                 input.mouseClick(dock.contentItem, edgeX, dock.height - 1, Qt.MiddleButton);
+                input.wait(30);
                 test.check(test.newWindowLaunches === 1 && test.normalLaunches === 0, "middle click uses explicit new-window action");
-                test.check(button.testMouse.cursorShape === Qt.BusyCursor, "launch shows a busy cursor on its dock item");
+                test.check(!!dock.launchFeedbackToken && LaunchFeedback.active.length === 1, "dock requests global launch cursor feedback");
                 button.modelData.desktopEntry.actions = [];
                 input.mouseClick(button, button.width / 2, button.height / 2, Qt.MiddleButton);
+                input.wait(30);
                 test.check(test.normalLaunches === 1, "middle click falls back to normal launch without new-window action");
                 button.modelData = originalGroup;
                 manager.toplevels.values = [a, b, c];
@@ -237,10 +239,10 @@ ShellRoot {
             case 10:
                 test.check(test.launchFrames.some(frame => frame.scale > 1 && frame.scale < 4 && frame.opacity > 0 && frame.opacity < 1), "launch icon copy grows and fades");
                 test.check(!dock.testLaunchOverlay.visible, "launch overlay closes after the effect");
-                test.check(dock.testItems.itemAt(0).testMouse.cursorShape === Qt.BusyCursor, "unrelated app does not clear the launch cursor");
+                test.check(!!dock.launchFeedbackToken && LaunchFeedback.active.length === 1, "unrelated app does not clear the global launch cursor");
                 manager.toplevels.values = [a, b, c, a2];
                 manager.toplevels.objectInsertedPost(a2, 3);
-                test.check(dock.testItems.itemAt(0).testMouse.cursorShape === Qt.ArrowCursor, "matching new window clears the launch cursor");
+                test.check(dock.launchFeedbackToken === "" && LaunchFeedback.active.length === 0, "matching new window clears the global launch cursor");
                 test.reopeningItem = dock.testItems.itemAt(2);
                 manager.toplevels.values = [a, b];
                 manager.toplevels.objectRemovedPost(a2, 3);
@@ -277,7 +279,7 @@ ShellRoot {
                 steps.interval = 3200;
                 break;
             case 16:
-                test.check(dock.pendingLaunchGroupId === "" && dock.testItems.itemAt(0).testMouse.cursorShape === Qt.ArrowCursor, "launch timeout restores the default cursor");
+                test.check(dock.pendingLaunchGroupId === "" && LaunchFeedback.active.length === 0, "launch timeout restores the global cursor");
                 console.info(test.failures.length ? "DOCK_TEST_FAILED" : "DOCK_TEST_PASSED");
                 Qt.quit();
             }
