@@ -24,7 +24,8 @@ with tempfile.TemporaryDirectory(prefix="bingux-dock-test-") as directory:
     dock = dock_file.read_text().replace("ToplevelManager", "root.testManager")
     dock = dock.replace("required property var settings", """required property var settings
     required property var testManager
-    property alias testItems: dockItems""")
+    property alias testItems: dockItems
+    property alias testSurface: dockSurface""")
     dock = dock.replace("model: root.testManager.toplevels", "model: root.testManager.toplevels.values")
     dock = dock.replace("id: dockButton", """id: dockButton
                     property alias testMenu: appMenu

@@ -273,7 +273,8 @@ PanelWindow {
                 "id": groupId,
                 "desktopEntry": desktopEntry,
                 "windows": [],
-                "entering": false
+                "entering": false,
+                "exiting": false
             };
             groupIndexes[groupId] = groups.length;
             discoveryIndexes[groupId] = groups.length;
@@ -332,8 +333,31 @@ PanelWindow {
                 nextObservedOrder.push(group.id);
         }
         root.observedGroupOrder = nextObservedOrder;
+        // Keep a departing group's slot until its animation finishes. This
+        // is the same ordered model used for layout and drag indices.
+        for (let index = 0; index < previousGroups.length; index++) {
+            const previous = previousGroups[index];
+            if (groupIndexes[previous.id] !== undefined)
+                continue;
+            groups.splice(Math.min(index, groups.length), 0, {
+                id: previous.id,
+                desktopEntry: previous.desktopEntry,
+                windows: [],
+                entering: false,
+                exiting: true,
+            });
+        }
         root.appGroups = groups;
         root.appGroupsInitialised = true;
+    }
+
+    function finishGroupExit(id) {
+        // A reopened app can reverse its departure before this callback.
+        if (!root.appGroups.some(group => group.id === id && group.exiting))
+            return;
+        if (root.draggedId.length > 0)
+            root.cancelDrag();
+        root.appGroups = root.appGroups.filter(group => group.id !== id || !group.exiting);
     }
 
     function launch(group, newWindow) {
@@ -542,7 +566,27 @@ PanelWindow {
                     required property int index
                     property alias menuOpen: appMenu.visible
                     property bool entering: false
+                    readonly property bool exiting: modelData.exiting === true
+                    property bool presenceReady: false
                     property real transitionProgress: 1
+                    enabled: !exiting
+                    onExitingChanged: {
+                        if (!presenceReady)
+                            return;
+                        if (exiting) {
+                            menuOpen = false;
+                            if (root.tooltipOwner === dockButton)
+                                root.dismissTooltip();
+                        }
+                        animatePresence(exiting ? 0 : 1);
+                    }
+                    function animatePresence(destination) {
+                        presenceAnimation.stop();
+                        entering = destination === 1;
+                        presenceAnimation.from = transitionProgress;
+                        presenceAnimation.to = destination;
+                        presenceAnimation.start();
+                    }
                     function publishRectangle() {
                         const position = dockIcon.mapToItem(root.contentItem, 0, 0);
                         const rect = root.visible
@@ -586,7 +630,7 @@ PanelWindow {
                     transformOrigin: Item.Left
                     scale: dockButton.transitionProgress * (root.draggedId === dockButton.modelData.id ? 1.06 : 1)
                     Behavior on scale {
-                        enabled: !dockButton.entering
+                        enabled: !dockButton.entering && !dockButton.exiting
                         NumberAnimation {
                             duration: Theme.motion
                             easing.type: Easing.OutCubic
@@ -594,7 +638,7 @@ PanelWindow {
                     }
                     opacity: dockButton.transitionProgress * (root.draggedId.length > 0 && root.draggedId !== modelData.id ? 0.65 : 1)
                     Behavior on opacity {
-                        enabled: !dockButton.entering
+                        enabled: !dockButton.entering && !dockButton.exiting
                         NumberAnimation {
                             duration: Theme.motion
                             easing.type: Easing.OutCubic
@@ -608,21 +652,27 @@ PanelWindow {
                     Keys.onLeftPressed: event => { if (event.modifiers & Qt.ControlModifier) root.moveGroup(modelData.id, index - 1) }
                     Keys.onRightPressed: event => { if (event.modifiers & Qt.ControlModifier) root.moveGroup(modelData.id, index + 1) }
                     NumberAnimation {
-                        id: entryAnimation
+                        id: presenceAnimation
                         target: dockButton
                         property: "transitionProgress"
                         from: 0
                         to: 1
-                        duration: Theme.reducedMotion ? 0 : Theme.motion * 2
+                        duration: Theme.reducedMotion ? 0 : Theme.motion * 3
                         easing.type: Easing.OutCubic
-                        onFinished: dockButton.entering = false
+                        onFinished: {
+                            dockButton.entering = false;
+                            if (dockButton.exiting)
+                                Qt.callLater(root.finishGroupExit, dockButton.modelData.id);
+                        }
                     }
                     Component.onCompleted: {
+                        presenceReady = true;
                         // Entry motion belongs to this delegate's lifetime,
                         // not to later title/window-count model updates.
                         if (modelData.entering) {
                             dockButton.entering = true;
-                            entryAnimation.start();
+                            transitionProgress = 0;
+                            animatePresence(1);
                         }
                     }
                     Timer {

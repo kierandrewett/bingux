@@ -9,6 +9,10 @@ ShellRoot {
     property var failures: []
     property int normalLaunches: 0
     property int newWindowLaunches: 0
+    property var openingFrames: []
+    property var closingFrames: []
+    property var reopeningItem: null
+    property real closingProgress: 1
     TestCase { id: input; name: "DockInteraction"; when: false }
 
     function check(condition, message) {
@@ -73,10 +77,52 @@ ShellRoot {
         settings: QtObject { property var pinnedApps: [] }
     }
     Timer {
-        interval: 300
+        interval: 16
         running: true
         repeat: true
         onTriggered: {
+            for (let i = 0; i < dock.testItems.count; i++) {
+                const item = dock.testItems.itemAt(i);
+                if (item.modelData.id !== "dock-test-c") continue;
+                const frame = { progress: item.transitionProgress, scale: item.scale,
+                    opacity: item.opacity, width: dock.testSurface.width };
+                if (item.modelData.exiting)
+                    test.closingFrames.push(frame);
+                else
+                    test.openingFrames.push(frame);
+            }
+        }
+    }
+    Timer {
+        id: steps
+        interval: 500
+        running: true
+        repeat: true
+        onTriggered: {
+            if (Theme.reducedMotion) {
+                switch (test.step++) {
+                case 0:
+                    test.savedItems = test.identities();
+                    manager.toplevels.values = [a, b, c];
+                    manager.toplevels.objectInsertedPost(c, 2);
+                    break;
+                case 1:
+                    test.check(dock.testItems.count === 3 && dock.testItems.itemAt(2).transitionProgress === 1, "reduced motion adds full-size icon");
+                    manager.toplevels.values = [a, b];
+                    manager.toplevels.objectRemovedPost(c, 2);
+                    break;
+                case 2:
+                    test.sameItems("reduced motion removes departing icon without resetting neighbours");
+                    b.activate();
+                    a.title = "Changed with reduced motion";
+                    break;
+                case 3:
+                    test.sameItems("reduced motion preserves buttons across focus and title changes");
+                    console.info(test.failures.length ? "DOCK_TEST_FAILED" : "DOCK_TEST_PASSED");
+                    Qt.quit();
+                }
+                return;
+            }
             switch (test.step++) {
             case 0:
                 test.check(dock.appGroups.length === 2, "unfocused zero-output windows stay in dock");
@@ -110,12 +156,18 @@ ShellRoot {
                 break;
             case 4:
                 test.check(dock.testItems.itemAt(0) === test.savedItems[0] && dock.testItems.itemAt(1) === test.savedItems[1], "new app does not recreate existing buttons");
+                test.check(test.openingFrames.some(frame => frame.progress > 0 && frame.progress < 0.9), "opening app has intermediate animation frames");
+                test.check(test.openingFrames.some(frame => frame.opacity > 0 && frame.opacity < 0.9 && frame.scale < 0.9), "opening icon scales and fades in");
+                test.check(test.openingFrames.length > 1 && test.openingFrames[test.openingFrames.length - 1].width > test.openingFrames[0].width, "dock grows during entry");
                 manager.toplevels.values = [a, b];
                 manager.toplevels.objectRemovedPost(a2, 2);
                 manager.toplevels.objectRemovedPost(c, 3);
                 break;
             case 5:
                 test.sameItems("closing windows preserves surviving buttons");
+                test.check(test.closingFrames.some(frame => frame.progress > 0 && frame.progress < 0.9), "closing app has intermediate animation frames");
+                test.check(test.closingFrames.some(frame => frame.opacity > 0 && frame.opacity < 0.9 && frame.scale < 0.9), "closing icon scales and fades out");
+                test.check(test.closingFrames.length > 1 && test.closingFrames[test.closingFrames.length - 1].width < test.closingFrames[0].width, "dock shrinks during departure");
                 test.check(dock.appGroups[0].windows.length === 1, "closed window removed from group");
                 dock.moveGroup("dock-test-b", 0);
                 test.check(dock.appGroups[0].id === "dock-test-b", "reorder applies before drag transform clears");
@@ -164,6 +216,29 @@ ShellRoot {
                 input.mouseClick(button, button.width / 2, button.height / 2, Qt.MiddleButton);
                 test.check(test.normalLaunches === 1, "middle click falls back to normal launch without new-window action");
                 button.modelData = originalGroup;
+                manager.toplevels.values = [a, b, c];
+                manager.toplevels.objectInsertedPost(c, 2);
+                break;
+            case 10:
+                test.reopeningItem = dock.testItems.itemAt(2);
+                manager.toplevels.values = [a, b];
+                manager.toplevels.objectRemovedPost(c, 2);
+                steps.interval = 100;
+                break;
+            case 11:
+                test.check(test.reopeningItem.exiting && test.reopeningItem.transitionProgress > 0 && test.reopeningItem.transitionProgress < 1, "rapid reopen starts during departure");
+                test.closingProgress = test.reopeningItem.transitionProgress;
+                manager.toplevels.values = [a, b, c];
+                manager.toplevels.objectInsertedPost(c, 2);
+                break;
+            case 12:
+                test.check(dock.testItems.itemAt(2) === test.reopeningItem, "reopening reverses the same button");
+                test.check(!test.reopeningItem.exiting && test.reopeningItem.transitionProgress > test.closingProgress, "reopening reverses departure smoothly");
+                steps.interval = 500;
+                break;
+            case 13:
+                test.check(test.reopeningItem.transitionProgress === 1, "reopened button reaches full size");
+                test.check(dock.testItems.itemAt(0) === test.savedItems[0] && dock.testItems.itemAt(1) === test.savedItems[1], "reopening preserves neighbours");
                 console.info(test.failures.length ? "DOCK_TEST_FAILED" : "DOCK_TEST_PASSED");
                 Qt.quit();
             }
