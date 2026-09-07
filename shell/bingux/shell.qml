@@ -12,6 +12,12 @@ ShellRoot {
 
     property var currentTime: new Date()
 
+    function closePanelsExcept(panel) {
+        if (panel !== searchOverlay && searchOverlay.visible) searchOverlay.closeSearch();
+        if (panel !== calendarPopup) calendarPopup.visible = false;
+        if (panel !== controlCentre) controlCentre.visible = false;
+    }
+
     function openSearch() {
         searchOverlay.showSearch();
     }
@@ -26,6 +32,7 @@ ShellRoot {
 
     SearchOverlay {
         id: searchOverlay
+        onVisibleChanged: if (visible) root.closePanelsExcept(searchOverlay)
     }
 
     NotificationState {
@@ -58,9 +65,9 @@ ShellRoot {
         function controls(): void { controlCentre.visible = !controlCentre.visible }
     }
 
-    ControlCentre { id: controlCentre; indicators: systemIndicators; screen: topBar.screen }
+    ControlCentre { id: controlCentre; indicators: systemIndicators; screen: topBar.screen; onVisibleChanged: if (visible) root.closePanelsExcept(controlCentre) }
 
-    CalendarPopup { id: calendarPopup; screen: topBar.screen }
+    CalendarPopup { id: calendarPopup; screen: topBar.screen; onVisibleChanged: if (visible) root.closePanelsExcept(calendarPopup) }
 
     PanelWindow {
         id: topBar

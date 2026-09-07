@@ -436,10 +436,17 @@ PanelWindow {
 
                 Layout.fillWidth: true
                 Layout.preferredHeight: 52
-                radius: 6
-                color: Theme.background
-                border.width: 1
-                border.color: searchInput.activeFocus ? Theme.text : Theme.selection
+                radius: Theme.cardRadius - Theme.padding
+                color: "transparent"
+
+                SymbolicIcon {
+                    id: searchFieldIcon
+                    anchors.left: parent.left
+                    anchors.leftMargin: Theme.gap
+                    anchors.verticalCenter: parent.verticalCenter
+                    implicitSize: 20
+                    source: Quickshell.iconPath("system-search-symbolic")
+                }
 
                 Text {
                     visible: searchInput.text === ""
@@ -452,8 +459,8 @@ PanelWindow {
                     anchors {
                         left: parent.left
                         right: parent.right
-                        leftMargin: 14
-                        rightMargin: 14
+                        leftMargin: Theme.gap + 20 + Theme.padding
+                        rightMargin: Theme.gap
                         verticalCenter: parent.verticalCenter
                     }
 
@@ -502,8 +509,8 @@ PanelWindow {
 
                     anchors {
                         fill: parent
-                        leftMargin: 14
-                        rightMargin: 14
+                        leftMargin: Theme.gap + 20 + Theme.padding
+                        rightMargin: Theme.gap
                     }
 
                 }

@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
@@ -72,31 +73,31 @@ QtObject {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: Math.max(96, parent.height / 6)
-                radius: 12
+                radius: Theme.cardRadius
                 color: Theme.surface
                 border.width: 1
                 border.color: Theme.outline
 
-                Row {
+                RowLayout {
                     id: heading
 
                     anchors.top: parent.top
-                    anchors.topMargin: 18
+                    anchors.topMargin: Theme.paddingLarge
                     anchors.left: parent.left
-                    anchors.leftMargin: 20
+                    anchors.leftMargin: Theme.paddingLarge
                     anchors.right: parent.right
-                    anchors.rightMargin: 20
-                    spacing: 14
+                    anchors.rightMargin: Theme.paddingLarge
+                    spacing: Theme.padding
 
-                    IconImage {
-                        anchors.verticalCenter: parent.verticalCenter
-                        implicitSize: 28
+                    SymbolicIcon {
+                        Layout.alignment: Qt.AlignVCenter
+                        implicitSize: 24
                         source: Quickshell.iconPath(osdWindow.request ? osdWindow.request.icon : "dialog-information-symbolic", "dialog-information-symbolic")
                     }
 
                     Text {
-                        width: parent.width - 28 - parent.spacing - (percentLabel.visible ? percentLabel.width + parent.spacing : 0)
-                        anchors.verticalCenter: parent.verticalCenter
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter
                         color: Theme.text
                         elide: Text.ElideRight
                         font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
@@ -108,7 +109,7 @@ QtObject {
                     Text {
                         id: percentLabel
 
-                        anchors.verticalCenter: parent.verticalCenter
+                        Layout.alignment: Qt.AlignVCenter
                         color: Theme.muted
                         font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
                         text: osdWindow.percentLabel
@@ -123,8 +124,8 @@ QtObject {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
-                    anchors.leftMargin: 20
-                    anchors.rightMargin: 20
+                    anchors.leftMargin: Theme.paddingLarge
+                    anchors.rightMargin: Theme.paddingLarge
                     anchors.bottomMargin: 20
                     radius: height / 2
                     color: Theme.elevated

@@ -37,6 +37,7 @@ ShellPopup {
             Tile {
                 iconName: "bluetooth-active-symbolic"
                 title: "Bluetooth"
+                enabled: Bluetooth.defaultAdapter !== null
                 subtitle: Bluetooth.defaultAdapter ? (Bluetooth.defaultAdapter.enabled ? "On" : "Off") : "Unavailable"
                 onClicked: if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.enabled = !Bluetooth.defaultAdapter.enabled
             }
@@ -98,7 +99,7 @@ ShellPopup {
         implicitHeight: 76
         activeFocusOnTab: true
         Accessible.name: title + ", " + subtitle
-        background: Rectangle { radius: Theme.cardRadius - Theme.padding; color: tile.down ? Theme.pressed : tile.hovered || tile.activeFocus ? Theme.hover : Theme.elevated }
+        background: Rectangle { radius: Theme.cardRadius - Theme.padding; color: !tile.enabled ? Theme.surface : tile.down ? Theme.pressed : tile.hovered || tile.activeFocus ? Theme.hover : Theme.elevated }
         contentItem: RowLayout {
             spacing: Theme.padding
             anchors.fill: parent
@@ -107,7 +108,7 @@ ShellPopup {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: Theme.spaceSmall
-                Text { Layout.fillWidth: true; text: tile.title; color: Theme.text; elide: Text.ElideRight; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize; font.weight: Font.DemiBold }
+                Text { Layout.fillWidth: true; text: tile.title; color: tile.enabled ? Theme.text : Theme.muted; elide: Text.ElideRight; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize; font.weight: Font.DemiBold }
                 Text { Layout.fillWidth: true; text: tile.subtitle; color: Theme.muted; elide: Text.ElideRight; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
             }
         }
