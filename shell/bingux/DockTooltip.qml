@@ -6,6 +6,8 @@ PanelWindow {
     id: root
     property string text: ""
     property real centreX: screen ? screen.width / 2 : 0
+    // Distance from the screen bottom to the dock's actual top edge.
+    property real anchorBottom: Theme.dockHeight + Theme.padding
     implicitWidth: Math.min(320, Math.ceil(metrics.width) + Theme.padding * 2 + 2)
     implicitHeight: Math.ceil(metrics.height) + Theme.gap * 2
     TextMetrics { id: metrics; text: root.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize }
@@ -16,7 +18,7 @@ PanelWindow {
     WlrLayershell.namespace: "gnoblin-dock-tooltip"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     anchors { bottom: true; left: true }
-    margins.bottom: Theme.dockHeight + Theme.padding * 2
+    margins.bottom: Math.max(Theme.gap, Math.min(anchorBottom + Theme.spaceSmall, (screen ? screen.height : 1080) - height - Theme.gap))
     margins.left: Math.max(Theme.gap, Math.min(centreX - width / 2, (screen ? screen.width : 1920) - width - Theme.gap))
     mask: Region {}
     Rectangle {

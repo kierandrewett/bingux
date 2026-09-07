@@ -129,8 +129,12 @@ ShellRoot {
                 test.savedItems = test.identities();
                 b.activate();
                 a.title = "A changed on focus";
+                dock.showTooltip(dock.testItems.itemAt(0));
                 break;
             case 1:
+                test.check(dock.testTooltip.margins.bottom === dock.height - dock.testSurface.y + Theme.spaceSmall, "tooltip sits four pixels above the actual dock surface");
+                test.check(Math.abs(dock.testTooltip.margins.left + dock.testTooltip.width / 2 - dock.testItems.itemAt(0).mapToItem(dock.contentItem, dock.testItems.itemAt(0).width / 2, 0).x) <= 1, "tooltip centres on its dock item");
+                dock.dismissTooltip();
                 test.check(dock.appGroups.length === 2, "focus change preserves both apps");
                 test.sameItems("title/focus change preserves existing button identities");
                 test.check(dock.testItems.itemAt(1).active && !dock.testItems.itemAt(0).active, "active highlight follows focus");

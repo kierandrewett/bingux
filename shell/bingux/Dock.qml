@@ -30,6 +30,7 @@ PanelWindow {
                 const item = dockItems.itemAt(i);
                 if (item) item.publishRectangle();
             }
+            root.updateTooltipPosition();
         }
     }
     Instantiator {
@@ -75,6 +76,7 @@ PanelWindow {
     DockTooltip {
         id: dockTooltip
         screen: root.screen
+        anchorBottom: root.height - dockSurface.y + root.margins.bottom
     }
 
     function tooltipEntered(owner) {
@@ -87,8 +89,14 @@ PanelWindow {
 
         root.tooltipOwner = owner;
         dockTooltip.text = owner.Accessible.name;
-        dockTooltip.centreX = owner.mapToItem(root.contentItem, owner.width / 2, 0).x;
+        root.updateTooltipPosition();
         dockTooltip.visible = true;
+    }
+
+    function updateTooltipPosition() {
+        const owner = root.tooltipOwner;
+        if (owner)
+            dockTooltip.centreX = root.margins.left + owner.mapToItem(root.contentItem, owner.width / 2, 0).x;
     }
 
     function leaveTooltip(owner) {
