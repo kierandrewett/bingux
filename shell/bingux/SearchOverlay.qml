@@ -39,6 +39,7 @@ PanelWindow {
     property string activeActivationRequestId: ""
     property var results: []
     property int selectedIndex: -1
+    property bool keyboardSelection: false
     property bool queryComplete: false
     property bool activationPending: false
     property string queryError: ""
@@ -49,6 +50,7 @@ PanelWindow {
     property var displayedResults: []
 
     function clearResults() {
+        keyboardSelection = false;
         results = [];
         displayedResults = [];
         selectedIndex = -1;
@@ -184,35 +186,30 @@ PanelWindow {
             else
                 updated.push(result);
         }
-        updated.sort(compareResults);
+        const preferChat = queryForSearch().trim().charAt(0) === "?";
+        updated.sort(function(left, right) {
+            if (preferChat && isChatResult(left) !== isChatResult(right))
+                return isChatResult(left) ? -1 : 1;
+            return compareResults(left, right);
+        });
         if (updated.length > resultLimit)
             updated.splice(resultLimit);
 
         results = updated;
         displayedResults = updated;
-        let retainedIndex = -1;
-        let chatIndex = -1;
-        for (let resultIndex = 0; resultIndex < displayedResults.length; resultIndex += 1) {
-            if (displayedResults[resultIndex].resultId === selectedResultId)
-                retainedIndex = resultIndex;
-
-            if (isChatResult(displayedResults[resultIndex]))
-                chatIndex = resultIndex;
-        }
-        if (queryForSearch().trim().charAt(0) === "?" && chatIndex >= 0)
-            selectedIndex = chatIndex;
-        else if (retainedIndex >= 0)
-            selectedIndex = retainedIndex;
-        else if (displayedResults.length > 0)
-            selectedIndex = 0;
-        else
-            selectedIndex = -1;
+        const retainedIndex = keyboardSelection
+            ? displayedResults.findIndex(result => result.resultId === selectedResultId)
+            : -1;
+        selectedIndex = retainedIndex >= 0 ? retainedIndex : displayedResults.length > 0 ? 0 : -1;
+        if (!keyboardSelection)
+            resultsList.positionViewAtBeginning();
     }
 
     function moveSelection(delta) {
         if (displayedResults.length === 0)
             return ;
 
+        keyboardSelection = true;
         const baseIndex = selectedIndex < 0 ? 0 : selectedIndex;
         selectedIndex = (baseIndex + delta + displayedResults.length) % displayedResults.length;
         resultsList.positionViewAtIndex(selectedIndex, ListView.Contain);
@@ -642,7 +639,7 @@ PanelWindow {
                     Rectangle {
                         anchors.fill: parent
                         radius: 6
-                        color: resultMouse.containsMouse || (root.selectedIndex >= 0 && root.selectedIndex < root.displayedResults.length && root.displayedResults[root.selectedIndex].resultId === resultRow.modelData.resultId) ? Theme.selection : "transparent"
+                        color: root.selectedIndex === resultRow.index ? Theme.selection : resultMouse.containsMouse ? Theme.hover : "transparent"
                     }
 
                     IconImage {
@@ -693,10 +690,6 @@ PanelWindow {
                         acceptedButtons: Qt.LeftButton
                         enabled: !root.activationPending
                         cursorShape: Qt.ArrowCursor
-                        onEntered: {
-                            root.selectedIndex = resultRow.index;
-                            resultsList.positionViewAtIndex(resultRow.index, ListView.Contain);
-                        }
                         onClicked: root.activateResult(resultRow.modelData)
                     }
 
