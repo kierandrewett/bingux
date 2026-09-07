@@ -10,6 +10,9 @@ PanelWindow {
     property real preferredY: Theme.barHeight + Theme.gap
     property real cornerRadius: Theme.cardRadius
     property int contentPadding: Theme.padding
+    property real revealOriginX: card.x + card.width / 2
+    property real revealOriginY: card.y + card.height / 2
+    property real revealScale: 1
     readonly property real contentRadius: Theme.insetRadius(cornerRadius, contentPadding)
     property int popupWidth: 320
     property int popupHeight: body.childrenRect.height + contentPadding * 2
@@ -33,7 +36,7 @@ PanelWindow {
     }
     ParallelAnimation {
         id: reveal
-        NumberAnimation { target: card; property: "scale"; from: 0.9; to: 1; duration: 160; easing.type: Easing.OutCubic }
+        NumberAnimation { target: root; property: "revealScale"; from: 0.9; to: 1; duration: 160; easing.type: Easing.OutCubic }
         NumberAnimation { target: card; property: "opacity"; from: 0; to: 1; duration: 160; easing.type: Easing.OutCubic }
     }
     contentItem.Keys.onEscapePressed: visible = false
@@ -48,6 +51,12 @@ PanelWindow {
         color: Theme.surface
         border.color: Theme.outline
         border.width: 1
+        transform: Scale {
+            origin.x: root.revealOriginX - card.x
+            origin.y: root.revealOriginY - card.y
+            xScale: root.revealScale
+            yScale: root.revealScale
+        }
         MouseArea { anchors.fill: parent }
         Item {
             id: body
