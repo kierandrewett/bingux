@@ -86,13 +86,24 @@ Item {
                 width: 32
                 height: Theme.barHeight
 
-                Rectangle {
+                Item {
                     anchors.fill: parent
-                    anchors.margins: 2
-                    radius: Theme.insetRadius(Theme.controlHeight, Theme.gap)
-                    // Keep the hover treatment while the menu is open so the
-                    // tray button remains the obvious anchor for it.
-                    color: trayMenu.visible ? Theme.hover : trayMouse.pressed ? Theme.pressed : trayMouse.containsMouse ? Theme.hover : "transparent"
+
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        radius: Theme.insetRadius(Theme.controlHeight, Theme.gap)
+                        visible: trayMenu.visible || trayMouse.containsMouse
+                        color: Theme.hover
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        radius: Theme.insetRadius(Theme.controlHeight, Theme.gap)
+                        visible: trayMouse.pressed && !trayMenu.visible
+                        color: Theme.pressed
+                    }
                 }
 
                 IconImage {

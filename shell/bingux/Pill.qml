@@ -10,10 +10,14 @@ Item {
     implicitHeight: Theme.barHeight
     HoverHandler { id: hover }
     Rectangle {
+        id: surface
         anchors.centerIn: parent
         width: parent.width
         height: Theme.controlHeight
         radius: height / 2
+        // Transparent-to-visible changes use visibility instead of animating
+        // the color, keeping hover targets instantaneous.
+        visible: root.color.a > 0
         color: root.color
     }
     RowLayout {
