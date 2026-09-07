@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Bluetooth
 import Quickshell.Io
 
 // Public command actions share the same objects and operations as the UI.
@@ -14,6 +15,86 @@ Scope {
     readonly property string instance: Date.now().toString(36)
     function ok(value) { return JSON.stringify(value || {ok: true}); }
     function fail(message) { return JSON.stringify({ok: false, error: message}); }
+    function pageCommand(page, input) {
+        if (!["network", "bluetooth", "audio", "display", "vpn", "power", "customise"].includes(page)) return fail("Unknown control-centre page");
+        if (input && page !== "audio") return fail("Input selection requires the audio page");
+        mediaControls.visible = true;
+        mediaControls.openDetail(page, null, input ? "input" : "output");
+        return ok({ok: true, page});
+    }
+    function deviceCommand(action, input, identity) {
+        const details = mediaControls.deviceControls;
+        const nodes = input ? details.audioInputs : details.audioOutputs;
+        const selected = input ? details.inputNode : details.outputNode;
+        if (action === "list") return ok({devices: nodes.map(node => ({id: node.name,
+            name: node.description || node.name, selected: node === selected})), input});
+        if (action !== "select") return fail("Unknown audio-device action");
+        const node = nodes.find(item => item.name === identity);
+        if (!node) return fail("Audio device no longer exists");
+        if (input) details.inputSelected(node); else details.outputSelected(node);
+        return ok({ok: true, pending: true, id: identity});
+    }
+    function serviceCommand(kind, action, value) {
+        const service = mediaControls.services;
+        const state = service.state;
+        if (!["power", "night-light", "awake"].includes(kind)) return fail("Unknown desktop control");
+        if (action === "status") {
+            const common = {ready: service.ready, busy: service.busy, error: service.error};
+            if (kind === "power") return ok(Object.assign(common, state.power || {available: false, profiles: []}));
+            return ok(Object.assign(common, {available: !!state[kind === "awake" ? "awakeAvailable" : "nightLightAvailable"],
+                enabled: kind === "awake" ? service.keepAwake : state.nightLight,
+                active: kind === "awake" ? service.keepAwake : state.nightLightActive}));
+        }
+        if (!service.ready || service.busy) return fail("Desktop controls are unavailable or busy");
+        if (kind === "power") {
+            if (action !== "set" || !state.power?.available || !state.power.profiles.includes(value)) return fail("Power profile is unavailable");
+            service.action({kind: "power", profile: value});
+        } else {
+            if (!["on", "off", "toggle"].includes(action)) return fail("Unknown toggle action");
+            if (!state[kind === "awake" ? "awakeAvailable" : "nightLightAvailable"]) return fail("This desktop control is unavailable");
+            const current = kind === "awake" ? service.keepAwake : state.nightLight;
+            const enabled = action === "toggle" ? !current : action === "on";
+            if (kind === "awake") { if (enabled !== current) service.toggleAwake(); }
+            else service.action({kind: "nightLight", enabled});
+        }
+        return ok({ok: true, pending: true});
+    }
+    function networkCommand(action, identity) {
+        const details = mediaControls.deviceControls;
+        if (action === "status") return ok({ready: details.networkUpdatedAt > 0, busy: details.networkBusy,
+            updatedAt: details.networkUpdatedAt, error: details.connectionError || details.networkError,
+            connections: details.connections, wireless: details.wirelessNetworks});
+        if (action === "refresh") {
+            if (details.networkBusy) return fail("Network controls are busy; use network status to inspect progress");
+            details.connectionError = "";
+            details.refreshNetwork(); return ok({ok: true, pending: true}); }
+        if (action === "connect" || action === "disconnect") return ok(details.connectionForCommand(identity, action === "connect" ? "up" : "down"));
+        return fail("Unknown network action");
+    }
+    function bluetoothCommand(action, identity) {
+        const adapter = mediaControls.bluetoothAdapter;
+        if (!adapter) return fail("Bluetooth adapter is unavailable");
+        const devices = adapter.devices.values;
+        if (action === "status" || action === "list") return ok({enabled: adapter.enabled, scanning: adapter.discovering,
+            devices: devices.map(device => ({id: device.address, name: device.name || device.deviceName,
+                connected: device.connected, paired: device.paired, blocked: device.blocked, state: device.state}))});
+        if (["on", "off", "toggle"].includes(action)) {
+            adapter.enabled = action === "toggle" ? !adapter.enabled : action === "on";
+        } else if (action === "scan") {
+            if (!["on", "off"].includes(identity)) return fail("Scan requires on or off");
+            if (!adapter.enabled && identity === "on") return fail("Enable Bluetooth before scanning");
+            mediaControls.deviceControls.scanForCommand(identity === "on");
+        } else if (action === "connect" || action === "disconnect") {
+            if (!adapter.enabled) return fail("Bluetooth is off");
+            const device = devices.find(item => item.address.toLowerCase() === identity.toLowerCase());
+            if (!device) return fail("Bluetooth device not found");
+            if (action === "connect" && (!device.paired || device.blocked)) return fail("Pair and unblock this device in Bluetooth settings first");
+            if ([BluetoothDeviceState.Connecting, BluetoothDeviceState.Disconnecting].includes(device.state)) return fail("Device connection is busy");
+            if (action === "connect" && !device.connected) device.connect();
+            if (action === "disconnect" && device.connected) device.disconnect();
+        } else return fail("Unknown Bluetooth action");
+        return ok({ok: true, pending: true});
+    }
     function audioCommand(action, input, value) {
         if (!["status", "volume", "up", "down", "mute", "unmute", "toggle"].includes(action)) return fail("Unknown audio action");
         const node = input ? indicators.audioSource : indicators.audioSink;
@@ -111,6 +192,11 @@ Scope {
     }
     IpcHandler {
         target: "actions"
+        function page(name: string, input: bool): string { return root.pageCommand(name, input); }
+        function device(action: string, input: bool, id: string): string { return root.deviceCommand(action, input, id); }
+        function service(kind: string, action: string, value: string): string { return root.serviceCommand(kind, action, value); }
+        function network(action: string, id: string): string { return root.networkCommand(action, id); }
+        function bluetooth(action: string, id: string): string { return root.bluetoothCommand(action, id); }
         function audio(action: string, input: bool, value: real): string { return root.audioCommand(action, input, value); }
         function media(action: string, player: string, value: real): string { return root.mediaCommand(action, player, value); }
         function notification(action: string, id: string, actionId: string): string { return root.notificationCommand(action, id, actionId); }
