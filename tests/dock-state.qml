@@ -1,4 +1,5 @@
 import QtQuick
+import QtTest
 import Quickshell
 
 ShellRoot {
@@ -6,6 +7,9 @@ ShellRoot {
     property int step: 0
     property var savedItems: []
     property var failures: []
+    property int normalLaunches: 0
+    property int newWindowLaunches: 0
+    TestCase { id: input; name: "DockInteraction"; when: false }
 
     function check(condition, message) {
         if (!condition) {
@@ -49,6 +53,8 @@ ShellRoot {
         property var screens: [] // Valid Gnoblin state: no optional output events.
         property bool activated: false
         property bool minimized: false
+        property int closeRequests: 0
+        function close() { closeRequests++; }
         function activate() {
             for (const window of manager.toplevels.values)
                 window.activated = window === this;
@@ -131,6 +137,33 @@ ShellRoot {
                 const second = dock.testItems.itemAt(1);
                 const separation = second.mapToItem(first.parent, 0, 0).x - first.mapToItem(first.parent, 0, 0).x;
                 test.check(Math.abs(separation - 76) < 0.1, "drag settlement leaves exactly one slot between icons");
+                first.menuOpen = true;
+                break;
+            case 9:
+                const button = dock.testItems.itemAt(0);
+                const windowEntry = test.findLabel(button.testMenu.body, a.title);
+                const closeButton = windowEntry.contentItem.children[0].children.find(item => item.objectName === "closeWindowButton");
+                test.check(closeButton && closeButton.visible, "window entry exposes a close button");
+                input.mouseClick(closeButton, closeButton.width / 2, closeButton.height / 2, Qt.LeftButton);
+                test.check(a.closeRequests === 1 && b.closeRequests === 0 && !a.activated, "close targets only its window without activating it");
+                test.check(button.menuOpen, "close request keeps menu open while window handles the request");
+                button.menuOpen = false;
+                const originalGroup = button.modelData;
+                button.modelData = {
+                    id: "dock-test-a", windows: [a],
+                    desktopEntry: {
+                        name: "Test app", icon: "application-x-executable",
+                        actions: [{ id: "new-window", execute: () => { test.newWindowLaunches++; } }],
+                        execute: () => { test.normalLaunches++; },
+                    },
+                };
+                test.check((button.testMouse.acceptedButtons & Qt.MiddleButton) !== 0, "dock accepts middle clicks");
+                input.mouseClick(button, button.width / 2, button.height / 2, Qt.MiddleButton);
+                test.check(test.newWindowLaunches === 1 && test.normalLaunches === 0, "middle click uses explicit new-window action");
+                button.modelData.desktopEntry.actions = [];
+                input.mouseClick(button, button.width / 2, button.height / 2, Qt.MiddleButton);
+                test.check(test.normalLaunches === 1, "middle click falls back to normal launch without new-window action");
+                button.modelData = originalGroup;
                 console.info(test.failures.length ? "DOCK_TEST_FAILED" : "DOCK_TEST_PASSED");
                 Qt.quit();
             }

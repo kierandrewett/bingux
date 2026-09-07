@@ -336,7 +336,7 @@ PanelWindow {
         root.appGroupsInitialised = true;
     }
 
-    function launch(group) {
+    function launch(group, newWindow) {
         if (!group.desktopEntry)
             return ;
 
@@ -346,6 +346,13 @@ PanelWindow {
         }
         root.pendingLaunchGroupId = group.id;
         pendingLaunchTimer.restart();
+        if (newWindow) {
+            const action = group.desktopEntry.actions.find(action => action.id === "new-window");
+            if (action) {
+                action.execute();
+                return;
+            }
+        }
         group.desktopEntry.execute();
     }
 
@@ -744,7 +751,7 @@ PanelWindow {
                             if (mouse.button === Qt.LeftButton)
                                 root.toggleGroup(dockButton.modelData);
                             else if (mouse.button === Qt.MiddleButton)
-                                root.launch(dockButton.modelData);
+                                root.launch(dockButton.modelData, true);
                             else if (mouse.button === Qt.RightButton)
                                 dockButton.menuOpen = !dockButton.menuOpen;
                         }
@@ -825,7 +832,7 @@ PanelWindow {
                                     label: "Open new window"
                                     visible: dockButton.modelData.desktopEntry !== null
                                     onTriggered: {
-                                        root.launch(dockButton.modelData);
+                                        root.launch(dockButton.modelData, true);
                                         dockButton.menuOpen = false;
                                     }
                                 }
@@ -877,6 +884,11 @@ PanelWindow {
 
                                         label: root.menuLabel(modelData && modelData.title, dockButton.modelData.id)
                                         iconSource: dockIcon.source
+                                        closable: !!modelData
+                                        onCloseRequested: {
+                                            if (modelData)
+                                                modelData.close();
+                                        }
                                         onTriggered: {
                                             if (modelData)
                                                 modelData.activate();
@@ -932,6 +944,8 @@ PanelWindow {
         id: action
         readonly property bool menuEntry: true
         property url iconSource: ""
+        property bool closable: false
+        signal closeRequested()
         property var navigation: null
         showFocusRing: navigation !== null && navigation.keyboardNavigation && activeFocus
         flat: true
@@ -985,6 +999,22 @@ PanelWindow {
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSize
                     verticalAlignment: Text.AlignVCenter
+                }
+                ActionButton {
+                    objectName: "closeWindowButton"
+                    visible: action.closable
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
+                    Layout.alignment: Qt.AlignVCenter
+                    flat: true
+                    text: "×"
+                    Accessible.name: "Close " + action.label
+                    showFocusRing: action.navigation !== null && action.navigation.keyboardNavigation
+                    onClicked: {
+                        if (action.navigation)
+                            action.navigation.pointerActivate();
+                        action.closeRequested();
+                    }
                 }
             }
         }

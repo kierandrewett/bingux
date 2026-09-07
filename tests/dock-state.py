@@ -26,7 +26,9 @@ with tempfile.TemporaryDirectory(prefix="bingux-dock-test-") as directory:
     required property var testManager
     property alias testItems: dockItems""")
     dock = dock.replace("model: root.testManager.toplevels", "model: root.testManager.toplevels.values")
-    dock = dock.replace("id: dockButton", "id: dockButton\n                    property alias testMenu: appMenu")
+    dock = dock.replace("id: dockButton", """id: dockButton
+                    property alias testMenu: appMenu
+                    property alias testMouse: dockMouse""")
     dock_file.write_text(dock)
     shutil.copy2(root / "tests/dock-state.qml", fixture / "shell.qml")
     environment = os.environ | {
