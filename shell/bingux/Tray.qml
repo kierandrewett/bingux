@@ -29,14 +29,6 @@ Item {
     height: implicitHeight
     clip: true
 
-    Behavior on implicitWidth {
-        enabled: !Theme.reducedMotion
-        NumberAnimation {
-            duration: Theme.motion
-            easing.type: Easing.OutCubic
-        }
-    }
-
     ListView {
         id: trayRow
 

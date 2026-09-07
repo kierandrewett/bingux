@@ -428,6 +428,14 @@ PanelWindow {
         border.color: Theme.outline
         visible: root.appGroups.length > 0
 
+        Behavior on width {
+            enabled: !Theme.reducedMotion
+            NumberAnimation {
+                duration: Theme.motion
+                easing.type: Easing.OutCubic
+            }
+        }
+
         Flickable {
             anchors.fill: parent
             anchors.leftMargin: dockSurface.itemPadding
