@@ -13,6 +13,7 @@ ShellRoot {
     property var closingFrames: []
     property var reopeningItem: null
     property real closingProgress: 1
+    property var launchFrames: []
     TestCase { id: input; name: "DockInteraction"; when: false }
 
     function check(condition, message) {
@@ -81,6 +82,8 @@ ShellRoot {
         running: true
         repeat: true
         onTriggered: {
+            if (dock.testLaunchEffect.running)
+                test.launchFrames.push({scale: dock.testLaunchEffect.scale, opacity: dock.testLaunchEffect.opacity});
             for (let i = 0; i < dock.testItems.count; i++) {
                 const item = dock.testItems.itemAt(i);
                 if (item.modelData.id !== "dock-test-c") continue;
@@ -108,6 +111,9 @@ ShellRoot {
                     break;
                 case 1:
                     test.check(dock.testItems.count === 3 && dock.testItems.itemAt(2).transitionProgress === 1, "reduced motion adds full-size icon");
+                    dock.launch({id: "dock-test-c", desktopEntry: {execute: () => { test.normalLaunches++; }}}, false);
+                    test.check(!dock.testLaunchOverlay.visible && !dock.testLaunchEffect.running, "reduced motion skips launch animation");
+                    test.check(dock.testItems.itemAt(2).testMouse.cursorShape === Qt.BusyCursor, "reduced motion retains launch cursor feedback");
                     manager.toplevels.values = [a, b];
                     manager.toplevels.objectRemovedPost(c, 2);
                     break;
@@ -220,6 +226,7 @@ ShellRoot {
                 test.check(dock.testSurface.bottomGap === Theme.padding - Theme.spaceSmall, "dock sits four pixels lower");
                 input.mouseClick(dock.contentItem, edgeX, dock.height - 1, Qt.MiddleButton);
                 test.check(test.newWindowLaunches === 1 && test.normalLaunches === 0, "middle click uses explicit new-window action");
+                test.check(button.testMouse.cursorShape === Qt.BusyCursor, "launch shows a busy cursor on its dock item");
                 button.modelData.desktopEntry.actions = [];
                 input.mouseClick(button, button.width / 2, button.height / 2, Qt.MiddleButton);
                 test.check(test.normalLaunches === 1, "middle click falls back to normal launch without new-window action");
@@ -228,8 +235,15 @@ ShellRoot {
                 manager.toplevels.objectInsertedPost(c, 2);
                 break;
             case 10:
+                test.check(test.launchFrames.some(frame => frame.scale > 1 && frame.scale < 4 && frame.opacity > 0 && frame.opacity < 1), "launch icon copy grows and fades");
+                test.check(!dock.testLaunchOverlay.visible, "launch overlay closes after the effect");
+                test.check(dock.testItems.itemAt(0).testMouse.cursorShape === Qt.BusyCursor, "unrelated app does not clear the launch cursor");
+                manager.toplevels.values = [a, b, c, a2];
+                manager.toplevels.objectInsertedPost(a2, 3);
+                test.check(dock.testItems.itemAt(0).testMouse.cursorShape === Qt.ArrowCursor, "matching new window clears the launch cursor");
                 test.reopeningItem = dock.testItems.itemAt(2);
                 manager.toplevels.values = [a, b];
+                manager.toplevels.objectRemovedPost(a2, 3);
                 manager.toplevels.objectRemovedPost(c, 2);
                 steps.interval = 100;
                 break;
@@ -259,6 +273,11 @@ ShellRoot {
                 break;
             case 15:
                 test.sameItems("left exit preserves surviving buttons");
+                dock.launch({id: "dock-test-a", desktopEntry: {execute: () => { test.normalLaunches++; }}}, false);
+                steps.interval = 3200;
+                break;
+            case 16:
+                test.check(dock.pendingLaunchGroupId === "" && dock.testItems.itemAt(0).testMouse.cursorShape === Qt.ArrowCursor, "launch timeout restores the default cursor");
                 console.info(test.failures.length ? "DOCK_TEST_FAILED" : "DOCK_TEST_PASSED");
                 Qt.quit();
             }

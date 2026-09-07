@@ -38,7 +38,11 @@ PanelWindow {
         delegate: Connections {
             required property var modelData
             target: modelData
-            function onAppIdChanged() { root.refreshAppGroups() }
+            function onAppIdChanged() {
+                if (root.pendingLaunchToplevel === modelData)
+                    root.associatePendingLaunchToplevel(modelData);
+                root.refreshAppGroups();
+            }
             function onParentChanged() { root.refreshAppGroups() }
             function onTitleChanged() { root.refreshAppGroups() }
             function onScreensChanged() { root.refreshAppGroups() }
@@ -77,6 +81,42 @@ PanelWindow {
         id: dockTooltip
         screen: root.screen
         anchorBottom: root.height - dockSurface.y + root.margins.bottom
+    }
+
+    PanelWindow {
+        id: launchOverlay
+        screen: root.screen
+        visible: false
+        color: "transparent"
+        implicitHeight: Theme.dockIconSize * 4 + Theme.padding * 2
+        anchors { bottom: true; left: true; right: true }
+        margins.left: root.margins.left
+        margins.right: root.margins.right
+        margins.bottom: root.margins.bottom
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "gnoblin-dock-launch"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        mask: Region {}
+
+        function play(icon) {
+            if (Theme.reducedMotion)
+                return;
+            const position = icon.mapToItem(root.contentItem, 0, 0);
+            launchOrigin.x = position.x;
+            launchOrigin.y = implicitHeight - root.height + position.y;
+            launchOrigin.width = icon.width;
+            launchOrigin.height = icon.height;
+            const source = icon.source;
+            visible = true;
+            Qt.callLater(() => dockLaunchEffect.play(launchOrigin, source, false));
+        }
+
+        Item { id: launchOrigin }
+        SearchLaunchEffect {
+            id: dockLaunchEffect
+            onFinished: launchOverlay.visible = false
+        }
     }
 
     function tooltipEntered(owner) {
@@ -378,6 +418,14 @@ PanelWindow {
         }
         root.pendingLaunchGroupId = group.id;
         pendingLaunchTimer.restart();
+        root.dismissTooltip();
+        for (let index = 0; index < dockItems.count; index++) {
+            const button = dockItems.itemAt(index);
+            if (button.modelData.id === group.id) {
+                button.animateLaunch();
+                break;
+            }
+        }
         if (newWindow) {
             const action = group.desktopEntry.actions.find(action => action.id === "new-window");
             if (action) {
@@ -623,6 +671,7 @@ PanelWindow {
                                 window.setRectangle(root, rect);
                         }
                     }
+                    function animateLaunch() { launchOverlay.play(dockIcon); }
                     property bool active: {
                         for (let index = 0; index < modelData.windows.length; index++) {
                             if (modelData.windows[index] && modelData.windows[index].activated)
@@ -808,7 +857,7 @@ PanelWindow {
                         anchors.bottomMargin: -(dockSurface.itemPadding + dockSurface.bottomGap)
                         enabled: !dockButton.entering
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-                        cursorShape: Qt.ArrowCursor
+                        cursorShape: root.pendingLaunchGroupId === dockButton.modelData.id ? Qt.BusyCursor : Qt.ArrowCursor
                         hoverEnabled: true
                         onEntered: root.tooltipEntered(dockButton)
                         onExited: {
