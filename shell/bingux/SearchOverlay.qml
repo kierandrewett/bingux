@@ -657,7 +657,7 @@ PanelWindow {
                     Rectangle {
                         anchors.fill: parent
                         radius: surface.contentRadius
-                        color: root.selectedIndex === resultRow.index ? Theme.selection : resultMouse.containsMouse ? Theme.hover : "transparent"
+                        color: resultMouse.pressed ? Theme.pressed : root.selectedIndex === resultRow.index ? Theme.selection : resultMouse.containsMouse ? Theme.hover : "transparent"
                     }
 
                     IconImage {

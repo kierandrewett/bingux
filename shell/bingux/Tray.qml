@@ -86,6 +86,13 @@ Item {
                 width: 32
                 height: Theme.barHeight
 
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: 2
+                    radius: Theme.insetRadius(Theme.controlHeight, Theme.gap)
+                    color: trayMouse.pressed ? Theme.pressed : trayMouse.containsMouse ? Theme.hover : "transparent"
+                }
+
                 IconImage {
                     visible: !trayButton.usesFallbackIcon
                     anchors.centerIn: parent
@@ -146,12 +153,17 @@ Item {
                     id: trayMenu
                     menu: trayButton.modelData.menu
                     screen: root.parentWindow.screen
+                    onPopupWidthChanged: {
+                        if (visible)
+                            preferredX = trayButton.mapToItem(root.parentWindow.contentItem, 0, 0).x - popupWidth + trayButton.width;
+                    }
                     function open() {
                         preferredX = trayButton.mapToItem(root.parentWindow.contentItem, 0, 0).x - popupWidth + trayButton.width;
                         visible = true;
                     }
                 }
                 MouseArea {
+                    id: trayMouse
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                     cursorShape: Qt.ArrowCursor

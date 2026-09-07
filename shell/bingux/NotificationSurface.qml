@@ -77,7 +77,7 @@ PanelWindow {
                 width: notificationColumn.width
                 height: cardContents.implicitHeight + contentPadding * 2
                 radius: Theme.cardRadius
-                color: Theme.surface
+                color: notificationMouse.pressed ? Theme.pressed : Theme.surface
                 border.width: 1
                 border.color: Theme.outline
                 Accessible.name: entry.appName + ": " + entry.summary
@@ -86,6 +86,7 @@ PanelWindow {
                 Accessible.onPressAction: root.invokeDefaultAction(entry)
 
                 MouseArea {
+                    id: notificationMouse
                     anchors.fill: parent
                     hoverEnabled: true
                     enabled: notificationCard.defaultActionAvailable
@@ -199,7 +200,7 @@ PanelWindow {
                                 width: visible ? Math.min(164, actionLabel.implicitWidth + 20) : 0
                                 height: visible ? 30 : 0
                                 radius: Theme.insetRadius(notificationCard.radius, notificationCard.contentPadding)
-                                color: actionMouse.containsMouse ? Theme.hover : Theme.elevated
+                                color: actionMouse.pressed ? Theme.pressed : actionMouse.containsMouse ? Theme.hover : Theme.elevated
                                 visible: !modelData.defaultAction
                                 Accessible.name: modelData.text
                                 Accessible.role: Accessible.Button

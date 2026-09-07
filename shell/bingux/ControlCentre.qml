@@ -76,7 +76,7 @@ ShellPopup {
                     x: volume.leftPadding + volume.visualPosition * (volume.availableWidth - width)
                     y: volume.topPadding + (volume.availableHeight - height) / 2
                     width: 18; height: 18; radius: 9
-                    color: Theme.text
+                    color: volume.pressed ? Theme.pressed : Theme.text
                     border.width: volume.activeFocus ? 2 : 0
                     border.color: Theme.accent
                 }

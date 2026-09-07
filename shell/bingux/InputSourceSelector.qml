@@ -119,7 +119,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: 4
-        color: (selectorMouse.containsMouse || root.activeFocus) && root.canSelect ? Theme.hover : "transparent"
+        color: selectorMouse.pressed ? Theme.pressed : (selectorMouse.containsMouse || root.activeFocus) && root.canSelect ? Theme.hover : "transparent"
     }
 
     Text {
@@ -229,7 +229,7 @@ Item {
                         Rectangle {
                             anchors.fill: parent
                             radius: inputMenu.contentRadius
-                            color: sourceActionMouse.containsMouse || root.selectedIndex === index ? Theme.selection : "transparent"
+                            color: sourceActionMouse.pressed ? Theme.pressed : sourceActionMouse.containsMouse || root.selectedIndex === index ? Theme.selection : "transparent"
                         }
 
                         Text {

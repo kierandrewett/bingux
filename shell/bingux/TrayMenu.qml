@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import QtQml.Models
 import Quickshell
 
 ShellPopup {
@@ -9,7 +10,18 @@ ShellPopup {
     property var menu: null
     property var parents: []
     property var currentMenu: menu
-    popupWidth: 300
+    readonly property real monitorWidthLimit: screen ? Math.floor(screen.width * 0.30) : 576
+    readonly property real measuredWidth: {
+        let widest = 0;
+        for (let index = 0; index < menuTextMetrics.count; index++) {
+            const metric = menuTextMetrics.objectAt(index);
+            if (metric)
+                widest = Math.max(widest, metric.width);
+        }
+        const contentWidth = widest + 18 + Theme.gap + 14 + contentPadding * 2 + Theme.gap;
+        return Math.min(monitorWidthLimit, Math.max(220, Math.ceil(contentWidth)));
+    }
+    popupWidth: measuredWidth
     contentPadding: Theme.gap
     popupHeight: Math.min(620, entries.contentHeight + contentPadding * 2 + (parents.length ? 40 : 0))
     onMenuChanged: { parents = []; currentMenu = menu }
@@ -33,7 +45,19 @@ ShellPopup {
             }
         }
     }
-    QsMenuOpener { id: opener; menu: root.visible ? root.currentMenu : null }
+    // Populate menu entries while the tray icon is hovered, before a click
+    // needs to show the menu surface.
+    QsMenuOpener { id: opener; menu: root.currentMenu }
+    Instantiator {
+        id: menuTextMetrics
+        model: opener.children
+        delegate: TextMetrics {
+            required property var modelData
+            text: modelData && typeof modelData.text === "string" ? modelData.text.replace(/&(.)/g, "$1") : ""
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize
+        }
+    }
     function back() {
         if (!parents.length) { visible = false; return }
         const path = parents.slice(); currentMenu = path.pop(); parents = path;
@@ -83,7 +107,7 @@ ShellPopup {
                 onClicked: root.activate(modelData)
                 background: Rectangle {
                     radius: root.contentRadius
-                    color: entryButton.enabled && (entryButton.hovered || (root.keyboardNavigation && entries.activeFocus && entries.currentIndex === entryButton.index)) ? Theme.hover : "transparent"
+                    color: entryButton.down ? Theme.pressed : entryButton.enabled && (entryButton.hovered || (root.keyboardNavigation && entries.activeFocus && entries.currentIndex === entryButton.index)) ? Theme.hover : "transparent"
                     Rectangle { visible: entryButton.modelData.isSeparator; anchors.centerIn: parent; width: parent.width - 12; height: 1; color: Theme.outline }
                 }
                 contentItem: RowLayout {

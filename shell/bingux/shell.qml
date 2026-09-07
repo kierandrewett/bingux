@@ -93,7 +93,7 @@ ShellRoot {
                     id: searchPill
                     anchors.left: parent.left
                     anchors.verticalCenter: parent.verticalCenter
-                    color: searchMouse.containsMouse || searchPill.activeFocus ? Theme.surface : "transparent"
+                    color: searchMouse.pressed ? Theme.pressed : searchMouse.containsMouse || searchPill.activeFocus ? Theme.surface : "transparent"
                     activeFocusOnTab: true
                     Accessible.name: "Search applications"
                     Accessible.role: Accessible.Button
@@ -105,7 +105,7 @@ ShellRoot {
             }
             Pill {
                 id: clockPill
-                color: clockMouse.containsMouse || clockPill.activeFocus ? Theme.surface : "transparent"
+                color: clockMouse.pressed ? Theme.pressed : clockMouse.containsMouse || clockPill.activeFocus ? Theme.surface : "transparent"
                 activeFocusOnTab: true
                 Accessible.name: "Calendar, " + clockLabel.text
                 Accessible.role: Accessible.Button
@@ -134,13 +134,14 @@ ShellRoot {
                     Pill { visible: metrics.desktopStateAvailable; InputSourceSelector { parentWindow: topBar; metrics: metrics; gnoblinCtlPath: profileSettings.gnoblinCtlPath } }
                     Pill {
                         id: systemPill
+                        color: systemMouse.pressed ? Theme.pressed : systemMouse.containsMouse || systemPill.activeFocus ? Theme.surface : "transparent"
                         activeFocusOnTab: true
                         Accessible.name: "Open control centre"
                         Accessible.role: Accessible.Button
                         Keys.onReturnPressed: controlCentre.visible = !controlCentre.visible
                         Keys.onSpacePressed: controlCentre.visible = !controlCentre.visible
                         SystemIndicators { id: systemIndicators; timeoutPath: profileSettings.timeoutPath }
-                        MouseArea { parent: systemPill; anchors.fill: parent; onClicked: controlCentre.visible = !controlCentre.visible }
+                        MouseArea { id: systemMouse; parent: systemPill; anchors.fill: parent; hoverEnabled: true; onClicked: controlCentre.visible = !controlCentre.visible }
                     }
                 }
             }

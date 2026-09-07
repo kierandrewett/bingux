@@ -372,6 +372,12 @@ PanelWindow {
                     z: root.draggedId === modelData.id ? 2 : 0
                     transform: Translate { x: root.draggedId === dockButton.modelData.id ? root.dragOffset : 0 }
                     opacity: root.draggedId.length > 0 && root.draggedId !== modelData.id ? 0.65 : 1
+                    Behavior on x {
+                        NumberAnimation {
+                            duration: Theme.motion
+                            easing.type: Easing.OutCubic
+                        }
+                    }
                     activeFocusOnTab: true
                     Accessible.role: Accessible.Button
                     Accessible.name: modelData.desktopEntry ? modelData.desktopEntry.name : modelData.id
@@ -390,7 +396,7 @@ PanelWindow {
 
                     Rectangle {
                         radius: Theme.insetRadius(dockSurface.radius, dockSurface.itemPadding)
-                        color: dockButton.active ? Theme.elevated : dockMouse.containsMouse || dockButton.activeFocus ? Theme.hover : "transparent"
+                        color: dockMouse.pressed ? Theme.pressed : dockButton.active ? Theme.elevated : dockMouse.containsMouse || dockButton.activeFocus ? Theme.hover : "transparent"
 
                         anchors {
                             fill: parent
