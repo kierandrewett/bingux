@@ -13,6 +13,8 @@ NotificationSurface 1.0 NotificationSurface.qml
 OsdState 1.0 OsdState.qml
 OsdSurface 1.0 OsdSurface.qml
 Pill 1.0 Pill.qml
+ShortcutSession 1.0 ShortcutSession.qml
+WindowSwitcher 1.0 WindowSwitcher.qml
 PrivacyIndicators 1.0 PrivacyIndicators.qml
 ProfileSettings 1.0 ProfileSettings.qml
 SearchOverlay 1.0 SearchOverlay.qml

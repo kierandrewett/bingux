@@ -265,6 +265,20 @@ in
                 "osd"
             ];
 
+            # Bingux owns app switching. Release GNOME's built-in shortcuts.
+            dconf.settings."org/gnome/desktop/wm/keybindings" = {
+                switch-applications = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
+                switch-applications-backward = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
+                switch-windows = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
+                switch-windows-backward = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
+            };
+            xdg.configFile."gnoblin/scripts/compositor-bridge.js".source =
+                "${config.programs.gnoblin.package}/share/gnoblin/scripts/compositor-bridge.js";
+            xdg.configFile."bingux/switcher.json".text = builtins.toJSON {
+                enabled = true;
+                showDelay = 80;
+            };
+
             xdg.configFile."quickshell/${cfg.configName}" = {
                 source = shellSource;
                 recursive = true;

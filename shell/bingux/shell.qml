@@ -13,6 +13,7 @@ ShellRoot {
     property var currentTime: new Date()
 
     function closePanelsExcept(panel) {
+        if (panel !== windowSwitcher && windowSwitcher.active) windowSwitcher.close();
         if (panel !== searchOverlay && searchOverlay.visible) searchOverlay.closeSearch();
         if (panel !== calendarPopup) calendarPopup.visible = false;
         if (panel !== controlCentre) controlCentre.visible = false;
@@ -33,6 +34,11 @@ ShellRoot {
     SearchOverlay {
         id: searchOverlay
         onVisibleChanged: if (visible) root.closePanelsExcept(searchOverlay)
+    }
+
+    WindowSwitcher {
+        id: windowSwitcher
+        onOpening: { root.closePanelsExcept(windowSwitcher); dock.closeMenus?.(); }
     }
 
     NotificationState {
