@@ -117,15 +117,15 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: 4
-        color: (selectorMouse.containsMouse || root.activeFocus) && root.canSelect ? "#2b3545" : "transparent"
+        color: (selectorMouse.containsMouse || root.activeFocus) && root.canSelect ? Theme.hover : "transparent"
     }
 
     Text {
         id: inputLabel
 
         anchors.centerIn: parent
-        color: root.metrics.desktopStateAvailable ? "#d9dee8" : "#8b94a3"
-        font.pixelSize: 12
+        color: root.metrics.desktopStateAvailable ? Theme.text : Theme.muted
+        font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
         textFormat: Text.PlainText
         text: root.displayLabel
     }
@@ -135,7 +135,7 @@ Item {
 
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
-        cursorShape: root.canSelect ? Qt.PointingHandCursor : Qt.ArrowCursor
+        cursorShape: root.canSelect ? Qt.ArrowCursor : Qt.ArrowCursor
         onClicked: {
             root.forceActiveFocus();
             root.openMenu();
@@ -181,7 +181,7 @@ Item {
             height: implicitHeight
             implicitHeight: menuColumn.implicitHeight + 12
             radius: 8
-            color: "#202632"
+            color: Theme.surface
             focus: true
             Keys.onPressed: function(event) {
                 if (event.key === Qt.Key_Escape) {
@@ -211,8 +211,8 @@ Item {
 
                 Text {
                     width: parent.width
-                    color: "#aeb8ca"
-                    font.pixelSize: 12
+                    color: Theme.muted
+                    font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
                     text: "Keyboard layout"
                     leftPadding: 8
                     rightPadding: 8
@@ -236,13 +236,13 @@ Item {
                         Rectangle {
                             anchors.fill: parent
                             radius: 6
-                            color: sourceActionMouse.containsMouse || root.selectedIndex === index ? "#344158" : "transparent"
+                            color: sourceActionMouse.containsMouse || root.selectedIndex === index ? Theme.selection : "transparent"
                         }
 
                         Text {
-                            color: "#edf1f7"
+                            color: Theme.text
                             elide: Text.ElideRight
-                            font.pixelSize: 13
+                            font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
                             textFormat: Text.PlainText
                             text: sourceAction.modelData.displayName
 
@@ -261,7 +261,7 @@ Item {
 
                             anchors.fill: parent
                             hoverEnabled: true
-                            cursorShape: root.canSelect ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            cursorShape: root.canSelect ? Qt.ArrowCursor : Qt.ArrowCursor
                             enabled: root.canSelect
                             onClicked: root.selectSource(sourceAction.modelData)
                         }
@@ -274,7 +274,7 @@ Item {
                     width: parent.width
                     visible: root.lastError !== ""
                     color: "#f4a340"
-                    font.pixelSize: 12
+                    font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
                     wrapMode: Text.Wrap
                     text: root.lastError
                     leftPadding: 8

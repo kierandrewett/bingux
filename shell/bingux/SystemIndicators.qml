@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Pipewire
@@ -176,14 +177,14 @@ Item {
         objects: root.audioSink === null ? [] : [root.audioSink]
     }
 
-    Row {
+    RowLayout {
         id: indicatorRow
 
         spacing: 4
 
         Item {
-            width: root.controlSize
-            height: root.controlSize
+            Layout.preferredWidth: root.controlSize
+            Layout.preferredHeight: root.controlSize
             Accessible.name: root.networkAccessibleName()
             Accessible.role: Accessible.StaticText
 
@@ -195,8 +196,8 @@ Item {
         }
 
         Item {
-            width: root.controlSize
-            height: root.controlSize
+            Layout.preferredWidth: root.controlSize
+            Layout.preferredHeight: root.controlSize
             visible: root.audioSink !== null
             Accessible.name: root.audioAccessibleName()
             Accessible.role: Accessible.Button
@@ -225,8 +226,8 @@ Item {
         }
 
         Item {
-            width: root.controlSize
-            height: root.controlSize
+            Layout.preferredWidth: root.controlSize
+            Layout.preferredHeight: root.controlSize
             visible: root.laptopBatteryAvailable
             Accessible.name: root.batteryAccessibleName()
             Accessible.role: Accessible.StaticText

@@ -76,9 +76,9 @@ PanelWindow {
                 width: notificationColumn.width
                 height: cardContents.implicitHeight + 28
                 radius: 12
-                color: "#202632"
+                color: Theme.surface
                 border.width: 1
-                border.color: "#3d485e"
+                border.color: Theme.outline
                 Accessible.name: entry.appName + ": " + entry.summary
                 Accessible.role: defaultActionAvailable ? Accessible.Button : Accessible.StaticText
                 Accessible.focusable: defaultActionAvailable
@@ -88,7 +88,7 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     enabled: notificationCard.defaultActionAvailable
-                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    cursorShape: enabled ? Qt.ArrowCursor : Qt.ArrowCursor
                     onClicked: root.invokeDefaultAction(notificationCard.entry)
                 }
 
@@ -121,9 +121,9 @@ PanelWindow {
                             anchors.right: closeButton.left
                             anchors.rightMargin: 8
                             anchors.verticalCenter: parent.verticalCenter
-                            color: "#b9c5d6"
+                            color: Theme.muted
                             elide: Text.ElideRight
-                            font.pixelSize: 12
+                            font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
                             text: notificationCard.entry.appName || notificationCard.entry.desktopEntry || "Notification"
                             textFormat: Text.PlainText
                         }
@@ -149,7 +149,7 @@ PanelWindow {
                             MouseArea {
                                 anchors.fill: parent
                                 hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
+                                cursorShape: Qt.ArrowCursor
                                 onClicked: root.state.dismiss(notificationCard.notification)
                             }
 
@@ -159,9 +159,9 @@ PanelWindow {
 
                     Text {
                         width: parent.width
-                        color: "#eef3fb"
+                        color: Theme.text
                         elide: Text.ElideRight
-                        font.pixelSize: 15
+                        font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
                         font.weight: Font.DemiBold
                         maximumLineCount: 2
                         text: notificationCard.entry.summary || "Notification"
@@ -172,8 +172,8 @@ PanelWindow {
                     Text {
                         width: parent.width
                         visible: notificationCard.entry.body.length > 0
-                        color: "#c6d0df"
-                        font.pixelSize: 13
+                        color: Theme.muted
+                        font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
                         lineHeight: 1.2
                         maximumLineCount: 3
                         text: notificationCard.entry.body
@@ -198,7 +198,7 @@ PanelWindow {
                                 width: visible ? Math.min(164, actionLabel.implicitWidth + 20) : 0
                                 height: visible ? 30 : 0
                                 radius: 6
-                                color: actionMouse.containsMouse ? "#3b4b66" : "#303b50"
+                                color: actionMouse.containsMouse ? Theme.hover : Theme.elevated
                                 visible: !modelData.defaultAction
                                 Accessible.name: modelData.text
                                 Accessible.role: Accessible.Button
@@ -209,9 +209,9 @@ PanelWindow {
                                     id: actionLabel
 
                                     anchors.centerIn: parent
-                                    color: "#d9e7ff"
+                                    color: Theme.text
                                     elide: Text.ElideRight
-                                    font.pixelSize: 12
+                                    font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
                                     maximumLineCount: 1
                                     text: actionButton.modelData.text
                                     textFormat: Text.PlainText
@@ -222,7 +222,7 @@ PanelWindow {
 
                                     anchors.fill: parent
                                     hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
+                                    cursorShape: Qt.ArrowCursor
                                     onClicked: actionButton.modelData.action.invoke()
                                 }
 

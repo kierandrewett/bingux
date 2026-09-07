@@ -73,9 +73,9 @@ QtObject {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: Math.max(96, parent.height / 6)
                 radius: 12
-                color: "#202632"
+                color: Theme.surface
                 border.width: 1
-                border.color: "#3d485e"
+                border.color: Theme.outline
 
                 Row {
                     id: heading
@@ -97,9 +97,9 @@ QtObject {
                     Text {
                         width: parent.width - 28 - parent.spacing - (percentLabel.visible ? percentLabel.width + parent.spacing : 0)
                         anchors.verticalCenter: parent.verticalCenter
-                        color: "#e7edf7"
+                        color: Theme.text
                         elide: Text.ElideRight
-                        font.pixelSize: 15
+                        font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
                         font.weight: Font.DemiBold
                         text: osdWindow.request ? root.labelFor(osdWindow.request) : ""
                         textFormat: Text.PlainText
@@ -109,8 +109,8 @@ QtObject {
                         id: percentLabel
 
                         anchors.verticalCenter: parent.verticalCenter
-                        color: "#c6d0df"
-                        font.pixelSize: 14
+                        color: Theme.muted
+                        font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
                         text: osdWindow.percentLabel
                         visible: osdWindow.hasLevel
                     }
@@ -127,13 +127,13 @@ QtObject {
                     anchors.rightMargin: 20
                     anchors.bottomMargin: 20
                     radius: height / 2
-                    color: "#3a4559"
+                    color: Theme.elevated
 
                     Rectangle {
                         width: parent.width * osdWindow.levelFraction
                         height: parent.height
                         radius: parent.radius
-                        color: "#8ab4f8"
+                        color: Theme.accent
                     }
 
                 }

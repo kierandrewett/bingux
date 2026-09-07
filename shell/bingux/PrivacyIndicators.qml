@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 
 Item {
     id: root
@@ -18,33 +19,33 @@ Item {
         required property string accessibleName
 
         visible: active
-        width: active ? indicatorRow.implicitWidth : 0
-        height: 24
+        implicitWidth: indicatorRow.implicitWidth
+        implicitHeight: 24
         Accessible.name: accessibleName
         Accessible.role: Accessible.StaticText
 
-        Row {
+        RowLayout {
             id: indicatorRow
 
             anchors.verticalCenter: parent.verticalCenter
             spacing: 4
 
             Rectangle {
-                width: 6
-                height: 6
+                Layout.preferredWidth: 6
+                Layout.preferredHeight: 6
                 radius: width / 2
                 color: "#f4a340"
             }
 
             Text {
                 color: "#f4a340"
-                font.pixelSize: 12
+                font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
                 text: indicator.label
             }
         }
     }
 
-    Row {
+    RowLayout {
         id: privacyRow
 
         spacing: 8
