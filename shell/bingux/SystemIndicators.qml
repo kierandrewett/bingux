@@ -187,7 +187,7 @@ Item {
             Accessible.name: root.networkAccessibleName()
             Accessible.role: Accessible.StaticText
 
-            IconImage {
+            SymbolicIcon {
                 anchors.centerIn: parent
                 implicitSize: 16
                 source: Quickshell.iconPath(root.networkIconName(), "network-offline-symbolic")
@@ -201,7 +201,7 @@ Item {
             Accessible.name: root.audioAccessibleName()
             Accessible.role: Accessible.Button
 
-            IconImage {
+            SymbolicIcon {
                 anchors.centerIn: parent
                 implicitSize: 16
                 source: Quickshell.iconPath(root.audioIconName(), "audio-volume-muted-symbolic")
@@ -231,7 +231,7 @@ Item {
             Accessible.name: root.batteryAccessibleName()
             Accessible.role: Accessible.StaticText
 
-            IconImage {
+            SymbolicIcon {
                 anchors.centerIn: parent
                 implicitSize: 16
                 source: Quickshell.iconPath(root.laptopBatteryAvailable ? root.battery.iconName : "battery-missing-symbolic", "battery-missing-symbolic")

@@ -142,14 +142,12 @@ Item {
                         color: "#8bd5ff"
                     }
                 }
-                QsMenuAnchor {
+                TrayMenu {
                     id: trayMenu
-
                     menu: trayButton.modelData.menu
-                    anchor.item: trayButton
-                    anchor.edges: Edges.Bottom
-                    anchor.gravity: Edges.Bottom
-                    anchor.adjustment: PopupAdjustment.Flip | PopupAdjustment.Slide
+                    screen: root.parentWindow.screen
+                    preferredX: trayButton.mapToItem(root.parentWindow.contentItem, 0, 0).x
+                    function open() { visible = true }
                 }
                 MouseArea {
                     anchors.fill: parent

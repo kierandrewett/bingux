@@ -1,26 +1,16 @@
 //@ pragma UseQApplication
 
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
 
 ShellRoot {
     id: root
 
-    readonly property int topBarHeight: 36
     property var currentTime: new Date()
-    readonly property string formattedTime: formatClock(currentTime)
-
-    function padTime(value) {
-        return value < 10 ? "0" + value : String(value);
-    }
-
-    function formatClock(timestamp) {
-        const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        return weekdays[timestamp.getDay()] + " " + padTime(timestamp.getDate()) + " " + months[timestamp.getMonth()] + " " + padTime(timestamp.getHours()) + ":" + padTime(timestamp.getMinutes()) + ":" + padTime(timestamp.getSeconds());
-    }
 
     function openSearch() {
         searchOverlay.showSearch();
@@ -61,182 +51,82 @@ ShellRoot {
         onTriggered: root.currentTime = new Date()
     }
 
+    IpcHandler {
+        target: "shell"
+        function calendar(): void { calendarPopup.visible = !calendarPopup.visible }
+        function search(): void { root.openSearch() }
+    }
+
+    CalendarPopup { id: calendarPopup; screen: topBar.screen }
+
     PanelWindow {
         id: topBar
-
-        exclusiveZone: root.topBarHeight
-        implicitHeight: root.topBarHeight
-        color: "#171a21"
+        exclusiveZone: Theme.barHeight
+        implicitHeight: Theme.barHeight
+        color: Theme.background
         WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "bingux-top-bar"
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+        anchors { top: true; left: true; right: true }
 
-        anchors {
-            top: true
-            left: true
-            right: true
-        }
-
-        Row {
-            id: leftControls
-            spacing: 8
-
-            anchors {
-                left: parent.left
-                leftMargin: 12
-                verticalCenter: parent.verticalCenter
-            }
-
-            Text {
-                color: "#d9dee8"
-                font.pixelSize: 13
-                text: "Bingux"
-            }
-
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: Theme.padding
+            anchors.rightMargin: Theme.padding
+            spacing: Theme.gap
             Item {
-                id: searchButton
-
-                implicitWidth: searchButtonContents.implicitWidth + 12
-                implicitHeight: 24
-                width: implicitWidth
-                height: implicitHeight
+                Layout.fillWidth: true
+                Layout.preferredWidth: Math.max(searchPill.implicitWidth, rightControls.implicitWidth)
+                Layout.minimumWidth: Math.max(searchPill.implicitWidth, rightControls.implicitWidth)
+                Layout.fillHeight: true
+                Pill {
+                    id: searchPill
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: searchMouse.containsMouse ? Theme.hover : Theme.surface
+                    activeFocusOnTab: true
+                    Accessible.name: "Search applications"
+                    Accessible.role: Accessible.Button
+                    Keys.onReturnPressed: root.openSearch()
+                    Keys.onSpacePressed: root.openSearch()
+                    SymbolicIcon { implicitSize: Theme.iconSize; source: Quickshell.iconPath("system-search-symbolic") }
+                    Text { text: "Search"; color: Theme.text; font.pixelSize: Theme.fontSize }
+                    MouseArea { id: searchMouse; parent: searchPill; anchors.fill: parent; hoverEnabled: true; onClicked: root.openSearch() }
+                }
+            }
+            Pill {
+                id: clockPill
+                color: clockMouse.containsMouse || calendarPopup.visible ? Theme.hover : Theme.surface
                 activeFocusOnTab: true
-                Accessible.name: "Open search"
+                Accessible.name: "Calendar, " + clockLabel.text
                 Accessible.role: Accessible.Button
-                Keys.onPressed: function(event) {
-                    if (event.key === Qt.Key_Return || event.key === Qt.Key_Space) {
-                        root.openSearch();
-                        event.accepted = true;
-                    }
-                }
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 4
-                    color: (searchButtonMouse.containsMouse || searchButton.activeFocus) ? "#2b3545" : "transparent"
-                }
-
-                Row {
-                    id: searchButtonContents
-
-                    anchors.centerIn: parent
-                    spacing: 4
-
-                    IconImage {
-                        implicitSize: 14
-                        source: Quickshell.iconPath("system-search-symbolic", "edit-find-symbolic")
-                    }
-
-                    Text {
-                        color: "#d9dee8"
-                        font.pixelSize: 12
-                        text: "Search"
-                    }
-
-                }
-
-                MouseArea {
-                    id: searchButtonMouse
-
-                    anchors.fill: parent
-                    acceptedButtons: Qt.LeftButton
-                    cursorShape: Qt.PointingHandCursor
-                    hoverEnabled: true
-                    onClicked: {
-                        searchButton.forceActiveFocus();
-                        root.openSearch();
-                    }
-                }
-
+                Keys.onReturnPressed: calendarPopup.visible = !calendarPopup.visible
+                Keys.onSpacePressed: calendarPopup.visible = !calendarPopup.visible
+                Text { id: clockLabel; text: root.currentTime.toLocaleDateString(Qt.locale(), "ddd d MMM") + "   " + root.currentTime.toLocaleTimeString(Qt.locale(), "hh:mm"); color: Theme.text; font.pixelSize: Theme.fontSize; font.weight: Font.DemiBold }
+                MouseArea { id: clockMouse; parent: clockPill; anchors.fill: parent; hoverEnabled: true; onClicked: calendarPopup.visible = !calendarPopup.visible }
             }
-
-        }
-        Text {
-            id: clockText
-            visible: rightControls.x >= leftControls.x + leftControls.width + implicitWidth + 24
-            x: {
-                const centredX = (parent.width - implicitWidth) / 2;
-                const rightAlignedX = rightControls.x - implicitWidth - 12;
-                const leftAlignedX = leftControls.x + leftControls.width + 12;
-                return Math.max(leftAlignedX, Math.min(centredX, rightAlignedX));
-            }
-            color: "#f5f7fa"
-            font.pixelSize: 14
-            text: root.formattedTime
-
-            anchors.verticalCenter: parent.verticalCenter
-        }
-
-        Row {
-            id: rightControls
-            spacing: 4
-
-            anchors {
-                right: parent.right
-                rightMargin: 12
-                verticalCenter: parent.verticalCenter
-            }
-
-            Tray {
-                parentWindow: topBar
-            }
-
-            PrivacyIndicators {
-                metrics: metrics
-            }
-
             Item {
-                id: metricDisplay
-
-                visible: profileSettings.metricsEnabled
-                implicitWidth: metricRow.implicitWidth
-                implicitHeight: metricRow.implicitHeight
-                width: visible ? implicitWidth : 0
-                height: visible ? implicitHeight : 0
-
-                Row {
-                    id: metricRow
-
-                    spacing: 12
-
-                    Rectangle {
-                        width: 5
-                        height: 5
-                        radius: width / 2
-                        color: metrics.available ? "#8cc265" : "#8b94a3"
+                Layout.fillWidth: true
+                Layout.preferredWidth: Math.max(searchPill.implicitWidth, rightControls.implicitWidth)
+                Layout.minimumWidth: Math.max(searchPill.implicitWidth, rightControls.implicitWidth)
+                Layout.fillHeight: true
+                RowLayout {
+                    id: rightControls
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: Theme.gap
+                    Pill { visible: tray.implicitWidth > 0; Tray { id: tray; parentWindow: topBar } }
+                    Pill { visible: privacy.implicitWidth > 0; PrivacyIndicators { id: privacy; metrics: metrics } }
+                    Pill {
+                        visible: profileSettings.metricsEnabled && metrics.available && topBar.width > 1400
+                        Text { text: metrics.cpuLabel; color: Theme.muted; font.pixelSize: 12 }
+                        Text { text: metrics.memoryLabel; color: Theme.muted; font.pixelSize: 12 }
                     }
-
-                    Text {
-                        color: metrics.available ? "#d9dee8" : "#8b94a3"
-                        font.pixelSize: 12
-                        text: metrics.cpuLabel
-                    }
-
-                    Text {
-                        color: metrics.available ? "#d9dee8" : "#8b94a3"
-                        font.pixelSize: 12
-                        text: metrics.memoryLabel
-                    }
-
-                    Text {
-                        color: metrics.available ? "#d9dee8" : "#8b94a3"
-                        font.pixelSize: 12
-                        text: metrics.networkLabel
-                    }
+                    Pill { InputSourceSelector { metrics: metrics; gnoblinCtlPath: profileSettings.gnoblinCtlPath } }
+                    Pill { SystemIndicators { timeoutPath: profileSettings.timeoutPath } }
                 }
             }
-
-            InputSourceSelector {
-                metrics: metrics
-                gnoblinCtlPath: profileSettings.gnoblinCtlPath
-            }
-
-            SystemIndicators {
-                timeoutPath: profileSettings.timeoutPath
-            }
-
         }
-
     }
 
     Dock {

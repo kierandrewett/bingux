@@ -1,0 +1,19 @@
+singleton Theme 1.0 Theme.qml
+CalendarPopup 1.0 CalendarPopup.qml
+Dock 1.0 Dock.qml
+InputSourceSelector 1.0 InputSourceSelector.qml
+Metrics 1.0 Metrics.qml
+NotificationState 1.0 NotificationState.qml
+NotificationSurface 1.0 NotificationSurface.qml
+OsdState 1.0 OsdState.qml
+OsdSurface 1.0 OsdSurface.qml
+Pill 1.0 Pill.qml
+PrivacyIndicators 1.0 PrivacyIndicators.qml
+ProfileSettings 1.0 ProfileSettings.qml
+SearchOverlay 1.0 SearchOverlay.qml
+SearchSocket 1.0 SearchSocket.qml
+ShellPopup 1.0 ShellPopup.qml
+SymbolicIcon 1.0 SymbolicIcon.qml
+SystemIndicators 1.0 SystemIndicators.qml
+Tray 1.0 Tray.qml
+TrayMenu 1.0 TrayMenu.qml
