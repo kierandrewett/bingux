@@ -8,6 +8,7 @@ PanelWindow {
     default property alias contents: body.data
     property real preferredX: (width - popupWidth) / 2
     property real preferredY: Theme.barHeight + Theme.gap
+    property int contentPadding: Theme.padding
     property int popupWidth: 320
     property int popupHeight: body.childrenRect.height + Theme.padding * 2
     readonly property alias body: body
@@ -18,7 +19,17 @@ PanelWindow {
     WlrLayershell.namespace: "gnoblin-shell-popup"
     WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     anchors { top: true; bottom: true; left: true; right: true }
-    onVisibleChanged: if (visible) contentItem.forceActiveFocus()
+    onVisibleChanged: {
+        if (visible) {
+            contentItem.forceActiveFocus();
+            reveal.restart();
+        } else reveal.stop();
+    }
+    ParallelAnimation {
+        id: reveal
+        NumberAnimation { target: card; property: "scale"; from: 0.9; to: 1; duration: 160; easing.type: Easing.OutCubic }
+        NumberAnimation { target: card; property: "opacity"; from: 0; to: 1; duration: 160; easing.type: Easing.OutCubic }
+    }
     contentItem.Keys.onEscapePressed: visible = false
     MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; onClicked: root.visible = false }
     Rectangle {
@@ -35,7 +46,7 @@ PanelWindow {
         Item {
             id: body
             anchors.fill: parent
-            anchors.margins: Theme.padding
+            anchors.margins: root.contentPadding
         }
     }
 }

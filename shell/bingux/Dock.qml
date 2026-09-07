@@ -304,7 +304,7 @@ PanelWindow {
 
                     required property var modelData
                     required property int index
-                    property bool menuOpen: false
+                    property alias menuOpen: appMenu.visible
                     function publishRectangle() {
                         const position = dockIcon.mapToItem(root.contentItem, 0, 0);
                         const rect = root.visible
@@ -452,14 +452,16 @@ PanelWindow {
 
                     ShellPopup {
                         id: appMenu
-                        visible: dockButton.menuOpen
                         popupWidth: 280
-                        popupHeight: menuColumn.implicitHeight + Theme.padding * 2
+                        contentPadding: Theme.gap
+                        popupHeight: menuColumn.implicitHeight + contentPadding * 2
                         screen: root.screen
                         preferredY: height - root.height - popupHeight - Theme.gap
                         onVisibleChanged: {
-                            if (!visible) dockButton.menuOpen = false;
-                            else preferredX = dockButton.mapToItem(root.contentItem, 0, 0).x - popupWidth / 2 + dockButton.width / 2;
+                            if (visible) {
+                                preferredX = dockButton.mapToItem(root.contentItem, 0, 0).x - popupWidth / 2 + dockButton.width / 2;
+                                menuColumn.forceActiveFocus();
+                            }
                         }
 
                         Rectangle {
@@ -473,6 +475,15 @@ PanelWindow {
 
                             ColumnLayout {
                                 id: menuColumn
+                                function moveSelection(delta) {
+                                    const actions = Array.from(children).filter(item => item.menuEntry === true && item.visible && item.enabled);
+                                    if (!actions.length) return;
+                                    let index = actions.findIndex(item => item.activeFocus);
+                                    if (index < 0) index = delta > 0 ? -1 : 0;
+                                    actions[(index + delta + actions.length) % actions.length].forceActiveFocus();
+                                }
+                                Keys.onDownPressed: moveSelection(1)
+                                Keys.onUpPressed: moveSelection(-1)
 
                                 spacing: 2
 
@@ -572,6 +583,7 @@ PanelWindow {
     }
 
     component MenuAction: ActionButton {
+        readonly property bool menuEntry: true
         flat: true
         required property string label
         signal triggered()

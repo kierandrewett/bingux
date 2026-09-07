@@ -5,13 +5,34 @@ import Quickshell
 
 ShellPopup {
     id: root
+    property bool keyboardNavigation: false
     property var menu: null
     property var parents: []
     property var currentMenu: menu
     popupWidth: 300
-    popupHeight: Math.min(620, entries.contentHeight + Theme.padding * 2 + (parents.length ? 40 : 0))
+    contentPadding: Theme.gap
+    popupHeight: Math.min(620, entries.contentHeight + contentPadding * 2 + (parents.length ? 40 : 0))
     onMenuChanged: { parents = []; currentMenu = menu }
-    onVisibleChanged: if (visible) entries.forceActiveFocus()
+    onVisibleChanged: if (visible) {
+        keyboardNavigation = false;
+        entries.currentIndex = -1;
+        entries.forceActiveFocus();
+    }
+    function moveSelection(delta) {
+        keyboardNavigation = true;
+        const count = entries.count;
+        let index = entries.currentIndex;
+        if (index < 0) index = delta > 0 ? -1 : 0;
+        for (let step = 0; step < count; step++) {
+            index = (index + delta + count) % count;
+            const entry = opener.children.values[index];
+            if (entry && entry.enabled && !entry.isSeparator) {
+                entries.currentIndex = index;
+                entries.positionViewAtIndex(index, ListView.Contain);
+                return;
+            }
+        }
+    }
     QsMenuOpener { id: opener; menu: root.visible ? root.currentMenu : null }
     function back() {
         if (!parents.length) { visible = false; return }
@@ -21,7 +42,8 @@ ShellPopup {
         if (!entry || !entry.enabled || entry.isSeparator) return;
         if (entry.hasChildren) {
             parents = parents.concat([currentMenu]); currentMenu = entry;
-            entries.currentIndex = 0;
+            entries.currentIndex = -1;
+            keyboardNavigation = false;
         } else { entry.triggered(); visible = false }
     }
     ColumnLayout {
@@ -42,6 +64,8 @@ ShellPopup {
             spacing: 2
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar {}
+            Keys.onDownPressed: root.moveSelection(1)
+            Keys.onUpPressed: root.moveSelection(-1)
             Keys.onReturnPressed: root.activate(currentItem ? currentItem.modelData : null)
             Keys.onSpacePressed: root.activate(currentItem ? currentItem.modelData : null)
             Keys.onLeftPressed: root.back()
@@ -58,7 +82,7 @@ ShellPopup {
                 onClicked: root.activate(modelData)
                 background: Rectangle {
                     radius: Theme.radius - 4
-                    color: entryButton.hovered || (entries.activeFocus && entries.currentIndex === entryButton.index) ? Theme.hover : "transparent"
+                    color: entryButton.enabled && (entryButton.hovered || (root.keyboardNavigation && entries.activeFocus && entries.currentIndex === entryButton.index)) ? Theme.hover : "transparent"
                     Rectangle { visible: entryButton.modelData.isSeparator; anchors.centerIn: parent; width: parent.width - 12; height: 1; color: Theme.outline }
                 }
                 contentItem: RowLayout {

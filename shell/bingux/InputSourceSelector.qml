@@ -9,7 +9,7 @@ Item {
     required property var parentWindow
     required property var metrics
     required property string gnoblinCtlPath
-    property bool menuOpen: false
+    property alias menuOpen: inputMenu.visible
     property int selectedIndex: -1
     property string selectedSourceKey: ""
     property bool selectionExplicit: false
@@ -157,13 +157,12 @@ Item {
 
     ShellPopup {
         id: inputMenu
-        visible: root.menuOpen
         screen: root.parentWindow.screen
         popupWidth: 260
-        popupHeight: menuSurface.implicitHeight + Theme.padding * 2
+        contentPadding: Theme.gap
+        popupHeight: menuSurface.implicitHeight + contentPadding * 2
         onVisibleChanged: {
-            if (!visible) root.menuOpen = false;
-            else {
+            if (visible) {
                 preferredX = root.mapToItem(root.parentWindow.contentItem, 0, 0).x - popupWidth + root.width;
                 menuSurface.forceActiveFocus();
             }
