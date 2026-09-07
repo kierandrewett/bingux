@@ -982,7 +982,7 @@ PanelWindow {
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: Theme.padding
-                anchors.rightMargin: Theme.padding
+                anchors.rightMargin: action.closable ? Theme.spaceSmall : Theme.padding
                 spacing: Theme.gap
                 IconImage {
                     visible: action.iconSource.toString().length > 0
