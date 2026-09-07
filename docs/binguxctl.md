@@ -65,3 +65,77 @@ an active capture can be finalised by the outgoing capture worker.
 Screenshots play GNOME's `screen-capture` sound event after a successful save.
 The sound follows the current sound theme and event-sound setting. Cancelled or
 failed captures, previews, and recordings do not play the shutter.
+
+## Audio and media
+
+```sh
+binguxctl audio status
+binguxctl audio volume 40
+binguxctl audio up 5
+binguxctl audio toggle
+binguxctl audio mute --input
+binguxctl media list
+binguxctl media toggle
+binguxctl media next --player org.mpris.MediaPlayer2.spotify
+binguxctl media seek 30 --player org.mpris.MediaPlayer2.spotify
+```
+
+Audio values are percentages, limited to 0-100. `up` and `down` default to five
+percentage points. Volume changes retain the current mute state; use `unmute`
+explicitly. `--input` selects the default microphone instead of the output.
+Unavailable devices return an error.
+
+Media commands use the control centre's selected player, or an exact D-Bus ID
+from `media list` when `--player` is supplied. Available actions are `play`,
+`pause`, `toggle`, `next`, `previous` and `seek`. Seek takes an absolute position
+in seconds. Unsupported actions and missing player IDs return errors.
+
+## Notifications, dock and windows
+
+```sh
+binguxctl notifications list
+binguxctl notifications invoke SESSION:ID ACTION_ID
+binguxctl notifications dismiss SESSION:ID
+binguxctl notifications clear
+binguxctl dock list
+binguxctl dock pin APP_ID
+binguxctl dock move APP_ID 2
+binguxctl dock launch APP_ID
+binguxctl windows list
+binguxctl windows minimize WINDOW_ID
+binguxctl windows activate WINDOW_ID
+binguxctl windows close WINDOW_ID
+```
+
+Use the exact IDs returned by the list commands. Notification lists include
+available action IDs. Archived notifications can be dismissed but might no
+longer have live actions. `clear` dismisses all notifications.
+
+Dock actions operate on listed app groups and use the same pin, reorder and
+launch operations as the dock. `launch` requests a new window; `activate`
+restores an existing window or launches a pinned app. `unpin` removes a pin.
+Positions are zero-based; moves across pinned/running sections require changing
+the pin state first.
+
+Window IDs remain stable across focus changes and expire when their window
+closes or the shell reloads. Refresh `windows list` after a reload. `activate`
+also restores a minimised window; `restore` only removes minimisation.
+
+## Capture settings
+
+```sh
+binguxctl capture options
+binguxctl capture configure --no-copy --cursor --delay 3
+binguxctl capture open --mode recording --fps 30 --max-height 1080 --audio system
+binguxctl capture open --region 100 100 800 600 --output ~/Pictures/Screenshots
+```
+
+`configure` saves options without opening the selector. `open` can apply options
+and open it in one command. Supported settings include mode, target, frame rate,
+height limit, delay, quality, audio source, image format, encoder, capture backend,
+output directory, cursor visibility, clipboard copying and region. Use
+`--no-cursor` or `--no-copy` to turn those options off. `--help` lists valid values.
+
+Regions use logical coordinates relative to the selected capture screen. A
+region must fit the screen. Each request is validated in full before any
+preference changes, and options cannot change during an active capture.

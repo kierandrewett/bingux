@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import struct
 import sys
 import time
 
@@ -55,6 +56,11 @@ def wait(predicate):
 
 try:
     wait(lambda state: state["ready"])
+    call("capture", "configure", "--fps", "15", "--quality", "compact", "--no-copy", "--region", "0", "0", "320", "180")
+    options = call("capture", "options")
+    assert options["fps"] == 15 and not options["copy"] and options["region"]["width"] == 320, options
+    rejected = subprocess.run(command + ["ipc", "capture", "configure", '{"fps":30,"quality":"invalid"}'], text=True, capture_output=True)
+    assert rejected.returncode == 1 and call("capture", "options")["fps"] == 15, rejected
     call("capture", "open", "--mode", "screenshot", "--target", "region")
     wait(lambda state: state["opened"])
     call("capture", "open")
@@ -62,6 +68,7 @@ try:
     call("capture", "take")
     saved = wait(lambda state: state["state"] == "saved")
     assert Path(saved["savedPath"]).parent == output and Path(saved["savedPath"]).stat().st_size > 0, saved
+    assert struct.unpack(">II", Path(saved["savedPath"]).read_bytes()[16:24]) == (320, 180), saved
     deadline = time.monotonic() + 4
     while not sound_log.exists() and time.monotonic() < deadline: time.sleep(.05)
     sound = json.loads(sound_log.read_text())
