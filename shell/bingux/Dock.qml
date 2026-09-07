@@ -38,6 +38,51 @@ PanelWindow {
     property string draggedId: ""
     property real dragOffset: 0
     property int dropIndex: -1
+    property var tooltipOwner: null
+    readonly property bool tooltipVisible: dockTooltip.visible
+
+    Timer {
+        id: tooltipHideDelay
+        interval: 120
+        onTriggered: {
+            if (root.tooltipOwner === null)
+                dockTooltip.visible = false;
+        }
+    }
+
+    DockTooltip {
+        id: dockTooltip
+        screen: root.screen
+    }
+
+    function tooltipEntered(owner) {
+        tooltipHideDelay.stop();
+    }
+
+    function showTooltip(owner) {
+        if (!owner || owner.menuOpen || root.draggedId.length > 0)
+            return;
+
+        root.tooltipOwner = owner;
+        dockTooltip.text = owner.Accessible.name;
+        dockTooltip.centreX = owner.mapToItem(root.contentItem, owner.width / 2, 0).x;
+        dockTooltip.visible = true;
+    }
+
+    function leaveTooltip(owner) {
+        if (root.tooltipOwner !== owner)
+            return;
+
+        root.tooltipOwner = null;
+        tooltipHideDelay.restart();
+    }
+
+    function dismissTooltip() {
+        tooltipHideDelay.stop();
+        root.tooltipOwner = null;
+        dockTooltip.visible = false;
+    }
+
     Settings {
         id: dockState
         location: "file://" + (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/gnoblin/dock.ini"
@@ -336,17 +381,11 @@ PanelWindow {
                     Keys.onRightPressed: event => { if (event.modifiers & Qt.ControlModifier) root.moveGroup(modelData.id, index + 1) }
                     Timer {
                         id: tooltipDelay
-                        interval: 500
+                        interval: root.tooltipVisible ? 0 : 500
                         running: dockMouse.containsMouse && root.draggedId.length === 0 && !dockButton.menuOpen
                         onTriggered: {
-                            tooltip.centreX = dockButton.mapToItem(root.contentItem, dockButton.width / 2, 0).x;
-                            tooltip.visible = true;
+                            root.showTooltip(dockButton);
                         }
-                    }
-                    DockTooltip {
-                        id: tooltip
-                        screen: root.screen
-                        text: dockButton.Accessible.name
                     }
 
                     Rectangle {
@@ -418,10 +457,14 @@ PanelWindow {
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                         cursorShape: Qt.ArrowCursor
                         hoverEnabled: true
-                        onExited: tooltip.visible = false
+                        onEntered: root.tooltipEntered(dockButton)
+                        onExited: {
+                            tooltipDelay.stop();
+                            root.leaveTooltip(dockButton);
+                        }
                         property real pressX: 0
                         property bool moved: false
-                        onPressed: function(mouse) { pressX = mouse.x; moved = false; tooltip.visible = false }
+                        onPressed: function(mouse) { pressX = mouse.x; moved = false; root.dismissTooltip() }
                         onPositionChanged: function(mouse) {
                             if (!(pressedButtons & Qt.LeftButton)) return;
                             const offset = mouse.x - pressX + (root.draggedId === dockButton.modelData.id ? root.dragOffset : 0);

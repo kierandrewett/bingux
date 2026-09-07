@@ -24,7 +24,7 @@ QtObject {
     readonly property int paddingLarge: 20
     readonly property int radius: 12
     readonly property int cardRadius: 20
-    readonly property int barHeight: 36
+    readonly property int barHeight: 34
     readonly property int controlHeight: 32
     readonly property int iconSize: 16
     readonly property int fontSmall: 12
