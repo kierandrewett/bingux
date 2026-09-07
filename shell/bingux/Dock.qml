@@ -17,6 +17,7 @@ PanelWindow {
     onHeightChanged: rectangleUpdate.restart()
     onVisibleChanged: rectangleUpdate.restart()
     onDragOffsetChanged: rectangleUpdate.restart()
+    onSettleOffsetChanged: rectangleUpdate.restart()
     Timer {
         id: rectangleUpdate
         interval: 16
@@ -38,6 +39,10 @@ PanelWindow {
     property string draggedId: ""
     property real dragOffset: 0
     property int dropIndex: -1
+    property bool settlingDrag: false
+    property string settlingId: ""
+    property int settlingTarget: -1
+    property real settleOffset: 0
     property var tooltipOwner: null
     readonly property bool tooltipVisible: dockTooltip.visible
 
@@ -327,19 +332,64 @@ PanelWindow {
     }
 
     function finishDrag() {
+        if (root.settlingDrag)
+            return;
+
         const id = root.draggedId;
         const target = root.dropIndex;
+        const source = root.groupIndex(id);
+        if (id.length === 0 || source < 0 || target < 0 || target >= root.appGroups.length) {
+            root.cancelDrag();
+            return;
+        }
+
+        root.settlingId = id;
+        root.settlingTarget = target;
+        root.settleOffset = root.dragOffset;
+        root.settlingDrag = true;
+        settleAnimation.from = root.dragOffset;
+        settleAnimation.to = (target - source) * (Theme.dockItemSize + Theme.spaceSmall);
+        settleAnimation.restart();
+    }
+
+    function completeDrag() {
+        if (!root.settlingDrag)
+            return;
+
+        const id = root.settlingId;
+        const target = root.settlingTarget;
         if (id.length > 0 && target >= 0 && target < root.appGroups.length)
             root.moveGroup(id, target);
+
+        // Keep the released icon at the destination while the model reorder
+        // is applied, then remove the temporary drag transform in one frame.
+        root.dragOffset = 0;
+        root.settlingDrag = false;
+        root.settlingId = "";
+        root.settlingTarget = -1;
+        root.settleOffset = 0;
+        root.draggedId = "";
+        root.dropIndex = -1;
+    }
+
+    function cancelDrag() {
+        settleAnimation.stop();
+        root.settlingDrag = false;
+        root.settlingId = "";
+        root.settlingTarget = -1;
+        root.settleOffset = 0;
         root.draggedId = "";
         root.dragOffset = 0;
         root.dropIndex = -1;
     }
 
-    function cancelDrag() {
-        root.draggedId = "";
-        root.dragOffset = 0;
-        root.dropIndex = -1;
+    NumberAnimation {
+        id: settleAnimation
+        target: root
+        property: "settleOffset"
+        duration: 180
+        easing.type: Easing.OutCubic
+        onFinished: root.completeDrag()
     }
 
     Timer {
@@ -424,7 +474,9 @@ PanelWindow {
                     z: root.draggedId === modelData.id ? 2 : 0
                     transform: [
                         Translate {
-                            x: root.draggedId === dockButton.modelData.id ? root.dragOffset : 0
+                            x: root.draggedId === dockButton.modelData.id
+                                ? (root.settlingDrag && root.settlingId === dockButton.modelData.id ? root.settleOffset : root.dragOffset)
+                                : 0
                         },
                         Translate {
                             id: reorderTransform
@@ -511,7 +563,7 @@ PanelWindow {
 
                         anchors {
                             bottom: parent.bottom
-                            bottomMargin: 0
+                            bottomMargin: -1
                             horizontalCenter: parent.horizontalCenter
                         }
 

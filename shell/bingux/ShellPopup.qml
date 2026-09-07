@@ -19,7 +19,11 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "gnoblin-shell-popup"
-    WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+    // Keep menus above the desktop without taking the active application's
+    // keyboard focus when they open. Gnoblin's OnDemand semantics focus this
+    // surface after the user clicks inside it, preserving Escape and keyboard
+    // navigation while the menu is being used.
+    WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
     anchors { top: true; bottom: true; left: true; right: true }
     onVisibleChanged: {
         if (visible) {

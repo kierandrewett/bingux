@@ -20,3 +20,4 @@ SymbolicIcon 1.0 SymbolicIcon.qml
 SystemIndicators 1.0 SystemIndicators.qml
 Tray 1.0 Tray.qml
 TrayMenu 1.0 TrayMenu.qml
+TerminalSidebar 1.0 TerminalSidebar.qml

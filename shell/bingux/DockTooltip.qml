@@ -20,10 +20,21 @@ PanelWindow {
     margins.left: Math.max(Theme.gap, Math.min(centreX - width / 2, (screen ? screen.width : 1920) - width - Theme.gap))
     mask: Region {}
     Rectangle {
+        id: surface
         anchors.fill: parent
         color: Theme.surface
         border.color: Theme.outline
-        radius: Theme.radius
+        radius: Theme.insetRadius(Theme.cardRadius, Theme.gap)
+        scale: root.visible ? 1 : 0.9
+        opacity: root.visible ? 1 : 0
+
+        Behavior on scale {
+            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+        }
+        Behavior on opacity {
+            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+        }
+
         Text {
             id: label
             anchors.fill: parent

@@ -90,7 +90,9 @@ Item {
                     anchors.fill: parent
                     anchors.margins: 2
                     radius: Theme.insetRadius(Theme.controlHeight, Theme.gap)
-                    color: trayMouse.pressed ? Theme.pressed : trayMouse.containsMouse ? Theme.hover : "transparent"
+                    // Keep the hover treatment while the menu is open so the
+                    // tray button remains the obvious anchor for it.
+                    color: trayMenu.visible ? Theme.hover : trayMouse.pressed ? Theme.pressed : trayMouse.containsMouse ? Theme.hover : "transparent"
                 }
 
                 IconImage {
