@@ -5,6 +5,10 @@ against its runtime Qt version. Mixing distro Qt updates with an older
 Quickshell binary can cause crashes.
 
 `Theme.qml` defines shared colours, spacing, icon sizes and typography.
+Nested rectangular backgrounds use `Theme.insetRadius(outerRadius, padding)`:
+`max(0, outerRadius - padding)`. Bind this to the actual parent radius and inset.
+For example, a 20px popup with 8px padding gives its menu rows a 12px radius.
+Circular indicators, slider handles and pills retain their circular geometry.
 Top bar controls use full-height hit targets and hover-only backgrounds.
 Dock buttons are square, with icons centred independently of their indicators.
 Drag an icon to reorder it, or focus it and press Ctrl+Left / Ctrl+Right.

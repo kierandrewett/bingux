@@ -8,9 +8,11 @@ PanelWindow {
     default property alias contents: body.data
     property real preferredX: (width - popupWidth) / 2
     property real preferredY: Theme.barHeight + Theme.gap
+    property real cornerRadius: Theme.cardRadius
     property int contentPadding: Theme.padding
+    readonly property real contentRadius: Theme.insetRadius(cornerRadius, contentPadding)
     property int popupWidth: 320
-    property int popupHeight: body.childrenRect.height + Theme.padding * 2
+    property int popupHeight: body.childrenRect.height + contentPadding * 2
     readonly property alias body: body
     visible: false
     color: "transparent"
@@ -38,7 +40,7 @@ PanelWindow {
         y: Math.max(Theme.gap, Math.min(root.preferredY, root.height - height - Theme.gap))
         width: Math.min(root.popupWidth, root.width - Theme.gap * 2)
         height: Math.min(root.popupHeight, root.height - Theme.gap * 2)
-        radius: Theme.cardRadius
+        radius: root.cornerRadius
         color: Theme.surface
         border.color: Theme.outline
         border.width: 1

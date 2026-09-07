@@ -16,7 +16,7 @@ PanelWindow {
     WlrLayershell.namespace: "gnoblin-dock-tooltip"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     anchors { bottom: true; left: true }
-    margins.bottom: Theme.dockHeight + Theme.padding * 2 + Theme.gap
+    margins.bottom: Theme.dockHeight + Theme.padding * 2 + Theme.spaceSmall
     margins.left: Math.max(Theme.gap, Math.min(centreX - width / 2, (screen ? screen.width : 1920) - width - Theme.gap))
     mask: Region {}
     Rectangle {

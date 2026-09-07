@@ -8,7 +8,7 @@ ShellPopup {
     id: root
     required property var indicators
     popupWidth: 380
-    popupHeight: controls.implicitHeight + Theme.padding * 2
+    popupHeight: controls.implicitHeight + contentPadding * 2
     preferredX: width - popupWidth - Theme.padding
     function settings(panel) {
         Quickshell.execDetached(["gnome-control-center", panel]);
@@ -21,7 +21,7 @@ ShellPopup {
         RowLayout {
             Layout.fillWidth: true
             Text { Layout.fillWidth: true; text: "Control Centre"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontHeading; font.weight: Font.DemiBold }
-            ActionButton { text: "×"; Accessible.name: "Close control centre"; onClicked: root.visible = false }
+            ActionButton { cornerRadius: root.contentRadius; text: "×"; Accessible.name: "Close control centre"; onClicked: root.visible = false }
         }
         GridLayout {
             Layout.fillWidth: true
@@ -47,7 +47,7 @@ ShellPopup {
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.outline }
         RowLayout {
             Layout.fillWidth: true
-            ActionButton {
+            ActionButton { cornerRadius: root.contentRadius;
                 Layout.preferredWidth: 40
                 enabled: root.indicators.audioAvailable
                 Accessible.name: root.indicators.audioMuted ? "Unmute" : "Mute"
@@ -86,8 +86,8 @@ ShellPopup {
         RowLayout {
             Layout.fillWidth: true
             Text { Layout.fillWidth: true; text: root.indicators.laptopBatteryAvailable ? root.indicators.batteryAccessibleName() : ""; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
-            ActionButton { text: "Sound settings"; onClicked: root.settings("sound") }
-            ActionButton { text: "Lock"; onClicked: { Quickshell.execDetached(["loginctl", "lock-session"]); root.visible = false } }
+            ActionButton { cornerRadius: root.contentRadius; text: "Sound settings"; onClicked: root.settings("sound") }
+            ActionButton { cornerRadius: root.contentRadius; text: "Lock"; onClicked: { Quickshell.execDetached(["loginctl", "lock-session"]); root.visible = false } }
         }
     }
     component Tile: AbstractButton {
@@ -99,7 +99,7 @@ ShellPopup {
         implicitHeight: 76
         activeFocusOnTab: true
         Accessible.name: title + ", " + subtitle
-        background: Rectangle { radius: Theme.cardRadius - Theme.padding; color: !tile.enabled ? Theme.surface : tile.down ? Theme.pressed : tile.hovered || tile.activeFocus ? Theme.hover : Theme.elevated }
+        background: Rectangle { radius: root.contentRadius; color: !tile.enabled ? Theme.surface : tile.down ? Theme.pressed : tile.hovered || tile.activeFocus ? Theme.hover : Theme.elevated }
         contentItem: RowLayout {
             spacing: Theme.padding
             anchors.fill: parent

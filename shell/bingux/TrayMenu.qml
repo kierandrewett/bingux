@@ -50,6 +50,7 @@ ShellPopup {
         anchors.fill: parent
         spacing: Theme.spaceSmall
         ActionButton {
+            cornerRadius: root.contentRadius
             visible: root.parents.length > 0
             text: "Back"
             Layout.fillWidth: true
@@ -81,7 +82,7 @@ ShellPopup {
                 Accessible.name: text
                 onClicked: root.activate(modelData)
                 background: Rectangle {
-                    radius: Theme.radius - 4
+                    radius: root.contentRadius
                     color: entryButton.enabled && (entryButton.hovered || (root.keyboardNavigation && entries.activeFocus && entries.currentIndex === entryButton.index)) ? Theme.hover : "transparent"
                     Rectangle { visible: entryButton.modelData.isSeparator; anchors.centerIn: parent; width: parent.width - 12; height: 1; color: Theme.outline }
                 }

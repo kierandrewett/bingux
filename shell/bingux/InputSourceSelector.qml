@@ -174,7 +174,6 @@ Item {
             width: parent.width
             height: implicitHeight
             implicitHeight: menuColumn.implicitHeight
-            radius: 8
             color: "transparent"
             focus: true
             Keys.onPressed: function(event) {
@@ -229,7 +228,7 @@ Item {
 
                         Rectangle {
                             anchors.fill: parent
-                            radius: 6
+                            radius: inputMenu.contentRadius
                             color: sourceActionMouse.containsMouse || root.selectedIndex === index ? Theme.selection : "transparent"
                         }
 

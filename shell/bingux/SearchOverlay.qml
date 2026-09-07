@@ -420,9 +420,11 @@ PanelWindow {
 
     Rectangle {
         id: surface
+        readonly property int contentPadding: Theme.padding
+        readonly property real contentRadius: Theme.insetRadius(radius, contentPadding)
 
         width: Math.max(0, Math.min(680, root.width - 32))
-        height: content.implicitHeight + 24
+        height: content.implicitHeight + surface.contentPadding * 2
         radius: Theme.cardRadius
         color: Theme.surface
         border.width: 1
@@ -441,7 +443,7 @@ PanelWindow {
 
             anchors {
                 fill: parent
-                margins: 12
+                margins: surface.contentPadding
             }
 
             Rectangle {
@@ -449,7 +451,7 @@ PanelWindow {
 
                 Layout.fillWidth: true
                 Layout.preferredHeight: 52
-                radius: Theme.cardRadius - Theme.padding
+                radius: surface.contentRadius
                 color: "transparent"
 
                 SymbolicIcon {
@@ -559,7 +561,7 @@ PanelWindow {
                     Rectangle {
                         width: parent.width
                         height: promptText.implicitHeight + 16
-                        radius: 6
+                        radius: surface.contentRadius
                         color: Theme.background
                         border.width: 1
                         border.color: Theme.outline
@@ -598,7 +600,7 @@ PanelWindow {
                     Rectangle {
                         width: parent.width
                         height: responseText.implicitHeight + 16
-                        radius: 6
+                        radius: surface.contentRadius
                         color: Theme.surface
                         border.width: 1
                         border.color: Theme.outline
@@ -654,7 +656,7 @@ PanelWindow {
 
                     Rectangle {
                         anchors.fill: parent
-                        radius: 6
+                        radius: surface.contentRadius
                         color: root.selectedIndex === resultRow.index ? Theme.selection : resultMouse.containsMouse ? Theme.hover : "transparent"
                     }
 

@@ -4,13 +4,14 @@ import QtQuick.Controls
 AbstractButton {
     id: root
     property bool flat: false
+    property real cornerRadius: Theme.insetRadius(Theme.cardRadius, Theme.padding)
     implicitWidth: Math.max(36, label.implicitWidth + Theme.padding * 2)
     implicitHeight: 36
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
     Accessible.name: text
     background: Rectangle {
-        radius: Theme.cardRadius - Theme.padding
+        radius: root.cornerRadius
         color: root.down ? Theme.pressed : root.hovered ? Theme.hover : root.flat ? "transparent" : Theme.elevated
         border.width: root.activeFocus ? 2 : 0
         border.color: Theme.accent

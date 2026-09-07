@@ -268,11 +268,12 @@ PanelWindow {
 
     Rectangle {
         id: dockSurface
+        readonly property real itemPadding: Math.max(0, (height - Theme.dockItemSize) / 2)
         onXChanged: rectangleUpdate.restart()
         onYChanged: rectangleUpdate.restart()
 
         anchors.centerIn: parent
-        width: Math.min(root.width - Theme.padding * 2, dockRow.implicitWidth + Theme.gap * 2)
+        width: Math.min(root.width - Theme.padding * 2, dockRow.implicitWidth + dockSurface.itemPadding * 2)
         height: Theme.dockHeight
         radius: Theme.cardRadius + 4
         color: Theme.surface
@@ -282,8 +283,8 @@ PanelWindow {
 
         Flickable {
             anchors.fill: parent
-            anchors.leftMargin: Theme.gap
-            anchors.rightMargin: Theme.gap
+            anchors.leftMargin: dockSurface.itemPadding
+            anchors.rightMargin: dockSurface.itemPadding
             onContentXChanged: rectangleUpdate.restart()
             contentWidth: dockRow.implicitWidth
             contentHeight: height
@@ -349,7 +350,7 @@ PanelWindow {
                     }
 
                     Rectangle {
-                        radius: Theme.cardRadius + 4 - Theme.gap
+                        radius: Theme.insetRadius(dockSurface.radius, dockSurface.itemPadding)
                         color: dockButton.active ? Theme.elevated : dockMouse.containsMouse || dockButton.activeFocus ? Theme.hover : "transparent"
 
                         anchors {
@@ -470,7 +471,6 @@ PanelWindow {
                             width: parent.width
                             height: implicitHeight
                             implicitHeight: menuColumn.implicitHeight + 12
-                            radius: 10
                             color: "transparent"
 
                             ColumnLayout {
@@ -493,6 +493,7 @@ PanelWindow {
                                 }
 
                                 MenuAction {
+                                    cornerRadius: appMenu.contentRadius
                                     label: "Open new window"
                                     visible: dockButton.modelData.desktopEntry !== null
                                     onTriggered: {
@@ -507,6 +508,7 @@ PanelWindow {
                                     model: dockButton.modelData.desktopEntry ? dockButton.modelData.desktopEntry.actions : []
 
                                     delegate: MenuAction {
+                                    cornerRadius: appMenu.contentRadius
                                         required property var modelData
 
                                         label: root.menuLabel(modelData.name, "Application action")
@@ -529,6 +531,7 @@ PanelWindow {
                                     model: dockButton.modelData.windows
 
                                     delegate: MenuAction {
+                                    cornerRadius: appMenu.contentRadius
                                         required property var modelData
 
                                         label: root.menuLabel(modelData.title, dockButton.modelData.id)

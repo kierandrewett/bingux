@@ -58,8 +58,8 @@ PanelWindow {
         width: Math.min(384, parent.width - 24)
         anchors.top: parent.top
         anchors.right: parent.right
-        anchors.topMargin: 48
-        anchors.rightMargin: 12
+        anchors.topMargin: Theme.barHeight + Theme.gap
+        anchors.rightMargin: Theme.padding
         spacing: 8
 
         Repeater {
@@ -67,6 +67,7 @@ PanelWindow {
 
             delegate: Rectangle {
                 id: notificationCard
+                readonly property int contentPadding: Theme.padding
 
                 required property var modelData
                 readonly property var entry: modelData
@@ -74,8 +75,8 @@ PanelWindow {
                 readonly property bool defaultActionAvailable: root.hasDefaultAction(entry)
 
                 width: notificationColumn.width
-                height: cardContents.implicitHeight + 28
-                radius: 12
+                height: cardContents.implicitHeight + contentPadding * 2
+                radius: Theme.cardRadius
                 color: Theme.surface
                 border.width: 1
                 border.color: Theme.outline
@@ -95,9 +96,9 @@ PanelWindow {
                 Column {
                     id: cardContents
 
-                    width: parent.width - 32
+                    width: parent.width - notificationCard.contentPadding * 2
                     anchors.top: parent.top
-                    anchors.topMargin: 14
+                    anchors.topMargin: notificationCard.contentPadding
                     anchors.horizontalCenter: parent.horizontalCenter
                     spacing: 8
 
@@ -197,7 +198,7 @@ PanelWindow {
 
                                 width: visible ? Math.min(164, actionLabel.implicitWidth + 20) : 0
                                 height: visible ? 30 : 0
-                                radius: 6
+                                radius: Theme.insetRadius(notificationCard.radius, notificationCard.contentPadding)
                                 color: actionMouse.containsMouse ? Theme.hover : Theme.elevated
                                 visible: !modelData.defaultAction
                                 Accessible.name: modelData.text

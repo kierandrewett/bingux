@@ -2,6 +2,10 @@ pragma Singleton
 import QtQuick
 
 QtObject {
+    function insetRadius(outerRadius, padding) {
+        return Math.max(0, outerRadius - padding);
+    }
+
     readonly property color background: "#e6161616"
     readonly property color surface: "#f0303030"
     readonly property color elevated: "#383838"
