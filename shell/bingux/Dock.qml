@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
 import QtCore
+import QtQml.Models
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
@@ -11,6 +12,29 @@ PanelWindow {
 
     required property var settings
     property var appGroups: []
+    onAppGroupsChanged: rectangleUpdate.restart()
+    onWidthChanged: rectangleUpdate.restart()
+    onHeightChanged: rectangleUpdate.restart()
+    onVisibleChanged: rectangleUpdate.restart()
+    onDragOffsetChanged: rectangleUpdate.restart()
+    Timer {
+        id: rectangleUpdate
+        interval: 16
+        onTriggered: {
+            for (let i = 0; i < dockItems.count; i++) {
+                const item = dockItems.itemAt(i);
+                if (item) item.publishRectangle();
+            }
+        }
+    }
+    Instantiator {
+        model: ToplevelManager.toplevels
+        delegate: Connections {
+            required property var modelData
+            target: modelData
+            function onAppIdChanged() { root.refreshAppGroups() }
+        }
+    }
     property string draggedId: ""
     property real dragOffset: 0
     property int dropIndex: -1
@@ -244,6 +268,8 @@ PanelWindow {
 
     Rectangle {
         id: dockSurface
+        onXChanged: rectangleUpdate.restart()
+        onYChanged: rectangleUpdate.restart()
 
         anchors.centerIn: parent
         width: Math.min(root.width - Theme.padding * 2, dockRow.implicitWidth + Theme.gap * 2)
@@ -269,6 +295,7 @@ PanelWindow {
             spacing: Theme.spaceSmall
 
             Repeater {
+                id: dockItems
                 model: root.appGroups
 
                 delegate: Item {
@@ -277,6 +304,13 @@ PanelWindow {
                     required property var modelData
                     required property int index
                     property bool menuOpen: false
+                    function publishRectangle() {
+                        const position = dockIcon.mapToItem(root.contentItem, 0, 0);
+                        const rect = root.visible
+                            ? Qt.rect(Math.round(position.x), Math.round(position.y), dockIcon.width, dockIcon.height)
+                            : Qt.rect(0, 0, 0, 0);
+                        for (const window of modelData.windows) window.setRectangle(root, rect);
+                    }
                     property bool active: {
                         for (let index = 0; index < modelData.windows.length; index++) {
                             if (modelData.windows[index].activated)
@@ -332,6 +366,7 @@ PanelWindow {
                     }
 
                     IconImage {
+                        id: dockIcon
                         implicitSize: Theme.dockIconSize
                         source: dockButton.modelData.desktopEntry ? Quickshell.iconPath(dockButton.modelData.desktopEntry.icon, "application-x-executable") : Quickshell.iconPath("application-x-executable", "application-x-executable")
 
@@ -535,48 +570,24 @@ PanelWindow {
         target: DesktopEntries
     }
 
-    component MenuAction: Item {
-        id: action
-
+    component MenuAction: ActionButton {
+        flat: true
         required property string label
-
         signal triggered()
-
+        text: label
         Layout.fillWidth: true
-        implicitHeight: visible ? 38 : 0
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 6
-            color: actionMouse.containsMouse ? Theme.hover : "transparent"
-        }
-
-        Text {
-            color: Theme.text
-            elide: Text.ElideRight
-            font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
+        implicitHeight: 38
+        onClicked: triggered()
+        contentItem: Text {
+            text: parent.label
             textFormat: Text.PlainText
-            text: action.label
-
-            anchors {
-                left: parent.left
-                right: parent.right
-                leftMargin: 10
-                rightMargin: 10
-                verticalCenter: parent.verticalCenter
-            }
-
+            elide: Text.ElideRight
+            color: Theme.text
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize
+            verticalAlignment: Text.AlignVCenter
+            leftPadding: Theme.padding
+            rightPadding: Theme.padding
         }
-
-        MouseArea {
-            id: actionMouse
-
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.ArrowCursor
-            onClicked: action.triggered()
-        }
-
     }
-
 }

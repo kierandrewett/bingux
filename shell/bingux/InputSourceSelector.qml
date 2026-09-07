@@ -1,10 +1,12 @@
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 
 Item {
     id: root
 
+    required property var parentWindow
     required property var metrics
     required property string gnoblinCtlPath
     property bool menuOpen: false
@@ -135,7 +137,7 @@ Item {
 
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
-        cursorShape: root.canSelect ? Qt.ArrowCursor : Qt.ArrowCursor
+        cursorShape: Qt.ArrowCursor
         onClicked: {
             root.forceActiveFocus();
             root.openMenu();
@@ -153,35 +155,28 @@ Item {
         }
     }
 
-    PopupWindow {
+    ShellPopup {
         id: inputMenu
-
         visible: root.menuOpen
-        implicitWidth: 220
-        implicitHeight: menuSurface.implicitHeight
-        color: "transparent"
+        screen: root.parentWindow.screen
+        popupWidth: 260
+        popupHeight: menuSurface.implicitHeight + Theme.padding * 2
         onVisibleChanged: {
-            if (!visible)
-                root.menuOpen = false;
-
-        }
-
-        anchor {
-            item: root
-            edges: Edges.Bottom | Edges.Left
-            gravity: Edges.Bottom | Edges.Right
-            adjustment: PopupAdjustment.Flip | PopupAdjustment.Slide
-            margins.top: 6
+            if (!visible) root.menuOpen = false;
+            else {
+                preferredX = root.mapToItem(root.parentWindow.contentItem, 0, 0).x - popupWidth + root.width;
+                menuSurface.forceActiveFocus();
+            }
         }
 
         Rectangle {
             id: menuSurface
 
-            width: inputMenu.width
+            width: parent.width
             height: implicitHeight
-            implicitHeight: menuColumn.implicitHeight + 12
+            implicitHeight: menuColumn.implicitHeight
             radius: 8
-            color: Theme.surface
+            color: "transparent"
             focus: true
             Keys.onPressed: function(event) {
                 if (event.key === Qt.Key_Escape) {
@@ -199,18 +194,18 @@ Item {
                 }
             }
 
-            Column {
+            ColumnLayout {
                 id: menuColumn
 
                 spacing: 2
 
                 anchors {
-                    fill: parent
-                    margins: 6
+                    left: parent.left
+                    right: parent.right
                 }
 
                 Text {
-                    width: parent.width
+                    Layout.fillWidth: true
                     color: Theme.muted
                     font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
                     text: "Keyboard layout"
@@ -228,8 +223,8 @@ Item {
 
                         required property var modelData
                         required property int index
-                        width: parent.width
-                        height: 34
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 38
                         Accessible.name: sourceAction.modelData.displayName
                         Accessible.role: Accessible.Button
 
@@ -261,7 +256,7 @@ Item {
 
                             anchors.fill: parent
                             hoverEnabled: true
-                            cursorShape: root.canSelect ? Qt.ArrowCursor : Qt.ArrowCursor
+                            cursorShape: Qt.ArrowCursor
                             enabled: root.canSelect
                             onClicked: root.selectSource(sourceAction.modelData)
                         }
@@ -271,7 +266,7 @@ Item {
                 }
 
                 Text {
-                    width: parent.width
+                    Layout.fillWidth: true
                     visible: root.lastError !== ""
                     color: "#f4a340"
                     font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall

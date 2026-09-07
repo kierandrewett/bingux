@@ -88,7 +88,7 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     enabled: notificationCard.defaultActionAvailable
-                    cursorShape: enabled ? Qt.ArrowCursor : Qt.ArrowCursor
+                    cursorShape: Qt.ArrowCursor
                     onClicked: root.invokeDefaultAction(notificationCard.entry)
                 }
 

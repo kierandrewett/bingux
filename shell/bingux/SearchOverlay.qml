@@ -461,6 +461,7 @@ PanelWindow {
 
                 TextInput {
                     id: searchInput
+                    HoverHandler { cursorShape: Qt.ArrowCursor }
 
                     activeFocusOnTab: true
                     focus: root.visible
@@ -684,7 +685,7 @@ PanelWindow {
                         hoverEnabled: true
                         acceptedButtons: Qt.LeftButton
                         enabled: !root.activationPending
-                        cursorShape: enabled ? Qt.ArrowCursor : Qt.ArrowCursor
+                        cursorShape: Qt.ArrowCursor
                         onEntered: {
                             root.selectedIndex = resultRow.index;
                             resultsList.positionViewAtIndex(resultRow.index, ListView.Contain);

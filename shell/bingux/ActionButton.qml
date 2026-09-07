@@ -3,14 +3,15 @@ import QtQuick.Controls
 
 AbstractButton {
     id: root
+    property bool flat: false
     implicitWidth: Math.max(36, label.implicitWidth + Theme.padding * 2)
     implicitHeight: 36
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
     Accessible.name: text
     background: Rectangle {
-        radius: Theme.radius
-        color: root.down ? Theme.pressed : root.hovered ? Theme.hover : Theme.elevated
+        radius: Theme.cardRadius - Theme.padding
+        color: root.down ? Theme.pressed : root.hovered ? Theme.hover : root.flat ? "transparent" : Theme.elevated
         border.width: root.activeFocus ? 2 : 0
         border.color: Theme.accent
     }

@@ -20,7 +20,7 @@ PanelWindow {
     anchors { top: true; bottom: true; left: true; right: true }
     onVisibleChanged: if (visible) contentItem.forceActiveFocus()
     contentItem.Keys.onEscapePressed: visible = false
-    MouseArea { anchors.fill: parent; onClicked: root.visible = false }
+    MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; onClicked: root.visible = false }
     Rectangle {
         id: card
         x: Math.max(Theme.gap, Math.min(root.preferredX, root.width - width - Theme.gap))

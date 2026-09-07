@@ -124,7 +124,7 @@ ShellRoot {
                         Text { text: metrics.cpuLabel; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
                         Text { text: metrics.memoryLabel; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
                     }
-                    Pill { visible: metrics.desktopStateAvailable; InputSourceSelector { metrics: metrics; gnoblinCtlPath: profileSettings.gnoblinCtlPath } }
+                    Pill { visible: metrics.desktopStateAvailable; InputSourceSelector { parentWindow: topBar; metrics: metrics; gnoblinCtlPath: profileSettings.gnoblinCtlPath } }
                     Pill {
                         id: systemPill
                         activeFocusOnTab: true
