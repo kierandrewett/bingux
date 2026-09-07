@@ -418,7 +418,7 @@ PanelWindow {
 
     exclusiveZone: implicitHeight
     implicitHeight: Theme.dockHeight + Theme.padding * 2
-    mask: Region { item: root.draggedId.length > 0 ? dragCapture : dockSurface }
+    mask: Region { item: root.draggedId.length > 0 ? dragCapture : dockInputArea }
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "bingux-dock"
@@ -522,13 +522,23 @@ PanelWindow {
         right: true
     }
 
+    Item {
+        id: dockInputArea
+        x: dockSurface.x
+        y: dockSurface.y
+        width: dockSurface.visible ? dockSurface.width : 0
+        height: root.height - y
+    }
+
     Rectangle {
         id: dockSurface
         readonly property real itemPadding: Math.max(0, (height - Theme.dockItemSize) / 2)
+        readonly property real bottomGap: Math.max(0, root.height - y - height)
         onXChanged: rectangleUpdate.restart()
         onYChanged: rectangleUpdate.restart()
 
         anchors.centerIn: parent
+        anchors.verticalCenterOffset: Theme.spaceSmall
         width: Math.min(root.width - Theme.padding * 2, dockRow.implicitWidth + dockSurface.itemPadding * 2)
         height: Theme.dockHeight
         radius: Theme.cardRadius + 4
@@ -541,6 +551,8 @@ PanelWindow {
             anchors.fill: parent
             anchors.leftMargin: dockSurface.itemPadding
             anchors.rightMargin: dockSurface.itemPadding
+            // Keep bottom-edge input inside the clipped viewport.
+            anchors.bottomMargin: -dockSurface.bottomGap
             onContentXChanged: rectangleUpdate.restart()
             contentWidth: dockRow.implicitWidth
             contentHeight: height
@@ -549,7 +561,7 @@ PanelWindow {
             boundsBehavior: Flickable.StopAtBounds
         RowLayout {
             id: dockRow
-            height: parent.height
+            height: dockSurface.height
             spacing: Theme.spaceSmall
 
             Repeater {
@@ -784,6 +796,8 @@ PanelWindow {
                         id: dockMouse
 
                         anchors.fill: parent
+                        anchors.topMargin: -dockSurface.itemPadding
+                        anchors.bottomMargin: -(dockSurface.itemPadding + dockSurface.bottomGap)
                         enabled: !dockButton.entering
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                         cursorShape: Qt.ArrowCursor

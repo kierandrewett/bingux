@@ -212,7 +212,9 @@ ShellRoot {
                     },
                 };
                 test.check((button.testMouse.acceptedButtons & Qt.MiddleButton) !== 0, "dock accepts middle clicks");
-                input.mouseClick(button, button.width / 2, button.height / 2, Qt.MiddleButton);
+                const edgeX = button.mapToItem(dock.contentItem, button.width / 2, 0).x;
+                test.check(dock.testSurface.bottomGap === Theme.padding - Theme.spaceSmall, "dock sits four pixels lower");
+                input.mouseClick(dock.contentItem, edgeX, dock.height - 1, Qt.MiddleButton);
                 test.check(test.newWindowLaunches === 1 && test.normalLaunches === 0, "middle click uses explicit new-window action");
                 button.modelData.desktopEntry.actions = [];
                 input.mouseClick(button, button.width / 2, button.height / 2, Qt.MiddleButton);
