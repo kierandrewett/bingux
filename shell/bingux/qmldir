@@ -1,6 +1,9 @@
 singleton Theme 1.0 Theme.qml
+ActionButton 1.0 ActionButton.qml
 CalendarPopup 1.0 CalendarPopup.qml
+ControlCentre 1.0 ControlCentre.qml
 Dock 1.0 Dock.qml
+DockTooltip 1.0 DockTooltip.qml
 InputSourceSelector 1.0 InputSourceSelector.qml
 Metrics 1.0 Metrics.qml
 NotificationState 1.0 NotificationState.qml
