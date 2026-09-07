@@ -1,4 +1,7 @@
 import QtQuick
+import QtQuick.Layouts
+import QtQuick.Controls
+import QtCore
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
@@ -8,6 +11,24 @@ PanelWindow {
 
     required property var settings
     property var appGroups: []
+    property string draggedId: ""
+    property real dragOffset: 0
+    property int dropIndex: -1
+    Settings {
+        id: dockState
+        location: "file://" + (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/gnoblin/dock.ini"
+        category: "dock"
+        property var order: []
+    }
+    function moveGroup(id, destination) {
+        const ids = appGroups.map(group => group.id);
+        const source = ids.indexOf(id);
+        if (source < 0 || destination < 0 || destination >= ids.length) return;
+        ids.splice(source, 1); ids.splice(destination, 0, id);
+        dockState.order = ids.concat(dockState.order.filter(old => ids.indexOf(old) < 0));
+        dockState.sync();
+        refreshAppGroups();
+    }
     property var emptyAppIdGroupAssociations: []
     property string pendingLaunchGroupId: ""
     property var pendingLaunchToplevel: null
@@ -137,6 +158,11 @@ PanelWindow {
             const groupIndex = addGroup(toplevel.appId, fallbackId);
             groups[groupIndex].windows.push(toplevel);
         }
+        const order = dockState.order;
+        groups.sort((a, b) => {
+            const ai = order.indexOf(a.id), bi = order.indexOf(b.id);
+            return (ai < 0 ? order.length : ai) - (bi < 0 ? order.length : bi);
+        });
         root.appGroups = groups;
     }
 
@@ -172,6 +198,7 @@ PanelWindow {
             active.minimized = true;
             return ;
         }
+        group.windows[0].minimized = false;
         group.windows[0].activate();
     }
 
@@ -188,7 +215,8 @@ PanelWindow {
     }
 
     exclusiveZone: 0
-    implicitHeight: 80
+    implicitHeight: Theme.dockHeight + Theme.padding * 2
+    mask: Region { item: dockSurface }
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "bingux-dock"
@@ -218,17 +246,27 @@ PanelWindow {
         id: dockSurface
 
         anchors.centerIn: parent
-        width: Math.min(root.width - 24, dockRow.implicitWidth + 20)
-        height: 64
-        radius: height / 2
-        color: "#202632"
+        width: Math.min(root.width - Theme.padding * 2, dockRow.implicitWidth + Theme.padding * 2)
+        height: Theme.dockHeight
+        radius: Theme.cardRadius + 4
+        color: Theme.surface
+        border.width: 1
+        border.color: Theme.outline
         visible: root.appGroups.length > 0
 
-        Row {
+        Flickable {
+            anchors.fill: parent
+            anchors.leftMargin: Theme.padding
+            anchors.rightMargin: Theme.padding
+            contentWidth: dockRow.implicitWidth
+            contentHeight: height
+            clip: true
+            interactive: root.draggedId.length === 0 && contentWidth > width
+            boundsBehavior: Flickable.StopAtBounds
+        RowLayout {
             id: dockRow
-
-            anchors.centerIn: parent
-            spacing: 4
+            height: parent.height
+            spacing: Theme.spaceSmall
 
             Repeater {
                 model: root.appGroups
@@ -237,6 +275,7 @@ PanelWindow {
                     id: dockButton
 
                     required property var modelData
+                    required property int index
                     property bool menuOpen: false
                     property bool active: {
                         for (let index = 0; index < modelData.windows.length; index++) {
@@ -247,21 +286,34 @@ PanelWindow {
                         return false;
                     }
 
-                    width: 52
-                    height: 56
+                    Layout.preferredWidth: Theme.dockItemSize
+                    Layout.preferredHeight: Theme.dockHeight
+                    z: root.draggedId === modelData.id ? 2 : 0
+                    transform: Translate { x: root.draggedId === dockButton.modelData.id ? root.dragOffset : 0 }
+                    opacity: root.draggedId.length > 0 && root.draggedId !== modelData.id ? 0.65 : 1
+                    activeFocusOnTab: true
+                    Accessible.role: Accessible.Button
+                    Accessible.name: modelData.desktopEntry ? modelData.desktopEntry.name : modelData.id
+                    Keys.onReturnPressed: root.toggleGroup(modelData)
+                    Keys.onSpacePressed: root.toggleGroup(modelData)
+                    Keys.onLeftPressed: event => { if (event.modifiers & Qt.ControlModifier) root.moveGroup(modelData.id, index - 1) }
+                    Keys.onRightPressed: event => { if (event.modifiers & Qt.ControlModifier) root.moveGroup(modelData.id, index + 1) }
+                    ToolTip.visible: dockMouse.containsMouse && root.draggedId.length === 0
+                    ToolTip.delay: 600
+                    ToolTip.text: Accessible.name
 
                     Rectangle {
                         radius: 10
-                        color: dockButton.active ? "#3a4962" : dockMouse.containsMouse ? "#2b3545" : "transparent"
+                        color: dockButton.active ? Theme.elevated : dockMouse.containsMouse || dockButton.activeFocus ? Theme.hover : "transparent"
 
                         anchors {
                             fill: parent
-                            margins: 2
+                            margins: Theme.gap
                         }
 
                         Behavior on color {
                             ColorAnimation {
-                                duration: 100
+                                duration: Theme.motion
                             }
 
                         }
@@ -269,13 +321,11 @@ PanelWindow {
                     }
 
                     IconImage {
-                        implicitSize: 36
+                        implicitSize: Theme.dockIconSize
                         source: dockButton.modelData.desktopEntry ? Quickshell.iconPath(dockButton.modelData.desktopEntry.icon, "application-x-executable") : Quickshell.iconPath("application-x-executable", "application-x-executable")
 
                         anchors {
-                            horizontalCenter: parent.horizontalCenter
-                            top: parent.top
-                            topMargin: 5
+                            centerIn: parent
                         }
 
                     }
@@ -286,24 +336,33 @@ PanelWindow {
 
                         anchors {
                             bottom: parent.bottom
-                            bottomMargin: 3
+                            bottomMargin: Theme.gap
                             horizontalCenter: parent.horizontalCenter
                         }
 
                         Repeater {
-                            model: dockButton.modelData.windows.length
+                            model: Math.min(4, dockButton.modelData.windows.length)
 
                             delegate: Rectangle {
                                 width: 4
                                 height: 4
                                 radius: width / 2
-                                color: dockButton.active ? "#f5f7fa" : "#aeb8ca"
+                                color: dockButton.active ? Theme.accent : Theme.muted
                             }
 
                         }
 
                     }
 
+                    Rectangle {
+                        visible: root.dropIndex === dockButton.index && root.draggedId !== dockButton.modelData.id
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 3
+                        height: Theme.dockIconSize
+                        radius: 2
+                        color: Theme.accent
+                    }
                     MouseArea {
                         id: dockMouse
 
@@ -311,7 +370,26 @@ PanelWindow {
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
                         hoverEnabled: true
+                        property real pressX: 0
+                        property bool moved: false
+                        onPressed: function(mouse) { pressX = mouse.x; moved = false }
+                        onPositionChanged: function(mouse) {
+                            if (!(pressedButtons & Qt.LeftButton)) return;
+                            const offset = mouse.x - pressX + (root.draggedId === dockButton.modelData.id ? root.dragOffset : 0);
+                            if (!moved && Math.abs(offset) < 8) return;
+                            moved = true;
+                            root.draggedId = dockButton.modelData.id;
+                            root.dragOffset = offset;
+                            root.dropIndex = Math.max(0, Math.min(root.appGroups.length - 1, dockButton.index + Math.round(offset / (Theme.dockItemSize + Theme.spaceSmall))));
+                        }
+                        onReleased: {
+                            const id = root.draggedId, target = root.dropIndex;
+                            root.draggedId = ""; root.dragOffset = 0; root.dropIndex = -1;
+                            if (moved) root.moveGroup(id, target);
+                        }
+                        onCanceled: { root.draggedId = ""; root.dragOffset = 0; root.dropIndex = -1 }
                         onClicked: function(mouse) {
+                            if (moved) return;
                             if (mouse.button === Qt.LeftButton)
                                 root.toggleGroup(dockButton.modelData);
                             else if (mouse.button === Qt.MiddleButton)
@@ -324,48 +402,35 @@ PanelWindow {
                         }
                     }
 
-                    PopupWindow {
+                    ShellPopup {
                         id: appMenu
-
                         visible: dockButton.menuOpen
-                        implicitWidth: 240
-                        implicitHeight: menuSurface.implicitHeight
-                        color: "transparent"
+                        popupWidth: 280
+                        popupHeight: menuColumn.implicitHeight + Theme.padding * 2
+                        screen: root.screen
+                        preferredY: height - root.height - popupHeight - Theme.gap
                         onVisibleChanged: {
-                            if (!visible)
-                                dockButton.menuOpen = false;
-
-                        }
-
-                        anchor {
-                            window: root
-                            edges: Edges.Top | Edges.Left
-                            gravity: Edges.Top | Edges.Left
-                            adjustment: PopupAdjustment.Flip | PopupAdjustment.Slide
-                            margins.top: 8
-                            onAnchoring: {
-                                const position = dockButton.mapToItem(root.contentItem, 0, 0);
-                                rect = Qt.rect(position.x, position.y, dockButton.width, dockButton.height);
-                            }
+                            if (!visible) dockButton.menuOpen = false;
+                            else preferredX = dockButton.mapToItem(root.contentItem, 0, 0).x - popupWidth / 2 + dockButton.width / 2;
                         }
 
                         Rectangle {
                             id: menuSurface
 
-                            width: appMenu.width
+                            width: parent.width
                             height: implicitHeight
                             implicitHeight: menuColumn.implicitHeight + 12
                             radius: 10
-                            color: "#202632"
+                            color: "transparent"
 
-                            Column {
+                            ColumnLayout {
                                 id: menuColumn
 
                                 spacing: 2
 
                                 anchors {
-                                    fill: parent
-                                    margins: 6
+                                    left: parent.left
+                                    right: parent.right
                                 }
 
                                 MenuAction {
@@ -397,7 +462,7 @@ PanelWindow {
                                 Rectangle {
                                     width: parent.width
                                     height: visible ? 1 : 0
-                                    color: "#39465b"
+                                    color: Theme.outline
                                     visible: desktopActions.count > 0 && dockButton.modelData.windows.length > 0
                                 }
 
@@ -426,6 +491,7 @@ PanelWindow {
 
             }
 
+        }
         }
 
     }
@@ -464,17 +530,17 @@ PanelWindow {
 
         signal triggered()
 
-        width: parent ? parent.width : 240
-        height: visible ? 34 : 0
+        Layout.fillWidth: true
+        implicitHeight: visible ? 38 : 0
 
         Rectangle {
             anchors.fill: parent
             radius: 6
-            color: actionMouse.containsMouse ? "#344158" : "transparent"
+            color: actionMouse.containsMouse ? Theme.hover : "transparent"
         }
 
         Text {
-            color: "#edf1f7"
+            color: Theme.text
             elide: Text.ElideRight
             font.pixelSize: 13
             textFormat: Text.PlainText

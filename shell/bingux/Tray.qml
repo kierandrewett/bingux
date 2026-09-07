@@ -146,8 +146,10 @@ Item {
                     id: trayMenu
                     menu: trayButton.modelData.menu
                     screen: root.parentWindow.screen
-                    preferredX: trayButton.mapToItem(root.parentWindow.contentItem, 0, 0).x
-                    function open() { visible = true }
+                    function open() {
+                        preferredX = trayButton.mapToItem(root.parentWindow.contentItem, 0, 0).x - popupWidth + trayButton.width;
+                        visible = true;
+                    }
                 }
                 MouseArea {
                     anchors.fill: parent
