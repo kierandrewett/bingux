@@ -1,6 +1,8 @@
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Widgets
 
 PanelWindow {
     id: root
@@ -393,7 +395,7 @@ PanelWindow {
 
     Rectangle {
         anchors.fill: parent
-        color: "#8c000000"
+        color: "transparent"
 
         MouseArea {
             anchors.fill: parent
@@ -406,12 +408,12 @@ PanelWindow {
     Rectangle {
         id: surface
 
-        width: Math.max(0, Math.min(560, root.width - 32))
+        width: Math.max(0, Math.min(680, root.width - 32))
         height: content.implicitHeight + 24
-        radius: 10
-        color: "#202632"
+        radius: Theme.cardRadius
+        color: Theme.surface
         border.width: 1
-        border.color: "#344158"
+        border.color: Theme.outline
 
         anchors {
             top: parent.top
@@ -419,7 +421,7 @@ PanelWindow {
             horizontalCenter: parent.horizontalCenter
         }
 
-        Column {
+        ColumnLayout {
             id: content
 
             spacing: 8
@@ -432,18 +434,18 @@ PanelWindow {
             Rectangle {
                 id: searchFieldSurface
 
-                width: parent.width
-                height: 46
+                Layout.fillWidth: true
+                Layout.preferredHeight: 52
                 radius: 6
-                color: "#171a21"
+                color: Theme.background
                 border.width: 1
-                border.color: searchInput.activeFocus ? "#d9dee8" : "#344158"
+                border.color: searchInput.activeFocus ? Theme.text : Theme.selection
 
                 Text {
                     visible: searchInput.text === ""
-                    color: "#8b94a3"
-                    font.pixelSize: 14
-                    text: root.chatMode ? "Ask a follow-up" : "Search Bingux or ? ask AI"
+                    color: Theme.muted
+                    font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
+                    text: root.chatMode ? "Ask a follow-up" : "Search applications, files and more"
                     textFormat: Text.PlainText
                     elide: Text.ElideRight
 
@@ -463,15 +465,15 @@ PanelWindow {
                     activeFocusOnTab: true
                     focus: root.visible
                     clip: true
-                    color: "#f5f7fa"
-                    font.pixelSize: 14
+                    color: Theme.text
+                    font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
                     maximumLength: 512
                     readOnly: root.activationPending
                     selectByMouse: true
-                    selectionColor: "#344158"
-                    selectedTextColor: "#f5f7fa"
+                    selectionColor: Theme.selection
+                    selectedTextColor: Theme.text
                     verticalAlignment: TextInput.AlignVCenter
-                    Accessible.name: root.chatMode ? "Ask a follow-up" : "Search Bingux"
+                    Accessible.name: root.chatMode ? "Ask a follow-up" : "Search"
                     onTextChanged: root.submitQuery()
                     Keys.onPressed: function(event) {
                         if (event.key === Qt.Key_Escape) {
@@ -510,8 +512,8 @@ PanelWindow {
             ListView {
                 id: chatTranscriptList
 
-                width: parent.width
-                height: visible ? Math.min(contentHeight, 192) : 0
+                Layout.fillWidth: true
+                Layout.preferredHeight: visible ? Math.min(contentHeight, 192) : 0
                 visible: root.chatMode && root.chatTranscript.length > 0
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
@@ -527,8 +529,8 @@ PanelWindow {
                     spacing: 4
 
                     Text {
-                        color: "#aeb8ca"
-                        font.pixelSize: 12
+                        color: Theme.muted
+                        font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
                         text: "You"
                         textFormat: Text.PlainText
                     }
@@ -537,16 +539,16 @@ PanelWindow {
                         width: parent.width
                         height: promptText.implicitHeight + 16
                         radius: 6
-                        color: "#171a21"
+                        color: Theme.background
                         border.width: 1
-                        border.color: "#344158"
+                        border.color: Theme.outline
 
                         Text {
                             id: promptText
 
-                            color: "#edf1f7"
+                            color: Theme.text
                             elide: Text.ElideRight
-                            font.pixelSize: 13
+                            font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
                             maximumLineCount: 3
                             text: chatExchange.modelData.prompt
                             textFormat: Text.PlainText
@@ -566,8 +568,8 @@ PanelWindow {
                     }
 
                     Text {
-                        color: "#aeb8ca"
-                        font.pixelSize: 12
+                        color: Theme.muted
+                        font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
                         text: "AI"
                         textFormat: Text.PlainText
                     }
@@ -576,15 +578,15 @@ PanelWindow {
                         width: parent.width
                         height: responseText.implicitHeight + 16
                         radius: 6
-                        color: "#202632"
+                        color: Theme.surface
                         border.width: 1
-                        border.color: "#344158"
+                        border.color: Theme.outline
 
                         Text {
                             id: responseText
 
-                            color: "#edf1f7"
-                            font.pixelSize: 13
+                            color: Theme.text
+                            font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
                             text: chatExchange.modelData.message
                             textFormat: Text.PlainText
                             wrapMode: Text.Wrap
@@ -609,8 +611,8 @@ PanelWindow {
             ListView {
                 id: resultsList
 
-                width: parent.width
-                height: visible ? Math.min(contentHeight, 300) : 0
+                Layout.fillWidth: true
+                Layout.preferredHeight: visible ? Math.min(contentHeight, 360) : 0
                 visible: root.displayedResults.length > 0
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
@@ -621,6 +623,7 @@ PanelWindow {
                 delegate: Item {
                     id: resultRow
 
+                    required property int index
                     required property var modelData
 
                     width: resultsList.width
@@ -631,25 +634,33 @@ PanelWindow {
                     Rectangle {
                         anchors.fill: parent
                         radius: 6
-                        color: resultMouse.containsMouse || (root.selectedIndex >= 0 && root.selectedIndex < root.displayedResults.length && root.displayedResults[root.selectedIndex].resultId === resultRow.modelData.resultId) ? "#344158" : "transparent"
+                        color: resultMouse.containsMouse || (root.selectedIndex >= 0 && root.selectedIndex < root.displayedResults.length && root.displayedResults[root.selectedIndex].resultId === resultRow.modelData.resultId) ? Theme.selection : "transparent"
                     }
 
-                    Column {
-                        spacing: 2
+                    IconImage {
+                        id: resultIcon
+                        anchors.left: parent.left
+                        anchors.leftMargin: Theme.padding
+                        anchors.verticalCenter: parent.verticalCenter
+                        implicitSize: 32
+                        source: Quickshell.iconPath(resultRow.modelData.icon || "system-search-symbolic", "application-x-executable")
+                    }
+                    ColumnLayout {
+                        spacing: Theme.spaceSmall
 
                         anchors {
                             left: parent.left
                             right: parent.right
-                            leftMargin: 10
-                            rightMargin: 10
+                            leftMargin: Theme.padding * 2 + 32
+                            rightMargin: Theme.padding
                             verticalCenter: parent.verticalCenter
                         }
 
                         Text {
-                            width: parent.width
-                            color: "#edf1f7"
+                            Layout.fillWidth: true
+                            color: Theme.text
                             elide: Text.ElideRight
-                            font.pixelSize: 13
+                            font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
                             text: resultRow.modelData.title
                             textFormat: Text.PlainText
                         }
@@ -657,9 +668,9 @@ PanelWindow {
                         Text {
                             width: parent.width
                             visible: resultRow.modelData.subtitle !== ""
-                            color: "#aeb8ca"
+                            color: Theme.muted
                             elide: Text.ElideRight
-                            font.pixelSize: 12
+                            font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
                             text: resultRow.modelData.subtitle
                             textFormat: Text.PlainText
                         }
@@ -673,10 +684,10 @@ PanelWindow {
                         hoverEnabled: true
                         acceptedButtons: Qt.LeftButton
                         enabled: !root.activationPending
-                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        cursorShape: enabled ? Qt.ArrowCursor : Qt.ArrowCursor
                         onEntered: {
-                            root.selectedIndex = index;
-                            resultsList.positionViewAtIndex(index, ListView.Contain);
+                            root.selectedIndex = resultRow.index;
+                            resultsList.positionViewAtIndex(resultRow.index, ListView.Contain);
                         }
                         onClicked: root.activateResult(resultRow.modelData)
                     }
@@ -686,10 +697,10 @@ PanelWindow {
             }
 
             Text {
-                width: parent.width
+                Layout.fillWidth: true
                 visible: root.statusText !== ""
-                color: root.queryError !== "" || !root.serviceReady ? "#f4a340" : "#8b94a3"
-                font.pixelSize: 12
+                color: root.queryError !== "" || !root.serviceReady ? "#f4a340" : Theme.muted
+                font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
                 text: root.statusText
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
