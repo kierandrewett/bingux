@@ -21,12 +21,12 @@ ShellPopup {
     property Item movedAnchor: null
     property var actionWidgets: []
     readonly property var groupedEntries: [
-        {id: "control-header-space", item: headerSpace}, {id: "control-battery", item: batteryControl},
+        {id: "control-header-space", item: headerSpace},
         {id: "control-media", item: mediaControl}, {id: "control-divider", item: dividerControl},
         {id: "control-customise", item: customiseControl}, {id: "controls-header", item: headerControls},
         {id: "controls-audio", item: audioRows}, {id: "controls-tiles", item: quickRows}
     ]
-    readonly property var movableWidgets: [networkWidget, bluetoothWidget, vpnWidget, dndWidget, nightLightWidget, powerWidget, awakeWidget, outputControl, inputControl].concat(actionWidgets)
+    readonly property var movableWidgets: [networkWidget, bluetoothWidget, vpnWidget, dndWidget, nightLightWidget, powerWidget, awakeWidget, outputControl, inputControl, batteryControl].concat(actionWidgets)
     component ActionWidget: IconButton {
         id: action
         required property string widgetId
@@ -248,14 +248,21 @@ ShellPopup {
                 visible: root.groupPosition("controls-header", "control-header-space") >= 0
                 Layout.fillWidth: true
             }
-            RowLayout {
+            BatteryStatus {
                 id: batteryControl
                 objectName: "controlBattery"
-                Layout.column: root.groupPosition("controls-header", "control-battery")
-                visible: root.groupPosition("controls-header", "control-battery") >= 0 && root.indicators.laptopBatteryAvailable
-                spacing: 8
-                SymbolicIcon { implicitSize: 16; color: Theme.muted; source: Quickshell.iconPath("battery-good-symbolic") }
-                Text { text: root.indicators.batteryAccessibleName().replace(/^Battery /, "").replace(" percent", "%").replace(/,.*$/, ""); Accessible.name: root.indicators.batteryAccessibleName(); color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+                readonly property string widgetId: "control-battery"
+                readonly property string container: DesktopLayout.zone(DesktopEditing.desktop.layout || {}, widgetId)
+                barLayout: root.widgetLayout !== null && container !== ""
+                barWindow: root.widgetLayout ? root.widgetLayout.windowFor(batteryControl) : root.nativeWindow
+                parent: barLayout ? root.widgetLayout.hostFor(batteryControl) : headerControls
+                Layout.row: barLayout ? root.widgetLayout.controlRow(batteryControl) : 0
+                Layout.column: barLayout ? root.widgetLayout.controlColumn(batteryControl) : root.groupPosition("controls-header", widgetId)
+                visible: (barLayout || root.groupPosition("controls-header", widgetId) >= 0) && (available || DesktopEditing.active)
+                available: root.indicators.laptopBatteryAvailable
+                summary: root.indicators.batteryAccessibleName()
+                presentation: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, container || "control-centre", label, "battery-good-symbolic", true, true)
+                WidgetEditHandle { control: batteryControl; widgetId: batteryControl.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
             }
             ActionWidget {
                 widgetId: "control-settings"

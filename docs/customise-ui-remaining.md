@@ -11,8 +11,9 @@ layout tests does not prove that every existing desktop widget is editable.
   original instances. Header action buttons can now move into the bar and dock,
   use presentation overrides, and keep their Shift-right-click actions. Volume and
   microphone sliders also move to these containers with their original nodes,
-  mute, scrolling and device navigation. Media, battery and group containers
-  still need that portability and editing support.
+  mute, scrolling and device navigation. The battery display also moves to the
+  bar and dock, supports appearance overrides and uses the same component in
+  the palette. Media and group containers still need that portability and editing support.
 - `DesktopLayout.accepts()` confines sidebar panels to the sidebar. Status,
   label and icon widgets cannot enter the control centre or sidebar.
 - `TerminalSidebar.qml` still offers ordinary position changes outside Customise
@@ -26,7 +27,7 @@ layout tests does not prove that every existing desktop widget is editable.
 
 ## Next implementation boundary
 
-Extend media, battery and group widgets into the other real containers
+Extend media and group widgets into the other real containers
 without flattening native header, audio, tile and media layouts. Use the same component instances
 and service actions. Add presentation overrides and shared edit actions to these
 controls. Improve the group drag affordance while retaining direct child drags.
@@ -38,7 +39,9 @@ compositor bridge staged by `tests/private_shell.py`. The fullscreen regression
 checks actual compositor order, native palette input and cancellation without
 changing the app's fullscreen state. These tests cover the implemented widgets;
 the additional control-layout case covers native header/audio drags, removal,
-Undo/Redo, previews, saving and cancellation. The dock-unpin case verifies direct
+Undo/Redo, previews, saving and cancellation. Battery checks cover native
+movement, absent-device editing, display overrides, saved placement, status
+updates and Shift-right-click. The dock-unpin case verifies direct
 mouse actions in both normal and editing menus and their saved state. The audio
 case checks native dragging, Undo/Redo, appearance overrides, saved placement,
 mute after hovering, slider clicks, wheel adjustment and device popup anchoring.

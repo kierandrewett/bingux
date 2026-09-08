@@ -130,6 +130,40 @@
                     {command: "gnome-control-center", arguments: ["users"]},
                     {command: "loginctl", arguments: ["lock-session"]}
                 ]));
+                const battery = findChild(controlCentre.body, "controlBattery");
+                battery.available = false;
+                editor.open();
+                tryCompare(controlCentre, "visible", true, 3000);
+                tryCompare(controlCentre, "revealScale", 1, 4000);
+                wait(300);
+                verify(battery.visible, "An absent battery remains editable in Customise UI");
+                drag(battery, battery.width / 2, battery.height / 2,
+                    Qt.point(dockArea.screenRect.x + 12, dockArea.screenRect.y + 12));
+                compare(battery.parent, dock.widgetHost, "The original battery display moves into the dock");
+                verify(!editor.desktop.controlLayout.groups["controls-header"].includes("control-battery"));
+                editor.undo(); wait(150); compare(battery.parent, header);
+                editor.redo(); wait(150); compare(battery.parent, dock.widgetHost);
+                editor.selectedContainer = "dock"; editor.containerDisplay("text");
+                editor.selectedWidget = "control-battery"; editor.widgetOption("label", "Charge");
+                verify(battery.presentation.showText && !battery.presentation.showIcon);
+                compare(battery.presentation.label, "Charge");
+                editor.widgetOption("display", "both"); editor.widgetOption("icon", "starred-symbolic");
+                verify(battery.presentation.showIcon && battery.presentation.icon === "starred-symbolic");
+                editor.widgetOption("label", ""); editor.widgetOption("icon", ""); editor.widgetOption("display", "inherit");
+                editor.containerDisplay("native");
+                editor.apply(); tryCompare(editor, "visible", false, 4000);
+                tryCompare(binguxSettings, "busy", false, 4000);
+                compare(BinguxPreferences.data.desktop.layout.dock[0], "control-battery");
+                verify(!battery.visible, "Outside the editor an absent battery stays hidden");
+                battery.summary = "Battery 84 percent, charging"; battery.available = true;
+                tryCompare(battery, "visible", true, 1000); compare(battery.label, "84%");
+                battery.summary = "Battery 79 percent, discharging";
+                tryCompare(battery, "label", "79%", 1000);
+                tryVerify(() => battery.width >= battery.implicitWidth && battery.height > 0, 1000);
+                wait(200);
+                mouseClick(battery, battery.width / 2, battery.height / 2, Qt.RightButton, Qt.ShiftModifier);
+                tryCompare(widgetMenu, "visible", true, 3000); compare(widgetMenu.widgetId, "control-battery");
+                widgetMenu.visible = false;
                 layoutReport.setText("PASS");
             } catch (error) {
                 console.error("CUSTOMISE_TEST_FAILED", error.message, error.stack);

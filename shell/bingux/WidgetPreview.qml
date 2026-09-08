@@ -75,14 +75,7 @@ Item {
     }
     Component { id: mediaControl; ControlCentreMedia { player: samplePlayer; playerOptions: [samplePlayer]; active: false } }
     Component { id: divider; Rectangle { implicitHeight: 1; color: Theme.outline; opacity: 0.5 } }
-    Component {
-        id: battery
-        RowLayout {
-            spacing: 8
-            SymbolicIcon { implicitSize: 16; source: Quickshell.iconPath("battery-good-symbolic"); color: Theme.muted }
-            Text { text: "84%"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
-        }
-    }
+    Component { id: battery; BatteryStatus { available: true; summary: "Battery 84 percent, charging" } }
     Component { id: customiseButton; ActionButton { text: "Customise controls..."; flat: true; implicitHeight: 28 } }
     QtObject { id: sampleAudioNode; property bool ready: true; property var audio: QtObject { property real volume: 0.6; property bool muted: false } }
     Component {
