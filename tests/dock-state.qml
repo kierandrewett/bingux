@@ -297,7 +297,7 @@ ShellRoot {
             case 15:
                 test.sameItems("left exit preserves surviving buttons");
                 dock.launch({id: "dock-test-a", desktopEntry: {execute: () => { test.normalLaunches++; }}}, false);
-                steps.interval = 3200;
+                steps.interval = Theme.dockLaunchTimeout + 200;
                 break;
             case 16:
                 test.check(dock.pendingLaunchGroupId === "" && LaunchFeedback.active.length === 0, "launch timeout restores the global cursor");

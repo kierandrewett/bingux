@@ -9,7 +9,7 @@ import tempfile
 
 root = Path(__file__).resolve().parent.parent
 test_name = os.environ.get("BINGUX_SHELL_TEST", "dock-state")
-if test_name not in ("dock-state", "dock-pinning", "dock-behaviour", "search-launch-cursor"):
+if test_name not in ("dock-state", "dock-pinning", "dock-behaviour", "search-launch-cursor", "dock-launch-timeout"):
     raise SystemExit("Unknown shell test")
 if not os.environ.get("WAYLAND_DISPLAY", "").startswith("gnoblin-gs-"):
     raise SystemExit("Run through Gnoblin scripts/run-gnome-shell.sh with GNOBLIN_TEST_DBUS_CLIENT.")
@@ -51,9 +51,11 @@ with tempfile.TemporaryDirectory(prefix="bingux-dock-test-") as directory:
         "QT_QUICK_BACKEND": "software",
         "XDG_CONFIG_HOME": str(fixture / "config"),
     }
+    if test_name == "dock-launch-timeout":
+        environment["BINGUX_APP_LAUNCHER_HELPER"] = "/usr/bin/true"
     command = [os.environ.get("QS_TEST_BIN", "qs"), "-p", str(fixture), "--no-color"]
     try:
-        result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=20)
+        result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=50)
     except subprocess.TimeoutExpired as error:
         print((error.stdout or b"").decode() + (error.stderr or b"").decode())
         raise SystemExit("Dock test timed out") from error

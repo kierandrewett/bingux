@@ -764,7 +764,7 @@ PanelWindow {
     Timer {
         id: pendingLaunchTimer
 
-        interval: Theme.launchTimeout
+        interval: Theme.dockLaunchTimeout
         repeat: false
         onTriggered: {
             const group = root.appGroups.find(item => item.id === root.pendingLaunchGroupId);

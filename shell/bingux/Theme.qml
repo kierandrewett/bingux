@@ -102,6 +102,7 @@ QtObject {
     readonly property int calendarPageMotion: reducedMotion ? 0 : 240
     readonly property int calendarAgendaHeight: 144
     readonly property int launchTimeout: 3000
+    readonly property int dockLaunchTimeout: 20000
     // Search has its own density so the launcher can feel deliberate without
     // changing the proportions of the rest of the shell.
     readonly property color searchSurface: "#f528292e"
