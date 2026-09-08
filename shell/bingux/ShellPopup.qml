@@ -9,9 +9,11 @@ Scope {
     id: root
     default property alias contents: body.data
     property bool visible: false
+    property bool keepWindowAlive: false
     property bool keyboardInteractive: true
     property bool dismissOnOutsideClick: true
     property alias screen: window.screen
+    readonly property alias nativeWindow: window
     property Item hostItem: null
     property var anchorWindow: null
     property Item anchorItem: null
@@ -144,7 +146,7 @@ Scope {
     // A layer surface avoids native xdg-popup grabs on layer-shell parents.
     PanelWindow {
         id: window
-        visible: root.retained && !root.hostItem
+        visible: (root.retained || root.keepWindowAlive) && !root.hostItem
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
