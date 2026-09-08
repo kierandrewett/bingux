@@ -187,7 +187,7 @@ PanelWindow {
         onTriggered: PreviewService.preload(root.previewCandidates)
     }
 
-    readonly property bool pointerBlocked: !visible || closing || openAnimation.running
+    readonly property bool pointerBlocked: !visible || closing || appMenu.visible || openAnimation.running
         || surfaceHeightAnimation.running || surfaceYAnimation.running || keyboardScroll.running
     property int pointerResultIndex: -1
     onPointerBlockedChanged: {
@@ -755,9 +755,9 @@ PanelWindow {
                 SymbolicIcon {
                     id: searchFieldIcon
                     anchors.left: parent.left
-                    anchors.leftMargin: 16
+                    anchors.leftMargin: 18
                     anchors.verticalCenter: parent.verticalCenter
-                    implicitSize: 24
+                    implicitSize: 20
                     color: Theme.muted
                     source: Quickshell.iconPath("system-search-symbolic")
                 }

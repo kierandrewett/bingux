@@ -34,7 +34,7 @@ SearchOverlay {
             wait(300);
             const result = {resultId: 'r300', desktopId: 'bingux-menu-test.desktop', providerId: 'applications', kind: 'application', title: 'Menu test app', subtitle: '', icon: 'application-x-executable', score: 1};
             verify(protocolCheck.isValidResult(result), 'Accept daemon app identity');
-            preview.displayedResults = [result];
+            preview.displayedResults = [result, Object.assign({}, result, {resultId: "r301", title: "Another app"})];
             preview.selectedIndex = 0;
             wait(300);
             const list = preview.find(preview.contentItem, 'searchResultsList');
@@ -50,6 +50,23 @@ SearchOverlay {
             equal(preview.activationCount, 0, 'Right click must not launch the app');
             const unpin = Quickshell.env('BINGUX_MENU_UNPIN') === '1';
             equal(pin.text, unpin ? 'Unpin from dock' : 'Pin to dock');
+            wait(250);
+            const otherRow = list.itemAtIndex(1);
+            const otherPoint = otherRow.mapToItem(preview.contentItem, otherRow.width - 30, otherRow.height - 20);
+            mouseMove(preview.contentItem, otherPoint.x, otherPoint.y);
+            wait(30);
+            equal(preview.selectedIndex, 0, 'Context menu freezes the search highlight');
+            mouseClick(preview.contentItem, otherPoint.x, otherPoint.y);
+            wait(250);
+            equal(pin.visible, false, 'Click on another result only dismisses the menu');
+            equal(preview.activationCount, 0, 'Dismissal click does not activate the covered result');
+            equal(preview.selectedIndex, 0, 'Dismissal preserves the previous highlight');
+            mouseMove(preview.contentItem, otherPoint.x + 2, otherPoint.y);
+            wait(30);
+            equal(preview.selectedIndex, 1, 'Hover resumes after menu dismissal');
+            mouseMove(preview.contentItem, point.x, point.y);
+            wait(30);
+            mouseClick(preview.contentItem, point.x, point.y, Qt.RightButton);
             wait(250);
             if (Quickshell.env('BINGUX_MENU_SCREENSHOT'))
                 grabImage(pin.parent.parent.parent).save(Quickshell.env('BINGUX_MENU_SCREENSHOT') + (unpin ? '-unpin.png' : '-pin.png'));
