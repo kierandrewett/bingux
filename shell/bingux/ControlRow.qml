@@ -9,6 +9,11 @@ AbstractButton {
     required property string title
     property string subtitle: ""
     required property string iconName
+    property var presentation: null
+    readonly property string displayedTitle: presentation?.label ?? title
+    readonly property string displayedIcon: presentation?.icon ?? iconName
+    readonly property bool showLabel: presentation?.showText ?? true
+    readonly property bool showIcon: presentation?.showIcon ?? (iconName.length > 0)
     property bool selected: false
     property bool navigation: false
     property real navigationRotation: 0
@@ -35,7 +40,7 @@ AbstractButton {
     // Their compact height also lets the primary controls breathe as a set.
     implicitHeight: tileLayout ? (compactTile ? (subtitle.length > 0 ? 96 : 84) : 104) : tileSurface || leadingBadge || subtitle.length > 0 ? 56 : 40
     padding: tileLayout ? (compactTile ? Theme.compactTilePadding : Theme.controlTilePadding) : 0
-    Accessible.name: title + (subtitle ? ", " + subtitle : "")
+    Accessible.name: displayedTitle + (subtitle ? ", " + subtitle : "")
     background: ControlCentreButtonSurface {
         visible: root.rowInteractive || root.tileSurface
         control: root
@@ -52,7 +57,7 @@ AbstractButton {
         columnSpacing: root.tileLayout ? Theme.gap : 10
         rowSpacing: root.tileLayout ? Theme.gap : 0
         Rectangle {
-            visible: root.iconName.length > 0
+            visible: root.showIcon
             Layout.row: 0
             Layout.column: 0
             Layout.leftMargin: root.tileLayout ? 0 : 12
@@ -60,9 +65,10 @@ AbstractButton {
             implicitHeight: implicitWidth
             radius: root.tileLayout ? 7 : 10
             color: root.leadingBadge && !root.tileLayout ? (root.selected ? Theme.selection : Theme.elevated) : "transparent"
-            SymbolicIcon { anchors.centerIn: parent; implicitSize: root.tileLayout ? 18 : 18; source: root.iconName.length > 0 ? Quickshell.iconPath(root.iconName) : ""; color: root.selected ? Theme.accent : Theme.muted }
+            SymbolicIcon { anchors.centerIn: parent; implicitSize: 18; source: root.displayedIcon ? Quickshell.iconPath(root.displayedIcon) : ""; color: root.selected ? Theme.accent : Theme.muted }
         }
         ColumnLayout {
+            visible: root.showLabel
             Layout.row: root.tileLayout ? 1 : 0
             Layout.column: root.tileLayout ? 0 : 1
             Layout.columnSpan: root.tileLayout ? 2 : 1
@@ -72,7 +78,7 @@ AbstractButton {
             MarqueeText {
                 objectName: "controlRowTitle"
                 Layout.fillWidth: true
-                text: root.title
+                text: root.displayedTitle
                 textFormat: Text.PlainText
                 active: root.visible && (rowHover.hovered || root.visualFocus)
                 color: root.enabled ? Theme.text : Theme.muted
