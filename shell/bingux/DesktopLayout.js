@@ -6,6 +6,7 @@ const widgets = [
     {id: "metrics", label: "System monitors", icon: "computer-symbolic"},
     {id: "keyboard", label: "Keyboard layout", icon: "input-keyboard-symbolic"},
     {id: "tray", label: "System tray", icon: "view-more-symbolic"},
+    {id: "overflow", label: "More status controls", icon: "view-more-symbolic"},
     {id: "privacy", label: "Privacy", icon: "microphone-sensitivity-high-symbolic"},
     {id: "capture", label: "Recording", icon: "media-record-symbolic"},
     {id: "terminal", label: "Terminal", icon: "utilities-terminal-symbolic", panel: true},
@@ -17,7 +18,7 @@ const widgets = [
 ];
 function defaults() {
     return {"top-left": ["search"], "top-center": ["clock"],
-        "top-right": ["capture", "tray", "privacy", "metrics", "keyboard", "controls", "notifications"],
+        "top-right": ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications"],
         dock: [], sidebar: ["terminal", "notes", "monitor", "calendar", "media", "tasks"]};
 }
 function widget(id) { return widgets.find(w => w.id === id); }

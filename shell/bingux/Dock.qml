@@ -201,6 +201,13 @@ PanelWindow {
         }
     }
 
+    function snapshotLayout() {
+        return {pinnedApps: pinnedApps.slice(), order: appOrder.slice(),
+            applications: appGroups.filter(group => isPinned(group)).map(group => ({
+                id: group.id, desktopId: group.desktopEntry ? group.desktopEntry.id : group.id
+            }))};
+    }
+
     Settings {
         id: dockState
         location: "file://" + (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/gnoblin/dock.ini"
@@ -214,10 +221,13 @@ PanelWindow {
         return normaliseAppId(entry ? entry.id : appId);
     }
     readonly property var pinnedApps: {
+        if (preferences.dockApps) return preferences.dockApps.pinnedApps;
         const removed = dockState.unpinnedApps.map(id => pinIdentity(id));
         return [...new Set(settings.pinnedApps.concat(dockState.pinnedApps).map(id => pinIdentity(id)))]
             .filter(id => id.length > 0 && removed.indexOf(id) < 0);
     }
+    readonly property var appOrder: preferences.dockApps ? preferences.dockApps.order : dockState.order
+    onAppOrderChanged: if (appGroupsInitialised) refreshAppGroups()
     onPinnedAppsChanged: if (appGroupsInitialised) refreshAppGroups()
     function isPinned(group) {
         return pinnedApps.indexOf(pinIdentity(group.desktopEntry ? group.desktopEntry.id : group.id)) >= 0;
@@ -235,6 +245,12 @@ PanelWindow {
         if (pinned && !group.desktopEntry) return;
         const id = pinIdentity(group.desktopEntry ? group.desktopEntry.id : group.id);
         if (!id) return;
+        if (preferences.dockApps) {
+            const pins = pinnedApps.filter(value => pinIdentity(value) !== id);
+            if (pinned) pins.push(id);
+            BinguxPreferences.saveDesktop({dockApps: {pinnedApps: pins, order: appOrder}});
+            return;
+        }
         dockState.pinnedApps = dockState.pinnedApps.filter(value => pinIdentity(value) !== id);
         dockState.unpinnedApps = dockState.unpinnedApps.filter(value => pinIdentity(value) !== id);
         if (pinned) dockState.pinnedApps = dockState.pinnedApps.concat([id]);
@@ -258,7 +274,9 @@ PanelWindow {
             if (source === destination) return;
         }
         ids.splice(source, 1); ids.splice(destination, 0, id);
-        dockState.order = ids.concat(dockState.order.filter(old => ids.indexOf(old) < 0));
+        const order = ids.concat(appOrder.filter(old => ids.indexOf(old) < 0));
+        if (preferences.dockApps) BinguxPreferences.saveDesktop({dockApps: {pinnedApps, order}});
+        else dockState.order = order;
         dockState.sync();
         refreshDebounce.stop();
         refreshAppGroupsNow();
@@ -471,7 +489,7 @@ PanelWindow {
             if (groupIndex >= 0)
                 groups[groupIndex].windows.push(toplevel);
         }
-        const order = dockState.order;
+        const order = appOrder;
         groups.sort((a, b) => {
             const sectionDifference = Number(root.isPinned(b)) - Number(root.isPinned(a));
             if (sectionDifference !== 0)

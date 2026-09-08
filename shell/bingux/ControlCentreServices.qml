@@ -18,9 +18,14 @@ Singleton {
     property var controls: ({vpn: true, dnd: true, nightLight: false, power: false, awake: false})
     property bool preferencesReady: false
     readonly property string preferencesDirectory: Quickshell.statePath("control-centre")
-    function showControl(name) { return controls[name] === true; }
+    readonly property var effectiveControls: BinguxPreferences.data.desktop.controlCentre || controls
+    function showControl(name) { return effectiveControls[name] === true; }
     function setControl(name, shown) {
         if (!(name in controls)) return;
+        if (BinguxPreferences.data.desktop.controlCentre) {
+            BinguxPreferences.saveDesktop({controlCentre: Object.assign({}, effectiveControls, {[name]: shown})});
+            return;
+        }
         controls = Object.assign({}, controls, {[name]: shown});
         if (preferencesReady) preferences.setText(JSON.stringify(controls));
     }

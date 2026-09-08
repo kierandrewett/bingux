@@ -22,7 +22,7 @@ with tempfile.TemporaryDirectory(prefix='bingux-layout-live-') as directory:
     (fixture / 'bin').mkdir()
     systemctl = fixture / 'bin/systemctl'; systemctl.write_text('#!/bin/sh\nexit 0\n'); systemctl.chmod(0o700)
     environment = os.environ | {'QT_QPA_PLATFORM': 'wayland', 'XDG_CONFIG_HOME': str(fixture / 'config'),
-        'XDG_STATE_HOME': str(fixture / 'state'), 'PATH': str(fixture / 'bin') + ':' + os.environ['PATH']}
+        'XDG_STATE_HOME': str(fixture / 'state'), 'BINGUX_LAYOUT_IMPORT': '0', 'PATH': str(fixture / 'bin') + ':' + os.environ['PATH']}
     environment.pop('BINGUX_SETTINGS_HELPER', None)
     environment['BINGUX_LAYOUT_REPORT'] = str(fixture / 'report')
     with (fixture / 'log').open('w') as log:

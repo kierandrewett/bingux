@@ -6,6 +6,16 @@
             try {
             compare(searchPill.parent, leftControls);
             compare(clockPill.parent, centerControls);
+            tryCompare(BinguxPreferences, 'loaded', true);
+            tryCompare(ControlCentreServices, 'preferencesReady', true);
+            tryCompare(dock, 'appGroupsInitialised', true);
+            const initial = root.layoutSnapshot();
+            BinguxPreferences.importDesktop(initial);
+            tryVerify(() => BinguxPreferences.data.desktop.layoutVersion === 1, 4000);
+            compare(JSON.stringify(topBar.snapshotLayout()), JSON.stringify(initial.layout));
+            compare(JSON.stringify(dock.snapshotLayout()), JSON.stringify(initial.dock));
+            compare(JSON.stringify(ControlCentreServices.effectiveControls), JSON.stringify(initial.controlCentre));
+            compare(terminalSidebar.edge, initial.sidebar.edge);
             binguxSettings.visible = true;
             tryCompare(binguxSettings, 'ready', true, 4000);
             tryCompare(binguxSettings, 'busy', false, 4000);

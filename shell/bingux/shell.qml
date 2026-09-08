@@ -17,6 +17,22 @@ ShellRoot {
     readonly property var commandNotifications: notificationState
     property var currentTime: new Date()
 
+    function layoutSnapshot() {
+        return {version: 1, layout: topBar.snapshotLayout(),
+            desktop: BinguxPreferences.data.desktop, dock: dock.snapshotLayout(),
+            controlCentre: ControlCentreServices.effectiveControls,
+            sidebar: {edge: terminalSidebar.edge, opened: terminalSidebar.opened,
+                contentType: terminalSidebar.contentType},
+            controlCentreReady: ControlCentreServices.preferencesReady};
+    }
+    Timer {
+        interval: 200
+        running: Quickshell.env("BINGUX_LAYOUT_IMPORT") !== "0" && BinguxPreferences.loaded &&
+            !BinguxPreferences.layoutError && !BinguxPreferences.data.desktop.layoutVersion &&
+            ControlCentreServices.preferencesReady && dock.appGroupsInitialised
+        onTriggered: BinguxPreferences.importDesktop(root.layoutSnapshot())
+    }
+
     function closePanelsExcept(panel) {
         if (panel !== windowSwitcher && windowSwitcher.active) windowSwitcher.close();
         if (panel !== searchOverlay && searchOverlay.visible) searchOverlay.closeSearch();
@@ -126,6 +142,9 @@ ShellRoot {
                 doNotDisturb: ControlCentreServices.doNotDisturb});
         }
         function reload(): void { Qt.callLater(() => Quickshell.reload(false)); }
+        function layoutSnapshot(): string {
+            return JSON.stringify(root.layoutSnapshot());
+        }
         function panel(name: string, action: string): string {
             const panels = {settings: binguxSettings, calendar: calendarPopup, controls: controlCentre,
                 notifications: notificationCentre, metrics: metricsPopup, search: searchOverlay};
@@ -221,11 +240,16 @@ ShellRoot {
         function snapshotLayout() {
             if (customLayout) return customLayout;
             const layout = DesktopLayout.defaults();
-            layout["top-right"] = orderedControls.filter(item => ![searchPill, clockPill, overflowButton].includes(item)).map(item => controlNames[defaultControls.indexOf(item)]);
+            layout["top-right"] = orderedControls.filter(item => ![searchPill, clockPill].includes(item)).map(item => controlNames[defaultControls.indexOf(item)]);
             layout.sidebar = terminalSidebar.contentTypes.map(type => type.id);
             return layout;
         }
         readonly property var customLayout: BinguxPreferences.data.desktop.layout
+        readonly property bool nativeTopBarLayout: !customLayout || (
+            JSON.stringify(customLayout["top-left"]) === '["search"]' &&
+            JSON.stringify(customLayout["top-center"]) === '["clock"]' &&
+            customLayout.dock.length === 0 &&
+            ["capture", "tray", "privacy", "metrics", "keyboard", "controls", "notifications"].every(id => customLayout["top-right"].includes(id)))
         function chosen(item) { return !customLayout || DesktopLayout.zone(customLayout, controlNames[defaultControls.indexOf(item)]) !== ""; }
         function zoneFor(item) {
             const name = controlNames[defaultControls.indexOf(item)];
@@ -350,7 +374,7 @@ ShellRoot {
             [notificationButton, notificationState.allEntries.length > 0], [searchPill, true], [clockPill, true]
         ].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0])
         readonly property var overflowItems: {
-            if (customLayout) {
+            if (customLayout && !nativeTopBarLayout) {
                 const hidden = [];
                 const center = availableControls.filter(item => zoneFor(item) === "top-center");
                 const left = availableControls.filter(item => zoneFor(item) === "top-left");
