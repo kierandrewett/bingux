@@ -274,6 +274,8 @@ in
             };
             xdg.configFile."gnoblin/scripts/compositor-bridge.js".source =
                 "${config.programs.gnoblin.package}/share/gnoblin/scripts/compositor-bridge.js";
+            xdg.configFile."gnoblin/scripts/lib".source =
+                "${config.programs.gnoblin.package}/share/gnoblin/scripts/lib";
             xdg.configFile."bingux/switcher.json".text = builtins.toJSON {
                 enabled = true;
                 showDelay = 80;

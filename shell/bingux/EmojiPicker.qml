@@ -143,7 +143,7 @@ ShellPopup {
             insertTimeout.restart();
         }
     }
-    Timer { id: insertTimeout; interval: 1500; onTriggered: root.insertionFailed("The app did not accept the insertion request. Please try again.") }
+    Timer { id: insertTimeout; interval: 5000; onTriggered: root.insertionFailed("The app did not accept the insertion request. Please try again.") }
     function insertionFailed(message) {
         insertDelay.stop();
         insertTimeout.stop();
