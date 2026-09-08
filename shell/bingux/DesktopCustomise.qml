@@ -6,30 +6,46 @@ import Quickshell.Io
 import Quickshell.Wayland
 import "DesktopLayout.js" as DesktopLayout
 
-PanelWindow {
+Scope {
     id: root
     readonly property alias preview: canvas
+    readonly property alias nativeWindow: editWindow
+    readonly property alias contentItem: editWindow.contentItem
+    property alias screen: editWindow.screen
+    readonly property real width: editWindow.width
+    readonly property real height: editWindow.height
     required property var settings
-    visible: false
-    color: Theme.barBackground
-    anchors { top: true; bottom: true; left: true; right: true }
-    exclusionMode: ExclusionMode.Ignore
-    exclusiveZone: 0
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "bingux-customise"
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+    property bool visible: false
+    property bool initialised: false
+    // Reuse the render window after the first open so previews retain their scene.
+    PanelWindow {
+        id: editWindow
+        visible: root.initialised
+        color: "transparent"
+        anchors { top: true; bottom: true; left: true; right: true }
+        exclusionMode: ExclusionMode.Ignore
+        exclusiveZone: 0
+        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.namespace: "gnoblin-shell-popup"
+        WlrLayershell.keyboardFocus: root.visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        mask: Region { width: root.visible ? editWindow.width : 0; height: root.visible ? editWindow.height : 0 }
+    }
     property var desktop: ({})
     property var layout: DesktopLayout.defaults()
     property string tab: "Widgets"
     property string appFilter: ""
     property string optionsPage: ""
+    property string selectedContainer: "top-right"
+    readonly property var containerChoices: [{id: "top-left", label: "Top left"}, {id: "top-center", label: "Top centre"}, {id: "top-right", label: "Top right"}, {id: "dock", label: "Dock"}, {id: "sidebar", label: "Sidebar"}, {id: "control-centre", label: "Control centre"}]
+    readonly property var iconChoices: ["system-search-symbolic", "preferences-system-symbolic", "x-office-calendar-symbolic", "preferences-system-notifications-symbolic", "computer-symbolic", "input-keyboard-symbolic", "view-more-symbolic", "microphone-sensitivity-high-symbolic", "media-record-symbolic", "utilities-terminal-symbolic", "accessories-text-editor-symbolic", "applications-multimedia-symbolic", "view-list-symbolic", "network-wireless-symbolic", "bluetooth-active-symbolic", "network-vpn-symbolic", "notifications-disabled-symbolic", "night-light-symbolic", "power-profile-balanced-symbolic", "display-brightness-symbolic", "audio-volume-high-symbolic", "audio-input-microphone-symbolic", "system-lock-screen-symbolic", "avatar-default-symbolic", "starred-symbolic", "user-home-symbolic", "folder-symbolic", "web-browser-symbolic", "mail-unread-symbolic", "camera-photo-symbolic", "view-pin-symbolic", "document-edit-symbolic"]
     property string selectedWidget: ""
     property string draggedId: ""
     property string hoverZone: ""
     property int hoverIndex: 0
-    property int hoverVisualIndex: 0
     property point pointer: Qt.point(0, 0)
     property string wallpaper: ""
+    property bool restoreSettings: false
+    onVisibleChanged: if (!visible && restoreSettings) { restoreSettings = false; settings.visible = true; }
     property bool applying: false
     property var originalDesktop: ({})
     property bool originalDirty: false
@@ -38,14 +54,38 @@ PanelWindow {
         if (applying) { settings.draft = Object.assign({}, settings.draft, {desktop: originalDesktop}); settings.dirty = originalDirty; settings.changedSettings = originalChanges; }
         applying = false; visible = false;
     }
-    readonly property var zones: [leftZone, centerZone, rightZone, appDockZone, dockZone, sidebarZone, controlTiles]
-    readonly property var available: DesktopLayout.widgets.filter(w => !DesktopLayout.zone(layout, w.id))
+    readonly property real topInset: settings.currentSidebarEdge === "top" ? (DesktopEditing.surfaces.find(surface => surface.zoneName === "sidebar" && surface.window.visible)?.screenRect.height || 0) : 0
+    readonly property real leftInset: settings.currentSidebarEdge === "left" ? sidebarExtent : 0
+    readonly property real rightInset: settings.currentSidebarEdge === "right" ? sidebarExtent : 0
+    readonly property real sidebarExtent: {
+        const area = DesktopEditing.surfaces.find(surface => surface.zoneName === "sidebar" && surface.window.visible);
+        return area ? area.screenRect.width : 0;
+    }
+    readonly property var zones: DesktopEditing.surfaces
+    function selectContainer(id) {
+        selectedContainer = id; selectedWidget = "";
+        optionsPage = "Container";
+    }
     function appId(value) { return value.endsWith(".desktop") ? value.slice(0, -8) : value; }
     function appEntry(value) { return DesktopEntries.byId(value) || DesktopEntries.byId(value + ".desktop") || DesktopEntries.heuristicLookup(value); }
-    function info(id) {
+    function baseInfo(id) {
         if (!id.startsWith("app:")) return DesktopLayout.widget(id);
         const entry = appEntry(id.slice(4));
         return {id, label: entry?.name || id.slice(4), icon: entry?.icon || "application-x-executable", app: true};
+    }
+    function containerFor(id) { return id.startsWith("app:") ? "dock" : id.startsWith("control-") ? "control-centre" : DesktopLayout.zone(layout, id); }
+    function appearance(id) {
+        const item = baseInfo(id);
+        return DesktopLayout.presentation(desktop, id, containerFor(id), item?.label || "", item?.icon || "", id !== "clock", id === "clock");
+    }
+    function info(id) { return Object.assign({}, baseInfo(id), appearance(id)); }
+    function widgetOption(key, value) {
+        const options = Object.assign({}, desktop.widgetOptions || {});
+        options[selectedWidget] = Object.assign({}, options[selectedWidget] || {}, {[key]: value});
+        change("widgetOptions", options);
+    }
+    function containerDisplay(value) {
+        change("containers", Object.assign({}, desktop.containers || {}, {[selectedContainer]: {display: value}}));
     }
     readonly property var applications: DesktopEntries.applications.values.filter(entry => !appFilter || entry.name.toLowerCase().includes(appFilter.toLowerCase())).slice().sort((a, b) => a.name.localeCompare(b.name))
     readonly property var dockApplications: {
@@ -60,12 +100,17 @@ PanelWindow {
         return id.startsWith("app:") ? ["dock-apps", "dock", "palette"].includes(target) : DesktopLayout.accepts(id, target);
     }
     function open() {
+        if (!settings.shellHosted) { settings.requestShellCustomise(); return; }
         desktop = JSON.parse(JSON.stringify(settings.draft.desktop));
         originalDesktop = JSON.parse(JSON.stringify(desktop)); originalDirty = settings.dirty;
         originalChanges = JSON.parse(JSON.stringify(settings.changedSettings));
         desktop.sidebarEdge = desktop.sidebarEdge || settings.currentSidebarEdge;
         layout = JSON.parse(JSON.stringify(desktop.layout || settings.currentLayout || DesktopLayout.defaults()));
         selectedWidget = ""; draggedId = ""; applying = false; tab = "Widgets"; optionsPage = ""; appFilter = "";
+        restoreSettings = settings.visible;
+        settings.visible = false;
+        DesktopEditing.editor = root;
+        initialised = true;
         visible = true;
         wallpaperReader.running = true;
         canvas.forceActiveFocus();
@@ -84,7 +129,7 @@ PanelWindow {
         if (id.startsWith("app:")) {
             if (!accepts(id, target)) return;
             const pins = dockApplications.map(value => value.slice(4)).filter(value => value !== id.slice(4));
-            if (target !== "palette") pins.splice(target === "dock" ? pins.length : Math.max(0, Math.min(index, pins.length)), 0, id.slice(4));
+            if (target !== "palette") pins.splice(Math.max(0, Math.min(index, pins.length)), 0, id.slice(4));
             const oldOrder = desktop.dockApps?.order || [];
             change("dockApps", {pinnedApps: pins, order: pins.concat(oldOrder.filter(value => !pins.includes(appId(appEntry(value)?.id || value))))});
             if (target !== "palette") change("dock", true);
@@ -95,32 +140,21 @@ PanelWindow {
         if (id === "metrics" && target !== "palette") change("metrics", true);
         if (target === "sidebar") change("sidebar", true);
     }
-    function drag(id, source, x, y) {
-        draggedId = id;
-        pointer = source.mapToItem(canvas, x, y);
-        hoverZone = "";
-        for (const area of zones.concat([palette])) {
-            const p = canvas.mapToItem(area, pointer.x, pointer.y);
-            if (p.x < 0 || p.y < 0 || p.x > area.width || p.y > area.height) continue;
+    function drag(id, source, x, y) { dragGlobal(id, source.mapToItem(root.preview, x, y)); }
+    function dragGlobal(id, point) {
+        draggedId = id; pointer = point; hoverZone = "";
+        for (const area of DesktopEditing.surfaces) {
+            if (!area.visible || !area.window.visible) continue;
+            const rect = area.screenRect;
+            if (point.x < rect.x || point.y < rect.y || point.x > rect.x + rect.width || point.y > rect.y + rect.height) continue;
             if (!accepts(id, area.zoneName)) continue;
             hoverZone = area.zoneName;
-            if (area === palette) { hoverIndex = 0; break; }
-            if (area === controlTiles) {
-                const before = area.items.findIndex((value, index) => {
-                    const item = controlRepeater.itemAt(index);
-                    return value !== id && item && p.y < item.y + item.height / 2 && (p.y < item.y || p.x < item.x + item.width / 2);
-                });
-                const order = (desktop.controlOrder || DesktopLayout.controlOrder()).filter(value => value !== id.slice(8));
-                hoverIndex = before < 0 ? order.length : order.indexOf(area.items[before].slice(8));
-                break;
-            }
-            const coordinate = area.vertical ? p.y - area.contentTop : p.x - area.contentX;
-            const all = area.items;
-            const items = all.filter(value => value !== id);
-            const slot = area.vertical ? area.chipHeight + 4 : area.chipWidth + 4;
-            hoverIndex = items.filter(value => coordinate > (all.indexOf(value) + 0.5) * slot).length;
-            hoverVisualIndex = hoverIndex < items.length ? all.indexOf(items[hoverIndex]) : all.length;
-            break;
+            hoverIndex = area.insertionIndex(point, id);
+            return;
+        }
+        const palette = root.preview.paletteRect;
+        if (point.x >= palette.x && point.x <= palette.x + palette.width && point.y >= palette.y && point.y <= palette.y + palette.height) {
+            hoverZone = "palette"; hoverIndex = 0;
         }
     }
     function release() {
@@ -157,81 +191,38 @@ PanelWindow {
         id: chip
         objectName: "customise-widget-" + widgetId
         required property string widgetId
-        property bool compact: false
-        property bool paletteTile: false
-        readonly property var info: root.info(widgetId)
-        width: paletteTile ? 112 : compact ? 44 : 146
-        height: paletteTile ? 88 : 36
+        readonly property var info: root.baseInfo(widgetId)
+        width: 260; height: 160
         opacity: root.draggedId === widgetId ? 0.35 : 1
-        Rectangle { anchors.fill: parent; radius: 7; color: root.selectedWidget === chip.widgetId ? Theme.selection : chipMouse.containsMouse ? Theme.hover : "transparent"; border.width: chip.activeFocus ? 1 : 0; border.color: Theme.accent }
+        Rectangle { anchors.fill: parent; anchors.margins: 4; radius: 8; color: chipMouse.containsMouse ? Theme.hover : "transparent" }
         Item {
-            id: chipIcon
-            visible: !(chip.compact && chip.widgetId === "clock")
-            width: chip.info?.app ? (chip.paletteTile ? 28 : Math.min(chip.width, chip.height) - 8) : chip.paletteTile ? 24 : 18
-            height: width
-            x: chip.paletteTile || chip.compact ? (parent.width - width) / 2 : 8
-            y: chip.paletteTile ? 14 : (parent.height - height) / 2
-            SymbolicIcon { anchors.fill: parent; visible: !chip.info?.app; implicitSize: parent.width; source: Quickshell.iconPath(chip.info?.icon || "application-x-executable-symbolic"); color: Theme.text }
-            Image { anchors.fill: parent; visible: !!chip.info?.app; source: visible ? Quickshell.iconPath(chip.info?.icon || "application-x-executable") : ""; sourceSize: Qt.size(64, 64); fillMode: Image.PreserveAspectFit }
+            x: 8; y: 8; width: parent.width - 16; height: 112
+            WidgetPreview { anchors.fill: parent; widgetId: chip.widgetId; visible: !chip.info?.app; metrics: root.settings.systemMetrics }
+            AppIcon {
+                visible: !!chip.info?.app
+                anchors.centerIn: parent
+                implicitSize: root.desktop.dockSize || 56
+                group: root.settings.dockView?.appGroups.find(group => root.appId(group.desktopEntry?.id || group.id) === chip.widgetId.slice(4)) || ({id: chip.widgetId.slice(4), desktopEntry: root.appEntry(chip.widgetId.slice(4))})
+                activeStreams: root.settings.dockView?.activity.activeStreams || []
+                notifications: root.settings.dockView?.notifications || []
+            }
         }
         Text {
-            visible: chip.paletteTile || !chip.compact || chip.widgetId === "clock"
-            x: chip.paletteTile ? 4 : chip.compact ? 0 : 34; y: chip.paletteTile ? 48 : (parent.height - height) / 2
-            width: parent.width - x - (chip.paletteTile ? 4 : 8)
-            height: chip.paletteTile ? 36 : implicitHeight
-            text: chip.compact && chip.widgetId === "clock" ? Qt.formatTime(new Date(), "hh:mm") : chip.info?.label || ""; textFormat: Text.PlainText
-            horizontalAlignment: chip.paletteTile || chip.compact ? Text.AlignHCenter : Text.AlignLeft
-            wrapMode: chip.paletteTile ? Text.WordWrap : Text.NoWrap; maximumLineCount: 2; elide: Text.ElideRight
+            x: 8; y: 124; width: parent.width - 16
+            text: chip.info?.label || ""; textFormat: Text.PlainText
+            horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
             color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
         }
         activeFocusOnTab: true
-        Accessible.role: Accessible.Button
-        Accessible.name: info?.label || "Widget"
-        Accessible.description: "Select, then choose a destination. You can also drag this widget."
-        Keys.onSpacePressed: root.selectedWidget = widgetId
-        Keys.onReturnPressed: root.selectedWidget = widgetId
-        DragHandle { id: chipMouse; widgetId: chip.widgetId }
-        ShellTooltip { visible: chipMouse.containsMouse && !root.draggedId; text: chip.info?.label || "" }
-    }
-    component Zone: Rectangle {
-        id: area
-        objectName: "customise-zone-" + zoneName
-        required property string zoneName
-        required property string label
-        property bool vertical: false
-        property var items: root.layout[zoneName] || []
-        property int contentTop: 4
-        property int chipHeight: 32
-        property int chipWidth: vertical ? width - 16 : Math.max(28, Math.min(80, (width - 16) / Math.max(1, items.length) - 4))
-        property string alignment: "left"
-        readonly property real contentX: vertical || alignment === "left" ? 8 : alignment === "center" ? (width - items.length * (chipWidth + 4) + 4) / 2 : width - items.length * (chipWidth + 4) - 4
-        readonly property bool compatible: root.accepts(root.draggedId || root.selectedWidget, zoneName)
-        radius: 5
-        color: "transparent"
-        border.width: root.draggedId || items.length === 0 ? 1 : 0
-        border.color: root.hoverZone === zoneName ? Theme.accent : compatible ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.5) : Theme.outline
-        Accessible.name: label
-        Flow {
-            x: area.contentX; y: area.contentTop; width: parent.width - 16; height: parent.height - area.contentTop
-            spacing: 4
-            flow: area.vertical ? Flow.TopToBottom : Flow.LeftToRight
-            Repeater {
-                model: area.items
-                Chip { required property string modelData; widgetId: modelData; width: area.chipWidth; compact: true; height: area.chipHeight }
-            }
-        }
-        Rectangle {
-            visible: root.hoverZone === area.zoneName
-            x: area.vertical ? 8 : Math.min(area.width - 5, area.contentX + root.hoverVisualIndex * (area.chipWidth + 4))
-            y: area.vertical ? Math.min(area.height - 4, area.contentTop + root.hoverVisualIndex * (area.chipHeight + 4)) : area.contentTop
-            width: area.vertical ? area.width - 16 : 3
-            height: area.vertical ? 3 : area.chipHeight
-            radius: 1; color: Theme.accent
-        }
-        Text { anchors.centerIn: parent; visible: area.items.length === 0; text: "+"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 18 }
+        Accessible.role: Accessible.Button; Accessible.name: info?.label || "Widget"
+        Keys.onReturnPressed: { root.selectedWidget = widgetId; root.optionsPage = "Widget"; }
+        DragHandle { id: chipMouse; widgetId: chip.widgetId; onDoubleClicked: { root.selectedWidget = widgetId; root.optionsPage = "Widget"; } }
     }
     Item {
         id: canvas
+        parent: editWindow.contentItem
+        visible: root.visible
+        readonly property rect paletteRect: Qt.rect(palette.x, palette.y, palette.width, palette.height)
         anchors.fill: parent
         focus: true
         Keys.onEscapePressed: {
@@ -241,28 +232,12 @@ PanelWindow {
         }
         Image { anchors.fill: parent; source: root.wallpaper; fillMode: Image.PreserveAspectCrop; asynchronous: true }
         Rectangle { anchors.fill: parent; color: Qt.rgba(0, 0, 0, 0.48) }
-        Rectangle { width: parent.width; height: 40; color: Theme.barBackground }
-        Zone { id: leftZone; zoneName: "top-left"; label: "Top bar left"; x: 4; y: 0; width: parent.width * 0.23; height: 40 }
-        Zone { id: centerZone; zoneName: "top-center"; label: "Top bar centre"; x: parent.width * 0.4; y: 0; width: parent.width * 0.2; height: 40; alignment: "center" }
-        Zone { id: rightZone; zoneName: "top-right"; label: "Top bar right"; x: parent.width * 0.62; y: 0; width: parent.width * 0.38 - 4; height: 40; alignment: "right" }
-        Rectangle {
-            id: sidebarBackground
-            readonly property bool horizontal: root.desktop.sidebarEdge === "top"
-            x: root.desktop.sidebarEdge === "left" || horizontal ? 0 : parent.width - width
-            y: 40; width: horizontal ? parent.width : 60; height: horizontal ? 52 : footer.y - y
-            color: Theme.barBackground
-            opacity: root.desktop.sidebar === false ? 0.5 : 1
-            Zone {
-                id: sidebarZone; zoneName: "sidebar"; label: "Sidebar panels"; vertical: !sidebarBackground.horizontal
-                x: 4; y: sidebarBackground.horizontal ? 0 : 12; width: parent.width - 8; height: parent.height - (sidebarBackground.horizontal ? 0 : 24); chipHeight: 40
-            }
-        }
         Item {
             id: palette
             objectName: "customisePalette"
             readonly property string zoneName: "palette"
-            x: root.desktop.sidebarEdge === "left" ? 84 : 24
-            y: sidebarBackground.horizontal ? 116 : 68; width: Math.max(240, controlPreview.x - x - 28); height: mockDock.y - y - 16
+            x: root.leftInset + 24
+            y: Theme.barHeight + 40 + root.topInset; width: Math.max(200, canvas.width - root.rightInset - x - Theme.notificationWidth - 88); height: canvas.height - y - 180
             Rectangle { anchors.fill: parent; radius: 8; color: "transparent"; border.width: root.hoverZone === "palette" ? 1 : 0; border.color: Theme.accent }
             ColumnLayout {
                 anchors.fill: parent; spacing: 14
@@ -275,91 +250,19 @@ PanelWindow {
                 SettingsField { visible: root.tab === "Apps"; label: "Find an app"; placeholderText: "Search installed apps"; Layout.margins: 0; text: root.appFilter; onEdited: value => root.appFilter = value }
                 GridView {
                     Layout.fillWidth: true; Layout.fillHeight: true
-                    cellWidth: 124; cellHeight: 100; clip: true; cacheBuffer: 100; reuseItems: true
-                    model: root.tab === "Apps" ? root.applications.map(entry => "app:" + root.appId(entry.id)) : DesktopLayout.widgets.concat(DesktopLayout.controlWidgets).map(widget => widget.id)
-                    delegate: Chip { required property string modelData; widgetId: modelData; paletteTile: true }
+                    cellWidth: 260; cellHeight: 160; clip: true; cacheBuffer: 100; reuseItems: true
+                    model: !root.visible ? [] : root.tab === "Apps" ? root.applications.map(entry => "app:" + root.appId(entry.id)) : DesktopLayout.widgets.concat(DesktopLayout.controlWidgets).map(widget => widget.id)
+                    delegate: Chip { required property string modelData; widgetId: modelData }
                     boundsBehavior: Flickable.StopAtBounds
                     ScrollBar.vertical: ScrollBar {}
                 }
             }
         }
         Rectangle {
-            id: controlPreview
-            x: parent.width - width - (root.desktop.sidebarEdge === "right" ? 84 : 24)
-            y: palette.y; width: Math.min(320, canvas.width * 0.3); height: Math.min(controlContents.implicitHeight + 32, mockDock.y - y - 16)
-            radius: Theme.cardRadius; color: Theme.shellSurface
-            Flickable {
-                anchors.fill: parent; anchors.margins: 16; clip: true
-                contentWidth: width; contentHeight: controlContents.implicitHeight; boundsBehavior: Flickable.StopAtBounds
-                ColumnLayout {
-                    id: controlContents; width: parent.width; spacing: 12
-                    RowLayout {
-                        Layout.fillWidth: true
-                        SymbolicIcon { implicitSize: 22; source: Quickshell.iconPath("avatar-default-symbolic"); color: Theme.text }
-                        Text { Layout.fillWidth: true; text: "Control centre"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize; font.weight: Font.Medium }
-                        SymbolicIcon { implicitSize: 18; source: Quickshell.iconPath("system-lock-screen-symbolic"); color: Theme.text }
-                    }
-                    RowLayout {
-                        SymbolicIcon { implicitSize: 20; source: Quickshell.iconPath("audio-volume-high-symbolic"); color: Theme.text }
-                        SeekSlider { Layout.fillWidth: true; value: 0.65; enabled: false }
-                    }
-                    RowLayout {
-                        SymbolicIcon { implicitSize: 20; source: Quickshell.iconPath("audio-input-microphone-symbolic"); color: Theme.text }
-                        SeekSlider { Layout.fillWidth: true; value: 0.45; enabled: false }
-                    }
-                    Item {
-                        Layout.fillWidth: true; implicitHeight: Math.max(84, controlTiles.implicitHeight)
-                        Rectangle { anchors.fill: parent; radius: 8; color: "transparent"; border.width: root.hoverZone === "control-centre" ? 1 : 0; border.color: Theme.accent }
-                    GridLayout {
-                        id: controlTiles
-                        objectName: "customise-zone-control-centre"
-                        readonly property string zoneName: "control-centre"
-                        readonly property var items: (root.desktop.controlOrder || DesktopLayout.controlOrder()).filter(id => ["network", "bluetooth"].includes(id) || root.desktop.controlCentre?.[id]).map(id => "control-" + id)
-                        width: parent.width; height: parent.height; columns: 2; columnSpacing: 8; rowSpacing: 8; uniformCellWidths: true
-                        Repeater {
-                            id: controlRepeater
-                            model: controlTiles.items
-                            ControlRow {
-                                required property string modelData
-                                title: root.info(modelData).label; iconName: root.info(modelData).icon; tileLayout: true; compactTile: true; rowInteractive: false
-                                objectName: "customise-control-" + modelData
-                                opacity: root.draggedId === modelData ? 0.35 : 1
-                                activeFocusOnTab: true
-                                Keys.onSpacePressed: root.selectedWidget = modelData
-                                Keys.onReturnPressed: root.selectedWidget = modelData
-                                DragHandle { widgetId: parent.modelData }
-                            }
-                        }
-                    }
-                    }
-                }
-            }
-        }
-        Rectangle {
-            id: mockDock
-            width: Math.min(canvas.width - 160, appDockZone.width + dockZone.width + 20)
-            height: Math.max(60, (root.desktop.dockSize || 56) + 16)
-            x: root.desktop.dockAlignment === "left" ? (root.desktop.sidebarEdge === "left" ? 76 : 16) : root.desktop.dockAlignment === "right" ? canvas.width - width - (root.desktop.sidebarEdge === "left" ? 16 : 76) : (canvas.width - width) / 2
-            y: footer.y - height - 16
-            radius: Theme.shellRadius; color: Theme.shellSurface
-            opacity: root.desktop.dock === false ? 0.5 : 1
-            Behavior on x { NumberAnimation { duration: Theme.reducedMotion ? 0 : 180; easing.type: Easing.OutCubic } }
-            Zone {
-                id: appDockZone; zoneName: "dock-apps"; label: "Pinned apps"; items: root.dockApplications
-                x: 4; y: 4; width: Math.max(64, Math.min(canvas.width - 340, items.length * ((root.desktop.dockSize || 56) + 4) + 16)); height: parent.height - 8
-                chipHeight: height - 8; chipWidth: Math.max(28, Math.min(root.desktop.dockSize || 56, (width - 16) / Math.max(1, items.length) - 4))
-            }
-            Rectangle { x: appDockZone.x + appDockZone.width + 4; y: 16; width: 1; height: parent.height - 32; color: Theme.outline }
-            Zone { id: dockZone; zoneName: "dock"; label: "Dock widgets"; x: appDockZone.x + appDockZone.width + 12; y: 4; width: Math.max(64, root.layout.dock.length * 40 + 16); height: parent.height - 8; contentTop: (height - chipHeight) / 2 }
-        }
-        Rectangle {
             id: footer
-            y: parent.height - height; width: parent.width; height: 56; color: Theme.barBackground
+            x: root.leftInset; y: parent.height - height; width: parent.width - root.leftInset - root.rightInset; height: 56; color: Theme.barBackground
             RowLayout {
                 anchors.fill: parent; anchors.margins: 10; spacing: 6
-                ActionButton { text: "Dock"; trailingIconName: "pan-down-symbolic"; flat: true; onClicked: root.optionsPage = root.optionsPage === "Dock" ? "" : "Dock" }
-                ActionButton { text: "Sidebar"; trailingIconName: "pan-down-symbolic"; flat: true; onClicked: root.optionsPage = root.optionsPage === "Sidebar" ? "" : "Sidebar" }
-                ActionButton { visible: !!root.selectedWidget; text: "Move " + (root.info(root.selectedWidget)?.label || "widget"); trailingIconName: "pan-down-symbolic"; flat: true; onClicked: root.optionsPage = root.optionsPage === "Move" ? "" : "Move" }
                 Item { Layout.fillWidth: true }
                 Text { visible: root.settings.status !== "" && root.settings.status !== "Saved"; text: root.settings.status; color: Theme.warning; Layout.maximumWidth: 260; elide: Text.ElideRight; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
                 ActionButton { text: "Restore defaults"; flat: true; enabled: !root.settings.busy; onClicked: root.layout = DesktopLayout.defaults() }
@@ -370,8 +273,8 @@ PanelWindow {
         Rectangle {
             id: optionsPopover
             visible: root.optionsPage !== ""
-            x: 12; y: footer.y - height - 8; width: Math.min(460, canvas.width - 24); height: Math.min(optionContents.implicitHeight + 32, footer.y - 64)
-            radius: Theme.cardRadius; color: Theme.shellSurface
+            x: palette.x; y: palette.y + 70; width: Math.min(420, palette.width); height: Math.min(optionContents.implicitHeight + 32, footer.y - y - 12)
+            radius: Theme.cardRadius; color: Qt.rgba(Theme.shellSurface.r, Theme.shellSurface.g, Theme.shellSurface.b, 1)
             Flickable {
                 anchors.fill: parent; anchors.margins: 16; clip: true; contentWidth: width; contentHeight: optionContents.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
@@ -380,7 +283,7 @@ PanelWindow {
                     id: optionContents; width: parent.width; spacing: 12
                     RowLayout {
                         Layout.fillWidth: true
-                        Text { Layout.fillWidth: true; text: root.optionsPage; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontHeading; font.weight: Font.Medium }
+                        Text { Layout.fillWidth: true; text: root.optionsPage === "Container" ? root.containerChoices.find(item => item.id === root.selectedContainer)?.label || "Container" : root.optionsPage; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontHeading; font.weight: Font.Medium }
                         IconButton { iconName: "window-close-symbolic"; label: "Close options"; onClicked: root.optionsPage = "" }
                     }
                     Flow {
@@ -390,9 +293,31 @@ PanelWindow {
                             ActionButton { required property var modelData; objectName: "customise-destination-" + modelData.id; text: modelData.label; enabled: root.accepts(root.selectedWidget, modelData.id); onClicked: { root.put(root.selectedWidget, modelData.id, root.layout[modelData.id]?.length || 0); root.optionsPage = ""; } }
                         }
                     }
+                    ColumnLayout {
+                        visible: root.optionsPage === "Container"; Layout.fillWidth: true; spacing: 12
+                        SettingsChoice { label: "Show"; choices: ["Original", "Icons", "Text", "Icons and text"]; values: ["native", "icons", "text", "both"]; value: root.desktop.containers?.[root.selectedContainer]?.display || "native"; onChosen: value => root.containerDisplay(value) }
+                    }
+                    ColumnLayout {
+                        visible: root.optionsPage === "Widget"; Layout.fillWidth: true; spacing: 12
+                        SettingsHeading { title: root.info(root.selectedWidget).label; description: "Use the container style, or change this widget." }
+                        SettingsChoice { label: "Show"; choices: ["Follow container", "Original", "Icons", "Text", "Both"]; values: ["inherit", "native", "icons", "text", "both"]; value: root.desktop.widgetOptions?.[root.selectedWidget]?.display || "inherit"; onChosen: value => root.widgetOption("display", value) }
+                        SettingsField { objectName: "customiseWidgetLabel"; Layout.margins: 0; label: "Label"; text: root.desktop.widgetOptions?.[root.selectedWidget]?.label || ""; placeholderText: root.baseInfo(root.selectedWidget)?.label || "Widget label"; onEdited: value => root.widgetOption("label", value) }
+                        Text { text: "Icon"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+                        GridLayout {
+                            Layout.fillWidth: true; columns: 8; rowSpacing: 4; columnSpacing: 4
+                            Repeater {
+                                model: root.iconChoices
+                                IconButton { required property string modelData; objectName: "customise-icon-" + modelData; iconName: modelData; label: modelData.replace(/-symbolic$/, "").replace(/-/g, " "); implicitWidth: 36; implicitHeight: 36; onClicked: root.widgetOption("icon", modelData) }
+                            }
+                        }
+                        RowLayout {
+                            ActionButton { text: "Reset widget"; flat: true; onClicked: { const next = Object.assign({}, root.desktop.widgetOptions || {}); delete next[root.selectedWidget]; root.change("widgetOptions", next); } }
+                            ActionButton { text: "Container style"; flat: true; onClicked: { root.selectedContainer = root.containerFor(root.selectedWidget) || "top-right"; root.optionsPage = "Container"; } }
+                        }
+                    }
                         ColumnLayout {
-                            visible: root.optionsPage === "Dock"; Layout.fillWidth: true; spacing: 16
-                            SettingsHeading { title: "Dock"; description: "Preview its size and position, then choose how app icons respond." }
+                            visible: root.optionsPage === "Dock" || (root.optionsPage === "Container" && root.selectedContainer === "dock"); Layout.fillWidth: true; spacing: 16
+
                             ControlRow { title: "Show dock"; iconName: ""; toggleVisible: true; toggleChecked: root.desktop.dock !== false; onToggleRequested: root.change("dock", !toggleChecked); onClicked: toggleRequested() }
                             SettingsChoice { label: "Alignment"; choices: ["Left", "Centre", "Right"]; values: ["left", "center", "right"]; value: root.desktop.dockAlignment || "center"; onChosen: value => root.change("dockAlignment", value) }
                             RowLayout {
@@ -406,8 +331,8 @@ PanelWindow {
                             SettingsChoice { label: "Scroll direction"; choices: ["Normal", "Reverse"]; values: ["natural", "reverse"]; value: root.desktop.dockScrollDirection || "natural"; onChosen: value => root.change("dockScrollDirection", value) }
                         }
                         ColumnLayout {
-                            visible: root.optionsPage === "Sidebar"; Layout.fillWidth: true; spacing: 16
-                            SettingsHeading { title: "Sidebar"; description: "Drag panel widgets to change their order. Keep at least one panel." }
+                            visible: root.optionsPage === "Sidebar" || (root.optionsPage === "Container" && root.selectedContainer === "sidebar"); Layout.fillWidth: true; spacing: 16
+
                             ControlRow { title: "Show sidebar"; iconName: ""; toggleVisible: true; toggleChecked: root.desktop.sidebar !== false; onToggleRequested: root.change("sidebar", !toggleChecked); onClicked: toggleRequested() }
                             SettingsChoice { label: "Screen edge"; choices: ["Left", "Top", "Right"]; values: ["left", "top", "right"]; value: root.desktop.sidebarEdge || "right"; onChosen: value => root.change("sidebarEdge", value) }
                         }
@@ -415,10 +340,12 @@ PanelWindow {
                 }
             }
         }
-        Rectangle {
-            visible: root.draggedId !== ""; x: root.pointer.x + 12; y: root.pointer.y + 12
-            width: dragLabel.implicitWidth + 28; height: 40; radius: 8; color: Theme.elevated
-            Text { id: dragLabel; anchors.centerIn: parent; text: root.info(root.draggedId)?.label || ""; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize }
+        Image {
+            visible: root.draggedId !== ""; x: root.pointer.x + 12; y: root.pointer.y + 12; z: 20000
+            source: DesktopEditing.previews[root.draggedId]?.url || ""
+            width: Math.min(320, DesktopEditing.previews[root.draggedId]?.width || 0)
+            height: Math.min(100, DesktopEditing.previews[root.draggedId]?.height || 0)
+            fillMode: Image.PreserveAspectFit
         }
     }
 }
