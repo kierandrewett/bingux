@@ -20,10 +20,6 @@ layout tests does not prove that every existing desktop widget is editable.
   label and icon widgets cannot enter the control centre or sidebar.
 - `TerminalSidebar.qml` still offers ordinary position changes outside Customise
   UI. The requested exception is ordinary dock application rearrangement.
-- `WidgetEditHandle.qml` inherits the control's disabled state. An unavailable
-  control therefore cannot receive Shift-right-click through that handle.
-- Palette previews block pointer actions but still need keyboard isolation from
-  their internal controls. Sample media data must not expose callable controls.
 - Restore defaults resets the arrangement. Container and widget options need a
   defined reset that is reversible through Undo and Cancel.
 
@@ -58,6 +54,14 @@ disconnection and album art fetched once across reopening and metadata changes.
 Dock notification retention, badges and vertical dismissal also pass. The icon
 fixture verifies Discord identity resolution, not the unavailable native icon
 renderer.
+
+The shared edit handle accepts Shift-right-click for disabled controls and
+children of disabled groups. Hidden controls stay inactive; normal clicks keep
+their disabled behaviour. A native compositor gesture verifies the disabled dock
+action and subsequent command dispatch after enabling it. Palette keyboard
+checks cover every registered preview type: loading keeps the current focus,
+and Tab cannot enter the sample controls. The previous preview implementation
+fails this keyboard regression.
 
 Remaining broad checks include all existing widget actions, notification
 interactions after layout changes, different scale factors,

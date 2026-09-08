@@ -5,7 +5,7 @@ import "DesktopLayout.js" as DesktopLayout
 import "ControlLayout.js" as ControlLayout
 
 // The palette uses the normal visual components with quiet sample data.
-Item {
+FocusScope {
     id: root
     required property string widgetId
     property var metrics: null
@@ -17,6 +17,10 @@ Item {
     readonly property Item visualItem: frame
     readonly property Item previewControl: component.item
     clip: true
+    function isolateKeyboard(item) {
+        item.activeFocusOnTab = false;
+        for (const child of item.children) isolateKeyboard(child);
+    }
     Item {
         id: frame
         anchors.centerIn: parent
@@ -26,6 +30,7 @@ Item {
         Loader {
             id: component
             active: DesktopEditing.active
+            onLoaded: root.isolateKeyboard(item)
             width: root.groupedWidget ? (root.spec.group ? 300 : item ? item.implicitWidth : 0) : root.panelWidget ? 300 : root.widgetId.startsWith("control-") && root.container === "control-centre" ? 188 : item ? item.implicitWidth : 0
             height: root.panelWidget ? 240 : item ? item.implicitHeight : 0
             scale: Math.min(1, root.width / Math.max(1, width))

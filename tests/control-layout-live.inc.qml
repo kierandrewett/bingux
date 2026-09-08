@@ -116,10 +116,13 @@
                 compare(findChild(account, "iconButtonImage"), avatar);
                 compare(avatar.status, Image.Ready, "The existing avatar remains loaded after moving windows");
                 compare(lock.parent, rightControls);
-                mouseClick(settings, settings.width / 2, settings.height / 2, Qt.RightButton, Qt.ShiftModifier);
+                settings.enabled = false;
+                tryCompare(dock.margins, "bottom", 0, 2000);
+                gesture(settings, dock, settings.width / 2, settings.height / 2, ["--shift-right-click"]);
                 tryCompare(widgetMenu, "visible", true, 3000);
                 compare(widgetMenu.widgetId, "control-settings", "The moved action keeps its Shift-right-click menu");
                 widgetMenu.visible = false; wait(300);
+                settings.enabled = true;
                 gesture(settings, dock, settings.width / 2, settings.height / 2, ["--click-only"]);
                 gesture(account, topBar, account.width / 2, account.height / 2, ["--click-only"]);
                 gesture(lock, topBar, lock.width / 2, lock.height / 2, ["--click-only"]);

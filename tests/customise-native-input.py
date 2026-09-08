@@ -34,13 +34,14 @@ export default function (api) {
         '<node><interface name="org.gnoblin.CustomiseInput"><method name="Run"><arg type="s" direction="in"/></method></interface></node>', {
         Run(request) {
             if (timer) throw new Error('An input gesture is already running');
-            const {origin, destination, button, prepare, hoverOnly, clickOnly, capture, dragCapture} = JSON.parse(request);
+            const {origin, destination, button, shift, prepare, hoverOnly, clickOnly, capture, dragCapture} = JSON.parse(request);
             // A second move clears the initial screen-edge barrier in the headless seat.
             const actions = [
                 () => pointer.notify_absolute_motion(GLib.get_monotonic_time(), origin[0], origin[1]),
                 () => pointer.notify_absolute_motion(GLib.get_monotonic_time(), origin[0], origin[1])
             ];
             if (!prepare && !hoverOnly) {
+                if (shift) actions.push(() => keyboard.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Shift_L, Clutter.KeyState.PRESSED));
                 actions.push(() => pointer.notify_button(GLib.get_monotonic_time(), button, Clutter.ButtonState.PRESSED));
                 if (destination) {
                     actions.push(() => pointer.notify_absolute_motion(GLib.get_monotonic_time(), origin[0] + Math.sign(destination[0] - origin[0]) * 12, origin[1] + Math.sign(destination[1] - origin[1]) * 12));
@@ -51,6 +52,7 @@ export default function (api) {
                     }
                 }
                 actions.push(() => pointer.notify_button(GLib.get_monotonic_time(), button, Clutter.ButtonState.RELEASED));
+                if (shift) actions.push(() => keyboard.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Shift_L, Clutter.KeyState.RELEASED));
                 for (const character of destination || clickOnly ? '' : 'Find') {
                     actions.push(() => keyboard.notify_keyval(GLib.get_monotonic_time(), character.charCodeAt(0), Clutter.KeyState.PRESSED));
                     actions.push(() => keyboard.notify_keyval(GLib.get_monotonic_time(), character.charCodeAt(0), Clutter.KeyState.RELEASED));
@@ -91,8 +93,9 @@ export default function (api) {
 
 request = json.dumps({'origin': [x, y], 'destination': destination, 'prepare': prepare,
     'hoverOnly': sys.argv[3:4] == ['--hover-only'],
-    'button': 3 if sys.argv[3:4] == ['--right-click'] else 1,
-    'clickOnly': sys.argv[3:4] in (['--click-only'], ['--right-click']),
+    'shift': sys.argv[3:4] == ['--shift-right-click'],
+    'button': 3 if sys.argv[3:4] in (['--right-click'], ['--shift-right-click']) else 1,
+    'clickOnly': sys.argv[3:4] in (['--click-only'], ['--right-click'], ['--shift-right-click']),
     'capture': os.environ.get('BINGUX_NATIVE_SCREENSHOT', ''),
     'dragCapture': os.environ.get('BINGUX_NATIVE_DRAG_CAPTURE', '')})
 subprocess.run(['gdbus', 'call', '--session', '--dest', 'org.gnoblin.CustomiseInput',
