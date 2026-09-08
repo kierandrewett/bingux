@@ -542,6 +542,17 @@ Scope {
                 y: root.edge === "top" ? -(1 - panel.reveal) * panelSurface.height : 0
             }
             Rectangle {
+                parent: panel.contentItem
+                z: 100
+                visible: panelSurface.visible
+                color: Theme.panelOuterOutline
+                Component.onCompleted: transform = panelSurface.transform
+                x: root.edge === "top" ? root.desktopCornerSize : root.edge === "left" ? panelSurface.width : panelSurface.x - 1
+                y: root.edge === "top" ? panelSurface.height : root.fullscreenApp ? 0 : Theme.barHeight + root.desktopCornerSize
+                width: root.edge === "top" ? Math.max(0, panel.width - root.desktopCornerSize * 2) : 1
+                height: root.edge === "top" ? 1 : Math.max(0, panel.height - y)
+            }
+            Rectangle {
                 // Join the desktop corner normally; in fullscreen continue
                 // the straight side border to the top of the screen.
                 color: Theme.barDivider

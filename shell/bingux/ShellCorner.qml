@@ -27,6 +27,19 @@ Item {
         }
         ShapePath {
             fillColor: "transparent"
+            strokeColor: Theme.panelOuterOutline
+            strokeWidth: 1
+            capStyle: ShapePath.FlatCap
+            startX: root.width - 0.5; startY: 1.5
+            PathArc {
+                x: 1.5; y: root.height - 0.5
+                radiusX: Math.max(0.5, root.width - 2)
+                radiusY: Math.max(0.5, root.height - 2)
+                direction: PathArc.Counterclockwise
+            }
+        }
+        ShapePath {
+            fillColor: "transparent"
             strokeColor: root.borderColor
             strokeWidth: 1
             capStyle: ShapePath.RoundCap

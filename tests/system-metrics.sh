@@ -3,7 +3,7 @@ set -euo pipefail
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT
-components=(DataTable TableRowSurface ServicesPanel FilterField ProcessTable ProcessorDetails ActionButton HardwareDetails RollingNumber SystemMetrics SystemMetricsPopup SystemPerformance MetricGraph Pill BarControlSurface ShellPopup ControlRow ControlSwitch ControlCentreButtonSurface SymbolicIcon IconButton MarqueeText ShellTooltip TooltipBubble OsIconImage SegmentedControl)
+components=(DataTable TableRowSurface ServicesPanel FilterField ProcessTable ProcessorDetails ActionButton HardwareDetails RollingNumber SystemMetrics SystemMetricsPopup SystemPerformance MetricGraph Pill BarControlSurface ShellPopup PanelOutline ControlRow ControlSwitch ControlCentreButtonSurface SymbolicIcon IconButton MarqueeText ShellTooltip TooltipBubble OsIconImage SegmentedControl)
 for component in "${components[@]}"; do
     cp "$repo_dir/shell/bingux/$component.qml" "$test_dir/"
     printf '%s 1.0 %s.qml\n' "$component" "$component" >> "$test_dir/qmldir"

@@ -138,3 +138,5 @@ WidgetEditHandle 1.0 WidgetEditHandle.qml
 WidgetPreview 1.0 WidgetPreview.qml
 WidgetDrag 1.0 WidgetDrag.qml
 WidgetDropArea 1.0 WidgetDropArea.qml
+
+PanelOutline 1.0 PanelOutline.qml

@@ -3,9 +3,9 @@ set -euo pipefail
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 fixture="$(mktemp -d /tmp/bingux-keyboard-test.XXXXXX)"
 trap 'rm -rf "$fixture"' EXIT
-cp "$repo_dir"/shell/bingux/{AnimatedCount,InputSourceSelector,Theme,ShellPopup,MenuNavigator,ShortcutSession,BarControlSurface,BarTooltip,ShellTooltip,TooltipBubble,SymbolicIcon}.qml "$fixture/"
+cp "$repo_dir"/shell/bingux/{AnimatedCount,InputSourceSelector,Theme,ShellPopup,PanelOutline,MenuNavigator,ShortcutSession,BarControlSurface,BarTooltip,ShellTooltip,TooltipBubble,SymbolicIcon}.qml "$fixture/"
 printf '%s\n' 'singleton Theme 1.0 Theme.qml' > "$fixture/qmldir"
-for component in AnimatedCount InputSourceSelector ShellPopup MenuNavigator ShortcutSession BarControlSurface BarTooltip ShellTooltip TooltipBubble SymbolicIcon; do
+for component in AnimatedCount InputSourceSelector ShellPopup PanelOutline MenuNavigator ShortcutSession BarControlSurface BarTooltip ShellTooltip TooltipBubble SymbolicIcon; do
     printf '%s 1.0 %s.qml\n' "$component" "$component" >> "$fixture/qmldir"
 done
 cp "$repo_dir/tests/input-source-selector.qml" "$fixture/shell.qml"

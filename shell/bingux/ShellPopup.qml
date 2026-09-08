@@ -178,6 +178,7 @@ Scope {
             opacity: root.motionSource ? root.motionSource.body.parent.opacity : 0
             border.color: Theme.outline
             border.width: root.surfaceVisible ? 1 : 0
+            PanelOutline { surface: card }
             transform: Scale {
                 origin.x: root.motionSource ? root.motionSource.panelX + root.motionSource.revealOriginX - card.x : root.revealOriginX
                 origin.y: root.motionSource ? root.motionSource.panelY + root.motionSource.revealOriginY - card.y : root.revealOriginY

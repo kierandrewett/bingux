@@ -710,6 +710,7 @@ PanelWindow {
         color: Theme.searchSurface
         border.width: 1
         border.color: "#555960"
+        PanelOutline { surface: surface }
         clip: true
         y: Math.max(16, Math.min(root.height * 0.38 - (Theme.searchInputHeight + 16) / 2, root.height - height - 24))
         Behavior on height {
@@ -1194,6 +1195,7 @@ PanelWindow {
         color: Theme.searchSurface
         border.width: 1
         border.color: "#555960"
+        PanelOutline { surface: previewSurface }
         clip: true
         MouseArea {
             anchors.fill: parent

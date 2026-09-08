@@ -319,6 +319,7 @@ Scope {
                 color: Theme.shellSurface
                 border.width: 1
                 border.color: Theme.outline
+                PanelOutline { surface: strip }
                 Flickable {
                     id: viewport
                     objectName: "switcherViewport"

@@ -90,6 +90,23 @@ ShellRoot {
         inputSuspended: captureTool.opened
     }
 
+    // Paint below the bar without increasing its window or exclusive zone.
+    PanelWindow {
+        screen: topBar.screen
+        visible: topBar.visible && terminalSidebar.topInset === 0
+        implicitHeight: 1
+        color: Theme.panelOuterOutline
+        exclusionMode: ExclusionMode.Ignore
+        mask: Region {}
+        anchors { top: true; left: true; right: true }
+        margins.top: topBar.margins.top + Theme.barHeight
+        margins.left: topBar.margins.left + (terminalSidebar.leftInset > 0 ? terminalSidebar.desktopCornerSize : 0)
+        margins.right: topBar.margins.right + (terminalSidebar.rightInset > 0 ? terminalSidebar.desktopCornerSize : 0)
+        WlrLayershell.layer: topBar.WlrLayershell.layer
+        WlrLayershell.namespace: "bingux-panel-outline"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    }
+
     Metrics {
         id: metrics
     }

@@ -31,9 +31,9 @@ if not str(root).startswith('/tmp/gnoblin-gs.'):
 fixture = root / 'popup-focus-fixture'
 fixture.mkdir()
 source = Path(__file__).resolve().parent.parent / 'shell/bingux'
-for name in ('Theme.qml', 'ShellPopup.qml', 'MenuNavigator.qml'):
+for name in ('Theme.qml', 'ShellPopup.qml', 'PanelOutline.qml', 'MenuNavigator.qml'):
     shutil.copy2(source / name, fixture / name)
-(fixture / 'qmldir').write_text('singleton Theme 1.0 Theme.qml\nShellPopup 1.0 ShellPopup.qml\nMenuNavigator 1.0 MenuNavigator.qml\n')
+(fixture / 'qmldir').write_text('singleton Theme 1.0 Theme.qml\nShellPopup 1.0 ShellPopup.qml\nPanelOutline 1.0 PanelOutline.qml\nMenuNavigator 1.0 MenuNavigator.qml\n')
 report = root / 'popup-focus-report.json'
 probe = root / 'scripts/popup-focus-probe.js'
 

@@ -823,6 +823,7 @@ PanelWindow {
         color: Theme.shellSurface
         border.width: 1
         border.color: Theme.outline
+        PanelOutline { surface: dockSurface }
         visible: DesktopEditing.active || root.appGroups.length > 0 || (root.preferences.layout?.dock.length || 0) > 0
 
         Flickable {

@@ -100,6 +100,7 @@ QtObject {
                 color: Theme.shellSurface
                 border.width: 1
                 border.color: Theme.outline
+                PanelOutline { surface: osdCard }
                 opacity: osdWindow.request !== null ? 1 : 0
                 Behavior on opacity {
                     NumberAnimation {

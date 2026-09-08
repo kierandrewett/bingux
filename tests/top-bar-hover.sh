@@ -5,11 +5,11 @@ export PATH="$PATH"
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT
-for component in Theme Pill BarControlSurface Tray TrayMenu InputSourceSelector ShellPopup MenuNavigator ActionButton; do
+for component in Theme Pill BarControlSurface Tray TrayMenu InputSourceSelector ShellPopup PanelOutline MenuNavigator ActionButton; do
     cp "$repo_dir/shell/bingux/$component.qml" "$test_dir/"
 done
 printf '%s\n' 'singleton Theme 1.0 Theme.qml' > "$test_dir/qmldir"
-for component in Pill BarControlSurface Tray TrayMenu InputSourceSelector ShellPopup MenuNavigator ActionButton; do
+for component in Pill BarControlSurface Tray TrayMenu InputSourceSelector ShellPopup PanelOutline MenuNavigator ActionButton; do
     printf '%s 1.0 %s.qml\n' "$component" "$component" >> "$test_dir/qmldir"
 done
 cp "$repo_dir/tests/top-bar-hover.qml" "$test_dir/shell.qml"

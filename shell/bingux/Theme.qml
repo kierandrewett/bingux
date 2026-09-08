@@ -18,6 +18,7 @@ QtObject {
     readonly property color hover: "#454545"
     readonly property color pressed: "#505050"
     readonly property color border: "#ffffff"
+    readonly property color panelOuterOutline: Qt.rgba(0, 0, 0, 0.5)
     readonly property color outline: "#505050"
     readonly property color text: "#fafafa"
     readonly property color muted: "#b0b0b0"

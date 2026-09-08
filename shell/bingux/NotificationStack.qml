@@ -354,6 +354,7 @@ Flickable {
             model: groupBackgrounds
             delegate: Rectangle {
                 // Group-owned, so removing the head card never replaces this surface.
+                id: groupSurface
                 objectName: "notificationGroupBackground"
                 required property string groupKey
                 required property real topY
@@ -370,6 +371,7 @@ Flickable {
                 color: Theme.elevated
                 border.width: root.cardBorder ? 1 : 0
                 border.color: Theme.outline
+                PanelOutline { surface: groupSurface }
                 z: -100000
                 visible: opacity > 0
                 opacity: showBackground ? 0.55 : 0
@@ -473,6 +475,7 @@ Flickable {
                     groupHead || groupExpanded ? 1 : surfaceFill.a + (1 - surfaceFill.a) * revealProgress)
                 border.width: root.cardBorder ? 1 : 0
                 border.color: Theme.outline
+                PanelOutline { surface: notificationCard }
                 Accessible.name: entry.appName + ": " + entry.summary
                 Accessible.role: (collapsedStack || defaultActionAvailable) ? Accessible.Button : Accessible.StaticText
                 Accessible.focusable: collapsedStack || defaultActionAvailable
