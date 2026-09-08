@@ -261,7 +261,7 @@ ShellRoot {
         function capture(): void { captureTool.open() }
     }
 
-    ControlCentre { id: controlCentre; widgetLayout: topBar; onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, item.barLayout ? topBar.windowFor(item) : controlCentre); onCustomiseRequested: binguxSettings.openCustomise("", ""); anchorWindow: topBar.windowFor(controlCentre.movedAnchor || systemPill); anchorItem: controlCentre.movedAnchor || systemPill; dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom); indicators: systemIndicators; screen: topBar.screen; onVisibleChanged: if (visible) root.closePanelsExcept(controlCentre) }
+    ControlCentre { id: controlCentre; widgetLayout: topBar; onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, item.editWindow || (item.barLayout ? topBar.windowFor(item) : controlCentre)); onCustomiseRequested: binguxSettings.openCustomise("", ""); anchorWindow: topBar.windowFor(controlCentre.movedAnchor || systemPill); anchorItem: controlCentre.movedAnchor || systemPill; dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom); indicators: systemIndicators; screen: topBar.screen; onVisibleChanged: if (visible) root.closePanelsExcept(controlCentre) }
 
     SystemMetricsPopup {
         id: metricsPopup

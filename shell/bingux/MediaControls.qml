@@ -7,6 +7,7 @@ import "MediaMatch.js" as MediaMatch
 
 FocusScope {
     id: root
+    objectName: "mediaControls"
     required property var player
     property var playerOptions: []
     signal playerSelected(var selectedPlayer)
@@ -21,10 +22,69 @@ FocusScope {
     // the hidden menu has stopped its display timer.
     onMenuActiveChanged: if (menuActive && player && player.positionSupported) player.positionChanged()
     property bool compact: false
+    property bool barLayout: false
+    property var barWindow: null
+    property var presentation: null
+    property string editWidgetId: ""
+    signal editRequested(string widgetId, var control)
+    readonly property bool inlineControls: barLayout && !details.retained
+    readonly property alias detailPopup: details
+    readonly property real cardHeight: contents.implicitHeight + Theme.padding * 2 + expandedArtSpace + playerSelectorHeight
+    function toggleArtwork() {
+        artworkExpanded = !artworkExpanded;
+        if (barLayout) details.visible = true;
+    }
+    onBarLayoutChanged: if (!barLayout) details.visible = false
+    onVisibleChanged: if (!visible) details.visible = false
+    Connections { target: DesktopEditing; function onActiveChanged() { if (DesktopEditing.active) details.visible = false; } }
+    Item {
+        id: fullContent
+        readonly property var editWindow: details.nativeWindow
+        parent: root.barLayout ? details.body : root
+        width: parent.width
+        height: root.cardHeight
+    }
+    WidgetEditHandle {
+        control: fullContent
+        widgetId: root.editWidgetId
+        previewSource: false
+        visible: root.barLayout && root.editWidgetId !== ""
+        onRequested: (id, item) => root.editRequested(id, item)
+    }
+    ShellPopup {
+        id: details
+        objectName: "mediaDetailsPopup"
+        anchorWindow: root.barWindow
+        screen: root.barWindow?.screen || Quickshell.screens[0]
+        anchorItem: root
+        contentPadding: 0
+        popupWidth: 400
+        popupHeight: root.cardHeight
+        surfaceVisible: false
+        cornerRadius: root.cornerRadius
+    }
+    GridLayout {
+        id: inlineBar
+        visible: root.inlineControls
+        anchors.fill: parent
+        rows: 1
+        columnSpacing: Theme.gap
+        rowSpacing: 0
+    }
+    ActionButton {
+        id: summaryButton
+        anchors.fill: parent
+        alignLeft: true
+        presentation: root.presentation
+        background: BarControlSurface { hovered: summaryButton.hovered; pressed: summaryButton.down; selected: true; focused: summaryButton.visualFocus }
+        visible: root.barLayout && !root.inlineControls
+        text: root.player ? root.player.trackTitle || root.player.identity : "Media playback"
+        onClicked: details.visible = !details.visible
+    }
     property bool artworkExpanded: false
     property real artExpansion: artworkExpanded ? 1 : 0
     readonly property real smallArtSize: compact ? 48 : Theme.controlHeight * 2
-    readonly property real expandedArtSize: Math.max(0, width - Theme.padding * 2)
+    readonly property real expandedArtSize: Math.max(0, fullContent.width - Theme.padding * 2)
     readonly property real expandedArtSpace: (expandedArtSize + Theme.gap) * artExpansion
     readonly property color accentHover: Qt.rgba(accent.r + (1 - accent.r) * 0.16, accent.g + (1 - accent.g) * 0.16, accent.b + (1 - accent.b) * 0.16, 1)
     readonly property color accentPressed: Qt.rgba(accent.r + (1 - accent.r) * 0.08, accent.g + (1 - accent.g) * 0.08, accent.b + (1 - accent.b) * 0.08, 1)
@@ -39,7 +99,9 @@ FocusScope {
     readonly property bool seekButtons: MediaMatch.prefersSeeking(player)
     property int seekTrack: -1
     property bool showRemaining: false
-    implicitHeight: contents.implicitHeight + Theme.padding * 2 + expandedArtSpace + playerSelectorHeight
+    implicitWidth: !barLayout ? 0 : presentation && !presentation.showText
+        ? (presentation.showIcon ? Theme.barHeight : 0) + Theme.barHeight * 3 + Theme.gap * 3 : 320
+    implicitHeight: barLayout ? Theme.barHeight : cardHeight
     Accessible.role: Accessible.Grouping
     Accessible.name: player ? player.identity + " playback" : "Media playback"
 
@@ -49,8 +111,10 @@ FocusScope {
         running: root.menuActive && root.hasPosition && root.player.isPlaying && !seek.pressed
         onTriggered: if (root.player) root.player.positionChanged()
     }
-    Rectangle { objectName: "mediaCardSurface"; anchors.fill: parent; radius: root.cornerRadius; color: Theme.menuWidgetBackground }
+    // Reparented controls must stay above the card when they return from the bar.
+    Rectangle { parent: fullContent; z: -1; objectName: "mediaCardSurface"; anchors.fill: parent; radius: root.cornerRadius; color: Theme.menuWidgetBackground }
     Item {
+        parent: fullContent
         objectName: "mediaPlayerSelector"
         visible: root.multiplePlayers
         anchors.top: parent.top
@@ -114,10 +178,12 @@ FocusScope {
     }
     ClippingRectangle {
         id: artButton
+        parent: root.inlineControls ? root : fullContent
+        visible: !root.inlineControls || !root.presentation || root.presentation.showIcon
         objectName: "mediaArtButton"
-        x: Theme.padding
-        y: Theme.padding + root.playerSelectorHeight
-        width: root.smallArtSize + (root.expandedArtSize - root.smallArtSize) * root.artExpansion
+        x: root.inlineControls ? 0 : Theme.padding
+        y: root.inlineControls ? (root.height - height) / 2 : Theme.padding + root.playerSelectorHeight
+        width: root.inlineControls ? Theme.barHeight - 4 : root.smallArtSize + (root.expandedArtSize - root.smallArtSize) * root.artExpansion
         height: width
         z: 2
         radius: Theme.insetRadius(root.cornerRadius, Theme.spaceSmall)
@@ -125,38 +191,71 @@ FocusScope {
         activeFocusOnTab: true
         Accessible.role: Accessible.Button
         Accessible.name: root.artworkExpanded ? "Collapse album artwork" : "Expand album artwork"
-        Accessible.onPressAction: root.artworkExpanded = !root.artworkExpanded
-        Keys.onReturnPressed: root.artworkExpanded = !root.artworkExpanded
-        Keys.onSpacePressed: root.artworkExpanded = !root.artworkExpanded
+        Accessible.onPressAction: root.toggleArtwork()
+        Keys.onReturnPressed: root.toggleArtwork()
+        Keys.onSpacePressed: root.toggleArtwork()
         AlbumArtwork {
             objectName: "mediaArtwork"
+            visible: !root.inlineControls || !root.presentation?.iconOverridden
             anchors.fill: parent
             source: root.player ? root.player.trackArtUrl : ""
             active: root.menuActive
+        }
+        SymbolicIcon {
+            objectName: "mediaOverrideIcon"
+            anchors.centerIn: parent
+            visible: root.inlineControls && !!root.presentation?.iconOverridden
+            source: visible ? Quickshell.iconPath(root.presentation.icon) : ""
+            color: Theme.text
         }
         MouseArea {
             id: artMouse
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             hoverEnabled: true
-            onClicked: root.artworkExpanded = !root.artworkExpanded
+            onClicked: root.toggleArtwork()
         }
-        ShellTooltip { parent: artButton; visible: root.menuActive && artMouse.containsMouse; text: artButton.Accessible.name }
+        BarTooltip { anchorItem: artButton; barWindow: root.barWindow; requested: root.inlineControls && root.menuActive && artMouse.containsMouse; text: artButton.Accessible.name }
+        ShellTooltip { parent: artButton; visible: !root.inlineControls && root.menuActive && artMouse.containsMouse; text: artButton.Accessible.name }
     }
-    ColumnLayout {
+    GridLayout {
         id: contents
+        parent: fullContent
+        columns: 1
+        columnSpacing: 0
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.margins: Theme.padding
         anchors.topMargin: Theme.padding + root.expandedArtSpace + root.playerSelectorHeight
-        spacing: Theme.gap
+        rowSpacing: Theme.gap
         RowLayout {
+            id: titleRow
+            parent: root.inlineControls ? inlineBar : contents
+            Layout.row: 0
+            Layout.column: 0
             Layout.fillWidth: true
             spacing: 0
+            MouseArea {
+                objectName: "mediaOpenDetails"
+                parent: root
+                x: root.inlineControls ? titleRow.x : 0
+                y: root.inlineControls ? titleRow.y : 0
+                width: root.inlineControls ? titleRow.width : 0
+                height: root.inlineControls ? titleRow.height : 0
+                enabled: root.inlineControls
+                activeFocusOnTab: root.inlineControls
+                Accessible.role: Accessible.Button
+                Accessible.name: "Open media controls"
+                Accessible.onPressAction: details.visible = true
+                Keys.onReturnPressed: details.visible = true
+                Keys.onSpacePressed: details.visible = true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: details.visible = true
+            }
             Item {
-                Layout.preferredWidth: (root.smallArtSize + Theme.gap * 2) * (1 - root.artExpansion)
-                Layout.preferredHeight: root.smallArtSize * (1 - root.artExpansion)
+                Layout.preferredWidth: root.inlineControls ? (artButton.visible ? artButton.width + Theme.gap : 0) : (root.smallArtSize + Theme.gap * 2) * (1 - root.artExpansion)
+                Layout.preferredHeight: root.inlineControls ? Theme.barHeight : root.smallArtSize * (1 - root.artExpansion)
             }
             ColumnLayout {
                 Layout.fillWidth: true
@@ -164,7 +263,8 @@ FocusScope {
                 MarqueeText {
                     objectName: "mediaTitle"
                     Layout.fillWidth: true
-                    text: root.player ? root.player.trackTitle || root.player.identity : "Not Playing"
+                    visible: !root.inlineControls || !root.presentation || root.presentation.showText
+                    text: root.inlineControls && root.presentation?.custom ? root.presentation.label : root.player ? root.player.trackTitle || root.player.identity : "Not Playing"
                     textFormat: Text.PlainText
                     active: root.menuActive
                     color: Theme.text
@@ -172,6 +272,7 @@ FocusScope {
                     fontWeight: Font.DemiBold
                 }
                 Text {
+                    visible: !root.inlineControls
                     Layout.fillWidth: true
                     text: root.player ? root.player.trackArtist || root.player.identity : "Music and audio"
                     textFormat: Text.PlainText
@@ -184,6 +285,7 @@ FocusScope {
         }
         SeekSlider {
             id: seek
+            Layout.row: 1
             accent: root.accent
             trackPreviewVisible: seek.previewVisible
             trackPreviewPosition: seek.previewPosition
@@ -262,10 +364,15 @@ FocusScope {
             }
 
         }
-        RowLayout {
+        GridLayout {
+            id: transport
+            Layout.row: 2
             Layout.fillWidth: true
-            spacing: Theme.gap
+            rows: 1
+            columnSpacing: Theme.gap
+            rowSpacing: 0
             Item {
+                Layout.column: 0
                 Layout.fillWidth: true
                 Layout.preferredWidth: 0
                 implicitHeight: Theme.controlHeight
@@ -307,6 +414,7 @@ FocusScope {
             }
             MediaButton {
                 objectName: "mediaPrevious"
+                Layout.column: 1
                 text: root.seekButtons ? "Back 10 seconds" : "Previous track"
                 iconName: root.seekButtons ? "media-seek-backward-symbolic" : "media-skip-backward-symbolic"
                 direction: -1
@@ -317,6 +425,7 @@ FocusScope {
                 id: playPause
                 primary: true
                 objectName: "mediaPlayPause"
+                Layout.column: 2
                 focus: true
                 text: root.player && root.player.isPlaying ? "Pause" : "Play"
                 iconName: root.player && root.player.isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic"
@@ -329,6 +438,7 @@ FocusScope {
             }
             MediaButton {
                 objectName: "mediaNext"
+                Layout.column: 3
                 text: root.seekButtons ? "Forward 10 seconds" : "Next track"
                 iconName: root.seekButtons ? "media-seek-forward-symbolic" : "media-skip-forward-symbolic"
                 direction: 1
@@ -336,6 +446,7 @@ FocusScope {
                 onClicked: if (enabled) { animateAction(); MediaMatch.step(root.player, 1); }
             }
             Item {
+                Layout.column: 4
                 Layout.fillWidth: true
                 Layout.preferredWidth: 0
                 implicitHeight: totalTime.implicitHeight
@@ -356,6 +467,8 @@ FocusScope {
     }
     component MediaButton: ActionButton {
         id: button
+        parent: root.inlineControls ? inlineBar : transport
+        Layout.row: 0
         required property string iconName
         property bool primary: false
         property int direction: 0
@@ -390,13 +503,14 @@ FocusScope {
         hoverEnabled: true
         ShellTooltip {
             parent: button
-            visible: root.menuActive && (button.hovered || button.visualFocus)
+            visible: !root.inlineControls && root.menuActive && (button.hovered || button.visualFocus)
             text: button.text
             x: (button.width - implicitWidth) / 2
             y: -implicitHeight - Theme.spaceSmall
         }
-        implicitWidth: Theme.controlHeight + Theme.gap
-        implicitHeight: Theme.controlHeight + Theme.gap
+        BarTooltip { anchorItem: button; barWindow: root.barWindow; requested: root.inlineControls && root.menuActive && (button.hovered || button.visualFocus); text: button.text }
+        implicitWidth: root.inlineControls ? Theme.barHeight : Theme.controlHeight + Theme.gap
+        implicitHeight: implicitWidth
         cornerRadius: implicitHeight / 2
         background: ControlCentreButtonSurface {
             control: button

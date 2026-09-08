@@ -22,11 +22,11 @@ ShellPopup {
     property var actionWidgets: []
     readonly property var groupedEntries: [
         {id: "control-header-space", item: headerSpace},
-        {id: "control-media", item: mediaControl}, {id: "control-divider", item: dividerControl},
+        {id: "control-divider", item: dividerControl},
         {id: "control-customise", item: customiseControl}, {id: "controls-header", item: headerControls},
         {id: "controls-audio", item: audioRows}, {id: "controls-tiles", item: quickRows}
     ]
-    readonly property var movableWidgets: [networkWidget, bluetoothWidget, vpnWidget, dndWidget, nightLightWidget, powerWidget, awakeWidget, outputControl, inputControl, batteryControl].concat(actionWidgets)
+    readonly property var movableWidgets: [networkWidget, bluetoothWidget, vpnWidget, dndWidget, nightLightWidget, powerWidget, awakeWidget, outputControl, inputControl, batteryControl, mediaControl].concat(actionWidgets)
     component ActionWidget: IconButton {
         id: action
         required property string widgetId
@@ -442,13 +442,23 @@ ShellPopup {
         ControlCentreMedia {
             id: mediaControl
             objectName: "controlMediaCard"
-            Layout.row: root.sectionRow("control-media")
-            visible: root.sectionRow("control-media") >= 0
-            Layout.fillWidth: true
+            editWidgetId: widgetId
+            onEditRequested: (id, item) => root.widgetEditRequested(id, item)
+            readonly property string widgetId: "control-media"
+            readonly property string container: DesktopLayout.zone(DesktopEditing.desktop.layout || {}, widgetId)
+            barLayout: root.widgetLayout !== null && container !== ""
+            barWindow: root.widgetLayout ? root.widgetLayout.windowFor(mediaControl) : root.nativeWindow
+            parent: barLayout ? root.widgetLayout.hostFor(mediaControl) : controls
+            Layout.row: barLayout ? root.widgetLayout.controlRow(mediaControl) : root.sectionRow(widgetId)
+            Layout.column: barLayout ? root.widgetLayout.controlColumn(mediaControl) : 0
+            visible: barLayout || root.sectionRow(widgetId) >= 0
+            Layout.fillWidth: !barLayout
+            presentation: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, container || "control-centre", player ? player.trackTitle || player.identity : "Media playback", "applications-multimedia-symbolic", true, true)
+            WidgetEditHandle { control: mediaControl; widgetId: mediaControl.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
             player: root.mediaPlayer
             playerOptions: root.mediaPlayers
             onPlayerSelected: selectedPlayer => root.selectedMediaPlayer = selectedPlayer
-            active: root.visible
+            active: root.visible || barLayout
         }
 
 

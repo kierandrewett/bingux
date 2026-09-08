@@ -13,7 +13,9 @@ layout tests does not prove that every existing desktop widget is editable.
   microphone sliders also move to these containers with their original nodes,
   mute, scrolling and device navigation. The battery display also moves to the
   bar and dock, supports appearance overrides and uses the same component in
-  the palette. Media and group containers still need that portability and editing support.
+  the palette. The media player now moves into both containers with its original
+  artwork, title and transport buttons. Its full controls open in an anchored
+  popup using those same instances. Group containers still need portability.
 - `DesktopLayout.accepts()` confines sidebar panels to the sidebar. Status,
   label and icon widgets cannot enter the control centre or sidebar.
 - `TerminalSidebar.qml` still offers ordinary position changes outside Customise
@@ -27,7 +29,7 @@ layout tests does not prove that every existing desktop widget is editable.
 
 ## Next implementation boundary
 
-Extend media and group widgets into the other real containers
+Extend group widgets into the other real containers
 without flattening native header, audio, tile and media layouts. Use the same component instances
 and service actions. Add presentation overrides and shared edit actions to these
 controls. Improve the group drag affordance while retaining direct child drags.
@@ -47,7 +49,17 @@ case checks native dragging, Undo/Redo, appearance overrides, saved placement,
 mute after hovering, slider clicks, wheel adjustment and device popup anchoring.
 Audio nodes are supplied by the test; physical device switching remains unverified.
 
-Remaining broad checks include all existing widget actions, dock media and
-notification interactions after layout changes, different scale factors,
+Media checks cover native dragging, Undo/Redo, persistence, both bar placements,
+playback, seeking, elapsed-time toggling, player switching, artwork expansion,
+presentation overrides and popup edit anchoring, with normal and reduced motion.
+The original full-card geometry and standalone video/player-switcher tests pass.
+The D-Bus MPRIS regression verifies transport, keyboard and wheel seeking,
+disconnection and album art fetched once across reopening and metadata changes.
+Dock notification retention, badges and vertical dismissal also pass. The icon
+fixture verifies Discord identity resolution, not the unavailable native icon
+renderer.
+
+Remaining broad checks include all existing widget actions, notification
+interactions after layout changes, different scale factors,
 multiple monitors, keyboard use and reduced motion. Record unavailable hardware
 checks as unverified, rather than treating an isolated render as equivalent.

@@ -51,7 +51,7 @@ function groupFor(id) { return Object.keys(defaults().groups).find(group => item
 
 function isAction(id) { return widget(id)?.action === true; }
 
-function isPortable(id) { return isAction(id) || audio.includes(id) || id === "control-battery"; }
+function isPortable(id) { return isAction(id) || audio.includes(id) || ["control-battery", "control-media"].includes(id); }
 
 function validPlacement(desktop) {
     if (!desktop.layout) return true;

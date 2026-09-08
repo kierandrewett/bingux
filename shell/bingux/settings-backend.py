@@ -25,7 +25,7 @@ PROVIDERS = {'applications', 'files', 'calculation', 'conversions', 'web', 'web-
 
 CONTROL_ACTIONS = {"control-account", "control-settings", "control-session", "control-lock"}
 
-PORTABLE_CONTROLS = CONTROL_ACTIONS | {"control-volume", "control-microphone", "control-battery"}
+PORTABLE_CONTROLS = CONTROL_ACTIONS | {"control-volume", "control-microphone", "control-battery", "control-media"}
 
 CONTROL_GROUPS = {
     'control-centre': ['controls-header', 'controls-audio', 'control-divider', 'controls-tiles', 'control-media', 'control-customise'],
