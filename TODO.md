@@ -10,6 +10,12 @@ This file tracks implementation work. A checked item means the related configura
 - [x] Verify Win+Period, caret placement and Enter insertion in Electron inputs and editable content.
 - [x] Check empty inputs, Unicode sequences, input blur rejection and GTK insertion. See `docs/emoji-picker.md` for the verified scope.
 
+## Sidebar note commands
+
+- [x] Reference Notion's published slash-command and block lists.
+- [x] Add searchable commands with arrow keys, Enter, Escape and pointer selection.
+- [x] Verify headings, inline formatting, lists, tables, undo and saved notes in the editor.
+
 ## Constraints
 
 - Keep `banks/` untouched. It is user-owned data and is outside the flake.
