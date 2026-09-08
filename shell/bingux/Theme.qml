@@ -60,7 +60,21 @@ QtObject {
     readonly property int sliderThumbSize: 16
     readonly property int iconSize: 16
     readonly property int fontSmall: 12
-    readonly property int tooltipDelay: 0
+    readonly property int tooltipDelay: tooltipsWarm ? 0 : 500
+    readonly property bool tooltipsWarm: tooltipOwners.length > 0 || tooltipCooldown.running
+    property var tooltipOwners: []
+    property Timer tooltipCooldown: Timer { interval: 1000 }
+    function beginTooltip(owner) {
+        const duration = tooltipsWarm || reducedMotion ? 0 : 120;
+        tooltipCooldown.stop();
+        if (!tooltipOwners.includes(owner)) tooltipOwners = tooltipOwners.concat([owner]);
+        return duration;
+    }
+    function endTooltip(owner) {
+        if (!tooltipOwners.includes(owner)) return;
+        tooltipOwners = tooltipOwners.filter(item => item !== owner);
+        if (tooltipOwners.length === 0) tooltipCooldown.restart();
+    }
     readonly property int fontSize: 14
     readonly property int fontHeading: 16
     readonly property string fontFamily: "Adwaita Sans"

@@ -23,6 +23,18 @@ PanelWindow {
     onWidthChanged: Qt.callLater(presentWhenSized)
     onHeightChanged: Qt.callLater(presentWhenSized)
     visible: false
+    Component.onDestruction: Theme.endTooltip(root)
+    onVisibleChanged: {
+        reveal.stop();
+        if (visible) {
+            reveal.duration = Theme.beginTooltip(root);
+            surface.opacity = reveal.duration > 0 ? 0 : 1;
+            if (reveal.duration > 0) reveal.start();
+        } else {
+            surface.opacity = 0;
+            Theme.endTooltip(root);
+        }
+    }
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
@@ -48,11 +60,8 @@ PanelWindow {
         width: implicitWidth
         height: implicitHeight
         text: root.presentedText
-        opacity: root.visible ? 1 : 0
-
-        Behavior on opacity {
-            NumberAnimation { duration: root.visible ? 0 : 160; easing.type: Easing.OutCubic }
-        }
+        opacity: 0
 
     }
+    NumberAnimation { id: reveal; target: surface; property: "opacity"; to: 1; easing.type: Easing.OutCubic }
 }

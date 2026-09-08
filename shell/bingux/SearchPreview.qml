@@ -136,9 +136,7 @@ Item {
                 verticalPadding: 4
                 scale: down ? 0.9 : 1
                 Behavior on scale { NumberAnimation { duration: Theme.previewMotion; easing.type: Easing.OutCubic } }
-                ToolTip.visible: hovered
-                ToolTip.delay: Theme.tooltipDelay
-                ToolTip.text: Accessible.name
+                ShellTooltip { visible: previewControl.hovered; text: previewControl.Accessible.name }
                 contentItem: Item {
                     SymbolicIcon {
                         objectName: "previewControlIcon"

@@ -53,9 +53,7 @@ Item {
         contentItem: Item {
             SymbolicIcon { anchors.centerIn: parent; implicitSize: 16; source: Quickshell.iconPath(button.iconName); color: Theme.muted }
         }
-        ToolTip.visible: hovered
-        ToolTip.delay: Theme.tooltipDelay
-        ToolTip.text: text
+        ShellTooltip { visible: button.hovered; text: button.text }
     }
     Flickable {
         id: viewport

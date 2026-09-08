@@ -17,5 +17,5 @@ if ! timeout 15s "${BINGUX_QUICKSHELL:-quickshell}" -p "$test_dir" --no-color > 
     exit 1
 fi
 cat "$test_dir/log"
-grep -q 'PASS: top bar and control tooltips show on the hover event' "$test_dir/log"
+grep -q 'PASS: initial tooltip delay and fade, instant cross-surface switching, idle reset' "$test_dir/log"
 if grep -E 'FAIL!|ERROR|FATAL|Binding loop' "$test_dir/log"; then exit 1; fi

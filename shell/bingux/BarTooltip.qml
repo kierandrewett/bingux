@@ -21,6 +21,7 @@ Scope {
     }
     property real centreX: 0
     property real bottomY: 0
+    Component.onDestruction: Theme.endTooltip(root)
     onRequestedChanged: {
         delay.stop();
         if (requested && Theme.tooltipDelay === 0) showTooltip();
@@ -41,6 +42,14 @@ Scope {
     }
     PanelWindow {
         id: popup
+        onVisibleChanged: {
+            reveal.stop();
+            if (visible) {
+                reveal.duration = Theme.beginTooltip(root);
+                bubble.opacity = reveal.duration > 0 ? 0 : 1;
+                if (reveal.duration > 0) reveal.start();
+            } else Theme.endTooltip(root);
+        }
         visible: false
         screen: root.barWindow.screen
         implicitWidth: bubble.implicitWidth
@@ -61,5 +70,6 @@ Scope {
             supportingText: root.reorderable || root.detectedReorderable ? "Ctrl + drag to move" : ""
             wrapText: true
         }
+        NumberAnimation { id: reveal; target: bubble; property: "opacity"; to: 1; easing.type: Easing.OutCubic }
     }
 }
