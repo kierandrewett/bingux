@@ -120,7 +120,19 @@ ShellRoot {
         function action(value) { actions = actions.concat([value]); }
         function toggleAwake() { keepAwake = !keepAwake; }
     }
-    ControlCentre { id: centre; services: services; indicators: indicators; bluetoothAdapter: adapter }
+    ControlCentre { id: centre; keepWindowAlive: true; services: services; indicators: indicators; bluetoothAdapter: adapter }
+    Component {
+        id: compactControl
+        ControlRow {
+            title: "Test control"; iconName: "notifications-disabled-symbolic"
+            barLayout: true; toggleVisible: true
+            presentation: ({label: title, icon: iconName, showIcon: true, showText: false})
+            property int toggles: 0
+            property int navigations: 0
+            onToggleRequested: toggles++
+            onNavigationRequested: navigations++
+        }
+    }
     Timer { id: quitAfterUnmap; interval: 400; onTriggered: Qt.quit() }
     TestCase {
         parent: centre.contentItem
@@ -128,6 +140,23 @@ ShellRoot {
         when: true
         function check(value, message) { checks += "CHECK " + value + " " + message + "\n"; results.setText(checks); verify(value, message); }
         function equal(actual, expected, message) { checks += "EQUAL " + actual + " " + expected + " " + message + "\n"; results.setText(checks); compare(actual, expected, message); }
+        function test_compactActions() {
+            centre.visible = true;
+            wait(250);
+            const control = compactControl.createObject(centre.contentItem, {x: 20, y: 20, z: 5000});
+            equal(control.height, Theme.barHeight, "compact controls fit the bar height");
+            mouseClick(control, control.width / 2, control.height / 2);
+            equal(control.toggles, 1, "compact toggle dispatches its existing action once");
+            control.toggleEnabled = false;
+            mouseClick(control, control.width / 2, control.height / 2);
+            equal(control.toggles, 1, "an unavailable compact toggle stays inactive");
+            control.navigation = true;
+            mouseClick(control, control.width / 2, control.height / 2);
+            equal(control.navigations, 1, "compact connectivity controls retain their detail action");
+            control.destroy();
+            centre.visible = false;
+            wait(200);
+        }
         function test_zz_notificationVariants() {
             const invoked = {reply: 0, defaultAction: 0};
             const avatar = notificationFactory.createObject(state, {id: 501, image: Quickshell.shellPath("avatar.svg"), summary: "Message from Marc", body: "Cooking"});

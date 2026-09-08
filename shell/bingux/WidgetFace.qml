@@ -7,12 +7,13 @@ RowLayout {
     required property var presentation
     property url iconSource: presentation?.icon ? Quickshell.iconPath(presentation.icon) : ""
     property bool colouredIcon: false
+    property color iconColor: Theme.text
     spacing: Theme.gap
     SymbolicIcon {
         visible: !!root.presentation?.showIcon && !root.colouredIcon
         implicitSize: Theme.iconSize
         source: root.iconSource
-        color: Theme.text
+        color: root.iconColor
     }
     Image {
         visible: !!root.presentation?.showIcon && root.colouredIcon

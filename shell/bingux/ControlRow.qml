@@ -18,10 +18,13 @@ AbstractButton {
     property bool navigation: false
     property real navigationRotation: 0
     property bool rowInteractive: true
-    hoverEnabled: rowInteractive
+    property bool barLayout: false
+    hoverEnabled: rowInteractive || barLayout
     HoverHandler { id: rowHover }
-    focusPolicy: rowInteractive ? Qt.StrongFocus : Qt.NoFocus
-    Accessible.role: rowInteractive ? Accessible.Button : Accessible.Grouping
+    focusPolicy: rowInteractive || barLayout ? Qt.StrongFocus : Qt.NoFocus
+    Accessible.role: rowInteractive || barLayout ? Accessible.Button : Accessible.Grouping
+    Accessible.checkable: barLayout && toggleVisible && !navigation
+    Accessible.checked: toggleChecked
     signal navigationRequested(var trigger)
     property bool tileLayout: false
     property bool compactTile: false
@@ -38,21 +41,32 @@ AbstractButton {
     Layout.fillWidth: true
     // Tiles should group related controls, not look like oversized app icons.
     // Their compact height also lets the primary controls breathe as a set.
-    implicitHeight: tileLayout ? (compactTile ? (subtitle.length > 0 ? 96 : 84) : 104) : tileSurface || leadingBadge || subtitle.length > 0 ? 56 : 40
-    padding: tileLayout ? (compactTile ? Theme.compactTilePadding : Theme.controlTilePadding) : 0
+    implicitWidth: barLayout ? barFace.implicitWidth + padding * 2 : Math.max(implicitBackgroundWidth + leftInset + rightInset, implicitContentWidth + leftPadding + rightPadding)
+    implicitHeight: barLayout ? Theme.barHeight : tileLayout ? (compactTile ? (subtitle.length > 0 ? 96 : 84) : 104) : tileSurface || leadingBadge || subtitle.length > 0 ? 56 : 40
+    padding: barLayout ? Theme.barControlPadding : tileLayout ? (compactTile ? Theme.compactTilePadding : Theme.controlTilePadding) : 0
     Accessible.name: displayedTitle + (subtitle ? ", " + subtitle : "")
-    background: ControlCentreButtonSurface {
-        visible: root.rowInteractive || root.tileSurface
-        control: root
-        // Selection stays quiet: a device row receives a restrained fill and
-        // its existing checkmark, while quick-control tiles use icon/switch
-        // colour rather than a full blue card.
-        selected: root.selected && !root.tileSurface
-        baseColor: root.tileSurface ? Theme.elevated : "transparent"
-        outlined: false
-        radius: root.tileSurface ? 12 : root.leadingBadge ? 10 : 8
+    onClicked: if (barLayout) {
+        if (navigation) navigationRequested(root);
+        else if (toggleVisible && toggleEnabled) toggleRequested();
     }
+    background: Item {
+        BarControlSurface { anchors.fill: parent; visible: root.barLayout; hovered: root.hovered; pressed: root.down; focused: root.visualFocus }
+        ControlCentreButtonSurface {
+            anchors.fill: parent
+            visible: !root.barLayout && (root.rowInteractive || root.tileSurface)
+            control: root
+            // Selection stays quiet: a device row receives a restrained fill and
+            // its existing checkmark, while quick-control tiles use icon/switch
+            // colour rather than a full blue card.
+            selected: root.selected && !root.tileSurface
+            baseColor: root.tileSurface ? Theme.elevated : "transparent"
+            outlined: false
+            radius: root.tileSurface ? 12 : root.leadingBadge ? 10 : 8
+        }
+    }
+    WidgetFace { id: barFace; anchors.centerIn: parent; visible: root.barLayout; presentation: root.presentation; iconColor: root.selected ? Theme.accent : Theme.text }
     contentItem: GridLayout {
+        visible: !root.barLayout
         columns: root.tileLayout ? 2 : 3
         columnSpacing: root.tileLayout ? Theme.gap : 10
         rowSpacing: root.tileLayout ? Theme.gap : 0
