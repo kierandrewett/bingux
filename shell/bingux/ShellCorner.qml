@@ -12,6 +12,7 @@ Item {
     Shape {
         anchors.fill: parent
         antialiasing: true
+        preferredRendererType: Shape.CurveRenderer
         transform: Scale { origin.x: root.width / 2; xScale: root.mirrored ? -1 : 1 }
         ShapePath {
             fillColor: root.color
@@ -30,11 +31,11 @@ Item {
             strokeColor: Theme.panelOuterOutline
             strokeWidth: 1
             capStyle: ShapePath.FlatCap
-            startX: root.width - 0.5; startY: 1.5
+            startX: root.width; startY: 1.5
             PathArc {
-                x: 1.5; y: root.height - 0.5
-                radiusX: Math.max(0.5, root.width - 2)
-                radiusY: Math.max(0.5, root.height - 2)
+                x: 1.5; y: root.height
+                radiusX: Math.max(0.5, root.width - 1.5)
+                radiusY: Math.max(0.5, root.height - 1.5)
                 direction: PathArc.Counterclockwise
             }
         }
@@ -42,12 +43,12 @@ Item {
             fillColor: "transparent"
             strokeColor: root.borderColor
             strokeWidth: 1
-            capStyle: ShapePath.RoundCap
-            startX: root.width - 0.5; startY: 0.5
+            capStyle: ShapePath.FlatCap
+            startX: root.width; startY: 0.5
             PathArc {
-                x: 0.5; y: root.height - 0.5
-                radiusX: Math.max(0.5, root.width - 1)
-                radiusY: Math.max(0.5, root.height - 1)
+                x: 0.5; y: root.height
+                radiusX: Math.max(0.5, root.width - 0.5)
+                radiusY: Math.max(0.5, root.height - 0.5)
                 direction: PathArc.Counterclockwise
             }
         }

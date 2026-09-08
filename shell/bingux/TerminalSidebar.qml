@@ -146,7 +146,7 @@ Scope {
     readonly property int maxSideWidth: Math.floor((screen ? screen.width : 1280) * 0.3)
     readonly property int minimumSideWidth: Math.min(250, maxSideWidth)
     readonly property real maximumExtent: edge === "top" ? (screen ? screen.height : 800) - Theme.barHeight : maxSideWidth
-    readonly property int desktopCornerSize: fullscreenApp ? 0 : Math.round(Theme.shellRadius * 2 * Math.min(1, Math.max(0, panel.extent * panel.reveal) / Math.max(1, maximumExtent)))
+    readonly property int desktopCornerSize: fullscreenApp ? 0 : Math.round(Theme.shellRadius * 1.5 * Math.min(1, Math.max(0, panel.extent * panel.reveal) / Math.max(1, maximumExtent)))
     property real hintStrength: 0
     function hintDrag() {
         handleVisible = true;
