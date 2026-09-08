@@ -132,11 +132,14 @@ Scope {
 
     function activate(entry) {
         const action = entry.actions.find(action => action.defaultAction && action.action && typeof action.action.invoke === "function");
+        const target = activationTarget(entry);
         if (action) {
+            // Focus first. The sender can then select a more specific window
+            // when it handles the action, without our fallback overriding it.
+            if (target.window) target.window.activate();
             action.action.invoke();
             return true;
         }
-        const target = activationTarget(entry);
         if (target.window) {
             target.window.activate();
         } else if (target.application) {

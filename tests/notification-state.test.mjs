@@ -10,6 +10,7 @@ function fixture() {
     vm.runInNewContext(readFileSync(new URL('../shell/bingux/NotificationHistory.js', import.meta.url), 'utf8'), history);
     const context = vm.createContext({
         History: history, historyReady: false,
+        ToplevelManager: {toplevels: {values: []}},
         Date: { now: () => now },
         DesktopEntries: { applications: {values: []}, byId: id => id === 'org.example.Files' ? { name: 'Files', icon: 'files-icon' } : null },
         expiryTimer: { stop() {}, restart() {}, interval: 0 },
@@ -266,6 +267,16 @@ test('notification clicks prefer sender actions over app fallback', () => {
     assert.equal(state.canActivate(entry), true);
     assert.equal(state.activate(entry), true);
     assert.equal(invoked, 1);
+});
+
+test('notification default actions also transfer focus to the matching app', () => {
+    const {state} = fixture();
+    const calls = [];
+    state.ToplevelManager = {toplevels: {values: [{appId: 'editor', activate() { calls.push('focus'); }}]}};
+    state.DesktopEntries.applications.values = [{id: 'editor', name: 'Editor'}];
+    const entry = {desktopEntry: 'editor', actions: [{defaultAction: true, action: {invoke() { calls.push('action'); }}}]};
+    assert.equal(state.activate(entry), true);
+    assert.deepEqual(calls, ['focus', 'action']);
 });
 
 test('notification clicks focus matching windows or launch their desktop entry', () => {
