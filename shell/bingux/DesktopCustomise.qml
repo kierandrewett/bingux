@@ -140,7 +140,6 @@ Scope {
         if (id === "metrics" && target !== "palette") change("metrics", true);
         if (target === "sidebar") change("sidebar", true);
     }
-    function drag(id, source, x, y) { dragGlobal(id, source.mapToItem(root.preview, x, y)); }
     function dragGlobal(id, point) {
         draggedId = id; pointer = point; hoverZone = "";
         for (const area of DesktopEditing.surfaces) {
@@ -182,10 +181,15 @@ Scope {
             preventStealing: true
             cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
             property point start
-            onPressed: mouse => { start = Qt.point(mouse.x, mouse.y); root.selectedWidget = widgetId; }
-            onPositionChanged: mouse => { if (pressed && (root.draggedId || Math.abs(mouse.x - start.x) + Math.abs(mouse.y - start.y) > 6)) root.drag(widgetId, this, mouse.x, mouse.y); }
-            onReleased: root.release()
-            onCanceled: { root.draggedId = ""; root.hoverZone = ""; }
+            property bool hadDrag: false
+            onPressed: mouse => { hadDrag = false; start = Qt.point(mouse.x, mouse.y); root.selectedWidget = widgetId; }
+            onPositionChanged: mouse => {
+                if (pressed && !hadDrag && Math.abs(mouse.x - start.x) + Math.abs(mouse.y - start.y) > 6) {
+                    hadDrag = true;
+                    nativeDrag.begin(widgetId, DesktopEditing.point(this, root.nativeWindow, mouse.x, mouse.y));
+                }
+            }
+            WidgetDrag { id: nativeDrag }
         }
     component Chip: Item {
         id: chip
@@ -236,6 +240,7 @@ Scope {
             id: palette
             objectName: "customisePalette"
             readonly property string zoneName: "palette"
+            WidgetDropArea { anchors.fill: parent; zoneName: "palette"; window: root.nativeWindow }
             x: root.leftInset + 24
             y: Theme.barHeight + 40 + root.topInset; width: Math.max(200, canvas.width - root.rightInset - x - Theme.notificationWidth - 88); height: canvas.height - y - 180
             Rectangle { anchors.fill: parent; radius: 8; color: "transparent"; border.width: root.hoverZone === "palette" ? 1 : 0; border.color: Theme.accent }
@@ -339,13 +344,6 @@ Scope {
 
                 }
             }
-        }
-        Image {
-            visible: root.draggedId !== ""; x: root.pointer.x + 12; y: root.pointer.y + 12; z: 20000
-            source: DesktopEditing.previews[root.draggedId]?.url || ""
-            width: Math.min(320, DesktopEditing.previews[root.draggedId]?.width || 0)
-            height: Math.min(100, DesktopEditing.previews[root.draggedId]?.height || 0)
-            fillMode: Image.PreserveAspectFit
         }
     }
 }
