@@ -9,15 +9,32 @@ Rectangle {
     property bool wrapText: true
     readonly property int horizontalPadding: 12
     readonly property int verticalPadding: 9
-    implicitWidth: Math.min(maximumWidth, Math.ceil(Math.max(
-        ...text.split("\n").map(line => textMeasure.advanceWidth(line)),
-        ...supportingText.split("\n").map(line => hintMeasure.advanceWidth(line)))) + horizontalPadding * 2)
+    implicitWidth: Math.min(maximumWidth,
+        Math.ceil(Math.max(textMeasure.contentWidth, hintMeasure.contentWidth)) + horizontalPadding * 2)
     implicitHeight: Math.ceil(content.implicitHeight) + verticalPadding * 2
     color: Theme.surface
     border.color: Theme.outline
     radius: Theme.insetRadius(Theme.cardRadius, Theme.gap)
-    FontMetrics { id: textMeasure; font: label.font }
-    FontMetrics { id: hintMeasure; font: hint.font }
+    // Measure wrapping at a fixed limit so the bubble can fit the rendered
+    // lines without creating a width binding loop with the visible labels.
+    Text {
+        id: textMeasure
+        visible: false
+        width: Math.max(0, root.maximumWidth - root.horizontalPadding * 2)
+        text: root.text
+        font: label.font
+        textFormat: Text.PlainText
+        wrapMode: label.wrapMode
+    }
+    Text {
+        id: hintMeasure
+        visible: false
+        width: textMeasure.width
+        text: root.supportingText
+        font: hint.font
+        textFormat: Text.PlainText
+        wrapMode: hint.wrapMode
+    }
     Column {
         id: content
         x: root.horizontalPadding
