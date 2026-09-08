@@ -17,7 +17,7 @@ Item {
     property int firstVisibleIndex: 0
     readonly property bool moreBefore: firstVisibleIndex > 0
     readonly property bool moreAfter: firstVisibleIndex + visibleCount < windowCount
-    readonly property real scrollOffset: -strip.contentX
+    readonly property real scrollOffset: strip.originX - strip.contentX
     implicitWidth: visibleCount > 0 ? visibleCount * 8 + 10 + (activeIndex >= firstVisibleIndex && activeIndex < firstVisibleIndex + visibleCount ? 10 : 0) : 0
     implicitHeight: 8
     visible: width > 0
@@ -49,7 +49,8 @@ Item {
         interactive: false
         cacheBuffer: Math.max(32, root.windowCount * 8)
         boundsBehavior: Flickable.StopAtBounds
-        contentX: root.firstVisibleIndex * 8 + (root.activeIndex >= 0 && root.activeIndex < root.firstVisibleIndex ? 10 : 0)
+        // ListView can shift its origin when windows are inserted or removed.
+        contentX: originX + root.firstVisibleIndex * 8 + (root.activeIndex >= 0 && root.activeIndex < root.firstVisibleIndex ? 10 : 0)
         Behavior on contentX {
             NumberAnimation { duration: Theme.reducedMotion ? 0 : 240; easing.type: Easing.OutQuart }
         }
