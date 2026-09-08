@@ -24,7 +24,8 @@
     }
     TestCase {
         id: layoutTest
-        parent: binguxSettings.customiser.contentItem
+        // Start on a mapped surface; the editor window is created by this test.
+        parent: topBar.contentItem
         when: topBar.visible && BinguxPreferences.loaded && ControlCentreServices.preferencesReady && dock.appGroupsInitialised
         function clickNative(item, window, x, y, right) {
             nativeTyping.position = DesktopEditing.point(item, window, x, y);
