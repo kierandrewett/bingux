@@ -14,6 +14,14 @@ import "DesktopLayout.js" as DesktopLayout
 ShellRoot {
     id: root
 
+    Connections {
+        target: Quickshell
+        // The success banner owns another QML engine and blocks IPC until it
+        // closes. Its animation can stall behind retained editor surfaces.
+        // Keep reload errors visible; successful reloads need no extra window.
+        function onReloadCompleted() { Quickshell.inhibitReloadPopup(); }
+    }
+
     readonly property var commandNotifications: notificationState
     property var currentTime: new Date()
 

@@ -44,6 +44,8 @@ The shell imports the effective runtime layout once into version 1 of the deskto
 - `python3 tests/search-engines.py` after building the search daemon; `BINGUX_SEARCHD_BIN` selects a different build.
 - `bash tests/bingux-settings.sh` with `BINGUX_QUICKSHELL` set to a compatible Quickshell runtime.
 - In a private Gnoblin test session: `tests/desktop-customise.py`, `tests/desktop-layout-live.py`, `BINGUX_SHELL_TEST=dock-behaviour tests/dock-state.py`, and `tests/popup-anchor.py`.
+- `tests/customise-reload-live.py` repeats native widget drags and UI reloads. It checks the process ID, saved layout, editor reopening and IPC after each reload.
+- `tests/quickshell-no-dumps-live.py` deliberately crashes a private shell and checks that it writes neither a kernel core file nor a Quickshell minidump.
 
 The full-shell layout fixture ends its private process group after its assertions complete. It does not change the user's settings or stop the user's shell.
 
@@ -51,3 +53,8 @@ The editor keeps the captured drag image in a pointer-transparent layer window.
 Native Wayland drag and drop still carries the widget ID between containers.
 This avoids the zero-size drag-icon actor observed with the current Qt/Mutter
 combination. The image is captured once at pickup and released when the drag ends.
+
+The runtime patch keeps rounded clipping textures in the same visual tree as
+their widgets. This lets Qt release their old window references when containers
+move or reload. Successful reload banners are suppressed because their separate
+QML engine can block IPC after an editor reload. Reload errors are still shown.
