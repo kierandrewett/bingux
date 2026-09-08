@@ -40,6 +40,11 @@ ShellRoot {
         property bool busy: false
         property string error: ""
         property bool keepAwake: false
+        property bool preferencesReady: true
+        property var controls: ({dnd: true})
+        property var vpns: [{id: "test-vpn", connected: false, canToggle: true}, {id: "blocked-vpn", connected: false, canToggle: false}]
+        function showControl(id) { return controls[id] === true; }
+        function setControl(id, shown) { controls = Object.assign({}, controls, {[id]: shown}); }
         property var lastAction: null
         property var state: ({power: {available: true, profile: "balanced", profiles: ["balanced", "power-saver"]},
             awakeAvailable: true, nightLightAvailable: true, nightLight: false, nightLightActive: false})
@@ -89,6 +94,7 @@ ShellRoot {
         property var mediaPlayers: [player]
         property var mediaPlayer: player
         property var services: servicesFixture
+        property var controlChoices: [{id: "dnd", title: "Do Not Disturb", available: true}, {id: "unavailable", title: "Unavailable", available: false}]
         property var deviceControls: devicesFixture
         property var bluetoothAdapter: adapterFixture
         property bool visible: false
@@ -116,17 +122,59 @@ ShellRoot {
         id: dockFixture
         property bool pinned: false
         property int launched: 0
+        property var launchedGroup: null
+        property bool launchedNewWindow: false
         property var appGroups: [{id: "test-app", desktopEntry: {name: "Test app"}, windows: [windowFixture]}]
         function isPinned(group) { return pinned; }
         function setPinned(group, value) { pinned = value; }
-        function launch(group, newWindow) { launched++; }
+        function launch(group, newWindow) { launched++; launchedGroup = group; launchedNewWindow = newWindow; }
         function preferredWindow(group) { return group.windows[0]; }
         function moveGroup(id, destination) {}
     }
-    ShellCommands { id: commands; indicators: indicatorsFixture; mediaControls: mediaFixture; notificationState: notificationFixture; dockView: dockFixture }
+    QtObject {
+        id: keyboardFixture
+        property var metrics: ({desktopStateAvailable: true, currentInputSource: {type: "xkb", id: "gb"}})
+        property var sources: [{type: "xkb", id: "gb", displayName: "English"}, {type: "ibus", id: "gb", displayName: "Input method"}]
+        property bool selectionBusy: false
+        property bool canSelect: true
+        property string lastError: ""
+        property var selected: null
+        function sourceKey(source) { return source.type + "\n" + source.id; }
+        function selectSource(source, keepOpen) { selected = source; }
+    }
+    QtObject {
+        id: appFixture
+        property string id: "installed-app"
+        property string name: "Installed app"
+        property string genericName: "Application"
+        property string icon: "application-x-executable"
+        property bool runInTerminal: false
+    }
+    ShellCommands { id: commands; inputSelector: keyboardFixture; applications: [appFixture]; indicators: indicatorsFixture; mediaControls: mediaFixture; notificationState: notificationFixture; dockView: dockFixture }
     Timer {
         running: true; interval: 100
         onTriggered: {
+            test.check(JSON.parse(commands.appCommand("list", "", "INSTALLED")).apps.length === 1, "Application search is case insensitive");
+            commands.appCommand("new-window", "installed-app.desktop", "");
+            test.check(dockFixture.launchedGroup.desktopEntry === appFixture && dockFixture.launchedNewWindow, "Unpinned app uses shared dock launch");
+            test.check(JSON.parse(commands.appCommand("launch", "missing", "")).ok === false && dockFixture.launched === 1, "Missing app never launches a different entry");
+            dockFixture.launched = 0;
+            commands.keyboardCommand("select", "ibus", "gb");
+            test.check(keyboardFixture.selected.type === "ibus", "Keyboard selects both type and ID");
+            test.check(JSON.parse(commands.keyboardCommand("list", "", "")).sources.filter(item => item.selected).length === 1, "Only exact current source is selected");
+            keyboardFixture.canSelect = false;
+            test.check(JSON.parse(commands.keyboardCommand("select", "xkb", "gb")).ok === false, "Busy keyboard selection rejected");
+            keyboardFixture.canSelect = true;
+            test.check(JSON.parse(commands.keyboardCommand("select", "xkb", "missing")).ok === false, "Unknown keyboard source rejected");
+            commands.controlCommand("hide", "dnd");
+            test.check(!servicesFixture.showControl("dnd") && servicesFixture.lastAction === null, "Control visibility does not toggle its setting");
+            commands.controlCommand("show", "dnd");
+            test.check(servicesFixture.showControl("dnd"), "Control visibility is restored");
+            test.check(JSON.parse(commands.controlCommand("show", "unavailable")).ok === false, "Unavailable control cannot be shown");
+            commands.vpnCommand("connect", "test-vpn");
+            test.check(servicesFixture.lastAction.kind === "vpn" && servicesFixture.lastAction.id === "test-vpn" && servicesFixture.lastAction.enabled, "VPN uses exact shared service connection");
+            test.check(JSON.parse(commands.vpnCommand("connect", "blocked-vpn")).ok === false, "Unavailable VPN rejected");
+            test.check(JSON.parse(commands.vpnCommand("disconnect", "test-vpn")).changed === false, "Already disconnected VPN is unchanged");
             commands.pageCommand("audio", true);
             test.check(mediaFixture.visible && mediaFixture.page === "audio" && mediaFixture.audioTab === "input", "Audio page opens the correct tab");
             test.check(JSON.parse(commands.pageCommand("missing", false)).ok === false, "Unknown page rejected");

@@ -10,11 +10,68 @@ Scope {
     required property var mediaControls
     required property var notificationState
     required property var dockView
+    property var inputSelector: null
+    property var applications: DesktopEntries.applications.values
     property var windowIds: new Map()
     property int nextWindowId: 0
     readonly property string instance: Date.now().toString(36)
     function ok(value) { return JSON.stringify(value || {ok: true}); }
     function fail(message) { return JSON.stringify({ok: false, error: message}); }
+    function appCommand(action, identity, query) {
+        if (action === "list") {
+            const term = query.trim().toLowerCase();
+            return ok({apps: applications.filter(entry => !term || (entry.id + " " + entry.name + " " + entry.genericName).toLowerCase().includes(term))
+                .map(entry => ({id: entry.id, name: entry.name, icon: entry.icon, terminal: entry.runInTerminal}))
+                .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))});
+        }
+        if (!["launch", "new-window"].includes(action)) return fail("Unknown application action");
+        const id = identity.replace(/\.desktop$/, "");
+        const entry = applications.find(item => item.id.replace(/\.desktop$/, "") === id);
+        if (!entry) return fail("Installed application not found; use apps list");
+        const group = dockView.appGroups.find(item => item.desktopEntry && item.desktopEntry.id === entry.id)
+            || {id: entry.id, desktopEntry: entry, windows: []};
+        dockView.launch(group, action === "new-window");
+        return ok({ok: true, pending: true, id: entry.id});
+    }
+    function keyboardCommand(action, type, identity) {
+        const selector = inputSelector;
+        if (!selector) return fail("Keyboard controls are unavailable");
+        if (action === "list") return ok({ready: selector.metrics.desktopStateAvailable,
+            busy: selector.selectionBusy, error: selector.lastError,
+            sources: selector.sources.map(source => ({type: source.type, id: source.id, name: source.displayName,
+                selected: !!selector.metrics.currentInputSource && selector.sourceKey(source) === selector.sourceKey(selector.metrics.currentInputSource)}))});
+        if (action !== "select") return fail("Unknown keyboard action");
+        if (!selector.canSelect) return fail("Keyboard controls are unavailable or busy");
+        const source = selector.sources.find(item => item.type === type && item.id === identity);
+        if (!source) return fail("Keyboard source not found; use keyboard list");
+        selector.selectSource(source, false);
+        return ok({ok: true, pending: true});
+    }
+    function controlCommand(action, identity) {
+        const service = mediaControls.services;
+        const choices = mediaControls.controlChoices;
+        if (action === "list") return ok({ready: service.preferencesReady, error: service.error,
+            controls: choices.map(item => ({id: item.id, name: item.title, available: item.available, shown: service.showControl(item.id)}))});
+        if (!["show", "hide"].includes(action)) return fail("Unknown control visibility action");
+        if (!service.preferencesReady) return fail("Control preferences are not ready");
+        const choice = choices.find(item => item.id === identity);
+        if (!choice) return fail("Control not found; use controls list");
+        if (action === "show" && !choice.available) return fail("This control is unavailable on this device");
+        service.setControl(identity, action === "show");
+        return ok({ok: true, shown: action === "show"});
+    }
+    function vpnCommand(action, identity) {
+        const service = mediaControls.services;
+        if (action === "list" || action === "status") return ok({ready: service.ready, busy: service.busy, error: service.error, connections: service.vpns});
+        if (!["connect", "disconnect"].includes(action)) return fail("Unknown VPN action");
+        if (!service.ready || service.busy) return fail("Desktop controls are unavailable or busy");
+        const connection = service.vpns.find(item => item.id === identity);
+        if (!connection || !connection.canToggle) return fail("VPN connection is unavailable; use vpn list");
+        const enabled = action === "connect";
+        if (connection.connected === enabled) return ok({ok: true, changed: false});
+        service.action({kind: "vpn", id: identity, enabled});
+        return ok({ok: true, pending: true});
+    }
     function pageCommand(page, input) {
         if (!["network", "bluetooth", "audio", "display", "vpn", "power", "customise"].includes(page)) return fail("Unknown control-centre page");
         if (input && page !== "audio") return fail("Input selection requires the audio page");
@@ -192,6 +249,10 @@ Scope {
     }
     IpcHandler {
         target: "actions"
+        function app(action: string, id: string, query: string): string { return root.appCommand(action, id, query); }
+        function keyboard(action: string, type: string, id: string): string { return root.keyboardCommand(action, type, id); }
+        function control(action: string, id: string): string { return root.controlCommand(action, id); }
+        function vpn(action: string, id: string): string { return root.vpnCommand(action, id); }
         function page(name: string, input: bool): string { return root.pageCommand(name, input); }
         function device(action: string, input: bool, id: string): string { return root.deviceCommand(action, input, id); }
         function service(kind: string, action: string, value: string): string { return root.serviceCommand(kind, action, value); }
