@@ -1142,6 +1142,7 @@ PanelWindow {
 
                     ShellPopup {
                         id: appMenu
+                        objectName: "dockAppMenu"
                         readonly property var mediaPlayers: Mpris.players.values.filter(player => MediaMatch.matches(player, dockButton.currentGroup))
                         revealOriginY: popupHeight
                         popupWidth: mediaPlayers.length > 0 || dockButton.notificationCount > 0 || notificationPreview.renderedNotificationCount > 0 ? 320 : 280
@@ -1220,6 +1221,18 @@ PanelWindow {
                                     right: parent.right
                                 }
 
+                                MenuAction {
+                                    objectName: "dockPinAction"
+                                    cornerRadius: appMenu.contentRadius
+                                    navigation: menuNavigation
+                                    label: root.isPinned(dockButton.currentGroup) ? "Unpin from dock" : "Pin to dock"
+                                    enabled: dockButton.currentGroup.desktopEntry !== null || root.isPinned(dockButton.currentGroup)
+                                    onTriggered: {
+                                        dockButton.menuOpen = false;
+                                        root.setPinned(dockButton.currentGroup, !root.isPinned(dockButton.currentGroup));
+                                    }
+                                }
+
                                 Repeater {
                                     model: appMenu.mediaPlayers
                                     delegate: DockMediaControls {
@@ -1255,17 +1268,6 @@ PanelWindow {
                                     }
                                 }
 
-                                MenuAction {
-                                    objectName: "dockPinAction"
-                                    cornerRadius: appMenu.contentRadius
-                                    navigation: menuNavigation
-                                    label: root.isPinned(dockButton.currentGroup) ? "Unpin from dock" : "Pin to dock"
-                                    enabled: dockButton.currentGroup.desktopEntry !== null || root.isPinned(dockButton.currentGroup)
-                                    onTriggered: {
-                                        dockButton.menuOpen = false;
-                                        root.setPinned(dockButton.currentGroup, !root.isPinned(dockButton.currentGroup));
-                                    }
-                                }
 
                                 MenuSeparator {
                                     visible: desktopActions.count > 0

@@ -16,15 +16,38 @@ MouseArea {
     objectName: "customise-zone-" + zoneName
     z: 10000
     visible: DesktopEditing.active
+    onVisibleChanged: if (!visible) appActions.visible = false
     preventStealing: true
     acceptedButtons: Qt.LeftButton | Qt.RightButton
     ContextMenu.menu: null
     ContextMenu.onRequested: position => {
         const id = entryAt(position.x, position.y)?.id;
         if (id && DesktopEditing.active) {
+            inspect(id);
+        }
+    }
+    function inspect(id) {
+        if (id.startsWith("app:")) {
+            appActions.widgetId = id;
+            appActions.anchorItem = entries.find(entry => entry.id === id)?.item || root;
+            appActions.visible = true;
+        } else {
             DesktopEditing.editor.selectedWidget = id;
             DesktopEditing.editor.optionsPage = "Widget";
         }
+    }
+    TrayMenu {
+        id: appActions
+        objectName: "customiseAppActions"
+        property string widgetId: ""
+        screen: root.window.screen
+        anchorWindow: root.window
+        actions: [
+            {text: "Unpin from dock", icon: "list-remove-symbolic", enabled: !!DesktopEditing.editor?.dockApplications.includes(widgetId),
+                triggered: () => DesktopEditing.editor.put(widgetId, "palette", 0)},
+            {text: "Customise…", icon: "preferences-system-symbolic", enabled: true,
+                triggered: () => { DesktopEditing.editor.selectedWidget = widgetId; DesktopEditing.editor.optionsPage = "Widget"; }}
+        ].map(action => Object.assign({isSeparator: false, hasChildren: false, checkState: Qt.Unchecked}, action))
     }
     cursorShape: pressedId ? Qt.ClosedHandCursor : Qt.ArrowCursor
     readonly property rect screenRect: {
@@ -67,7 +90,7 @@ MouseArea {
         const editor = DesktopEditing.editor;
         if (hadDrag) { nativeDrag.cancelPending(); pressedId = ""; return; }
         if (mouse.button === Qt.RightButton && pressedId) {
-            editor.selectedWidget = pressedId; editor.optionsPage = "Widget";
+            inspect(pressedId);
         } else editor.selectContainer(zoneName);
         pressedId = "";
     }

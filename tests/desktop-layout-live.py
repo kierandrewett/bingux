@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Apply an editor layout to the actual shell in a private compositor."""
 import os
+import argparse
 from pathlib import Path
 import shutil
 import tempfile
@@ -8,6 +9,9 @@ import subprocess
 import time
 from private_shell import run_reported_shell, stage_compositor_bridge
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--case', choices=('desktop-layout', 'dock-unpin'), default='desktop-layout')
+case = parser.parse_args().case
 repo = Path(__file__).resolve().parent.parent
 if not os.environ.get('WAYLAND_DISPLAY', '').startswith('gnoblin-gs-'):
     raise SystemExit('Run through Gnoblin\'s private test session')
@@ -16,7 +20,7 @@ with tempfile.TemporaryDirectory(prefix='bingux-layout-live-') as directory:
     for source in (repo / 'shell/bingux').iterdir():
         if source.suffix in ('.qml', '.js', '.py') or source.name == 'qmldir': shutil.copy2(source, fixture)
     shell = (fixture / 'shell.qml').read_text().replace('import QtQuick\n', 'import QtQuick\nimport QtQuick.Window\nimport QtTest\n', 1)
-    shell = shell.rstrip()[:-1] + (repo / 'tests/desktop-layout-live.inc.qml').read_text() + '\n}\n'
+    shell = shell.rstrip()[:-1] + (repo / ('tests/' + case + '-live.inc.qml')).read_text() + '\n}\n'
     (fixture / 'shell.qml').write_text(shell)
     for folder in ('icons', 'preview-assets'): shutil.copytree(repo / 'shell/bingux' / folder, fixture / folder)
     (fixture / 'bin').mkdir()
