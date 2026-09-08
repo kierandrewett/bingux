@@ -31,8 +31,9 @@ PanelWindow {
     property bool applying: false
     property var originalDesktop: ({})
     property bool originalDirty: false
+    property var originalChanges: ({})
     function cancel() {
-        if (applying) { settings.draft = Object.assign({}, settings.draft, {desktop: originalDesktop}); settings.dirty = originalDirty; }
+        if (applying) { settings.draft = Object.assign({}, settings.draft, {desktop: originalDesktop}); settings.dirty = originalDirty; settings.changedSettings = originalChanges; }
         applying = false; visible = false;
     }
     readonly property var zones: [leftZone, centerZone, rightZone, dockZone, sidebarZone]
@@ -40,6 +41,7 @@ PanelWindow {
     function open() {
         desktop = JSON.parse(JSON.stringify(settings.draft.desktop));
         originalDesktop = JSON.parse(JSON.stringify(desktop)); originalDirty = settings.dirty;
+        originalChanges = JSON.parse(JSON.stringify(settings.changedSettings));
         desktop.sidebarEdge = desktop.sidebarEdge || settings.currentSidebarEdge;
         layout = JSON.parse(JSON.stringify(desktop.layout || settings.currentLayout || DesktopLayout.defaults()));
         selectedWidget = ""; draggedId = ""; applying = false; tab = "Widgets";

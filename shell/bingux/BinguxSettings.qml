@@ -35,11 +35,13 @@ Window {
     property bool ready: false
     property string operation: ""
     property var submittedDraft: ({})
+    property var changedSettings: ({})
     readonly property bool busy: operation !== ""
     function update(section, key, value) {
         const next = JSON.parse(JSON.stringify(draft));
         next[section][key] = value;
         draft = next;
+        changedSettings = Object.assign({}, changedSettings, {[section]: Object.assign({}, changedSettings[section] || {}, {[key]: value})});
         dirty = true;
         status = "";
     }
@@ -52,7 +54,7 @@ Window {
     function save() {
         if (busy) return;
         update("search", "ai", aiEnabled ? {harness: selectedHarness, model: model.trim(), executable: executable.trim()} : null);
-        submittedDraft = JSON.parse(JSON.stringify(draft));
+        submittedDraft = JSON.parse(JSON.stringify(changedSettings));
         receivedReply = false;
         operation = "save";
         backend.command = helper.concat(["save"]);
@@ -77,6 +79,7 @@ Window {
                 if (result.error) { root.status = result.error; return; }
                 root.ready = true;
                 root.draft = result.data;
+                root.changedSettings = {};
                 root.dirty = false;
                 root.aiEnabled = !!result.data.search.ai;
                 root.selectedHarness = result.data.search.ai?.harness || "pi";

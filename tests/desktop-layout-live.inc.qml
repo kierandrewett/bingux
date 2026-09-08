@@ -54,6 +54,13 @@
             wait(400);
             binguxSettings.read(); tryCompare(binguxSettings, 'busy', false, 4000);
             compare(binguxSettings.draft.desktop.layout['top-left'][0], 'search');
+            // A Settings draft can outlive a change made directly in the dock.
+            BinguxPreferences.saveDesktop({dockApps: {pinnedApps: ['org.gnome.Nautilus'], order: ['org.gnome.Nautilus']}});
+            wait(300);
+            binguxSettings.update('previews', 'maxMegabytes', 5);
+            binguxSettings.save();
+            tryCompare(binguxSettings, 'busy', false, 4000);
+            compare(BinguxPreferences.data.desktop.dockApps.pinnedApps[0], 'org.gnome.Nautilus', 'Saving unrelated settings preserves new dock pins');
             const crowded = DesktopLayout.defaults();
             crowded['top-left'] = crowded['top-left'].concat(crowded['top-center'], crowded['top-right']);
             crowded['top-center'] = []; crowded['top-right'] = [];
