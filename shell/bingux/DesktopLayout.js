@@ -21,11 +21,17 @@ const layoutWidgets = [
     {id: "spring", label: "Flexible space", layoutItem: true, flexible: true}
 ];
 function isSpacing(id) { return /^(spacer|spring)(:[1-9][0-9]{0,3})?$/.test(id); }
-function freshSpacingId(layout, kind) {
+function freshInstanceId(layout, kind) {
     const used = Object.values(layout).reduce((items, values) => items.concat(values), []);
     for (let index = 1; index <= 9999; index++) if (!used.includes(kind + ":" + index)) return kind + ":" + index;
     return "";
 }
+const decorationWidgets = [
+    {id: "label", label: "Label", icon: "document-edit-symbolic", decoration: true},
+    {id: "icon", label: "Icon", icon: "starred-symbolic", decoration: true}
+];
+function isDecoration(id) { return /^(label|icon)(:[1-9][0-9]{0,3})?$/.test(id); }
+function isTemplate(id) { return ["spacer", "spring", "label", "icon"].includes(id); }
 const controlWidgets = [
     {id: "control-network", label: "Wi-Fi", icon: "network-wireless-symbolic"},
     {id: "control-bluetooth", label: "Bluetooth", icon: "bluetooth-active-symbolic"},
@@ -52,6 +58,7 @@ function defaults() {
 }
 function widget(id) {
     if (isSpacing(id)) return Object.assign({}, layoutWidgets.find(item => item.id === id.split(":")[0]), {id});
+    if (isDecoration(id)) return Object.assign({}, decorationWidgets.find(item => item.id === id.split(":")[0]), {id});
     return widgets.concat(controlWidgets).find(w => w.id === id);
 }
 function zone(layout, id) { return Object.keys(layout).find(key => layout[key].includes(id)) || ""; }
@@ -73,9 +80,9 @@ function move(layout, id, target, index) {
     if (!accepts(id, target)) return layout;
     if (target !== "palette" && !(target in layout)) return layout;
     if (target !== "sidebar" && id === layout.sidebar[0] && layout.sidebar.length === 1) return layout;
-    if (id === "spacer" || id === "spring") {
+    if (isTemplate(id)) {
         if (target === "palette") return layout;
-        id = freshSpacingId(layout, id);
+        id = freshInstanceId(layout, id);
         if (!id) return layout;
     }
     const next = {};

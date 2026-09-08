@@ -83,3 +83,19 @@ test("space palette items create independent instances and springs stay in the b
     assert.equal(layout.widget("spring:1").flexible, true);
     assert.equal(layout.widget("spring:unknown"), undefined);
 });
+
+test("labels and icons create independent movable instances", () => {
+    let current = layout.defaults();
+    current = layout.move(current, "label", "top-left", 0);
+    current = layout.move(current, "label", "dock", 0);
+    current = layout.move(current, "icon", "dock", 1);
+    assert.deepEqual(plain(current.dock), ["label:2", "icon:1"]);
+    assert.equal(current["top-left"][0], "label:1");
+    current = layout.move(current, "label:1", "dock", 1);
+    assert.deepEqual(plain(current.dock), ["label:2", "label:1", "icon:1"]);
+    assert.equal(layout.move(current, "icon:1", "sidebar", 0), current);
+    assert.equal(layout.widget("label:0"), undefined);
+    current = layout.move(current, "label:2", "palette", 0);
+    assert.equal(layout.zone(current, "label:2"), "");
+    assert.equal(layout.widget("icon:1").decoration, true);
+});

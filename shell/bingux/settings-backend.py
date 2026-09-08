@@ -115,7 +115,15 @@ def validate(data):
         seen = set()
         for zone, items in layout.items():
             allowed = panels if zone == 'sidebar' else widgets | controls
-            if not isinstance(items, list) or len(items) > 256 or any(not isinstance(item, str) or (item not in allowed and not (zone.startswith('top-') and re.fullmatch(r'(spacer|spring):[1-9][0-9]{0,3}', item))) or item in seen for item in items): raise ValueError('A widget can only be placed once in a compatible area.')
+            instance_kinds = 'spacer|spring|label|icon' if zone.startswith('top-') else 'label|icon' if zone == 'dock' else None
+            if not isinstance(items, list) or len(items) > 256:
+                raise ValueError('Invalid container widget list.')
+            for item in items:
+                if not isinstance(item, str):
+                    raise ValueError('Invalid widget identifier.')
+                instance = instance_kinds and re.fullmatch(rf'({instance_kinds}):[1-9][0-9]{{0,3}}', item)
+                if (item not in allowed and not instance) or item in seen:
+                    raise ValueError('A widget can only be placed once in a compatible area.')
             if len(items) != len(set(items)): raise ValueError('A widget can only be placed once.')
             seen.update(items)
         if not layout['sidebar']: raise ValueError('Keep at least one sidebar panel.')
