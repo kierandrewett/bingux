@@ -40,7 +40,7 @@ Item {
                     overflow, tray, notes, calendar, media, tasks, terminal, monitor: performance})[root.widgetId] || empty
         }
     }
-    Component { id: headerButton; IconButton { iconName: root.spec.icon || ""; label: root.spec.label || "" } }
+    Component { id: headerButton; IconButton { iconName: root.spec.icon || ""; label: root.spec.label || ""; presentation: root.face } }
     Component {
         id: headerGroup
         RowLayout {

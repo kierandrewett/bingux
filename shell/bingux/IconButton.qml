@@ -8,23 +8,31 @@ AbstractButton {
     required property string iconName
     required property string label
     property url imageSource: ""
+    property bool barStyle: false
+    property var presentation: null
+    readonly property bool customPresentation: !!presentation?.custom
+    readonly property string displayedLabel: presentation?.label || label
     property bool highlighted: false
-    implicitWidth: 32
+    implicitWidth: customPresentation ? Math.max(32, face.implicitWidth + Theme.gap * 2) : 32
     implicitHeight: 32
     hoverEnabled: true
-    Accessible.name: label
-    background: ControlCentreButtonSurface { control: root; selected: root.highlighted }
+    Accessible.name: displayedLabel
+    background: Item {
+        ControlCentreButtonSurface { anchors.fill: parent; visible: !root.barStyle; control: root; selected: root.highlighted }
+        BarControlSurface { visible: root.barStyle; hovered: root.hovered; pressed: root.down; selected: root.highlighted; focused: root.visualFocus }
+    }
     contentItem: Item {
         scale: root.down ? 0.88 : 1
         Behavior on scale { NumberAnimation { duration: Theme.reducedMotion ? 0 : 80; easing.type: Easing.OutCubic } }
-        SymbolicIcon { visible: avatar.status !== Image.Ready; anchors.centerIn: parent; implicitSize: 16; source: Quickshell.iconPath(root.iconName); color: root.enabled ? Theme.text : Theme.muted }
+        SymbolicIcon { visible: !root.customPresentation && avatar.status !== Image.Ready; anchors.centerIn: parent; implicitSize: 16; source: Quickshell.iconPath(root.iconName); color: root.enabled ? Theme.text : Theme.muted }
+        WidgetFace { id: face; anchors.centerIn: parent; visible: root.customPresentation; presentation: root.presentation; iconColor: root.enabled ? Theme.text : Theme.muted }
         ClippingRectangle {
             anchors.centerIn: parent
             width: 24; height: 24; radius: 12
-            visible: avatar.status === Image.Ready
+            visible: !root.customPresentation && avatar.status === Image.Ready
             color: "transparent"
-            Image { id: avatar; anchors.fill: parent; source: root.imageSource; fillMode: Image.PreserveAspectCrop; sourceSize.width: 48; sourceSize.height: 48 }
+            Image { id: avatar; objectName: "iconButtonImage"; anchors.fill: parent; source: root.imageSource; fillMode: Image.PreserveAspectCrop; sourceSize.width: 48; sourceSize.height: 48 }
         }
     }
-    ShellTooltip { parent: root; visible: root.visible && root.enabled && (root.hovered || root.visualFocus); text: root.label }
+    ShellTooltip { parent: root; visible: root.visible && root.enabled && (root.hovered || root.visualFocus); text: root.displayedLabel }
 }
