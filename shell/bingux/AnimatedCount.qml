@@ -5,6 +5,7 @@ Item {
     property int value: 1
     property var formatter: null
     property bool stepValues: true
+    property bool opticalCenter: false
     property alias font: current.font
     property color color: Theme.text
     property int displayedValue: value
@@ -35,7 +36,9 @@ Item {
     Text {
         id: current
         anchors.horizontalCenter: parent.horizontalCenter
-        y: (root.height - height) / 2 - root.direction * root.progress * root.height
+        y: (root.opticalCenter
+            ? (root.height - currentMetrics.tightBoundingRect.height) / 2 - baselineOffset - currentMetrics.tightBoundingRect.y
+            : (root.height - height) / 2) - root.direction * root.progress * root.height
         text: root.label(root.displayedValue)
         color: root.color
         opacity: 1 - root.progress
@@ -46,7 +49,9 @@ Item {
     }
     Text {
         anchors.horizontalCenter: parent.horizontalCenter
-        y: (root.height - height) / 2 + root.direction * (1 - root.progress) * root.height
+        y: (root.opticalCenter
+            ? (root.height - nextMetrics.tightBoundingRect.height) / 2 - baselineOffset - nextMetrics.tightBoundingRect.y
+            : (root.height - height) / 2) + root.direction * (1 - root.progress) * root.height
         text: root.label(root.nextValue)
         color: root.color
         opacity: root.progress

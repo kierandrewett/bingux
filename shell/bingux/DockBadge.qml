@@ -32,6 +32,9 @@ Rectangle {
         visible: !root.iconName
         value: Math.max(1, root.count)
         color: root.foreground
+        font.pixelSize: 13
+        font.weight: Font.Bold
+        opticalCenter: true
     }
     SymbolicIcon {
         anchors.centerIn: parent

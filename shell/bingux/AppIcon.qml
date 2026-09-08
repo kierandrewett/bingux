@@ -61,6 +61,6 @@ Item {
         shown: root.notificationCount > 0
         count: root.notificationCount
         color: Theme.notificationBadge
-        foreground: Theme.text
+        foreground: "#ffffff"
     }
 }

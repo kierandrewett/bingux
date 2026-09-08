@@ -74,7 +74,7 @@ QtObject {
     readonly property int mediaActionMotion: 180
     readonly property color recordingIndicator: "#c01c28"
     readonly property color privacyIndicator: "#ff7800"
-    readonly property color notificationBadge: "#c01c28"
+    readonly property color notificationBadge: "#e52f3c"
     readonly property int notificationWidth: 384
     readonly property int notificationPadding: 16
     readonly property int notificationRadius: 16
