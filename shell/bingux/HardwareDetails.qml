@@ -4,6 +4,7 @@ import QtQuick.Controls
 import QtQuick.Window
 import Quickshell.Io
 import Quickshell
+import "ProcessApplications.js" as ProcessApplications
 
 Item {
     id: root
@@ -84,17 +85,9 @@ Item {
     property var selectedProcesses: []
     readonly property var selectedProcess: selectedProcesses[0] || null
     property string actionMessage: ""
+    readonly property var applicationIndex: ProcessApplications.index(DesktopEntries.applications.values)
     function applicationFor(process) {
-        const names = [process.executable, process.name].filter(Boolean);
-        for (const name of names) {
-            const exact = DesktopEntries.byId(name) || DesktopEntries.byId(name + ".desktop");
-            if (exact) return exact;
-            const matches = DesktopEntries.applications.values.filter(entry =>
-                [entry.id, entry.name, entry.startupClass, String(entry.command?.[0] || "").split("/").pop()].some(value =>
-                    String(value || "").replace(/\.desktop$/i, "").toLowerCase() === name.toLowerCase()));
-            if (matches.length === 1) return matches[0];
-        }
-        return names.length ? DesktopEntries.heuristicLookup(names[0]) : null;
+        return ProcessApplications.lookup(process, applicationIndex, DesktopEntries);
     }
     function openProcessMenu(row, processes) {
         selectedProcesses = processes.map(process => Object.assign({}, process));

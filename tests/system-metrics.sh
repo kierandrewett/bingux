@@ -8,7 +8,7 @@ for component in "${components[@]}"; do
     cp "$repo_dir/shell/bingux/$component.qml" "$test_dir/"
     printf '%s 1.0 %s.qml\n' "$component" "$component" >> "$test_dir/qmldir"
 done
-cp "$repo_dir"/shell/bingux/{Theme,OsIcons}.qml "$repo_dir/shell/bingux/MetricsHistory.js" "$test_dir/"
+cp "$repo_dir"/shell/bingux/{Theme,OsIcons}.qml "$repo_dir/shell/bingux/MetricsHistory.js" "$repo_dir/shell/bingux/ProcessApplications.js" "$test_dir/"
 printf '%s\n' 'singleton Theme 1.0 Theme.qml' 'singleton OsIcons 1.0 OsIcons.qml' >> "$test_dir/qmldir"
 cp "$repo_dir/shell/bingux/process-action.py" "$repo_dir/shell/bingux/render-os-icons.py" "$test_dir/"
 cp "$repo_dir/tests/${1:-system-metrics}.qml" "$test_dir/shell.qml"

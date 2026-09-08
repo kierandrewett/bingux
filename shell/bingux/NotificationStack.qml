@@ -208,23 +208,31 @@ Flickable {
             groups.get(key).push(entry);
         }
         const entries = [];
-        groups.forEach(group => { for (const entry of group) entries.push(entry); });
+        const entryIds = new Set();
+        const depths = new Map();
+        groups.forEach(group => {
+            group.forEach((entry, depth) => {
+                entries.push(entry);
+                entryIds.add(entry.notification.id);
+                depths.set(entry, depth);
+            });
+        });
         for (let index = cards.count - 1; index >= 0; index -= 1) {
-            if (!entries.some(entry => entry.notification.id === cards.get(index).notificationId))
+            if (!entryIds.has(cards.get(index).notificationId))
                 cards.setProperty(index, "retiring", true);
         }
         let insertionIndex = 0;
         for (let index = 0; index < entries.length; index += 1) {
             if (collapseOnDismiss) {
                 while (insertionIndex < cards.count && cards.get(insertionIndex).retiring
-                    && !entries.some(entry => entry.notification.id === cards.get(insertionIndex).notificationId)) insertionIndex++;
+                    && !entryIds.has(cards.get(insertionIndex).notificationId)) insertionIndex++;
             }
             const modelIndex = collapseOnDismiss ? insertionIndex++ : index;
             const entry = entries[index];
             const key = appKey(entry);
             const group = groups.get(key);
             const roles = {notificationId: entry.notification.id, entryData: entry, retiring: false,
-                groupKey: key, groupCount: group.length, groupDepth: group.indexOf(entry), groupHead: group[0] === entry,
+                groupKey: key, groupCount: group.length, groupDepth: depths.get(entry), groupHead: group[0] === entry,
                 groupExpanded: expandedApps[key] === true};
             let existing = -1;
             for (let row = modelIndex; row < cards.count; row += 1) {
