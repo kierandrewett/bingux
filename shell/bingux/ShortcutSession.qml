@@ -8,6 +8,10 @@ QtObject {
     property var bindings: []
     property bool enabled: true
     property int boundCount: 0
+    property int sessionSerial: 0
+    property var capabilities: []
+    signal uiState(string name, var state)
+    signal uiCommand(string name, var command)
     property bool trackWindows: false
     property bool trackPrivacy: false
     signal privacySnapshot(var state)
@@ -26,13 +30,13 @@ QtObject {
     function requestInputAnchor() { send({op: "input-anchor"}); }
     function insertText(windowId, text) { send({op: "type-text", window: windowId, text: text}); }
     function requestPreview(id, width, height) { send({op: "preview", window: id, width: width, height: height}); }
-    function activateWindow(id) { send({op: "activate", window: id}); }
+    function activateWindow(id) { send({op: "activate", window: id, session: sessionSerial}); }
     function send(record) {
         if (!socket.connected) return;
         socket.write(JSON.stringify(record) + "\n");
         socket.flush();
     }
-    function end() { send({op: "end"}); }
+    function end() { send({op: "end", session: sessionSerial}); }
     function registerBindings() {
         boundCount = 0;
         send({op: "clear"});
@@ -47,6 +51,7 @@ QtObject {
         Component.onCompleted: connected = CompositorEnvironment.gnoblin
         onConnectedChanged: {
             root.boundCount = 0;
+            root.capabilities = [];
             if (!connected) { root.cancelled(); retry.restart(); }
         }
         onError: { root.cancelled(); retry.restart(); }
@@ -54,9 +59,11 @@ QtObject {
             onRead: function(data) {
                 try {
                     const record = JSON.parse(data);
-                    if (record.event === "hello") root.registerBindings();
+                    if (record.event === "hello") { root.capabilities = record.features || []; root.registerBindings(); }
+                    else if (record.event === "ui-state") root.uiState(record.name, record.state);
+                    else if (record.event === "ui-command") root.uiCommand(record.name, record.command);
                     else if (record.event === "bound") root.boundCount++;
-                    else if (record.event === "activated") root.activated(record.id, record.first, record.modifiers);
+                    else if (record.event === "activated") { root.sessionSerial = record.session || 0; root.activated(record.id, record.first, record.modifiers); }
                     else if (record.event === "key") root.keyPressed(record.key, record.modifiers);
                     else if (record.event === "released") root.released();
                     else if (record.event === "typed") root.textInserted(record.window);

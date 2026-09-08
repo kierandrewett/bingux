@@ -242,7 +242,8 @@ try:
     time.sleep(.7)
     wait_for(lambda s: s['ready'])
     key(56, False)
-    assert state()['focus'] == previous and not state()['visible'], 'Quickshell restart leaked the keyboard session'
+    wait_for(lambda s: s['focus'] != previous and not s['visible'])
+    assert not state()['visible'], 'Restarted UI must not retain the fallback gesture'
     config = Path(os.environ['XDG_CONFIG_HOME']) / 'bingux/switcher.json'
     config.parent.mkdir(parents=True, exist_ok=True)
     config.write_text('{"enabled":false}')

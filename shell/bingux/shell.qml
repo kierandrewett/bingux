@@ -119,21 +119,42 @@ ShellRoot {
         id: metrics
     }
 
-    SearchOverlay {
-        dockView: dock
-        onSettingsRequested: binguxSettings.visible = true
+    UiSession {
+        id: popouts
+        sessionName: "desktop"
+        state: {
+            const groups = {};
+            for (const entry of notificationState.allEntries) {
+                const key = JSON.stringify([entry.desktopEntry || "", entry.appName || ""]);
+                if (!groups[key]) groups[key] = {desktopEntry: entry.desktopEntry || "", appName: entry.appName || "", count: 0};
+                groups[key].count++;
+            }
+            return {pinnedApps: dock.pinnedApps, activeStreams: dock.activity.activeStreams,
+                notificationGroups: Object.values(groups)};
+        }
+        onCommandReceived: command => {
+            if (command.action === "settings") binguxSettings.visible = true;
+            else if (command.action === "pin" && typeof command.id === "string") {
+                const entry = dock.desktopEntryFor(dock.normaliseAppId(command.id));
+                if (entry) dock.setPinned({id: entry.id, desktopEntry: entry, windows: []}, command.pinned === true);
+            }
+        }
+    }
+    QtObject {
         id: searchOverlay
+        readonly property bool visible: popouts.states.search?.visible || false
         onVisibleChanged: if (visible) root.closePanelsExcept(searchOverlay)
+        function showSearch() { popouts.command("search", {action: "open"}); }
+        function closeSearch() { popouts.command("search", {action: "close"}); }
+    }
+    QtObject {
+        id: windowSwitcher
+        readonly property bool active: popouts.states.switcher?.visible || false
+        onActiveChanged: if (active) { root.closePanelsExcept(windowSwitcher); dock.closeMenus(); }
+        function close() { popouts.command("switcher", {action: "close"}); }
     }
 
     PrivacyState { id: privacySession }
-
-    WindowSwitcher {
-        id: windowSwitcher
-        activeStreams: dock.activity.activeStreams
-        notifications: notificationState.allEntries
-        onOpening: { root.closePanelsExcept(windowSwitcher); dock.closeMenus?.(); }
-    }
 
     CaptureTool {
         id: captureTool

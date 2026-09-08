@@ -242,6 +242,8 @@ PanelWindow {
         });
     }
 
+    function toggleSearch() { if (visible && !closing) closeSearch(); else showSearch(); }
+
     function showSearch() {
         browserFocus.cancel();
         webFocusOnClose = "";
@@ -570,14 +572,15 @@ PanelWindow {
 
     IpcHandler {
         target: "search"
-        function open(): void { root.showSearch(); }
-        function close(): void { root.closeSearch(); }
+        function toggle(): string { root.toggleSearch(); return JSON.stringify({ok: true, open: root.visible && !root.closing}); }
+        function open(): string { root.showSearch(); return JSON.stringify({ok: true, open: true}); }
+        function close(): string { root.closeSearch(); return JSON.stringify({ok: true, open: false}); }
         function query(text: string): void {
             root.showSearch();
             searchInput.text = text;
         }
         function move(delta: int): void { root.moveSelection(delta); }
-        function status(): string { return JSON.stringify({visible: root.visible, acceptingKeyboard: root.acceptingKeyboard, query: searchInput.text}); }
+        function status(): string { return JSON.stringify({open: root.visible && !root.closing, visible: root.visible, acceptingKeyboard: root.acceptingKeyboard, query: searchInput.text}); }
     }
 
     Connections {

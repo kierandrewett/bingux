@@ -5,7 +5,7 @@ import io
 from pathlib import Path
 import subprocess
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 spec = importlib.util.spec_from_file_location("binguxctl", Path(__file__).resolve().parents[1] / "packages/binguxctl/binguxctl.py")
 ctl = importlib.util.module_from_spec(spec)
@@ -13,6 +13,15 @@ spec.loader.exec_module(ctl)
 
 
 class ControlCommands(unittest.TestCase):
+    def test_popouts_use_independent_configs(self):
+        for target, filename in (("search", "SearchShell.qml"), ("switcher", "SwitcherShell.qml")):
+            for words, path in ((["--path", "/desktop/shell.qml"], "/desktop/" + filename),
+                                (["--config", "custom"], "/configs/quickshell/custom/" + filename)):
+                with patch.dict(ctl.os.environ, {"XDG_CONFIG_HOME": "/configs"}, clear=True), patch.object(ctl, "execute", return_value=0) as execute:
+                    self.assertEqual(ctl.main(["--quickshell", "qs", *words, target, "status"]), 0)
+                    self.assertEqual(execute.call_args.args[0], ["qs", "ipc", "--path", path, "call", "--", target, "status"])
+        self.assertEqual(self.route(["search", "toggle"]), ["call", "--", "search", "toggle"])
+
     def route(self, words):
         cli = ctl.parser()
         return ctl.invocation(cli.parse_args(words), cli)

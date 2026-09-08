@@ -1,9 +1,26 @@
 # Window switcher
 
-Bingux implements Alt+Tab in `shell/bingux/WindowSwitcher.qml`. Quickshell owns
-the UI, recent-window order, selection, and activation decisions. Gnoblin's
-generic compositor bridge provides window IDs and input sessions. Gnoblin has
-no separate switcher script.
+Bingux runs the chooser in `bingux-switcher-ui.service`, separate from the
+main desktop and `bingux-search-ui.service`. Neither shortcut waits for the
+main UI process. Both services restart independently when they exit.
+
+Gnoblin's `src/scripts/lib/window-switcher-fallback.js` keeps Alt+Tab and
+Super+Tab registered when no UI client is connected. It keeps a window list
+and selection for each gesture. On modifier release, a working UI can commit
+its selection immediately. If it does not respond within 80 ms, the script
+activates the selected window. With no UI connected, it activates immediately.
+Escape cancels. Messages carry a gesture serial, so a recovered UI cannot
+apply an old selection. Alt+Tab also asks search to close.
+
+The fallback runs in the compositor, outside every Bingux process. It requires
+a responsive compositor. It does not provide a visual chooser while the
+switcher UI is unavailable.
+
+Super invokes `SearchShell.qml` directly through `binguxctl`. While search is
+open, the compositor raises the existing top bar and dock buffers above
+fullscreen windows. It restores their order when search closes or disconnects.
+This also works when the desktop UI is paused. The compositor suppresses this
+reveal on the lock screen.
 
 - Alt+Tab selects the previous window. Further Tab presses move forward.
 - Alt+Shift+Tab moves backwards. Super+Tab and Super+Shift+Tab also work.
@@ -123,3 +140,13 @@ checks badge matching, delegate identity during window updates, tooltip content,
 rendered animation progress, and rapid carousel wraparound. The keyboard test
 also checks preview pixels and that a held chooser stops capturing. Repeat
 with `BINGUX_REDUCED_MOTION=1` to check the immediate presentation path.
+
+## Process isolation regression
+
+Run `tests/popout-isolation.py` as `GNOBLIN_TEST_DBUS_CLIENT` through Gnoblin's
+`scripts/run-gnome-shell.sh`. Set `GNOBLIN_PREFIX` to the patched installation
+and `QUICKSHELL_BIN` to its matching Quickshell runtime. The test uses a private
+compositor, private bus and copied QML configuration. It sends real Super and
+Alt+Tab events, pauses the desktop and popout processes, checks fullscreen
+stacking and restoration, and checks switching after all UI processes exit.
+`tests/window-switcher.py` covers the chooser's normal navigation and previews.

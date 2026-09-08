@@ -184,6 +184,7 @@ def invocation(args, cli):
         if not args.text: cli.error("search query requires text")
         call = ["search", "query", " ".join(args.text)]
     elif command == "search" and args.text: cli.error("query text requires search query")
+    elif command == "search": call = ["search", action]
     elif command == "dnd": call = ["shell", "dnd", action]
     elif command in ("settings", "search", "calendar", "controls", "metrics", "keyboard", "notifications"):
         call = ["shell", "panel", command, action]
@@ -242,6 +243,15 @@ def main(argv=None):
     args = cli.parse_args(argv)
     call = invocation(args, cli)
     path = args.path or (None if args.config else os.environ.get("BINGUX_CONFIG_PATH"))
+    target = args.target if args.command == "ipc" else args.command
+    if target in ("search", "switcher"):
+        # Invoke the companion directly, even when the desktop is frozen.
+        if path:
+            base = Path(path).expanduser()
+            if base.suffix == ".qml": base = base.parent
+        else:
+            base = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "quickshell" / (args.config or os.environ.get("BINGUX_CONFIG_NAME", "bingux"))
+        path = str(base / ("SearchShell.qml" if target == "search" else "SwitcherShell.qml"))
     selection = ["--path", path] if path else ["--config", args.config or os.environ.get("BINGUX_CONFIG_NAME", "bingux")]
     try:
         prefix = [args.quickshell, "ipc", *(["--any-display"] if args.any_display else []), *selection]

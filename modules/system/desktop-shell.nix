@@ -35,6 +35,20 @@ let
             readonly property string gnoblinCtlPath: "${lib.getExe' config.programs.gnoblin.package "gnoblinctl"}"
         }
     '';
+    shellEnvironment = [
+        "QT_QPA_PLATFORM=wayland"
+        "BINGUX_SETTINGS_HELPER=${lib.getExe settingsBackend}"
+        "BINGUX_PREVIEW_HELPER=${filePreview}/bin/bingux-file-preview"
+        "BINGUX_APP_LAUNCHER_HELPER=${desktopControls}/bin/bingux-launch-app"
+        "BINGUX_CONTROLS_HELPER=${desktopControls}/bin/bingux-controls"
+        "BINGUX_SESSION_INHIBIT=${pkgs.gnome-session}/bin/gnome-session-inhibit"
+        "BINGUX_ICON_HELPER=${iconRenderer}/bin/bingux-icon-renderer"
+        "BINGUX_AUDIO_METER=${audioMeter}/bin/bingux-audio-meter"
+        "BINGUX_CAPTURE_HELPER=${lib.getExe captureBackend}"
+        "BINGUX_CALENDAR_HELPER=${lib.getExe calendarBackend}"
+        "BINGUX_CARET_HELPER=${lib.getExe caretBackend}"
+        "QML_IMPORT_PATH=${pkgs.qt6.qtmultimedia}/lib/qt-6/qml:${textLayout}/lib/qt-6/qml${lib.optionalString cfg.sidebar.enable ":${terminalWidget}/lib/qt-6/qml"}"
+    ];
     # QuickShell resolves the root QML file to its store directory before it
     # resolves local component types. Put the generated profile settings file
     # in that same immutable directory instead of relying on a separate home
@@ -372,6 +386,7 @@ in
             # owns its lifecycle so a daemon restart cannot remove the other
             # daemon's socket.
             systemd.user.services = {
+                quickshell.Unit.Wants = [ "bingux-search-ui.service" "bingux-switcher-ui.service" ];
                 quickshell.Service.Type = lib.mkForce "dbus";
                 quickshell.Service.BusName = "org.freedesktop.Notifications";
                 quickshell.Service.Restart = lib.mkForce "always";
@@ -379,20 +394,30 @@ in
                 # User-systemd does not always import the session's Qt platform
                 # selection before graphical-session.target. Select Wayland
                 # explicitly so Qt does not attempt an unavailable X11 backend.
-                quickshell.Service.Environment = [
-                    "QT_QPA_PLATFORM=wayland"
-                    "BINGUX_SETTINGS_HELPER=${lib.getExe settingsBackend}"
-                    "BINGUX_PREVIEW_HELPER=${filePreview}/bin/bingux-file-preview"
-                    "BINGUX_APP_LAUNCHER_HELPER=${desktopControls}/bin/bingux-launch-app"
-                    "BINGUX_CONTROLS_HELPER=${desktopControls}/bin/bingux-controls"
-                    "BINGUX_SESSION_INHIBIT=${pkgs.gnome-session}/bin/gnome-session-inhibit"
-                    "BINGUX_ICON_HELPER=${iconRenderer}/bin/bingux-icon-renderer"
-                    "BINGUX_AUDIO_METER=${audioMeter}/bin/bingux-audio-meter"
-                    "BINGUX_CAPTURE_HELPER=${lib.getExe captureBackend}"
-                    "BINGUX_CALENDAR_HELPER=${lib.getExe calendarBackend}"
-                    "BINGUX_CARET_HELPER=${lib.getExe caretBackend}"
-                    "QML_IMPORT_PATH=${pkgs.qt6.qtmultimedia}/lib/qt-6/qml:${textLayout}/lib/qt-6/qml${lib.optionalString cfg.sidebar.enable ":${terminalWidget}/lib/qt-6/qml"}"
-                ];
+                quickshell.Service.Environment = shellEnvironment;
+
+                bingux-search-ui = {
+                    Unit = { Description = "Bingux search popout"; PartOf = [ cfg.systemdTarget ]; };
+                    Service = {
+                        ExecStart = "${lib.getExe cfg.package} --path ${shellSource}/SearchShell.qml --no-color";
+                        Environment = shellEnvironment;
+                        Restart = "always";
+                        RestartSec = 1;
+                        LimitCORE = 0;
+                    };
+                    Install.WantedBy = [ cfg.systemdTarget ];
+                };
+                bingux-switcher-ui = {
+                    Unit = { Description = "Bingux window switcher"; PartOf = [ cfg.systemdTarget ]; };
+                    Service = {
+                        ExecStart = "${lib.getExe cfg.package} --path ${shellSource}/SwitcherShell.qml --no-color";
+                        Environment = shellEnvironment;
+                        Restart = "always";
+                        RestartSec = 1;
+                        LimitCORE = 0;
+                    };
+                    Install.WantedBy = [ cfg.systemdTarget ];
+                };
 
                 bingux-runtime-dir = {
                     Unit = {
