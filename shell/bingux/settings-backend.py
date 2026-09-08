@@ -23,6 +23,8 @@ DEFAULTS = {'search': {'disabledProviders': [], 'ai': None, 'fileRoots': None, '
                         'containers': {}, 'widgetOptions': {}}}
 PROVIDERS = {'applications', 'files', 'calculation', 'conversions', 'web', 'web-shortcuts', 'external'}
 
+CONTROL_ACTIONS = {"control-account", "control-settings", "control-session", "control-lock"}
+
 CONTROL_GROUPS = {
     'control-centre': ['controls-header', 'controls-audio', 'control-divider', 'controls-tiles', 'control-media', 'control-customise'],
     'controls-header': ['control-account', 'control-header-space', 'control-battery', 'control-settings', 'control-session', 'control-lock'],
@@ -47,6 +49,18 @@ def validate_control_layout(layout):
             raise ValueError('A control-centre widget can only appear once in its group.')
 
 
+def validate_control_action_placement(desktop):
+    layout = desktop.get('layout')
+    if layout is None:
+        return
+    if not isinstance(layout, dict) or any(not isinstance(items, list) for items in layout.values()):
+        raise ValueError('Invalid desktop layout.')
+    actions = {item for items in layout.values() for item in items if isinstance(item, str)} & CONTROL_ACTIONS
+    grouped = desktop.get('controlLayout')
+    if actions and (grouped is None or actions & set(grouped['groups']['controls-header'])):
+        raise ValueError('A control action can only be placed in one container.')
+
+
 def config_path():
     return Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home() / '.config'))) / 'bingux/settings.json'
 
@@ -57,6 +71,7 @@ def read():
     if type(version) is not int or version not in (0, 1):
         raise ValueError('This desktop layout version is not supported.')
     validate_control_layout(data.get('desktop', {}).get('controlLayout'))
+    validate_control_action_placement(data.get('desktop', {}))
     return {key: DEFAULTS[key] | data.get(key, {}) for key in DEFAULTS}
 
 
@@ -141,7 +156,7 @@ def validate(data):
         if not isinstance(layout, dict) or set(layout) != zones: raise ValueError('Invalid desktop layout.')
         seen = set()
         for zone, items in layout.items():
-            allowed = panels if zone == 'sidebar' else widgets | controls
+            allowed = panels if zone == 'sidebar' else widgets | controls | CONTROL_ACTIONS
             instance_kinds = 'spacer|spring|label|icon' if zone.startswith('top-') else 'label|icon' if zone == 'dock' else None
             if not isinstance(items, list) or len(items) > 256:
                 raise ValueError('Invalid container widget list.')
@@ -154,6 +169,7 @@ def validate(data):
             if len(items) != len(set(items)): raise ValueError('A widget can only be placed once.')
             seen.update(items)
         if not layout['sidebar']: raise ValueError('Keep at least one sidebar panel.')
+        validate_control_action_placement(desktop)
         if seen & controls and (control_order is None or any('control-' + name in seen for name in control_order)):
             raise ValueError('A control can only be placed in one container.')
     ai = search['ai']

@@ -50,3 +50,12 @@ test('every native group member has one palette entry and its original group', (
         }
     }
 });
+
+test('action placement rejects duplicate ownership after loading settings', () => {
+    const desktop = {controlLayout: model.defaults(), layout: {dock: ["control-settings"]}};
+    assert.equal(model.validPlacement(desktop), false);
+    desktop.controlLayout = model.move(desktop.controlLayout, "controls-header", "control-settings", -1);
+    assert.equal(model.validPlacement(desktop), true);
+    desktop.controlLayout = null;
+    assert.equal(model.validPlacement(desktop), false);
+});

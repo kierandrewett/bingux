@@ -68,6 +68,7 @@ Singleton {
                 const incoming = JSON.parse(text());
                 if (![0, 1].includes(incoming.desktop?.layoutVersion || 0)) throw new Error("This desktop layout version is not supported.");
                 if (incoming.desktop?.controlLayout && !ControlLayout.valid(incoming.desktop.controlLayout)) throw new Error("This control-centre layout is not supported.");
+                if (!ControlLayout.validPlacement(incoming.desktop || {})) throw new Error("A control action can only be placed in one container.");
                 root.data = {search: Object.assign({}, root.data.search, incoming.search || {}),
                     previews: Object.assign({}, root.data.previews, incoming.previews || {}),
                     desktop: Object.assign({}, root.data.desktop, incoming.desktop || {}, writer.running ? writer.submitted || {} : {}, root.pendingDesktop || {})};

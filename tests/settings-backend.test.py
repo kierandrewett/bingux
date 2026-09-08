@@ -1,5 +1,6 @@
 import copy
 import importlib.util
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -142,6 +143,25 @@ class SettingsTests(unittest.TestCase):
         settings.write({'desktop': {'controlLayout': custom}})
         self.assertEqual(settings.import_layout({})['desktop']['controlLayout'], custom)
         self.assertEqual(backup.read_bytes(), previous)
+
+    def test_moved_control_actions_keep_one_saved_owner(self):
+        layout = {'top-left': [], 'top-center': [], 'top-right': [], 'dock': [], 'sidebar': ['notes']}
+        groups = settings.native_control_layout()
+        settings.write({'desktop': {'layout': layout, 'controlLayout': groups}})
+        for action in settings.CONTROL_ACTIONS:
+            moved = copy.deepcopy(layout); moved['dock'] = [action]
+            before = settings.config_path().read_bytes()
+            with self.assertRaises(ValueError): settings.write({'desktop': {'layout': moved}})
+            self.assertEqual(settings.config_path().read_bytes(), before)
+            owned = copy.deepcopy(groups); owned['groups']['controls-header'].remove(action)
+            settings.write({'desktop': {'layout': moved, 'controlLayout': owned}})
+            self.assertEqual(settings.read()['desktop']['layout']['dock'], [action])
+            valid = settings.config_path().read_bytes()
+            invalid = settings.read(); invalid['desktop']['controlLayout'] = groups
+            settings.config_path().write_text(json.dumps(invalid))
+            with self.assertRaises(ValueError): settings.read()
+            settings.config_path().write_bytes(valid)
+            settings.write({'desktop': {'layout': layout, 'controlLayout': groups}})
 
     def test_control_group_validation_preserves_the_last_saved_layout(self):
         settings.write({'desktop': {'controlLayout': settings.native_control_layout()}})

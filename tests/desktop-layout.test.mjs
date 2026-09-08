@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import test from "node:test";
-const layout = vm.createContext({});
-vm.runInContext(readFileSync(new URL("../shell/bingux/DesktopLayout.js", import.meta.url), "utf8"), layout);
+const controls = vm.createContext({});
+vm.runInContext(readFileSync(new URL("../shell/bingux/ControlLayout.js", import.meta.url), "utf8"), controls);
+const layout = vm.createContext({ControlLayout: controls});
+vm.runInContext(readFileSync(new URL("../shell/bingux/DesktopLayout.js", import.meta.url), "utf8").replace(/^\.import[^\n]+\n/, ""), layout);
 const plain = value => JSON.parse(JSON.stringify(value));
 test("moving widgets preserves other placements and never duplicates a widget", () => {
     const original = layout.defaults();
@@ -98,4 +100,17 @@ test("labels and icons create independent movable instances", () => {
     current = layout.move(current, "label:2", "palette", 0);
     assert.equal(layout.zone(current, "label:2"), "");
     assert.equal(layout.widget("icon:1").decoration, true);
+});
+
+test("native action buttons can move through bar and dock without duplicate placements", () => {
+    for (const id of ["control-account", "control-settings", "control-session", "control-lock"]) {
+        let current = layout.defaults();
+        for (const zone of ["top-left", "top-center", "top-right", "dock", "palette"]) {
+            assert.ok(layout.accepts(id, zone));
+            current = layout.move(current, id, zone, 0);
+            assert.equal(Object.values(current).flat().filter(value => value === id).length, zone === "palette" ? 0 : 1);
+            assert.equal(layout.zone(current, id), zone === "palette" ? "" : zone);
+        }
+        assert.equal(layout.accepts(id, "sidebar"), false);
+    }
 });
