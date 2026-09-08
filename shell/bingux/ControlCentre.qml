@@ -117,7 +117,8 @@ ShellPopup {
     popupWidth: Theme.notificationWidth + contentPadding * 2
     property real dockSafeInset: Theme.dockExclusiveHeight
     readonly property real dockSafeBottom: height - dockSafeInset - Theme.gap
-    readonly property real maximumPopupHeight: Math.max(0, Math.min(height * 0.8, anchorAbove ? anchorTop - Theme.barHeight - Theme.gap : dockSafeBottom - belowAnchorY))
+    readonly property real editorTop: Theme.barHeight + 40 + (DesktopEditing.editor?.topInset || 0)
+    readonly property real maximumPopupHeight: Math.max(0, Math.min(height * 0.8, DesktopEditing.active ? dockSafeBottom - editorTop : anchorAbove ? anchorTop - Theme.barHeight - Theme.gap : dockSafeBottom - belowAnchorY))
     property real controlsHeight: Math.min(detailOpen ? activeDetailView.implicitHeight : controls.implicitHeight,
         Math.max(0, maximumPopupHeight - contentPadding * 2))
     Behavior on controlsHeight {
@@ -130,7 +131,7 @@ ShellPopup {
     surfaceColor: Theme.shellSurface
     preferredX: DesktopEditing.active ? width - popupWidth - DesktopEditing.editor.rightInset - 24 : anchorItem ? anchorPosition.x - popupWidth : width - popupWidth - Theme.padding
 
-    preferredY: DesktopEditing.active ? Theme.barHeight + 40 + DesktopEditing.editor.topInset : anchorItem ? (anchorAbove ? anchorTop - popupHeight - Theme.gap : anchorPosition.y + Theme.gap) : Theme.barHeight + Theme.gap
+    preferredY: DesktopEditing.active ? editorTop : anchorItem ? (anchorAbove ? anchorTop - popupHeight - Theme.gap : anchorPosition.y + Theme.gap) : Theme.barHeight + Theme.gap
     dismissOnOutsideClick: !DesktopEditing.active
     keyboardInteractive: !DesktopEditing.active
     NativeEditSurface {
