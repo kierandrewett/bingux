@@ -9,9 +9,11 @@ AbstractButton {
     required property string label
     property url imageSource: ""
     property bool barStyle: false
+    property var barWindow: null
     property var presentation: null
     readonly property bool customPresentation: !!presentation?.custom
     readonly property string displayedLabel: presentation?.label || label
+    property string tooltipText: displayedLabel
     property bool highlighted: false
     implicitWidth: customPresentation ? Math.max(32, face.implicitWidth + Theme.gap * 2) : 32
     implicitHeight: 32
@@ -34,5 +36,6 @@ AbstractButton {
             Image { id: avatar; objectName: "iconButtonImage"; anchors.fill: parent; source: root.imageSource; fillMode: Image.PreserveAspectCrop; sourceSize.width: 48; sourceSize.height: 48 }
         }
     }
-    ShellTooltip { parent: root; visible: root.visible && root.enabled && (root.hovered || root.visualFocus); text: root.displayedLabel }
+    BarTooltip { objectName: "iconButtonBarTooltip"; anchorItem: root; barWindow: root.barWindow; requested: root.barStyle && root.visible && root.enabled && (root.hovered || root.visualFocus); text: root.tooltipText }
+    ShellTooltip { parent: root; visible: !root.barStyle && root.visible && root.enabled && (root.hovered || root.visualFocus); text: root.tooltipText }
 }

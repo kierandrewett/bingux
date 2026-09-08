@@ -148,12 +148,14 @@ class SettingsTests(unittest.TestCase):
         layout = {'top-left': [], 'top-center': [], 'top-right': [], 'dock': [], 'sidebar': ['notes']}
         groups = settings.native_control_layout()
         settings.write({'desktop': {'layout': layout, 'controlLayout': groups}})
-        for action in settings.CONTROL_ACTIONS:
+        for action in settings.PORTABLE_CONTROLS:
             moved = copy.deepcopy(layout); moved['dock'] = [action]
             before = settings.config_path().read_bytes()
             with self.assertRaises(ValueError): settings.write({'desktop': {'layout': moved}})
             self.assertEqual(settings.config_path().read_bytes(), before)
-            owned = copy.deepcopy(groups); owned['groups']['controls-header'].remove(action)
+            owned = copy.deepcopy(groups)
+            group = next(name for name, ids in settings.CONTROL_GROUPS.items() if action in ids)
+            owned['groups'][group].remove(action)
             settings.write({'desktop': {'layout': moved, 'controlLayout': owned}})
             self.assertEqual(settings.read()['desktop']['layout']['dock'], [action])
             valid = settings.config_path().read_bytes()

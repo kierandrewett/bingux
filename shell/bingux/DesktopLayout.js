@@ -61,7 +61,7 @@ function defaults() {
 function widget(id) {
     if (isSpacing(id)) return Object.assign({}, layoutWidgets.find(item => item.id === id.split(":")[0]), {id});
     if (isDecoration(id)) return Object.assign({}, decorationWidgets.find(item => item.id === id.split(":")[0]), {id});
-    return widgets.concat(controlWidgets).find(w => w.id === id) || (ControlLayout.isAction(id) ? ControlLayout.widget(id) : undefined);
+    return widgets.concat(controlWidgets).find(w => w.id === id) || (ControlLayout.isPortable(id) ? ControlLayout.widget(id) : undefined);
 }
 function zone(layout, id) { return Object.keys(layout).find(key => layout[key].includes(id)) || ""; }
 // A drop is positioned against visible neighbours, but saved orders include hidden widgets.

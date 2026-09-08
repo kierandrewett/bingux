@@ -51,10 +51,12 @@ function groupFor(id) { return Object.keys(defaults().groups).find(group => item
 
 function isAction(id) { return widget(id)?.action === true; }
 
+function isPortable(id) { return isAction(id) || audio.includes(id); }
+
 function validPlacement(desktop) {
     if (!desktop.layout) return true;
     const lists = Object.values(desktop.layout);
     if (!lists.every(items => Array.isArray(items))) return false;
-    const placed = lists.reduce((all, items) => all.concat(items), []).filter(isAction);
-    return !placed.length || (!!desktop.controlLayout && placed.every(id => !contains(desktop.controlLayout, "controls-header", id)));
+    const placed = lists.reduce((all, items) => all.concat(items), []).filter(isPortable);
+    return !placed.length || (!!desktop.controlLayout && placed.every(id => !contains(desktop.controlLayout, groupFor(id), id)));
 }

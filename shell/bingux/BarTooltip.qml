@@ -30,7 +30,9 @@ Scope {
     }
     function showTooltip() {
         root.detectedReorderable = root.detectReorderable();
-        const point = root.anchorItem.mapToGlobal(root.anchorItem.width / 2, root.anchorItem.height);
+        const point = root.barWindow
+            ? DesktopEditing.point(root.anchorItem, root.barWindow, root.anchorItem.width / 2, root.anchorItem.height)
+            : root.anchorItem.mapToGlobal(root.anchorItem.width / 2, root.anchorItem.height);
         root.centreX = point.x;
         root.bottomY = point.y;
         root.shown = root.requested && root.text !== "";
@@ -43,13 +45,15 @@ Scope {
     PanelWindow {
         id: popup
         visible: bubble.presented
-        screen: root.barWindow.screen
+        screen: root.barWindow?.screen || Quickshell.screens[0]
         implicitWidth: bubble.implicitWidth
         implicitHeight: bubble.implicitHeight
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         anchors { top: true; left: true }
-        margins.top: root.bottomY + Theme.gap
+        margins.top: root.barWindow?.anchors.bottom && !root.barWindow?.anchors.top
+            ? Math.max(0, root.bottomY - root.anchorItem.height - height - Theme.gap)
+            : root.bottomY + Theme.gap
         margins.left: Math.max(Theme.gap, Math.min(root.centreX - width / 2, (screen ? screen.width : 1920) - width - Theme.gap))
         mask: Region {}
         WlrLayershell.layer: WlrLayer.Overlay

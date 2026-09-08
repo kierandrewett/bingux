@@ -2,11 +2,14 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-ColumnLayout {
+Item {
     id: level
     required property var node
     required property string label
     required property string iconName
+    property bool barLayout: false
+    property var barWindow: null
+    property var presentation: null
     property bool navigation: false
     property string navigationObjectName: ""
     property string muteObjectName: "audioLevelMute"
@@ -15,16 +18,25 @@ ColumnLayout {
     property real wheelStep: 0.05
     signal devicesRequested(var trigger)
     readonly property bool available: node !== null && node.ready && node.audio !== null
+    readonly property string muteIconName: available && node.audio.muted ? (label === "Microphone" ? "microphone-sensitivity-muted-symbolic" : "audio-volume-muted-symbolic") : iconName
     Layout.fillWidth: true
-    spacing: 6
+    implicitWidth: audioRow.implicitWidth
+    implicitHeight: audioRow.implicitHeight
     RowLayout {
-        Layout.fillWidth: true
+        id: audioRow
+        anchors.fill: parent
         spacing: Theme.gap
         IconButton {
             objectName: level.muteObjectName
+            barStyle: level.barLayout
+            barWindow: level.barWindow
+            implicitHeight: level.barLayout ? Theme.barHeight : 32
+            presentation: level.presentation
             enabled: level.available
             label: (level.available && level.node.audio.muted ? "Unmute " : "Mute ") + level.label.toLowerCase()
-            iconName: level.available && level.node.audio.muted ? (level.label === "Microphone" ? "microphone-sensitivity-muted-symbolic" : "audio-volume-muted-symbolic") : level.iconName
+            iconName: level.muteIconName
+            Accessible.name: label
+            tooltipText: label
             highlighted: level.available && level.node.audio.muted
             onClicked: level.node.audio.muted = !level.node.audio.muted
         }
@@ -34,7 +46,8 @@ ColumnLayout {
             muted: level.available && level.node.audio.muted
             objectName: level.sliderObjectName
             Layout.fillWidth: true
-            implicitHeight: Theme.sliderControlHeight
+            implicitHeight: level.barLayout ? Theme.barHeight : Theme.sliderControlHeight
+            Layout.minimumWidth: level.barLayout ? 100 : 0
             enabled: level.available
             from: 0; to: level.maximum; stepSize: 0.05
             snapMode: Slider.SnapAlways
@@ -84,6 +97,9 @@ ColumnLayout {
         }
         IconButton {
             objectName: level.navigationObjectName
+            barStyle: level.barLayout
+            barWindow: level.barWindow
+            implicitHeight: level.barLayout ? Theme.barHeight : 32
             visible: level.navigation
             iconName: "go-next-symbolic"
             label: level.label === "Microphone" ? "Input devices" : "Output devices"

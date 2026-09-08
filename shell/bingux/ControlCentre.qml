@@ -22,12 +22,11 @@ ShellPopup {
     property var actionWidgets: []
     readonly property var groupedEntries: [
         {id: "control-header-space", item: headerSpace}, {id: "control-battery", item: batteryControl},
-        {id: "control-volume", item: outputControl}, {id: "control-microphone", item: inputControl},
         {id: "control-media", item: mediaControl}, {id: "control-divider", item: dividerControl},
         {id: "control-customise", item: customiseControl}, {id: "controls-header", item: headerControls},
         {id: "controls-audio", item: audioRows}, {id: "controls-tiles", item: quickRows}
     ]
-    readonly property var movableWidgets: [networkWidget, bluetoothWidget, vpnWidget, dndWidget, nightLightWidget, powerWidget, awakeWidget].concat(actionWidgets)
+    readonly property var movableWidgets: [networkWidget, bluetoothWidget, vpnWidget, dndWidget, nightLightWidget, powerWidget, awakeWidget, outputControl, inputControl].concat(actionWidgets)
     component ActionWidget: IconButton {
         id: action
         required property string widgetId
@@ -38,11 +37,27 @@ ShellPopup {
         Layout.column: barLayout ? root.widgetLayout.controlColumn(action) : root.groupPosition("controls-header", widgetId)
         Layout.row: barLayout ? root.widgetLayout.controlRow(action) : 0
         barStyle: barLayout
+        barWindow: root.widgetLayout ? root.widgetLayout.windowFor(action) : root.nativeWindow
         implicitHeight: barLayout ? Theme.barHeight : 32
         presentation: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, container || "control-centre", label, iconName, true, false)
         WidgetEditHandle { control: action; widgetId: action.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
         Component.onCompleted: root.actionWidgets = root.actionWidgets.concat([action])
         Component.onDestruction: root.actionWidgets = root.actionWidgets.filter(item => item !== action)
+    }
+    component AudioWidget: AudioLevel {
+        id: audio
+        barWindow: root.widgetLayout ? root.widgetLayout.windowFor(audio) : root.nativeWindow
+        required property string widgetId
+        readonly property string container: DesktopLayout.zone(DesktopEditing.desktop.layout || {}, widgetId)
+        barLayout: root.widgetLayout !== null && container !== ""
+        parent: barLayout ? root.widgetLayout.hostFor(audio) : audioRows
+        visible: barLayout || root.groupPosition("controls-audio", widgetId) >= 0
+        Layout.fillWidth: !barLayout
+        Layout.preferredWidth: barLayout ? implicitWidth : -1
+        Layout.row: barLayout ? root.widgetLayout.controlRow(audio) : root.groupPosition("controls-audio", widgetId)
+        Layout.column: barLayout ? root.widgetLayout.controlColumn(audio) : 0
+        presentation: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, container || "control-centre", label, muteIconName, true, false)
+        WidgetEditHandle { control: audio; widgetId: audio.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
     }
     component QuickWidget: ControlRow {
         id: quick
@@ -268,11 +283,10 @@ ShellPopup {
             columns: 1
             rowSpacing: 12
             columnSpacing: 0
-            AudioLevel {
+            AudioWidget {
+                widgetId: "control-volume"
                 id: outputControl
                 objectName: "controlOutputRow"
-                Layout.row: root.groupPosition("controls-audio", "control-volume")
-                visible: root.groupPosition("controls-audio", "control-volume") >= 0
                 node: root.indicators.audioSink || null
                 label: "Volume"
                 iconName: root.indicators.audioIconName()
@@ -281,13 +295,12 @@ ShellPopup {
                 navigationObjectName: "controlSoundDetails"
                 muteObjectName: "controlMute"
                 sliderObjectName: "controlVolume"
-                onDevicesRequested: trigger => root.openDetail("audio", trigger, "output")
+                onDevicesRequested: trigger => root.openDetail("audio", outputControl.barLayout ? outputControl : trigger, "output")
             }
-            AudioLevel {
+            AudioWidget {
+                widgetId: "control-microphone"
                 id: inputControl
                 objectName: "controlInputRow"
-                Layout.row: root.groupPosition("controls-audio", "control-microphone")
-                visible: root.groupPosition("controls-audio", "control-microphone") >= 0
                 node: root.microphone
                 label: "Microphone"
                 iconName: "audio-input-microphone-symbolic"
@@ -295,7 +308,7 @@ ShellPopup {
                 navigationObjectName: "controlInputDetails"
                 muteObjectName: "controlMicrophoneQuick"
                 sliderObjectName: "controlMicrophoneVolume"
-                onDevicesRequested: trigger => root.openDetail("audio", trigger, "input")
+                onDevicesRequested: trigger => root.openDetail("audio", inputControl.barLayout ? inputControl : trigger, "input")
             }
         }
         Rectangle {

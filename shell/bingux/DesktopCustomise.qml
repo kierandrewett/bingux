@@ -149,7 +149,7 @@ Scope {
     readonly property var containerChoices: [{id: "top-left", label: "Top left"}, {id: "top-center", label: "Top centre"}, {id: "top-right", label: "Top right"}, {id: "dock", label: "Dock"}, {id: "sidebar", label: "Sidebar"}, {id: "control-centre", label: "Control centre"}]
     readonly property var iconChoices: ["system-search-symbolic", "preferences-system-symbolic", "x-office-calendar-symbolic", "preferences-system-notifications-symbolic", "computer-symbolic", "input-keyboard-symbolic", "view-more-symbolic", "microphone-sensitivity-high-symbolic", "media-record-symbolic", "utilities-terminal-symbolic", "accessories-text-editor-symbolic", "applications-multimedia-symbolic", "view-list-symbolic", "network-wireless-symbolic", "bluetooth-active-symbolic", "network-vpn-symbolic", "notifications-disabled-symbolic", "night-light-symbolic", "power-profile-balanced-symbolic", "display-brightness-symbolic", "audio-volume-high-symbolic", "audio-input-microphone-symbolic", "system-lock-screen-symbolic", "avatar-default-symbolic", "starred-symbolic", "user-home-symbolic", "folder-symbolic", "web-browser-symbolic", "mail-unread-symbolic", "camera-photo-symbolic", "view-pin-symbolic", "document-edit-symbolic"]
     property string selectedWidget: ""
-    readonly property bool appearanceEditable: !DesktopLayout.isSpacing(selectedWidget) && (!ControlLayout.groupFor(selectedWidget) || ControlLayout.isAction(selectedWidget))
+    readonly property bool appearanceEditable: !DesktopLayout.isSpacing(selectedWidget) && (!ControlLayout.groupFor(selectedWidget) || ControlLayout.isPortable(selectedWidget))
     property url dragImage: ""
     property point dragHotSpot: Qt.point(0, 0)
     property size dragSize: Qt.size(0, 0)
@@ -217,7 +217,7 @@ Scope {
         return zone === "dock" && id.startsWith("app:") ? dockApplications : layout[zone] || [];
     }
     function accepts(id, target) {
-        if (ControlLayout.groupFor(id) && !ControlLayout.isAction(id)) return ["control-centre", "palette"].includes(target);
+        if (ControlLayout.groupFor(id) && !ControlLayout.isPortable(id)) return ["control-centre", "palette"].includes(target);
         return id.startsWith("app:") ? ["dock-apps", "dock", "palette"].includes(target) : DesktopLayout.accepts(id, target);
     }
     function open() {
@@ -250,7 +250,7 @@ Scope {
             if (target === "control-centre" && group !== "control-centre" && !ControlLayout.contains(next, "control-centre", group))
                 next = ControlLayout.move(next, "control-centre", group, ControlLayout.position(null, "control-centre", group));
             change("controlLayout", next);
-            if (ControlLayout.isAction(id)) {
+            if (ControlLayout.isPortable(id)) {
                 layout = DesktopLayout.move(layout, id, target === "control-centre" ? "palette" : target, index);
                 if (target === "dock") change("dock", true);
             }

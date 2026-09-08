@@ -59,3 +59,12 @@ test('action placement rejects duplicate ownership after loading settings', () =
     desktop.controlLayout = null;
     assert.equal(model.validPlacement(desktop), false);
 });
+
+test('audio placement rejects simultaneous native and external ownership', () => {
+    for (const id of ['control-volume', 'control-microphone']) {
+        const desktop = {controlLayout: model.defaults(), layout: {'top-left': [id]}};
+        assert.equal(model.validPlacement(desktop), false);
+        desktop.controlLayout = model.move(desktop.controlLayout, model.groupFor(id), id, -1);
+        assert.equal(model.validPlacement(desktop), true);
+    }
+});

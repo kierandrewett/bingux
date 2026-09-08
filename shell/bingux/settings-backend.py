@@ -25,6 +25,8 @@ PROVIDERS = {'applications', 'files', 'calculation', 'conversions', 'web', 'web-
 
 CONTROL_ACTIONS = {"control-account", "control-settings", "control-session", "control-lock"}
 
+PORTABLE_CONTROLS = CONTROL_ACTIONS | {"control-volume", "control-microphone"}
+
 CONTROL_GROUPS = {
     'control-centre': ['controls-header', 'controls-audio', 'control-divider', 'controls-tiles', 'control-media', 'control-customise'],
     'controls-header': ['control-account', 'control-header-space', 'control-battery', 'control-settings', 'control-session', 'control-lock'],
@@ -55,10 +57,10 @@ def validate_control_action_placement(desktop):
         return
     if not isinstance(layout, dict) or any(not isinstance(items, list) for items in layout.values()):
         raise ValueError('Invalid desktop layout.')
-    actions = {item for items in layout.values() for item in items if isinstance(item, str)} & CONTROL_ACTIONS
+    actions = {item for items in layout.values() for item in items if isinstance(item, str)} & PORTABLE_CONTROLS
     grouped = desktop.get('controlLayout')
-    if actions and (grouped is None or actions & set(grouped['groups']['controls-header'])):
-        raise ValueError('A control action can only be placed in one container.')
+    if actions and (grouped is None or actions & {item for items in grouped['groups'].values() for item in items}):
+        raise ValueError('A control widget can only be placed in one container.')
 
 
 def config_path():
@@ -156,7 +158,7 @@ def validate(data):
         if not isinstance(layout, dict) or set(layout) != zones: raise ValueError('Invalid desktop layout.')
         seen = set()
         for zone, items in layout.items():
-            allowed = panels if zone == 'sidebar' else widgets | controls | CONTROL_ACTIONS
+            allowed = panels if zone == 'sidebar' else widgets | controls | PORTABLE_CONTROLS
             instance_kinds = 'spacer|spring|label|icon' if zone.startswith('top-') else 'label|icon' if zone == 'dock' else None
             if not isinstance(items, list) or len(items) > 256:
                 raise ValueError('Invalid container widget list.')
