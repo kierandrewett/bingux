@@ -8,8 +8,20 @@ PanelWindow {
     property real centreX: screen ? screen.width / 2 : 0
     // Distance from the screen bottom to the dock's actual top edge.
     property real anchorBottom: Theme.dockHeight + Theme.padding
-    implicitWidth: surface.implicitWidth
-    implicitHeight: surface.implicitHeight
+    // Measure the next label independently of the currently configured window.
+    // Keep a stable transparent envelope so a compositor cannot scale an old
+    // buffer during a width configure. Only the bubble inside changes width.
+    implicitWidth: measurement.maximumWidth
+    implicitHeight: measurement.implicitHeight
+    // Keep the old content until any multiline height change is configured.
+    property string presentedText: ""
+    function presentWhenSized() {
+        if (width === implicitWidth && height === implicitHeight)
+            presentedText = text;
+    }
+    onTextChanged: Qt.callLater(presentWhenSized)
+    onWidthChanged: Qt.callLater(presentWhenSized)
+    onHeightChanged: Qt.callLater(presentWhenSized)
     visible: false
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
@@ -21,9 +33,21 @@ PanelWindow {
     margins.left: Math.max(Theme.gap, Math.min(centreX - width / 2, (screen ? screen.width : 1920) - width - Theme.gap))
     mask: Region {}
     TooltipBubble {
-        id: surface
-        anchors.fill: parent
+        id: measurement
+        visible: false
         text: root.text
+        width: implicitWidth
+        onImplicitWidthChanged: Qt.callLater(root.presentWhenSized)
+        onImplicitHeightChanged: Qt.callLater(root.presentWhenSized)
+    }
+    TooltipBubble {
+        id: surface
+        x: Math.max(0, Math.min(root.centreX - root.margins.left - width / 2,
+            parent.width - width))
+        anchors.bottom: parent.bottom
+        width: implicitWidth
+        height: implicitHeight
+        text: root.presentedText
         opacity: root.visible ? 1 : 0
 
         Behavior on opacity {
