@@ -4,10 +4,35 @@ import QtQuick.Controls
 import Quickshell
 import Quickshell.Bluetooth
 import Quickshell.Services.Mpris
+import "DesktopLayout.js" as DesktopLayout
 
 ShellPopup {
     id: root
     required property var indicators
+    readonly property var widgetOrder: BinguxPreferences.data.desktop.controlOrder || DesktopLayout.controlOrder()
+    function controlVisible(name) {
+        if (name === "awake" && services.keepAwake) return true;
+        if (!widgetOrder.includes(name)) return false;
+        return name === "network" || name === "bluetooth" ? true : name === "vpn" ? showVpn : services.showControl(name);
+    }
+    function controlSpan(name) {
+        if (["vpn", "power", "awake"].includes(name)) return 2;
+        if (["dnd", "nightLight"].includes(name)) return controlVisible("dnd") && controlVisible("nightLight") ? 1 : 2;
+        return 1;
+    }
+    function controlCell(name) {
+        let row = 0, column = 0;
+        const order = widgetOrder.includes("awake") ? widgetOrder : widgetOrder.concat(["awake"]);
+        for (const id of order) {
+            if (!controlVisible(id)) continue;
+            const span = controlSpan(id);
+            if (column + span > 2) { row++; column = 0; }
+            if (id === name) return {row, column};
+            column += span;
+            if (column === 2) { row++; column = 0; }
+        }
+        return {row: -1, column: -1};
+    }
     readonly property var controlChoices: extrasView.choices
     readonly property var deviceControls: detailView
     property var services: ControlCentreServices
@@ -179,6 +204,9 @@ ShellPopup {
                 navigation: true
                 rowInteractive: false
                 objectName: "controlNetwork"
+                visible: root.controlVisible("network")
+                Layout.row: root.controlCell("network").row
+                Layout.column: root.controlCell("network").column
                 iconName: root.indicators.networkIconName()
                 title: root.indicators.networkState === "wired" ? "Ethernet" : root.indicators.networkState === "vpn" ? "VPN" : "Wi-Fi"
                 subtitle: root.indicators.networkState === "offline" ? "Not connected" : root.indicators.networkState === "unknown" ? "Unavailable" : "Connected"
@@ -192,6 +220,9 @@ ShellPopup {
                 navigation: true
                 rowInteractive: false
                 objectName: "controlBluetooth"
+                visible: root.controlVisible("bluetooth")
+                Layout.row: root.controlCell("bluetooth").row
+                Layout.column: root.controlCell("bluetooth").column
                 iconName: "bluetooth-active-symbolic"
                 title: "Bluetooth"
                 toggleVisible: true
@@ -202,7 +233,9 @@ ShellPopup {
                 onToggleRequested: if (root.bluetoothAdapter) root.bluetoothAdapter.enabled = !root.bluetoothAdapter.enabled
             }
             ControlRow {
-                visible: root.showVpn
+                visible: root.controlVisible("vpn")
+                Layout.row: root.controlCell("vpn").row
+                Layout.column: root.controlCell("vpn").column
                 tileLayout: false
                 tileSurface: true
                 Layout.columnSpan: 2
@@ -218,9 +251,11 @@ ShellPopup {
             ControlRow {
                 tileLayout: true
                 compactTile: true
-                Layout.columnSpan: root.services.showControl("dnd") && root.services.showControl("nightLight") ? 1 : 2
+                Layout.columnSpan: root.controlSpan("dnd")
+                Layout.row: root.controlCell("dnd").row
+                Layout.column: root.controlCell("dnd").column
                 objectName: "controlDnd"
-                visible: root.services.showControl("dnd")
+                visible: root.controlVisible("dnd")
                 title: "Do Not Disturb"
                 subtitle: ""
                 iconName: "notifications-disabled-symbolic"
@@ -233,9 +268,11 @@ ShellPopup {
             ControlRow {
                 tileLayout: true
                 compactTile: true
-                Layout.columnSpan: root.services.showControl("dnd") && root.services.showControl("nightLight") ? 1 : 2
+                Layout.columnSpan: root.controlSpan("nightLight")
+                Layout.row: root.controlCell("nightLight").row
+                Layout.column: root.controlCell("nightLight").column
                 objectName: "controlNightLight"
-                visible: root.services.showControl("nightLight")
+                visible: root.controlVisible("nightLight")
                 title: "Night Light"
                 subtitle: !root.services.state.nightLightAvailable ? "Unavailable" : root.services.state.nightLight && !root.services.state.nightLightActive ? "Scheduled" : ""
                 iconName: "night-light-symbolic"
@@ -250,7 +287,9 @@ ShellPopup {
                 tileSurface: true
                 Layout.columnSpan: 2
                 objectName: "controlPower"
-                visible: root.services.showControl("power")
+                visible: root.controlVisible("power")
+                Layout.row: root.controlCell("power").row
+                Layout.column: root.controlCell("power").column
                 title: "Power mode"
                 subtitle: !root.services.state.power.available ? "Unavailable" : root.services.state.power.profile === "power-saver" ? "Power Saver" : root.services.state.power.profile === "performance" ? "Performance" : "Balanced"
                 iconName: "power-profile-balanced-symbolic"
@@ -264,7 +303,9 @@ ShellPopup {
                 tileSurface: true
                 Layout.columnSpan: 2
                 objectName: "controlKeepAwake"
-                visible: root.services.showControl("awake") || root.services.keepAwake
+                visible: root.controlVisible("awake")
+                Layout.row: root.controlCell("awake").row
+                Layout.column: root.controlCell("awake").column
                 title: "Keep Awake"
                 subtitle: root.services.keepAwake ? "Until sign out" : ""
                 iconName: "display-brightness-symbolic"

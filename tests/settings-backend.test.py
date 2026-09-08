@@ -39,6 +39,15 @@ class SettingsTests(unittest.TestCase):
         for data in [{'desktop': {'dockSize': 999}}, {'desktop': {'dockClick': 'unknown'}}, {'search': {'fileRoots': ['relative/path']}}]:
             with self.assertRaises(ValueError): settings.write(data)
 
+    def test_control_centre_order_roundtrip_and_validation(self):
+        order = ['bluetooth', 'network', 'power', 'dnd']
+        settings.write({'desktop': {'controlOrder': order}})
+        self.assertEqual(settings.read()['desktop']['controlOrder'], order)
+        before = settings.config_path().read_bytes()
+        for invalid in [['network', 'network'], ['unknown'], [None], 'network']:
+            with self.assertRaises(ValueError): settings.write({'desktop': {'controlOrder': invalid}})
+            self.assertEqual(settings.config_path().read_bytes(), before)
+
     def test_runtime_import_is_exact_and_happens_once(self):
         snapshot = {'version': 1, 'controlCentreReady': True,
             'layout': {'top-left': ['search'], 'top-center': ['clock'],

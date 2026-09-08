@@ -19,7 +19,7 @@ DEFAULTS = {'search': {'disabledProviders': [], 'ai': None, 'fileRoots': None, '
             'desktop': {'dock': True, 'sidebar': True, 'metrics': True, 'layout': None, 'dockSize': 56, 'dockAlignment': 'center',
                         'dockClick': 'toggle', 'dockMiddleClick': 'launch', 'dockScroll': 'cycle',
                         'dockScrollDirection': 'natural', 'sidebarEdge': None,
-                        'layoutVersion': 0, 'dockApps': None, 'controlCentre': None,
+                        'layoutVersion': 0, 'dockApps': None, 'controlCentre': None, 'controlOrder': None,
                         'containers': {}, 'widgetOptions': {}}}
 PROVIDERS = {'applications', 'files', 'calculation', 'conversions', 'web', 'web-shortcuts', 'external'}
 
@@ -79,6 +79,9 @@ def validate(data):
             if not isinstance(items, list) or len(items) > 256 or any(not isinstance(item, str) or not item or len(item) > 256 or any(ord(c) < 32 for c in item) for item in items) or len(items) != len(set(items)):
                 raise ValueError('Invalid dock application identifiers.')
     controls = desktop['controlCentre']
+    control_order = desktop['controlOrder']
+    if control_order is not None and (not isinstance(control_order, list) or any(not isinstance(item, str) or item not in {'network', 'bluetooth', 'vpn', 'dnd', 'nightLight', 'power', 'awake'} for item in control_order) or len(control_order) != len(set(control_order))):
+        raise ValueError('Invalid control-centre widget order.')
     if controls is not None and (not isinstance(controls, dict) or set(controls) != {'vpn', 'dnd', 'nightLight', 'power', 'awake'} or any(type(value) is not bool for value in controls.values())):
         raise ValueError('Invalid control-centre preferences.')
     # Native preserves each existing widget's presentation on first import.
