@@ -10,8 +10,10 @@ Item {
     property var screen: Quickshell.screens[0]
     property Item menuHost: null
     function closeContextMenu() { if (contextMenuLoader.item) contextMenuLoader.item.visible = false; }
-    onVisibleChanged: if (!visible) closeContextMenu()
+    onVisibleChanged: if (!visible) { closeContextMenu(); slashMenu.close(); }
+    onMenuHostChanged: slashMenu.close()
     function showContextMenu(position) {
+        slashMenu.close();
         if (editor.selectionStart === editor.selectionEnd)
             editor.cursorPosition = editor.positionAt(position.x, position.y);
         const point = menuHost ? editor.mapToItem(menuHost, position.x, position.y) : editor.mapToGlobal(position.x, position.y);
@@ -56,6 +58,44 @@ Item {
         save();
         Qt.callLater(root.focusContent);
     }
+    function insertCommand(command, start, end) {
+        editor.continuation = null;
+        let markdown = command.markdown;
+        let block = !!command.block;
+        let selection = command.select || "";
+        if (command.input) {
+            // Leave the URL editable until Enter applies the Markdown fragment.
+            markdown = command.input.replace(/([\\`*_{}\[\]()#+.!>|~-])/g, "\\$1");
+        } else if (command.id === "date") {
+            markdown = Qt.formatDate(new Date(), "yyyy-MM-dd");
+        } else if (command.id === "duplicate" || command.id === "delete") {
+            const before = editor.getText(0, start);
+            const blockStart = Math.max(before.lastIndexOf("\n"), before.lastIndexOf("\u2029")) + 1;
+            const after = editor.getText(end, editor.length);
+            const boundary = after.search(/[\n\u2029]/);
+            const blockEnd = boundary < 0 ? editor.length : end + boundary;
+            markdown = (editor.getFormattedText(blockStart, start) + editor.getFormattedText(end, blockEnd)).trim();
+            if (command.id === "duplicate") markdown += "\n\n" + markdown;
+            else markdown = "\u200b";
+            start = blockStart;
+            end = blockEnd;
+            block = true;
+        }
+        if (block) {
+            const before = editor.getText(0, start);
+            const lineStart = Math.max(before.lastIndexOf("\n"), before.lastIndexOf("\u2029")) + 1;
+            if (before.slice(lineStart).trim()) markdown = "\n\n" + markdown;
+        }
+        editor.formatRange(start, end, markdown, block);
+        if (selection) {
+            const plain = editor.getText(0, editor.length);
+            const offset = plain.indexOf(selection, start);
+            if (offset >= 0) editor.select(offset, offset + selection.length);
+            editor.continuation = null;
+        }
+        save();
+        focusContent();
+    }
     Settings {
         id: saved
         location: "file://" + Quickshell.env("HOME") + "/.config/bingux/sidebar-notes.ini"
@@ -90,7 +130,7 @@ Item {
             placeholderTextColor: Theme.muted
             selectionColor: Theme.textSelection
             selectedTextColor: Theme.text
-            placeholderText: "Write a note…"
+            placeholderText: "Write a note… Type / for commands"
             font.family: Theme.fontFamily
             font.pixelSize: 16
             font.wordSpacing: 1
@@ -101,7 +141,9 @@ Item {
             background: null
             DocumentSpacing { document: editor.textDocument }
             Accessible.name: "Sidebar notes"
-            Accessible.description: "Markdown shortcuts format your note as you type"
+            Accessible.description: slashMenu.visible
+                ? "Note commands: " + (slashMenu.selectedCommand ? slashMenu.selectedCommand.title : "No matches") + ". Use arrow keys and Enter."
+                : "Type slash for commands. Markdown shortcuts format your note as you type."
             readonly property int activeBlockStart: {
                 const before = getText(0, cursorPosition);
                 return Math.max(before.lastIndexOf("\n"), before.lastIndexOf("\u2029")) + 1;
@@ -150,6 +192,23 @@ Item {
                     }).join("\n");
                 }
                 formatRange(start, end, markdown || "\u200b", true);
+            }
+            function finishMarkdownLink() {
+                const start = activeBlockStart;
+                if (/^\s*```/.test(getFormattedText(start, cursorPosition))) return false;
+                const tail = getText(start, length);
+                const boundary = tail.search(/[\n\u2029]/);
+                const line = boundary < 0 ? tail : tail.slice(0, boundary);
+                const pattern = /!?\[[^\]\n]+\]\([^\s)]+\)/g;
+                let match;
+                while ((match = pattern.exec(line)) !== null) {
+                    const from = start + match.index, to = from + match[0].length;
+                    if (cursorPosition >= from && cursorPosition <= to) {
+                        formatRange(from, to, match[0], false);
+                        return true;
+                    }
+                }
+                return false;
             }
             property bool formatting: false
             property var continuation: null
@@ -267,16 +326,26 @@ Item {
             }
             onTextEdited: {
                 formatShortcut();
+                slashMenu.update(true);
                 root.save();
             }
             onTextChanged: saveDelay.restart()
+            onCursorPositionChanged: Qt.callLater(() => slashMenu.update(false))
+            onActiveFocusChanged: if (!activeFocus) slashMenu.close()
+            onInputMethodComposingChanged: if (inputMethodComposing) slashMenu.close()
             Keys.onPressed: event => {
+                if (slashMenu.handleKey(event)) { event.accepted = true; return; }
                 if (event.key === Qt.Key_Menu || (event.key === Qt.Key_F10 && (event.modifiers & Qt.ShiftModifier))) {
                     root.showContextMenu(Qt.point(cursorRectangle.x, cursorRectangle.y + cursorRectangle.height));
                     event.accepted = true;
                     return;
                 }
                 if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    if (finishMarkdownLink()) {
+                        root.save();
+                        event.accepted = true;
+                        return;
+                    }
                     const before = getText(0, cursorPosition);
                     const start = Math.max(before.lastIndexOf("\n"), before.lastIndexOf("\u2029")) + 1;
                     const blockMarkdown = getFormattedText(Math.max(0, start - 1), cursorPosition).trim();
@@ -314,5 +383,6 @@ Item {
         }
     }
     Loader { id: contextMenuLoader }
+    NotesSlashMenu { id: slashMenu; notes: root; editor: editor }
 
 }
