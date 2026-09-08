@@ -15,6 +15,7 @@ Scope {
     readonly property alias editWindow: panel
     readonly property alias editSurface: panelSurface
     readonly property alias contentItem: sidebarContents
+    readonly property alias contentSelector: contentMenu
     readonly property alias detachedSurface: detachedWindow
     readonly property alias edgeSurface: sensor
     readonly property var allContentTypes: [
@@ -33,8 +34,13 @@ Scope {
             if (edge && edge !== saved.edge) root.syncEdge(edge);
         }
     }
-    readonly property string contentType: contentTypes.some(type => type.id === saved.contentType) ? saved.contentType : (contentTypes[0]?.id || "terminal")
-    readonly property var currentContent: contentTypes.find(type => type.id === contentType)
+    property string previewContentType: ""
+    readonly property string contentType: {
+        const selected = DesktopEditing.active && previewContentType ? previewContentType : saved.contentType;
+        return contentTypes.some(type => type.id === selected) ? selected : (contentTypes[0]?.id || "terminal");
+    }
+    readonly property var currentContent: contentTypes.find(type => type.id === contentType) || contentTypes[0] || allContentTypes[0]
+    readonly property Item activePanel: contentType === "terminal" ? terminalLoader.item : contentType === "notes" ? notes : contentType === "monitor" ? monitor : extraPanel.item
     function focusContent() {
         if (contentType === "terminal" && terminalReady)
             terminalLoader.item.focusTerminal();
@@ -48,6 +54,11 @@ Scope {
     function selectContent(value) {
         if (!contentTypes.some(type => type.id === value))
             return;
+        if (DesktopEditing.active) {
+            previewContentType = value;
+            if (value === "terminal") terminalCreated = true;
+            return;
+        }
         saved.contentType = value;
         saved.setValue("contentType", value);
         saved.sync();
@@ -319,6 +330,8 @@ Scope {
     Connections {
         target: DesktopEditing
         function onActiveChanged() {
+            root.previewContentType = "";
+            contentMenu.visible = false;
             if (DesktopEditing.active && root.contentType === "terminal") root.terminalCreated = true;
             if (!root.detached) root.animateTo(DesktopEditing.active || root.opened ? 1 : 0);
         }
@@ -513,7 +526,11 @@ Scope {
 
         Rectangle {
             id: panelSurface
-            NativeEditSurface { anchors.fill: parent; window: panel; zoneName: "sidebar"; vertical: true }
+            NativeEditSurface {
+                anchors.fill: parent; anchors.topMargin: sidebarHeader.height; geometryItem: panelSurface
+                window: panel; zoneName: "sidebar"; vertical: true
+                entries: [{id: root.contentType, item: root.activePanel}]
+            }
             width: root.edge === "top" ? panel.width : panel.extent
             height: root.edge === "top" ? panel.extent : panel.height
             x: root.edge === "right" ? panel.width - width : 0
@@ -551,8 +568,10 @@ Scope {
                         spacing: Theme.spaceSmall
                         ActionButton {
                             id: contentPicker
-                        objectName: "sidebarContentPicker"
+                            objectName: "sidebarContentPicker"
+                            WidgetEditHandle { control: contentPicker; widgetId: root.contentType; previewSource: false; onRequested: (id, item) => root.widgetEditRequested(id, item, panel) }
                             text: root.currentContent.label
+                            presentation: DesktopLayout.presentation(DesktopEditing.desktop, root.contentType, "sidebar", root.currentContent.label, root.currentContent.icon, true, true)
                             alignLeft: true
                             iconName: root.currentContent.icon
                             Layout.preferredWidth: implicitWidth + Theme.gap
@@ -753,7 +772,8 @@ Scope {
                     ActionButton {
                         id: sidebarWidget
                         required property var modelData
-                        WidgetEditHandle { control: sidebarWidget; widgetId: sidebarWidget.modelData.id; onRequested: (id, item) => root.widgetEditRequested(id, item, contentMenu) }
+                        objectName: "sidebar-select-" + modelData.id
+                        WidgetEditHandle { control: sidebarWidget; widgetId: sidebarWidget.modelData.id; previewSource: false; onRequested: (id, item) => root.widgetEditRequested(id, item, contentMenu) }
                         readonly property bool menuEntry: true
                         signal triggered()
                         text: modelData.label
@@ -778,6 +798,7 @@ Scope {
                 ActionButton {
                     readonly property bool menuEntry: true
                     signal triggered()
+                    visible: !DesktopEditing.active
                     Layout.fillWidth: true
                     implicitHeight: 32
                     text: root.detached ? "Dock in sidebar" : "Pop out window"
