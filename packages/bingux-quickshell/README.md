@@ -1,4 +1,4 @@
-# Bingux Quickshell patch
+# Bingux Quickshell runtime
 
 A layer surface must record the settings sent when it is created. Quickshell
 0.2.1 through 0.3.1 leave that snapshot at its default values. If a setting
@@ -9,6 +9,11 @@ the button click.
 
 `layer-initial-state.patch` records the initial settings in the existing
 committed-state snapshot. The NixOS desktop module uses this package by default.
+
+The runtime disables Quickshell's built-in crash reporter and minidump writer.
+The service also sets `LimitCORE=0` to prevent kernel memory dumps. Systemd
+handles service restarts, and normal diagnostic messages remain in the journal.
+Private UI tests set the same core limit so failed tests cannot fill a checkout.
 
 Run `tests/layershell-focus-live.py` as `GNOBLIN_TEST_DBUS_CLIENT` in Gnoblin's
 private session, with `QS_TEST_BIN` pointing to the matching Quickshell runtime.

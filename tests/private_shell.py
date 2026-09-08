@@ -1,11 +1,14 @@
 """Run a private shell until its QML assertions write their completion report."""
 import os
+import resource
 import signal
 import subprocess
 import time
 
 
 def run_reported_shell(fixture, environment, report_variable, timeout=30, complete=lambda text: bool(text)):
+    # Failed UI tests must not leave full memory dumps in the checkout.
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     environment = environment | {report_variable: str(fixture / 'report')}
     with (fixture / 'runtime.log').open('w') as log:
         process = subprocess.Popen([os.environ.get('QS_TEST_BIN', 'qs'), '-p', str(fixture), '--no-color'],
