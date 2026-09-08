@@ -95,6 +95,7 @@ ShellRoot {
     }
 
     SearchOverlay {
+        dockView: dock
         onSettingsRequested: binguxSettings.visible = true
         id: searchOverlay
         onVisibleChanged: if (visible) root.closePanelsExcept(searchOverlay)
@@ -214,7 +215,7 @@ ShellRoot {
         function capture(): void { captureTool.open() }
     }
 
-    ControlCentre { id: controlCentre; onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, controlCentre); onCustomiseRequested: binguxSettings.openCustomise("", ""); anchorWindow: topBar.windowFor(systemPill); anchorItem: systemPill; dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom); indicators: systemIndicators; screen: topBar.screen; onVisibleChanged: if (visible) root.closePanelsExcept(controlCentre) }
+    ControlCentre { id: controlCentre; widgetLayout: topBar; onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, item.barLayout ? topBar.windowFor(item) : controlCentre); onCustomiseRequested: binguxSettings.openCustomise("", ""); anchorWindow: topBar.windowFor(controlCentre.movedAnchor || systemPill); anchorItem: controlCentre.movedAnchor || systemPill; dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom); indicators: systemIndicators; screen: topBar.screen; onVisibleChanged: if (visible) root.closePanelsExcept(controlCentre) }
 
     SystemMetricsPopup {
         id: metricsPopup
@@ -270,7 +271,7 @@ ShellRoot {
         function snapshotLayout() {
             if (customLayout) return customLayout;
             const layout = DesktopLayout.defaults();
-            layout["top-right"] = orderedControls.filter(item => ![searchPill, clockPill].includes(item)).map(item => controlNames[defaultControls.indexOf(item)]);
+            layout["top-right"] = orderedControls.filter(item => chosen(item) && ![searchPill, clockPill].includes(item)).map(item => controlNames[defaultControls.indexOf(item)]);
             layout.sidebar = terminalSidebar.contentTypes.map(type => type.id);
             return layout;
         }
@@ -283,10 +284,14 @@ ShellRoot {
             JSON.stringify(customLayout["top-left"]) === '["search"]' &&
             JSON.stringify(customLayout["top-center"]) === '["clock"]' &&
             customLayout.dock.length === 0 &&
+            !["top-left", "top-center", "top-right"].some(zone => customLayout[zone].some(id => id.startsWith("control-"))) &&
             ["top-left", "top-center", "top-right"].every(zone => !DesktopEditing.desktop.containers?.[zone]?.display || DesktopEditing.desktop.containers[zone].display === "native") &&
             Object.keys(DesktopEditing.desktop.widgetOptions || {}).every(id => !DesktopLayout.zone(customLayout, id).startsWith("top-") || !appearance(id, "", "", false, false).custom) &&
             ["capture", "tray", "privacy", "metrics", "keyboard", "controls", "notifications"].every(id => customLayout["top-right"].includes(id)))
-        function chosen(item) { return !customLayout || DesktopLayout.zone(customLayout, controlNames[defaultControls.indexOf(item)]) !== ""; }
+        function chosen(item) {
+            const name = controlNames[defaultControls.indexOf(item)];
+            return customLayout ? DesktopLayout.zone(customLayout, name) !== "" : !name.startsWith("control-");
+        }
         function zoneFor(item) {
             const name = controlNames[defaultControls.indexOf(item)];
             if (name === "overflow" && (!customLayout || !DesktopLayout.zone(customLayout, name))) return "top-right";
@@ -301,8 +306,8 @@ ShellRoot {
         readonly property real controlsBudget: Math.max(0, (width - clockPill.implicitWidth) / 2 - Theme.gap)
         // Display order is independent of overflow priority and reparenting order.
         readonly property var defaultControls: [captureStatus, trayContainer, privacyContainer,
-            metricsPill, inputSourceSelector, overflowButton, systemPill, notificationButton, searchPill, clockPill]
-        readonly property var controlNames: ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "search", "clock"]
+            metricsPill, inputSourceSelector, overflowButton, systemPill, notificationButton, searchPill, clockPill].concat(controlCentre.movableWidgets)
+        readonly property var controlNames: ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "search", "clock"].concat(controlCentre.movableWidgets.map(item => item.widgetId))
         Settings {
             id: barPreferences
             location: "file://" + (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/bingux/top-bar.ini"
@@ -408,7 +413,7 @@ ShellRoot {
             [privacyContainer, privacyContainer.active], [metricsPill, profileSettings.metricsEnabled],
             [inputSourceSelector, metrics.desktopStateAvailable], [systemPill, true],
             [notificationButton, notificationState.allEntries.length > 0], [searchPill, true], [clockPill, true]
-        ].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0])
+        ].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat(controlCentre.movableWidgets.filter(item => chosen(item)))
         readonly property var overflowItems: {
             if (customLayout && !nativeTopBarLayout) {
                 const hidden = [];
@@ -530,7 +535,7 @@ ShellRoot {
                 GridLayout {
                     id: rightControls
                     Instantiator {
-                        model: topBar.defaultControls
+                        model: topBar.defaultControls.filter(item => !controlCentre.movableWidgets.includes(item))
                         delegate: WidgetEditHandle {
                             required property var modelData
                             control: modelData

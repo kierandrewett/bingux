@@ -12,8 +12,28 @@ ShellPopup {
     required property var indicators
     signal widgetEditRequested(string widgetId, var control)
     signal customiseRequested()
+    property var widgetLayout: null
+    property Item movedAnchor: null
+    readonly property var movableWidgets: [networkWidget, bluetoothWidget, vpnWidget, dndWidget, nightLightWidget, powerWidget, awakeWidget]
+    component QuickWidget: ControlRow {
+        id: quick
+        required property string controlName
+        readonly property string widgetId: "control-" + controlName
+        readonly property string container: DesktopLayout.zone(DesktopEditing.desktop.layout || {}, widgetId)
+        barLayout: root.widgetLayout !== null && container !== ""
+        parent: barLayout ? root.widgetLayout.hostFor(quick) : quickRows
+        visible: barLayout || root.controlVisible(controlName)
+        Layout.fillWidth: !barLayout
+        Layout.row: barLayout ? root.widgetLayout.controlRow(quick) : root.controlCell(controlName).row
+        Layout.column: barLayout ? root.widgetLayout.controlColumn(quick) : root.controlCell(controlName).column
+        Layout.columnSpan: barLayout ? 1 : root.controlSpan(controlName)
+        presentation: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, container || "control-centre", title, iconName, true, !barLayout)
+        WidgetEditHandle { control: quick; widgetId: quick.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
+        BarTooltip { anchorItem: quick; barWindow: root.widgetLayout ? root.widgetLayout.windowFor(quick) : root.nativeWindow; requested: quick.barLayout && quick.hovered; text: quick.displayedTitle + (quick.subtitle ? "\n" + quick.subtitle : "") }
+    }
     readonly property var widgetOrder: DesktopEditing.desktop.controlOrder || DesktopLayout.controlOrder()
     function controlVisible(name) {
+        if (DesktopLayout.zone(DesktopEditing.desktop.layout || {}, "control-" + name)) return false;
         if (name === "awake" && services.keepAwake) return true;
         if (!widgetOrder.includes(name)) return false;
         return name === "network" || name === "bluetooth" ? true : name === "vpn" ? showVpn : services.showControl(name);
@@ -43,7 +63,7 @@ ShellPopup {
     readonly property var activeDetailView: extraPage ? extrasView : detailView
     readonly property var connectedVpns: services.vpns.filter(vpn => vpn.connected)
     readonly property bool showVpn: services.showControl("vpn") && services.vpns.length > 0
-    onVisibleChanged: services.active = visible
+    Binding { target: root.services; property: "active"; value: root.visible || root.movableWidgets.some(item => item.barLayout) }
     property bool detailOpen: false
     property string detailPage: "network"
     property real detailProgress: detailOpen ? 1 : 0
@@ -52,6 +72,7 @@ ShellPopup {
     property bool pendingDetailFocus: false
     property bool pendingOverviewFocus: false
     function openDetail(page, trigger, audioTab) {
+        if (trigger?.barLayout) { movedAnchor = trigger; visible = true; }
         if (page === "audio") detailView.audioTab = audioTab || "output";
         pendingOverviewFocus = false;
         detailTrigger = trigger || null;
@@ -85,7 +106,7 @@ ShellPopup {
             }
         }
     }
-    Connections { target: root; function onVisibleChanged() { if (!root.visible) root.detailOpen = false; } }
+    Connections { target: root; function onVisibleChanged() { if (!root.visible) { root.detailOpen = false; root.movedAnchor = null; } } }
     property var bluetoothAdapter: Bluetooth.defaultAdapter
     readonly property var microphone: indicators.audioSource || null
     readonly property bool microphoneAvailable: microphone !== null && microphone.ready && microphone.audio !== null
@@ -114,7 +135,7 @@ ShellPopup {
     keyboardInteractive: !DesktopEditing.active
     NativeEditSurface {
         parent: root.body.parent; anchors.fill: parent; window: root.nativeWindow; zoneName: "control-centre"; vertical: true
-        entries: [{id: "control-network", item: networkWidget}, {id: "control-bluetooth", item: bluetoothWidget}, {id: "control-vpn", item: vpnWidget}, {id: "control-dnd", item: dndWidget}, {id: "control-nightLight", item: nightLightWidget}, {id: "control-power", item: powerWidget}, {id: "control-awake", item: awakeWidget}]
+        entries: root.movableWidgets.filter(item => !item.barLayout).map(item => ({id: item.widgetId, item}))
     }
 
     function settings(panel) {
@@ -209,18 +230,13 @@ ShellPopup {
             uniformCellWidths: true
             rowSpacing: 8
             columnSpacing: 8
-            ControlRow {
+            QuickWidget {
                 tileLayout: true
-                Layout.columnSpan: 1
                 navigation: true
                 rowInteractive: false
                 id: networkWidget
+                controlName: "network"
                 objectName: "controlNetwork"
-                WidgetEditHandle { control: networkWidget; widgetId: "control-network"; onRequested: (id, item) => root.widgetEditRequested(id, item) }
-                presentation: DesktopLayout.presentation(DesktopEditing.desktop, "control-network", "control-centre", title, iconName, true, true)
-                visible: root.controlVisible("network")
-                Layout.row: root.controlCell("network").row
-                Layout.column: root.controlCell("network").column
                 iconName: root.indicators.networkIconName()
                 title: root.indicators.networkState === "wired" ? "Ethernet" : root.indicators.networkState === "vpn" ? "VPN" : "Wi-Fi"
                 subtitle: root.indicators.networkState === "offline" ? "Not connected" : root.indicators.networkState === "unknown" ? "Unavailable" : "Connected"
@@ -228,18 +244,13 @@ ShellPopup {
                 Accessible.description: root.indicators.networkAccessibleName()
                 onNavigationRequested: trigger => root.openDetail("network", trigger)
             }
-            ControlRow {
+            QuickWidget {
                 tileLayout: true
-                Layout.columnSpan: 1
                 navigation: true
                 rowInteractive: false
                 id: bluetoothWidget
+                controlName: "bluetooth"
                 objectName: "controlBluetooth"
-                WidgetEditHandle { control: bluetoothWidget; widgetId: "control-bluetooth"; onRequested: (id, item) => root.widgetEditRequested(id, item) }
-                presentation: DesktopLayout.presentation(DesktopEditing.desktop, "control-bluetooth", "control-centre", title, iconName, true, true)
-                visible: root.controlVisible("bluetooth")
-                Layout.row: root.controlCell("bluetooth").row
-                Layout.column: root.controlCell("bluetooth").column
                 iconName: "bluetooth-active-symbolic"
                 title: "Bluetooth"
                 toggleVisible: true
@@ -249,17 +260,12 @@ ShellPopup {
                 onNavigationRequested: trigger => root.openDetail("bluetooth", trigger)
                 onToggleRequested: if (root.bluetoothAdapter) root.bluetoothAdapter.enabled = !root.bluetoothAdapter.enabled
             }
-            ControlRow {
-                visible: root.controlVisible("vpn")
-                Layout.row: root.controlCell("vpn").row
-                Layout.column: root.controlCell("vpn").column
+            QuickWidget {
                 tileLayout: false
                 tileSurface: true
-                Layout.columnSpan: 2
                 id: vpnWidget
+                controlName: "vpn"
                 objectName: "controlVpn"
-                WidgetEditHandle { control: vpnWidget; widgetId: "control-vpn"; onRequested: (id, item) => root.widgetEditRequested(id, item) }
-                presentation: DesktopLayout.presentation(DesktopEditing.desktop, "control-vpn", "control-centre", title, iconName, true, true)
                 rowInteractive: false
                 navigation: true
                 iconName: "network-vpn-symbolic"
@@ -268,17 +274,12 @@ ShellPopup {
                 subtitle: root.connectedVpns.length ? root.connectedVpns.map(vpn => vpn.name).join(", ") : "Disconnected"
                 onNavigationRequested: trigger => root.openDetail("vpn", trigger)
             }
-            ControlRow {
+            QuickWidget {
                 tileLayout: true
                 compactTile: true
-                Layout.columnSpan: root.controlSpan("dnd")
-                Layout.row: root.controlCell("dnd").row
-                Layout.column: root.controlCell("dnd").column
                 id: dndWidget
+                controlName: "dnd"
                 objectName: "controlDnd"
-                WidgetEditHandle { control: dndWidget; widgetId: "control-dnd"; onRequested: (id, item) => root.widgetEditRequested(id, item) }
-                presentation: DesktopLayout.presentation(DesktopEditing.desktop, "control-dnd", "control-centre", title, iconName, true, true)
-                visible: root.controlVisible("dnd")
                 title: "Do Not Disturb"
                 subtitle: ""
                 iconName: "notifications-disabled-symbolic"
@@ -288,17 +289,12 @@ ShellPopup {
                 selected: root.services.doNotDisturb
                 onToggleRequested: root.services.action({kind: "dnd", enabled: !root.services.doNotDisturb})
             }
-            ControlRow {
+            QuickWidget {
                 tileLayout: true
                 compactTile: true
-                Layout.columnSpan: root.controlSpan("nightLight")
-                Layout.row: root.controlCell("nightLight").row
-                Layout.column: root.controlCell("nightLight").column
                 id: nightLightWidget
+                controlName: "nightLight"
                 objectName: "controlNightLight"
-                WidgetEditHandle { control: nightLightWidget; widgetId: "control-nightLight"; onRequested: (id, item) => root.widgetEditRequested(id, item) }
-                presentation: DesktopLayout.presentation(DesktopEditing.desktop, "control-nightLight", "control-centre", title, iconName, true, true)
-                visible: root.controlVisible("nightLight")
                 title: "Night Light"
                 subtitle: !root.services.state.nightLightAvailable ? "Unavailable" : root.services.state.nightLight && !root.services.state.nightLightActive ? "Scheduled" : ""
                 iconName: "night-light-symbolic"
@@ -308,17 +304,12 @@ ShellPopup {
                 selected: !!root.services.state.nightLight
                 onToggleRequested: root.services.action({kind: "nightLight", enabled: !root.services.state.nightLight})
             }
-            ControlRow {
+            QuickWidget {
                 tileLayout: false
                 tileSurface: true
-                Layout.columnSpan: 2
                 id: powerWidget
+                controlName: "power"
                 objectName: "controlPower"
-                WidgetEditHandle { control: powerWidget; widgetId: "control-power"; onRequested: (id, item) => root.widgetEditRequested(id, item) }
-                presentation: DesktopLayout.presentation(DesktopEditing.desktop, "control-power", "control-centre", title, iconName, true, true)
-                visible: root.controlVisible("power")
-                Layout.row: root.controlCell("power").row
-                Layout.column: root.controlCell("power").column
                 title: "Power mode"
                 subtitle: !root.services.state.power.available ? "Unavailable" : root.services.state.power.profile === "power-saver" ? "Power Saver" : root.services.state.power.profile === "performance" ? "Performance" : "Balanced"
                 iconName: "power-profile-balanced-symbolic"
@@ -327,17 +318,12 @@ ShellPopup {
                 enabled: root.services.state.power.available
                 onNavigationRequested: trigger => root.openDetail("power", trigger)
             }
-            ControlRow {
+            QuickWidget {
                 tileLayout: false
                 tileSurface: true
-                Layout.columnSpan: 2
                 id: awakeWidget
+                controlName: "awake"
                 objectName: "controlKeepAwake"
-                WidgetEditHandle { control: awakeWidget; widgetId: "control-awake"; onRequested: (id, item) => root.widgetEditRequested(id, item) }
-                presentation: DesktopLayout.presentation(DesktopEditing.desktop, "control-awake", "control-centre", title, iconName, true, true)
-                visible: root.controlVisible("awake")
-                Layout.row: root.controlCell("awake").row
-                Layout.column: root.controlCell("awake").column
                 title: "Keep Awake"
                 subtitle: root.services.keepAwake ? "Until sign out" : ""
                 iconName: "display-brightness-symbolic"
