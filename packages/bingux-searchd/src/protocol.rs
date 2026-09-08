@@ -284,6 +284,10 @@ pub enum DaemonEvent {
     Activated {
         request_id: String,
     },
+    ChatProgress {
+        request_id: String,
+        message: Arc<str>,
+    },
     ChatResponse {
         request_id: String,
         message: Arc<str>,
@@ -654,6 +658,16 @@ pub fn encode_daemon_event_line(event: &DaemonEvent) -> ProtocolResult<Vec<u8>> 
                 request_id,
             })
         }
+        DaemonEvent::ChatProgress { request_id, message } => {
+            validate_request_id(request_id)?;
+            validate_chat_response_message(message.as_ref())?;
+            encode_line(&ChatResponseWire {
+                protocol_version: PROTOCOL_VERSION,
+                record_type: "chat-progress",
+                request_id,
+                message: message.as_ref(),
+            })
+        }
         DaemonEvent::ChatResponse {
             request_id,
             message,
@@ -943,7 +957,7 @@ fn validate_query(value: &str) -> ProtocolResult<()> {
 pub(crate) fn validate_chat_response_message(value: &str) -> ProtocolResult<()> {
     if !value.is_empty()
         && value.len() <= MAX_CHAT_RESPONSE_BYTES
-        && !value.chars().any(char::is_control)
+        && !value.chars().any(|c| c.is_control() && c != '\n' && c != '\t')
     {
         Ok(())
     } else {

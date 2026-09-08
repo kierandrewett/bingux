@@ -3,9 +3,8 @@ use bingux_searchd::{
     ai::{AiProvider, ChatHistory},
     config::{SearchCommands, SearchConfig},
     external::{ExternalEvent, ExternalProviders},
-    gnoblin::{self, Event as GnoblinEvent},
     protocol::{
-        ActivateRequest, DaemonErrorCode, DaemonEvent, DaemonResult, IntegrationState,
+        ActivateRequest, DaemonErrorCode, DaemonEvent, DaemonResult,
         ProtocolError, ProtocolErrorKind, QueryRequest, ShellRequest, encode_daemon_event_lines,
         parse_shell_request, shell_request_id,
     },
@@ -38,7 +37,6 @@ use std::{
 
 const CLIENT_QUEUE_CAPACITY: usize = 64;
 const EXTERNAL_EVENT_QUEUE_CAPACITY: usize = 256;
-const GNOBLIN_EVENT_QUEUE_CAPACITY: usize = 8;
 const MAX_CLIENTS: usize = 16;
 const QUERY_WORKER_COUNT: usize = 2;
 const QUERY_QUEUE_CAPACITY: usize = 64;
@@ -71,14 +69,13 @@ fn run() -> Result<()> {
     let weather = WeatherProvider::start(config.weather.clone());
     let (external_sender, external_receiver) = mpsc::sync_channel(EXTERNAL_EVENT_QUEUE_CAPACITY);
     let external = Arc::new(ExternalProviders::start(
-        &config.provider_manifest_paths,
+        if config.disabled_providers.iter().any(|p| p == "external") { &[] } else { &config.provider_manifest_paths },
         external_sender,
     )?);
     let runtime = Arc::new(Runtime::new(local, weather, external, config.commands, ai)?);
     runtime.start_query_workers()?;
 
     start_external_event_dispatcher(Arc::clone(&runtime), external_receiver);
-    start_gnoblin_bridge(Arc::clone(&runtime));
 
     let listener = bind_listener(&socket_path)
         .with_context(|| format!("could not bind search socket {}", socket_path.display()))?;
@@ -145,7 +142,6 @@ struct Runtime {
     external_activations: Mutex<HashMap<String, ActivationRoute>>,
     chat_activations: Mutex<HashMap<String, ChatActivationRoute>>,
     chat_histories: Mutex<HashMap<u64, ChatHistory>>,
-    gnoblin_ready: AtomicBool,
     next_client_id: AtomicU64,
     next_query_id: AtomicU64,
     next_result_id: AtomicU64,
@@ -182,7 +178,6 @@ impl Runtime {
             external_activations: Mutex::new(HashMap::new()),
             chat_activations: Mutex::new(HashMap::new()),
             chat_histories: Mutex::new(HashMap::new()),
-            gnoblin_ready: AtomicBool::new(false),
             next_client_id: AtomicU64::new(1),
             next_query_id: AtomicU64::new(1),
             next_result_id: AtomicU64::new(1),
@@ -225,7 +220,14 @@ impl Runtime {
                         if !work.runtime.chat_activation_is_active(&work.activation_id) {
                             continue;
                         }
-                        let completion = work.ai.complete(&work.history, &work.prompt);
+                        let completion = work.ai.stream(&work.history, &work.prompt, |message| {
+                            let Ok(routes) = work.runtime.chat_activations.lock() else { return false; };
+                            let Some(route) = routes.get(&work.activation_id) else { return false; };
+                            if message.is_empty() { return true; }
+                            route.sender.try_send(DaemonEvent::ChatProgress {
+                                request_id: route.request_id.clone(), message: Arc::from(message),
+                            }).is_ok()
+                        });
                         work.runtime.finish_chat_activation(
                             &work.activation_id,
                             work.prompt,
@@ -485,11 +487,11 @@ impl Runtime {
             return;
         }
 
-        let dispatch = self.external.query(
+        let dispatch = if request.query.trim().starts_with(['!', '?']) { Default::default() } else { self.external.query(
             provider_query_id.clone(),
             request.query.clone(),
             request.limit,
-        );
+        ) };
         tracker.configure_providers(dispatch.accepted.clone());
 
         if !self.query_is_active(client_id, &provider_query_id)
@@ -1469,34 +1471,6 @@ fn start_external_event_dispatcher(runtime: Arc<Runtime>, receiver: Receiver<Ext
     });
 }
 
-fn start_gnoblin_bridge(runtime: Arc<Runtime>) {
-    let (sender, receiver) = mpsc::sync_channel(GNOBLIN_EVENT_QUEUE_CAPACITY);
-    gnoblin::start_super_release_subscriber(sender);
-    thread::spawn(move || {
-        for event in receiver {
-            match event {
-                GnoblinEvent::Ready => {
-                    runtime.gnoblin_ready.store(true, Ordering::Release);
-                    runtime.broadcast(DaemonEvent::IntegrationState {
-                        state: IntegrationState::Ready,
-                    });
-                }
-                GnoblinEvent::Unavailable => {
-                    runtime.gnoblin_ready.store(false, Ordering::Release);
-                    runtime.broadcast(DaemonEvent::IntegrationState {
-                        state: IntegrationState::Unavailable,
-                    });
-                }
-                GnoblinEvent::SuperReleased { monotonic_usec } => {
-                    runtime.broadcast(DaemonEvent::ShowSearch {
-                        monotonic_usec: monotonic_usec.to_string(),
-                    })
-                }
-            }
-        }
-    });
-}
-
 fn accept_clients(listener: UnixListener, runtime: Arc<Runtime>) -> Result<()> {
     for stream in listener.incoming() {
         match stream {
@@ -1544,21 +1518,6 @@ fn handle_client(runtime: Arc<Runtime>, client_id: u64, stream: UnixStream) {
         runtime.release_client_slot();
         return;
     }
-    let initial_state = if runtime.gnoblin_ready.load(Ordering::Acquire) {
-        IntegrationState::Ready
-    } else {
-        IntegrationState::Unavailable
-    };
-    if sender
-        .try_send(DaemonEvent::IntegrationState {
-            state: initial_state,
-        })
-        .is_err()
-    {
-        runtime.disconnect_client(client_id);
-        return;
-    }
-
     let writer_runtime = Arc::clone(&runtime);
     thread::spawn(move || {
         write_client_events(writer_stream, receiver);
@@ -1612,6 +1571,7 @@ fn encoding_failure_event(event: &DaemonEvent) -> DaemonEvent {
     let request_id = match event {
         DaemonEvent::Results { request_id, .. }
         | DaemonEvent::Activated { request_id }
+        | DaemonEvent::ChatProgress { request_id, .. }
         | DaemonEvent::ChatResponse { request_id, .. }
         | DaemonEvent::Error { request_id, .. } => request_id.as_str(),
         DaemonEvent::ShowSearch { .. } | DaemonEvent::IntegrationState { .. } => {
@@ -1912,6 +1872,7 @@ mod tests {
 
     fn test_search_config() -> SearchConfig {
         SearchConfig {
+            disabled_providers: Vec::new(),
             protocol_version: 1,
             commands: SearchCommands {
                 application_launcher: vec!["/bin/true".to_owned()],
@@ -2024,10 +1985,6 @@ mod tests {
         let client = thread::spawn(move || handle_client(runtime, 1, daemon_stream));
         let mut reader = BufReader::new(shell_stream.try_clone().expect("clone shell socket"));
 
-        let initial_state = read_socket_event(&mut reader);
-        assert_eq!(initial_state["type"], "integration-state");
-        assert_eq!(initial_state["state"], "unavailable");
-
         shell_stream
             .write_all(
                 br#"{"protocolVersion":1,"type":"query","requestId":"q-01","query":"1 + 1","limit":20}"#,
@@ -2076,7 +2033,6 @@ mod tests {
             .expect("set socket read timeout");
         let client = thread::spawn(move || handle_client(runtime, 1, daemon_stream));
         let mut reader = BufReader::new(shell_stream.try_clone().expect("clone shell socket"));
-        let _initial_state = read_socket_event(&mut reader);
 
         shell_stream
             .write_all(

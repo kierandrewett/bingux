@@ -1,4 +1,5 @@
 {
+    coreutils,
     glib,
     lib,
     makeWrapper,
@@ -22,6 +23,7 @@ rustPlatform.buildRustPackage {
         wrapProgram "$out/bin/bingux-searchd" \
             --prefix PATH : ${
                 lib.makeBinPath [
+                    coreutils
                     glib
                     ripgrep
                     wl-clipboard

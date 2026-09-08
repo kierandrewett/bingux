@@ -18,6 +18,8 @@ pub struct SearchConfig {
     pub protocol_version: u32,
     pub commands: SearchCommands,
     #[serde(default)]
+    pub disabled_providers: Vec<String>,
+    #[serde(default)]
     pub file_roots: Vec<PathBuf>,
     #[serde(default)]
     pub provider_manifest_paths: Vec<PathBuf>,
@@ -51,8 +53,15 @@ pub struct WeatherConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AiConfig {
+    #[serde(default)]
+    pub harness: Option<String>,
+    #[serde(default)]
+    pub executable: Option<PathBuf>,
+    #[serde(default)]
     pub endpoint: String,
+    #[serde(default)]
     pub model: String,
+    #[serde(default)]
     pub api_key_file: PathBuf,
 }
 
@@ -68,7 +77,19 @@ impl SearchConfig {
     pub fn load(path: &Path) -> Result<Self> {
         let contents = fs::read_to_string(path)
             .with_context(|| format!("could not read search configuration {}", path.display()))?;
-        let config = serde_json::from_str::<Self>(&contents)
+        let mut value: serde_json::Value = serde_json::from_str(&contents)?;
+        let preferences = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
+            .map(|dir| dir.join("bingux/settings.json"));
+        if let Some(path) = preferences.filter(|p| p.is_file()) {
+            let data: serde_json::Value = serde_json::from_str(&fs::read_to_string(path)?)?;
+            if let Some(search) = data.get("search").and_then(|v| v.as_object()) {
+                for key in ["ai", "disabledProviders"] {
+                    if let Some(setting) = search.get(key) { value[key] = setting.clone(); }
+                }
+            }
+        }
+        let config = serde_json::from_value::<Self>(value)
             .with_context(|| format!("could not parse search configuration {}", path.display()))?;
         config.validate()?;
         Ok(config)
@@ -172,6 +193,12 @@ impl WeatherConfig {
 
 impl AiConfig {
     fn validate(&self) -> Result<()> {
+        if let Some(harness) = &self.harness {
+            if !matches!(harness.as_str(), "pi" | "claude") { bail!("Unsupported AI harness"); }
+            if let Some(path) = &self.executable { require_absolute_path(path, "AI executable")?; }
+            if self.model.len() > 256 || self.model.chars().any(char::is_control) { bail!("AI model is invalid"); }
+            return Ok(());
+        }
         validate_endpoint(&self.endpoint)?;
 
         if self.model.trim().is_empty()
@@ -516,6 +543,7 @@ mod tests {
 
     fn valid_config() -> SearchConfig {
         SearchConfig {
+            disabled_providers: Vec::new(),
             protocol_version: 1,
             commands: SearchCommands {
                 application_launcher: vec!["/nix/store/test/bin/gtk-launch".to_owned()],
@@ -540,6 +568,8 @@ mod tests {
                 refresh_seconds: 900,
             }),
             ai: Some(AiConfig {
+                harness: None,
+                executable: None,
                 endpoint: "https://example.test/v1/chat/completions".to_owned(),
                 model: "test-model".to_owned(),
                 api_key_file: PathBuf::from("/run/secrets/ai-api-key"),

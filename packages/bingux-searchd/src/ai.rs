@@ -24,6 +24,7 @@ pub const MAX_CHAT_HISTORY_EXCHANGES: usize = 6;
 
 #[derive(Clone)]
 pub struct AiProvider {
+    cli: Option<AiConfig>,
     agent: ureq::Agent,
     endpoint: String,
     model: String,
@@ -87,7 +88,7 @@ impl ChatHistory {
 
 impl AiProvider {
     pub fn new(config: AiConfig) -> Result<Self> {
-        validate_endpoint(&config.endpoint)?;
+        if config.harness.is_none() { validate_endpoint(&config.endpoint)?; }
         let agent = ureq::Agent::new_with_config(
             ureq::Agent::config_builder()
                 .https_only(true)
@@ -96,6 +97,7 @@ impl AiProvider {
                 .build(),
         );
         Ok(Self {
+            cli: config.harness.as_ref().map(|_| config.clone()),
             agent,
             endpoint: config.endpoint,
             model: config.model,
@@ -129,6 +131,14 @@ impl AiProvider {
             .map_err(|_| anyhow::anyhow!("AI provider response failed"))?;
 
         parse_first_response(&body)
+    }
+
+    pub fn stream(&self, history: &ChatHistory, prompt: &str, mut update: impl FnMut(&str) -> bool) -> Result<String> {
+        if let Some(config) = &self.cli {
+            let input = serde_json::to_string(&history.messages_with(prompt))?;
+            return crate::cli_ai::complete(config, &input, &mut update);
+        }
+        self.complete(history, prompt)
     }
 
     fn read_api_key(&self) -> Result<String> {
