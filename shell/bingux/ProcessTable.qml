@@ -102,7 +102,7 @@ ColumnLayout {
         for (let i = 0; i < ordered.length; i++) {
             const process = ordered[i];
             const key = entryKey(process);
-            const record = {key, pid: process.pid ?? -1, description: process.description || "", startTime: process.startTime || 0, name: process.name, executable: process.executable || "", cpuPercent: process.cpuPercent ?? -1, memoryBytes: process.memoryBytes ?? 0, threads: process.threads ?? 0, state: process.state || ""};
+            const record = {key, pid: process.pid ?? -1, commandLine: (process.argv || []).map(arg => /^[a-zA-Z0-9_@%+=:,./-]+$/.test(arg) ? arg : "'" + arg.replace(/'/g, "'\"'\"'") + "'").join(" "), description: process.description || "", startTime: process.startTime || 0, name: process.name, executable: process.executable || "", cpuPercent: process.cpuPercent ?? -1, memoryBytes: process.memoryBytes ?? 0, threads: process.threads ?? 0, state: process.state || ""};
             if (i >= keys.length || keys[i] !== key) {
                 const found = keys.indexOf(key, i + 1);
                 if (found >= 0) { rows.move(found, i, 1); keys.splice(found, 1); }
@@ -172,6 +172,7 @@ ColumnLayout {
             required property int pid
             required property string name
             required property string description
+            required property string commandLine
             required property string executable
             required property real cpuPercent
             required property real memoryBytes
@@ -266,7 +267,7 @@ ColumnLayout {
                 onCanceled: root.dragSelecting = false
             }
             HoverHandler { id: hover }
-            ShellTooltip { visible: hover.hovered; text: root.mode === "services" ? row.name + "\n" + row.description : row.name + (row.desktopEntry ? " · " + row.desktopEntry.name : "") + "\nPID " + row.pid + " · CPU 100% = one logical core" }
+            ShellTooltip { objectName: "processTooltip"; maximumWidth: root.mode === "processes" ? 640 : 320; timeout: root.mode === "processes" ? -1 : 8000; visible: hover.hovered; text: root.mode === "services" ? row.name + "\n" + row.description : row.name + (row.desktopEntry ? " · " + row.desktopEntry.name : "") + "\n" + (row.commandLine || "Command line unavailable") + "\nPID " + row.pid + " · CPU 100% = one logical core" }
         }
     }
     component Cell: Text {

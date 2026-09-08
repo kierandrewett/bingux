@@ -44,6 +44,7 @@ pub struct Process {
     pub pid: u32,
     pub name: String,
     pub executable: String,
+    pub argv: Vec<String>,
     pub start_time: u64,
     pub cpu_percent: Option<f64>,
     pub memory_bytes: u64,
@@ -79,6 +80,17 @@ fn parse_process(text: &str) -> Option<Counters> {
         threads: fields.get(17)?.parse().ok()?,
         state: fields.first()?.to_string(),
     })
+}
+fn parse_argv(bytes: &[u8]) -> Vec<String> {
+    if bytes.is_empty() {
+        return Vec::new();
+    }
+    bytes
+        .strip_suffix(&[0])
+        .unwrap_or(bytes)
+        .split(|byte| *byte == 0)
+        .map(|arg| String::from_utf8_lossy(arg).into_owned())
+        .collect()
 }
 #[derive(Default)]
 pub struct Sampler {
@@ -130,6 +142,7 @@ impl Sampler {
                     pid,
                     name: c.name,
                     executable: String::new(),
+                    argv: Vec::new(),
                     start_time: c.start,
                     cpu_percent: cpu,
                     memory_bytes: c.rss.saturating_mul(page),
@@ -152,6 +165,9 @@ impl Sampler {
                             p.file_name()
                                 .map(|s| s.to_string_lossy().chars().take(256).collect())
                         })
+                        .unwrap_or_default();
+                    process.argv = fs::read(format!("/proc/{}/cmdline", process.pid))
+                        .map(|bytes| parse_argv(&bytes))
                         .unwrap_or_default();
                     process
                 })
@@ -313,6 +329,15 @@ fn storage(path: &str) -> Option<Storage> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn argv_preserves_boundaries_and_empty_arguments() {
+        assert_eq!(
+            parse_argv(b"/bin/example\0two words\0\0'quoted'\0"),
+            vec!["/bin/example", "two words", "", "'quoted'"]
+        );
+        assert!(parse_argv(b"").is_empty());
+        assert_eq!(parse_argv(b"example"), vec!["example"]);
+    }
     #[test]
     fn names_with_parentheses_and_spaces() {
         let mut fields = vec!["0"; 22];
