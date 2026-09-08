@@ -4,6 +4,7 @@ repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT
 cp "$repo_dir"/shell/bingux/*.qml "$repo_dir"/shell/bingux/*.js "$repo_dir"/shell/bingux/qmldir "$test_dir/"
+cp -r "$repo_dir/shell/bingux/icons" "$test_dir/icons"
 python3 - "$test_dir" <<'PY'
 from pathlib import Path
 import sys

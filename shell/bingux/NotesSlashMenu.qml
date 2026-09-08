@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Quickshell
 import "NotesCommands.js" as Commands
 
 Popup {
@@ -113,13 +114,27 @@ Popup {
                 }
                 contentItem: RowLayout {
                     spacing: 10
-                    Text {
+                    Item {
                         Layout.preferredWidth: 32
-                        horizontalAlignment: Text.AlignHCenter
-                        text: entry.modelData.icon
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 18
-                        color: Theme.text
+                        Layout.preferredHeight: 24
+                        Accessible.ignored: true
+                        SymbolicIcon {
+                            anchors.centerIn: parent
+                            implicitSize: 20
+                            visible: !!entry.modelData.icon
+                            source: !entry.modelData.icon ? "" : entry.modelData.icon.startsWith("icons/")
+                                ? Qt.resolvedUrl(entry.modelData.icon) : Quickshell.iconPath(entry.modelData.icon)
+                            color: Theme.text
+                        }
+                        Text {
+                            anchors.centerIn: parent
+                            visible: !!entry.modelData.iconLabel
+                            text: entry.modelData.iconLabel || ""
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 16
+                            font.weight: Font.Medium
+                            color: Theme.text
+                        }
                     }
                     ColumnLayout {
                         Layout.fillWidth: true
