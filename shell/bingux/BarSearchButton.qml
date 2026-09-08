@@ -4,11 +4,12 @@ import Quickshell
 
 AbstractButton {
     id: root
-    implicitWidth: Theme.barEdgeHitWidth
+    property var presentation: null
+    implicitWidth: presentation?.custom ? face.implicitWidth + Theme.barPrimaryPadding * 2 : Theme.barEdgeHitWidth
     implicitHeight: Theme.barHeight
     activeFocusOnTab: true
     hoverEnabled: true
-    Accessible.name: "Search"
+    Accessible.name: presentation?.label || "Search"
     Accessible.role: Accessible.Button
     Accessible.onPressAction: root.clicked()
     background: BarControlSurface {
@@ -17,10 +18,10 @@ AbstractButton {
         focused: root.visualFocus
     }
     contentItem: Item {
-        SymbolicIcon {
+        WidgetFace {
+            id: face
             anchors.centerIn: parent
-            implicitSize: Theme.iconSize
-            source: Quickshell.iconPath("system-search-symbolic")
+            presentation: root.presentation || {icon: "system-search-symbolic", label: "Search", showIcon: true, showText: false}
         }
     }
     Keys.onReturnPressed: root.clicked()
