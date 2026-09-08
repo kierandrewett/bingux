@@ -7,3 +7,5 @@ pub mod protocol;
 pub mod providers;
 pub mod server;
 pub mod weather;
+
+pub mod search_engines;

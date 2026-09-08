@@ -19,6 +19,10 @@ pub struct SearchConfig {
     pub commands: SearchCommands,
     #[serde(default)]
     pub disabled_providers: Vec<String>,
+    #[serde(default = "crate::search_engines::defaults")]
+    pub engines: Vec<crate::search_engines::SearchEngine>,
+    #[serde(default = "crate::search_engines::default_id")]
+    pub default_engine: String,
     #[serde(default)]
     pub file_roots: Vec<PathBuf>,
     #[serde(default)]
@@ -84,8 +88,10 @@ impl SearchConfig {
         if let Some(path) = preferences.filter(|p| p.is_file()) {
             let data: serde_json::Value = serde_json::from_str(&fs::read_to_string(path)?)?;
             if let Some(search) = data.get("search").and_then(|v| v.as_object()) {
-                for key in ["ai", "disabledProviders"] {
-                    if let Some(setting) = search.get(key) { value[key] = setting.clone(); }
+                for key in ["ai", "disabledProviders", "engines", "defaultEngine", "fileRoots"] {
+                    if let Some(setting) = search.get(key) {
+                        if key != "fileRoots" || !setting.is_null() { value[key] = setting.clone(); }
+                    }
                 }
             }
         }
@@ -96,6 +102,7 @@ impl SearchConfig {
     }
 
     pub fn validate(&self) -> Result<()> {
+        crate::search_engines::validate(&self.engines, &self.default_engine)?;
         if self.protocol_version != PROTOCOL_VERSION {
             bail!("search configuration uses unsupported protocol version");
         }
@@ -544,6 +551,8 @@ mod tests {
     fn valid_config() -> SearchConfig {
         SearchConfig {
             disabled_providers: Vec::new(),
+            engines: crate::search_engines::defaults(),
+            default_engine: crate::search_engines::default_id(),
             protocol_version: 1,
             commands: SearchCommands {
                 application_launcher: vec!["/nix/store/test/bin/gtk-launch".to_owned()],

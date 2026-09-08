@@ -91,6 +91,8 @@ pub struct LocalProviders {
     sqlite_sources: Vec<SqliteSource>,
     ai_enabled: bool,
     disabled_providers: Vec<String>,
+    engines: Vec<crate::search_engines::SearchEngine>,
+    default_engine: String,
     web_opener: Vec<String>,
     os_index_roots: Vec<PathBuf>,
 }
@@ -164,11 +166,11 @@ impl LocalProviders {
             files,
             ai_enabled: config.ai.is_some(),
             disabled_providers: config.disabled_providers.clone(),
+            engines: config.engines.clone(),
+            default_engine: config.default_engine.clone(),
             web_opener: config.commands.file_opener.clone(),
             os_index_roots: if start_index_workers {
-                let mut roots = config.file_roots.clone();
-                if let Some(home) = env::var_os("HOME") { roots.push(PathBuf::from(home)); }
-                roots
+                config.file_roots.clone()
             } else { Vec::new() },
             sqlite_sources: config
                 .sqlite_sources
@@ -225,8 +227,21 @@ impl LocalProviders {
         }
         if let Some(candidate) = conversion_candidate(query) { candidates.push(candidate); }
         if let Some(candidate) = specialised_web_candidate(query, &self.web_opener) { candidates.push(candidate); }
+        if !self.disabled_providers.iter().any(|id| id == "web-shortcuts") {
+            for engine in self.engines.iter().filter(|engine| engine.enabled) {
+                if let Some(terms) = query.trim().strip_prefix(&format!("{}:", engine.shortcut)) {
+                    if let Some(mut candidate) = engine_candidate(terms.trim(), &self.web_opener, engine) {
+                        candidate.provider_id = "web-shortcuts".into();
+                        candidate.result.result_id = engine.id.clone();
+                        candidate.result.score = 1.0;
+                        candidates.push(candidate);
+                    }
+                }
+            }
+        }
         candidates.retain(|candidate| !self.disabled_providers.contains(&candidate.provider_id));
-        let web = if self.disabled_providers.iter().any(|p| p == "web") { None } else { web_candidate(query, &self.web_opener) };
+        let web = if self.disabled_providers.iter().any(|p| p == "web") { None } else { self.engines.iter().find(|engine| engine.enabled && engine.id == self.default_engine)
+            .and_then(|engine| engine_candidate(query, &self.web_opener, engine)) };
         // Leave one visible slot for Web even when local indexes are full.
         // A one-result request retains its highest-ranked local answer.
         let web_slots = usize::from(web.is_some() && (limit > 1 || candidates.is_empty()));
@@ -286,30 +301,21 @@ fn query_os_index(query: &SearchQuery, roots: &[PathBuf], opener: &[String]) -> 
 }
 
 fn web_candidate(query: &str, opener: &[String]) -> Option<Candidate> {
+    engine_candidate(query, opener, &crate::search_engines::defaults()[0])
+}
+
+fn engine_candidate(query: &str, opener: &[String], engine: &crate::search_engines::SearchEngine) -> Option<Candidate> {
     let query = query.trim();
-    if query.is_empty() || opener.is_empty() {
-        return None;
-    }
-    let mut encoded = String::new();
-    for byte in query.bytes() {
-        if byte.is_ascii_alphanumeric() || b"-._~".contains(&byte) {
-            encoded.push(char::from(byte));
-        } else {
-            encoded.push_str(&format!("%{byte:02X}"));
-        }
-    }
-    let url = format!("https://duckduckgo.com/?q={encoded}");
+    if query.is_empty() || opener.is_empty() { return None; }
     let candidate = Candidate {
         provider_id: "web".to_owned(),
         result: ProviderResult {
-            result_id: "search".to_owned(),
-            kind: ResultKind::Action,
-            title: query.to_owned(),
-            subtitle: "DuckDuckGo".to_owned(),
-            icon: "duckduckgo".to_owned(),
+            result_id: "search".to_owned(), kind: ResultKind::Action,
+            title: query.to_owned(), subtitle: engine.name.clone(),
+            icon: if engine.id == "duckduckgo" { "duckduckgo" } else { "web-browser-symbolic" }.to_owned(),
             score: 0.1,
         },
-        activation: append_activation(opener, &url),
+        activation: append_activation(opener, &engine.search_url(query)),
     };
     candidate.result.validate().ok()?;
     Some(candidate)

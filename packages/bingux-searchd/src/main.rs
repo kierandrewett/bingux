@@ -1873,6 +1873,8 @@ mod tests {
     fn test_search_config() -> SearchConfig {
         SearchConfig {
             disabled_providers: Vec::new(),
+            engines: bingux_searchd::search_engines::defaults(),
+            default_engine: bingux_searchd::search_engines::default_id(),
             protocol_version: 1,
             commands: SearchCommands {
                 application_launcher: vec!["/bin/true".to_owned()],
