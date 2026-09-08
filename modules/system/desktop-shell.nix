@@ -7,7 +7,7 @@
 let
     settingsBackend = pkgs.writeShellApplication {
         name = "bingux-settings-backend";
-        runtimeInputs = [ pkgs.python3 pkgs.systemd ];
+        runtimeInputs = [ pkgs.python3 pkgs.systemd pkgs.glib pkgs.imagemagick ];
         text = ''exec python3 ${../../shell/bingux/settings-backend.py} "$@"'';
     };
     filePreview = pkgs.callPackage ../../packages/bingux-file-preview { };

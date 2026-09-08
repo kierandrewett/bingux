@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """Validate and atomically persist user overrides, separate from managed config."""
+import hashlib
+import copy
+import re
+from urllib.parse import urlsplit, unquote
 import json
 import os
 from pathlib import Path
@@ -8,9 +12,12 @@ import subprocess
 import sys
 import tempfile
 
-DEFAULTS = {'search': {'disabledProviders': [], 'ai': None},
+DEFAULTS = {'search': {'disabledProviders': [], 'ai': None, 'fileRoots': None, 'defaultEngine': 'duckduckgo', 'engines': [
+                {'id': 'duckduckgo', 'name': 'DuckDuckGo', 'shortcut': 'ddg', 'url': 'https://duckduckgo.com/?q={query}', 'enabled': True}]},
             'previews': {'enabled': True, 'prewarm': True, 'maxMegabytes': 20},
-            'desktop': {'dock': True, 'sidebar': True, 'metrics': True}}
+            'desktop': {'dock': True, 'sidebar': True, 'metrics': True, 'layout': None, 'dockSize': 56, 'dockAlignment': 'center',
+                        'dockClick': 'toggle', 'dockMiddleClick': 'launch', 'dockScroll': 'cycle',
+                        'dockScrollDirection': 'natural', 'sidebarEdge': None}}
 PROVIDERS = {'applications', 'files', 'calculation', 'conversions', 'web', 'web-shortcuts', 'external'}
 
 
@@ -25,13 +32,50 @@ def read():
 
 def validate(data):
     if not isinstance(data, dict) or set(data) - set(DEFAULTS): raise ValueError('Unknown settings section.')
-    result = read()
+    result = copy.deepcopy(read())
     for key, values in data.items():
         if not isinstance(values, dict) or set(values) - set(DEFAULTS[key]): raise ValueError('Unknown setting.')
         result[key].update(values)
     search = result['search']
     disabled = search['disabledProviders']
     if not isinstance(disabled, list) or any(p not in PROVIDERS for p in disabled): raise ValueError('Unknown search provider.')
+    roots = search['fileRoots']
+    if roots is not None and (not isinstance(roots, list) or len(roots) > 32 or any(not isinstance(p, str) or not Path(p).is_absolute() or '\0' in p for p in roots)):
+        raise ValueError('Use absolute paths for search locations, with at most 32 locations.')
+    engines = search['engines']
+    if not isinstance(engines, list) or not 1 <= len(engines) <= 32: raise ValueError('Add between 1 and 32 search engines.')
+    ids, shortcuts = set(), set()
+    for engine in engines:
+        if not isinstance(engine, dict) or set(engine) != {'id', 'name', 'shortcut', 'url', 'enabled'}: raise ValueError('Invalid search engine.')
+        for field in ('id', 'name', 'shortcut', 'url'):
+            if not isinstance(engine[field], str) or any(ord(c) < 32 for c in engine[field]): raise ValueError('Invalid search engine text.')
+        if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,63}', engine['id']) or engine['id'] in ids: raise ValueError('Search engine identifiers must be unique.')
+        if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,23}', engine['shortcut']) or engine['shortcut'] in shortcuts or engine['shortcut'] in ('wiki', 'gh', 'maps', 'yt'):
+            raise ValueError('Choose a unique shortcut with letters, numbers or hyphens. wiki, gh, maps and yt are reserved.')
+        if not engine['name'].strip() or len(engine['name']) > 80: raise ValueError('Enter a name of up to 80 characters.')
+        url = urlsplit(engine['url'])
+        if url.scheme not in ('https', 'http') or not url.hostname or url.username or url.password or len(engine['url']) > 2048 or engine['url'].count('{query}') != 1 or '{query}' in url.netloc:
+            raise ValueError('Use an HTTP or HTTPS URL with {query} in its path or query.')
+        if type(engine['enabled']) is not bool: raise ValueError('Invalid engine toggle.')
+        ids.add(engine['id']); shortcuts.add(engine['shortcut'])
+    if not any(e['id'] == search['defaultEngine'] and e['enabled'] for e in engines): raise ValueError('The default search engine must be enabled.')
+    desktop = result['desktop']
+    for key, choices in {'dockAlignment': ('left', 'center', 'right'), 'dockClick': ('toggle', 'focus', 'launch'), 'dockMiddleClick': ('launch', 'close', 'none'), 'dockScroll': ('cycle', 'none'), 'dockScrollDirection': ('natural', 'reverse'), 'sidebarEdge': (None, 'left', 'right', 'top')}.items():
+        if desktop[key] not in choices: raise ValueError('Invalid desktop behaviour.')
+    if type(desktop['dockSize']) is not int or not 32 <= desktop['dockSize'] <= 80: raise ValueError('Dock icons must be between 32 and 80 pixels.')
+    layout = desktop['layout']
+    if layout is not None:
+        zones = {'top-left', 'top-center', 'top-right', 'dock', 'sidebar'}
+        widgets = {'search', 'clock', 'capture', 'tray', 'privacy', 'metrics', 'keyboard', 'controls', 'notifications'}
+        panels = {'terminal', 'notes', 'monitor', 'calendar', 'media', 'tasks'}
+        if not isinstance(layout, dict) or set(layout) != zones: raise ValueError('Invalid desktop layout.')
+        seen = set()
+        for zone, items in layout.items():
+            allowed = panels if zone == 'sidebar' else widgets
+            if not isinstance(items, list) or any(not isinstance(item, str) or item not in allowed or item in seen for item in items): raise ValueError('A widget can only be placed once in a compatible area.')
+            if len(items) != len(set(items)): raise ValueError('A widget can only be placed once.')
+            seen.update(items)
+        if not layout['sidebar']: raise ValueError('Keep at least one sidebar panel.')
     ai = search['ai']
     if ai is not None:
         if not isinstance(ai, dict) or set(ai) - {'harness', 'executable', 'model'}: raise ValueError('Invalid AI settings.')
@@ -64,9 +108,35 @@ def write(data):
     return data
 
 
+def wallpaper():
+    for key in ('picture-uri-dark', 'picture-uri'):
+        reply = subprocess.run(['gsettings', 'get', 'org.gnome.desktop.background', key], capture_output=True, text=True, timeout=3)
+        uri = reply.stdout.strip().strip("'")
+        parsed = urlsplit(uri)
+        if parsed.scheme != 'file': continue
+        source = Path(unquote(parsed.path))
+        if not source.is_file(): continue
+        if source.suffix.lower() in ('.png', '.jpg', '.jpeg', '.webp'): return source.as_uri()
+        cache = Path(os.environ.get('XDG_CACHE_HOME', str(Path.home() / '.cache'))) / 'bingux/wallpaper'
+        cache.mkdir(parents=True, exist_ok=True)
+        fingerprint = hashlib.sha256(f'{source}:{source.stat().st_mtime_ns}:{source.stat().st_size}'.encode()).hexdigest()
+        output = cache / (fingerprint + '.png')
+        if not output.exists():
+            with tempfile.NamedTemporaryFile(suffix='.png', dir=cache) as temporary:
+                subprocess.run(['magick', '-limit', 'memory', '256MiB', '-limit', 'map', '512MiB',
+                    str(source) + '[0]', '-resize', '2560x1440>', temporary.name], check=True, capture_output=True, timeout=12)
+                os.replace(temporary.name, output)
+                # NamedTemporaryFile owns the pathname; recreate it for cleanup.
+                Path(temporary.name).touch()
+        return output.as_uri()
+    return ''
+
+
 def main():
     try:
-        if sys.argv[1:] == ['save']:
+        if sys.argv[1:] == ['wallpaper']:
+            print(json.dumps({'wallpaper': wallpaper()}))
+        elif sys.argv[1:] == ['save']:
             incoming = sys.stdin.buffer.read(32769)
             if len(incoming) > 32768: raise ValueError('Settings are too large.')
             before = read()
