@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Validate and atomically persist user overrides, separate from managed config."""
 import hashlib
+import fcntl
 import copy
 import re
 from urllib.parse import urlsplit, unquote
@@ -17,7 +18,9 @@ DEFAULTS = {'search': {'disabledProviders': [], 'ai': None, 'fileRoots': None, '
             'previews': {'enabled': True, 'prewarm': True, 'maxMegabytes': 20},
             'desktop': {'dock': True, 'sidebar': True, 'metrics': True, 'layout': None, 'dockSize': 56, 'dockAlignment': 'center',
                         'dockClick': 'toggle', 'dockMiddleClick': 'launch', 'dockScroll': 'cycle',
-                        'dockScrollDirection': 'natural', 'sidebarEdge': None}}
+                        'dockScrollDirection': 'natural', 'sidebarEdge': None,
+                        'layoutVersion': 0, 'dockApps': None, 'controlCentre': None,
+                        'containers': {}, 'widgetOptions': {}}}
 PROVIDERS = {'applications', 'files', 'calculation', 'conversions', 'web', 'web-shortcuts', 'external'}
 
 
@@ -27,12 +30,16 @@ def config_path():
 
 def read():
     data = json.loads(config_path().read_text()) if config_path().exists() else {}
+    version = data.get('desktop', {}).get('layoutVersion', 0)
+    if type(version) is not int or version not in (0, 1):
+        raise ValueError('This desktop layout version is not supported.')
     return {key: DEFAULTS[key] | data.get(key, {}) for key in DEFAULTS}
 
 
 def validate(data):
     if not isinstance(data, dict) or set(data) - set(DEFAULTS): raise ValueError('Unknown settings section.')
-    result = copy.deepcopy(read())
+    current = read()
+    result = copy.deepcopy(current)
     for key, values in data.items():
         if not isinstance(values, dict) or set(values) - set(DEFAULTS[key]): raise ValueError('Unknown setting.')
         result[key].update(values)
@@ -60,13 +67,43 @@ def validate(data):
         ids.add(engine['id']); shortcuts.add(engine['shortcut'])
     if not any(e['id'] == search['defaultEngine'] and e['enabled'] for e in engines): raise ValueError('The default search engine must be enabled.')
     desktop = result['desktop']
+    if current['desktop']['layoutVersion'] == 1 and desktop['layoutVersion'] != 1:
+        raise ValueError('The desktop layout has changed. Reopen Settings before saving.')
+    if type(desktop['layoutVersion']) is not int or desktop['layoutVersion'] not in (0, 1):
+        raise ValueError('This desktop layout version is not supported.')
+    applications = desktop['dockApps']
+    if applications is not None:
+        if not isinstance(applications, dict) or set(applications) != {'pinnedApps', 'order'}:
+            raise ValueError('Invalid dock application layout.')
+        for items in applications.values():
+            if not isinstance(items, list) or len(items) > 256 or any(not isinstance(item, str) or not item or len(item) > 256 or any(ord(c) < 32 for c in item) for item in items) or len(items) != len(set(items)):
+                raise ValueError('Invalid dock application identifiers.')
+    controls = desktop['controlCentre']
+    if controls is not None and (not isinstance(controls, dict) or set(controls) != {'vpn', 'dnd', 'nightLight', 'power', 'awake'} or any(type(value) is not bool for value in controls.values())):
+        raise ValueError('Invalid control-centre preferences.')
+    # Native preserves each existing widget's presentation on first import.
+    modes = ('native', 'icons', 'text', 'both')
+    for key, options in desktop['containers'].items() if isinstance(desktop['containers'], dict) else [(None, None)]:
+        if key not in ('top-left', 'top-center', 'top-right', 'dock', 'sidebar', 'control-centre') or not isinstance(options, dict) or set(options) != {'display'} or options['display'] not in modes:
+            raise ValueError('Invalid container display options.')
+    if not isinstance(desktop['widgetOptions'], dict) or len(desktop['widgetOptions']) > 256:
+        raise ValueError('Invalid widget display options.')
+    for key, options in desktop['widgetOptions'].items():
+        if not isinstance(key, str) or not isinstance(options, dict) or set(options) - {'display', 'label', 'icon'}:
+            raise ValueError('Invalid widget display options.')
+        if options.get('display', 'inherit') not in modes + ('inherit',):
+            raise ValueError('Invalid widget display mode.')
+        for field in ('label', 'icon'):
+            value = options.get(field, '')
+            if not isinstance(value, str) or len(value) > 160 or any(ord(c) < 32 for c in value):
+                raise ValueError('Invalid widget label or icon.')
     for key, choices in {'dockAlignment': ('left', 'center', 'right'), 'dockClick': ('toggle', 'focus', 'launch'), 'dockMiddleClick': ('launch', 'close', 'none'), 'dockScroll': ('cycle', 'none'), 'dockScrollDirection': ('natural', 'reverse'), 'sidebarEdge': (None, 'left', 'right', 'top')}.items():
         if desktop[key] not in choices: raise ValueError('Invalid desktop behaviour.')
     if type(desktop['dockSize']) is not int or not 32 <= desktop['dockSize'] <= 80: raise ValueError('Dock icons must be between 32 and 80 pixels.')
     layout = desktop['layout']
     if layout is not None:
         zones = {'top-left', 'top-center', 'top-right', 'dock', 'sidebar'}
-        widgets = {'search', 'clock', 'capture', 'tray', 'privacy', 'metrics', 'keyboard', 'controls', 'notifications'}
+        widgets = {'search', 'clock', 'capture', 'tray', 'privacy', 'metrics', 'keyboard', 'overflow', 'controls', 'notifications'}
         panels = {'terminal', 'notes', 'monitor', 'calendar', 'media', 'tasks'}
         if not isinstance(layout, dict) or set(layout) != zones: raise ValueError('Invalid desktop layout.')
         seen = set()
@@ -92,7 +129,7 @@ def validate(data):
     return result
 
 
-def write(data):
+def _write(data):
     data = validate(data)
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -106,6 +143,40 @@ def write(data):
         finally:
             temporary.unlink(missing_ok=True)
     return data
+
+
+def write(data):
+    path = config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with (path.parent / 'settings.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return _write(data)
+
+
+def import_layout(snapshot):
+    """Import the resolved runtime state once, without replacing later edits."""
+    path = config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with (path.parent / 'settings.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        current = read()
+        if current['desktop']['layoutVersion'] == 1:
+            return current
+        if not isinstance(snapshot, dict) or snapshot.get('version') != 1 or snapshot.get('controlCentreReady') is not True:
+            raise ValueError('Wait for the current desktop layout to finish loading.')
+        desktop = copy.deepcopy(current['desktop'])
+        desktop.update(layoutVersion=1, layout=desktop['layout'] or snapshot['layout'],
+                       sidebarEdge=desktop['sidebarEdge'] or snapshot['sidebar']['edge'],
+                       dockApps={key: snapshot['dock'][key] for key in ('pinnedApps', 'order')},
+                       controlCentre=snapshot['controlCentre'])
+        candidate = validate({'desktop': desktop})
+        backup = path.parent / 'layout-before-import.json'
+        if not backup.exists():
+            with backup.open('x') as stream:
+                os.chmod(backup, 0o600)
+                json.dump({'settings': current, 'runtime': snapshot}, stream, indent=2)
+                stream.write('\n'); stream.flush(); os.fsync(stream.fileno())
+        return _write(candidate)
 
 
 def wallpaper():
@@ -136,6 +207,10 @@ def main():
     try:
         if sys.argv[1:] == ['wallpaper']:
             print(json.dumps({'wallpaper': wallpaper()}))
+        elif sys.argv[1:] == ['import-layout']:
+            incoming = sys.stdin.buffer.read(131073)
+            if len(incoming) > 131072: raise ValueError('Layout snapshot is too large.')
+            print(json.dumps({'data': import_layout(json.loads(incoming))}))
         elif sys.argv[1:] == ['save']:
             incoming = sys.stdin.buffer.read(32769)
             if len(incoming) > 32768: raise ValueError('Settings are too large.')

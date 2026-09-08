@@ -39,4 +39,38 @@ class SettingsTests(unittest.TestCase):
         for data in [{'desktop': {'dockSize': 999}}, {'desktop': {'dockClick': 'unknown'}}, {'search': {'fileRoots': ['relative/path']}}]:
             with self.assertRaises(ValueError): settings.write(data)
 
+    def test_runtime_import_is_exact_and_happens_once(self):
+        snapshot = {'version': 1, 'controlCentreReady': True,
+            'layout': {'top-left': ['search'], 'top-center': ['clock'],
+                'top-right': ['keyboard', 'metrics', 'controls'], 'dock': [], 'sidebar': ['notes', 'terminal']},
+            'sidebar': {'edge': 'left'},
+            'dock': {'pinnedApps': ['discord-canary', 'org.telegram'], 'order': ['TelegramDesktop', 'discord']},
+            'controlCentre': {'vpn': True, 'dnd': True, 'nightLight': True, 'power': False, 'awake': False}}
+        settings.write({'desktop': {'dockSize': 48}})
+        imported = settings.import_layout(snapshot)
+        self.assertEqual(imported['desktop']['layout'], snapshot['layout'])
+        self.assertEqual(imported['desktop']['dockApps'], snapshot['dock'])
+        self.assertEqual(imported['desktop']['controlCentre'], snapshot['controlCentre'])
+        self.assertEqual(imported['desktop']['sidebarEdge'], 'left')
+        self.assertEqual(imported['desktop']['dockSize'], 48)
+        self.assertEqual(imported['desktop']['layoutVersion'], 1)
+        backup = settings.config_path().parent / 'layout-before-import.json'
+        original_backup = backup.read_bytes()
+        settings.write({'desktop': {'dockSize': 64, 'sidebarEdge': 'right'}})
+        self.assertEqual(settings.import_layout({})['desktop']['dockSize'], 64)
+        self.assertEqual(settings.read()['desktop']['sidebarEdge'], 'right')
+        self.assertEqual(backup.read_bytes(), original_backup)
+        with self.assertRaises(ValueError): settings.write({'desktop': {'layoutVersion': 0}})
+
+    def test_unknown_version_and_failed_import_do_not_replace_settings(self):
+        settings.write({})
+        before = settings.config_path().read_bytes()
+        with self.assertRaises(ValueError): settings.import_layout({'version': 1, 'controlCentreReady': False})
+        for desktop in [{'layoutVersion': 2}, {'layoutVersion': True},
+                        {'dockApps': {'order': ['same', 'same'], 'pinnedApps': []}},
+                        {'containers': {'dock': {'display': 'invalid'}}},
+                        {'widgetOptions': {'clock': {'display': 'invalid'}}}]:
+            with self.assertRaises(ValueError): settings.write({'desktop': desktop})
+            self.assertEqual(settings.config_path().read_bytes(), before)
+
 if __name__ == '__main__': unittest.main()
