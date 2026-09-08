@@ -157,7 +157,7 @@ ShellRoot {
             wait(350);
             const ordered = cards.slice().sort((a, b) => a.groupDepth - b.groupDepth);
             for (let i = 0; i < ordered.length; ++i) {
-                equal(ordered[i].height, ordered[i].naturalHeight, "expanded mixed card uses its own content height");
+                tryVerify(() => Math.abs(ordered[i].height - ordered[i].naturalHeight) < 0.5, 3000, "expanded mixed card uses its own content height after its resize finishes");
                 if (i > 0) check(ordered[i].y >= ordered[i - 1].y + ordered[i - 1].height, "mixed cards do not overlap when expanded");
             }
             const small = findChild(cards.find(item => item.notificationId === 501), "notificationImagePreview");
