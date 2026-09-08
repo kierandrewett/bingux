@@ -1,4 +1,5 @@
 import QtQuick
+import "DesktopLayout.js" as DesktopLayout
 
 // Editing handles sit over the existing surface. Its controls stay in their own window.
 MouseArea {
@@ -35,7 +36,10 @@ MouseArea {
             const p = value.p, item = value.entry.item;
             return vertical ? point.y < p.y || (point.y < p.y + item.height && point.x < p.x + item.width / 2) : point.x < p.x + item.width / 2;
         });
-        return before < 0 ? items.length : before;
+        const editor = DesktopEditing.editor;
+        const order = zoneName === "control-centre" ? (editor.desktop.controlOrder || DesktopLayout.controlOrder()).map(name => "control-" + name)
+            : zoneName === "dock" && id.startsWith("app:") ? editor.dockApplications : editor.layout[zoneName] || [];
+        return DesktopLayout.insertionIndex(order, id, items.map(value => value.entry.id), before);
     }
     onPressed: mouse => {
         start = Qt.point(mouse.x, mouse.y);

@@ -42,6 +42,14 @@ function defaults() {
 }
 function widget(id) { return widgets.concat(controlWidgets).find(w => w.id === id); }
 function zone(layout, id) { return Object.keys(layout).find(key => layout[key].includes(id)) || ""; }
+// A drop is positioned against visible neighbours, but saved orders include hidden widgets.
+function insertionIndex(order, draggedId, visibleIds, before) {
+    const remaining = order.filter(id => id !== draggedId);
+    const next = before >= 0 ? remaining.indexOf(visibleIds[before]) : -1;
+    if (next >= 0) return next;
+    const previous = remaining.indexOf(visibleIds[visibleIds.length - 1]);
+    return previous >= 0 ? previous + 1 : remaining.length;
+}
 function accepts(id, target) {
     const item = widget(id);
     if (id.startsWith("control-")) return !!item && ["control-centre", "palette"].includes(target);

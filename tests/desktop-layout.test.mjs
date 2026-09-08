@@ -45,3 +45,13 @@ test("presentation preserves native defaults and supports container inheritance 
     face = layout.presentation(desktop, "clock", "dock", "12:30", "clock", false, true);
     assert.equal(face.showIcon, false); assert.equal(face.showText, true);
 });
+test("drop positions follow visible neighbours in orders containing hidden widgets", () => {
+    const order = ["hidden-first", "network", "vpn", "bluetooth", "hidden-last"];
+    assert.equal(layout.insertionIndex(order, "network", ["bluetooth"], -1), 3);
+    assert.equal(layout.insertionIndex(order, "network", ["bluetooth"], 0), 2);
+    assert.equal(layout.insertionIndex(order, "new", ["network", "bluetooth"], 1), 3);
+    assert.equal(layout.insertionIndex(order, "new", [], -1), 5);
+    const moved = order.filter(id => id !== "network");
+    moved.splice(layout.insertionIndex(order, "network", ["bluetooth"], -1), 0, "network");
+    assert.deepEqual(moved, ["hidden-first", "vpn", "bluetooth", "network", "hidden-last"]);
+});
