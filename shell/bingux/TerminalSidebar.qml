@@ -507,11 +507,11 @@ Scope {
                 y: root.edge === "top" ? -(1 - panel.reveal) * panelSurface.height : 0
             }
             Rectangle {
-                // Only the desktop-facing edge is outlined. The corner
-                // continues this line into the top bar, without a boxed join.
+                // Join the desktop corner normally; in fullscreen continue
+                // the straight side border to the top of the screen.
                 color: Theme.barDivider
                 x: root.edge === "top" ? root.desktopCornerSize : root.edge === "left" ? parent.width - 1 : 0
-                y: root.edge === "top" ? parent.height - 1 : Theme.barHeight + root.desktopCornerSize
+                y: root.edge === "top" ? parent.height - 1 : root.fullscreenApp ? 0 : Theme.barHeight + root.desktopCornerSize
                 width: root.edge === "top" ? Math.max(0, parent.width - root.desktopCornerSize * 2) : 1
                 height: root.edge === "top" ? 1 : Math.max(0, parent.height - y)
             }
