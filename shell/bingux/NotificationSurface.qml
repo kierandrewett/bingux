@@ -26,9 +26,9 @@ PanelWindow {
     }
     color: "transparent"
     focusable: inHistory && notificationCentre.visible
-    // Preserve the shared scene while archived history exists. An empty toast
-    // viewport has a zero-height input mask, so the desktop stays click-through.
-    visible: !inputSuspended && (notificationCount > 0 || renderedNotificationCount > 0 || inHistory)
+    // Retain history in QML, but unmap its full-screen buffer when no cards
+    // are shown. An invisible mapped surface still pays compositor blur costs.
+    visible: !inputSuspended && (renderedNotificationCount > 0 || inHistory)
     exclusionMode: ExclusionMode.Ignore
     surfaceFormat.opaque: false
     WlrLayershell.layer: WlrLayer.Overlay
@@ -42,15 +42,18 @@ PanelWindow {
         id: desktopArea
         objectName: "notificationDesktopArea"
         x: root.hasSidebar ? root.leftInset : 0
-        width: Math.max(0, root.width - x - (root.hasSidebar ? root.rightInset : 0))
-        height: root.height
+        // Before the first map the native window has no configured size yet.
+        // Prepare the slide from screen geometry, not a zero-width viewport.
+        width: Math.max(0, (root.width || root.screen?.width || 0) - x - (root.hasSidebar ? root.rightInset : 0))
+        height: root.height || root.screen?.height || 0
         clip: true
 
         NotificationStack {
             id: stack
             state: root.state
             onNotificationActivated: if (root.notificationCentre) root.notificationCentre.visible = false;
-            presentedEntries: root.inHistory ? root.state.allEntries : root.state.visibleEntries
+            presentedEntries: root.state.allEntries
+            filterToasts: true
             historyMode: root.inHistory
             groupNotifications: root.inHistory
             z: 10

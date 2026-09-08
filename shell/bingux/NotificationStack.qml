@@ -27,6 +27,9 @@ Flickable {
     property bool rowSeparators: false
     property bool cardShadow: true
     property bool historyMode: false
+    // Keep history delegates alive; only live toasts take space outside history.
+    property bool filterToasts: false
+    property var lastSyncedEntries: new Map()
     property bool groupNotifications: true
     readonly property int visibleStackCards: 4
     property bool active: true
@@ -62,13 +65,20 @@ Flickable {
     property real trailingInset: Theme.padding
     property real bottomInset: 16
     readonly property real stackHeight: notificationColumn.height + bottomInset
-    readonly property int renderedNotificationCount: cards.count
+    readonly property int renderedNotificationCount: {
+        if (!filterToasts || historyMode) return cards.count;
+        let count = 0;
+        for (let index = 0; index < cardRepeater.count; ++index) {
+            const card = cardRepeater.itemAt(index);
+            // Retiring toast delegates must finish their exit before unmapping.
+            if (card && card.entry.toastVisible) count++;
+        }
+        return count;
+    }
     function resetPresentation() {
         historyStart.stop();
         placementFinish.stop();
         placingHistory = false;
-        cards.clear();
-        groupBackgrounds.clear();
         syncEntries();
     }
 
@@ -151,7 +161,7 @@ Flickable {
         const groups = new Map();
         for (let index = 0; index < cardRepeater.count; index++) {
             const card = cardRepeater.itemAt(index);
-            if (!card) continue;
+            if (!card || (filterToasts && !historyMode && !card.entry.toastVisible)) continue;
             if (!groups.has(card.groupKey)) groups.set(card.groupKey, []);
             groups.get(card.groupKey).push(card);
         }
@@ -255,7 +265,13 @@ Flickable {
                     delegate.layoutReady = false;
                     delegate.handoverInProgress = true;
                 }
-                cards.set(modelIndex, roles);
+                const current = cards.get(modelIndex);
+                for (const role of Object.keys(roles)) {
+                    const changed = role === "entryData"
+                        ? lastSyncedEntries.get(entry.notification.id) !== entry
+                        : current[role] !== roles[role];
+                    if (changed) cards.setProperty(modelIndex, role, roles[role]);
+                }
                 if (advancing) {
                     // Preserve every backing card at its current rendered position during reindexing.
                     delegate.layoutInset = currentX;
@@ -265,6 +281,7 @@ Flickable {
                 }
             }
         }
+        lastSyncedEntries = new Map(entries.map(entry => [entry.notification.id, entry]));
         layoutTimer.restart();
     }
 
@@ -415,7 +432,8 @@ Flickable {
                     && y + height >= root.contentY - root.originY - 120
                     && y <= root.contentY - root.originY + root.height + 120
                 readonly property bool nearViewport: !root.historyMode || targetNearViewport || frontNearViewport
-                visible: (groupExpanded || groupDepth < root.visibleStackCards) && nearViewport
+                visible: (!root.filterToasts || root.historyMode || entry.toastVisible)
+                    && (groupExpanded || groupDepth < root.visibleStackCards) && nearViewport
                     && (!root.updatingGroups || groupDepth < root.visibleStackCards)
                 readonly property bool collapsedStack: groupHead && groupCount > 1 && !groupExpanded
                 readonly property bool upcomingStackHead: !groupExpanded && groupDepth === 1 && groupCount > 2 && revealProgress > 0
