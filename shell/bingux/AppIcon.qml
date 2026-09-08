@@ -6,6 +6,7 @@ import "MediaMatch.js" as MediaMatch
 Item {
     id: root
     property var group: null
+    property var presentation: null
     property var activeStreams: []
     property var notifications: []
     property int implicitSize: Theme.dockIconSize
@@ -16,7 +17,7 @@ Item {
     readonly property bool playingAudio: activeStreams.some(node => MediaMatch.matchesAudio(node.properties, group))
     readonly property var appNotifications: notifications.filter(entry => MediaMatch.matchesNotification(entry, group))
     readonly property int notificationCount: appNotifications.length
-    readonly property string appName: group && group.desktopEntry ? group.desktopEntry.name : group ? group.displayName || group.id : ""
+    readonly property string appName: presentation?.label || (group && group.desktopEntry ? group.desktopEntry.name : group ? group.displayName || group.id : "")
     readonly property string tooltipText: appName + (playingAudio ? " · Playing audio" : "")
         + (notificationCount > 0 ? " · " + notificationCount + " notifications" : "")
     implicitWidth: implicitSize
@@ -24,10 +25,21 @@ Item {
 
     OsIconImage {
         id: image
+        visible: root.presentation?.showIcon ?? true
         anchors.fill: parent
+        anchors.bottomMargin: root.presentation?.showText && root.presentation?.showIcon ? 16 : 0
         implicitSize: root.implicitSize
-        source: Quickshell.iconPath(root.group && root.group.desktopEntry && root.group.desktopEntry.icon
-            ? root.group.desktopEntry.icon : "application-x-executable", "application-x-executable")
+        source: Quickshell.iconPath(root.presentation?.icon || (root.group && root.group.desktopEntry && root.group.desktopEntry.icon
+            ? root.group.desktopEntry.icon : "application-x-executable"), "application-x-executable")
+    }
+    Text {
+        visible: !!root.presentation?.showText
+        anchors.bottom: parent.bottom
+        width: parent.width; height: root.presentation?.showIcon ? 16 : parent.height
+        text: root.appName; textFormat: Text.PlainText; elide: Text.ElideRight
+        horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+        wrapMode: root.presentation?.showIcon ? Text.NoWrap : Text.WordWrap
+        color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
     }
     IconAccent { id: accent; source: image.normalizedSource }
     DockBadge {

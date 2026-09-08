@@ -7,6 +7,7 @@ Item {
     id: root
 
     required property var parentWindow
+    property var presentation: null
     readonly property int maximumVisibleItems: 12
     property var trayItems: []
 
@@ -101,7 +102,7 @@ Item {
                     return trayButton.isSafeIconSource(icon) ? icon : Quickshell.iconPath("application-x-executable", "application-x-executable");
                 }
 
-                width: Theme.barIconTarget
+                width: root.presentation?.custom ? customFace.implicitWidth + Theme.barPrimaryPadding * 2 : Theme.barIconTarget
                 height: Theme.barHeight
                 BarTooltip {
                     anchorItem: trayButton
@@ -117,15 +118,22 @@ Item {
                     focused: trayButton.activeFocus
                 }
 
+                WidgetFace {
+                    id: customFace; anchors.centerIn: parent; visible: !!root.presentation?.custom
+                    presentation: Object.assign({}, root.presentation || {}, {label: root.presentation?.labelOverridden ? root.presentation.label : trayButton.Accessible.name})
+                    iconSource: root.presentation?.iconOverridden ? Quickshell.iconPath(root.presentation.icon) : trayButton.iconSource(trayButton.modelData.icon)
+                    colouredIcon: !root.presentation?.iconOverridden
+                }
+
                 OsIconImage {
-                    visible: !trayButton.usesFallbackIcon
+                    visible: !root.presentation?.custom && !trayButton.usesFallbackIcon
                     anchors.centerIn: parent
                     implicitSize: Theme.iconSize
                     source: trayButton.iconSource(trayButton.modelData.icon)
                 }
 
                 Item {
-                    visible: trayButton.usesFallbackIcon
+                    visible: !root.presentation?.custom && trayButton.usesFallbackIcon
                     width: 16
                     height: 16
                     anchors.centerIn: parent
