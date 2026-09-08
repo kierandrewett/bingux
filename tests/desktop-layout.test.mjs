@@ -66,3 +66,20 @@ test("control-centre widgets can use every bar and dock position without duplica
     current = layout.move(current, "control-network", "palette", 0);
     assert.equal(layout.zone(current, "control-network"), "");
 });
+
+test("space palette items create independent instances and springs stay in the bar", () => {
+    let current = layout.defaults();
+    current = layout.move(current, "spring", "top-left", 1);
+    current = layout.move(current, "spring", "top-left", 2);
+    current = layout.move(current, "spacer", "top-right", 0);
+    assert.deepEqual(plain(current["top-left"]), ["search", "spring:1", "spring:2"]);
+    assert.equal(current["top-right"][0], "spacer:1");
+    const previous = current;
+    assert.equal(layout.move(current, "spring:1", "dock", 0), previous);
+    current = layout.move(current, "spring:1", "top-center", 0);
+    assert.equal(current["top-center"][0], "spring:1");
+    current = layout.move(current, "spring:2", "palette", 0);
+    assert.equal(layout.zone(current, "spring:2"), "");
+    assert.equal(layout.widget("spring:1").flexible, true);
+    assert.equal(layout.widget("spring:unknown"), undefined);
+});

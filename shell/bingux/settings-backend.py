@@ -92,8 +92,10 @@ def validate(data):
     if not isinstance(desktop['widgetOptions'], dict) or len(desktop['widgetOptions']) > 256:
         raise ValueError('Invalid widget display options.')
     for key, options in desktop['widgetOptions'].items():
-        if not isinstance(key, str) or not isinstance(options, dict) or set(options) - {'display', 'label', 'icon'}:
+        if not isinstance(key, str) or not isinstance(options, dict) or set(options) - {'display', 'label', 'icon', 'width'}:
             raise ValueError('Invalid widget display options.')
+        if 'width' in options and (not re.fullmatch(r'spacer:[1-9][0-9]{0,3}', key) or type(options['width']) is not int or not 8 <= options['width'] <= 160):
+            raise ValueError('Fixed spaces must be between 8 and 160 pixels.')
         if options.get('display', 'inherit') not in modes + ('inherit',):
             raise ValueError('Invalid widget display mode.')
         for field in ('label', 'icon'):
@@ -113,7 +115,7 @@ def validate(data):
         seen = set()
         for zone, items in layout.items():
             allowed = panels if zone == 'sidebar' else widgets | controls
-            if not isinstance(items, list) or any(not isinstance(item, str) or item not in allowed or item in seen for item in items): raise ValueError('A widget can only be placed once in a compatible area.')
+            if not isinstance(items, list) or len(items) > 256 or any(not isinstance(item, str) or (item not in allowed and not (zone.startswith('top-') and re.fullmatch(r'(spacer|spring):[1-9][0-9]{0,3}', item))) or item in seen for item in items): raise ValueError('A widget can only be placed once in a compatible area.')
             if len(items) != len(set(items)): raise ValueError('A widget can only be placed once.')
             seen.update(items)
         if not layout['sidebar']: raise ValueError('Keep at least one sidebar panel.')

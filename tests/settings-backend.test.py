@@ -65,6 +65,27 @@ class SettingsTests(unittest.TestCase):
                 settings.write({'desktop': {'layout': duplicate}})
         self.assertEqual(settings.config_path().read_bytes(), before)
 
+    def test_fixed_space_width_validation(self):
+        settings.write({'desktop': {'widgetOptions': {'spacer:1': {'width': 48}}}})
+        self.assertEqual(settings.read()['desktop']['widgetOptions']['spacer:1']['width'], 48)
+        before = settings.config_path().read_bytes()
+        for key, width in [('spacer:1', 0), ('spacer:1', 161), ('spacer:1', True), ('spring:1', 40), ('search', 40)]:
+            with self.assertRaises(ValueError): settings.write({'desktop': {'widgetOptions': {key: {'width': width}}}})
+            self.assertEqual(settings.config_path().read_bytes(), before)
+
+    def test_spacing_instances_roundtrip_and_validate(self):
+        layout = {'top-left': ['search', 'spring:1', 'spacer:1'], 'top-center': ['clock'],
+                  'top-right': ['spring:2', 'controls'], 'dock': [], 'sidebar': ['notes']}
+        settings.write({'desktop': {'layout': layout}})
+        self.assertEqual(settings.read()['desktop']['layout'], layout)
+        before = settings.config_path().read_bytes()
+        for zone, item in [('dock', 'spring:3'), ('sidebar', 'spacer:2'), ('top-left', 'spring:2'),
+                           ('top-left', 'spring'), ('top-left', 'spring:0'), ('top-left', 'spacer:invalid')]:
+            invalid = copy.deepcopy(layout)
+            invalid[zone].append(item)
+            with self.assertRaises(ValueError): settings.write({'desktop': {'layout': invalid}})
+        self.assertEqual(settings.config_path().read_bytes(), before)
+
     def test_runtime_import_is_exact_and_happens_once(self):
         snapshot = {'version': 1, 'controlCentreReady': True,
             'layout': {'top-left': ['search'], 'top-center': ['clock'],

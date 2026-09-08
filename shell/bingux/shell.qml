@@ -293,6 +293,29 @@ ShellRoot {
             return layout;
         }
         readonly property var customLayout: DesktopEditing.desktop.layout
+        readonly property var spacingIds: customLayout ? ["top-left", "top-center", "top-right"].reduce((items, zone) => items.concat(customLayout[zone]), []).filter(DesktopLayout.isSpacing) : []
+        property var spacingWidgets: []
+        Instantiator {
+            model: topBar.spacingIds
+            delegate: BarSpace {
+                id: spacingWidget
+                required property string modelData
+                readonly property string widgetId: modelData
+                flexible: widgetId.startsWith("spring:")
+                gapSize: DesktopEditing.desktop.widgetOptions?.[widgetId]?.width || 20
+                parent: topBar.hostFor(spacingWidget)
+                Layout.column: topBar.controlColumn(spacingWidget)
+                Layout.row: 0
+            }
+            onObjectAdded: (index, object) => topBar.spacingWidgets = topBar.spacingWidgets.concat([object])
+            onObjectRemoved: (index, object) => topBar.spacingWidgets = topBar.spacingWidgets.filter(item => item !== object)
+        }
+        function hasSpring(zone) { return customLayout?.[zone]?.some(id => id.startsWith("spring:")) || false; }
+        function zoneBudget(zone) {
+            const centre = availableControls.filter(item => zoneFor(item) === "top-center");
+            const centreWidth = hasSpring("top-center") ? width * 0.4 : Math.min(width * 0.4, centre.reduce((sum, item) => sum + item.implicitWidth + Theme.barControlGap, 0));
+            return zone === "top-center" ? centreWidth : Math.max(0, (width - centreWidth) / 2 - Theme.gap);
+        }
         function appearance(id, label, icon, nativeIcon, nativeText) {
             return DesktopLayout.presentation(DesktopEditing.desktop, id,
                 customLayout ? DesktopLayout.zone(customLayout, id) : "top-right", label, icon, nativeIcon, nativeText);
@@ -301,16 +324,16 @@ ShellRoot {
             JSON.stringify(customLayout["top-left"]) === '["search"]' &&
             JSON.stringify(customLayout["top-center"]) === '["clock"]' &&
             customLayout.dock.length === 0 &&
-            !["top-left", "top-center", "top-right"].some(zone => customLayout[zone].some(id => id.startsWith("control-"))) &&
+            !["top-left", "top-center", "top-right"].some(zone => customLayout[zone].some(id => id.startsWith("control-") || DesktopLayout.isSpacing(id))) &&
             ["top-left", "top-center", "top-right"].every(zone => !DesktopEditing.desktop.containers?.[zone]?.display || DesktopEditing.desktop.containers[zone].display === "native") &&
             Object.keys(DesktopEditing.desktop.widgetOptions || {}).every(id => !DesktopLayout.zone(customLayout, id).startsWith("top-") || !appearance(id, "", "", false, false).custom) &&
             ["capture", "tray", "privacy", "metrics", "keyboard", "controls", "notifications"].every(id => customLayout["top-right"].includes(id)))
         function chosen(item) {
-            const name = controlNames[defaultControls.indexOf(item)];
+            const name = item.widgetId || controlNames[defaultControls.indexOf(item)];
             return customLayout ? DesktopLayout.zone(customLayout, name) !== "" : !name.startsWith("control-");
         }
         function zoneFor(item) {
-            const name = controlNames[defaultControls.indexOf(item)];
+            const name = item.widgetId || controlNames[defaultControls.indexOf(item)];
             if (name === "overflow" && (!customLayout || !DesktopLayout.zone(customLayout, name))) return "top-right";
             return customLayout ? DesktopLayout.zone(customLayout, name) : name === "search" ? "top-left" : name === "clock" ? "top-center" : "top-right";
         }
@@ -323,8 +346,8 @@ ShellRoot {
         readonly property real controlsBudget: Math.max(0, (width - clockPill.implicitWidth) / 2 - Theme.gap)
         // Display order is independent of overflow priority and reparenting order.
         readonly property var defaultControls: [captureStatus, trayContainer, privacyContainer,
-            metricsPill, inputSourceSelector, overflowButton, systemPill, notificationButton, searchPill, clockPill].concat(controlCentre.movableWidgets)
-        readonly property var controlNames: ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "search", "clock"].concat(controlCentre.movableWidgets.map(item => item.widgetId))
+            metricsPill, inputSourceSelector, overflowButton, systemPill, notificationButton, searchPill, clockPill].concat(controlCentre.movableWidgets, spacingWidgets)
+        readonly property var controlNames: ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "search", "clock"].concat(controlCentre.movableWidgets.map(item => item.widgetId), spacingWidgets.map(item => item.widgetId))
         Settings {
             id: barPreferences
             location: "file://" + (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/bingux/top-bar.ini"
@@ -430,16 +453,16 @@ ShellRoot {
             [privacyContainer, privacyContainer.active], [metricsPill, profileSettings.metricsEnabled],
             [inputSourceSelector, metrics.desktopStateAvailable], [systemPill, true],
             [notificationButton, notificationState.allEntries.length > 0], [searchPill, true], [clockPill, true]
-        ].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat(controlCentre.movableWidgets.filter(item => chosen(item)))
+        ].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat(controlCentre.movableWidgets.filter(item => chosen(item)), spacingWidgets)
         readonly property var overflowItems: {
             if (customLayout && !nativeTopBarLayout) {
                 const hidden = [];
                 const center = availableControls.filter(item => zoneFor(item) === "top-center");
                 const left = availableControls.filter(item => zoneFor(item) === "top-left");
                 const right = availableControls.filter(item => zoneFor(item) === "top-right");
-                const demand = items => items.reduce((sum, item) => sum + item.implicitWidth, 0) + Math.max(0, items.length - 1) * Theme.barControlGap;
+                const demand = items => items.reduce((sum, item) => sum + (item.flexible ? 8 : item.implicitWidth), 0) + Math.max(0, items.length - 1) * Theme.barControlGap;
                 const centerBudget = left.length || right.length ? width * 0.4 : width - 2 * Theme.gap;
-                const sideBudget = center.length ? (width - Math.min(centerBudget, demand(center))) / 2 - Theme.gap : width / 2 - Theme.gap;
+                const sideBudget = center.length ? (width - (hasSpring("top-center") ? centerBudget : Math.min(centerBudget, demand(center)))) / 2 - Theme.gap : width / 2 - Theme.gap;
                 for (const group of [{items: center, budget: centerBudget},
                     {items: left, budget: !center.length && !right.length ? width - Theme.barEdgeHitWidth - 2 * Theme.gap : sideBudget},
                     {items: right, budget: (!center.length && !left.length ? width - Theme.gap : sideBudget) - Theme.barEdgeHitWidth - Theme.barControlGap}]) {
@@ -447,7 +470,7 @@ ShellRoot {
                     for (const item of [trayContainer, metricsPill].concat(group.items.slice().reverse())) {
                         if (demand(shown) <= group.budget) break;
                         const index = shown.indexOf(item);
-                        if (index < 0) continue;
+                        if (index < 0 || DesktopLayout.isSpacing(item.widgetId || "")) continue;
                         shown.splice(index, 1); hidden.push(item);
                     }
                 }
@@ -498,22 +521,24 @@ ShellRoot {
                 color: Theme.barDivider
             }
         }
+        readonly property real editLeftBoundary: Math.max(leftControls.width, Math.min(centerControls.x, (leftControls.width + centerControls.x) / 2))
+        readonly property real editRightBoundary: Math.min(width - rightControls.width, Math.max(centerControls.x + centerControls.width, (centerControls.x + centerControls.width + width - rightControls.width) / 2))
         NativeEditSurface {
-            window: topBar; zoneName: "top-left"; x: 0; width: topBar.width * 0.3; height: topBar.height
+            window: topBar; zoneName: "top-left"; x: 0; width: topBar.editLeftBoundary; height: topBar.height
             entries: topBar.defaultControls.filter(item => topBar.zoneFor(item) === zoneName).map(item => ({id: topBar.controlNames[topBar.defaultControls.indexOf(item)], item}))
         }
         NativeEditSurface {
-            window: topBar; zoneName: "top-center"; x: topBar.width * 0.3; width: topBar.width * 0.3; height: topBar.height
+            window: topBar; zoneName: "top-center"; x: topBar.editLeftBoundary; width: Math.max(0, topBar.editRightBoundary - x); height: topBar.height
             entries: topBar.defaultControls.filter(item => topBar.zoneFor(item) === zoneName).map(item => ({id: topBar.controlNames[topBar.defaultControls.indexOf(item)], item}))
         }
         NativeEditSurface {
-            window: topBar; zoneName: "top-right"; x: topBar.width * 0.6; width: topBar.width * 0.4; height: topBar.height
+            window: topBar; zoneName: "top-right"; x: topBar.editRightBoundary; width: topBar.width - x; height: topBar.height
             entries: topBar.defaultControls.filter(item => topBar.zoneFor(item) === zoneName).map(item => ({id: topBar.controlNames[topBar.defaultControls.indexOf(item)], item}))
         }
         Item {
             anchors.fill: parent
-            GridLayout { id: leftControls; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; rows: 1; columnSpacing: Theme.barControlGap }
-            GridLayout { id: centerControls; anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: parent.verticalCenter; rows: 1; columnSpacing: Theme.barControlGap }
+            GridLayout { id: leftControls; width: topBar.hasSpring("top-left") ? topBar.zoneBudget("top-left") : implicitWidth; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; rows: 1; columnSpacing: Theme.barControlGap }
+            GridLayout { id: centerControls; width: topBar.hasSpring("top-center") ? topBar.zoneBudget("top-center") : implicitWidth; anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: parent.verticalCenter; rows: 1; columnSpacing: Theme.barControlGap }
             BarSearchButton {
                 id: searchPill
                 presentation: topBar.appearance("search", "Search", "system-search-symbolic", true, false)
@@ -551,12 +576,13 @@ ShellRoot {
                 width: Math.max(0, (parent.width - clockPill.width) / 2 - Theme.gap)
                 GridLayout {
                     id: rightControls
+                    width: topBar.hasSpring("top-right") ? topBar.zoneBudget("top-right") : implicitWidth
                     Instantiator {
                         model: topBar.defaultControls.filter(item => !controlCentre.movableWidgets.includes(item))
                         delegate: WidgetEditHandle {
                             required property var modelData
                             control: modelData
-                            widgetId: topBar.controlNames[topBar.defaultControls.indexOf(modelData)]
+                            widgetId: modelData.widgetId || topBar.controlNames[topBar.defaultControls.indexOf(modelData)] || ""
                             onRequested: (id, item) => root.openWidgetMenu(id, item, topBar.windowFor(item))
                         }
                     }
