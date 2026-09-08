@@ -286,12 +286,14 @@ FocusScope {
                     Accessible.name: (root.showRemaining ? "Time remaining " : "Elapsed time ") + text
                     onClicked: root.showRemaining = !root.showRemaining
                     background: ControlCentreButtonSurface { control: elapsedTime; animated: false; radius: Theme.gap; baseColor: "transparent" }
-                    contentItem: Text {
+                    contentItem: RollingNumber {
+                        objectName: "mediaElapsedDigits"
                         text: elapsedTime.text
-                        verticalAlignment: Text.AlignVCenter
-                        horizontalAlignment: Text.AlignLeft
+                        value: root.showRemaining ? seek.to - elapsedTime.displayedPosition : elapsedTime.displayedPosition
+                        motionEnabled: root.menuActive && !seek.pressed
                         color: Theme.muted
-                        font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
+                        pixelSize: Theme.fontSmall
+                        fontWeight: Font.Normal
                     }
                     ShellTooltip {
                         parent: elapsedTime
@@ -330,12 +332,21 @@ FocusScope {
                 enabled: MediaMatch.canStep(root.player, 1)
                 onClicked: if (enabled) { animateAction(); MediaMatch.step(root.player, 1); }
             }
-            Text {
+            Item {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 0
-                horizontalAlignment: Text.AlignRight
-                text: root.hasPosition ? MediaMatch.timeLabel(root.player.length) : ""
-                color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
+                implicitHeight: totalTime.implicitHeight
+                RollingNumber {
+                    id: totalTime
+                    objectName: "mediaDurationDigits"
+                    anchors.right: parent.right
+                    text: root.hasPosition ? MediaMatch.timeLabel(root.player.length) : ""
+                    value: root.hasPosition ? root.player.length : 0
+                    motionEnabled: root.menuActive
+                    color: Theme.muted
+                    pixelSize: Theme.fontSmall
+                    fontWeight: Font.Normal
+                }
             }
         }
     }

@@ -15,13 +15,19 @@ Item {
     property real progress: 0
     property int direction: 1
     property bool ready: false
+    property bool motionEnabled: true
+    onMotionEnabledChanged: if (!motionEnabled) {
+        roll.stop();
+        displayedText = text; incomingText = text;
+        displayedValue = value; incomingValue = value; progress = 0;
+    }
     readonly property bool animating: roll.running
     implicitWidth: prefixMeasure.advanceWidth + glyphRow.implicitWidth
     implicitHeight: Math.ceil(pixelSize * 1.3)
     clip: true
     function advance() {
         if (!ready || roll.running || displayedText === text) return;
-        if (Theme.reducedMotion) {
+        if (Theme.reducedMotion || !motionEnabled) {
             displayedText = text; incomingText = text;
             displayedValue = value; incomingValue = value; progress = 0;
             return;

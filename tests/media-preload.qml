@@ -43,6 +43,27 @@ ShellRoot {
                 art.active = true;
                 compare(art.front.opacity, 1);
             }
+            function test_sliding_times() {
+                controls.menuActive = true;
+                const elapsed = findChild(controls, "mediaElapsedDigits");
+                const duration = findChild(controls, "mediaDurationDigits");
+                verify(elapsed !== null && duration !== null);
+                player.position = 43;
+                tryVerify(() => elapsed.animating, 100);
+                tryCompare(elapsed, "displayedText", "0:43", 500);
+                controls.showRemaining = true;
+                tryCompare(elapsed, "displayedText", "-4:17", 500);
+                player.position = 44;
+                tryVerify(() => elapsed.animating, 100);
+                compare(elapsed.direction, -1);
+                tryCompare(elapsed, "displayedText", "-4:16", 500);
+                player.length = 301;
+                tryCompare(duration, "displayedText", "5:01", 500);
+                controls.menuActive = false;
+                player.position = 60;
+                tryCompare(elapsed, "displayedText", "-4:01", 100);
+                verify(!elapsed.animating);
+            }
             function cleanupTestCase() { report.setText("FAILURES " + qtest_results.failCount + "\n"); finish.start(); }
         }
     }
