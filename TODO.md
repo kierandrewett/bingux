@@ -2,6 +2,14 @@
 
 This file tracks implementation work. A checked item means the related configuration builds and has the stated evidence.
 
+## Emoji picker and Electron
+
+- [x] Fold skin-tone variants into one entry and save the preference beside search.
+- [x] Verify actual Discord search input on native Wayland and persist its launch flags.
+- [x] Prefer native text-input caret geometry, with bounded accessibility fallback.
+- [x] Verify Win+Period, caret placement and Enter insertion in Electron inputs and editable content.
+- [x] Check empty inputs, Unicode sequences, input blur rejection and GTK insertion. See `docs/emoji-picker.md` for the verified scope.
+
 ## Constraints
 
 - Keep `banks/` untouched. It is user-owned data and is outside the flake.
