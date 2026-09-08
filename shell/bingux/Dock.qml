@@ -494,7 +494,8 @@ PanelWindow {
             const sectionDifference = Number(root.isPinned(b)) - Number(root.isPinned(a));
             if (sectionDifference !== 0)
                 return sectionDifference;
-            const ai = order.indexOf(a.id), bi = order.indexOf(b.id);
+            const ai = order.findIndex(id => id === a.id || pinIdentity(id) === pinIdentity(a.desktopEntry ? a.desktopEntry.id : a.id));
+            const bi = order.findIndex(id => id === b.id || pinIdentity(id) === pinIdentity(b.desktopEntry ? b.desktopEntry.id : b.id));
             const configuredDifference = (ai < 0 ? order.length : ai) - (bi < 0 ? order.length : bi);
             if (configuredDifference !== 0)
                 return configuredDifference;

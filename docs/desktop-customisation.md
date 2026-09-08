@@ -4,9 +4,11 @@ Open **Bingux Settings > Desktop > Customise Desktop**. This opens a full-screen
 
 Drag a widget from the centre palette into the left, centre or right section of the top bar, or into the dock. A widget already on the desktop moves instead of being duplicated. Sidebar panel widgets can move within the sidebar. Drag a widget back into the palette to remove it. Keep at least one sidebar panel.
 
-For keyboard use, focus a widget and press Space or Enter, then choose a destination in the palette. The Dock tab controls icon size, left/centre/right alignment, click and middle-click actions, and mouse wheel or trackpad window switching. The Sidebar tab controls visibility and screen edge.
+The open centre palette has Widgets and Apps views. Drag an installed app into the dock to pin it. The dock preview uses the saved pins and order. The control centre stays open beside the palette; drag its tiles to change their order or drag one into the palette to remove it.
 
-Changes stay in the preview until **Apply and finish**. Cancel or Escape discards the preview. Reset layout restores the default widget arrangement in the preview. Existing settings changes are also saved when applying the desktop.
+For keyboard use, focus a widget and press Space or Enter, then use Move in the footer. The Dock footer button opens icon size, alignment and pointer behaviour options. The Sidebar button opens visibility and screen edge options.
+
+Changes stay in the preview until **Done**. Cancel discards the preview. Escape closes the current options panel first, then the editor. Restore defaults resets the top-bar and sidebar widget arrangement in the preview. Existing settings changes are also saved when applying the desktop.
 
 The live shell uses the same widget instances after reparenting. Menus follow their controls, including controls moved to the dock. Crowded top-bar sections move controls into the existing More menu. Live top-bar reordering remains persistent after using the editor.
 
@@ -24,7 +26,7 @@ Press Apply to save search changes. The settings helper restarts the user search
 
 User overrides are stored atomically in `$XDG_CONFIG_HOME/bingux/settings.json`. They remain separate from managed Nix configuration. The settings backend validates engine URLs, unique shortcuts, enabled defaults, desktop ranges, widget destinations and duplicate widgets before replacing the file. The search daemon validates engine configuration again when loading it.
 
-The editor uses the current top-bar order and sidebar edge when no customised layout has been saved. JPEG XL and other wallpapers that Qt cannot read directly are converted to a cached PNG by the settings helper.
+The shell imports the effective runtime layout once into version 1 of the desktop settings. This includes top-bar and overflow order, dock pins and app order, sidebar edge, and control-centre choices. The source state is retained in `layout-before-import.json`. Later launches and the editor load the saved layout. Unsupported versions are rejected. JPEG XL and other wallpapers that Qt cannot read directly are converted to a cached PNG by the settings helper.
 
 ## Checks
 

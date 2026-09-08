@@ -26,6 +26,7 @@
             editor.put('controls', 'dock', 1);
             editor.put('metrics', 'top-left', 0);
             editor.put('notes', 'sidebar', 0);
+            editor.put('control-bluetooth', 'control-centre', 0);
             editor.change('dockSize', 40);
             editor.change('dockAlignment', 'left');
             editor.apply();
@@ -41,6 +42,8 @@
             tryVerify(() => dock.widgetHost.implicitWidth > 0, 2000);
             controlCentre.visible = true;
             wait(400);
+            compare(controlCentre.controlCell('bluetooth').column, 0, 'The live control centre follows the saved tile order');
+            compare(controlCentre.controlCell('network').column, 1);
             compare(controlCentre.anchorWindow, dock);
             verify(controlCentre.preferredY > Theme.barHeight, 'Dock popup is placed above the dock');
             verify(controlCentre.preferredY + controlCentre.popupHeight <= dock.popupAnchorTop - Theme.gap + 1, 'Dock popup clears the dock');
