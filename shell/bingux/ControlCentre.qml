@@ -128,7 +128,7 @@ ShellPopup {
     popupHeight: Math.ceil(controlsHeight) + contentPadding * 2
     contentPadding: 16
     cornerRadius: Theme.cardRadius
-    surfaceColor: Theme.shellSurface
+    surfaceColor: Theme.popupSurface
     preferredX: DesktopEditing.active ? width - popupWidth - DesktopEditing.editor.rightInset - 24 : anchorItem ? anchorPosition.x - popupWidth : width - popupWidth - Theme.padding
 
     preferredY: DesktopEditing.active ? editorTop : anchorItem ? (anchorAbove ? anchorTop - popupHeight - Theme.gap : anchorPosition.y + Theme.gap) : Theme.barHeight + Theme.gap

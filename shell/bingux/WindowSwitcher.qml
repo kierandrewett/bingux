@@ -317,7 +317,7 @@ Scope {
                 width: root.displayCount * (root.tileWidth + root.tileGap) - root.tileGap + root.cardPadding * 2
                 height: root.tileHeight + root.cardPadding * 2
                 radius: Theme.shellRadius
-                color: Theme.shellSurface
+                color: Theme.popupSurface
                 border.width: 1
                 border.color: Theme.outline
                 PanelOutline { surface: strip }

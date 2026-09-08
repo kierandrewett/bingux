@@ -289,8 +289,8 @@ in
                 match.layer = "^(bingux-bar-tooltip|gnoblin-dock-tooltip|gnoblin-shell-popup|bingux-popup-dismiss|gnoblin-dock-launch|bingux-notifications)$";
                 animation = "none";
             } {
-                # Keep the shared shell background identical across panels and popouts.
-                match.layer = "^(bingux-top-bar|bingux-terminal-sidebar|bingux-sidebar-corner|bingux-panel-outline|bingux-dock|bingux-search|gnoblin-shell-popup)$";
+                # Let QML own panel and popup colours, including translucent outlines.
+                match.layer = "^(bingux-top-bar|bingux-terminal-sidebar|bingux-sidebar-corner|bingux-panel-outline|bingux-dock|bingux-search|gnoblin-shell-popup|bingux-bar-tooltip|gnoblin-dock-tooltip|bingux-notifications|bingux-capture-feedback)$";
                 opacity = 1.0;
                 blur = 0;
             } ];

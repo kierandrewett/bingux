@@ -19,7 +19,7 @@ ShellPopup {
     cornerRadius: Theme.radius
     popupWidth: 236
     contentPadding: 6
-    surfaceColor: Qt.rgba(Theme.surface.r, Theme.surface.g, Theme.surface.b, 1)
+    surfaceColor: Theme.popupSurface
     popupHeight: Math.min(menuColumn.implicitHeight + 12, height - Theme.barHeight - 24)
     onVisibleChanged: { if (visible) headingChoices = false; else if (notes.visible) Qt.callLater(notes.focusContent); }
     MenuNavigator {

@@ -356,7 +356,7 @@ Scope {
                     visible: preferences.target === "region"
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: parent.y < 40 ? 12 : -36
-                    width: sizeLabel.implicitWidth + Theme.padding * 2; height: 28; radius: Theme.radius; color: Theme.shellSurface
+                    width: sizeLabel.implicitWidth + Theme.padding * 2; height: 28; radius: Theme.radius; color: Theme.popupSurface
                     Text { id: sizeLabel; anchors.centerIn: parent; text: Math.round(root.region.width) + " × " + Math.round(root.region.height); color: "white"; font.family: Theme.fontFamily; font.pixelSize: 12 }
                 }
             }
@@ -414,7 +414,7 @@ Scope {
                 width: toolbarRow.implicitWidth + 16
                 height: 56
                 radius: Theme.cardRadius
-                color: Theme.shellSurface
+                color: Theme.popupSurface
                 border.color: Theme.outline
                 MouseArea { anchors.fill: parent } // Controls must not start a region drag.
                 RowLayout {
@@ -503,7 +503,7 @@ Scope {
                 x: Math.min(overlay.width - width - 16, toolbar.x + toolbar.width - width)
                 y: toolbar.y > height + 20 ? toolbar.y - height - 12 : Math.min(overlay.height - height - 8, toolbar.y + toolbar.height + 12)
                 radius: Theme.cardRadius
-                color: Theme.shellSurface
+                color: Theme.popupSurface
                 border.color: Theme.outline
                 MouseArea { anchors.fill: parent }
                 Flickable {
@@ -569,7 +569,7 @@ Scope {
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "bingux-capture-feedback"
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        Rectangle { anchors.fill: parent; color: Theme.shellSurface; radius: 20; border.color: Theme.outline }
+        Rectangle { anchors.fill: parent; color: Theme.popupSurface; radius: 20; border.color: Theme.outline }
         ColumnLayout {
             id: feedbackContents
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: 16 }

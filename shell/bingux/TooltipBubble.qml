@@ -12,7 +12,7 @@ Rectangle {
     implicitWidth: Math.min(maximumWidth,
         Math.ceil(Math.max(textMeasure.contentWidth, hintMeasure.contentWidth)) + horizontalPadding * 2)
     implicitHeight: Math.ceil(content.implicitHeight) + verticalPadding * 2
-    color: Theme.surface
+    color: Theme.popupSurface
     border.color: Theme.outline
     radius: Theme.insetRadius(Theme.cardRadius, Theme.gap)
     // Measure wrapping at a fixed limit so the bubble can fit the rendered

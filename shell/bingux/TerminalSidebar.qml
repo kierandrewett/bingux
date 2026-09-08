@@ -738,7 +738,7 @@ Scope {
         id: contentMenu
         hostItem: root.detached ? detachedWindow.contentItem : null
         cornerRadius: Theme.radius
-        surfaceColor: Qt.rgba(Theme.surface.r, Theme.surface.g, Theme.surface.b, 1)
+        surfaceColor: Theme.popupSurface
         screen: root.detached ? detachedWindow.screen : root.screen
         popupWidth: 190
         popupHeight: Math.min(contentMenuColumn.implicitHeight + contentPadding * 2, height - preferredY - Theme.gap)

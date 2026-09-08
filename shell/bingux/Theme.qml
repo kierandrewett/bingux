@@ -10,7 +10,7 @@ QtObject {
     readonly property color background: "#f5161616"
     readonly property color surface: "#f0303030"
     readonly property color shellSurface: "#1b1b1b"
-    readonly property color popupSurface: shellSurface
+    readonly property color popupSurface: "#303030"
     readonly property int shellRadius: cardRadius + 4
     readonly property color elevated: "#383838"
     readonly property color menuWidgetBackground: elevated
@@ -106,7 +106,7 @@ QtObject {
     readonly property int dockLaunchTimeout: 20000
     // Search has its own density so the launcher can feel deliberate without
     // changing the proportions of the rest of the shell.
-    readonly property color searchSurface: shellSurface
+    readonly property color searchSurface: popupSurface
     readonly property color searchHover: "#302f3543"
     readonly property color searchSelection: "#5b4c6f9b"
     readonly property color searchAccent: "#a9c8f7"

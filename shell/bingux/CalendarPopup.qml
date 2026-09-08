@@ -94,7 +94,7 @@ ShellPopup {
     property date agendaDate: selectedDate
     popupWidth: 384
     contentPadding: 16
-    surfaceColor: Theme.shellSurface
+    surfaceColor: Theme.popupSurface
     popupHeight: calendar.implicitHeight + contentPadding * 2
     onAboutToOpen: {
         if (inlineMode) return;

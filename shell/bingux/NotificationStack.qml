@@ -21,7 +21,7 @@ Flickable {
     readonly property bool reducedMotion: Theme.reducedMotion || !animationsEnabled
     readonly property int cardMotion: animationsEnabled ? Theme.notificationMotion : 0
     readonly property int groupMotion: reducedMotion ? 0 : historyMode ? 180 : Theme.notificationGroupMotion
-    property color cardBackground: Theme.surface
+    property color cardBackground: Theme.popupSurface
     property real cardRadius: Theme.notificationRadius
     property bool cardBorder: true
     property bool rowSeparators: false

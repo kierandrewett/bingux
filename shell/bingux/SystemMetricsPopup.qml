@@ -18,7 +18,7 @@ ShellPopup {
     popupHeight: !customising && performance.page !== "usage" ? maximumHeight
         : Math.min((customising ? content.implicitHeight : performance.implicitHeight) + contentPadding * 2, maximumHeight)
     contentPadding: 16
-    surfaceColor: Theme.shellSurface
+    surfaceColor: Theme.popupSurface
     Flickable {
         id: viewport
         anchors.fill: parent

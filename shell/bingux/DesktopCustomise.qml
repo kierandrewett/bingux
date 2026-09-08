@@ -420,7 +420,7 @@ Scope {
             height: Math.min(optionContents.implicitHeight + 32, footer.y - Theme.barHeight - root.topInset - 36)
             border.width: 1; border.color: Theme.outline
             MouseArea { anchors.fill: parent }
-            radius: Theme.cardRadius; color: Qt.rgba(Theme.shellSurface.r, Theme.shellSurface.g, Theme.shellSurface.b, 1)
+            radius: Theme.cardRadius; color: Qt.rgba(Theme.popupSurface.r, Theme.popupSurface.g, Theme.popupSurface.b, 1)
             Flickable {
                 anchors.fill: parent; anchors.margins: 16; clip: true; contentWidth: width; contentHeight: optionContents.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds

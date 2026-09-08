@@ -97,7 +97,7 @@ QtObject {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: root.dockSafeInset + Theme.gap * 2
                 radius: Theme.shellRadius
-                color: Theme.shellSurface
+                color: Theme.popupSurface
                 border.width: 1
                 border.color: Theme.outline
                 PanelOutline { surface: osdCard }
@@ -206,7 +206,7 @@ QtObject {
                             x: parent.width / osdWindow.maximum
                             width: 2
                             height: parent.height
-                            color: Theme.shellSurface
+                            color: Theme.popupSurface
                         }
                     }
                 }
