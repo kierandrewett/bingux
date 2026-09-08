@@ -13,6 +13,11 @@ import "MediaMatch.js" as MediaMatch
 PanelWindow {
     id: root
 
+    readonly property real popupAnchorTop: (screen ? screen.height : 0) - height - margins.bottom + dockSurface.y
+    readonly property alias widgetHost: dockWidgets
+    readonly property var preferences: BinguxPreferences.data.desktop
+    readonly property int itemSize: (preferences.dockSize || 56) + 16
+    readonly property int iconSize: preferences.dockSize || 56
     required property var settings
     property var notifications: []
     property var notificationStore: null
@@ -123,7 +128,7 @@ PanelWindow {
         screen: root.screen
         visible: false
         color: "transparent"
-        implicitHeight: Theme.dockIconSize * 4 + Theme.padding * 2
+        implicitHeight: root.iconSize * 4 + Theme.padding * 2
         anchors { bottom: true; left: true; right: true }
         margins.left: root.margins.left
         margins.right: root.margins.right
@@ -269,7 +274,7 @@ PanelWindow {
 
     function slotPosition(index, pinnedCount) {
         const gap = pinnedCount > 0 && pinnedCount < appGroups.length && index >= pinnedCount ? Theme.padding : 0;
-        return index * (Theme.dockItemSize + Theme.spaceSmall) + gap;
+        return index * (root.itemSize + Theme.spaceSmall) + gap;
     }
 
     function dragDestination(id, offset) {
@@ -537,6 +542,7 @@ PanelWindow {
         id: applicationLaunchProcess
         Process {
             property string groupId: ""
+            stderr: SplitParser { onRead: data => console.warn("Application launch:", data) }
             onExited: (code, status) => {
                 if (code !== 0 && root.pendingLaunchGroupId === groupId) {
                     pendingLaunchTimer.stop();
@@ -643,7 +649,7 @@ PanelWindow {
     }
 
     exclusiveZone: implicitHeight
-    implicitHeight: Theme.dockExclusiveHeight
+    implicitHeight: root.itemSize + 16 + Theme.dockPadding * 2
     mask: Region { item: root.draggedId.length > 0 ? dragCapture : dockInputArea }
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Top
@@ -769,19 +775,20 @@ PanelWindow {
 
     Rectangle {
         id: dockSurface
-        readonly property real itemPadding: Math.max(0, (height - Theme.dockItemSize) / 2)
+        readonly property real itemPadding: Math.max(0, (height - root.itemSize) / 2)
         readonly property real bottomGap: Math.max(0, root.height - y - height)
         onXChanged: rectangleUpdate.restart()
         onYChanged: rectangleUpdate.restart()
 
-        anchors.centerIn: parent
+        anchors.verticalCenter: parent.verticalCenter
+        x: root.preferences.dockAlignment === "left" ? Theme.padding : root.preferences.dockAlignment === "right" ? root.width - width - Theme.padding : (root.width - width) / 2
         width: Math.min(root.width - Theme.padding * 2, dockRow.implicitWidth + dockSurface.itemPadding * 2)
-        height: Theme.dockHeight
+        height: root.itemSize + 16
         radius: Theme.shellRadius
         color: Theme.shellSurface
         border.width: 1
         border.color: Theme.outline
-        visible: root.appGroups.length > 0
+        visible: root.appGroups.length > 0 || (root.preferences.layout?.dock.length || 0) > 0
 
         Flickable {
             anchors.fill: parent
@@ -799,12 +806,12 @@ PanelWindow {
                 objectName: "dockSectionDivider"
                 // Use the section's extent. A cached delegate at the boundary
                 // becomes the wrong anchor when ScriptModel moves that icon.
-                x: (root.draggedId ? root.previewPinnedCount * Theme.dockItemSize : dockRow.sectionWidths.width)
+                x: (root.draggedId ? root.previewPinnedCount * root.itemSize : dockRow.sectionWidths.width)
                     + Math.max(0, root.previewPinnedCount - 1) * dockRow.spacing
                     + (dockRow.sectionGap + dockRow.spacing) / 2 - width / 2
                 y: (dockSurface.height - height) / 2
                 width: 1
-                height: Theme.dockItemSize / 2
+                height: root.itemSize / 2
                 radius: width / 2
                 color: Theme.outline
                 opacity: root.draggedId ? (root.previewPinnedCount > 0 && root.previewPinnedCount < root.appGroups.length ? 1 : 0) : dockRow.sectionPresence
@@ -822,9 +829,9 @@ PanelWindow {
                     if (index < root.pinnedGroupCount) pinned += item.transitionProgress;
                     else running += item.transitionProgress;
                 }
-                return Qt.size(pinned * Theme.dockItemSize, running * Theme.dockItemSize);
+                return Qt.size(pinned * root.itemSize, running * root.itemSize);
             }
-            readonly property real sectionPresence: Math.min(1, sectionWidths.width / Theme.dockItemSize, sectionWidths.height / Theme.dockItemSize)
+            readonly property real sectionPresence: Math.min(1, sectionWidths.width / root.itemSize, sectionWidths.height / root.itemSize)
             readonly property real sectionGap: Theme.padding * sectionPresence
 
             Repeater {
@@ -850,7 +857,7 @@ PanelWindow {
                     property real transitionProgress: 1
                     property int slideDirection: 1
                     // At zero slot width, align with the neighbouring icon's centre.
-                    readonly property real slideOffset: slideDirection * (Theme.dockItemSize / 2 + Theme.spaceSmall) * (1 - transitionProgress)
+                    readonly property real slideOffset: slideDirection * (root.itemSize / 2 + Theme.spaceSmall) * (1 - transitionProgress)
                     enabled: !exiting
                     onExitingChanged: {
                         if (!presenceReady)
@@ -898,8 +905,8 @@ PanelWindow {
                         return false;
                     }
 
-                    Layout.preferredWidth: Theme.dockItemSize * dockButton.transitionProgress
-                    Layout.preferredHeight: Theme.dockItemSize
+                    Layout.preferredWidth: root.itemSize * dockButton.transitionProgress
+                    Layout.preferredHeight: root.itemSize
                     Layout.rightMargin: index === root.pinnedGroupCount - 1 ? dockRow.sectionGap : 0
                     z: root.draggedId === modelData.id ? 2 : entering || exiting ? 0 : 1
                     transform: [
@@ -975,8 +982,8 @@ PanelWindow {
 
                     Item {
                         id: buttonVisual
-                        width: Theme.dockItemSize
-                        height: Theme.dockItemSize
+                        width: root.itemSize
+                        height: root.itemSize
                         x: (dockButton.width - width) / 2 + dockButton.slideOffset
                         anchors.verticalCenter: parent.verticalCenter
 
@@ -992,7 +999,7 @@ PanelWindow {
 
                         AppIcon {
                             id: dockIcon
-                            implicitSize: Theme.dockIconSize
+                            implicitSize: root.iconSize
                             group: dockButton.currentGroup
                             activeStreams: root.activity.activeStreams
                             notifications: root.notifications
@@ -1017,6 +1024,7 @@ PanelWindow {
 
                         DockWindowIndicators {
                             id: windowIndicators
+                            launching: root.pendingLaunchGroupId === dockButton.currentGroup.id
                             windows: dockButton.currentGroup.windows
                             anchors.bottom: parent.bottom
                             anchors.bottomMargin: -3
@@ -1040,6 +1048,7 @@ PanelWindow {
                             tooltipDelay.stop();
                             root.leaveTooltip(dockButton);
                         }
+                        property double lastScroll: 0
                         property real pressX: 0
                         property bool moved: false
                         onPressed: function(mouse) { pressX = mouse.x; moved = false; root.dismissTooltip() }
@@ -1061,15 +1070,30 @@ PanelWindow {
                         onCanceled: root.cancelDrag()
                         onClicked: function(mouse) {
                             if (moved) return;
-                            if (mouse.button === Qt.LeftButton)
-                                root.toggleGroup(dockButton.currentGroup);
-                            else if (mouse.button === Qt.MiddleButton)
-                                root.launch(dockButton.currentGroup, true);
+                            if (mouse.button === Qt.LeftButton) {
+                                const action = root.preferences.dockClick || "toggle";
+                                if (action === "launch") root.launch(dockButton.currentGroup, true);
+                                else if (action === "focus") {
+                                    const window = root.preferredWindow(dockButton.currentGroup);
+                                    if (window) { window.minimized = false; window.activate(); }
+                                    else root.launch(dockButton.currentGroup, false);
+                                } else root.toggleGroup(dockButton.currentGroup);
+                            } else if (mouse.button === Qt.MiddleButton) {
+                                const action = root.preferences.dockMiddleClick || "launch";
+                                if (action === "launch") root.launch(dockButton.currentGroup, true);
+                                else if (action === "close") for (const window of dockButton.currentGroup.windows) window.close();
+                            }
                             else if (mouse.button === Qt.RightButton)
                                 dockButton.menuOpen = !dockButton.menuOpen;
                         }
                         onWheel: function(wheel) {
-                            root.cycleGroup(dockButton.currentGroup, wheel.angleDelta.y);
+                            if (root.preferences.dockScroll === "none") { wheel.accepted = false; return; }
+                            const delta = wheel.pixelDelta.y || wheel.angleDelta.y || wheel.pixelDelta.x || wheel.angleDelta.x;
+                            if (!delta) return;
+                            const now = Date.now();
+                            if (now - lastScroll < 140) return;
+                            lastScroll = now;
+                            root.cycleGroup(dockButton.currentGroup, delta * (root.preferences.dockScrollDirection === "reverse" ? -1 : 1));
                         }
                     }
 
@@ -1272,6 +1296,8 @@ PanelWindow {
                 }
 
             }
+            GridLayout { id: dockWidgets; rows: 1; columnSpacing: Theme.barControlGap; Layout.alignment: Qt.AlignVCenter }
+
 
         }
         }

@@ -13,7 +13,7 @@ ShellPopup {
         visible = true;
     }
     readonly property real maximumHeight: Math.max(0, Math.min(640, height * 0.65,
-        height - Theme.dockExclusiveHeight - Theme.gap - preferredY))
+        anchorAbove ? anchorTop - Theme.barHeight - Theme.gap : height - Theme.dockExclusiveHeight - Theme.gap - belowAnchorY))
     popupWidth: customising ? 336 : 520
     popupHeight: !customising && performance.page !== "usage" ? maximumHeight
         : Math.min((customising ? content.implicitHeight : performance.implicitHeight) + contentPadding * 2, maximumHeight)

@@ -1,0 +1,38 @@
+# Desktop customisation and search providers
+
+Open **Bingux Settings > Desktop > Customise Desktop**. This opens a full-screen layer-shell editor on the Settings window's screen. It shows the current wallpaper behind a mock desktop.
+
+Drag a widget from the centre palette into the left, centre or right section of the top bar, or into the dock. A widget already on the desktop moves instead of being duplicated. Sidebar panel widgets can move within the sidebar. Drag a widget back into the palette to remove it. Keep at least one sidebar panel.
+
+For keyboard use, focus a widget and press Space or Enter, then choose a destination in the palette. The Dock tab controls icon size, left/centre/right alignment, click and middle-click actions, and mouse wheel or trackpad window switching. The Sidebar tab controls visibility and screen edge.
+
+Changes stay in the preview until **Apply and finish**. Cancel or Escape discards the preview. Reset layout restores the default widget arrangement in the preview. Existing settings changes are also saved when applying the desktop.
+
+The live shell uses the same widget instances after reparenting. Menus follow their controls, including controls moved to the dock. Crowded top-bar sections move controls into the existing More menu. Live top-bar reordering remains persistent after using the editor.
+
+## Search providers
+
+**Settings > Search** lists website search engines and built-in providers. Use Add to create a website engine with a name, unique shortcut and URL containing `{query}`. `%s` is also accepted by the form. The search terms are URL-encoded before substitution. Bingux opens the result through its existing browser launcher.
+
+An enabled engine can be made the default. The current default cannot be disabled or removed until another engine is selected. Custom shortcuts use `shortcut: search terms`. The built-in `wiki:`, `gh:`, `maps:` and `yt:` shortcuts remain reserved.
+
+Built-in provider rows have independent enable switches and detail pages. Files and folders accepts absolute search locations separated by semicolons. An empty field uses the system-configured locations. Other detail pages describe their triggers and provide the relevant controls. Connected process providers remain managed by system configuration; the Add form creates website search engines.
+
+Press Apply to save search changes. The settings helper restarts the user search service when its search configuration changes. A restart failure is reported after the file is saved.
+
+## Persistence and validation
+
+User overrides are stored atomically in `$XDG_CONFIG_HOME/bingux/settings.json`. They remain separate from managed Nix configuration. The settings backend validates engine URLs, unique shortcuts, enabled defaults, desktop ranges, widget destinations and duplicate widgets before replacing the file. The search daemon validates engine configuration again when loading it.
+
+The editor uses the current top-bar order and sidebar edge when no customised layout has been saved. JPEG XL and other wallpapers that Qt cannot read directly are converted to a cached PNG by the settings helper.
+
+## Checks
+
+- `python3 tests/settings-backend.test.py`
+- `node --test tests/desktop-layout.test.mjs`
+- `cargo test --locked --manifest-path packages/bingux-searchd/Cargo.toml`
+- `python3 tests/search-engines.py` after building the search daemon; `BINGUX_SEARCHD_BIN` selects a different build.
+- `bash tests/bingux-settings.sh` with `BINGUX_QUICKSHELL` set to a compatible Quickshell runtime.
+- In a private Gnoblin test session: `tests/desktop-customise.py`, `tests/desktop-layout-live.py`, `BINGUX_SHELL_TEST=dock-behaviour tests/dock-state.py`, and `tests/popup-anchor.py`.
+
+The full-shell layout fixture ends its private process group after its assertions complete. It does not change the user's settings or stop the user's shell.

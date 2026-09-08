@@ -9,6 +9,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
+import "DesktopLayout.js" as DesktopLayout
 
 ShellRoot {
     id: root
@@ -42,7 +43,7 @@ ShellRoot {
         systemMetrics: metrics
         settings: profileSettings
         screen: topBar.screen
-        inputSuspended: captureTool.opened
+        inputSuspended: captureTool.opened || binguxSettings.customiser.visible
     }
 
     Metrics {
@@ -86,7 +87,7 @@ ShellRoot {
         sidebarScreen: terminalSidebar.screen
         leftInset: terminalSidebar.leftInset
         rightInset: terminalSidebar.rightInset
-        inputSuspended: captureTool.opened
+        inputSuspended: captureTool.opened || binguxSettings.customiser.visible
         notificationCentre: notificationCentre
         screen: topBar.screen
         state: notificationState
@@ -113,7 +114,7 @@ ShellRoot {
 
     ShellCommands { inputSelector: inputSourceSelector; indicators: systemIndicators; mediaControls: controlCentre; notificationState: root.commandNotifications; dockView: dock }
 
-    BinguxSettings { id: binguxSettings }
+    BinguxSettings { id: binguxSettings; currentLayout: topBar.snapshotLayout(); currentSidebarEdge: terminalSidebar.edge; onVisibleChanged: if (visible) root.closePanelsExcept(null) }
 
     IpcHandler {
         target: "shell"
@@ -164,11 +165,11 @@ ShellRoot {
         function capture(): void { captureTool.open() }
     }
 
-    ControlCentre { id: controlCentre; anchorWindow: topBar; anchorItem: systemPill; dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom); indicators: systemIndicators; screen: topBar.screen; onVisibleChanged: if (visible) root.closePanelsExcept(controlCentre) }
+    ControlCentre { id: controlCentre; anchorWindow: topBar.windowFor(systemPill); anchorItem: systemPill; dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom); indicators: systemIndicators; screen: topBar.screen; onVisibleChanged: if (visible) root.closePanelsExcept(controlCentre) }
 
     SystemMetricsPopup {
         id: metricsPopup
-        anchorWindow: topBar
+        anchorWindow: topBar.windowFor(metricsPill)
         anchorItem: metricsPill
         anchorAlignment: Qt.AlignHCenter
         monitorWidget: metricsPill
@@ -209,7 +210,7 @@ ShellRoot {
     CalendarPopup {
         id: calendarPopup
         screen: topBar.screen
-        anchorWindow: topBar
+        anchorWindow: topBar.windowFor(clockPill)
         anchorItem: clockPill
         anchorAlignment: Qt.AlignHCenter
         onVisibleChanged: if (visible) root.closePanelsExcept(calendarPopup)
@@ -217,18 +218,38 @@ ShellRoot {
 
     PanelWindow {
         id: topBar
+        function snapshotLayout() {
+            if (customLayout) return customLayout;
+            const layout = DesktopLayout.defaults();
+            layout["top-right"] = orderedControls.filter(item => ![searchPill, clockPill, overflowButton].includes(item)).map(item => controlNames[defaultControls.indexOf(item)]);
+            layout.sidebar = terminalSidebar.contentTypes.map(type => type.id);
+            return layout;
+        }
+        readonly property var customLayout: BinguxPreferences.data.desktop.layout
+        function chosen(item) { return !customLayout || DesktopLayout.zone(customLayout, controlNames[defaultControls.indexOf(item)]) !== ""; }
+        function zoneFor(item) {
+            const name = controlNames[defaultControls.indexOf(item)];
+            if (name === "overflow") return "top-right";
+            return customLayout ? DesktopLayout.zone(customLayout, name) : name === "search" ? "top-left" : name === "clock" ? "top-center" : "top-right";
+        }
+        function windowFor(item) { return zoneFor(item) === "dock" ? dock : topBar; }
+        function hostFor(item) {
+            if (overflows(item)) return overflowColumn;
+            const zone = zoneFor(item);
+            return zone === "dock" ? dock.widgetHost : zone === "top-left" ? leftControls : zone === "top-center" ? centerControls : rightControls;
+        }
         readonly property real controlsBudget: Math.max(0, (width - clockPill.implicitWidth) / 2 - Theme.gap)
         // Display order is independent of overflow priority and reparenting order.
         readonly property var defaultControls: [captureStatus, trayContainer, privacyContainer,
-            metricsPill, inputSourceSelector, overflowButton, systemPill, notificationButton]
-        readonly property var controlNames: ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications"]
+            metricsPill, inputSourceSelector, overflowButton, systemPill, notificationButton, searchPill, clockPill]
+        readonly property var controlNames: ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "search", "clock"]
         Settings {
             id: barPreferences
             location: "file://" + (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/bingux/top-bar.ini"
             property string order: ""
         }
         readonly property var orderedControls: {
-            const names = barPreferences.order.split(",");
+            const names = customLayout ? ["top-left", "top-center", "top-right", "dock"].reduce((names, zone) => names.concat(customLayout[zone]), []) : barPreferences.order.split(",");
             const ordered = [];
             for (const name of names) {
                 const index = controlNames.indexOf(name);
@@ -238,7 +259,7 @@ ShellRoot {
         }
         function dropTarget(item, globalPoint) {
             const vertical = overflows(item);
-            const siblings = (vertical ? overflowItems : barControls).filter(other => other !== item);
+            const siblings = (vertical ? overflowItems : barControls).filter(other => other !== item && other.parent === item.parent);
             const point = item.parent.mapFromGlobal(globalPoint.x, globalPoint.y);
             const coordinate = vertical ? point.y : point.x;
             const before = siblings.find(other => coordinate < (vertical ? other.y + other.height / 2 : other.x + other.width / 2));
@@ -272,7 +293,7 @@ ShellRoot {
         function reorderShift(item) {
             if (!draggedControl || item.parent !== draggedControl.parent) return 0;
             const vertical = overflows(draggedControl);
-            const siblings = vertical ? overflowItems : barControls;
+            const siblings = (vertical ? overflowItems : barControls).filter(other => other.parent === item.parent);
             const preview = previewOrder.filter(other => siblings.includes(other));
             if (!preview.length || !preview.includes(item)) return 0;
             let position = vertical ? siblings[0].y : siblings[0].x;
@@ -298,8 +319,15 @@ ShellRoot {
             // exactly as the dock does after its settle animation.
             committingReorder = true;
             if (!cancelReorder) {
-                barPreferences.order = previewOrder.map(other => controlNames[defaultControls.indexOf(other)]).join(",");
-                barPreferences.sync();
+                if (customLayout) {
+                    const layout = JSON.parse(JSON.stringify(customLayout));
+                    for (const zone of ["top-left", "top-center", "top-right", "dock"])
+                        layout[zone] = previewOrder.filter(other => zoneFor(other) === zone && other !== overflowButton).map(other => controlNames[defaultControls.indexOf(other)]);
+                    BinguxPreferences.saveLayout(layout);
+                } else {
+                    barPreferences.order = previewOrder.map(other => controlNames[defaultControls.indexOf(other)]).join(",");
+                    barPreferences.sync();
+                }
             }
             draggedControl = null;
             previewOrder = [];
@@ -319,10 +347,31 @@ ShellRoot {
             [captureStatus, captureStatus.visible], [trayContainer, tray.implicitWidth > 0],
             [privacyContainer, privacyContainer.active], [metricsPill, profileSettings.metricsEnabled],
             [inputSourceSelector, metrics.desktopStateAvailable], [systemPill, true],
-            [notificationButton, notificationState.allEntries.length > 0]
-        ].filter(entry => entry[1]).map(entry => entry[0])
+            [notificationButton, notificationState.allEntries.length > 0], [searchPill, true], [clockPill, true]
+        ].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0])
         readonly property var overflowItems: {
-            const items = availableControls;
+            if (customLayout) {
+                const hidden = [];
+                const center = availableControls.filter(item => zoneFor(item) === "top-center");
+                const left = availableControls.filter(item => zoneFor(item) === "top-left");
+                const right = availableControls.filter(item => zoneFor(item) === "top-right");
+                const demand = items => items.reduce((sum, item) => sum + item.implicitWidth, 0) + Math.max(0, items.length - 1) * Theme.barControlGap;
+                const centerBudget = left.length || right.length ? width * 0.4 : width - 2 * Theme.gap;
+                const sideBudget = center.length ? (width - Math.min(centerBudget, demand(center))) / 2 - Theme.gap : width / 2 - Theme.gap;
+                for (const group of [{items: center, budget: centerBudget},
+                    {items: left, budget: !center.length && !right.length ? width - Theme.barEdgeHitWidth - 2 * Theme.gap : sideBudget},
+                    {items: right, budget: (!center.length && !left.length ? width - Theme.gap : sideBudget) - Theme.barEdgeHitWidth - Theme.barControlGap}]) {
+                    const shown = group.items.slice();
+                    for (const item of [trayContainer, metricsPill].concat(group.items.slice().reverse())) {
+                        if (demand(shown) <= group.budget) break;
+                        const index = shown.indexOf(item);
+                        if (index < 0) continue;
+                        shown.splice(index, 1); hidden.push(item);
+                    }
+                }
+                return orderedControls.filter(item => hidden.includes(item));
+            }
+            const items = availableControls.filter(item => zoneFor(item) === "top-right");
             let needed = items.reduce((sum, item) => sum + item.implicitWidth, 0)
                 + Math.max(0, items.length - 1) * Theme.barControlGap;
             if (needed <= controlsBudget) return [];
@@ -338,7 +387,7 @@ ShellRoot {
         }
         readonly property var barControls: orderedControls.filter(item => (item === overflowButton ? overflowItems.length > 0 : availableControls.includes(item)) && !overflows(item))
         function overflows(item) { return overflowItems.includes(item); }
-        function controlColumn(item) { return overflows(item) ? 0 : Math.max(0, barControls.indexOf(item)); }
+        function controlColumn(item) { return overflows(item) ? 0 : Math.max(0, barControls.filter(other => zoneFor(other) === zoneFor(item)).indexOf(item)); }
         function controlRow(item) { return overflows(item) ? overflowItems.indexOf(item) : 0; }
         onOverflowItemsChanged: if (overflowItems.length === 0) barOverflow.visible = false
         margins.left: terminalSidebar.leftInset
@@ -367,24 +416,20 @@ ShellRoot {
         }
         Item {
             anchors.fill: parent
-            Item {
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                width: searchPill.implicitWidth
-                BarSearchButton {
-                    id: searchPill
-                    anchors.left: parent.left
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    width: implicitWidth
-                    onClicked: root.openSearch()
-                }
+            GridLayout { id: leftControls; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; rows: 1; columnSpacing: Theme.barControlGap }
+            GridLayout { id: centerControls; anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: parent.verticalCenter; rows: 1; columnSpacing: Theme.barControlGap }
+            BarSearchButton {
+                id: searchPill
+                parent: topBar.hostFor(searchPill)
+                Layout.column: topBar.controlColumn(searchPill); Layout.row: 0
+                visible: topBar.chosen(searchPill)
+                onClicked: root.openSearch()
             }
             Pill {
                 id: clockPill
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.verticalCenter: parent.verticalCenter
+                parent: topBar.hostFor(clockPill)
+                Layout.column: topBar.controlColumn(clockPill); Layout.row: 0
+                visible: topBar.chosen(clockPill)
                 z: 1
                 horizontalPadding: Theme.barPrimaryPadding
                 interactive: true
@@ -422,29 +467,31 @@ ShellRoot {
                     columnSpacing: Theme.barControlGap
                     RecordingIndicator {
                         id: captureStatus
-                        parent: rightControls
+                        parent: topBar.hostFor(captureStatus)
                         Layout.column: topBar.controlColumn(captureStatus)
                         Layout.row: topBar.controlRow(captureStatus)
                         capture: captureTool
                         privacy: privacySession
-                        barWindow: topBar
+                        visible: topBar.chosen(captureStatus) && (captureTool.busy || privacySession.recording)
+                        barWindow: topBar.windowFor(captureStatus)
                         reorderable: true
                     }
-                    Pill { id: trayContainer; parent: topBar.overflows(trayContainer) ? overflowColumn : rightControls; Layout.column: topBar.controlColumn(trayContainer); Layout.row: topBar.controlRow(trayContainer); horizontalPadding: 0; visible: tray.implicitWidth > 0; Tray { id: tray; parentWindow: topBar } }
+                    Pill { id: trayContainer; parent: topBar.hostFor(trayContainer); Layout.column: topBar.controlColumn(trayContainer); Layout.row: topBar.controlRow(trayContainer); horizontalPadding: 0; visible: topBar.chosen(trayContainer) && tray.implicitWidth > 0; Tray { id: tray; parentWindow: topBar.windowFor(trayContainer) } }
                     PrivacyIndicators {
                         id: privacyContainer
-                        parent: rightControls
+                        parent: topBar.hostFor(privacyContainer)
                         Layout.column: topBar.controlColumn(privacyContainer)
                         Layout.row: topBar.controlRow(privacyContainer)
                         systemMetrics: metrics
                         privacyState: privacySession
-                        barWindow: topBar
+                        visible: topBar.chosen(privacyContainer) && active
+                        barWindow: topBar.windowFor(privacyContainer)
                     }
                     SystemMetrics {
                         id: metricsPill
-                        parent: topBar.overflows(metricsPill) ? overflowColumn : rightControls; Layout.column: topBar.controlColumn(metricsPill); Layout.row: topBar.controlRow(metricsPill)
+                        parent: topBar.hostFor(metricsPill); Layout.column: topBar.controlColumn(metricsPill); Layout.row: topBar.controlRow(metricsPill)
                         systemMetrics: metrics
-                        visible: profileSettings.metricsEnabled
+                        visible: topBar.chosen(metricsPill) && profileSettings.metricsEnabled
                         selected: metricsPopup.visible
                         onConfigureRequested: {
                             metricsPopup.showPage(true);
@@ -452,12 +499,13 @@ ShellRoot {
                         onPerformanceRequested: {
                             metricsPopup.showPage(false);
                         }
-                        BarTooltip { reorderable: true; anchorItem: metricsPill; barWindow: topBar; requested: metricsPill.pointerHovered; text: metricsPill.description }
+                        BarTooltip { reorderable: true; anchorItem: metricsPill; barWindow: topBar.windowFor(metricsPill); requested: metricsPill.pointerHovered; text: metricsPill.description }
                     }
-                    InputSourceSelector { id: inputSourceSelector; parent: topBar.overflows(inputSourceSelector) ? overflowColumn : rightControls; Layout.column: topBar.controlColumn(inputSourceSelector); Layout.row: topBar.controlRow(inputSourceSelector); visible: metrics.desktopStateAvailable; parentWindow: topBar; metrics: metrics; gnoblinCtlPath: profileSettings.gnoblinCtlPath; onOpening: root.closePanelsExcept(inputSourceSelector) }
+                    InputSourceSelector { id: inputSourceSelector; parent: topBar.hostFor(inputSourceSelector); Layout.column: topBar.controlColumn(inputSourceSelector); Layout.row: topBar.controlRow(inputSourceSelector); visible: topBar.chosen(inputSourceSelector) && metrics.desktopStateAvailable; parentWindow: topBar.windowFor(inputSourceSelector); metrics: metrics; gnoblinCtlPath: profileSettings.gnoblinCtlPath; onOpening: root.closePanelsExcept(inputSourceSelector) }
                     Pill {
                         id: systemPill
-                        parent: topBar.overflows(systemPill) ? overflowColumn : rightControls; Layout.column: topBar.controlColumn(systemPill); Layout.row: topBar.controlRow(systemPill)
+                        parent: topBar.hostFor(systemPill); Layout.column: topBar.controlColumn(systemPill); Layout.row: topBar.controlRow(systemPill)
+                        visible: topBar.chosen(systemPill)
                         horizontalPadding: Theme.barPrimaryPadding
                         interactive: true
                         hovered: systemMouse.containsMouse
@@ -471,7 +519,7 @@ ShellRoot {
                         Keys.onReturnPressed: controlCentre.visible = !controlCentre.visible
                         Keys.onSpacePressed: controlCentre.visible = !controlCentre.visible
                         SystemIndicators { id: systemIndicators; timeoutPath: profileSettings.timeoutPath }
-                        BarTooltip { reorderable: true; anchorItem: systemPill; barWindow: topBar; requested: systemMouse.containsMouse; text: "Control Centre" + (systemIndicators.extraStatusDescription ? "\n" + systemIndicators.extraStatusDescription : "") }
+                        BarTooltip { reorderable: true; anchorItem: systemPill; barWindow: topBar.windowFor(systemPill); requested: systemMouse.containsMouse; text: "Control Centre" + (systemIndicators.extraStatusDescription ? "\n" + systemIndicators.extraStatusDescription : "") }
                         MouseArea { id: systemMouse; parent: systemPill; anchors.fill: parent; hoverEnabled: true; onClicked: controlCentre.visible = !controlCentre.visible }
                     }
                     AbstractButton {
@@ -494,8 +542,8 @@ ShellRoot {
                     }
                     AbstractButton {
                         id: notificationButton
-                        parent: topBar.overflows(notificationButton) ? overflowColumn : rightControls; Layout.column: topBar.controlColumn(notificationButton); Layout.row: topBar.controlRow(notificationButton)
-                        visible: notificationState.allEntries.length > 0
+                        parent: topBar.hostFor(notificationButton); Layout.column: topBar.controlColumn(notificationButton); Layout.row: topBar.controlRow(notificationButton)
+                        visible: topBar.chosen(notificationButton) && notificationState.allEntries.length > 0
                         implicitWidth: notificationCount.implicitWidth + Theme.barEdgeHitWidth - Theme.iconSize
                         hoverEnabled: true
                         implicitHeight: Theme.barHeight
@@ -513,7 +561,7 @@ ShellRoot {
                                 count: notificationState.allEntries.length
                             }
                         }
-                        BarTooltip { reorderable: true; anchorItem: notificationButton; barWindow: topBar; requested: notificationButton.hovered; text: notificationState.allEntries.length > 0 ? "Notifications · " + notificationState.allEntries.length : "No notifications" }
+                        BarTooltip { reorderable: true; anchorItem: notificationButton; barWindow: topBar.windowFor(notificationButton); requested: notificationButton.hovered; text: notificationState.allEntries.length > 0 ? "Notifications · " + notificationState.allEntries.length : "No notifications" }
                         background: BarControlSurface {
                             hovered: notificationButton.hovered
                             pressed: notificationButton.down

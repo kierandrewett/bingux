@@ -18,6 +18,9 @@ Scope {
     property int anchorAlignment: Qt.AlignRight
     readonly property real placementLeft: anchorWindow ? anchorWindow.margins.left : 0
     readonly property real placementRight: width - (anchorWindow ? anchorWindow.margins.right : 0)
+    readonly property real belowAnchorY: anchorItem ? anchorPosition.y + Theme.gap : Theme.barHeight + Theme.gap
+    readonly property bool anchorAbove: !!anchorWindow && anchorWindow.anchors.bottom && !anchorWindow.anchors.top
+    readonly property real anchorTop: anchorAbove && typeof anchorWindow.popupAnchorTop === "number" ? anchorWindow.popupAnchorTop : anchorPosition.y - (anchorItem ? anchorItem.height : 0)
     readonly property point anchorPosition: {
         if (!anchorItem) return Qt.point(0, Theme.barHeight);
         // Track layout and reparenting, including controls moved into overflow.
@@ -28,7 +31,7 @@ Scope {
         if (anchorWindow && anchorItem.Window.window === anchorWindow.contentItem.Window.window) {
             // Convert bar-local coordinates with the layer-surface margins.
             const point = anchorItem.mapToItem(anchorWindow.contentItem, x, anchorItem.height);
-            return Qt.point(placementLeft + point.x, anchorWindow.margins.top + point.y);
+            return Qt.point(placementLeft + point.x, (anchorWindow.anchors.bottom && !anchorWindow.anchors.top ? height - anchorWindow.height - anchorWindow.margins.bottom : anchorWindow.margins.top) + point.y);
         }
         return anchorItem.mapToItem(contentItem, x, anchorItem.height);
     }
@@ -44,7 +47,7 @@ Scope {
     readonly property alias body: body
     readonly property bool closing: retained && !visible
     property real preferredX: anchorItem ? anchorPosition.x - popupWidth / (anchorAlignment === Qt.AlignHCenter ? 2 : 1) : (width - popupWidth) / 2
-    property real preferredY: anchorItem ? anchorPosition.y + Theme.gap : Theme.barHeight + Theme.gap
+    property real preferredY: anchorItem ? (anchorAbove ? anchorTop - popupHeight - Theme.gap : anchorPosition.y + Theme.gap) : Theme.barHeight + Theme.gap
     property bool surfaceVisible: true
     property color surfaceColor: Theme.popupSurface
     property real cornerRadius: Theme.cardRadius

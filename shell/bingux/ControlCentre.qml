@@ -68,7 +68,7 @@ ShellPopup {
     popupWidth: Theme.notificationWidth + contentPadding * 2
     property real dockSafeInset: Theme.dockExclusiveHeight
     readonly property real dockSafeBottom: height - dockSafeInset - Theme.gap
-    readonly property real maximumPopupHeight: Math.max(0, Math.min(height * 0.8, dockSafeBottom - preferredY))
+    readonly property real maximumPopupHeight: Math.max(0, Math.min(height * 0.8, anchorAbove ? anchorTop - Theme.barHeight - Theme.gap : dockSafeBottom - belowAnchorY))
     property real controlsHeight: Math.min(detailOpen ? activeDetailView.implicitHeight : controls.implicitHeight,
         Math.max(0, maximumPopupHeight - contentPadding * 2))
     Behavior on controlsHeight {

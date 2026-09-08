@@ -12,7 +12,7 @@ Scope {
     property var systemMetrics: null
     readonly property alias contentItem: sidebarContents
     readonly property alias detachedSurface: detachedWindow
-    readonly property var contentTypes: [
+    readonly property var allContentTypes: [
         {id: "terminal", label: "Terminal", icon: "utilities-terminal-symbolic"},
         {id: "notes", label: "Notes", icon: "accessories-text-editor-symbolic"},
         {id: "monitor", label: "System", icon: "computer-symbolic"},
@@ -20,7 +20,15 @@ Scope {
         {id: "media", label: "Media", icon: "applications-multimedia-symbolic"},
         {id: "tasks", label: "Tasks", icon: "view-list-symbolic"}
     ]
-    readonly property string contentType: contentTypes.some(type => type.id === saved.contentType) ? saved.contentType : "terminal"
+    readonly property var contentTypes: BinguxPreferences.data.desktop.layout ? BinguxPreferences.data.desktop.layout.sidebar.map(id => allContentTypes.find(type => type.id === id)).filter(type => type) : allContentTypes
+    Connections {
+        target: BinguxPreferences
+        function onDataChanged() {
+            const edge = BinguxPreferences.data.desktop.sidebarEdge;
+            if (edge && edge !== root.edge) root.setEdge(edge);
+        }
+    }
+    readonly property string contentType: contentTypes.some(type => type.id === saved.contentType) ? saved.contentType : (contentTypes[0]?.id || "terminal")
     readonly property var currentContent: contentTypes.find(type => type.id === contentType)
     function focusContent() {
         if (contentType === "terminal" && terminalReady)
