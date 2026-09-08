@@ -17,6 +17,9 @@ FocusScope {
         if (playerOptions.length) playerSelected(playerOptions[(Math.max(0, index) + direction + playerOptions.length) % playerOptions.length]);
     }
     property bool menuActive: false
+    // Position is extrapolated by MPRIS, but bindings need a notification after
+    // the hidden menu has stopped its display timer.
+    onMenuActiveChanged: if (menuActive && player && player.positionSupported) player.positionChanged()
     property bool compact: false
     property bool artworkExpanded: false
     property real artExpansion: artworkExpanded ? 1 : 0

@@ -14,7 +14,7 @@ Item {
     Component.onCompleted: load()
 
     function load() {
-        if (!active || fade.running || front.source.toString() === source) return;
+        if (fade.running || front.source.toString() === source) return;
         AlbumArtCache.retain(source);
         back.source = source;
         ready(back);
@@ -23,7 +23,12 @@ Item {
         if (image !== back || image.source.toString() !== source || fade.running) return;
         if (image.status !== Image.Ready && image.status !== Image.Error && source) return;
         firstFront = !firstFront;
-        fade.restart();
+        if (active) {
+            fade.restart();
+        } else {
+            first.opacity = firstFront ? 1 : 0;
+            second.opacity = firstFront ? 0 : 1;
+        }
     }
     component Cover: Image {
         anchors.fill: parent
