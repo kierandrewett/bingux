@@ -19,6 +19,13 @@ Scope {
     required property var settings
     property bool visible: false
     property bool initialised: false
+    UiSession {
+        id: stackingSession
+        sessionName: root.initialised ? "customise" : ""
+        state: ({visible: root.visible, surface: "bingux-customise", companionsAbove: true,
+            companions: DesktopEditing.surfaces.map(surface => surface.window.WlrLayershell.namespace)
+                .concat(["gnoblin-shell-popup", "bingux-sidebar-corner", "bingux-panel-outline"])})
+    }
     // Reuse the render window after the first open so previews retain their scene.
     PanelWindow {
         id: editWindow
@@ -27,8 +34,8 @@ Scope {
         anchors { top: true; bottom: true; left: true; right: true }
         exclusionMode: ExclusionMode.Ignore
         exclusiveZone: 0
-        WlrLayershell.layer: WlrLayer.Top
-        WlrLayershell.namespace: "gnoblin-shell-popup"
+        WlrLayershell.layer: stackingSession.capabilities.includes("ui-sessions") ? WlrLayer.Overlay : WlrLayer.Top
+        WlrLayershell.namespace: "bingux-customise"
         WlrLayershell.keyboardFocus: root.visible && root.optionsPage === "" ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         mask: Region { width: root.visible ? editWindow.width : 0; height: root.visible ? editWindow.height : 0 }
     }
@@ -389,7 +396,7 @@ Scope {
                     Repeater { model: ["Widgets", "Apps"]; ActionButton { required property string modelData; text: modelData; flat: root.tab !== modelData; onClicked: { root.tab = modelData; root.appFilter = ""; root.optionsPage = ""; } } }
                     Item { Layout.fillWidth: true }
                 }
-                SettingsField { label: root.tab === "Apps" ? "Find an app" : "Find a widget"; placeholderText: root.tab === "Apps" ? "Search installed apps" : "Search widgets"; Layout.margins: 0; text: root.appFilter; onEdited: value => root.appFilter = value }
+                SettingsField { objectName: "customiseFilter"; label: root.tab === "Apps" ? "Find an app" : "Find a widget"; placeholderText: root.tab === "Apps" ? "Search installed apps" : "Search widgets"; Layout.margins: 0; text: root.appFilter; onEdited: value => root.appFilter = value }
                 GridView {
                     id: paletteGrid
                     objectName: "customiseWidgetGrid"
