@@ -34,7 +34,7 @@ QML
 fi
 cp "$repo_dir/tests/${1:-sidebar-notes}.qml" "$test_dir/shell.qml"
 export BINGUX_NOTES_TEST_RESULTS="$test_dir/results.txt"
-if [[ "${1:-sidebar-notes}" == "notes-context" || "${1:-sidebar-notes}" == "sidebar-popout" || "${1:-sidebar-notes}" == "sidebar-calendar" ]]; then
+if [[ "${BINGUX_NOTES_NATIVE:-0}" == 1 || "${1:-sidebar-notes}" == "notes-context" || "${1:-sidebar-notes}" == "sidebar-popout" || "${1:-sidebar-notes}" == "sidebar-calendar" ]]; then
     timeout 20s "${QUICKSHELL_BIN:-quickshell}" -p "$test_dir" > "$test_dir/runtime.log" 2>&1 || { cat "$test_dir/runtime.log"; exit 1; }
 else
     QT_QPA_PLATFORM=offscreen timeout 20s dbus-run-session -- "${QUICKSHELL_BIN:-quickshell}" -p "$test_dir" > "$test_dir/runtime.log" 2>&1 || { cat "$test_dir/runtime.log"; exit 1; }
