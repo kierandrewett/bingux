@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Widgets
 
 Scope {
     id: root
@@ -376,7 +377,7 @@ Scope {
                                 activeStreams: root.activeStreams
                                 notifications: root.notifications
                             }
-                            Rectangle {
+                            ClippingRectangle {
                                 id: previewSurface
                                 anchors.top: parent.top
                                 anchors.left: parent.left
@@ -387,9 +388,9 @@ Scope {
                                 color: Theme.background
                                 Image {
                                     anchors.fill: parent
-                                    anchors.margins: Theme.spaceSmall
                                     source: root.previews[modelData.id] || ""
-                                    fillMode: Image.PreserveAspectFit
+                                    fillMode: Image.PreserveAspectCrop
+                                    verticalAlignment: Image.AlignTop
                                     cache: true
                                     asynchronous: true
                                     retainWhileLoading: true

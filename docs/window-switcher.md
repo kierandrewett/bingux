@@ -30,7 +30,9 @@ images remain available until their window closes, including after a failed
 refresh. There is no continuous
 capture loop. These are snapshots, not live video previews. The previous image
 stays visible while its replacement decodes. A window without capture content
-displays its app icon. Apps that discard buffers when minimised keep their last
+displays its app icon. Previews fill their rounded frame without an inner inset
+or letterbox bars. Scaling preserves proportions and crops overflow, aligned to
+the top to retain window headings. Apps that discard buffers when minimised keep their last
 valid cached image; if none was captured, they show an icon until an image is
 available. Captures do not change focus or raise windows.
 
