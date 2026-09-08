@@ -1,0 +1,10 @@
+--- a/src/wayland/wlr_layershell/surface.cpp
++++ b/src/wayland/wlr_layershell/surface.cpp
+@@ -170,6 +170,7 @@
+ 	this->set_exclusive_zone(QHighDpi::toNativePixels(s.exclusiveZone, qwindow));
+ 	this->set_keyboard_interactivity(toWaylandKeyboardFocus(s.keyboardFocus));
+ 
++	this->committed = s;
+ 	this->bridge->surface = this;
+ }
+ 

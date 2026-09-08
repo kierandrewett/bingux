@@ -75,8 +75,8 @@ in
 
         package = lib.mkOption {
             type = lib.types.package;
-            default = pkgs.quickshell;
-            defaultText = lib.literalExpression "pkgs.quickshell";
+            default = pkgs.callPackage ../../packages/bingux-quickshell {};
+            defaultText = lib.literalExpression "pkgs.callPackage ../../packages/bingux-quickshell {}";
             description = "The pinned Quickshell package that runs the Bingux desktop shell.";
         };
 

@@ -1,0 +1,16 @@
+# Bingux Quickshell patch
+
+A layer surface must record the settings sent when it is created. Quickshell
+0.2.1 through 0.3.1 leave that snapshot at its default values. If a setting
+returns to its default before the next commit, the compositor keeps the old
+value. In Customise UI, this can leave the sidebar accepting keyboard focus,
+so a mouse press takes focus from the editor and the return of focus cancels
+the button click.
+
+`layer-initial-state.patch` records the initial settings in the existing
+committed-state snapshot. The NixOS desktop module uses this package by default.
+
+Run `tests/layershell-focus-live.py` as `GNOBLIN_TEST_DBUS_CLIENT` in Gnoblin's
+private session, with `QS_TEST_BIN` pointing to the matching Quickshell runtime.
+The test reads actual Wayland requests. Before the patch it receives only
+`OnDemand` (2); after the patch it also receives `None` (0).
