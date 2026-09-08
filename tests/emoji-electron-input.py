@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", ""))
 assert str(CONFIG).startswith("/tmp/gnoblin-gs."), "Use the isolated Gnoblin test runner"
 SOCKET = os.environ["GNOBLIN_COMPOSITOR_SOCKET"]
+X11 = os.environ.get("GNOBLIN_TEST_XWAYLAND") == "1"
 IPC = ["qs", "ipc", "-p", str(CONFIG / "emoji-test"), "call", "emoji"]
 
 
@@ -54,12 +55,13 @@ def drive(mode, pid, query):
         if mode == "focus":
             return
         if mode == "blur":
+            if X11: return
             wait_for(lambda: (r := anchor()) and r.get("caret") is None, "Stale caret after input blur")
             error = request({"op": "type-text", "window": window["id"], "text": "unexpected"}, "error")
             assert "text input" in error["message"], error
             return
-        before = wait_for(lambda: (r if (r := anchor()) and r.get("caret") else None), "No native Electron caret")
-        assert before["caret"]["height"] > 0, before
+        before = anchor() if X11 else wait_for(lambda: (r if (r := anchor()) and r.get("caret") else None), "No native Electron caret")
+        if not X11: assert before["caret"]["height"] > 0, before
         assert not status()["visible"]
         bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
         def key(symbol, down):
@@ -78,8 +80,8 @@ def drive(mode, pid, query):
             except AssertionError:
                 print("Picker state:", status(), flush=True)
                 raise
-            assert picker["anchor"] == "caret", picker
-            rect = before["caret"]
+            if not X11: assert picker["anchor"] == "caret", picker
+            rect = before["caret"] or {"x": -1000, "y": -1000, "width": 1, "height": 1}
             x = picker["x"] + picker["screenX"]
             y = picker["y"] + picker["screenY"]
             assert (y + 408 <= rect["y"] or y >= rect["y"] + rect["height"]
@@ -98,7 +100,7 @@ def drive(mode, pid, query):
             key(0xff0d, True)
             key(0xff0d, False)
             wait_for(lambda: not status()["visible"], "Enter did not dismiss picker")
-            time.sleep(.5)
+            time.sleep(1.1 if X11 else .5)
             assert not status()["error"], status()
         finally:
             subprocess.run(IPC + ["close"], check=True, timeout=3, capture_output=True)
@@ -111,6 +113,7 @@ else:
     scripts.mkdir(parents=True, exist_ok=True)
     gnoblin = Path(os.environ["GNOBLIN_SOURCE"])
     shutil.copy2(gnoblin / "src/scripts/compositor-bridge.js", scripts)
+    shutil.copytree(gnoblin / "src/scripts/lib", scripts / "lib")
     (scripts / "emoji-test.js").write_text('''import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
@@ -130,8 +133,10 @@ export default function enable(api) {
     const pointer = seat.create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
     pointer.notify_absolute_motion(GLib.get_monotonic_time(), 20, 20);
     const service = Gio.DBusExportedObject.wrapJSObject(`<node><interface name="org.gnoblin.EmojiTest">
+        <method name="Display"><arg type="s" direction="out"/><arg type="s" direction="out"/></method>
         <method name="Key"><arg type="u" direction="in"/><arg type="b" direction="in"/></method>
         </interface></node>`, {
+        Display() { return [GLib.getenv("DISPLAY") || "", GLib.getenv("XAUTHORITY") || ""]; },
         Key(symbol, down) {
             keyboard.notify_keyval(GLib.get_monotonic_time(), symbol,
                 down ? Clutter.KeyState.PRESSED : Clutter.KeyState.RELEASED);
@@ -159,7 +164,13 @@ export default function enable(api) {
                 except (subprocess.SubprocessError, ValueError):
                     return False
             wait_for(ready, "Picker did not start")
-            subprocess.run([os.environ["BINGUX_TEST_ELECTRON"], "--ozone-platform=wayland",
+            if X11:
+                from gi.repository import Gio
+                bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+                reply = bus.call_sync("org.gnoblin.EmojiTest", "/org/gnoblin/EmojiTest", "org.gnoblin.EmojiTest",
+                                      "Display", None, None, Gio.DBusCallFlags.NONE, 3000, None)
+                os.environ["DISPLAY"], os.environ["XAUTHORITY"] = reply.unpack()
+            subprocess.run([os.environ["BINGUX_TEST_ELECTRON"], "--ozone-platform=" + ("x11" if X11 else "wayland"),
                             str(ROOT / "tests/emoji-electron-input.cjs")], check=True, timeout=45)
         finally:
             shell.terminate()

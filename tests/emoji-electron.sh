@@ -10,6 +10,9 @@ export GNOBLIN_COMPOSITOR_SOCKET="$test_dir/compositor.sock"
 # IBus can discover the host daemon outside the private session bus. Prevent
 # that connection so test keys never enter the host input method.
 export IBUS_ADDRESS="unix:path=$test_dir/no-ibus"
+# X11 Chromium otherwise sends keys to the deliberately absent IBus daemon.
+export GTK_IM_MODULE=gtk-im-context-simple
+export XMODIFIERS=@im=none
 export GNOBLIN_TEST_DBUS_CLIENT="$repo_dir/tests/emoji-electron-input.py"
 export MONITOR=1920x1080
 "$GNOBLIN_SOURCE/scripts/run-gnome-shell.sh"
