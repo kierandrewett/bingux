@@ -107,15 +107,18 @@ def validate(data):
     if layout is not None:
         zones = {'top-left', 'top-center', 'top-right', 'dock', 'sidebar'}
         widgets = {'search', 'clock', 'capture', 'tray', 'privacy', 'metrics', 'keyboard', 'overflow', 'controls', 'notifications'}
+        controls = {'control-' + name for name in ('network', 'bluetooth', 'vpn', 'dnd', 'nightLight', 'power', 'awake')}
         panels = {'terminal', 'notes', 'monitor', 'calendar', 'media', 'tasks'}
         if not isinstance(layout, dict) or set(layout) != zones: raise ValueError('Invalid desktop layout.')
         seen = set()
         for zone, items in layout.items():
-            allowed = panels if zone == 'sidebar' else widgets
+            allowed = panels if zone == 'sidebar' else widgets | controls
             if not isinstance(items, list) or any(not isinstance(item, str) or item not in allowed or item in seen for item in items): raise ValueError('A widget can only be placed once in a compatible area.')
             if len(items) != len(set(items)): raise ValueError('A widget can only be placed once.')
             seen.update(items)
         if not layout['sidebar']: raise ValueError('Keep at least one sidebar panel.')
+        if seen & controls and (control_order is None or any('control-' + name in seen for name in control_order)):
+            raise ValueError('A control can only be placed in one container.')
     ai = search['ai']
     if ai is not None:
         if not isinstance(ai, dict) or set(ai) - {'harness', 'executable', 'model'}: raise ValueError('Invalid AI settings.')
