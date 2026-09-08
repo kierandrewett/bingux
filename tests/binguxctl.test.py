@@ -39,6 +39,12 @@ class ControlCommands(unittest.TestCase):
 
     def test_desktop_controls(self):
         cases = [
+            (["apps", "list", "Text Editor"], ["app", "list", "", "Text Editor"]),
+            (["apps", "launch", "org.test.App", "--new-window"], ["app", "new-window", "org.test.App", ""]),
+            (["keyboard", "select", "xkb", "gb+extd"], ["keyboard", "select", "xkb", "gb+extd"]),
+            (["keyboard", "list"], ["keyboard", "list", "", ""]),
+            (["controls", "hide", "dnd"], ["control", "hide", "dnd"]),
+            (["vpn", "connect", "nm:connection"], ["vpn", "connect", "nm:connection"]),
             (["controls", "page", "audio", "--input"], ["page", "audio", "true"]),
             (["audio", "devices"], ["device", "list", "false", ""]),
             (["audio", "select", "alsa.device", "--input"], ["device", "select", "true", "alsa.device"]),
@@ -78,7 +84,10 @@ class ControlCommands(unittest.TestCase):
                       ["controls", "page"], ["controls", "open", "audio"], ["controls", "page", "network", "--input"],
                       ["audio", "select"], ["audio", "devices", "bad"], ["audio", "volume", "bad"],
                       ["bluetooth", "scan", "toggle"], ["bluetooth", "connect", "other"], ["network", "connect", "bad"],
-                      ["power", "set"], ["night-light", "on", "bad"]):
+                      ["power", "set"], ["night-light", "on", "bad"],
+                      ["apps", "launch"], ["apps", "list", "--new-window"], ["keyboard", "select", "xkb"],
+                      ["keyboard", "next", "xkb", "gb"], ["controls", "hide"], ["controls", "show", "dnd", "--input"],
+                      ["vpn", "connect"], ["vpn", "list", "tailscale"]):
             with self.subTest(words=words), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 self.route(words)
 

@@ -42,6 +42,7 @@ def parser():
     audio.add_argument("value", nargs="?", help="Percentage or device ID for select")
     audio.add_argument("--input", action="store_true", help="Control the default microphone")
     for name, actions in (("network", ["status", "list", "refresh", "connect", "disconnect"]),
+                          ("vpn", ["status", "list", "connect", "disconnect"]),
                           ("bluetooth", ["status", "list", "on", "off", "toggle", "scan", "connect", "disconnect"]),
                           ("power", ["status", "set"]),
                           ("night-light", ["status", "on", "off", "toggle"]),
@@ -49,6 +50,10 @@ def parser():
         control = commands.add_parser(name, help=f"Control {name}")
         control.add_argument("action", nargs="?", default="status", choices=actions)
         control.add_argument("value", nargs="?")
+    apps = commands.add_parser("apps", help="List or launch installed applications")
+    apps.add_argument("action", nargs="?", default="list", choices=["list", "launch"])
+    apps.add_argument("value", nargs="?", help="Search text for list, exact desktop ID for launch")
+    apps.add_argument("--new-window", action="store_true", help="Request the app's new-window action")
     media = commands.add_parser("media", help="Control an MPRIS player")
     media.add_argument("action", nargs="?", default="status", choices=["list", "status", "play", "pause", "toggle", "next", "previous", "seek"])
     media.add_argument("value", nargs="?", type=float, help="Absolute position in seconds for seek")
@@ -65,13 +70,16 @@ def parser():
     for name in ("calendar", "controls", "metrics", "keyboard", "notifications"):
         command = commands.add_parser(name, help=f"Control {name}")
         actions = ["open", "close", "toggle", "status"]
-        if name == "controls": actions += ["page"]
-        if name == "keyboard": actions += ["next", "previous"]
+        if name == "controls": actions += ["page", "list", "show", "hide"]
+        if name == "keyboard": actions += ["next", "previous", "list", "select"]
         if name == "notifications": actions += ["list", "dismiss", "clear", "invoke"]
         command.add_argument("action", nargs="?", default="toggle", choices=actions)
         if name == "controls":
-            command.add_argument("page", nargs="?", choices=["network", "bluetooth", "audio", "display", "vpn", "power", "customise"])
+            command.add_argument("value", nargs="?", help="Page name or control ID")
             command.add_argument("--input", action="store_true", help="Open the audio input page")
+        if name == "keyboard":
+            command.add_argument("type", nargs="?", help="Source type from keyboard list")
+            command.add_argument("id", nargs="?", help="Source ID from keyboard list")
         if name == "notifications":
             command.add_argument("id", nargs="?")
             command.add_argument("action_id", nargs="?")
@@ -112,14 +120,31 @@ def invocation(args, cli):
         elif action == "open" and any(key not in ("kind", "target") for key in options):
             call = ["capture", "openOptions", json.dumps(options)]
         else: call = ["capture", "show", args.mode, args.target] if action == "open" else ["capture", {"toggle": "open"}.get(action, action)]
+    elif command == "apps":
+        if action == "launch" and not args.value: cli.error("apps launch requires a desktop ID from apps list")
+        if args.new_window and action != "launch": cli.error("--new-window requires apps launch")
+        call = ["actions", "app", "new-window" if args.new_window else action,
+                (args.value or "") if action == "launch" else "", (args.value or "") if action == "list" else ""]
     elif command == "controls":
-        if (action == "page") != (args.page is not None): cli.error("controls page requires a page name")
-        if args.input and args.page != "audio": cli.error("--input requires controls page audio")
-        call = ["actions", "page", args.page, str(args.input).lower()] if action == "page" else ["shell", "panel", "controls", action]
+        needs_value = action in ("page", "show", "hide")
+        if needs_value != (args.value is not None): cli.error("This controls action " + ("requires a value" if needs_value else "takes no value"))
+        if args.input and (action != "page" or args.value != "audio"): cli.error("--input requires controls page audio")
+        if action == "page":
+            if args.value not in ("network", "bluetooth", "audio", "display", "vpn", "power", "customise"): cli.error("Unknown control-centre page")
+            call = ["actions", "page", args.value, str(args.input).lower()]
+        elif action in ("list", "show", "hide"): call = ["actions", "control", action, args.value or ""]
+        else: call = ["shell", "panel", "controls", action]
+    elif command == "keyboard":
+        if action == "select":
+            if not args.type or not args.id: cli.error("keyboard select requires a source type and ID from keyboard list")
+        elif args.type is not None or args.id is not None: cli.error("Only keyboard select takes a source type and ID")
+        if action in ("list", "select"): call = ["actions", "keyboard", action, args.type or "", args.id or ""]
+        elif action in ("next", "previous"): call = ["shell", "keyboardNext" if action == "next" else "keyboardPrevious"]
+        else: call = ["shell", "panel", "keyboard", action]
     elif command == "audio" and action in ("devices", "select"):
         if (action == "select") != (args.value is not None): cli.error("A device ID is required only for audio select")
         call = ["actions", "device", "list" if action == "devices" else "select", str(args.input).lower(), args.value or ""]
-    elif command in ("network", "bluetooth", "power", "night-light", "awake"):
+    elif command in ("network", "bluetooth", "vpn", "power", "night-light", "awake"):
         needs_value = action in ("connect", "disconnect", "scan", "set")
         if needs_value != (args.value is not None): cli.error("This action " + ("requires a value" if needs_value else "takes no value"))
         if command == "bluetooth":
@@ -158,8 +183,6 @@ def invocation(args, cli):
         if not args.text: cli.error("search query requires text")
         call = ["search", "query", " ".join(args.text)]
     elif command == "search" and args.text: cli.error("query text requires search query")
-    elif command == "keyboard" and action in ("next", "previous"):
-        call = ["shell", "keyboardNext" if action == "next" else "keyboardPrevious"]
     elif command == "dnd": call = ["shell", "dnd", action]
     elif command in ("search", "calendar", "controls", "metrics", "keyboard", "notifications"):
         call = ["shell", "panel", command, action]
