@@ -55,3 +55,44 @@ test('notification desktop identities are authoritative with exact legacy-name f
     assert.equal(api.matchesNotification({ appName: 'Spotify' }, group), true);
     assert.equal(api.matchesNotification({ appName: 'Spotify update available' }, group), false);
 });
+test('Chromium forks without DesktopEntry use their exact application identity', () => {
+    const helium = {id: 'helium', desktopEntry: {id: 'helium', name: 'Helium'}, windows: [{appId: 'helium'}]};
+    const player = {identity: 'Helium', dbusName: 'org.mpris.MediaPlayer2.chromium.instance4006326'};
+    assert.equal(api.matches(player, helium), true);
+    assert.equal(api.matches(player, {id: 'chromium', desktopEntry: {name: 'Chromium'}}), false);
+    assert.equal(api.matches(player, group), false);
+    assert.equal(api.matches({...player, desktopEntry: 'other'}, helium), false);
+    assert.equal(api.matches({...player, identity: 'Helium video'}, helium), false);
+});
+test('long items and video providers seek; short music keeps track controls', () => {
+    assert.equal(api.prefersSeeking({lengthSupported: true, length: 600}), false);
+    assert.equal(api.prefersSeeking({lengthSupported: true, length: 601}), true);
+    assert.equal(api.prefersSeeking({lengthSupported: false, length: 900}), false);
+    assert.equal(api.prefersSeeking({metadata: {'xesam:url': 'https://www.youtube.com/watch?v=abc'}}), true);
+    assert.equal(api.prefersSeeking({metadata: {'xesam:url': 'https://music.youtube.com/watch?v=abc'}}), false);
+    assert.equal(api.prefersSeeking({metadata: {'xesam:url': 'https://youtube.com.evil.invalid/watch'}}), false);
+    assert.equal(api.prefersSeeking({metadata: {'xesam:contentType': 'video/mp4'}}), true);
+    assert.equal(api.prefersSeeking({desktopEntry: 'org.gnome.Showtime'}), true);
+    assert.equal(api.prefersSeeking({identity: 'Helium'}), false);
+});
+test('seek steps respect capabilities and track boundaries', () => {
+    const calls = [];
+    const player = {canControl: true, canSeek: true, lengthSupported: true, length: 900,
+        positionSupported: true, position: 5, seek: value => calls.push(value)};
+    api.step(player, -1);
+    player.position = 895;
+    api.step(player, 1);
+    player.position = 100;
+    api.step(player, -1);
+    api.step(player, 1);
+    assert.deepEqual(calls, [-5, 5, -10, 10]);
+    player.canSeek = false;
+    assert.equal(api.canStep(player, 1), false);
+    api.step(player, 1);
+    assert.equal(calls.length, 4);
+    player.length = 180; player.canGoNext = true; player.next = () => calls.push('next');
+    api.step(player, 1);
+    assert.equal(calls.at(-1), 'next');
+    player.canControl = false;
+    assert.equal(api.canStep(player, 1), false);
+});

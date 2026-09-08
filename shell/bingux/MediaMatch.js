@@ -2,8 +2,8 @@ function normalize(value) {
     return String(value || "").replace(/\.desktop$/i, "").toLowerCase();
 }
 
-// Icon lookup is presentation-only; never use these display-name fallbacks
-// to route playback or associate a player with an application's windows.
+// Icon lookup is presentation-only. Playback matching below uses exact IDs
+// and an exact name fallback only for the known generic Chromium bus.
 function playerDesktopEntry(player, provider) {
     if (!player) return null;
     const desktopId = String(player.desktopEntry || "").replace(/\.desktop$/i, "");
@@ -55,6 +55,12 @@ function matches(player, group) {
     if (desktopId) return identities.includes(desktopId);
     const busId = normalize(String(player.dbusName || "")
         .replace(/^org\.mpris\.MediaPlayer2\./, "").replace(/\.instance[^.]*$/, ""));
+    // Chromium forks omit DesktopEntry and share Chromium's bus prefix.
+    // Only that known generic bus permits an exact application-name fallback.
+    if (busId === "chromium" && normalize(player.identity)) {
+        const identity = normalize(player.identity);
+        return identities.includes(identity) || identity === normalize(entry.name);
+    }
     return busId.length > 0 && identities.includes(busId);
 }
 
@@ -62,4 +68,36 @@ function timeLabel(seconds) {
     const total = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
     const minutes = Math.floor(total / 60);
     return minutes + ":" + String(total % 60).padStart(2, "0");
+}
+
+// Duration is in seconds. A browser alone does not identify video: web music
+// players should keep track controls unless the current item is long-form.
+function prefersSeeking(player) {
+    if (!player) return false;
+    if (player.lengthSupported && player.length > 600) return true;
+    const metadata = player.metadata || {};
+    if (/^video\//i.test(String(metadata["xesam:contentType"] || ""))) return true;
+    const url = String(metadata["xesam:url"] || "");
+    if (/^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts|live)|youtu\.be\/|vimeo\.com\/|twitch\.tv\/|netflix\.com\/|disneyplus\.com\/)/i.test(url)) return true;
+    return ["mpv", "celluloid", "io.github.celluloid_player.celluloid", "totem", "org.gnome.totem", "org.gnome.showtime"]
+        .includes(normalize(player.desktopEntry));
+}
+
+function canStep(player, direction) {
+    if (!player || !player.canControl) return false;
+    return prefersSeeking(player) ? !!player.canSeek : !!(direction < 0 ? player.canGoPrevious : player.canGoNext);
+}
+
+function step(player, direction) {
+    if (!canStep(player, direction)) return;
+    if (prefersSeeking(player)) {
+        let offset = direction < 0 ? -10 : 10;
+        if (player.positionSupported) {
+            offset = Math.max(-player.position, offset);
+            if (player.lengthSupported && player.length > 0)
+                offset = Math.min(offset, Math.max(0, player.length - player.position));
+        }
+        player.seek(offset);
+    } else if (direction < 0) player.previous();
+    else player.next();
 }
