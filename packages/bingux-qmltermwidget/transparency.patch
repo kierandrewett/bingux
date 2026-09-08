@@ -1,0 +1,17 @@
+--- a/lib/TerminalDisplay.h
++++ b/lib/TerminalDisplay.h
+@@ -97,5 +97,6 @@
+    Q_PROPERTY(QFont font                READ getVTFont       WRITE setVTFont      NOTIFY vtFontChanged           )
+    Q_PROPERTY(QString colorScheme       READ colorScheme     WRITE setColorScheme NOTIFY colorSchemeChanged      )
++   Q_PROPERTY(qreal backgroundOpacity   READ backgroundOpacity WRITE setOpacity)
+    Q_PROPERTY(QSize terminalSize        READ getTerminalSize                      NOTIFY changedContentSizeSignal)
+    Q_PROPERTY(int lineSpacing           READ lineSpacing     WRITE setLineSpacing NOTIFY lineSpacingChanged      )
+    Q_PROPERTY(bool terminalUsesMouse    READ getUsesMouse                         NOTIFY usesMouseChanged        )
+@@ -136,6 +137,7 @@
+ 
+     /** Sets the opacity of the terminal display. */
+     void setOpacity(qreal opacity);
++    qreal backgroundOpacity() const { return _opacity; }
+ 
+     /** 
+      * This enum describes the location where the scroll bar is positioned in the display widget.

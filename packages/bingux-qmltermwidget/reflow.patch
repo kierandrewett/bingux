@@ -1,0 +1,157 @@
+diff --git a/lib/Emulation.cpp b/lib/Emulation.cpp
+index 3ba370f..8243a21 100644
+--- a/lib/Emulation.cpp
++++ b/lib/Emulation.cpp
+@@ -361,6 +361,7 @@ void Emulation::setImageSize(int lines, int columns)
+     return;
+ 
+   _screen[0]->resizeImage(lines,columns);
++  _screen[1]->setReflowEnabled(false);
+   _screen[1]->resizeImage(lines,columns);
+ 
+   emit imageSizeChanged(lines,columns);
+diff --git a/lib/Screen.cpp b/lib/Screen.cpp
+index e2108d6..9e1f3ab 100644
+--- a/lib/Screen.cpp
++++ b/lib/Screen.cpp
+@@ -339,9 +339,119 @@ void Screen::restoreCursor()
+     updateEffectiveRendition();
+ }
+ 
++void Screen::reflowImage(int newLines, int newColumns)
++{
++    // Join only soft-wrapped rows. Hard line breaks and complete Character
++    // records (colours, attributes, combining glyphs) remain intact.
++    const int oldHistoryLines = history->getLines();
++    int lastScreenLine = cuY;
++    for (int row = 0; row < lines; ++row)
++        if (!screenLines[row].isEmpty())
++            lastScreenLine = qMax(lastScreenLine, row);
++
++    QVector<ImageLine> rows;
++    QVector<LineProperty> properties;
++    ImageLine logical;
++    int cursorOffset = -1;
++    int savedOffset = -1;
++    int cursorRow = 0, cursorColumn = 0;
++    int savedRow = 0, savedColumn = 0;
++
++    auto flush = [&]() {
++        int start = 0;
++        do {
++            int end = qMin(start + newColumns, int(logical.size()));
++            // A zero cell is the continuation of a double-width glyph.
++            // Move the entire glyph to the next row instead of splitting it.
++            if (end < logical.size() && end > start && logical[end].character == 0) {
++                --end;
++                if (end == start)
++                    end = qMin(start + 2, int(logical.size()));
++            }
++            const bool last = end == logical.size();
++            auto mapCursor = [&](int offset, int &row, int &column) {
++                if (offset >= start && (offset < end || (last && offset == end))) {
++                    row = rows.size();
++                    column = offset - start;
++                }
++            };
++            mapCursor(cursorOffset, cursorRow, cursorColumn);
++            mapCursor(savedOffset, savedRow, savedColumn);
++            rows.append(logical.mid(start, end - start));
++            properties.append(last ? LINE_DEFAULT : LINE_WRAPPED);
++            start = end;
++        } while (start < logical.size());
++        logical.clear();
++        cursorOffset = savedOffset = -1;
++    };
++
++    for (int row = 0; row <= oldHistoryLines + lastScreenLine; ++row) {
++        ImageLine cells;
++        bool wrapped;
++        if (row < oldHistoryLines) {
++            cells.resize(history->getLineLen(row));
++            if (!cells.isEmpty())
++                history->getCells(row, 0, cells.size(), cells.data());
++            wrapped = history->isWrappedLine(row);
++        } else {
++            const int screenRow = row - oldHistoryLines;
++            cells = screenLines[screenRow];
++            if (screenRow == cuY) {
++                cursorOffset = logical.size() + cuX;
++                while (cells.size() < cuX)
++                    cells.append(defaultChar);
++            }
++            if (screenRow == savedState.cursorLine) {
++                savedOffset = logical.size() + qMin(savedState.cursorColumn, int(cells.size()));
++            }
++            wrapped = lineProperties[screenRow] & LINE_WRAPPED;
++        }
++        logical += cells;
++        if (!wrapped || row == oldHistoryLines + lastScreenLine)
++            flush();
++    }
++
++    // Keep the cursor visible, pushing overflow into the existing history type.
++    // Growing the viewport can bring historical rows back onto the screen.
++    const int firstScreenRow = qMax(0, qMin(int(rows.size()) - newLines, cursorRow));
++    HistoryScroll *newHistory = history->getType().scroll(nullptr);
++    for (int row = 0; row < firstScreenRow; ++row) {
++        newHistory->addCellsVector(rows[row]);
++        newHistory->addLine(properties[row] & LINE_WRAPPED);
++    }
++    delete history;
++    history = newHistory;
++    delete[] screenLines;
++    screenLines = new ImageLine[newLines + 1];
++    lineProperties.resize(newLines + 1);
++    for (int row = 0; row <= newLines; ++row)
++        lineProperties[row] = LINE_DEFAULT;
++    for (int row = 0; row < newLines && firstScreenRow + row < rows.size(); ++row) {
++        screenLines[row] = rows[firstScreenRow + row];
++        lineProperties[row] = properties[firstScreenRow + row];
++    }
++    lines = newLines;
++    columns = newColumns;
++    cuX = qMin(cursorColumn, columns);
++    cuY = qBound(0, cursorRow - firstScreenRow, lines - 1);
++    savedState.cursorColumn = qMin(savedColumn, columns - 1);
++    savedState.cursorLine = qBound(0, savedRow - firstScreenRow, lines - 1);
++    _topMargin = 0;
++    _bottomMargin = lines - 1;
++    lastPos = -1;
++    _scrolledLines = 0;
++    _droppedLines = qMax(0, firstScreenRow - history->getLines());
++    clearSelection();
++    initTabStops();
++}
++
+ void Screen::resizeImage(int new_lines, int new_columns)
+ {
+     if ((new_lines==lines) && (new_columns==columns)) return;
++    if (_reflowEnabled && new_columns != columns) {
++        reflowImage(new_lines, new_columns);
++        return;
++    }
+ 
+     if (cuY > new_lines-1)
+     { // attempt to preserve focus and lines
+diff --git a/lib/Screen.h b/lib/Screen.h
+index 4fce19e..9f382e9 100644
+--- a/lib/Screen.h
++++ b/lib/Screen.h
+@@ -373,6 +373,7 @@ public:
+      * cleared.
+      */
+     void resizeImage(int new_lines, int new_columns);
++    void setReflowEnabled(bool enabled) { _reflowEnabled = enabled; }
+ 
+     /**
+      * Returns the current screen image.
+@@ -705,6 +706,8 @@ private:
+     // used in REP (repeating char)
+     unsigned short lastDrawnChar;
+ 
++    bool _reflowEnabled = true;
++    void reflowImage(int newLines, int newColumns);
+     static Character defaultChar;
+ };
+ 

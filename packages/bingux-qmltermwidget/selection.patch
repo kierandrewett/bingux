@@ -1,0 +1,105 @@
+--- a/lib/Character.h
++++ b/lib/Character.h
+@@ -53,6 +53,7 @@
+ #define RE_STRIKEOUT       (1 << 8)
+ #define RE_CONCEAL         (1 << 9)
+ #define RE_OVERLINE        (1 << 10)
++#define RE_SELECTED        (1 << 11) // Display selection, separate from ANSI reverse
+ 
+ class ScreenWindow;
+ 
+@@ -86,7 +87,7 @@
+   wchar_t character;
+ 
+   /** A combination of RENDITION flags which specify options for drawing the character. */
+-  quint8  rendition;
++  quint16 rendition;
+ 
+   /** The foreground color used to draw this character. */
+   CharacterColor  foregroundColor;
+--- a/lib/Screen.cpp
++++ b/lib/Screen.cpp
+@@ -581,6 +581,7 @@
+                 if (isSelected(column,line))
+                 {
+                     reverseRendition(dest[destLineOffset + column]);
++                    dest[destLineOffset + column].rendition |= RE_SELECTED;
+                 }
+             }
+         }
+@@ -603,9 +604,11 @@
+ 
+             dest[destIndex] = screenLines[srcIndex/columns].value(srcIndex%columns,defaultChar);
+ 
+-            // invert selected text
+-            if (selBegin != -1 && isSelected(column,line + history->getLines()))
++            // Mark selection while retaining the legacy inverted-colour fallback.
++            if (selBegin != -1 && isSelected(column,line + history->getLines())) {
+                 reverseRendition(dest[destIndex]);
++                dest[destIndex].rendition |= RE_SELECTED;
++            }
+         }
+ 
+     }
+--- a/lib/TerminalDisplay.h
++++ b/lib/TerminalDisplay.h
+@@ -97,6 +97,7 @@
+    Q_PROPERTY(QFont font                READ getVTFont       WRITE setVTFont      NOTIFY vtFontChanged           )
+    Q_PROPERTY(QString colorScheme       READ colorScheme     WRITE setColorScheme NOTIFY colorSchemeChanged      )
+    Q_PROPERTY(qreal backgroundOpacity   READ backgroundOpacity WRITE setOpacity)
++   Q_PROPERTY(QColor selectionColor READ selectionColor WRITE setSelectionColor)
+    Q_PROPERTY(QSize terminalSize        READ getTerminalSize                      NOTIFY changedContentSizeSignal)
+    Q_PROPERTY(int lineSpacing           READ lineSpacing     WRITE setLineSpacing NOTIFY lineSpacingChanged      )
+    Q_PROPERTY(bool terminalUsesMouse    READ getUsesMouse                         NOTIFY usesMouseChanged        )
+@@ -138,6 +139,8 @@
+     /** Sets the opacity of the terminal display. */
+     void setOpacity(qreal opacity);
+     qreal backgroundOpacity() const { return _opacity; }
++    QColor selectionColor() const { return _selectionColor; }
++    void setSelectionColor(const QColor &color) { _selectionColor = color; update(); }
+ 
+     /** 
+      * This enum describes the location where the scroll bar is positioned in the display widget.
+@@ -941,6 +944,7 @@
+     QSize _size;
+ 
+     qreal _opacity;
++    QColor _selectionColor;
+ 
+     QPixmap _backgroundImage;
+     BackgroundMode _backgroundMode;
+--- a/lib/TerminalDisplay.cpp
++++ b/lib/TerminalDisplay.cpp
+@@ -951,6 +951,14 @@
+ {
+     painter.save();
+ 
++    // Preserve text colours and tint the background for configured selections.
++    Character selectedStyle = *style;
++    const bool selected = (style->rendition & RE_SELECTED) && _selectionColor.isValid();
++    if (selected) {
++        qSwap(selectedStyle.foregroundColor, selectedStyle.backgroundColor);
++        style = &selectedStyle;
++    }
++
+     // setup painter
+     const QColor foregroundColor = style->foregroundColor.color(_colorTable);
+     const QColor backgroundColor = style->backgroundColor.color(_colorTable);
+@@ -959,6 +967,8 @@
+     if ( backgroundColor != palette().window().color() )
+         drawBackground(painter,rect,backgroundColor,
+                        false /* do not use transparency */);
++
++    if (selected) painter.fillRect(rect, _selectionColor);
+ 
+     // draw cursor shape if the current character is the cursor
+     // this may alter the foreground and background colors
+@@ -1932,7 +1942,7 @@
+       bool smallWidth = _fixedFont && c && charWidth < _fontWidth;
+       CharacterColor currentForeground = _image[loc(x,y)].foregroundColor;
+       CharacterColor currentBackground = _image[loc(x,y)].backgroundColor;
+-      quint8 currentRendition = _image[loc(x,y)].rendition;
++      quint16 currentRendition = _image[loc(x,y)].rendition;
+ 
+       quint32 nxtC = 0;
+       bool nxtDoubleWidth = false;
