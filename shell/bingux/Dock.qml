@@ -70,9 +70,10 @@ PanelWindow {
         delegate: Connections {
             required property var modelData
             target: modelData
+            // The initial app ID can arrive before this Connections object exists.
+            Component.onCompleted: root.associatePendingLaunchToplevel(modelData)
             function onAppIdChanged() {
-                if (root.pendingLaunchToplevel === modelData)
-                    root.associatePendingLaunchToplevel(modelData);
+                root.associatePendingLaunchToplevel(modelData);
                 root.refreshAppGroups();
             }
             function onParentChanged() { root.refreshAppGroups() }
