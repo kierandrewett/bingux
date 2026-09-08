@@ -28,6 +28,13 @@ with tempfile.TemporaryDirectory(prefix='bingux-layout-live-') as directory:
     systemctl = fixture / 'bin/systemctl'; systemctl.write_text('#!/bin/sh\nexit 0\n'); systemctl.chmod(0o700)
     environment = os.environ | {'BINGUX_TEST_COMPOSITOR_CONFIG': os.environ['XDG_CONFIG_HOME'], 'BINGUX_TEST_NATIVE_INPUT': str(repo / 'tests/customise-native-input.py'), 'QT_QPA_PLATFORM': 'wayland', 'XDG_CONFIG_HOME': str(fixture / 'config'),
         'XDG_STATE_HOME': str(fixture / 'state'), 'BINGUX_LAYOUT_IMPORT': '0', 'PATH': str(fixture / 'bin') + ':' + os.environ['PATH']}
+    if case == 'control-layout':
+        (fixture / 'action-avatar.svg').write_text('<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><circle cx="24" cy="24" r="24" fill="#77aaff"/></svg>')
+        environment['BINGUX_ACTION_REPORT'] = str(fixture / 'actions.jsonl')
+        for name in ('gnome-control-center', 'loginctl'):
+            helper = fixture / 'bin' / name
+            helper.write_text('#!/usr/bin/python3\nimport json,os,sys\nwith open(os.environ["BINGUX_ACTION_REPORT"],"a") as output: output.write(json.dumps({"command":os.path.basename(sys.argv[0]),"arguments":sys.argv[1:]})+"\\n")\n')
+            helper.chmod(0o700)
     environment.pop('BINGUX_SETTINGS_HELPER', None)
     stage_compositor_bridge(repo, os.environ['XDG_CONFIG_HOME'])
     subprocess.run(['python3', str(repo / 'tests/customise-native-input.py'), '--prepare'], env=environment, check=True)

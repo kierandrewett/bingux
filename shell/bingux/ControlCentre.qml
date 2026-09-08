@@ -19,17 +19,31 @@ ShellPopup {
     signal customiseRequested()
     property var widgetLayout: null
     property Item movedAnchor: null
+    property var actionWidgets: []
     readonly property var groupedEntries: [
-        {id: "control-account", item: accountControl}, {id: "control-header-space", item: headerSpace},
-        {id: "control-battery", item: batteryControl}, {id: "control-settings", item: settingsControl},
-        {id: "control-session", item: headerControls.children.find(item => item.objectName === "controlSessionPower")},
-        {id: "control-lock", item: lockControl}, {id: "control-volume", item: outputControl},
-        {id: "control-microphone", item: inputControl}, {id: "control-media", item: mediaControl},
-        {id: "control-divider", item: dividerControl}, {id: "control-customise", item: customiseControl},
-        {id: "controls-header", item: headerControls}, {id: "controls-audio", item: audioRows},
-        {id: "controls-tiles", item: quickRows}
+        {id: "control-header-space", item: headerSpace}, {id: "control-battery", item: batteryControl},
+        {id: "control-volume", item: outputControl}, {id: "control-microphone", item: inputControl},
+        {id: "control-media", item: mediaControl}, {id: "control-divider", item: dividerControl},
+        {id: "control-customise", item: customiseControl}, {id: "controls-header", item: headerControls},
+        {id: "controls-audio", item: audioRows}, {id: "controls-tiles", item: quickRows}
     ]
-    readonly property var movableWidgets: [networkWidget, bluetoothWidget, vpnWidget, dndWidget, nightLightWidget, powerWidget, awakeWidget]
+    readonly property var movableWidgets: [networkWidget, bluetoothWidget, vpnWidget, dndWidget, nightLightWidget, powerWidget, awakeWidget].concat(actionWidgets)
+    component ActionWidget: IconButton {
+        id: action
+        required property string widgetId
+        readonly property string container: DesktopLayout.zone(DesktopEditing.desktop.layout || {}, widgetId)
+        readonly property bool barLayout: root.widgetLayout !== null && container !== ""
+        parent: barLayout ? root.widgetLayout.hostFor(action) : headerControls
+        visible: barLayout || root.groupPosition("controls-header", widgetId) >= 0
+        Layout.column: barLayout ? root.widgetLayout.controlColumn(action) : root.groupPosition("controls-header", widgetId)
+        Layout.row: barLayout ? root.widgetLayout.controlRow(action) : 0
+        barStyle: barLayout
+        implicitHeight: barLayout ? Theme.barHeight : 32
+        presentation: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, container || "control-centre", label, iconName, true, false)
+        WidgetEditHandle { control: action; widgetId: action.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
+        Component.onCompleted: root.actionWidgets = root.actionWidgets.concat([action])
+        Component.onDestruction: root.actionWidgets = root.actionWidgets.filter(item => item !== action)
+    }
     component QuickWidget: ControlRow {
         id: quick
         required property string controlName
@@ -203,11 +217,10 @@ ShellPopup {
             rows: 1
             rowSpacing: 0
             columnSpacing: 8
-            IconButton {
+            ActionWidget {
+                widgetId: "control-account"
                 id: accountControl
                 objectName: "controlUserAccount"
-                Layout.column: root.groupPosition("controls-header", "control-account")
-                visible: root.groupPosition("controls-header", "control-account") >= 0
                 iconName: "avatar-default-symbolic"
                 imageSource: "file:///var/lib/AccountsService/icons/" + Quickshell.env("USER")
                 label: "User account"
@@ -229,20 +242,18 @@ ShellPopup {
                 SymbolicIcon { implicitSize: 16; color: Theme.muted; source: Quickshell.iconPath("battery-good-symbolic") }
                 Text { text: root.indicators.batteryAccessibleName().replace(/^Battery /, "").replace(" percent", "%").replace(/,.*$/, ""); Accessible.name: root.indicators.batteryAccessibleName(); color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
             }
-            IconButton {
+            ActionWidget {
+                widgetId: "control-settings"
                 id: settingsControl
                 objectName: "controlSettings"
-                Layout.column: root.groupPosition("controls-header", "control-settings")
-                visible: root.groupPosition("controls-header", "control-settings") >= 0
                 iconName: "org.gnome.Settings-symbolic"
                 label: "Settings"
                 onClicked: root.settings("")
             }
-            IconButton {
+            ActionWidget {
+                widgetId: "control-lock"
                 id: lockControl
                 objectName: "controlLock"
-                Layout.column: root.groupPosition("controls-header", "control-lock")
-                visible: root.groupPosition("controls-header", "control-lock") >= 0
                 iconName: "system-lock-screen-symbolic"
                 label: "Lock"
                 onClicked: { Quickshell.execDetached(["loginctl", "lock-session"]); root.visible = false }

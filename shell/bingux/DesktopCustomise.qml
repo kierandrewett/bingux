@@ -149,6 +149,7 @@ Scope {
     readonly property var containerChoices: [{id: "top-left", label: "Top left"}, {id: "top-center", label: "Top centre"}, {id: "top-right", label: "Top right"}, {id: "dock", label: "Dock"}, {id: "sidebar", label: "Sidebar"}, {id: "control-centre", label: "Control centre"}]
     readonly property var iconChoices: ["system-search-symbolic", "preferences-system-symbolic", "x-office-calendar-symbolic", "preferences-system-notifications-symbolic", "computer-symbolic", "input-keyboard-symbolic", "view-more-symbolic", "microphone-sensitivity-high-symbolic", "media-record-symbolic", "utilities-terminal-symbolic", "accessories-text-editor-symbolic", "applications-multimedia-symbolic", "view-list-symbolic", "network-wireless-symbolic", "bluetooth-active-symbolic", "network-vpn-symbolic", "notifications-disabled-symbolic", "night-light-symbolic", "power-profile-balanced-symbolic", "display-brightness-symbolic", "audio-volume-high-symbolic", "audio-input-microphone-symbolic", "system-lock-screen-symbolic", "avatar-default-symbolic", "starred-symbolic", "user-home-symbolic", "folder-symbolic", "web-browser-symbolic", "mail-unread-symbolic", "camera-photo-symbolic", "view-pin-symbolic", "document-edit-symbolic"]
     property string selectedWidget: ""
+    readonly property bool appearanceEditable: !DesktopLayout.isSpacing(selectedWidget) && (!ControlLayout.groupFor(selectedWidget) || ControlLayout.isAction(selectedWidget))
     property url dragImage: ""
     property point dragHotSpot: Qt.point(0, 0)
     property size dragSize: Qt.size(0, 0)
@@ -186,7 +187,7 @@ Scope {
         const entry = appEntry(id.slice(4));
         return {id, label: entry?.name || id.slice(4), icon: entry?.icon || "application-x-executable", app: true};
     }
-    function containerFor(id) { if (ControlLayout.groupFor(id)) return "control-centre"; return id.startsWith("app:") ? "dock" : DesktopLayout.zone(layout, id) || (id.startsWith("control-") ? "control-centre" : ""); }
+    function containerFor(id) { if (ControlLayout.groupFor(id)) return DesktopLayout.zone(layout, id) || "control-centre"; return id.startsWith("app:") ? "dock" : DesktopLayout.zone(layout, id) || (id.startsWith("control-") ? "control-centre" : ""); }
     function appearance(id) {
         const item = baseInfo(id);
         return DesktopLayout.presentation(desktop, id, containerFor(id), item?.label || "", item?.icon || "", id !== "clock", id === "clock");
@@ -216,7 +217,7 @@ Scope {
         return zone === "dock" && id.startsWith("app:") ? dockApplications : layout[zone] || [];
     }
     function accepts(id, target) {
-        if (ControlLayout.groupFor(id)) return ["control-centre", "palette"].includes(target);
+        if (ControlLayout.groupFor(id) && !ControlLayout.isAction(id)) return ["control-centre", "palette"].includes(target);
         return id.startsWith("app:") ? ["dock-apps", "dock", "palette"].includes(target) : DesktopLayout.accepts(id, target);
     }
     function open() {
@@ -245,10 +246,14 @@ Scope {
     function putItem(id, target, index) {
         const group = ControlLayout.groupFor(id);
         if (group) {
-            let next = ControlLayout.move(desktop.controlLayout, group, id, target === "palette" ? -1 : index);
-            if (target !== "palette" && group !== "control-centre" && !ControlLayout.contains(next, "control-centre", group))
+            let next = ControlLayout.move(desktop.controlLayout, group, id, target === "control-centre" ? index : -1);
+            if (target === "control-centre" && group !== "control-centre" && !ControlLayout.contains(next, "control-centre", group))
                 next = ControlLayout.move(next, "control-centre", group, ControlLayout.position(null, "control-centre", group));
             change("controlLayout", next);
+            if (ControlLayout.isAction(id)) {
+                layout = DesktopLayout.move(layout, id, target === "control-centre" ? "palette" : target, index);
+                if (target === "dock") change("dock", true);
+            }
             return;
         }
         if (id.startsWith("control-")) {
@@ -491,11 +496,11 @@ Scope {
                             SeekSlider { Layout.fillWidth: true; from: 8; to: 160; stepSize: 4; value: root.desktop.widgetOptions?.[root.selectedWidget]?.width || 20; onMoved: root.widgetOption("width", Math.round(value)); Accessible.name: "Space width" }
                             Text { text: (root.desktop.widgetOptions?.[root.selectedWidget]?.width || 20) + " px"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
                         }
-                        SettingsChoice { visible: !DesktopLayout.isSpacing(root.selectedWidget) && !ControlLayout.groupFor(root.selectedWidget); label: "Show"; choices: ["Follow container", "Original", "Icons", "Text", "Both"]; values: ["inherit", "native", "icons", "text", "both"]; value: root.desktop.widgetOptions?.[root.selectedWidget]?.display || "inherit"; onChosen: value => root.widgetOption("display", value) }
-                        SettingsField { visible: !DesktopLayout.isSpacing(root.selectedWidget) && !ControlLayout.groupFor(root.selectedWidget); objectName: "customiseWidgetLabel"; Layout.margins: 0; label: "Label"; text: root.desktop.widgetOptions?.[root.selectedWidget]?.label || ""; placeholderText: root.baseInfo(root.selectedWidget)?.label || "Widget label"; onEdited: value => root.widgetOption("label", value) }
-                        ActionButton { objectName: "customiseIconPickerToggle"; visible: !DesktopLayout.isSpacing(root.selectedWidget) && !ControlLayout.groupFor(root.selectedWidget); text: root.iconsExpanded ? "Hide icons" : "Change icon…"; flat: true; onClicked: root.iconsExpanded = !root.iconsExpanded }
+                        SettingsChoice { visible: root.appearanceEditable; label: "Show"; choices: ["Follow container", "Original", "Icons", "Text", "Both"]; values: ["inherit", "native", "icons", "text", "both"]; value: root.desktop.widgetOptions?.[root.selectedWidget]?.display || "inherit"; onChosen: value => root.widgetOption("display", value) }
+                        SettingsField { visible: root.appearanceEditable; objectName: "customiseWidgetLabel"; Layout.margins: 0; label: "Label"; text: root.desktop.widgetOptions?.[root.selectedWidget]?.label || ""; placeholderText: root.baseInfo(root.selectedWidget)?.label || "Widget label"; onEdited: value => root.widgetOption("label", value) }
+                        ActionButton { objectName: "customiseIconPickerToggle"; visible: root.appearanceEditable; text: root.iconsExpanded ? "Hide icons" : "Change icon…"; flat: true; onClicked: root.iconsExpanded = !root.iconsExpanded }
                         GridLayout {
-                            visible: root.iconsExpanded && !DesktopLayout.isSpacing(root.selectedWidget) && !ControlLayout.groupFor(root.selectedWidget)
+                            visible: root.iconsExpanded && root.appearanceEditable
                             Layout.fillWidth: true; columns: 8; rowSpacing: 4; columnSpacing: 4
                             Repeater {
                                 model: root.iconChoices
