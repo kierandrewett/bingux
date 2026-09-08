@@ -4,6 +4,7 @@ import Quickshell
 Item {
     id: root
     property var windows: []
+    property bool launching: false
     readonly property int windowCount: windows.length
     readonly property int visibleCount: Math.min(4, windowCount)
     readonly property int activeIndex: {
