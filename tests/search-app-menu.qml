@@ -9,6 +9,7 @@ SearchOverlay {
     WlrLayershell.namespace: "bingux-search-app-menu-test"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     mask: Region {}
+    SearchSocket { id: protocolCheck }
     dockView: testDock
     Dock { id: testDock; visible: false; settings: ({pinnedApps: []}) }
     property int activationCount: 0
@@ -31,7 +32,8 @@ SearchOverlay {
         }
         function test_menu() {
             wait(300);
-            const result = {resultId: 'bingux-menu-test.desktop', providerId: 'applications', kind: 'application', title: 'Menu test app', subtitle: '', icon: 'application-x-executable'};
+            const result = {resultId: 'r300', desktopId: 'bingux-menu-test.desktop', providerId: 'applications', kind: 'application', title: 'Menu test app', subtitle: '', icon: 'application-x-executable', score: 1};
+            verify(protocolCheck.isValidResult(result), 'Accept daemon app identity');
             preview.displayedResults = [result];
             preview.selectedIndex = 0;
             wait(300);
@@ -52,7 +54,7 @@ SearchOverlay {
             if (Quickshell.env('BINGUX_MENU_SCREENSHOT'))
                 grabImage(pin.parent.parent.parent).save(Quickshell.env('BINGUX_MENU_SCREENSHOT') + (unpin ? '-unpin.png' : '-pin.png'));
             mouseClick(pin, pin.width / 2, pin.height / 2);
-            tryVerify(() => testDock.isPinned({id: result.resultId}) === !unpin);
+            tryVerify(() => testDock.isPinned({id: result.desktopId}) === !unpin);
             equal(preview.visible, true, 'Pin action keeps search open');
             equal(preview.activationCount, 0, 'Pin action must not launch the app');
             wait(300);

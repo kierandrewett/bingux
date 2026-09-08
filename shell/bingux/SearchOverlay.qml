@@ -23,8 +23,8 @@ PanelWindow {
     property var dockView: null
     function openAppMenu(result, position) {
         if (!dockView || activationPending || awaitingResults || closing
-            || result.providerId !== "applications" || result.kind !== "application") return;
-        const entry = dockView.desktopEntryFor(dockView.normaliseAppId(result.resultId));
+            || !result.desktopId || result.providerId !== "applications" || result.kind !== "application") return;
+        const entry = dockView.desktopEntryFor(dockView.normaliseAppId(result.desktopId));
         if (!entry) return;
         appMenu.result = result;
         appMenu.group = {id: entry.id, desktopEntry: entry, windows: []};

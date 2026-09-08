@@ -191,6 +191,9 @@ impl ProviderResult {
 pub struct DaemonResult {
     /// A short-lived opaque identifier resolved only by the daemon.
     pub result_id: String,
+    /// Installed desktop entry identity for built-in application results.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub desktop_id: Option<String>,
     pub provider_id: String,
     pub kind: ResultKind,
     pub title: String,
@@ -202,6 +205,9 @@ pub struct DaemonResult {
 impl DaemonResult {
     pub fn validate(&self) -> ProtocolResult<()> {
         validate_opaque_result_id(&self.result_id)?;
+        if let Some(desktop_id) = &self.desktop_id {
+            validate_provider_result_id(desktop_id)?;
+        }
         validate_provider_id(&self.provider_id)?;
         validate_result_display_text(&self.title, &self.subtitle, &self.icon)?;
         validate_score(self.score)
@@ -1390,6 +1396,7 @@ mod tests {
         let results = (0..50)
             .map(|index| DaemonResult {
                 result_id: format!("r{index}"),
+                desktop_id: None,
                 provider_id: "notes".to_owned(),
                 kind: ResultKind::Database,
                 title: "x".repeat(2_048),

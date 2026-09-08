@@ -419,7 +419,10 @@ The host gives each provider query a provider-local `queryId` that matches the s
 
 Provider-local `resultId` values match `[A-Za-z0-9._:-]{1,128}`. The combined UTF-8 byte length of
 `title`, `subtitle`, and `icon` must not exceed 24 KiB, and these fields must not contain control
-characters. The host maps them to short-lived opaque socket result identifiers. It may split a
+characters. The host maps them to short-lived opaque socket result identifiers. Built-in application
+results also include an optional `desktopId` field in the shell response. It identifies the installed
+`.desktop` entry for dock pinning; `resultId` remains the opaque activation token. Shell clients must
+accept this optional field. It is not part of the external provider response schema. The host may split a
 provider result batch into multiple socket records to keep each record within 64 KiB. It never sends
 a provider command or executable text to QML.
 

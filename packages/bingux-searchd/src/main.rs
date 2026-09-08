@@ -790,6 +790,9 @@ impl Runtime {
             let result_id = format!("r{}", self.next_result_id.fetch_add(1, Ordering::Relaxed));
             let result = DaemonResult {
                 result_id: result_id.clone(),
+                desktop_id: (candidate.provider_id == "applications"
+                    && candidate.result.kind == bingux_searchd::protocol::ResultKind::Application)
+                    .then(|| candidate.result.result_id.clone()),
                 provider_id: candidate.provider_id,
                 kind: candidate.result.kind,
                 title: candidate.result.title,
@@ -2105,6 +2108,7 @@ mod tests {
             elapsed_usec: 1,
             results: vec![DaemonResult {
                 result_id: "r-01".into(),
+                desktop_id: None,
                 provider_id: "provider".into(),
                 kind: bingux_searchd::protocol::ResultKind::Action,
                 title: "invalid\nresult".into(),
@@ -2280,6 +2284,30 @@ mod tests {
             activations.take("current", 1),
             Some(Activation::None)
         ));
+    }
+
+    #[test]
+    fn application_results_keep_desktop_identity_beside_opaque_activation_id() {
+        let runtime = test_runtime();
+        let (sender, _receiver) = mpsc::sync_channel(1);
+        let tracker = Arc::new(QueryTracker::new(1, "q-app".into(), 2, sender));
+        runtime.queries.lock().unwrap().insert("q-app".into(), tracker);
+        runtime.client_queries.lock().unwrap().insert(1, "q-app".into());
+        let candidates = vec![Candidate {
+            provider_id: "applications".into(),
+            result: bingux_searchd::protocol::ProviderResult {
+                result_id: "org.example.App.desktop".into(),
+                kind: bingux_searchd::protocol::ResultKind::Application,
+                title: "Example".into(), subtitle: String::new(), icon: String::new(), score: 1.0,
+            },
+            activation: Activation::None,
+        }];
+        let results = runtime.register_candidates(1, "q-app", candidates, 20);
+        assert_eq!(results.len(), 1);
+        let wire = serde_json::to_value(&results[0]).unwrap();
+        assert_eq!(wire["desktopId"], "org.example.App.desktop");
+        assert_ne!(wire["resultId"], wire["desktopId"]);
+        assert!(runtime.activations.lock().unwrap().take(&results[0].result_id, 1).is_some());
     }
 
     #[test]

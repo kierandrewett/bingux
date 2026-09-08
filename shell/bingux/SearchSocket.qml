@@ -147,7 +147,7 @@ QtObject {
 
     function isValidResult(result) {
         const kinds = ["application", "file", "folder", "database", "calculation", "weather", "chat", "action"];
-        return hasOnlyFields(result, ["resultId", "providerId", "kind", "title", "subtitle", "icon", "score"]) && isValidOpaqueResultId(result.resultId) && isValidProviderId(result.providerId) && kinds.indexOf(result.kind) !== -1 && isSafeDisplayText(result.title) && isSafeDisplayText(result.subtitle) && isSafeDisplayText(result.icon) && utf8ByteLength(result.title) + utf8ByteLength(result.subtitle) + utf8ByteLength(result.icon) <= maxResultDisplayBytes && isFiniteNumber(result.score) && result.score >= 0 && result.score <= 1;
+        return hasOnlyFields(result, ["resultId", "desktopId", "providerId", "kind", "title", "subtitle", "icon", "score"]) && (result.desktopId === undefined || (result.providerId === "applications" && result.kind === "application" && typeof result.desktopId === "string" && /^[A-Za-z0-9._:-]{1,128}$/.test(result.desktopId))) && isValidOpaqueResultId(result.resultId) && isValidProviderId(result.providerId) && kinds.indexOf(result.kind) !== -1 && isSafeDisplayText(result.title) && isSafeDisplayText(result.subtitle) && isSafeDisplayText(result.icon) && utf8ByteLength(result.title) + utf8ByteLength(result.subtitle) + utf8ByteLength(result.icon) <= maxResultDisplayBytes && isFiniteNumber(result.score) && result.score >= 0 && result.score <= 1;
     }
 
     function isCommonRecord(record) {
