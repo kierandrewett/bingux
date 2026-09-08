@@ -1338,7 +1338,14 @@ PanelWindow {
                 }
 
             }
-            GridLayout { id: dockWidgets; rows: 1; columnSpacing: Theme.barControlGap; Layout.alignment: Qt.AlignVCenter }
+            GridLayout {
+                id: dockWidgets
+                // An empty widget section must not add RowLayout spacing after the last app.
+                visible: implicitWidth > 0
+                rows: 1
+                columnSpacing: Theme.barControlGap
+                Layout.alignment: Qt.AlignVCenter
+            }
 
 
         }
