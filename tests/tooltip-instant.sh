@@ -17,5 +17,5 @@ if ! timeout 15s "${BINGUX_QUICKSHELL:-quickshell}" -p "$test_dir" --no-color > 
     exit 1
 fi
 cat "$test_dir/log"
-grep -q 'PASS: initial tooltip delay and fade, instant cross-surface switching, idle reset' "$test_dir/log"
+grep -q 'PASS: first hover waits, switching skips delay but keeps motion, animated exit and re-entry' "$test_dir/log"
 if grep -E 'FAIL!|ERROR|FATAL|Binding loop' "$test_dir/log"; then exit 1; fi

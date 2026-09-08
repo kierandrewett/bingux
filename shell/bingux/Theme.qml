@@ -65,16 +65,16 @@ QtObject {
     property var tooltipOwners: []
     property Timer tooltipCooldown: Timer { interval: 1000 }
     function beginTooltip(owner) {
-        const duration = tooltipsWarm || reducedMotion ? 0 : 120;
         tooltipCooldown.stop();
         if (!tooltipOwners.includes(owner)) tooltipOwners = tooltipOwners.concat([owner]);
-        return duration;
     }
     function endTooltip(owner) {
         if (!tooltipOwners.includes(owner)) return;
         tooltipOwners = tooltipOwners.filter(item => item !== owner);
         if (tooltipOwners.length === 0) tooltipCooldown.restart();
     }
+    readonly property int tooltipMotion: reducedMotion ? 0 : 160
+    readonly property real tooltipHiddenScale: 0.96
     readonly property int fontSize: 14
     readonly property int fontHeading: 16
     readonly property string fontFamily: "Adwaita Sans"

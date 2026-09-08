@@ -5,14 +5,18 @@ Controls.ToolTip {
     id: root
     property int maximumWidth: 320
     property bool wrapText: true
-    property int revealDuration: 0
-    onAboutToShow: revealDuration = Theme.beginTooltip(root)
+    onAboutToShow: Theme.beginTooltip(root)
     onClosed: Theme.endTooltip(root)
     Component.onDestruction: Theme.endTooltip(root)
+    readonly property int revealDuration: Theme.tooltipMotion
     enter: Transition {
         NumberAnimation { property: "opacity"; from: 0; to: 1; duration: root.revealDuration; easing.type: Easing.OutCubic }
+        NumberAnimation { property: "scale"; from: Theme.tooltipHiddenScale; to: 1; duration: root.revealDuration; easing.type: Easing.OutCubic }
     }
-    exit: Transition {}
+    exit: Transition {
+        NumberAnimation { property: "opacity"; to: 0; duration: Theme.tooltipMotion; easing.type: Easing.OutCubic }
+        NumberAnimation { property: "scale"; to: Theme.tooltipHiddenScale; duration: Theme.tooltipMotion; easing.type: Easing.OutCubic }
+    }
     delay: Theme.tooltipDelay
     timeout: 8000
     padding: 0

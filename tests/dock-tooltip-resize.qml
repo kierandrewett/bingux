@@ -3,7 +3,7 @@ import QtTest
 import Quickshell
 
 ShellRoot {
-    DockTooltip { id: tip; text: "Files"; visible: true; centreX: 600; anchorBottom: 160 }
+    DockTooltip { id: tip; text: "Files"; shown: true; centreX: 600; anchorBottom: 160 }
     TestCase {
         name: "DockTooltipResize"
         when: tip.visible
@@ -36,10 +36,10 @@ ShellRoot {
                 check(bubble.width <= tip.width && bubble.height <= tip.height,
                     "Settled bubble does not fit the window");
             }
-            tip.visible = false;
+            tip.shown = false;
             tip.text = "Thunderbird Mail";
             wait(30);
-            tip.visible = true;
+            tip.shown = true;
             tryCompare(label, "text", tip.text);
             check(label.lineCount === 1, "Reopened tooltip wrapped a short title");
             console.warn("PASS: 80 dock tooltip switches, pending replacement, long labels and reopen");

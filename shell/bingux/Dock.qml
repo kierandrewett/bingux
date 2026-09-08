@@ -117,7 +117,7 @@ PanelWindow {
         interval: 120
         onTriggered: {
             if (root.tooltipOwner === null)
-                dockTooltip.visible = false;
+                dockTooltip.shown = false;
         }
     }
 
@@ -174,7 +174,7 @@ PanelWindow {
         root.tooltipOwner = owner;
         dockTooltip.text = owner.tooltipText;
         root.updateTooltipPosition();
-        dockTooltip.visible = true;
+        dockTooltip.shown = true;
     }
 
     function updateTooltipPosition() {
@@ -194,7 +194,7 @@ PanelWindow {
     function dismissTooltip() {
         tooltipHideDelay.stop();
         root.tooltipOwner = null;
-        dockTooltip.visible = false;
+        dockTooltip.shown = false;
     }
 
     function closeMenus() {

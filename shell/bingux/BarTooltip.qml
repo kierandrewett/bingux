@@ -21,19 +21,19 @@ Scope {
     }
     property real centreX: 0
     property real bottomY: 0
-    Component.onDestruction: Theme.endTooltip(root)
+    property bool shown: false
     onRequestedChanged: {
         delay.stop();
         if (requested && Theme.tooltipDelay === 0) showTooltip();
         else if (requested) delay.start();
-        else popup.visible = false;
+        else shown = false;
     }
     function showTooltip() {
         root.detectedReorderable = root.detectReorderable();
         const point = root.anchorItem.mapToGlobal(root.anchorItem.width / 2, root.anchorItem.height);
         root.centreX = point.x;
         root.bottomY = point.y;
-        popup.visible = root.requested && root.text !== "";
+        root.shown = root.requested && root.text !== "";
     }
     Timer {
         id: delay
@@ -42,15 +42,7 @@ Scope {
     }
     PanelWindow {
         id: popup
-        onVisibleChanged: {
-            reveal.stop();
-            if (visible) {
-                reveal.duration = Theme.beginTooltip(root);
-                bubble.opacity = reveal.duration > 0 ? 0 : 1;
-                if (reveal.duration > 0) reveal.start();
-            } else Theme.endTooltip(root);
-        }
-        visible: false
+        visible: bubble.presented
         screen: root.barWindow.screen
         implicitWidth: bubble.implicitWidth
         implicitHeight: bubble.implicitHeight
@@ -65,11 +57,13 @@ Scope {
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
         TooltipBubble {
             id: bubble
+            animated: true
+            shown: root.shown
+            transformOrigin: Item.Top
             anchors.fill: parent
             text: root.text
             supportingText: root.reorderable || root.detectedReorderable ? "Ctrl + drag to move" : ""
             wrapText: true
         }
-        NumberAnimation { id: reveal; target: bubble; property: "opacity"; to: 1; easing.type: Easing.OutCubic }
     }
 }

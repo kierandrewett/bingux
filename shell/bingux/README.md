@@ -57,8 +57,10 @@ the script through Gnoblin's `GNOBLIN_TEST_DBUS_CLIENT` launcher so desktop inpu
 cannot dismiss the test menus.
 
 Tray submenus use the same surface and provide a Back action. `DockTooltip.qml` provides a non-interactive
-application tooltip after a 500 ms initial hover delay with a 120 ms fade. Subsequent tooltips
-open instantly across the shell until the pointer leaves all tooltips for one second.
+application tooltip after a 500 ms initial hover delay. Moving to another tooltip target
+skips the delay until one second after the last tooltip closes. Every open and close
+keeps the same 160 ms fade and scale animation, including immediate target switches.
+All tooltips share the dock bubble styling, and surfaces stay mapped until the exit finishes.
 
 Click the clock for the calendar, the system indicators for the control centre,
 and the search icon for the floating search panel. Search needs bingux-searchd;
