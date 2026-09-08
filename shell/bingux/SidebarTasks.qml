@@ -7,18 +7,20 @@ import Quickshell
 ColumnLayout {
     id: root
     property url preferencesLocation: "file://" + Quickshell.env("HOME") + "/.config/bingux/sidebar-tasks.ini"
+    property var previewTasks: null
     property var tasks: []
     readonly property int remaining: tasks.filter(task => !task.done).length
     spacing: Theme.gap
     Settings { id: saved; location: root.preferencesLocation; property string items: "[]" }
     Component.onCompleted: {
+        if (previewTasks) { tasks = previewTasks; return; }
         try {
             const parsed = JSON.parse(saved.items);
             if (Array.isArray(parsed)) tasks = parsed.filter(task => task && typeof task.text === "string" && typeof task.done === "boolean");
         } catch (_) {}
     }
     function focusContent() { input.forceActiveFocus(); }
-    function store(items) { tasks = items; saved.items = JSON.stringify(items); saved.setValue("items", saved.items); saved.sync(); }
+    function store(items) { if (previewTasks) return; tasks = items; saved.items = JSON.stringify(items); saved.setValue("items", saved.items); saved.sync(); }
     function addTask(text) {
         if (!text.trim()) return;
         store(tasks.concat([{text: text.trim(), done: false}]));

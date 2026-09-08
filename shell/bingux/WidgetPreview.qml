@@ -1,66 +1,139 @@
 import QtQuick
+import QtQuick.Layouts
 import Quickshell
+import "DesktopLayout.js" as DesktopLayout
 
-// A visible widget uses its rendered frame. Dormant widgets use their existing
-// component type, with state copied from the live instance, inside the palette.
+// The palette uses the normal visual components with quiet sample data.
 Item {
     id: root
     required property string widgetId
-    readonly property var live: DesktopEditing.sources[widgetId]
-    readonly property var frame: widgetId === "notifications" && !live?.visible ? null : DesktopEditing.previews[widgetId]
     property var metrics: null
-    readonly property bool panelWidget: ["notes", "monitor", "terminal", "calendar", "media", "tasks"].includes(widgetId)
+    readonly property var spec: DesktopLayout.widget(widgetId) || {}
+    readonly property bool panelWidget: !!spec.panel
+    readonly property string container: DesktopLayout.zone(DesktopEditing.desktop.layout || {}, widgetId) || (widgetId.startsWith("control-") ? "control-centre" : "top-right")
+    readonly property var face: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, container, spec.label || "", spec.icon || "", !["clock", "keyboard"].includes(widgetId), ["clock", "keyboard"].includes(widgetId))
+    readonly property Item visualItem: frame
+    readonly property Item previewControl: component.item
     clip: true
-    Image {
-        anchors.horizontalCenter: parent.horizontalCenter
-        y: root.panelWidget ? 0 : (parent.height - height) / 2
-        width: Math.min(parent.width, root.frame?.width || 0)
-        height: root.panelWidget && root.frame ? root.frame.height * width / Math.max(1, root.frame.width) : Math.min(parent.height, root.frame?.height || 0)
-        source: root.frame?.url || ""; fillMode: Image.PreserveAspectFit; cache: false
-    }
-    Loader {
-        id: fallback
-        active: DesktopEditing.active && !!DesktopEditing.editor?.nativeWindow && !root.frame
+    Item {
+        id: frame
         anchors.centerIn: parent
-        width: root.widgetId.startsWith("control-") ? Math.min(parent.width, root.live?.width || 188) : parent.width
-        height: root.widgetId.startsWith("control-") ? 104 : parent.height
-        sourceComponent: root.widgetId.startsWith("control-") ? control : root.widgetId === "notifications" ? notifications
-            : root.widgetId === "capture" ? capture : root.widgetId === "privacy" ? privacy
-            : root.widgetId === "overflow" ? overflow : root.widgetId === "tray" ? tray
-            : ["calendar", "media", "tasks"].includes(root.widgetId) ? panel : empty
+        width: Math.min(root.width, component.width)
+        height: Math.min(root.height, component.height * component.scale)
+        clip: true
+        Loader {
+            id: component
+            active: DesktopEditing.active
+            width: root.panelWidget ? 300 : root.widgetId.startsWith("control-") && root.container === "control-centre" ? 188 : item ? item.implicitWidth : 0
+            height: root.panelWidget ? 240 : item ? item.implicitHeight : 0
+            scale: Math.min(1, root.width / Math.max(1, width))
+            transformOrigin: Item.TopLeft
+            sourceComponent: root.spec.layoutItem ? space : root.widgetId.startsWith("control-") ? control
+                : ({search, clock, controls: indicators, notifications, metrics: monitor, keyboard, privacy, capture,
+                    overflow, tray, notes, calendar, media, tasks, terminal, monitor: performance})[root.widgetId] || empty
+        }
     }
     Component {
         id: control
         ControlRow {
-            barLayout: root.live?.barLayout ?? false
-            title: root.live?.title || ""; subtitle: root.live?.subtitle || ""; iconName: root.live?.iconName || ""
-            presentation: root.live?.presentation || null
-            tileLayout: root.live?.tileLayout ?? true; compactTile: root.live?.compactTile ?? false
-            selected: root.live?.selected ?? false; navigation: root.live?.navigation ?? false
-            toggleVisible: root.live?.toggleVisible ?? false; toggleChecked: root.live?.toggleChecked ?? false
-            valueText: root.live?.valueText || ""; rowInteractive: false
+            readonly property string kind: root.widgetId.slice(8)
+            barLayout: root.container !== "control-centre"
+            title: root.spec.label || ""
+            subtitle: ({network: "Home network", bluetooth: "Connected", vpn: "Connected", power: "Balanced"})[kind] || ""
+            iconName: root.spec.icon || ""
+            presentation: DesktopLayout.presentation(DesktopEditing.desktop, root.widgetId, root.container, title, iconName, true, !barLayout)
+            tileLayout: !["vpn", "power", "awake"].includes(kind)
+            tileSurface: !tileLayout
+            compactTile: ["dnd", "nightLight"].includes(kind)
+            selected: ["network", "bluetooth", "vpn"].includes(kind)
+            navigation: ["network", "bluetooth", "vpn", "power"].includes(kind)
+            toggleVisible: !["network", "vpn", "power"].includes(kind)
+            toggleChecked: kind === "bluetooth"
+            rowInteractive: false
         }
     }
-    Component { id: notifications; Item { NotificationIndicator { anchors.centerIn: parent; count: 1 } } }
-    Component { id: capture; Item { ActivityIndicator { anchors.centerIn: parent; barWindow: DesktopEditing.editor?.nativeWindow; filled: true; label: "00:00"; activityColor: Theme.recordingIndicator; trailingIcon: "screencast-stop-symbolic" } } }
-    Component { id: privacy; Item { ActivityIndicator { anchors.centerIn: parent; barWindow: DesktopEditing.editor?.nativeWindow; iconName: "camera-web-symbolic" } } }
-    Component { id: overflow; Item { IconButton { anchors.centerIn: parent; iconName: "view-more-symbolic"; label: "More"; background: BarControlSurface {} } } }
-    Component { id: tray; Item { Tray { anchors.centerIn: parent; parentWindow: DesktopEditing.editor?.nativeWindow } } }
+    Component { id: space; BarSpace { flexible: root.widgetId.startsWith("spring"); editing: true; implicitWidth: flexible ? 120 : 32 } }
+    Component { id: search; BarSearchButton { presentation: root.face } }
     Component {
-        id: panel
-        Item {
-            clip: true
-            Loader {
-                anchors.centerIn: parent; width: 400; height: 220
-                scale: Math.min(parent.width / width, parent.height / height)
-                source: root.widgetId === "calendar" ? "SidebarCalendar.qml" : root.widgetId === "media" ? "SidebarMedia.qml" : "SidebarTasks.qml"
-                onLoaded: {
-                    if (root.widgetId === "calendar") item.serviceEnabled = false;
+        id: clock
+        Pill {
+            horizontalPadding: Theme.barPrimaryPadding
+            presentation: root.face
+            Text { text: "Tue 8 Sep"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize; font.weight: Font.DemiBold }
+            Text { text: "12:30"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize; font.weight: Font.DemiBold }
+        }
+    }
+    Component {
+        id: indicators
+        Pill {
+            horizontalPadding: Theme.barPrimaryPadding
+            presentation: root.face
+            Row {
+                Repeater {
+                    model: ["network-wireless-signal-excellent-symbolic", "audio-volume-high-symbolic", "bluetooth-active-symbolic"]
+                    StatusIndicator { required property string modelData; shown: true; iconName: modelData }
                 }
             }
         }
     }
-    Component { id: empty; Item { Text { anchors.centerIn: parent; text: root.widgetId === "terminal" ? "Terminal is closed" : "Hidden when inactive"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall } } }
-    // Preview controls never dispatch their normal actions.
+    Component { id: notifications; NotificationIndicator { count: 3 } }
+    Component { id: capture; ActivityIndicator { barWindow: DesktopEditing.editor?.nativeWindow; filled: true; label: "00:24"; activityColor: Theme.recordingIndicator; trailingIcon: "screencast-stop-symbolic" } }
+    Component { id: privacy; ActivityIndicator { barWindow: DesktopEditing.editor?.nativeWindow; iconName: "microphone-sensitivity-high-symbolic" } }
+    Component { id: overflow; IconButton { iconName: "view-more-symbolic"; label: "More"; background: BarControlSurface {} } }
+    Component {
+        id: tray
+        Row {
+            spacing: Theme.gap
+            Repeater { model: ["mail-unread-symbolic", "network-vpn-symbolic", "drive-harddisk-symbolic"]; SymbolicIcon { required property string modelData; implicitSize: Theme.iconSize; source: Quickshell.iconPath(modelData); color: Theme.text } }
+        }
+    }
+    Component { id: keyboard; InputSourceSelector { parentWindow: DesktopEditing.editor?.nativeWindow; metrics: sampleMetrics; gnoblinCtlPath: ""; shortcutsEnabled: false; presentation: root.face } }
+    Component { id: monitor; SystemMetrics { systemMetrics: sampleMetrics; presentation: root.face } }
+    Component { id: performance; SidebarMonitor { metrics: sampleMetrics } }
+    Component { id: notes; SidebarNotes { previewText: "# Weekend plans\n\nA few things to remember.\n\n- Pick up groceries\n- Book a table\n\n## Ideas\n\nKeep the afternoon free." } }
+    Component { id: tasks; SidebarTasks { previewTasks: [{text: "Plan the week", done: false}, {text: "Book tickets", done: false}, {text: "Reply to messages", done: true}] } }
+    Component { id: media; SidebarMedia { players: [samplePlayer] } }
+    Component { id: calendar; SidebarCalendar { serviceEnabled: false; month: new Date(2026, 8, 1); selectedDate: new Date(2026, 8, 8) } }
+    Component {
+        id: terminal
+        Text { text: "$ ls\nDocuments  Downloads  Music\nPictures   Projects   Videos\n\n$ "; color: Theme.text; font.family: "DejaVu Sans Mono"; font.pointSize: Theme.fontSize * 0.75; padding: 12 }
+    }
+    Component { id: empty; Item {} }
+    QtObject {
+        id: sampleMetrics
+        property bool available: true
+        property var sampleSnapshot: ({cpuPercent: 24, memoryUsedBytes: 8589934592, memoryTotalBytes: 34359738368,
+            networkReceiveBytesPerSecond: 128000, networkTransmitBytesPerSecond: 32000,
+            extra: {cpuTemperatureCelsius: 48, load1: 1.2, logicalCpus: 8, swapUsedBytes: 0, swapTotalBytes: 0, diskReadBytesPerSecond: 0, diskWriteBytesPerSecond: 0}})
+        property var latest: sampleSnapshot
+        property var history: []
+        property string cpuLabel: "8-core processor"
+        property bool desktopStateAvailable: true
+        property string inputSourceLabel: "en"
+        property var inputSources: [{type: "xkb", id: "gb", displayName: "English (UK)", shortName: "en"}]
+        property var currentInputSource: inputSources[0]
+        function formatBytes(value) { return (value / 1073741824).toFixed(0) + "G"; }
+        function formatRate(value) { return (value / 1000).toFixed(0) + "K/s"; }
+    }
+    QtObject {
+        id: samplePlayer
+        property string identity: "Music"
+        property string uniqueId: "preview-track"
+        property string trackTitle: "A little music for the afternoon"
+        property string trackArtist: "Sample artist"
+        property string trackArtUrl: ""
+        property real position: 72
+        property real length: 224
+        property bool isPlaying: false
+        property bool canControl: true
+        property bool canPlay: true
+        property bool canPause: true
+        property bool canSeek: true
+        property bool canGoNext: true
+        property bool canGoPrevious: true
+        property bool positionSupported: true
+        property bool lengthSupported: true
+    }
+    // Preview controls cannot launch apps, write notes, or change device state.
     MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons }
 }

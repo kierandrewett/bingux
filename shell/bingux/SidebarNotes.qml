@@ -7,6 +7,7 @@ import Bingux.Text 1.0
 
 Item {
     id: root
+    property string previewText: ""
     property var screen: Quickshell.screens[0]
     property Item menuHost: null
     function closeContextMenu() { if (contextMenuLoader.item) contextMenuLoader.item.visible = false; }
@@ -97,6 +98,7 @@ Item {
     }
     function focusContent() { editor.forceActiveFocus(); }
     function save() {
+        if (previewText) return;
         saved.note = editor.text;
         saved.setValue("note", editor.text);
         saved.sync();
@@ -112,7 +114,7 @@ Item {
         TextArea {
             id: editor
             objectName: "notesEditor"
-            text: root.normaliseHeadings(saved.note)
+            text: root.previewText || root.normaliseHeadings(saved.note)
             textFormat: TextEdit.MarkdownText
             wrapMode: TextEdit.Wrap
             selectByMouse: true
