@@ -1,11 +1,15 @@
 import QtQuick
 import QtQuick.Layouts
+import "DesktopLayout.js" as DesktopLayout
 
 Item {
     id: root
     required property var systemMetrics
     required property var privacyState
     property var barWindow: null
+    function appearance(label, icon) {
+        return DesktopLayout.presentation(DesktopEditing.desktop, "privacy", DesktopLayout.zone(DesktopEditing.desktop.layout || {}, "privacy"), label, icon, true, false);
+    }
     readonly property bool screenSharing: privacyState.screenSharing || (!privacyState.available && systemMetrics.screenSharing)
     readonly property bool active: sharingVisible || privacyState.cameraInUse
         || systemMetrics.microphoneInUse || systemMetrics.locationInUse
@@ -31,6 +35,7 @@ Item {
         id: privacyRow
         spacing: Theme.barControlGap
         ActivityIndicator {
+            presentation: root.appearance(tooltip, iconName)
             objectName: "screenSharingIndicator"
             visible: root.sharingVisible
             barWindow: root.barWindow
@@ -42,6 +47,7 @@ Item {
             onClicked: root.privacyState.stopSharing()
         }
         ActivityIndicator {
+            presentation: root.appearance(tooltip, iconName)
             objectName: "cameraIndicator"
             visible: root.privacyState.cameraInUse
             barWindow: root.barWindow
@@ -49,6 +55,7 @@ Item {
             tooltip: "Camera in use"
         }
         ActivityIndicator {
+            presentation: root.appearance(tooltip, iconName)
             objectName: "microphoneIndicator"
             visible: root.systemMetrics.microphoneInUse
             barWindow: root.barWindow
@@ -56,6 +63,7 @@ Item {
             tooltip: "Microphone in use"
         }
         ActivityIndicator {
+            presentation: root.appearance(tooltip, iconName)
             objectName: "locationIndicator"
             visible: root.systemMetrics.locationInUse
             barWindow: root.barWindow
