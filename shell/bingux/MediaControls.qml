@@ -273,8 +273,9 @@ FocusScope {
                     id: elapsedTime
                     objectName: "mediaElapsed"
                     width: implicitWidth
-                    implicitWidth: contentItem.implicitWidth + Theme.gap
+                    implicitWidth: elapsedDigits.implicitWidth + horizontalPadding * 2
                     padding: Theme.spaceSmall
+                    horizontalPadding: Theme.spaceSmall
                     implicitHeight: Theme.controlHeight
                     enabled: root.hasPosition
                     hoverEnabled: true
@@ -287,7 +288,9 @@ FocusScope {
                     onClicked: root.showRemaining = !root.showRemaining
                     background: ControlCentreButtonSurface { control: elapsedTime; animated: false; radius: Theme.gap; baseColor: "transparent" }
                     contentItem: RollingNumber {
+                        id: elapsedDigits
                         objectName: "mediaElapsedDigits"
+                        duration: 320
                         text: elapsedTime.text
                         value: root.showRemaining ? seek.to - elapsedTime.displayedPosition : elapsedTime.displayedPosition
                         motionEnabled: root.menuActive && !seek.pressed
@@ -339,6 +342,7 @@ FocusScope {
                 RollingNumber {
                     id: totalTime
                     objectName: "mediaDurationDigits"
+                    duration: 320
                     anchors.right: parent.right
                     text: root.hasPosition ? MediaMatch.timeLabel(root.player.length) : ""
                     value: root.hasPosition ? root.player.length : 0

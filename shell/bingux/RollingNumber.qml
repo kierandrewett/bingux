@@ -7,6 +7,7 @@ Item {
     property string prefix: ""
     property color color: Theme.text
     property int pixelSize: 26
+    property int duration: 140
     property int fontWeight: Font.Medium
     property string displayedText: text
     property string incomingText: text
@@ -93,7 +94,7 @@ Item {
     NumberAnimation {
         id: roll
         target: root; property: "progress"; from: 0; to: 1
-        duration: 140
+        duration: root.duration
         easing.type: Easing.OutCubic
         onFinished: {
             root.displayedText = root.incomingText;

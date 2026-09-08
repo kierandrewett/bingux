@@ -50,6 +50,13 @@ ShellRoot {
                 verify(elapsed !== null && duration !== null);
                 player.position = 43;
                 tryVerify(() => elapsed.animating, 100);
+                wait(100);
+                verify(elapsed.animating, "Media digits remain in motion long enough to see");
+                verify(elapsed.width >= elapsed.implicitWidth, "Elapsed digits have enough visible width");
+                const glyph = findChild(elapsed, "rollingGlyph3");
+                const oldDigit = findChild(glyph, "oldRollingDigit");
+                verify(oldDigit.y < (glyph.height - oldDigit.height) / 2, "Outgoing digit slides upwards");
+                if (Quickshell.env("MEDIA_ROLL_FRAME")) grabImage(controls).save(Quickshell.env("MEDIA_ROLL_FRAME"));
                 tryCompare(elapsed, "displayedText", "0:43", 500);
                 controls.showRemaining = true;
                 tryCompare(elapsed, "displayedText", "-4:17", 500);
