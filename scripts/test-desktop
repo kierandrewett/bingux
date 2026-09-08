@@ -1,0 +1,142 @@
+#!/usr/bin/env python3
+"""Run Bingux in a private, nested Sway desktop for UI testing."""
+import argparse
+import json
+import os
+from pathlib import Path
+import shlex
+import signal
+import shutil
+import subprocess
+import tempfile
+import sys
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--quickshell", default=os.environ.get("QUICKSHELL_BIN", "qs"))
+    parser.add_argument("--size", default="1280x800", help="nested output size (default: 1280x800)")
+    parser.add_argument("--check", action="store_true", help="check dependencies without opening a desktop")
+    parser.add_argument("--smoke", action="store_true", help="verify shell IPC and search open/close, then exit")
+    args = parser.parse_args()
+    try:
+        width, height = map(int, args.size.split("x"))
+        if not (640 <= width <= 7680 and 480 <= height <= 4320):
+            raise ValueError()
+    except ValueError:
+        parser.error("--size must be WIDTHxHEIGHT, between 640x480 and 7680x4320")
+    required = ["sway", "dbus-run-session", args.quickshell]
+    missing = [name for name in required if not shutil.which(name)]
+    if missing:
+        parser.exit(1, "Missing dependencies: " + ", ".join(missing) + "\n")
+    if args.check:
+        print("Launcher dependencies available. Runtime QML plugins are checked when the shell loads.")
+        return
+    if not os.environ.get("WAYLAND_DISPLAY") and not os.environ.get("DISPLAY"):
+        parser.error("a graphical desktop is required for the nested compositor")
+    source = Path(__file__).resolve().parents[1] / "shell" / "bingux"
+    with tempfile.TemporaryDirectory(prefix="bingux-desktop-") as directory:
+        root = Path(directory)
+        env = os.environ.copy()
+        env["BINGUX_COMPOSITOR"] = "portable"
+        if env.get("WAYLAND_DISPLAY") and not os.path.isabs(env["WAYLAND_DISPLAY"]):
+            env["WAYLAND_DISPLAY"] = str(Path(env["XDG_RUNTIME_DIR"]) / env["WAYLAND_DISPLAY"])
+        runtime = root / "runtime"
+        runtime.mkdir(mode=0o700)
+        env["XDG_RUNTIME_DIR"] = str(runtime)
+        env["XDG_CURRENT_DESKTOP"] = "sway"
+        env["XDG_SESSION_DESKTOP"] = "sway"
+        env["WLR_BACKENDS"] = "wayland" if env.get("WAYLAND_DISPLAY") else "x11"
+        env["WLR_LIBINPUT_NO_DEVICES"] = "1"
+        # Private settings and bus: do not acquire the host notification service.
+        for key, child in [("HOME", "home"), ("XDG_CONFIG_HOME", "config"), ("XDG_STATE_HOME", "state"), ("XDG_CACHE_HOME", "cache")]:
+            path = root / child
+            path.mkdir()
+            env[key] = str(path)
+        for key in ("GNOBLIN_COMPOSITOR_SOCKET", "SWAYSOCK", "BINGUX_ANY_DISPLAY"):
+            env.pop(key, None)
+        qs = shlex.quote(shutil.which(args.quickshell))
+        shell_path = shlex.quote(str(source))
+        services = []
+        search = shutil.which("bingux-searchd")
+        if search:
+            search_config = root / "search.json"
+            search_config.write_text(json.dumps({"protocolVersion": 1, "commands": {
+                "applicationLauncher": ["python3", str(source / "launch-application.py")],
+                "fileOpener": ["xdg-open"], "clipboard": ["wl-copy"]}}))
+            services.append("exec " + shlex.join([search, "--config", str(search_config)]))
+        status = shutil.which("bingux-statusd")
+        if status:
+            services.append("exec " + shlex.quote(status))
+        proof = root / "smoke-ok"
+        if args.smoke:
+            probe = root / "probe.py"
+            probe.write_text("""import json, subprocess, time
+from pathlib import Path
+qs = QS
+source = SOURCE
+try:
+    for attempt in range(40):
+        result = subprocess.run([qs, 'ipc', '-p', source, 'call', '--', 'shell', 'status'], capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            try:
+                json.loads(result.stdout)
+                break
+            except ValueError:
+                pass
+        time.sleep(0.25)
+    else:
+        raise RuntimeError('Shell IPC did not become ready')
+    for action, expected in [('open', True), ('close', False)]:
+        subprocess.run([qs, 'ipc', '-p', source, 'call', '--', 'search', action], check=True, timeout=5)
+        time.sleep(0.3)
+        result = subprocess.check_output([qs, 'ipc', '-p', source, 'call', '--', 'shell', 'status'], text=True, timeout=5)
+        assert json.loads(result)['search'] == expected, result
+    Path(PROOF).write_text('Shell IPC and search open/close passed')
+finally:
+    subprocess.run(['swaymsg', 'exit'])
+""".replace('QS', repr(shutil.which(args.quickshell))).replace('SOURCE', repr(str(source))).replace('PROOF', repr(str(proof))))
+            services.append("exec " + shlex.join([sys.executable, str(probe)]))
+        config = root / "sway.conf"
+        config.write_text(f'''output * mode {width}x{height}
+output * bg #202124 solid_color
+seat * hide_cursor when-typing disable
+bindsym Mod4+Shift+e exit
+bindsym Mod4+space exec {qs} ipc -p {shell_path} call -- search open
+{chr(10).join(services)}
+exec {qs} -p {shell_path}
+''')
+        print("Nested Bingux: Super+Space opens search; Super+Shift+E exits. Settings are temporary.", flush=True)
+        process = subprocess.Popen(["dbus-run-session", "--", "sway", "-c", str(config)], env=env, start_new_session=True)
+        try:
+            returncode = process.wait(timeout=45 if args.smoke else None)
+        finally:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            process.wait()
+            # Sway starts commands in separate process groups. Stop only children
+            # carrying this test's unique runtime directory.
+            marker = ("XDG_RUNTIME_DIR=" + str(runtime)).encode()
+            for entry in Path("/proc").iterdir():
+                if not entry.name.isdigit():
+                    continue
+                try:
+                    if marker in (entry / "environ").read_bytes().split(b"\0"):
+                        os.kill(int(entry.name), signal.SIGTERM)
+                except (OSError, ProcessLookupError):
+                    pass
+            for mount in (runtime / "doc", runtime / "gvfs"):
+                if os.path.ismount(mount):
+                    subprocess.run(["fusermount3", "-uz", str(mount)], check=False)
+
+        if args.smoke:
+            if not proof.exists():
+                parser.exit(1, "Nested desktop smoke check failed; see runtime output above.\n")
+            print(proof.read_text())
+        raise SystemExit(returncode)
+
+
+if __name__ == "__main__":
+    main()

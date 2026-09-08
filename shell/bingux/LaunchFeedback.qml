@@ -21,6 +21,10 @@ QtObject {
     }
 
     function enqueue(method, args, callback) {
+        if (!CompositorEnvironment.gnoblin) {
+            if (callback) callback();
+            return;
+        }
         queue.push({callback: callback, command: ["timeout", "2s", "gdbus", "call", "--session",
             "--dest", "org.gnoblin.LaunchFeedback",
             "--object-path", "/org/gnoblin/LaunchFeedback",

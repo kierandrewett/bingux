@@ -121,3 +121,5 @@ ShellCommands 1.0 ShellCommands.qml
 
 singleton BinguxPreferences 1.0 BinguxPreferences.qml
 BinguxSettings 1.0 BinguxSettings.qml
+
+singleton CompositorEnvironment 1.0 CompositorEnvironment.qml

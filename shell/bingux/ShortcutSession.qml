@@ -44,7 +44,7 @@ QtObject {
     onBindingsChanged: registerBindings()
     property var socket: Socket {
         path: Quickshell.env("GNOBLIN_COMPOSITOR_SOCKET") || Quickshell.env("XDG_RUNTIME_DIR") + "/gnoblin/compositor-v1.sock"
-        Component.onCompleted: connected = true
+        Component.onCompleted: connected = CompositorEnvironment.gnoblin
         onConnectedChanged: {
             root.boundCount = 0;
             if (!connected) { root.cancelled(); retry.restart(); }
@@ -73,6 +73,6 @@ QtObject {
     }
     property var retry: Timer {
         interval: 500
-        onTriggered: if (!socket.connected) socket.connected = true
+        onTriggered: if (CompositorEnvironment.gnoblin && !socket.connected) socket.connected = true
     }
 }
