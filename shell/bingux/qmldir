@@ -1,6 +1,7 @@
 singleton Theme 1.0 Theme.qml
 singleton LaunchFeedback 1.0 LaunchFeedback.qml
 ActionButton 1.0 ActionButton.qml
+WidgetFace 1.0 WidgetFace.qml
 AppIcon 1.0 AppIcon.qml
 CalendarPopup 1.0 CalendarPopup.qml
 CalendarEvents 1.0 CalendarEvents.qml
