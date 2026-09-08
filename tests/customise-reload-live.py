@@ -153,6 +153,15 @@ with tempfile.TemporaryDirectory(prefix="bingux-editor-reload-") as directory:
                 state = wait_for(lambda state: state["revision"] == revision and state["ready"])
                 assert state["pid"] == initial["pid"], f"{action} reload restarted Quickshell"
                 assert state["sidebarOpen"] == opened and state["detached"] == detached, state
+            call("open")
+            wait_for(lambda state: state["visible"] and state["detached"])
+            time.sleep(1)
+            shell.write_text(source.replace("RELOAD_REVISION", "7"))
+            state = wait_for(lambda state: state["revision"] == 7 and state["ready"])
+            time.sleep(2)
+            state = wait_for(lambda state: state["revision"] == 7 and state["ready"])
+            assert state["pid"] == initial["pid"], "Reloading the detached sidebar editor restarted Quickshell"
+            assert not state["visible"] and state["sidebarOpen"] and state["detached"], state
             log.flush()
             log.seek(0)
             output = log.read()
