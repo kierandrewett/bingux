@@ -1,9 +1,24 @@
 """Run a private shell until its QML assertions write their completion report."""
 import os
+from pathlib import Path
 import resource
+import shutil
 import signal
 import subprocess
 import time
+
+
+def stage_compositor_bridge(repo, config):
+    """Stage the current bridge before the private input service reloads scripts."""
+    config = Path(config).resolve()
+    if not str(config).startswith('/tmp/gnoblin-gs.') or config.name != 'config' or not os.environ.get('WAYLAND_DISPLAY', '').startswith('gnoblin-gs-'):
+        raise RuntimeError('Only a private Gnoblin session can receive the test bridge')
+    scripts = config / 'gnoblin/scripts'
+    scripts.mkdir(parents=True, exist_ok=True)
+    source = Path(repo).parent / 'gnoblin/src/scripts'
+    shutil.copy2(source / 'compositor-bridge.js', scripts)
+    shutil.copytree(source / 'lib', scripts / 'lib', dirs_exist_ok=True)
+    return scripts
 
 
 def run_reported_shell(fixture, environment, report_variable, timeout=30, complete=lambda text: bool(text)):

@@ -10,6 +10,7 @@ import signal
 import subprocess
 import tempfile
 import time
+from private_shell import stage_compositor_bridge
 
 repo = Path(__file__).resolve().parents[1]
 config = Path(os.environ['XDG_CONFIG_HOME'])
@@ -23,11 +24,7 @@ def run(args, **kwargs):
     return subprocess.run(args, check=True, capture_output=True, text=True, timeout=8, **kwargs).stdout.strip()
 
 
-scripts = config / 'gnoblin/scripts'
-scripts.mkdir(parents=True, exist_ok=True)
-gnoblin = repo.parent / 'gnoblin'
-shutil.copy2(gnoblin / 'src/scripts/compositor-bridge.js', scripts)
-shutil.copytree(gnoblin / 'src/scripts/lib', scripts / 'lib', dirs_exist_ok=True)
+scripts = stage_compositor_bridge(repo, config)
 (scripts / 'customise-stacking-test.js').write_text('''
 import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';

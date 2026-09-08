@@ -6,7 +6,7 @@ import shutil
 import tempfile
 import subprocess
 import time
-from private_shell import run_reported_shell
+from private_shell import run_reported_shell, stage_compositor_bridge
 
 repo = Path(__file__).resolve().parent.parent
 if not os.environ.get('WAYLAND_DISPLAY', '').startswith('gnoblin-gs-'):
@@ -24,6 +24,7 @@ with tempfile.TemporaryDirectory(prefix='bingux-layout-live-') as directory:
     environment = os.environ | {'BINGUX_TEST_COMPOSITOR_CONFIG': os.environ['XDG_CONFIG_HOME'], 'BINGUX_TEST_NATIVE_INPUT': str(repo / 'tests/customise-native-input.py'), 'QT_QPA_PLATFORM': 'wayland', 'XDG_CONFIG_HOME': str(fixture / 'config'),
         'XDG_STATE_HOME': str(fixture / 'state'), 'BINGUX_LAYOUT_IMPORT': '0', 'PATH': str(fixture / 'bin') + ':' + os.environ['PATH']}
     environment.pop('BINGUX_SETTINGS_HELPER', None)
+    stage_compositor_bridge(repo, os.environ['XDG_CONFIG_HOME'])
     subprocess.run(['python3', str(repo / 'tests/customise-native-input.py'), '--prepare'], env=environment, check=True)
     time.sleep(.3)
     report, output = run_reported_shell(fixture, environment, 'BINGUX_LAYOUT_REPORT', timeout=55)
