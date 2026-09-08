@@ -32,6 +32,7 @@ Item {
     Component {
         id: control
         ControlRow {
+            barLayout: root.live?.barLayout ?? false
             title: root.live?.title || ""; subtitle: root.live?.subtitle || ""; iconName: root.live?.iconName || ""
             presentation: root.live?.presentation || null
             tileLayout: root.live?.tileLayout ?? true; compactTile: root.live?.compactTile ?? false

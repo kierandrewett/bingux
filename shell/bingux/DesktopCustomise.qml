@@ -73,7 +73,7 @@ Scope {
         const entry = appEntry(id.slice(4));
         return {id, label: entry?.name || id.slice(4), icon: entry?.icon || "application-x-executable", app: true};
     }
-    function containerFor(id) { return id.startsWith("app:") ? "dock" : id.startsWith("control-") ? "control-centre" : DesktopLayout.zone(layout, id); }
+    function containerFor(id) { return id.startsWith("app:") ? "dock" : DesktopLayout.zone(layout, id) || (id.startsWith("control-") ? "control-centre" : ""); }
     function appearance(id) {
         const item = baseInfo(id);
         return DesktopLayout.presentation(desktop, id, containerFor(id), item?.label || "", item?.icon || "", id !== "clock", id === "clock");
@@ -121,8 +121,10 @@ Scope {
             if (!accepts(id, target)) return;
             const name = id.slice(8);
             const order = (desktop.controlOrder || DesktopLayout.controlOrder()).filter(value => value !== name);
-            if (target !== "palette") order.splice(Math.max(0, Math.min(index, order.length)), 0, name);
+            if (target === "control-centre") order.splice(Math.max(0, Math.min(index, order.length)), 0, name);
             change("controlOrder", order);
+            layout = DesktopLayout.move(layout, id, target === "control-centre" ? "palette" : target, index);
+            if (target === "dock") change("dock", true);
             if (!["network", "bluetooth"].includes(name)) change("controlCentre", Object.assign({vpn: true, dnd: true, nightLight: false, power: false, awake: false}, desktop.controlCentre || {}, {[name]: target !== "palette"}));
             return;
         }

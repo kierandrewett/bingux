@@ -52,7 +52,7 @@ function insertionIndex(order, draggedId, visibleIds, before) {
 }
 function accepts(id, target) {
     const item = widget(id);
-    if (id.startsWith("control-")) return !!item && ["control-centre", "palette"].includes(target);
+    if (id.startsWith("control-")) return !!item && ["control-centre", "top-left", "top-center", "top-right", "dock", "palette"].includes(target);
     return !!item && (target === "palette" || (item.panel ? target === "sidebar" : ["top-left", "top-center", "top-right", "dock"].includes(target)));
 }
 function move(layout, id, target, index) {

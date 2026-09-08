@@ -55,3 +55,14 @@ test("drop positions follow visible neighbours in orders containing hidden widge
     moved.splice(layout.insertionIndex(order, "network", ["bluetooth"], -1), 0, "network");
     assert.deepEqual(moved, ["hidden-first", "vpn", "bluetooth", "network", "hidden-last"]);
 });
+test("control-centre widgets can use every bar and dock position without duplicates", () => {
+    let current = layout.defaults();
+    for (const target of ["dock", "top-left", "top-center", "top-right"]) {
+        current = layout.move(current, "control-network", target, 0);
+        assert.equal(layout.zone(current, "control-network"), target);
+        assert.equal(Object.values(current).flat().filter(id => id === "control-network").length, 1);
+        assert.deepEqual(plain(current.sidebar), plain(layout.defaults().sidebar));
+    }
+    current = layout.move(current, "control-network", "palette", 0);
+    assert.equal(layout.zone(current, "control-network"), "");
+});
