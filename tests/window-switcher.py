@@ -17,6 +17,7 @@ qs = os.environ.get('QUICKSHELL_BIN', 'qs')
 scripts = Path(os.environ['XDG_CONFIG_HOME']) / 'gnoblin/scripts'
 scripts.mkdir(parents=True, exist_ok=True)
 shutil.copy2(repo / 'src/scripts/compositor-bridge.js', scripts)
+shutil.copytree(repo / 'src/scripts/lib', scripts / 'lib', dirs_exist_ok=True)
 (scripts / 'switcher-test.js').write_text('''
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -140,6 +141,16 @@ try:
     captured = state()['previewRequests']
     time.sleep(.65)
     assert state()['previewRequests'] == captured == 3, 'Previews must stop capturing once the visible windows are cached'
+    tap(1)
+    key(56, False)
+    wait_for(lambda s: not s['visible'])
+    time.sleep(2.1)
+    key(56, True)
+    tap(15)
+    wait_for(lambda s: s['shown'])
+    time.sleep(.7)
+    assert state()['previewCount'] == 3, 'Reopening must retain every cached preview'
+    assert state()['previewRequests'] == captured + 1, 'Only the focused window needs a fresh capture'
     # Inspect actual PNG content, not just a successful preview response.
     import socket, base64
     from PIL import Image

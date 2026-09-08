@@ -24,7 +24,10 @@ animation or thumbnail. `BINGUX_REDUCED_MOTION=1` disables these animations.
 The shell prepares one cached thumbnail after window focus settles for 250 ms.
 Further requests run while the chooser is shown, after navigation has
 settled for 120 ms. Each visible window is captured at most once per gesture;
-a cached thumbnail under two seconds old is reused. There is no continuous
+background thumbnails are reused for 30 seconds. The focused window refreshes
+after two seconds so its latest content is ready when switching away. Cached
+images remain available until their window closes, including after a failed
+refresh. There is no continuous
 capture loop. These are snapshots, not live video previews. The previous image
 stays visible while its replacement decodes. A window without capture content
 displays its app icon. Apps that discard buffers when minimised keep their last

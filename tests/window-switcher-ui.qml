@@ -75,6 +75,15 @@ ShellRoot {
                     {id: "4", appId: "test-first.desktop", title: "Another window from the same app", parent: "1", lastUserTime: 2},
                     {id: "5", appId: "test-fifth.desktop", title: "", lastUserTime: 1}]);
                 test.check(chooser.history.length === 5, "Each window is retained, including transients and untitled windows");
+                const now = Date.now();
+                chooser.previews = {"1": "cached", "2": "cached"};
+                chooser.previewTimes = {"1": now - 3000, "2": now - 3000};
+                test.check(chooser.needsPreview(chooser.liveWindows[0], now), "Refresh content from the focused window");
+                test.check(!chooser.needsPreview(chooser.liveWindows[1], now), "Reuse background previews beyond two seconds");
+                test.check(chooser.needsPreview(chooser.liveWindows[1], now + 30000), "Refresh old background snapshots");
+                test.check(chooser.needsPreview(chooser.liveWindows[2], now), "Capture windows without a preview");
+                chooser.previews = ({});
+                chooser.previewTimes = ({});
                 chooser.step(false);
             } else if (test.phase === 1) {
                 test.check(chooser.revealProgress === 1, "Opening reaches full opacity");

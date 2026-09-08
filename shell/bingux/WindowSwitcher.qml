@@ -17,6 +17,7 @@ Scope {
     property bool previewPending: false
     property var previewTimes: ({})
     property var previewAttempts: ({})
+    readonly property int previewCacheAge: 30000
     property int iconRevision: 0
     property string previewError: ""
     property int previewRequests: 0
@@ -175,6 +176,11 @@ Scope {
         return Quickshell.iconPath(app && app.icon ? app.icon : "application-x-executable", "application-x-executable");
     }
     Timer { id: reveal; interval: root.showDelay; onTriggered: if (root.active) root.shown = true }
+    function needsPreview(window, now) {
+        // Refresh the window being used, but reuse background snapshots across gestures.
+        const maximumAge = window.focused ? 2000 : previewCacheAge;
+        return !previews[window.id] || now - (previewTimes[window.id] || 0) > maximumAge;
+    }
     function requestPreview(window) {
         previewPending = true;
         previewTimeout.restart();
@@ -189,7 +195,7 @@ Scope {
         onTriggered: {
             if (!root.enabled || root.active || root.previewPending) return;
             const focused = root.liveWindows.find(window => window.id === root.focusedWindowId);
-            if (focused && (!root.previews[focused.id] || Date.now() - (root.previewTimes[focused.id] || 0) > 2000))
+            if (focused && root.needsPreview(focused, Date.now()))
                 root.requestPreview(focused);
         }
     }
@@ -205,7 +211,7 @@ Scope {
             const now = Date.now();
             const targets = [root.selectedWindow].concat(root.visibleWindows);
             const target = targets.find(window => window && !root.previewAttempts[window.id]
-                && (!root.previews[window.id] || now - (root.previewTimes[window.id] || 0) > 2000));
+                && root.needsPreview(window, now));
             if (!target) { stop(); return; }
             root.previewAttempts = Object.assign({}, root.previewAttempts, {[target.id]: true});
             root.requestPreview(target);
