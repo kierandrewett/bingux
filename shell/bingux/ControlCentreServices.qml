@@ -18,7 +18,7 @@ Singleton {
     property var controls: ({vpn: true, dnd: true, nightLight: false, power: false, awake: false})
     property bool preferencesReady: false
     readonly property string preferencesDirectory: Quickshell.statePath("control-centre")
-    readonly property var effectiveControls: BinguxPreferences.data.desktop.controlCentre || controls
+    readonly property var effectiveControls: DesktopEditing.desktop.controlCentre || controls
     function showControl(name) { return effectiveControls[name] === true; }
     function setControl(name, shown) {
         if (!(name in controls)) return;
