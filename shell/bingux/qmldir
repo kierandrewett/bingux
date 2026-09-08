@@ -135,3 +135,4 @@ DesktopCustomise 1.0 DesktopCustomise.qml
 singleton DesktopEditing 1.0 DesktopEditing.qml
 NativeEditSurface 1.0 NativeEditSurface.qml
 WidgetEditHandle 1.0 WidgetEditHandle.qml
+WidgetPreview 1.0 WidgetPreview.qml
