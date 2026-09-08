@@ -2,14 +2,46 @@
     Process {
         id: nativeTyping
         property point position
-        command: ["python3", Quickshell.env("BINGUX_TEST_NATIVE_INPUT"), position.x.toString(), position.y.toString()]
+        property var extraArguments: []
+        command: ["python3", Quickshell.env("BINGUX_TEST_NATIVE_INPUT"), position.x.toString(), position.y.toString()].concat(extraArguments)
 
     }
     Component { id: externalSettingsComponent; BinguxSettings {} }
+    Connections {
+        target: desktopCustomiser
+        function onDraggedIdChanged() { console.log('DRAG_STATE', desktopCustomiser.draggedId); }
+        function onHoverZoneChanged() { console.log('DROP_STATE', desktopCustomiser.hoverZone); }
+    }
+    Connections {
+        target: terminalSidebar.contentSelector
+        function onVisibleChanged() { console.log('SELECTOR_VISIBLE', terminalSidebar.contentSelector.visible); }
+    }
+    Connections {
+        target: layoutTest.findChild(terminalSidebar.contentItem, 'sidebarContentPicker')
+        function onClicked() { console.log('SELECTOR_CLICKED'); }
+        function onPressedChanged() { console.log('SELECTOR_PRESSED', target.pressed); }
+    }
     TestCase {
         id: layoutTest
         parent: binguxSettings.customiser.contentItem
         when: topBar.visible
+        function clickNative(item, window, x, y, right) {
+            nativeTyping.position = DesktopEditing.point(item, window, x, y);
+            nativeTyping.extraArguments = [right ? '--right-click' : '--click-only'];
+            nativeTyping.running = true;
+            tryCompare(nativeTyping, 'running', false, 3000, 'The native click releases its button');
+        }
+        function dragNative(item, window, x, y, destination) {
+            const editor = binguxSettings.customiser;
+            const before = JSON.stringify([editor.desktop, editor.layout]);
+            nativeTyping.position = DesktopEditing.point(item, window, x, y);
+            nativeTyping.extraArguments = ['--drag-to', destination.x.toString(), destination.y.toString()];
+            nativeTyping.running = true;
+            tryVerify(() => JSON.stringify([editor.desktop, editor.layout]) !== before, 4000, 'The native drop changes the draft layout');
+            tryVerify(() => binguxSettings.customiser.draggedId === '', 4000, 'The compositor completes the widget drag');
+            tryCompare(nativeTyping, 'running', false, 3000);
+            nativeTyping.extraArguments = [];
+        }
         function test_live_layout() {
             try {
             compare(searchPill.parent, leftControls);
@@ -42,6 +74,32 @@
             compare(controlCentre.hostItem, null, 'Control centre stays in its native window');
             wait(1000);
             tryVerify(() => !!DesktopEditing.previews.search && !!DesktopEditing.previews['control-network'], 3000, 'Palette uses captures of the actual widgets');
+            const originalPanel = terminalSidebar.contentType;
+            const picker = findChild(terminalSidebar.contentItem, 'sidebarContentPicker');
+            clickNative(picker, terminalSidebar.editWindow, 20, picker.height / 2, false);
+            tryCompare(terminalSidebar.contentSelector, 'visible', true, 3000);
+            const notesChoice = findChild(terminalSidebar.contentSelector.contentItem, 'sidebar-select-notes');
+            verify(notesChoice);
+            tryCompare(notesChoice, 'visible', true);
+            wait(200);
+            clickNative(notesChoice, terminalSidebar.contentSelector.nativeWindow, 20, notesChoice.height / 2, false);
+            tryCompare(terminalSidebar, 'contentType', 'notes', 3000, 'The real sidebar picker works while customising');
+            tryCompare(terminalSidebar.contentSelector, 'retained', false, 2000, 'The panel selector releases its native surface before dragging');
+            compare(DesktopEditing.sources.notes, terminalSidebar.activePanel, 'The palette captures the actual panel, not its menu entry');
+            const sidebarEdit = DesktopEditing.surfaces.find(area => area.zoneName === 'sidebar');
+            const notesStart = terminalSidebar.activePanel.mapToItem(sidebarEdit, 24, 24);
+            clickNative(sidebarEdit, terminalSidebar.editWindow, notesStart.x, notesStart.y, true);
+            tryCompare(editor, 'selectedWidget', 'notes', 3000, 'The actual sidebar panel exposes widget settings');
+            editor.optionsPage = '';
+            wait(200);
+            const paletteRect = editor.preview.paletteRect;
+            dragNative(terminalSidebar.activePanel, terminalSidebar.editWindow, 24, 24, Qt.point(paletteRect.x + 20, paletteRect.y + 20));
+            verify(!editor.layout.sidebar.includes('notes'), 'Dragging the actual sidebar panel to the palette removes it');
+            verify(BinguxPreferences.data.desktop.layout.sidebar.includes('notes'), 'Panel removal remains a draft');
+            editor.cancel();
+            compare(terminalSidebar.contentType, originalPanel, 'Cancel restores the selected sidebar panel');
+            editor.open();
+            wait(300);
             // Reopening keeps the same QQuickWindow even after preview controls exist.
             const editWindow = editor.nativeWindow.contentItem.Window.window;
             for (let cycle = 0; cycle < 3; cycle++) {
@@ -56,7 +114,7 @@
             nativeTyping.position = DesktopEditing.point(label, editor.nativeWindow, 20, 12);
             nativeTyping.running = true;
             tryCompare(label, "text", "Find", 4000);
-            wait(100); // Release the last native key before testing another control.
+            tryCompare(nativeTyping, 'running', false, 3000, 'Typing releases the last native key');
             const star = findChild(editor.contentItem, 'customise-icon-starred-symbolic');
             mouseClick(star, 18, 18);
             compare(editor.desktop.widgetOptions.search.label, 'Find');
@@ -69,11 +127,7 @@
             const searchTile = findChild(editor.contentItem, 'customise-widget-search');
             verify(searchTile);
             const destination = dockEdit.screenRect;
-            const tilePoint = searchTile.mapToItem(editor.preview, 0, 0);
-            mousePress(searchTile, 20, 20);
-            mouseMove(searchTile, 38, 20, 50);
-            mouseMove(searchTile, destination.x + 12 - tilePoint.x, destination.y + 12 - tilePoint.y, 150);
-            mouseRelease(searchTile, destination.x + 12 - tilePoint.x, destination.y + 12 - tilePoint.y);
+            dragNative(searchTile, editor.nativeWindow, 20, 20, Qt.point(destination.x + 12, destination.y + 12));
             compare(editor.layout.dock[0], 'search', 'Palette drag targets the real dock');
             compare(searchPill.parent, dock.widgetHost, 'The existing widget moves immediately in preview');
             verify(!BinguxPreferences.data.desktop.layout.dock.includes('search'), 'Preview is not written to settings');
@@ -90,23 +144,14 @@
             wait(100);
             const appTile = findChild(editor.contentItem, 'customise-widget-app:' + appId);
             verify(appTile);
-            const appPoint = appTile.mapToItem(editor.preview, 0, 0);
             const dockPoint = dockEdit.screenRect;
-            mousePress(appTile, 20, 20);
-            mouseMove(appTile, 38, 20, 50);
-            mouseMove(appTile, dockPoint.x + 12 - appPoint.x, dockPoint.y + 12 - appPoint.y, 150);
-            mouseRelease(appTile, dockPoint.x + 12 - appPoint.x, dockPoint.y + 12 - appPoint.y);
+            dragNative(appTile, editor.nativeWindow, 20, 20, Qt.point(dockPoint.x + 12, dockPoint.y + 12));
             compare(editor.desktop.dockApps.pinnedApps[0], appId, 'Dragging an app pins it in the live dock preview');
             editor.tab = 'Widgets';
             const ccEdit = DesktopEditing.surfaces.find(area => area.zoneName === 'control-centre');
             const network = ccEdit.entries.find(entry => entry.id === 'control-network').item;
             const bluetooth = ccEdit.entries.find(entry => entry.id === 'control-bluetooth').item;
-            const networkPoint = network.mapToItem(ccEdit, 20, 20);
-            const bluetoothPoint = bluetooth.mapToItem(ccEdit, bluetooth.width - 2, bluetooth.height / 2);
-            mousePress(ccEdit, networkPoint.x, networkPoint.y);
-            mouseMove(ccEdit, networkPoint.x + 12, networkPoint.y, 50);
-            mouseMove(ccEdit, bluetoothPoint.x, bluetoothPoint.y, 150);
-            mouseRelease(ccEdit, bluetoothPoint.x, bluetoothPoint.y);
+            dragNative(network, controlCentre.nativeWindow, 20, 20, DesktopEditing.point(bluetooth, controlCentre.nativeWindow, bluetooth.width - 2, bluetooth.height / 2));
             compare(editor.desktop.controlOrder[0], 'bluetooth', 'Dragging the actual network tile reorders the control centre');
             const reorderedControls = editor.desktop.controlOrder.slice();
             const originalControls = editor.desktop.controlCentre;
@@ -114,12 +159,7 @@
             editor.change('controlOrder', ['nightLight', 'network', 'power', 'bluetooth', 'vpn', 'dnd', 'awake']);
             wait(200);
             verify(!controlCentre.controlVisible('nightLight') && !controlCentre.controlVisible('power'));
-            const networkStart = network.mapToItem(ccEdit, 20, 20);
-            const bluetoothEnd = bluetooth.mapToItem(ccEdit, bluetooth.width - 2, bluetooth.height / 2);
-            mousePress(ccEdit, networkStart.x, networkStart.y);
-            mouseMove(ccEdit, networkStart.x + 12, networkStart.y, 50);
-            mouseMove(ccEdit, bluetoothEnd.x, bluetoothEnd.y, 150);
-            mouseRelease(ccEdit, bluetoothEnd.x, bluetoothEnd.y);
+            dragNative(network, controlCentre.nativeWindow, 20, 20, DesktopEditing.point(bluetooth, controlCentre.nativeWindow, bluetooth.width - 2, bluetooth.height / 2));
             compare(JSON.stringify(editor.desktop.controlOrder.slice(0, 4)), JSON.stringify(['nightLight', 'power', 'bluetooth', 'network']), 'Hidden tiles do not shift the visible drop position');
             wait(100);
             compare(controlCentre.controlCell('bluetooth').column, 0);
