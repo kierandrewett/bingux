@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import "DesktopLayout.js" as DesktopLayout
+import "ControlLayout.js" as ControlLayout
 
 Scope {
     id: root
@@ -181,11 +182,11 @@ Scope {
     function appId(value) { return value.endsWith(".desktop") ? value.slice(0, -8) : value; }
     function appEntry(value) { return DesktopEntries.byId(value) || DesktopEntries.byId(value + ".desktop") || DesktopEntries.heuristicLookup(value); }
     function baseInfo(id) {
-        if (!id.startsWith("app:")) return DesktopLayout.widget(id);
+        if (!id.startsWith("app:")) return ControlLayout.widget(id) || DesktopLayout.widget(id);
         const entry = appEntry(id.slice(4));
         return {id, label: entry?.name || id.slice(4), icon: entry?.icon || "application-x-executable", app: true};
     }
-    function containerFor(id) { return id.startsWith("app:") ? "dock" : DesktopLayout.zone(layout, id) || (id.startsWith("control-") ? "control-centre" : ""); }
+    function containerFor(id) { if (ControlLayout.groupFor(id)) return "control-centre"; return id.startsWith("app:") ? "dock" : DesktopLayout.zone(layout, id) || (id.startsWith("control-") ? "control-centre" : ""); }
     function appearance(id) {
         const item = baseInfo(id);
         return DesktopLayout.presentation(desktop, id, containerFor(id), item?.label || "", item?.icon || "", id !== "clock", id === "clock");
@@ -208,7 +209,14 @@ Scope {
             return (ai < 0 ? order.length : ai) - (bi < 0 ? order.length : bi);
         }).map(id => "app:" + id);
     }
+    function orderFor(zone, id) {
+        const group = ControlLayout.groupFor(id);
+        if (zone === "control-centre") return group ? ControlLayout.items(desktop.controlLayout, group)
+            : (desktop.controlOrder || DesktopLayout.controlOrder()).map(name => "control-" + name);
+        return zone === "dock" && id.startsWith("app:") ? dockApplications : layout[zone] || [];
+    }
     function accepts(id, target) {
+        if (ControlLayout.groupFor(id)) return ["control-centre", "palette"].includes(target);
         return id.startsWith("app:") ? ["dock-apps", "dock", "palette"].includes(target) : DesktopLayout.accepts(id, target);
     }
     function open() {
@@ -235,6 +243,14 @@ Scope {
         try { putItem(id, target, index); } finally { groupingChange = false; }
     }
     function putItem(id, target, index) {
+        const group = ControlLayout.groupFor(id);
+        if (group) {
+            let next = ControlLayout.move(desktop.controlLayout, group, id, target === "palette" ? -1 : index);
+            if (target !== "palette" && group !== "control-centre" && !ControlLayout.contains(next, "control-centre", group))
+                next = ControlLayout.move(next, "control-centre", group, ControlLayout.position(null, "control-centre", group));
+            change("controlLayout", next);
+            return;
+        }
         if (id.startsWith("control-")) {
             if (!accepts(id, target)) return;
             const name = id.slice(8);
@@ -402,7 +418,7 @@ Scope {
                     objectName: "customiseWidgetGrid"
                     Layout.fillWidth: true; Layout.fillHeight: true
                     cellWidth: width / Math.max(1, Math.floor(width / 190)); cellHeight: 144; clip: true; cacheBuffer: 100; reuseItems: true
-                    model: !root.visible ? [] : root.tab === "Apps" ? root.applications.map(entry => "app:" + root.appId(entry.id)) : DesktopLayout.layoutWidgets.concat(DesktopLayout.decorationWidgets, DesktopLayout.widgets, DesktopLayout.controlWidgets).filter(widget => !root.appFilter || widget.label.toLowerCase().includes(root.appFilter.toLowerCase())).map(widget => widget.id)
+                    model: !root.visible ? [] : root.tab === "Apps" ? root.applications.map(entry => "app:" + root.appId(entry.id)) : DesktopLayout.layoutWidgets.concat(DesktopLayout.decorationWidgets, DesktopLayout.widgets, DesktopLayout.controlWidgets, ControlLayout.widgets).filter(widget => !root.appFilter || widget.label.toLowerCase().includes(root.appFilter.toLowerCase())).map(widget => widget.id)
                     delegate: Chip { required property string modelData; widgetId: modelData }
                     boundsBehavior: Flickable.StopAtBounds
                     ScrollBar.vertical: ScrollBar {}
@@ -459,7 +475,7 @@ Scope {
                         visible: root.optionsPage === "Move"; Layout.fillWidth: true; spacing: 4
                         Repeater {
                             model: [{id: "top-left", label: "Top left"}, {id: "top-center", label: "Top centre"}, {id: "top-right", label: "Top right"}, {id: "dock", label: "Dock"}, {id: "sidebar", label: "Sidebar"}, {id: "control-centre", label: "Control centre"}, {id: "palette", label: "Remove"}]
-                            ActionButton { required property var modelData; objectName: "customise-destination-" + modelData.id; text: modelData.label; enabled: root.accepts(root.selectedWidget, modelData.id); onClicked: { root.put(root.selectedWidget, modelData.id, root.layout[modelData.id]?.length || 0); root.optionsPage = ""; } }
+                            ActionButton { required property var modelData; objectName: "customise-destination-" + modelData.id; text: modelData.label; enabled: root.accepts(root.selectedWidget, modelData.id); onClicked: { root.put(root.selectedWidget, modelData.id, root.orderFor(modelData.id, root.selectedWidget).length); root.optionsPage = ""; } }
                         }
                     }
                     ColumnLayout {
@@ -475,11 +491,11 @@ Scope {
                             SeekSlider { Layout.fillWidth: true; from: 8; to: 160; stepSize: 4; value: root.desktop.widgetOptions?.[root.selectedWidget]?.width || 20; onMoved: root.widgetOption("width", Math.round(value)); Accessible.name: "Space width" }
                             Text { text: (root.desktop.widgetOptions?.[root.selectedWidget]?.width || 20) + " px"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
                         }
-                        SettingsChoice { visible: !DesktopLayout.isSpacing(root.selectedWidget); label: "Show"; choices: ["Follow container", "Original", "Icons", "Text", "Both"]; values: ["inherit", "native", "icons", "text", "both"]; value: root.desktop.widgetOptions?.[root.selectedWidget]?.display || "inherit"; onChosen: value => root.widgetOption("display", value) }
-                        SettingsField { visible: !DesktopLayout.isSpacing(root.selectedWidget); objectName: "customiseWidgetLabel"; Layout.margins: 0; label: "Label"; text: root.desktop.widgetOptions?.[root.selectedWidget]?.label || ""; placeholderText: root.baseInfo(root.selectedWidget)?.label || "Widget label"; onEdited: value => root.widgetOption("label", value) }
-                        ActionButton { objectName: "customiseIconPickerToggle"; visible: !DesktopLayout.isSpacing(root.selectedWidget); text: root.iconsExpanded ? "Hide icons" : "Change icon…"; flat: true; onClicked: root.iconsExpanded = !root.iconsExpanded }
+                        SettingsChoice { visible: !DesktopLayout.isSpacing(root.selectedWidget) && !ControlLayout.groupFor(root.selectedWidget); label: "Show"; choices: ["Follow container", "Original", "Icons", "Text", "Both"]; values: ["inherit", "native", "icons", "text", "both"]; value: root.desktop.widgetOptions?.[root.selectedWidget]?.display || "inherit"; onChosen: value => root.widgetOption("display", value) }
+                        SettingsField { visible: !DesktopLayout.isSpacing(root.selectedWidget) && !ControlLayout.groupFor(root.selectedWidget); objectName: "customiseWidgetLabel"; Layout.margins: 0; label: "Label"; text: root.desktop.widgetOptions?.[root.selectedWidget]?.label || ""; placeholderText: root.baseInfo(root.selectedWidget)?.label || "Widget label"; onEdited: value => root.widgetOption("label", value) }
+                        ActionButton { objectName: "customiseIconPickerToggle"; visible: !DesktopLayout.isSpacing(root.selectedWidget) && !ControlLayout.groupFor(root.selectedWidget); text: root.iconsExpanded ? "Hide icons" : "Change icon…"; flat: true; onClicked: root.iconsExpanded = !root.iconsExpanded }
                         GridLayout {
-                            visible: root.iconsExpanded && !DesktopLayout.isSpacing(root.selectedWidget)
+                            visible: root.iconsExpanded && !DesktopLayout.isSpacing(root.selectedWidget) && !ControlLayout.groupFor(root.selectedWidget)
                             Layout.fillWidth: true; columns: 8; rowSpacing: 4; columnSpacing: 4
                             Repeater {
                                 model: root.iconChoices

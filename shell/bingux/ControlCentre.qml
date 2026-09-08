@@ -19,6 +19,16 @@ ShellPopup {
     signal customiseRequested()
     property var widgetLayout: null
     property Item movedAnchor: null
+    readonly property var groupedEntries: [
+        {id: "control-account", item: accountControl}, {id: "control-header-space", item: headerSpace},
+        {id: "control-battery", item: batteryControl}, {id: "control-settings", item: settingsControl},
+        {id: "control-session", item: headerControls.children.find(item => item.objectName === "controlSessionPower")},
+        {id: "control-lock", item: lockControl}, {id: "control-volume", item: outputControl},
+        {id: "control-microphone", item: inputControl}, {id: "control-media", item: mediaControl},
+        {id: "control-divider", item: dividerControl}, {id: "control-customise", item: customiseControl},
+        {id: "controls-header", item: headerControls}, {id: "controls-audio", item: audioRows},
+        {id: "controls-tiles", item: quickRows}
+    ]
     readonly property var movableWidgets: [networkWidget, bluetoothWidget, vpnWidget, dndWidget, nightLightWidget, powerWidget, awakeWidget]
     component QuickWidget: ControlRow {
         id: quick
@@ -140,8 +150,13 @@ ShellPopup {
     dismissOnOutsideClick: !DesktopEditing.active
     keyboardInteractive: !DesktopEditing.active
     NativeEditSurface {
-        parent: root.body.parent; anchors.fill: parent; window: root.nativeWindow; zoneName: "control-centre"; vertical: true
-        entries: root.movableWidgets.filter(item => !item.barLayout).map(item => ({id: item.widgetId, item}))
+        parent: root.body.parent; anchors.fill: parent; window: root.nativeWindow; zoneName: "control-centre"; vertical: ControlLayout.groupFor(DesktopEditing.editor?.draggedId || "") !== "controls-header"
+        geometryItem: {
+            const group = ControlLayout.groupFor(DesktopEditing.editor?.draggedId || "");
+            return group === "controls-header" && headerControls.visible ? headerControls
+                : group === "controls-audio" && audioRows.visible ? audioRows : root.body.parent;
+        }
+        entries: root.movableWidgets.filter(item => !item.barLayout).map(item => ({id: item.widgetId, item})).concat(root.groupedEntries)
     }
 
     function settings(panel) {
@@ -189,6 +204,7 @@ ShellPopup {
             rowSpacing: 0
             columnSpacing: 8
             IconButton {
+                id: accountControl
                 objectName: "controlUserAccount"
                 Layout.column: root.groupPosition("controls-header", "control-account")
                 visible: root.groupPosition("controls-header", "control-account") >= 0
@@ -198,12 +214,14 @@ ShellPopup {
                 onClicked: root.settings("users")
             }
             Item {
+                id: headerSpace
                 objectName: "controlHeaderSpace"
                 Layout.column: root.groupPosition("controls-header", "control-header-space")
                 visible: root.groupPosition("controls-header", "control-header-space") >= 0
                 Layout.fillWidth: true
             }
             RowLayout {
+                id: batteryControl
                 objectName: "controlBattery"
                 Layout.column: root.groupPosition("controls-header", "control-battery")
                 visible: root.groupPosition("controls-header", "control-battery") >= 0 && root.indicators.laptopBatteryAvailable
@@ -212,6 +230,7 @@ ShellPopup {
                 Text { text: root.indicators.batteryAccessibleName().replace(/^Battery /, "").replace(" percent", "%").replace(/,.*$/, ""); Accessible.name: root.indicators.batteryAccessibleName(); color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
             }
             IconButton {
+                id: settingsControl
                 objectName: "controlSettings"
                 Layout.column: root.groupPosition("controls-header", "control-settings")
                 visible: root.groupPosition("controls-header", "control-settings") >= 0
@@ -220,6 +239,7 @@ ShellPopup {
                 onClicked: root.settings("")
             }
             IconButton {
+                id: lockControl
                 objectName: "controlLock"
                 Layout.column: root.groupPosition("controls-header", "control-lock")
                 visible: root.groupPosition("controls-header", "control-lock") >= 0
@@ -229,6 +249,7 @@ ShellPopup {
             }
         }
         GridLayout {
+            id: audioRows
             objectName: "controlAudioRows"
             Layout.row: root.sectionRow("controls-audio")
             visible: root.sectionRow("controls-audio") >= 0
@@ -237,6 +258,7 @@ ShellPopup {
             rowSpacing: 12
             columnSpacing: 0
             AudioLevel {
+                id: outputControl
                 objectName: "controlOutputRow"
                 Layout.row: root.groupPosition("controls-audio", "control-volume")
                 visible: root.groupPosition("controls-audio", "control-volume") >= 0
@@ -251,6 +273,7 @@ ShellPopup {
                 onDevicesRequested: trigger => root.openDetail("audio", trigger, "output")
             }
             AudioLevel {
+                id: inputControl
                 objectName: "controlInputRow"
                 Layout.row: root.groupPosition("controls-audio", "control-microphone")
                 visible: root.groupPosition("controls-audio", "control-microphone") >= 0
@@ -265,6 +288,7 @@ ShellPopup {
             }
         }
         Rectangle {
+            id: dividerControl
             objectName: "controlDivider"
             Layout.row: root.sectionRow("control-divider")
             visible: root.sectionRow("control-divider") >= 0
@@ -385,6 +409,7 @@ ShellPopup {
             }
         }
         ControlCentreMedia {
+            id: mediaControl
             objectName: "controlMediaCard"
             Layout.row: root.sectionRow("control-media")
             visible: root.sectionRow("control-media") >= 0
@@ -397,6 +422,7 @@ ShellPopup {
 
 
         ActionButton {
+            id: customiseControl
             objectName: "controlCustomise"
             Layout.row: root.sectionRow("control-customise")
             visible: root.sectionRow("control-customise") >= 0

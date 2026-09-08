@@ -15,6 +15,14 @@ DropArea {
             return false;
         }
         const point = DesktopEditing.point(root, window, event.x, event.y);
+        if (surface) {
+            const rect = surface.screenRect;
+            if (point.x < rect.x || point.y < rect.y || point.x > rect.x + rect.width || point.y > rect.y + rect.height) {
+                event.accepted = false;
+                if (editor.hoverZone === zoneName) editor.hoverZone = "";
+                return false;
+            }
+        }
         editor.pointer = point;
         editor.hoverZone = zoneName;
         editor.hoverIndex = surface ? surface.insertionIndex(point, editor.draggedId) : 0;

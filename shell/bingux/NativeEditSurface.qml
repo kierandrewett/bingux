@@ -63,16 +63,14 @@ MouseArea {
         });
     }
     function insertionIndex(point, id) {
-        const items = entries.filter(entry => entry.id !== id && entry.item?.visible &&
+        const order = DesktopEditing.editor.orderFor(zoneName, id);
+        const items = entries.filter(entry => order.includes(entry.id) && entry.id !== id && entry.item?.visible &&
             (zoneName !== "dock" || entry.id.startsWith("app:") === id.startsWith("app:"))).map(entry => ({entry, p: DesktopEditing.point(entry.item, window, 0, 0)}))
             .sort((a, b) => vertical ? a.p.y - b.p.y || a.p.x - b.p.x : a.p.x - b.p.x);
         const before = items.findIndex(value => {
             const p = value.p, item = value.entry.item;
             return vertical ? point.y < p.y || (point.y < p.y + item.height && point.x < p.x + item.width / 2) : point.x < p.x + item.width / 2;
         });
-        const editor = DesktopEditing.editor;
-        const order = zoneName === "control-centre" ? (editor.desktop.controlOrder || DesktopLayout.controlOrder()).map(name => "control-" + name)
-            : zoneName === "dock" && id.startsWith("app:") ? editor.dockApplications : editor.layout[zoneName] || [];
         return DesktopLayout.insertionIndex(order, id, items.map(value => value.entry.id), before);
     }
     onPressed: mouse => {
@@ -101,8 +99,7 @@ MouseArea {
     readonly property rect insertionRect: {
         if (!dropActive) return Qt.rect(0, 0, 0, 0);
         const editor = DesktopEditing.editor;
-        const order = zoneName === "control-centre" ? (editor.desktop.controlOrder || DesktopLayout.controlOrder()).map(name => "control-" + name)
-            : zoneName === "dock" && editor.draggedId.startsWith("app:") ? editor.dockApplications : editor.layout[zoneName] || [];
+        const order = editor.orderFor(zoneName, editor.draggedId);
         const remaining = order.filter(id => id !== editor.draggedId);
         const next = remaining.slice(editor.hoverIndex).map(id => entries.find(entry => entry.id === id)).find(entry => entry?.item?.visible);
         const previous = remaining.slice(0, editor.hoverIndex).reverse().map(id => entries.find(entry => entry.id === id)).find(entry => entry?.item?.visible);
@@ -120,7 +117,9 @@ MouseArea {
         radius: 1.5; color: Theme.accent
     }
     Rectangle {
-        anchors.fill: parent; radius: typeof root.parent.radius === "number" ? root.parent.radius : 0; color: "transparent"
+        readonly property point origin: root.geometryItem.mapToItem(root, 0, 0)
+        x: origin.x; y: origin.y; width: root.geometryItem.width; height: root.geometryItem.height
+        radius: typeof root.parent.radius === "number" ? root.parent.radius : 0; color: "transparent"
         border.width: 1
         border.color: root.dropActive || (DesktopEditing.editor?.optionsPage === "Container" && DesktopEditing.editor.selectedContainer === root.zoneName) ? Theme.accent : Theme.outline
     }
