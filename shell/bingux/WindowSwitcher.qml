@@ -7,7 +7,8 @@ import Quickshell.Wayland
 Scope {
     id: root
     property bool enabled: true
-    property int showDelay: 80
+    property int showDelay: 40
+    readonly property int selectionMotion: 70
     property bool active: false
     property bool shown: false
     property var activeStreams: []
@@ -47,7 +48,7 @@ Scope {
     onShownChanged: {
         visibilityAnimation.stop();
         visibilityAnimation.to = shown ? 1 : 0;
-        visibilityAnimation.duration = Theme.reducedMotion ? 0 : shown ? Theme.popupOpenMotion : Theme.popupCloseMotion;
+        visibilityAnimation.duration = Theme.reducedMotion ? 0 : shown ? 80 : 60;
         visibilityAnimation.start();
     }
     NumberAnimation {
@@ -81,7 +82,7 @@ Scope {
     }
     Timer {
         id: recenter
-        interval: Theme.reducedMotion ? 0 : Theme.motion + 32
+        interval: Theme.reducedMotion ? 0 : root.selectionMotion + 32
         onTriggered: {
             if (!root.active || !root.windows.length) return;
             root.normalizeTrack();
@@ -270,7 +271,7 @@ Scope {
                 root.cancel();
                 shortcuts.end();
                 root.enabled = settings.enabled === undefined ? true : settings.enabled;
-                root.showDelay = settings.showDelay === undefined ? 80 : settings.showDelay;
+                root.showDelay = settings.showDelay === undefined ? 40 : settings.showDelay;
             } catch (error) { console.warn("bingux-switcher: keeping previous settings: " + error); }
         }
     }
@@ -324,7 +325,7 @@ Scope {
                     clip: true
                     Behavior on contentX {
                         enabled: root.shown && root.revealProgress > 0 && !root.rebasing && !Theme.reducedMotion
-                        NumberAnimation { duration: Theme.motion; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: root.selectionMotion; easing.type: Easing.OutCubic }
                     }
                 Rectangle {
                     id: selectionHighlight
@@ -337,7 +338,7 @@ Scope {
                     color: Theme.hover
                     Behavior on x {
                         enabled: root.shown && root.revealProgress > 0 && !root.rebasing && !Theme.reducedMotion
-                        NumberAnimation { duration: Theme.motion; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: root.selectionMotion; easing.type: Easing.OutCubic }
                     }
                 }
                 RowLayout {

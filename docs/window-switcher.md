@@ -17,8 +17,8 @@ transient windows. Closed windows disappear without changing the identity of
 the selected window when it remains open.
 
 Quick taps switch without showing the chooser. Holding the shortcut shows
-window previews after 80 ms. Opening and closing use the shared popup motion;
-the selection highlight slides between cards. Activation does not wait for an
+window previews after 40 ms. Opening takes 80 ms and closing takes 60 ms;
+the selection highlight slides between cards in 70 ms. Activation does not wait for an
 animation or thumbnail. `BINGUX_REDUCED_MOTION=1` disables these animations.
 
 The shell prepares one cached thumbnail after window focus settles for 250 ms.
@@ -56,7 +56,7 @@ Create `~/.config/bingux/switcher.json` before starting Bingux:
 ```json
 {
   "enabled": true,
-  "showDelay": 80
+  "showDelay": 40
 }
 ```
 
