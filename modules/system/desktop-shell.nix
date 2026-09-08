@@ -375,6 +375,7 @@ in
                 quickshell.Service.Type = lib.mkForce "dbus";
                 quickshell.Service.BusName = "org.freedesktop.Notifications";
                 quickshell.Service.Restart = lib.mkForce "always";
+                quickshell.Service.LimitCORE = 0;
                 # User-systemd does not always import the session's Qt platform
                 # selection before graphical-session.target. Select Wayland
                 # explicitly so Qt does not attempt an unavailable X11 backend.
