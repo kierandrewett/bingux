@@ -60,6 +60,7 @@ QtObject {
     readonly property int sliderThumbSize: 16
     readonly property int iconSize: 16
     readonly property int fontSmall: 12
+    readonly property int tooltipDelay: 0
     readonly property int fontSize: 14
     readonly property int fontHeading: 16
     readonly property string fontFamily: "Adwaita Sans"

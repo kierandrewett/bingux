@@ -5,7 +5,7 @@ Controls.ToolTip {
     id: root
     property int maximumWidth: 320
     property bool wrapText: true
-    delay: 600
+    delay: Theme.tooltipDelay
     timeout: 8000
     padding: 0
     implicitWidth: contentItem.implicitWidth

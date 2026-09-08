@@ -1015,7 +1015,7 @@ PanelWindow {
                     }
                     Timer {
                         id: tooltipDelay
-                        interval: root.tooltipVisible ? 0 : 500
+                        interval: Theme.tooltipDelay
                         running: dockMouse.containsMouse && root.draggedId.length === 0 && !dockButton.menuOpen && !dockButton.entering
                         onTriggered: {
                             root.showTooltip(dockButton);

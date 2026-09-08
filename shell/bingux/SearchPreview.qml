@@ -137,7 +137,7 @@ Item {
                 scale: down ? 0.9 : 1
                 Behavior on scale { NumberAnimation { duration: Theme.previewMotion; easing.type: Easing.OutCubic } }
                 ToolTip.visible: hovered
-                ToolTip.delay: 600
+                ToolTip.delay: Theme.tooltipDelay
                 ToolTip.text: Accessible.name
                 contentItem: Item {
                     SymbolicIcon {

@@ -23,19 +23,21 @@ Scope {
     property real bottomY: 0
     onRequestedChanged: {
         delay.stop();
-        if (requested) delay.start();
+        if (requested && Theme.tooltipDelay === 0) showTooltip();
+        else if (requested) delay.start();
         else popup.visible = false;
+    }
+    function showTooltip() {
+        root.detectedReorderable = root.detectReorderable();
+        const point = root.anchorItem.mapToGlobal(root.anchorItem.width / 2, root.anchorItem.height);
+        root.centreX = point.x;
+        root.bottomY = point.y;
+        popup.visible = root.requested && root.text !== "";
     }
     Timer {
         id: delay
-        interval: 600
-        onTriggered: {
-            root.detectedReorderable = root.detectReorderable();
-            const point = root.anchorItem.mapToGlobal(root.anchorItem.width / 2, root.anchorItem.height);
-            root.centreX = point.x;
-            root.bottomY = point.y;
-            popup.visible = root.requested && root.text !== "";
-        }
+        interval: Theme.tooltipDelay
+        onTriggered: root.showTooltip()
     }
     PanelWindow {
         id: popup

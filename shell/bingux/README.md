@@ -57,7 +57,7 @@ the script through Gnoblin's `GNOBLIN_TEST_DBUS_CLIENT` launcher so desktop inpu
 cannot dismiss the test menus.
 
 Tray submenus use the same surface and provide a Back action. `DockTooltip.qml` provides a non-interactive
-application tooltip after a short hover delay.
+application tooltip immediately on hover. All shell tooltips use `Theme.tooltipDelay`, which is zero.
 
 Click the clock for the calendar, the system indicators for the control centre,
 and the search icon for the floating search panel. Search needs bingux-searchd;

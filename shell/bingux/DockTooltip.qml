@@ -51,7 +51,7 @@ PanelWindow {
         opacity: root.visible ? 1 : 0
 
         Behavior on opacity {
-            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: root.visible ? 0 : 160; easing.type: Easing.OutCubic }
         }
 
     }
