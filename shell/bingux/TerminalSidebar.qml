@@ -129,6 +129,7 @@ Scope {
     property bool useDragSize: false
     property real dragExtent: 0
     readonly property int maxSideWidth: Math.floor((screen ? screen.width : 1280) * 0.3)
+    readonly property int minimumSideWidth: Math.min(250, maxSideWidth)
     readonly property real maximumExtent: edge === "top" ? (screen ? screen.height : 800) - Theme.barHeight : maxSideWidth
     readonly property int desktopCornerSize: Math.round(Theme.shellRadius * 2 * Math.min(1, Math.max(0, panel.extent * panel.reveal) / Math.max(1, maximumExtent)))
     property real hintStrength: 0
@@ -199,7 +200,7 @@ Scope {
         dragExtent = Math.max(0, Math.min(maximum, initialExtent + distance));
         useDragSize = true;
         dragging = true;
-        panel.reveal = dragExtent > 0 ? 1 : 0;
+        panel.reveal = dragExtent / panel.extent;
     }
 
     function finishGesture(cancelled) {
@@ -219,7 +220,7 @@ Scope {
                 if (edge === "top")
                     saved.heightFraction = dragExtent / (screen ? screen.height : 800);
                 else
-                    saved.widthFraction = dragExtent / (screen ? screen.width : 1280);
+                    saved.widthFraction = Math.max(minimumSideWidth, dragExtent) / (screen ? screen.width : 1280);
             }
             useDragSize = false;
             open();
@@ -470,7 +471,9 @@ Scope {
         contentItem.clip: true
         // Keep the Wayland buffer geometry fixed. Resize only QML content so
         // right-edge anchoring never races compositor configure/commit cycles.
-        readonly property real extent: root.useDragSize ? Math.max(1, root.dragExtent) : root.edge === "top" ? Math.round((root.screen ? root.screen.height : 800) * saved.heightFraction) : Math.min(root.maxSideWidth, Math.round((root.screen ? root.screen.width : 1280) * saved.widthFraction))
+        readonly property real extent: root.edge === "top"
+            ? (root.useDragSize ? Math.max(1, root.dragExtent) : Math.round((root.screen ? root.screen.height : 800) * saved.heightFraction))
+            : Math.max(root.minimumSideWidth, root.useDragSize ? root.dragExtent : Math.min(root.maxSideWidth, Math.round((root.screen ? root.screen.width : 1280) * saved.widthFraction)))
         implicitWidth: root.screen ? root.screen.width : 1280
         implicitHeight: (root.screen ? root.screen.height : 800) - (root.edge === "top" ? Theme.barHeight : 0)
         exclusiveZone: visible && !root.fullscreenApp ? Math.round(extent * reveal) : 0
