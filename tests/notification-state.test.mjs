@@ -291,3 +291,18 @@ test('notification clicks focus matching windows or launch their desktop entry',
     assert.equal(state.canActivate(unknown), false);
     assert.equal(state.activate(unknown), false);
 });
+
+test('unchanged desktop metadata preserves the notification model and entry identities', () => {
+    const {state, make} = fixture();
+    const notification = make();
+    state.accept(notification);
+    const entries = state.allEntries;
+    const entry = entries[0];
+    for (let i = 0; i < 100; i++) state.refreshApplicationMetadata();
+    assert.equal(state.allEntries, entries);
+    assert.equal(state.allEntries[0], entry);
+    notification.appName = 'Changed name';
+    state.refreshApplicationMetadata();
+    assert.notEqual(state.allEntries, entries);
+    assert.equal(state.allEntries[0].appName, 'Changed name');
+});

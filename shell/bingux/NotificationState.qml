@@ -184,11 +184,16 @@ Scope {
     }
 
     function refreshApplicationMetadata() {
-        const refresh = entry => {
-            const identity = entryFor(entry.notification, entry.deadline, entry);
-            return Object.assign({}, entry, {appName: identity.appName, appIcon: identity.appIcon});
-        };
-        allEntries = allEntries.map(refresh);
+        let changed = false;
+        const refreshed = allEntries.map(entry => {
+            const application = applicationFor(entry.notification);
+            const appName = boundedText(application ? application.name : entry.notification.appName, maxApplicationNameLength);
+            const appIcon = boundedText((application ? application.icon : "") || entry.notification.appIcon, maxIconNameLength);
+            if (appName === entry.appName && appIcon === entry.appIcon) return entry;
+            changed = true;
+            return Object.assign({}, entry, {appName: appName, appIcon: appIcon});
+        });
+        if (changed) allEntries = refreshed;
     }
 
     // Keep the model stable while the pointer is over a card, including its controls.
@@ -469,9 +474,17 @@ Scope {
         }
     }
 
+    // DesktopEntries emits one change per entry during a rescan. Refresh once
+    // after the batch, rather than once for every installed application.
+    Timer {
+        id: applicationRefresh
+        interval: 100
+        onTriggered: root.refreshApplicationMetadata()
+    }
+
     desktopEntryWatcher: Connections {
         target: DesktopEntries.applications
-        function onValuesChanged() { root.refreshApplicationMetadata(); }
+        function onValuesChanged() { applicationRefresh.restart(); }
     }
 
     notificationServer: NotificationServer {

@@ -6,7 +6,9 @@ NotificationStack {
     objectName: "dockNotifications"
     property var entries: []
     property bool menuActive: false
-    presentedEntries: entries
+    // Hidden app menus must not rebuild notification cards on every model update.
+    presentedEntries: menuActive ? entries : []
+    onMenuActiveChanged: if (!menuActive) Qt.callLater(root.resetPresentation)
     historyMode: true
     groupNotifications: false
     animationsEnabled: false
