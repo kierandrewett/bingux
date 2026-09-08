@@ -2,13 +2,15 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import "DesktopLayout.js" as DesktopLayout
+import "ControlLayout.js" as ControlLayout
 
 // The palette uses the normal visual components with quiet sample data.
 Item {
     id: root
     required property string widgetId
     property var metrics: null
-    readonly property var spec: DesktopLayout.widget(widgetId) || {}
+    readonly property var spec: ControlLayout.widget(widgetId) || DesktopLayout.widget(widgetId) || {}
+    readonly property bool groupedWidget: !!ControlLayout.groupFor(widgetId)
     readonly property bool panelWidget: !!spec.panel
     readonly property string container: DesktopLayout.zone(DesktopEditing.desktop.layout || {}, widgetId) || (widgetId.startsWith("control-") ? "control-centre" : "top-right")
     readonly property var face: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, container, spec.label || "", spec.icon || "", !["clock", "keyboard"].includes(widgetId), ["clock", "keyboard"].includes(widgetId))
@@ -24,15 +26,65 @@ Item {
         Loader {
             id: component
             active: DesktopEditing.active
-            width: root.panelWidget ? 300 : root.widgetId.startsWith("control-") && root.container === "control-centre" ? 188 : item ? item.implicitWidth : 0
+            width: root.groupedWidget ? (root.spec.group ? 300 : item ? item.implicitWidth : 0) : root.panelWidget ? 300 : root.widgetId.startsWith("control-") && root.container === "control-centre" ? 188 : item ? item.implicitWidth : 0
             height: root.panelWidget ? 240 : item ? item.implicitHeight : 0
             scale: Math.min(1, root.width / Math.max(1, width))
             transformOrigin: Item.TopLeft
-            sourceComponent: root.spec.decoration ? decoration : root.spec.layoutItem ? space : root.widgetId.startsWith("control-") ? control
+            sourceComponent: root.groupedWidget ? ({
+                    "controls-header": headerGroup, "controls-audio": audioGroup, "controls-tiles": tileGroup,
+                    "control-volume": audioControl, "control-microphone": audioControl, "control-media": mediaControl,
+                    "control-divider": divider, "control-header-space": space, "control-battery": battery,
+                    "control-customise": customiseButton
+                })[root.widgetId] || headerButton : root.spec.decoration ? decoration : root.spec.layoutItem ? space : root.widgetId.startsWith("control-") ? control
                 : ({search, clock, controls: indicators, notifications, metrics: monitor, keyboard, privacy, capture,
                     overflow, tray, notes, calendar, media, tasks, terminal, monitor: performance})[root.widgetId] || empty
         }
     }
+    Component { id: headerButton; IconButton { iconName: root.spec.icon || ""; label: root.spec.label || "" } }
+    Component {
+        id: headerGroup
+        RowLayout {
+            spacing: 8
+            IconButton { iconName: "avatar-default-symbolic"; label: "User account" }
+            Item { Layout.fillWidth: true }
+            Repeater {
+                model: ["control-settings", "control-session", "control-lock"]
+                IconButton { required property string modelData; iconName: ControlLayout.widget(modelData).icon; label: ControlLayout.widget(modelData).label }
+            }
+        }
+    }
+    Component {
+        id: audioControl
+        AudioLevel { node: sampleAudioNode; label: root.spec.label; iconName: root.spec.icon; navigation: true }
+    }
+    Component {
+        id: audioGroup
+        ColumnLayout {
+            spacing: 12
+            AudioLevel { node: sampleAudioNode; label: "Volume"; iconName: "audio-volume-high-symbolic"; maximum: 1.5; navigation: true }
+            AudioLevel { node: sampleAudioNode; label: "Microphone"; iconName: "audio-input-microphone-symbolic"; navigation: true }
+        }
+    }
+    Component {
+        id: tileGroup
+        Row {
+            spacing: 8
+            Loader { width: 146; height: 72; Component.onCompleted: setSource("WidgetPreview.qml", {widgetId: "control-network"}) }
+            Loader { width: 146; height: 72; Component.onCompleted: setSource("WidgetPreview.qml", {widgetId: "control-bluetooth"}) }
+        }
+    }
+    Component { id: mediaControl; ControlCentreMedia { player: samplePlayer; playerOptions: [samplePlayer]; active: false } }
+    Component { id: divider; Rectangle { implicitHeight: 1; color: Theme.outline; opacity: 0.5 } }
+    Component {
+        id: battery
+        RowLayout {
+            spacing: 8
+            SymbolicIcon { implicitSize: 16; source: Quickshell.iconPath("battery-good-symbolic"); color: Theme.muted }
+            Text { text: "84%"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+        }
+    }
+    Component { id: customiseButton; ActionButton { text: "Customise controls..."; flat: true; implicitHeight: 28 } }
+    QtObject { id: sampleAudioNode; property bool ready: true; property var audio: QtObject { property real volume: 0.6; property bool muted: false } }
     Component {
         id: control
         ControlRow {

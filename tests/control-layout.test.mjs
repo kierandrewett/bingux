@@ -37,3 +37,16 @@ test('invalid versions, groups and duplicate entries are rejected', () => {
         const value = plain(model.defaults()); mutate(value); assert.equal(model.valid(value), false);
     }
 });
+
+test('every native group member has one palette entry and its original group', () => {
+    const expected = Object.values(model.defaults().groups).flat();
+    const widgets = vm.runInContext("widgets", model);
+    assert.equal(widgets.length, expected.length);
+    assert.equal(new Set(widgets.map(item => item.id)).size, expected.length);
+    for (const [group, ids] of Object.entries(model.defaults().groups)) {
+        for (const id of ids) {
+            assert.ok(model.widget(id)?.label);
+            assert.equal(model.groupFor(id), group);
+        }
+    }
+});

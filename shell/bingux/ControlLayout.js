@@ -29,3 +29,22 @@ function move(layout, group, id, index) {
     next.groups[group] = order;
     return next;
 }
+
+const widgets = [
+    {id: "controls-header", label: "Account and session", group: true},
+    {id: "controls-audio", label: "Audio controls", group: true},
+    {id: "control-divider", label: "Divider", group: true},
+    {id: "controls-tiles", label: "Quick controls", group: true},
+    {id: "control-media", label: "Media player", group: true},
+    {id: "control-customise", label: "Customise button", group: true},
+    {id: "control-account", label: "User account", icon: "avatar-default-symbolic"},
+    {id: "control-header-space", label: "Header space", group: true},
+    {id: "control-battery", label: "Battery", icon: "battery-good-symbolic", group: true},
+    {id: "control-settings", label: "Settings", icon: "org.gnome.Settings-symbolic"},
+    {id: "control-session", label: "Power options", icon: "system-shutdown-symbolic"},
+    {id: "control-lock", label: "Lock", icon: "system-lock-screen-symbolic"},
+    {id: "control-volume", label: "Volume", icon: "audio-volume-high-symbolic", group: true},
+    {id: "control-microphone", label: "Microphone", icon: "audio-input-microphone-symbolic", group: true}
+];
+function widget(id) { return widgets.find(item => item.id === id); }
+function groupFor(id) { return Object.keys(defaults().groups).find(group => items(defaults(), group).includes(id)) || ""; }
