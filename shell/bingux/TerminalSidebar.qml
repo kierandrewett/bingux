@@ -12,6 +12,7 @@ Scope {
     property var systemMetrics: null
     readonly property alias contentItem: sidebarContents
     readonly property alias detachedSurface: detachedWindow
+    readonly property alias edgeSurface: sensor
     readonly property var allContentTypes: [
         {id: "terminal", label: "Terminal", icon: "utilities-terminal-symbolic"},
         {id: "notes", label: "Notes", icon: "accessories-text-editor-symbolic"},
@@ -54,6 +55,29 @@ Scope {
     property var screen
     // Full-screen selectors own edge input without closing the terminal session.
     property bool inputSuspended: false
+    // Layer surfaces can clear activeToplevel while taking keyboard focus.
+    property var lastActiveWindow: ToplevelManager.activeToplevel
+    Connections {
+        target: ToplevelManager
+        function onActiveToplevelChanged() {
+            if (ToplevelManager.activeToplevel)
+                root.lastActiveWindow = ToplevelManager.activeToplevel;
+        }
+    }
+    readonly property var fullscreenWindow: lastActiveWindow && lastActiveWindow.fullscreen
+        && !lastActiveWindow.minimized
+        // Some compositors publish state without output enter/leave events.
+        && (lastActiveWindow.screens.length === 0 || lastActiveWindow.screens.includes(screen)) ? lastActiveWindow : null
+    readonly property bool fullscreenApp: fullscreenWindow !== null
+    onFullscreenWindowChanged: {
+        if (!fullscreenWindow || detached)
+            return;
+        gestureActive = false;
+        dragging = false;
+        useDragSize = false;
+        handleVisible = false;
+        hide();
+    }
     property bool opened: false
     property alias detached: saved.detached
     property bool focusRequested: false
@@ -264,7 +288,7 @@ Scope {
     }
 
     Component.onCompleted: Qt.callLater(function () {
-        if (saved.wasOpen && root.settings.sidebarEnabled) {
+        if (saved.wasOpen && root.settings.sidebarEnabled && (!root.fullscreenApp || root.detached)) {
             root.terminalCreated = root.contentType === "terminal";
             root.opened = true;
             panel.reveal = 1;
@@ -409,6 +433,7 @@ Scope {
                 pointerPosition: root.pointerPosition,
                 handleHovered: handleButton.hovered,
                 suspended: root.inputSuspended,
+                fullscreen: root.fullscreenApp,
                 reveal: panel.reveal,
                 dragging: root.dragging,
                 hinting: dragHint.running,
@@ -448,7 +473,7 @@ Scope {
         readonly property real extent: root.useDragSize ? Math.max(1, root.dragExtent) : root.edge === "top" ? Math.round((root.screen ? root.screen.height : 800) * saved.heightFraction) : Math.min(root.maxSideWidth, Math.round((root.screen ? root.screen.width : 1280) * saved.widthFraction))
         implicitWidth: root.screen ? root.screen.width : 1280
         implicitHeight: (root.screen ? root.screen.height : 800) - (root.edge === "top" ? Theme.barHeight : 0)
-        exclusiveZone: visible ? Math.round(extent * reveal) : 0
+        exclusiveZone: visible && !root.fullscreenApp ? Math.round(extent * reveal) : 0
         mask: Region {
             x: root.edge === "right" ? Math.round(panel.width - panel.extent * panel.reveal) : 0
             y: 0
@@ -820,7 +845,7 @@ Scope {
         screen: root.screen
         visible: !root.detached && !root.inputSuspended && root.settings.sidebarEnabled && (!panel.visible || root.opened || root.gestureActive)
         color: "transparent"
-        readonly property int grabWidth: (root.gestureActive ? root.startedOpen : root.opened) ? 24 : Theme.gap
+        readonly property int grabWidth: (root.gestureActive ? root.startedOpen : root.opened) ? 24 : root.fullscreenApp ? 2 : Theme.gap
         implicitWidth: grabWidth
         implicitHeight: grabWidth
         exclusionMode: ExclusionMode.Ignore
