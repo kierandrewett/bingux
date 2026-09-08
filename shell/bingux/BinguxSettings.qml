@@ -18,11 +18,14 @@ Window {
     color: "transparent"
     readonly property bool maximised: visibility === Window.Maximized
     function toggleMaximised() { if (maximised) showNormal(); else showMaximized(); }
+    property var dockView: null
+    property var systemMetrics: null
+    property bool shellHosted: false
     property var currentLayout: null
     property string currentSidebarEdge: "right"
     readonly property alias searchPage: searchSettings
     signal saved()
-    readonly property alias customiser: customiser
+    property var customiser: standaloneCustomiser
     property string page: "Search"
     property var draft: JSON.parse(JSON.stringify(BinguxPreferences.data))
     property var harnesses: []
@@ -36,6 +39,21 @@ Window {
     property string operation: ""
     property var submittedDraft: ({})
     property var changedSettings: ({})
+    property var requestedCustomise: null
+    function openCustomise(widgetId, options) {
+        requestedCustomise = {widgetId: widgetId || "", options: options || ""};
+        if (dirty && !busy) showCustomiser();
+        else if (!busy) read();
+    }
+    function showCustomiser() {
+        const request = requestedCustomise;
+        requestedCustomise = null;
+        customiser.open();
+        customiser.selectedWidget = request.widgetId;
+        if (request.options === "Remove") customiser.put(request.widgetId, "palette", 0);
+        else customiser.optionsPage = request.options;
+        if (!request.widgetId) customiser.selectedContainer = "control-centre";
+    }
     readonly property bool busy: operation !== ""
     function update(section, key, value) {
         const next = JSON.parse(JSON.stringify(draft));
@@ -89,10 +107,33 @@ Window {
                 root.status = result.warning || (backend.command[backend.command.length - 1] === "save" ? "Saved" : "");
                 BinguxPreferences.data = result.data;
                 if (backend.command[backend.command.length - 1] === "save") root.saved();
+                if (root.requestedCustomise) Qt.callLater(root.showCustomiser);
             }
         }
     }
-    DesktopCustomise { id: customiser; settings: root; screen: Quickshell.screens.find(s => s.name === root.screen.name) || Quickshell.screens[0] }
+    Process {
+        id: customiseRequest
+        command: ["qs", "-p", Quickshell.shellPath("shell.qml"), "ipc", "call", "shell", "customise"]
+        stderr: StdioCollector { onStreamFinished: if (text.trim()) console.warn("Customise IPC:", text.trim()) }
+        onExited: code => {
+            if (code !== 0) root.status = "Could not open desktop customisation.";
+            else root.visible = false;
+        }
+    }
+
+    property bool shellCustomisePending: false
+    function requestShellCustomise() {
+        shellCustomisePending = true;
+        if (busy) return;
+        if (dirty) { save(); return; }
+        shellCustomisePending = false;
+        customiseRequest.running = true;
+    }
+    onBusyChanged: if (!busy && shellCustomisePending) {
+        if (ready && !dirty) Qt.callLater(root.requestShellCustomise);
+        else shellCustomisePending = false;
+    }
+    DesktopCustomise { id: standaloneCustomiser; settings: root; screen: Quickshell.screens.find(s => s.name === root.screen.name) || Quickshell.screens[0] }
     readonly property bool wideLayout: width >= 740
     property bool navigationOpen: false
     property bool advancedOpen: false

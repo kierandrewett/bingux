@@ -49,17 +49,45 @@ ShellRoot {
     function openSearch() {
         searchOverlay.showSearch();
     }
+    function openWidgetMenu(id, item, window) {
+        widgetMenu.widgetId = id;
+        widgetMenu.anchorItem = item;
+        widgetMenu.anchorWindow = window.nativeWindow || window;
+        widgetMenu.visible = true;
+    }
+    TrayMenu {
+        id: widgetMenu
+        property string widgetId: ""
+        screen: topBar.screen
+        actions: [
+            {text: "Customise…", enabled: true, icon: "preferences-system-symbolic", triggered: () => binguxSettings.openCustomise(widgetId, "Widget")},
+            {text: "Move…", enabled: true, icon: "transform-move-symbolic", triggered: () => binguxSettings.openCustomise(widgetId, "Move")},
+            {text: "Remove", enabled: true, icon: "list-remove-symbolic", triggered: () => binguxSettings.openCustomise(widgetId, "Remove")}
+        ].map(action => Object.assign({isSeparator: false, hasChildren: false, checkState: Qt.Unchecked}, action))
+    }
 
+    Connections {
+        target: DesktopEditing
+        function onActiveChanged() {
+            if (DesktopEditing.active) {
+                root.closePanelsExcept(null);
+                widgetMenu.visible = false;
+                controlCentre.detailOpen = false;
+                Qt.callLater(() => controlCentre.visible = DesktopEditing.active);
+            } else controlCentre.visible = false;
+        }
+    }
     ProfileSettings {
         id: profileSettings
     }
 
     TerminalSidebar {
         id: terminalSidebar
+        onWidgetEditRequested: (id, item, window) => root.openWidgetMenu(id, item, window)
         systemMetrics: metrics
         settings: profileSettings
         screen: topBar.screen
-        inputSuspended: captureTool.opened || binguxSettings.customiser.visible
+        inputSuspended: captureTool.opened
     }
 
     Metrics {
@@ -103,7 +131,7 @@ ShellRoot {
         sidebarScreen: terminalSidebar.screen
         leftInset: terminalSidebar.leftInset
         rightInset: terminalSidebar.rightInset
-        inputSuspended: captureTool.opened || binguxSettings.customiser.visible
+        inputSuspended: captureTool.opened || DesktopEditing.active
         notificationCentre: notificationCentre
         screen: topBar.screen
         state: notificationState
@@ -130,10 +158,12 @@ ShellRoot {
 
     ShellCommands { inputSelector: inputSourceSelector; indicators: systemIndicators; mediaControls: controlCentre; notificationState: root.commandNotifications; dockView: dock }
 
-    BinguxSettings { id: binguxSettings; currentLayout: topBar.snapshotLayout(); currentSidebarEdge: terminalSidebar.edge; onVisibleChanged: if (visible) root.closePanelsExcept(null) }
+    DesktopCustomise { id: desktopCustomiser; settings: binguxSettings; screen: topBar.screen }
+    BinguxSettings { id: binguxSettings; customiser: desktopCustomiser; shellHosted: true; systemMetrics: metrics; dockView: dock; currentLayout: topBar.snapshotLayout(); currentSidebarEdge: terminalSidebar.edge; onVisibleChanged: if (visible) root.closePanelsExcept(null) }
 
     IpcHandler {
         target: "shell"
+        function customise(): void { binguxSettings.openCustomise("", ""); }
         function status(): string {
             return JSON.stringify({search: searchOverlay.visible, calendar: calendarPopup.visible,
                 controls: controlCentre.visible, notifications: notificationCentre.visible,
@@ -184,7 +214,7 @@ ShellRoot {
         function capture(): void { captureTool.open() }
     }
 
-    ControlCentre { id: controlCentre; anchorWindow: topBar.windowFor(systemPill); anchorItem: systemPill; dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom); indicators: systemIndicators; screen: topBar.screen; onVisibleChanged: if (visible) root.closePanelsExcept(controlCentre) }
+    ControlCentre { id: controlCentre; onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, controlCentre); onCustomiseRequested: binguxSettings.openCustomise("", ""); anchorWindow: topBar.windowFor(systemPill); anchorItem: systemPill; dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom); indicators: systemIndicators; screen: topBar.screen; onVisibleChanged: if (visible) root.closePanelsExcept(controlCentre) }
 
     SystemMetricsPopup {
         id: metricsPopup
@@ -206,7 +236,7 @@ ShellRoot {
 
     ShellPopup {
         id: barOverflow
-        anchorWindow: topBar
+        anchorWindow: topBar.windowFor(overflowButton)
         anchorItem: overflowButton
         screen: topBar.screen
         popupWidth: Math.max(200, ...topBar.overflowItems.map(item => item.implicitWidth + contentPadding * 2))
@@ -244,16 +274,22 @@ ShellRoot {
             layout.sidebar = terminalSidebar.contentTypes.map(type => type.id);
             return layout;
         }
-        readonly property var customLayout: BinguxPreferences.data.desktop.layout
+        readonly property var customLayout: DesktopEditing.desktop.layout
+        function appearance(id, label, icon, nativeIcon, nativeText) {
+            return DesktopLayout.presentation(DesktopEditing.desktop, id,
+                customLayout ? DesktopLayout.zone(customLayout, id) : "top-right", label, icon, nativeIcon, nativeText);
+        }
         readonly property bool nativeTopBarLayout: !customLayout || (
             JSON.stringify(customLayout["top-left"]) === '["search"]' &&
             JSON.stringify(customLayout["top-center"]) === '["clock"]' &&
             customLayout.dock.length === 0 &&
+            ["top-left", "top-center", "top-right"].every(zone => !DesktopEditing.desktop.containers?.[zone]?.display || DesktopEditing.desktop.containers[zone].display === "native") &&
+            Object.keys(DesktopEditing.desktop.widgetOptions || {}).every(id => !DesktopLayout.zone(customLayout, id).startsWith("top-") || !appearance(id, "", "", false, false).custom) &&
             ["capture", "tray", "privacy", "metrics", "keyboard", "controls", "notifications"].every(id => customLayout["top-right"].includes(id)))
         function chosen(item) { return !customLayout || DesktopLayout.zone(customLayout, controlNames[defaultControls.indexOf(item)]) !== ""; }
         function zoneFor(item) {
             const name = controlNames[defaultControls.indexOf(item)];
-            if (name === "overflow") return "top-right";
+            if (name === "overflow" && (!customLayout || !DesktopLayout.zone(customLayout, name))) return "top-right";
             return customLayout ? DesktopLayout.zone(customLayout, name) : name === "search" ? "top-left" : name === "clock" ? "top-center" : "top-right";
         }
         function windowFor(item) { return zoneFor(item) === "dock" ? dock : topBar; }
@@ -416,12 +452,14 @@ ShellRoot {
         onOverflowItemsChanged: if (overflowItems.length === 0) barOverflow.visible = false
         margins.left: terminalSidebar.leftInset
         margins.right: terminalSidebar.rightInset
+        margins.top: DesktopEditing.active ? 12 : 0
+        Behavior on margins.top { NumberAnimation { duration: Theme.reducedMotion ? 0 : 220; easing.type: Easing.OutCubic } }
         exclusiveZone: Theme.barHeight
         implicitHeight: Theme.barHeight
         color: "transparent"
-        WlrLayershell.layer: WlrLayer.Top
+        WlrLayershell.layer: DesktopEditing.active ? WlrLayer.Overlay : WlrLayer.Top
         WlrLayershell.namespace: "bingux-top-bar"
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+        WlrLayershell.keyboardFocus: DesktopEditing.active ? WlrKeyboardFocus.None : WlrKeyboardFocus.OnDemand
         anchors { top: true; left: true; right: true }
 
         Rectangle {
@@ -438,12 +476,25 @@ ShellRoot {
                 color: Theme.barDivider
             }
         }
+        NativeEditSurface {
+            window: topBar; zoneName: "top-left"; x: 0; width: topBar.width * 0.3; height: topBar.height
+            entries: topBar.defaultControls.filter(item => topBar.zoneFor(item) === zoneName).map(item => ({id: topBar.controlNames[topBar.defaultControls.indexOf(item)], item}))
+        }
+        NativeEditSurface {
+            window: topBar; zoneName: "top-center"; x: topBar.width * 0.3; width: topBar.width * 0.3; height: topBar.height
+            entries: topBar.defaultControls.filter(item => topBar.zoneFor(item) === zoneName).map(item => ({id: topBar.controlNames[topBar.defaultControls.indexOf(item)], item}))
+        }
+        NativeEditSurface {
+            window: topBar; zoneName: "top-right"; x: topBar.width * 0.6; width: topBar.width * 0.4; height: topBar.height
+            entries: topBar.defaultControls.filter(item => topBar.zoneFor(item) === zoneName).map(item => ({id: topBar.controlNames[topBar.defaultControls.indexOf(item)], item}))
+        }
         Item {
             anchors.fill: parent
             GridLayout { id: leftControls; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; rows: 1; columnSpacing: Theme.barControlGap }
             GridLayout { id: centerControls; anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: parent.verticalCenter; rows: 1; columnSpacing: Theme.barControlGap }
             BarSearchButton {
                 id: searchPill
+                presentation: topBar.appearance("search", "Search", "system-search-symbolic", true, false)
                 parent: topBar.hostFor(searchPill)
                 Layout.column: topBar.controlColumn(searchPill); Layout.row: 0
                 visible: topBar.chosen(searchPill)
@@ -451,6 +502,7 @@ ShellRoot {
             }
             Pill {
                 id: clockPill
+                presentation: topBar.appearance("clock", clockLabel.text + " " + timeLabel.text, "x-office-calendar-symbolic", false, true)
                 parent: topBar.hostFor(clockPill)
                 Layout.column: topBar.controlColumn(clockPill); Layout.row: 0
                 visible: topBar.chosen(clockPill)
@@ -479,10 +531,11 @@ ShellRoot {
                     id: rightControls
                     Instantiator {
                         model: topBar.defaultControls
-                        delegate: BarReorderHandle {
+                        delegate: WidgetEditHandle {
                             required property var modelData
                             control: modelData
-                            controller: topBar
+                            widgetId: topBar.controlNames[topBar.defaultControls.indexOf(modelData)]
+                            onRequested: (id, item) => root.openWidgetMenu(id, item, topBar.windowFor(item))
                         }
                     }
                     rows: 1
@@ -491,6 +544,7 @@ ShellRoot {
                     columnSpacing: Theme.barControlGap
                     RecordingIndicator {
                         id: captureStatus
+                        presentation: topBar.appearance("capture", label || tooltip, "media-record-symbolic", false, true)
                         parent: topBar.hostFor(captureStatus)
                         Layout.column: topBar.controlColumn(captureStatus)
                         Layout.row: topBar.controlRow(captureStatus)
@@ -500,7 +554,7 @@ ShellRoot {
                         barWindow: topBar.windowFor(captureStatus)
                         reorderable: true
                     }
-                    Pill { id: trayContainer; parent: topBar.hostFor(trayContainer); Layout.column: topBar.controlColumn(trayContainer); Layout.row: topBar.controlRow(trayContainer); horizontalPadding: 0; visible: topBar.chosen(trayContainer) && tray.implicitWidth > 0; Tray { id: tray; parentWindow: topBar.windowFor(trayContainer) } }
+                    Pill { id: trayContainer; parent: topBar.hostFor(trayContainer); Layout.column: topBar.controlColumn(trayContainer); Layout.row: topBar.controlRow(trayContainer); horizontalPadding: 0; visible: topBar.chosen(trayContainer) && tray.implicitWidth > 0; Tray { id: tray; presentation: topBar.appearance("tray", "System tray", "view-more-symbolic", true, false); parentWindow: topBar.windowFor(trayContainer) } }
                     PrivacyIndicators {
                         id: privacyContainer
                         parent: topBar.hostFor(privacyContainer)
@@ -513,6 +567,7 @@ ShellRoot {
                     }
                     SystemMetrics {
                         id: metricsPill
+                        presentation: topBar.appearance("metrics", "System monitors", "computer-symbolic", true, true)
                         parent: topBar.hostFor(metricsPill); Layout.column: topBar.controlColumn(metricsPill); Layout.row: topBar.controlRow(metricsPill)
                         systemMetrics: metrics
                         visible: topBar.chosen(metricsPill) && profileSettings.metricsEnabled
@@ -525,9 +580,10 @@ ShellRoot {
                         }
                         BarTooltip { reorderable: true; anchorItem: metricsPill; barWindow: topBar.windowFor(metricsPill); requested: metricsPill.pointerHovered; text: metricsPill.description }
                     }
-                    InputSourceSelector { id: inputSourceSelector; parent: topBar.hostFor(inputSourceSelector); Layout.column: topBar.controlColumn(inputSourceSelector); Layout.row: topBar.controlRow(inputSourceSelector); visible: topBar.chosen(inputSourceSelector) && metrics.desktopStateAvailable; parentWindow: topBar.windowFor(inputSourceSelector); metrics: metrics; gnoblinCtlPath: profileSettings.gnoblinCtlPath; onOpening: root.closePanelsExcept(inputSourceSelector) }
+                    InputSourceSelector { id: inputSourceSelector; presentation: topBar.appearance("keyboard", displayLabel, "input-keyboard-symbolic", false, true); parent: topBar.hostFor(inputSourceSelector); Layout.column: topBar.controlColumn(inputSourceSelector); Layout.row: topBar.controlRow(inputSourceSelector); visible: topBar.chosen(inputSourceSelector) && metrics.desktopStateAvailable; parentWindow: topBar.windowFor(inputSourceSelector); metrics: metrics; gnoblinCtlPath: profileSettings.gnoblinCtlPath; onOpening: root.closePanelsExcept(inputSourceSelector) }
                     Pill {
                         id: systemPill
+                        presentation: topBar.appearance("controls", "Control centre", "preferences-system-symbolic", true, false)
                         parent: topBar.hostFor(systemPill); Layout.column: topBar.controlColumn(systemPill); Layout.row: topBar.controlRow(systemPill)
                         visible: topBar.chosen(systemPill)
                         horizontalPadding: Theme.barPrimaryPadding
@@ -548,10 +604,12 @@ ShellRoot {
                     }
                     AbstractButton {
                         id: overflowButton
+                        parent: topBar.hostFor(overflowButton)
+                        readonly property var presentation: topBar.appearance("overflow", "More", "view-more-symbolic", true, false)
                         Layout.column: topBar.controlColumn(overflowButton)
                         Layout.row: 0
                         visible: topBar.overflowItems.length > 0
-                        implicitWidth: Theme.barEdgeHitWidth
+                        implicitWidth: presentation.custom ? overflowFace.implicitWidth + Theme.barPrimaryPadding * 2 : Theme.barEdgeHitWidth
                         implicitHeight: Theme.barHeight
                         hoverEnabled: true
                         activeFocusOnTab: true
@@ -560,29 +618,34 @@ ShellRoot {
                         Keys.onReturnPressed: clicked()
                         background: BarControlSurface { hovered: overflowButton.hovered; pressed: overflowButton.down; selected: barOverflow.visible; focused: overflowButton.visualFocus }
                         contentItem: Item {
-                            SymbolicIcon { anchors.centerIn: parent; implicitSize: Theme.iconSize; source: Quickshell.iconPath("view-more-symbolic") }
+                            WidgetFace { id: overflowFace; anchors.centerIn: parent; visible: overflowButton.presentation.custom; presentation: overflowButton.presentation }
+                            SymbolicIcon { anchors.centerIn: parent; visible: !overflowButton.presentation.custom; implicitSize: Theme.iconSize; source: Quickshell.iconPath("view-more-symbolic") }
                         }
-                        BarTooltip { reorderable: true; anchorItem: overflowButton; barWindow: topBar; requested: overflowButton.hovered; text: "More status controls" }
+                        BarTooltip { reorderable: true; anchorItem: overflowButton; barWindow: topBar.windowFor(overflowButton); requested: overflowButton.hovered; text: "More status controls" }
                     }
                     AbstractButton {
                         id: notificationButton
+                        readonly property var presentation: topBar.appearance("notifications", "Notifications", "preferences-system-notifications-symbolic", true, false)
                         parent: topBar.hostFor(notificationButton); Layout.column: topBar.controlColumn(notificationButton); Layout.row: topBar.controlRow(notificationButton)
                         visible: topBar.chosen(notificationButton) && notificationState.allEntries.length > 0
-                        implicitWidth: notificationCount.implicitWidth + Theme.barEdgeHitWidth - Theme.iconSize
+                        implicitWidth: notificationFace.implicitWidth + Theme.barEdgeHitWidth - Theme.iconSize
                         hoverEnabled: true
                         implicitHeight: Theme.barHeight
                         Accessible.name: "Notifications"
                         Accessible.description: notificationState.allEntries.length + " notifications"
                         onClicked: if (notificationState.allEntries.length > 0) notificationCentre.visible = !notificationCentre.visible
                         contentItem: Item {
-                            NotificationIndicator {
-                                id: notificationCount
-                                Connections {
-                                    target: notificationSurface.viewport
-                                    function onToastArchived() { notificationCount.playArchive(); }
+                            RowLayout {
+                                id: notificationFace; anchors.centerIn: parent; spacing: Theme.gap
+                                WidgetFace { visible: notificationButton.presentation.custom; presentation: notificationButton.presentation }
+                                NotificationIndicator {
+                                    id: notificationCount
+                                    Connections {
+                                        target: notificationSurface.viewport
+                                        function onToastArchived() { notificationCount.playArchive(); }
+                                    }
+                                    count: notificationState.allEntries.length
                                 }
-                                anchors.centerIn: parent
-                                count: notificationState.allEntries.length
                             }
                         }
                         BarTooltip { reorderable: true; anchorItem: notificationButton; barWindow: topBar.windowFor(notificationButton); requested: notificationButton.hovered; text: notificationState.allEntries.length > 0 ? "Notifications · " + notificationState.allEntries.length : "No notifications" }
@@ -600,12 +663,13 @@ ShellRoot {
 
     Dock {
         id: dock
+        onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, dock)
         notifications: notificationState.allEntries
         notificationStore: notificationState
         margins.left: terminalSidebar.leftInset
         margins.right: terminalSidebar.rightInset
         settings: profileSettings
-        visible: profileSettings.dockEnabled
+        visible: DesktopEditing.active || profileSettings.dockEnabled
     }
 
 }
