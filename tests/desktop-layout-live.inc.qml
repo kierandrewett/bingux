@@ -7,6 +7,7 @@
 
     }
     Component { id: externalSettingsComponent; BinguxSettings {} }
+    Component { id: samplePreviewComponent; WidgetPreview { width: 240; height: 160 } }
     Connections {
         target: desktopCustomiser
         function onDraggedIdChanged() { console.log('DRAG_STATE', desktopCustomiser.draggedId); }
@@ -24,7 +25,7 @@
     TestCase {
         id: layoutTest
         parent: binguxSettings.customiser.contentItem
-        when: topBar.visible
+        when: topBar.visible && BinguxPreferences.loaded && ControlCentreServices.preferencesReady && dock.appGroupsInitialised
         function clickNative(item, window, x, y, right) {
             nativeTyping.position = DesktopEditing.point(item, window, x, y);
             nativeTyping.extraArguments = [right ? '--right-click' : '--click-only'];
@@ -73,7 +74,16 @@
             compare(searchPill.parent, leftControls, 'Entering edit mode keeps the original widget instance in its native container');
             compare(controlCentre.hostItem, null, 'Control centre stays in its native window');
             wait(1000);
-            tryVerify(() => !!DesktopEditing.previews.search && !!DesktopEditing.previews['control-network'], 3000, 'Palette uses captures of the actual widgets');
+            verify(DesktopEditing.sources.search && DesktopEditing.sources['control-network'], 'The editor keeps the actual widgets registered for dragging');
+            const previewSpecs = DesktopLayout.layoutWidgets.concat(DesktopLayout.widgets, DesktopLayout.controlWidgets);
+            for (const spec of previewSpecs) {
+                const sample = samplePreviewComponent.createObject(editor.contentItem, {widgetId: spec.id});
+                tryVerify(() => sample.previewControl !== null, 1500, 'Sample preview renders: ' + spec.id);
+                verify(sample.visualItem.width > 0 && sample.visualItem.height > 0, 'Sample preview has geometry: ' + spec.id);
+                wait(30);
+                sample.destroy();
+            }
+            wait(100);
             const originalPanel = terminalSidebar.contentType;
             const picker = findChild(terminalSidebar.contentItem, 'sidebarContentPicker');
             clickNative(picker, terminalSidebar.editWindow, 20, picker.height / 2, false);
@@ -107,15 +117,44 @@
                 wait(80); editor.cancel(); wait(80); editor.open(); wait(100);
                 compare(editor.nativeWindow.contentItem.Window.window, editWindow);
             }
+            editor.optionsPage = '';
+            const leftEdit = DesktopEditing.surfaces.find(area => area.zoneName === 'top-left');
+            const flexTile = findChild(editor.contentItem, 'customise-widget-spring');
+            const fixedTile = findChild(editor.contentItem, 'customise-widget-spacer');
+            for (let n = 0; n < 2; n++) {
+                const rect = leftEdit.screenRect;
+                dragNative(flexTile, editor.nativeWindow, flexTile.width / 2, 50, Qt.point(rect.x + Math.min(80, rect.width / 2), rect.y + 16));
+            }
+            tryVerify(() => topBar.spacingWidgets.length === 2);
+            wait(100);
+            verify(topBar.spacingWidgets.every(item => item.width > 40), 'Springs expand into available bar space');
+            verify(Math.abs(topBar.spacingWidgets[0].width - topBar.spacingWidgets[1].width) <= 1, 'Springs share available space');
+            editor.undo(); wait(100);
+            compare(topBar.spacingWidgets.length, 1, 'Undo reverses one complete native drop');
+            editor.redo(); wait(100);
+            compare(topBar.spacingWidgets.length, 2, 'Redo restores the spacing instance');
+            const leftRect = leftEdit.screenRect;
+            dragNative(fixedTile, editor.nativeWindow, fixedTile.width / 2, 50, Qt.point(leftRect.x + 8, leftRect.y + 16));
+            tryVerify(() => topBar.spacingWidgets.length === 3);
+            editor.selectedWidget = editor.layout['top-left'].find(id => id.startsWith('spacer:'));
+            editor.widgetOption('width', 48);
+            wait(100);
+            compare(topBar.spacingWidgets.find(item => !item.flexible).width, 48, 'Fixed space uses the saved width');
+            editor.cancel(); editor.open(); wait(200);
+            compare(topBar.spacingWidgets.length, 0, 'Cancel removes draft spacing instances');
             editor.optionsPage = 'Widget'; editor.selectedWidget = 'search';
             wait(100);
-            const label = findChild(editor.contentItem, 'customiseWidgetLabelInput');
+            const inspector = findChild(editor.optionsContentItem, 'customiseInspector');
+            verify(inspector.y >= topBar.margins.top + topBar.height, 'Top bar options appear below the selected item');
+
+            const label = findChild(editor.optionsContentItem, 'customiseWidgetLabelInput');
             verify(label);
-            nativeTyping.position = DesktopEditing.point(label, editor.nativeWindow, 20, 12);
+            nativeTyping.position = DesktopEditing.point(label, editor.optionsWindow, 20, 12);
             nativeTyping.running = true;
             tryCompare(label, "text", "Find", 4000);
             tryCompare(nativeTyping, 'running', false, 3000, 'Typing releases the last native key');
-            const star = findChild(editor.contentItem, 'customise-icon-starred-symbolic');
+            mouseClick(findChild(editor.optionsContentItem, 'customiseIconPickerToggle'), 20, 15);
+            const star = findChild(editor.optionsContentItem, 'customise-icon-starred-symbolic');
             mouseClick(star, 18, 18);
             compare(editor.desktop.widgetOptions.search.label, 'Find');
             compare(editor.desktop.widgetOptions.search.icon, 'starred-symbolic');
@@ -167,12 +206,15 @@
             compare(controlCentre.controlCell('network').column, 1);
             editor.change('controlOrder', reorderedControls);
             editor.change('controlCentre', originalControls);
+            wait(300);
             const originalNetworkParent = network.parent;
             const controlsDock = dockEdit.screenRect;
             dragNative(network, controlCentre.nativeWindow, 20, 20, Qt.point(controlsDock.x + 12, controlsDock.y + 12));
             compare(network.parent, dock.widgetHost, 'The actual network widget moves into the dock');
             verify(network.barLayout, 'A dock control uses its compact presentation');
             compare(network.implicitHeight, Theme.barHeight);
+            tryCompare(network, 'height', Theme.barHeight, 2000, 'The moved tile finishes its compact layout before the next drag');
+            wait(100);
             verify(!editor.desktop.controlOrder.includes('network'), 'Moving a control removes its old placement');
             dragNative(network, dock, network.width / 2, network.height / 2, DesktopEditing.point(bluetooth, controlCentre.nativeWindow, 2, 20));
             compare(network.parent, originalNetworkParent, 'Moving back restores the original control-centre widget');
@@ -193,6 +235,10 @@
             editor.change('sidebarEdge', 'left');
             editor.change('dockSize', 40);
             editor.change('dockAlignment', 'left');
+            editor.put('spring', 'top-left', 1);
+            editor.put('spacer', 'top-right', 0);
+            const savedSpace = editor.layout['top-right'].find(id => id.startsWith('spacer:'));
+            editor.selectedWidget = savedSpace; editor.widgetOption('width', 36);
             mouseClick(done, done.width / 2, done.height / 2);
             tryCompare(binguxSettings, 'busy', false, 4000);
             tryCompare(editor, 'visible', false, 2000);
@@ -206,6 +252,9 @@
             tryVerify(() => clockPill.x < systemPill.x, 2000, 'Dock widgets keep the configured order');
             compare(metricsPill.parent, leftControls);
             compare(network.parent, leftControls, 'The saved control uses its new top-bar container');
+            verify(BinguxPreferences.data.desktop.layout['top-right'].includes(savedSpace), 'The saved layout retains its spacing instance');
+            compare(BinguxPreferences.data.desktop.widgetOptions[savedSpace].width, 36);
+            compare(topBar.spacingWidgets.find(item => item.widgetId === savedSpace).width, 36, 'The actual bar uses its saved spacing after editor close');
             verify(ControlCentreServices.active, 'Moved controls keep their service state current while the popup is closed');
             compare(searchPill.parent, rightControls);
             compare(dock.iconSize, 40);

@@ -1,12 +1,14 @@
 # Desktop customisation and search providers
 
-Open **Bingux Settings > Desktop > Customise Desktop**. This opens a full-screen layer-shell editor on the Settings window's screen. It shows the current wallpaper behind a mock desktop.
+Open **Bingux Settings > Desktop > Customise Desktop**. This opens a full-screen layer-shell editor on the Settings window's screen. It shows the current wallpaper behind the existing top bar, dock, sidebar and control centre. These containers keep their actual widget instances and actions.
 
 Drag a widget from the centre palette into the left, centre or right section of the top bar, or into the dock. A widget already on the desktop moves instead of being duplicated. Sidebar panel widgets can move within the sidebar. Drag a widget back into the palette to remove it. Keep at least one sidebar panel.
 
 The open centre palette has Widgets and Apps views. Drag an installed app into the dock to pin it. The dock preview uses the saved pins and order. The control centre stays open beside the palette; drag its tiles to change their order or drag one into the palette to remove it.
 
-For keyboard use, focus a widget and press Space or Enter, then use Move in the footer. The Dock footer button opens icon size, alignment and pointer behaviour options. The Sidebar button opens visibility and screen edge options.
+The palette uses shared widget components with sample content. It does not continuously capture live widgets. The item you pick up follows the cursor, and a line marks its insertion position. Fixed Space and Flexible space items can be added more than once to the top bar. Flexible spaces share the available width in their section. Fixed spaces have an adjustable width from 8 to 160 pixels.
+
+Click a container to open its settings beside it. Right-click a placed widget, double-click its palette preview, or focus the preview and press Enter to open widget options. Move and Remove are in those options. The icon grid and dock pointer settings expand on request. Undo and Redo reverse complete drops and individual settings changes.
 
 Changes stay in the preview until **Done**. Cancel discards the preview. Escape closes the current options panel first, then the editor. Restore defaults resets the top-bar and sidebar widget arrangement in the preview. Existing settings changes are also saved when applying the desktop.
 
@@ -26,7 +28,7 @@ Press Apply to save search changes. The settings helper restarts the user search
 
 User overrides are stored atomically in `$XDG_CONFIG_HOME/bingux/settings.json`. They remain separate from managed Nix configuration. The settings backend validates engine URLs, unique shortcuts, enabled defaults, desktop ranges, widget destinations and duplicate widgets before replacing the file. The search daemon validates engine configuration again when loading it.
 
-The shell imports the effective runtime layout once into version 1 of the desktop settings. This includes top-bar and overflow order, dock pins and app order, sidebar edge, and control-centre choices. The source state is retained in `layout-before-import.json`. Later launches and the editor load the saved layout. Unsupported versions are rejected. JPEG XL and other wallpapers that Qt cannot read directly are converted to a cached PNG by the settings helper.
+The shell imports the effective runtime layout once into version 1 of the desktop settings. This includes top-bar and overflow order, dock pins and app order, sidebar edge, and control-centre choices. The source state is retained in `layout-before-import.json`. Spacing instances use unique IDs such as `spring:1` and `spacer:1`; fixed widths are stored in `desktop.widgetOptions["spacer:1"].width`. Existing imported arrangements do not gain spacing items automatically. Later launches and the editor load the saved layout. Unsupported versions are rejected. JPEG XL and other wallpapers that Qt cannot read directly are converted to a cached PNG by the settings helper.
 
 ## Checks
 
@@ -38,3 +40,8 @@ The shell imports the effective runtime layout once into version 1 of the deskto
 - In a private Gnoblin test session: `tests/desktop-customise.py`, `tests/desktop-layout-live.py`, `BINGUX_SHELL_TEST=dock-behaviour tests/dock-state.py`, and `tests/popup-anchor.py`.
 
 The full-shell layout fixture ends its private process group after its assertions complete. It does not change the user's settings or stop the user's shell.
+
+The editor keeps the captured drag image in a pointer-transparent layer window.
+Native Wayland drag and drop still carries the widget ID between containers.
+This avoids the zero-size drag-icon actor observed with the current Qt/Mutter
+combination. The image is captured once at pickup and released when the drag ends.

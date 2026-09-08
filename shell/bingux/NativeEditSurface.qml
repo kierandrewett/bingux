@@ -60,24 +60,46 @@ MouseArea {
     onPositionChanged: mouse => {
         if ((pressedButtons & Qt.LeftButton) && pressedId && !hadDrag && Math.abs(mouse.x - start.x) + Math.abs(mouse.y - start.y) > 6) {
             hadDrag = true;
-            nativeDrag.begin(pressedId, DesktopEditing.point(root, window, mouse.x, mouse.y));
+            nativeDrag.begin(pressedId, entryAt(start.x, start.y)?.item, window, DesktopEditing.point(root, window, start.x, start.y));
         }
     }
     onReleased: mouse => {
         const editor = DesktopEditing.editor;
-        if (hadDrag) { pressedId = ""; return; }
+        if (hadDrag) { nativeDrag.cancelPending(); pressedId = ""; return; }
         if (mouse.button === Qt.RightButton && pressedId) {
             editor.selectedWidget = pressedId; editor.optionsPage = "Widget";
         } else editor.selectContainer(zoneName);
         pressedId = "";
     }
-    onCanceled: pressedId = ""
+    onCanceled: { nativeDrag.cancelPending(); pressedId = ""; }
     WidgetDrag { id: nativeDrag }
     WidgetDropArea { anchors.fill: parent; zoneName: root.zoneName; window: root.window; surface: root }
+    readonly property bool dropActive: DesktopEditing.editor?.hoverZone === zoneName
+    readonly property rect insertionRect: {
+        if (!dropActive) return Qt.rect(0, 0, 0, 0);
+        const editor = DesktopEditing.editor;
+        const order = zoneName === "control-centre" ? (editor.desktop.controlOrder || DesktopLayout.controlOrder()).map(name => "control-" + name)
+            : zoneName === "dock" && editor.draggedId.startsWith("app:") ? editor.dockApplications : editor.layout[zoneName] || [];
+        const remaining = order.filter(id => id !== editor.draggedId);
+        const next = remaining.slice(editor.hoverIndex).map(id => entries.find(entry => entry.id === id)).find(entry => entry?.item?.visible);
+        const previous = remaining.slice(0, editor.hoverIndex).reverse().map(id => entries.find(entry => entry.id === id)).find(entry => entry?.item?.visible);
+        const item = next?.item || previous?.item;
+        if (!item) return vertical ? Qt.rect(6, 6, width - 12, 3) : Qt.rect(6, 5, 3, height - 10);
+        const p = item.mapToItem(root, 0, 0);
+        return vertical ? Qt.rect(Math.max(4, p.x), p.y + (next ? 0 : item.height) - 2, Math.min(width - 8, item.width), 3)
+            : Qt.rect(p.x + (next ? 0 : item.width) - 2, 5, 3, height - 10);
+    }
+    Rectangle {
+        visible: root.dropActive
+        x: Math.max(1, Math.min(root.insertionRect.x, root.width - width - 1))
+        y: Math.max(1, Math.min(root.insertionRect.y, root.height - height - 1))
+        width: Math.max(0, root.insertionRect.width); height: Math.max(0, root.insertionRect.height)
+        radius: 1.5; color: Theme.accent
+    }
     Rectangle {
         anchors.fill: parent; radius: typeof root.parent.radius === "number" ? root.parent.radius : 0; color: "transparent"
         border.width: 1
-        border.color: DesktopEditing.editor?.hoverZone === root.zoneName ? Theme.accent : Theme.outline
+        border.color: root.dropActive || (DesktopEditing.editor?.optionsPage === "Container" && DesktopEditing.editor.selectedContainer === root.zoneName) ? Theme.accent : Theme.outline
     }
     Component.onCompleted: DesktopEditing.registerSurface(root)
     Component.onDestruction: DesktopEditing.unregisterSurface(root)

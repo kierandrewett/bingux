@@ -42,6 +42,10 @@ export default function () {
         for (let step = 1; step <= 8; step++) {
             const fraction = step / 8;
             actions.push(() => pointer.notify_absolute_motion(GLib.get_monotonic_time(), origin[0] + (destination[0] - origin[0]) * fraction, origin[1] + (destination[1] - origin[1]) * fraction));
+            if (step === 4 && __DRAG_CAPTURE__) actions.push(() => {
+                const shot = new Shell.Screenshot();
+                return shot.screenshot(true, Gio.File.new_for_path(__DRAG_CAPTURE__).replace(null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null));
+            });
         }
     }
     actions.push(() => pointer.notify_button(GLib.get_monotonic_time(), __BUTTON__, Clutter.ButtonState.RELEASED));
@@ -50,9 +54,15 @@ export default function () {
         actions.push(() => keyboard.notify_keyval(GLib.get_monotonic_time(), character.charCodeAt(0), Clutter.KeyState.RELEASED));
     }
     if (PREPARE) actions.splice(2);
+    let pending = false;
     let timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 80, () => {
-        actions.shift()();
-        if (actions.length) return GLib.SOURCE_CONTINUE;
+        if (pending) return GLib.SOURCE_CONTINUE;
+        const result = actions.length ? actions.shift()() : null;
+        if (result && typeof result.then === 'function') {
+            pending = true;
+            result.finally(() => { pending = false; });
+        }
+        if (actions.length || pending) return GLib.SOURCE_CONTINUE;
         if (!PREPARE && SCREENSHOT) {
             const shot = new Shell.Screenshot();
             shot.screenshot(false, Gio.File.new_for_path(SCREENSHOT).replace(null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null)).then(() => {});
@@ -65,7 +75,7 @@ export default function () {
         if (timer) GLib.source_remove(timer);
     };
 }
-'''.replace('__COMPLETION__', json.dumps(str(completion))).replace('__BUTTON__', str(button)).replace('__CLICK_ONLY__', json.dumps(click_only)).replace('__DRAG_DESTINATION__', json.dumps(destination)).replace('__ORIGIN_POINT__', json.dumps([x, y])).replace('PREPARE', 'true' if prepare else 'false').replace('SCREENSHOT', json.dumps(os.environ.get('BINGUX_NATIVE_SCREENSHOT', ''))))
+'''.replace('__DRAG_CAPTURE__', json.dumps(os.environ.get('BINGUX_NATIVE_DRAG_CAPTURE', ''))).replace('__COMPLETION__', json.dumps(str(completion))).replace('__BUTTON__', str(button)).replace('__CLICK_ONLY__', json.dumps(click_only)).replace('__DRAG_DESTINATION__', json.dumps(destination)).replace('__ORIGIN_POINT__', json.dumps([x, y])).replace('PREPARE', 'true' if prepare else 'false').replace('SCREENSHOT', json.dumps(os.environ.get('BINGUX_NATIVE_SCREENSHOT', ''))))
 subprocess.run(['gnoblinctl', 'reload-scripts'], env=os.environ | {'XDG_CONFIG_HOME': str(config)}, check=True, capture_output=True)
 deadline = time.monotonic() + 8
 while not completion.exists():

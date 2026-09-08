@@ -9,6 +9,7 @@ DropArea {
     keys: ["application/x-bingux-widget"]
     function updatePosition(event) {
         const editor = DesktopEditing.editor;
+        if (DesktopEditing.active && editor.draggedId) editor.pointer = DesktopEditing.point(root, window, event.x, event.y);
         if (!DesktopEditing.active || !editor.draggedId || !editor.accepts(editor.draggedId, zoneName)) {
             event.accepted = false;
             return false;

@@ -10,6 +10,8 @@ Scope {
     id: root
     readonly property alias preview: canvas
     readonly property alias nativeWindow: editWindow
+    readonly property alias optionsWindow: inspectorWindow
+    readonly property alias optionsContentItem: inspectorWindow.contentItem
     readonly property alias contentItem: editWindow.contentItem
     property alias screen: editWindow.screen
     readonly property real width: editWindow.width
@@ -27,18 +29,120 @@ Scope {
         exclusiveZone: 0
         WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "gnoblin-shell-popup"
-        WlrLayershell.keyboardFocus: root.visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: root.visible && root.optionsPage === "" ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         mask: Region { width: root.visible ? editWindow.width : 0; height: root.visible ? editWindow.height : 0 }
+    }
+    // A pointer-transparent surface keeps the pickup image above native containers.
+    PanelWindow {
+        id: dragWindow
+        visible: root.initialised
+        screen: editWindow.screen
+        color: "transparent"
+        anchors { top: true; bottom: true; left: true; right: true }
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "bingux-customise-drag"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+        mask: Region { width: 0; height: 0 }
+        Image {
+            visible: root.visible && root.draggedId !== ""
+            source: root.dragImage
+            x: root.pointer.x - root.dragHotSpot.x
+            y: root.pointer.y - root.dragHotSpot.y
+            width: root.dragSize.width; height: root.dragSize.height
+            cache: false
+        }
+    }
+    Instantiator {
+        model: root.initialised ? DesktopEditing.surfaces.reduce((windows, surface) => windows.includes(surface.window) ? windows : windows.concat([surface.window]), [root.nativeWindow]) : []
+        delegate: DropArea {
+            required property var modelData
+            parent: modelData.contentItem
+            anchors.fill: parent
+            z: -1
+            enabled: DesktopEditing.active
+            keys: ["application/x-bingux-widget"]
+            function track(event) {
+                if (!root.draggedId) return;
+                root.pointer = DesktopEditing.point(this, modelData, event.x, event.y);
+                root.hoverZone = "";
+                event.accepted = true;
+            }
+            onEntered: drag => track(drag)
+            onPositionChanged: drag => track(drag)
+        }
+    }
+    PanelWindow {
+        id: inspectorWindow
+        visible: root.initialised
+        screen: editWindow.screen
+        color: "transparent"
+        anchors { top: true; bottom: true; left: true; right: true }
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "gnoblin-shell-popup"
+        WlrLayershell.keyboardFocus: root.visible && root.optionsPage !== "" ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        mask: Region { x: optionsPopover.x; y: optionsPopover.y; width: root.visible && root.optionsPage ? optionsPopover.width : 0; height: root.visible && root.optionsPage ? optionsPopover.height : 0 }
+        contentItem.Keys.onEscapePressed: root.optionsPage = ""
     }
     property var desktop: ({})
     property var layout: DesktopLayout.defaults()
+    property var undoStack: []
+    property var redoStack: []
+    property bool groupingChange: false
+    function snapshot() { return JSON.stringify({desktop, layout}); }
+    function checkpoint() {
+        if (groupingChange) return;
+        const state = snapshot();
+        if (undoStack[undoStack.length - 1] !== state) undoStack = undoStack.slice(-49).concat([state]);
+        redoStack = [];
+    }
+    function restoreSnapshot(state) {
+        const saved = JSON.parse(state);
+        desktop = saved.desktop; layout = saved.layout;
+        optionsPage = "";
+    }
+    function undo() {
+        if (!undoStack.length || draggedId) return;
+        redoStack = redoStack.concat([snapshot()]);
+        const state = undoStack[undoStack.length - 1];
+        undoStack = undoStack.slice(0, -1); restoreSnapshot(state);
+    }
+    function redo() {
+        if (!redoStack.length || draggedId) return;
+        undoStack = undoStack.concat([snapshot()]);
+        const state = redoStack[redoStack.length - 1];
+        redoStack = redoStack.slice(0, -1); restoreSnapshot(state);
+    }
     property string tab: "Widgets"
     property string appFilter: ""
+    property bool iconsExpanded: false
+    property bool behaviourExpanded: false
+    property rect paletteSelection: Qt.rect(0, 0, 0, 0)
+    readonly property string inspectedZone: optionsPage === "Container" ? selectedContainer : optionsPage === "Dock" ? "dock" : optionsPage === "Sidebar" ? "sidebar" : containerFor(selectedWidget)
+    readonly property rect inspectionAnchor: {
+        const surface = DesktopEditing.surfaces.find(area => area.zoneName === inspectedZone && area.visible && area.window.visible);
+        if (surface) {
+            const item = optionsPage === "Widget" || optionsPage === "Move" ? surface.entries.find(entry => entry.id === selectedWidget)?.item : null;
+            if (item && item.visible) {
+                const geometry = [item.x, item.y, item.width, item.height, surface.screenRect];
+                const point = DesktopEditing.point(item, surface.window, 0, 0);
+                return Qt.rect(point.x, point.y, item.width, item.height);
+            }
+            return surface.screenRect;
+        }
+        return paletteSelection.width ? paletteSelection : Qt.rect(palette.x, palette.y + 100, 160, 100);
+    }
+    onOptionsPageChanged: { iconsExpanded = false; behaviourExpanded = false; }
+    onDraggedIdChanged: if (draggedId) optionsPage = "";
     property string optionsPage: ""
     property string selectedContainer: "top-right"
     readonly property var containerChoices: [{id: "top-left", label: "Top left"}, {id: "top-center", label: "Top centre"}, {id: "top-right", label: "Top right"}, {id: "dock", label: "Dock"}, {id: "sidebar", label: "Sidebar"}, {id: "control-centre", label: "Control centre"}]
     readonly property var iconChoices: ["system-search-symbolic", "preferences-system-symbolic", "x-office-calendar-symbolic", "preferences-system-notifications-symbolic", "computer-symbolic", "input-keyboard-symbolic", "view-more-symbolic", "microphone-sensitivity-high-symbolic", "media-record-symbolic", "utilities-terminal-symbolic", "accessories-text-editor-symbolic", "applications-multimedia-symbolic", "view-list-symbolic", "network-wireless-symbolic", "bluetooth-active-symbolic", "network-vpn-symbolic", "notifications-disabled-symbolic", "night-light-symbolic", "power-profile-balanced-symbolic", "display-brightness-symbolic", "audio-volume-high-symbolic", "audio-input-microphone-symbolic", "system-lock-screen-symbolic", "avatar-default-symbolic", "starred-symbolic", "user-home-symbolic", "folder-symbolic", "web-browser-symbolic", "mail-unread-symbolic", "camera-photo-symbolic", "view-pin-symbolic", "document-edit-symbolic"]
     property string selectedWidget: ""
+    property url dragImage: ""
+    property point dragHotSpot: Qt.point(0, 0)
+    property size dragSize: Qt.size(0, 0)
     property string draggedId: ""
     property string hoverZone: ""
     property int hoverIndex: 0
@@ -106,6 +210,7 @@ Scope {
         originalChanges = JSON.parse(JSON.stringify(settings.changedSettings));
         desktop.sidebarEdge = desktop.sidebarEdge || settings.currentSidebarEdge;
         layout = JSON.parse(JSON.stringify(desktop.layout || settings.currentLayout || DesktopLayout.defaults()));
+        undoStack = []; redoStack = [];
         selectedWidget = ""; draggedId = ""; applying = false; tab = "Widgets"; optionsPage = ""; appFilter = "";
         restoreSettings = settings.visible;
         settings.visible = false;
@@ -115,8 +220,13 @@ Scope {
         wallpaperReader.running = true;
         canvas.forceActiveFocus();
     }
-    function change(key, value) { desktop = Object.assign({}, desktop, {[key]: value}); }
+    function change(key, value) { if (JSON.stringify(desktop[key]) === JSON.stringify(value)) return; checkpoint(); desktop = Object.assign({}, desktop, {[key]: value}); }
     function put(id, target, index) {
+        if (!accepts(id, target)) return;
+        checkpoint(); groupingChange = true;
+        try { putItem(id, target, index); } finally { groupingChange = false; }
+    }
+    function putItem(id, target, index) {
         if (id.startsWith("control-")) {
             if (!accepts(id, target)) return;
             const name = id.slice(8);
@@ -179,6 +289,7 @@ Scope {
     }
     component DragHandle: MouseArea {
             required property string widgetId
+            required property Item dragVisual
             anchors.fill: parent; hoverEnabled: true
             preventStealing: true
             cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
@@ -188,9 +299,11 @@ Scope {
             onPositionChanged: mouse => {
                 if (pressed && !hadDrag && Math.abs(mouse.x - start.x) + Math.abs(mouse.y - start.y) > 6) {
                     hadDrag = true;
-                    nativeDrag.begin(widgetId, DesktopEditing.point(this, root.nativeWindow, mouse.x, mouse.y));
+                    nativeDrag.begin(widgetId, dragVisual, root.nativeWindow, DesktopEditing.point(this, root.nativeWindow, start.x, start.y));
                 }
             }
+            onReleased: nativeDrag.cancelPending()
+            onCanceled: nativeDrag.cancelPending()
             WidgetDrag { id: nativeDrag }
         }
     component Chip: Item {
@@ -198,31 +311,37 @@ Scope {
         objectName: "customise-widget-" + widgetId
         required property string widgetId
         readonly property var info: root.baseInfo(widgetId)
-        width: 260; height: 160
+        width: paletteGrid.cellWidth; height: paletteGrid.cellHeight
         opacity: root.draggedId === widgetId ? 0.35 : 1
         Rectangle { anchors.fill: parent; anchors.margins: 4; radius: 8; color: chipMouse.containsMouse ? Theme.hover : "transparent" }
         Item {
-            x: 8; y: 8; width: parent.width - 16; height: 112
-            WidgetPreview { anchors.fill: parent; widgetId: chip.widgetId; visible: !chip.info?.app; metrics: root.settings.systemMetrics }
+            x: 8; y: 8; width: parent.width - 16; height: parent.height - 44
+            WidgetPreview { id: widgetPreview; anchors.fill: parent; widgetId: chip.widgetId; visible: !chip.info?.app; metrics: root.settings.systemMetrics }
             AppIcon {
+                id: appPreview
                 visible: !!chip.info?.app
                 anchors.centerIn: parent
                 implicitSize: root.desktop.dockSize || 56
-                group: root.settings.dockView?.appGroups.find(group => root.appId(group.desktopEntry?.id || group.id) === chip.widgetId.slice(4)) || ({id: chip.widgetId.slice(4), desktopEntry: root.appEntry(chip.widgetId.slice(4))})
-                activeStreams: root.settings.dockView?.activity.activeStreams || []
-                notifications: root.settings.dockView?.notifications || []
+                group: ({id: chip.widgetId.slice(4), desktopEntry: root.appEntry(chip.widgetId.slice(4))})
+                activeStreams: []
+                notifications: []
             }
         }
         Text {
-            x: 8; y: 124; width: parent.width - 16
+            x: 8; y: parent.height - 28; width: parent.width - 16
             text: chip.info?.label || ""; textFormat: Text.PlainText
             horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
             color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
         }
         activeFocusOnTab: true
         Accessible.role: Accessible.Button; Accessible.name: info?.label || "Widget"
-        Keys.onReturnPressed: { root.selectedWidget = widgetId; root.optionsPage = "Widget"; }
-        DragHandle { id: chipMouse; widgetId: chip.widgetId; onDoubleClicked: { root.selectedWidget = widgetId; root.optionsPage = "Widget"; } }
+        function inspect() {
+            const point = DesktopEditing.point(chip, root.nativeWindow, 0, 0);
+            root.paletteSelection = Qt.rect(point.x, point.y, width, height);
+            root.selectedWidget = widgetId; root.optionsPage = "Widget";
+        }
+        Keys.onReturnPressed: inspect()
+        DragHandle { id: chipMouse; widgetId: chip.widgetId; dragVisual: chip.info?.app ? appPreview : widgetPreview.visualItem; onDoubleClicked: chip.inspect() }
     }
     Item {
         id: canvas
@@ -248,17 +367,19 @@ Scope {
             Rectangle { anchors.fill: parent; radius: 8; color: "transparent"; border.width: root.hoverZone === "palette" ? 1 : 0; border.color: Theme.accent }
             ColumnLayout {
                 anchors.fill: parent; spacing: 14
-                Text { Layout.fillWidth: true; text: "Drag your favourite items into the desktop."; wrapMode: Text.Wrap; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize; font.weight: Font.DemiBold }
+                Text { Layout.fillWidth: true; text: root.draggedId ? "Drop into a highlighted container, or here to remove." : "Drag items into your desktop."; wrapMode: Text.Wrap; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize; font.weight: Font.DemiBold }
                 RowLayout {
                     spacing: 4
-                    Repeater { model: ["Widgets", "Apps"]; ActionButton { required property string modelData; text: modelData; flat: root.tab !== modelData; onClicked: root.tab = modelData } }
+                    Repeater { model: ["Widgets", "Apps"]; ActionButton { required property string modelData; text: modelData; flat: root.tab !== modelData; onClicked: { root.tab = modelData; root.appFilter = ""; root.optionsPage = ""; } } }
                     Item { Layout.fillWidth: true }
                 }
-                SettingsField { visible: root.tab === "Apps"; label: "Find an app"; placeholderText: "Search installed apps"; Layout.margins: 0; text: root.appFilter; onEdited: value => root.appFilter = value }
+                SettingsField { label: root.tab === "Apps" ? "Find an app" : "Find a widget"; placeholderText: root.tab === "Apps" ? "Search installed apps" : "Search widgets"; Layout.margins: 0; text: root.appFilter; onEdited: value => root.appFilter = value }
                 GridView {
+                    id: paletteGrid
+                    objectName: "customiseWidgetGrid"
                     Layout.fillWidth: true; Layout.fillHeight: true
-                    cellWidth: 260; cellHeight: 160; clip: true; cacheBuffer: 100; reuseItems: true
-                    model: !root.visible ? [] : root.tab === "Apps" ? root.applications.map(entry => "app:" + root.appId(entry.id)) : DesktopLayout.widgets.concat(DesktopLayout.controlWidgets).map(widget => widget.id)
+                    cellWidth: width / Math.max(1, Math.floor(width / 190)); cellHeight: 144; clip: true; cacheBuffer: 100; reuseItems: true
+                    model: !root.visible ? [] : root.tab === "Apps" ? root.applications.map(entry => "app:" + root.appId(entry.id)) : DesktopLayout.layoutWidgets.concat(DesktopLayout.widgets, DesktopLayout.controlWidgets).filter(widget => !root.appFilter || widget.label.toLowerCase().includes(root.appFilter.toLowerCase())).map(widget => widget.id)
                     delegate: Chip { required property string modelData; widgetId: modelData }
                     boundsBehavior: Flickable.StopAtBounds
                     ScrollBar.vertical: ScrollBar {}
@@ -270,17 +391,35 @@ Scope {
             x: root.leftInset; y: parent.height - height; width: parent.width - root.leftInset - root.rightInset; height: 56; color: Theme.barBackground
             RowLayout {
                 anchors.fill: parent; anchors.margins: 10; spacing: 6
+                IconButton { objectName: "customiseUndo"; iconName: "edit-undo-symbolic"; label: "Undo"; enabled: root.undoStack.length > 0 && !root.draggedId; onClicked: root.undo() }
+                IconButton { objectName: "customiseRedo"; iconName: "edit-redo-symbolic"; label: "Redo"; enabled: root.redoStack.length > 0 && !root.draggedId; onClicked: root.redo() }
                 Item { Layout.fillWidth: true }
                 Text { visible: root.settings.status !== "" && root.settings.status !== "Saved"; text: root.settings.status; color: Theme.warning; Layout.maximumWidth: 260; elide: Text.ElideRight; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
-                ActionButton { text: "Restore defaults"; flat: true; enabled: !root.settings.busy; onClicked: root.layout = DesktopLayout.defaults() }
+                ActionButton { text: "Restore defaults"; flat: true; enabled: !root.settings.busy; onClicked: { root.checkpoint(); root.layout = DesktopLayout.defaults(); } }
                 ActionButton { objectName: "customiseCancel"; text: "Cancel"; enabled: !root.settings.busy; onClicked: root.cancel() }
                 ActionButton { objectName: "customiseApply"; text: root.settings.busy ? "Saving…" : "Done"; enabled: !root.settings.busy; onClicked: root.apply() }
             }
         }
+        MouseArea {
+            anchors.fill: parent
+            visible: root.optionsPage !== ""
+            onPressed: mouse => { root.optionsPage = ""; mouse.accepted = false; }
+        }
         Rectangle {
             id: optionsPopover
-            visible: root.optionsPage !== ""
-            x: palette.x; y: palette.y + 70; width: Math.min(420, palette.width); height: Math.min(optionContents.implicitHeight + 32, footer.y - y - 12)
+            objectName: "customiseInspector"
+            parent: inspectorWindow.contentItem
+            visible: root.visible && root.optionsPage !== ""
+            readonly property rect target: root.inspectionAnchor
+            readonly property bool beside: ["sidebar", "control-centre"].includes(root.inspectedZone)
+            readonly property real desiredX: beside ? (target.x > canvas.width / 2 ? target.x - width - 12 : target.x + target.width + 12) : target.x + target.width / 2 - width / 2
+            readonly property real desiredY: root.inspectedZone === "dock" ? target.y - height - 12 : beside ? target.y : target.y + target.height + 12
+            x: Math.max(root.leftInset + 12, Math.min(desiredX, canvas.width - root.rightInset - width - 12))
+            y: Math.max(Theme.barHeight + root.topInset + 12, Math.min(desiredY, footer.y - height - 12))
+            width: Math.min(380, canvas.width - root.leftInset - root.rightInset - 24)
+            height: Math.min(optionContents.implicitHeight + 32, footer.y - Theme.barHeight - root.topInset - 36)
+            border.width: 1; border.color: Theme.outline
+            MouseArea { anchors.fill: parent }
             radius: Theme.cardRadius; color: Qt.rgba(Theme.shellSurface.r, Theme.shellSurface.g, Theme.shellSurface.b, 1)
             Flickable {
                 anchors.fill: parent; anchors.margins: 16; clip: true; contentWidth: width; contentHeight: optionContents.implicitHeight
@@ -290,7 +429,7 @@ Scope {
                     id: optionContents; width: parent.width; spacing: 12
                     RowLayout {
                         Layout.fillWidth: true
-                        Text { Layout.fillWidth: true; text: root.optionsPage === "Container" ? root.containerChoices.find(item => item.id === root.selectedContainer)?.label || "Container" : root.optionsPage; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontHeading; font.weight: Font.Medium }
+                        Text { Layout.fillWidth: true; text: root.optionsPage === "Container" ? root.containerChoices.find(item => item.id === root.selectedContainer)?.label || "Container" : root.optionsPage === "Widget" ? root.baseInfo(root.selectedWidget)?.label || "Widget" : root.optionsPage; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontHeading; font.weight: Font.Medium }
                         IconButton { iconName: "window-close-symbolic"; label: "Close options"; onClicked: root.optionsPage = "" }
                     }
                     Flow {
@@ -306,11 +445,18 @@ Scope {
                     }
                     ColumnLayout {
                         visible: root.optionsPage === "Widget"; Layout.fillWidth: true; spacing: 12
-                        SettingsHeading { title: root.info(root.selectedWidget).label; description: "Use the container style, or change this widget." }
-                        SettingsChoice { label: "Show"; choices: ["Follow container", "Original", "Icons", "Text", "Both"]; values: ["inherit", "native", "icons", "text", "both"]; value: root.desktop.widgetOptions?.[root.selectedWidget]?.display || "inherit"; onChosen: value => root.widgetOption("display", value) }
-                        SettingsField { objectName: "customiseWidgetLabel"; Layout.margins: 0; label: "Label"; text: root.desktop.widgetOptions?.[root.selectedWidget]?.label || ""; placeholderText: root.baseInfo(root.selectedWidget)?.label || "Widget label"; onEdited: value => root.widgetOption("label", value) }
-                        Text { text: "Icon"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+                        Text { visible: DesktopLayout.isSpacing(root.selectedWidget); Layout.fillWidth: true; wrapMode: Text.Wrap; text: root.selectedWidget.startsWith("spring") ? "Expands to fill the available room in this part of the bar." : "Leaves a fixed gap between neighbouring items."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+                        RowLayout {
+                            visible: root.selectedWidget.startsWith("spacer:")
+                            Text { text: "Width"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+                            SeekSlider { Layout.fillWidth: true; from: 8; to: 160; stepSize: 4; value: root.desktop.widgetOptions?.[root.selectedWidget]?.width || 20; onMoved: root.widgetOption("width", Math.round(value)); Accessible.name: "Space width" }
+                            Text { text: (root.desktop.widgetOptions?.[root.selectedWidget]?.width || 20) + " px"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+                        }
+                        SettingsChoice { visible: !DesktopLayout.isSpacing(root.selectedWidget); label: "Show"; choices: ["Follow container", "Original", "Icons", "Text", "Both"]; values: ["inherit", "native", "icons", "text", "both"]; value: root.desktop.widgetOptions?.[root.selectedWidget]?.display || "inherit"; onChosen: value => root.widgetOption("display", value) }
+                        SettingsField { visible: !DesktopLayout.isSpacing(root.selectedWidget); objectName: "customiseWidgetLabel"; Layout.margins: 0; label: "Label"; text: root.desktop.widgetOptions?.[root.selectedWidget]?.label || ""; placeholderText: root.baseInfo(root.selectedWidget)?.label || "Widget label"; onEdited: value => root.widgetOption("label", value) }
+                        ActionButton { objectName: "customiseIconPickerToggle"; visible: !DesktopLayout.isSpacing(root.selectedWidget); text: root.iconsExpanded ? "Hide icons" : "Change icon…"; flat: true; onClicked: root.iconsExpanded = !root.iconsExpanded }
                         GridLayout {
+                            visible: root.iconsExpanded && !DesktopLayout.isSpacing(root.selectedWidget)
                             Layout.fillWidth: true; columns: 8; rowSpacing: 4; columnSpacing: 4
                             Repeater {
                                 model: root.iconChoices
@@ -318,8 +464,9 @@ Scope {
                             }
                         }
                         RowLayout {
-                            ActionButton { text: "Reset widget"; flat: true; onClicked: { const next = Object.assign({}, root.desktop.widgetOptions || {}); delete next[root.selectedWidget]; root.change("widgetOptions", next); } }
-                            ActionButton { text: "Container style"; flat: true; onClicked: { root.selectedContainer = root.containerFor(root.selectedWidget) || "top-right"; root.optionsPage = "Container"; } }
+                            ActionButton { text: "Move…"; flat: true; onClicked: root.optionsPage = "Move" }
+                            ActionButton { text: "Remove"; flat: true; onClicked: { root.put(root.selectedWidget, "palette", 0); root.optionsPage = ""; } }
+                            ActionButton { text: "Reset"; flat: true; onClicked: { const next = Object.assign({}, root.desktop.widgetOptions || {}); delete next[root.selectedWidget]; root.change("widgetOptions", next); } }
                         }
                     }
                         ColumnLayout {
@@ -332,10 +479,11 @@ Scope {
                                 SeekSlider { Layout.fillWidth: true; from: 32; to: 80; stepSize: 4; value: root.desktop.dockSize || 56; onMoved: root.change("dockSize", Math.round(value)); Accessible.name: "Dock icon size" }
                                 Text { text: (root.desktop.dockSize || 56) + " px"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
                             }
-                            SettingsChoice { label: "Click"; choices: ["Focus or minimise", "Always focus", "New window"]; values: ["toggle", "focus", "launch"]; value: root.desktop.dockClick || "toggle"; onChosen: value => root.change("dockClick", value) }
-                            SettingsChoice { label: "Middle click"; choices: ["New window", "Close windows", "Do nothing"]; values: ["launch", "close", "none"]; value: root.desktop.dockMiddleClick || "launch"; onChosen: value => root.change("dockMiddleClick", value) }
-                            SettingsChoice { label: "Mouse wheel and trackpad"; choices: ["Switch windows", "Do nothing"]; values: ["cycle", "none"]; value: root.desktop.dockScroll || "cycle"; onChosen: value => root.change("dockScroll", value) }
-                            SettingsChoice { label: "Scroll direction"; choices: ["Normal", "Reverse"]; values: ["natural", "reverse"]; value: root.desktop.dockScrollDirection || "natural"; onChosen: value => root.change("dockScrollDirection", value) }
+                            ActionButton { text: root.behaviourExpanded ? "Hide mouse and trackpad settings" : "Mouse and trackpad…"; flat: true; onClicked: root.behaviourExpanded = !root.behaviourExpanded }
+                            SettingsChoice { visible: root.behaviourExpanded; label: "Click"; choices: ["Focus or minimise", "Always focus", "New window"]; values: ["toggle", "focus", "launch"]; value: root.desktop.dockClick || "toggle"; onChosen: value => root.change("dockClick", value) }
+                            SettingsChoice { visible: root.behaviourExpanded; label: "Middle click"; choices: ["New window", "Close windows", "Do nothing"]; values: ["launch", "close", "none"]; value: root.desktop.dockMiddleClick || "launch"; onChosen: value => root.change("dockMiddleClick", value) }
+                            SettingsChoice { visible: root.behaviourExpanded; label: "Mouse wheel and trackpad"; choices: ["Switch windows", "Do nothing"]; values: ["cycle", "none"]; value: root.desktop.dockScroll || "cycle"; onChosen: value => root.change("dockScroll", value) }
+                            SettingsChoice { visible: root.behaviourExpanded; label: "Scroll direction"; choices: ["Normal", "Reverse"]; values: ["natural", "reverse"]; value: root.desktop.dockScrollDirection || "natural"; onChosen: value => root.change("dockScrollDirection", value) }
                         }
                         ColumnLayout {
                             visible: root.optionsPage === "Sidebar" || (root.optionsPage === "Container" && root.selectedContainer === "sidebar"); Layout.fillWidth: true; spacing: 16
