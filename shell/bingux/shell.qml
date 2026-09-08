@@ -95,7 +95,6 @@ ShellRoot {
     }
 
     SearchOverlay {
-        dockView: dock
         onSettingsRequested: binguxSettings.visible = true
         id: searchOverlay
         onVisibleChanged: if (visible) root.closePanelsExcept(searchOverlay)
