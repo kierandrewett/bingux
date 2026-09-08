@@ -87,6 +87,7 @@ ShellRoot {
             verify(ToplevelManager.toplevels.values.some(w => w.title === app.title && w.fullscreen));
             checks += "Retained fullscreen: " + sidebar.fullscreenApp + "\n";
             compare(sidebar.fullscreenApp, true);
+            compare(sidebar.desktopCornerSize, 0, "Fullscreen sidebar has square corners");
             sidebar.hide();
             app.showNormal();
             app.requestActivate();
@@ -94,6 +95,7 @@ ShellRoot {
             checks += "Exited fullscreen\n";
             sidebar.open();
             wait(300);
+            verify(sidebar.desktopCornerSize > 0, "Desktop corners return outside fullscreen");
             app.showFullScreen();
             app.requestActivate();
             tryCompare(sidebar, "opened", false);
