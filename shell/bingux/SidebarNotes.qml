@@ -25,19 +25,9 @@ Item {
         contextMenu.visible = true;
         Qt.callLater(contextMenu.focusMenu);
     }
-    property var formatUndoGroups: []
     function undoEdit(redo) {
-        const current = editor.text;
-        const groups = formatUndoGroups.slice().reverse();
-        const group = groups.find(entry => (redo ? entry.before : entry.after) === current);
-        const operation = redo ? "redo" : "undo";
         if (!(redo ? editor.canRedo : editor.canUndo)) return;
-        const limit = group ? group.steps : 1;
-        for (let step = 0; step < limit; step++) {
-            editor[operation]();
-            if (!group || editor.text === (redo ? group.after : group.before)) break;
-            if (!group.states.includes(editor.text) || !(redo ? editor.canRedo : editor.canUndo)) break;
-        }
+        editor[redo ? "redo" : "undo"]();
         save();
     }
     function menuEnabled(action) {
@@ -139,7 +129,7 @@ Item {
             bottomPadding: 16
             persistentSelection: true
             background: null
-            DocumentSpacing { document: editor.textDocument }
+            DocumentEdit { id: documentEdit; document: editor.textDocument }
             Accessible.name: "Sidebar notes"
             Accessible.description: slashMenu.visible
                 ? "Note commands: " + (slashMenu.selectedCommand ? slashMenu.selectedCommand.title : "No matches") + ". Use arrow keys and Enter."
@@ -216,8 +206,6 @@ Item {
             // Insert a formatted fragment, preserving the rest of the document
             // and its native cursor, selection, and undo history.
             function formatRange(start, end, markdown, emptyBlock) {
-                const undoGroup = {before: text, states: [], steps: 0, after: ""};
-                formatting = true;
                 let continuationFont = Qt.font({
                     family: cursorSelection.font.family,
                     pointSize: cursorSelection.font.pointSize,
@@ -227,47 +215,28 @@ Item {
                     strikeout: cursorSelection.font.strikeout
                 });
                 // Qt merges the first imported block into the current block.
-                // Anchor block edits at the document start: importing a middle
-                // heading as the first fragment block loses its heading level.
+                // Include the prefix to retain a middle heading's semantic level.
                 if (emptyBlock && start > 0) {
                     markdown = getFormattedText(0, start - 1).replace(/\s+$/, "") + "\n\n" + markdown;
                     start = 0;
                 }
-                if (end > start) {
-                    remove(start, end);
-                    undoGroup.states.push(text);
-                    undoGroup.steps++;
+                formatting = true;
+                try {
+                    const result = documentEdit.replace(start, end, markdown, emptyBlock);
+                    if (result.cursor === undefined) return;
+                    cursorPosition = result.cursor;
+                    if (result.font) continuationFont = Qt.font({
+                        family: result.font.family,
+                        pointSize: result.font.pointSize,
+                        bold: result.font.bold,
+                        italic: result.font.italic,
+                        underline: result.font.underline,
+                        strikeout: result.font.strikeout
+                    });
+                    continuation = { position: cursorPosition, length: length, prefix: getText(0, cursorPosition), font: continuationFont };
+                } finally {
+                    formatting = false;
                 }
-                const before = length;
-                insert(start, markdown);
-                undoGroup.states.push(text);
-                undoGroup.steps++;
-                const added = length - before;
-                cursorPosition = start + added;
-                if (emptyBlock) {
-                    const marker = getText(start, start + added).indexOf("\u200b");
-                    if (marker >= 0) {
-                        // Removing the placeholder drops its character format.
-                        // Carry that format into the first character the user types.
-                        select(start + marker, start + marker + 1);
-                        continuationFont = Qt.font({
-                            family: cursorSelection.font.family,
-                            pointSize: cursorSelection.font.pointSize,
-                            bold: cursorSelection.font.bold,
-                            italic: cursorSelection.font.italic,
-                            underline: cursorSelection.font.underline,
-                            strikeout: cursorSelection.font.strikeout
-                        });
-                        remove(start + marker, start + marker + 1);
-                        undoGroup.states.push(text);
-                        undoGroup.steps++;
-                        cursorPosition = start + marker;
-                    }
-                }
-                continuation = { position: cursorPosition, length: length, prefix: getText(0, cursorPosition), font: continuationFont };
-                formatting = false;
-                undoGroup.after = text;
-                root.formatUndoGroups = root.formatUndoGroups.concat([undoGroup]).slice(-32);
             }
             function formatShortcut() {
                 if (formatting || inputMethodComposing || selectionStart !== selectionEnd)

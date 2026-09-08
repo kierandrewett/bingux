@@ -24,7 +24,6 @@ ShellRoot {
                 menu.close();
                 editor.text = "";
                 editor.continuation = null;
-                notes.formatUndoGroups = [];
                 editor.forceActiveFocus();
             }
             function test_navigation() {
