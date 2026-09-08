@@ -95,6 +95,8 @@ Scope {
     }
     property bool opened: false
     property alias detached: saved.detached
+    // The editor uses the real sidebar at its edge without changing saved state.
+    readonly property bool floating: detached && !DesktopEditing.active
     property bool focusRequested: false
     property bool handleVisible: false
     readonly property bool handleHovered: pillAllowed && (handleButton.hovered || (sensor.visible && sensorGesture.hovered) || gestureActive)
@@ -333,7 +335,7 @@ Scope {
             root.previewContentType = "";
             contentMenu.visible = false;
             if (DesktopEditing.active && root.contentType === "terminal") root.terminalCreated = true;
-            if (!root.detached) root.animateTo(DesktopEditing.active || root.opened ? 1 : 0);
+            if (!root.floating) root.animateTo(DesktopEditing.active || root.opened ? 1 : 0);
         }
     }
     function open() {
@@ -399,6 +401,12 @@ Scope {
         if (!["left", "top", "right"].includes(value))
             return;
         contentMenu.visible = false;
+        if (root.detached && DesktopEditing.active) {
+            saved.edge = value;
+            saved.setValue("edge", value);
+            saved.sync();
+            return;
+        }
         const wasOpen = opened;
         slide.stop();
         panel.reveal = 0;
@@ -494,7 +502,7 @@ Scope {
         id: panel
         property real reveal: 0
         screen: root.screen
-        visible: !root.detached && (DesktopEditing.active || root.opened || root.dragging || slide.running)
+        visible: !root.floating && (DesktopEditing.active || root.opened || root.dragging || slide.running)
         onVisibleChanged: if (!visible)
             root.useDragSize = false
         color: "transparent"
@@ -564,7 +572,7 @@ Scope {
             Item {
                 id: sidebarContents
                 objectName: "sidebarContents"
-                parent: root.detached ? detachedWindow.contentItem : panelSurface
+                parent: root.floating ? detachedWindow.contentItem : panelSurface
                 anchors.fill: parent
                 Item {
                     id: sidebarHeader
@@ -635,8 +643,8 @@ Scope {
                         SidebarNotes {
                             id: notes
                             Component.onCompleted: DesktopEditing.registerSource("notes", notes)
-                            menuHost: root.detached ? detachedWindow.contentItem : null
-                            screen: root.detached ? detachedWindow.screen : root.screen
+                            menuHost: root.floating ? detachedWindow.contentItem : null
+                            screen: root.floating ? detachedWindow.screen : root.screen
                             anchors.fill: parent
                             visible: root.contentType === "notes"
                         }
@@ -686,7 +694,7 @@ Scope {
         objectName: "sidebarDetachedWindow"
         title: root.currentContent.label + " — Bingux"
         screen: root.screen
-        visible: root.detached && root.opened
+        visible: root.floating && root.opened
         implicitWidth: 400
         implicitHeight: 640
         minimumSize: Qt.size(180, 240)
@@ -736,10 +744,10 @@ Scope {
 
     ShellPopup {
         id: contentMenu
-        hostItem: root.detached ? detachedWindow.contentItem : null
+        hostItem: root.floating ? detachedWindow.contentItem : null
         cornerRadius: Theme.radius
         surfaceColor: Theme.popupSurface
-        screen: root.detached ? detachedWindow.screen : root.screen
+        screen: root.floating ? detachedWindow.screen : root.screen
         popupWidth: 190
         popupHeight: Math.min(contentMenuColumn.implicitHeight + contentPadding * 2, height - preferredY - Theme.gap)
         contentPadding: Theme.spaceSmall
@@ -747,7 +755,7 @@ Scope {
         preferredX: anchorPoint.x
         preferredY: anchorPoint.y + Theme.spaceSmall
         onVisibleChanged: if (visible) {
-            anchorPoint = root.detached
+            anchorPoint = root.floating
                 ? contentPicker.mapToItem(detachedWindow.contentItem, 0, contentPicker.height)
                 : contentPicker.mapToGlobal(0, contentPicker.height);
             Qt.callLater(contentNavigation.focusMenu);

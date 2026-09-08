@@ -515,8 +515,6 @@ ShellRoot {
         onOverflowItemsChanged: if (overflowItems.length === 0) barOverflow.visible = false
         margins.left: terminalSidebar.leftInset
         margins.right: terminalSidebar.rightInset
-        margins.top: DesktopEditing.active ? 12 : 0
-        Behavior on margins.top { NumberAnimation { duration: Theme.reducedMotion ? 0 : 220; easing.type: Easing.OutCubic } }
         exclusiveZone: Theme.barHeight
         implicitHeight: Theme.barHeight
         color: "transparent"

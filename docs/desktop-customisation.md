@@ -10,6 +10,10 @@ The palette uses shared widget components with sample content. It does not conti
 
 Label and Icon tiles create independent items in the top bar or dock. Edit their text or choose a symbol from the icon grid. They follow the container display mode unless you set an override. Removing an instance clears its options; Undo restores both the item and its appearance.
 
+A popped-out sidebar uses its saved desktop edge while the editor is open. The
+editor moves the existing content into that edge surface. Done and Cancel both
+restore the floating window without changing its content or popped-out state.
+
 Click a container to open its settings beside it. Right-click a placed widget, double-click its palette preview, or focus the preview and press Enter to open widget options. Move and Remove are in those options. The icon grid and dock pointer settings expand on request. Undo and Redo reverse complete drops and individual settings changes.
 
 Changes stay in the preview until **Done**. Cancel discards the preview. Escape closes the current options panel first, then the editor. Restore defaults resets the top-bar and sidebar widget arrangement in the preview. Existing settings changes are also saved when applying the desktop.
