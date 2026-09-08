@@ -19,7 +19,7 @@ typedef struct Meter {
     pa_proplist *properties;
     bool muted, corked, active, removed;
     float peak;
-    uint64_t sampled, candidate, audible;
+    uint64_t sampled, candidate, audible, retry_at;
     struct Meter *next;
 } Meter;
 static Meter *meters;
@@ -87,6 +87,7 @@ static void sink_info(pa_context *ctx, const pa_sink_info *info, int eol, void *
     meter->stream = pa_stream_new_with_proplist(ctx, "Application peak meter", &spec, NULL, properties);
     pa_proplist_free(properties);
     if (!meter->stream) return;
+    meter->sampled = now_ms();
     pa_stream_set_read_callback(meter->stream, read_peak, meter);
     pa_buffer_attr buffer = { (uint32_t)-1, (uint32_t)-1, (uint32_t)-1, (uint32_t)-1, sizeof(float) };
     if (pa_stream_set_monitor_stream(meter->stream, meter->id) < 0 ||
@@ -113,7 +114,10 @@ static void input_info(pa_context *ctx, const pa_sink_input_info *info, int eol,
     if (meter->properties) pa_proplist_free(meter->properties);
     meter->properties = pa_proplist_copy(info->proplist);
     dirty = true;
-    if (!meter->stream) unref(pa_context_get_sink_info_by_index(ctx, info->sink, sink_info, (void *)(uintptr_t)info->index));
+    if (!meter->stream) {
+        meter->retry_at = now_ms() + 1000;
+        unref(pa_context_get_sink_info_by_index(ctx, info->sink, sink_info, (void *)(uintptr_t)info->index));
+    }
 }
 static void subscribe(pa_context *ctx, pa_subscription_event_type_t event, uint32_t id, void *userdata) {
     (void)userdata;
@@ -168,6 +172,18 @@ static void tick(pa_mainloop_api *api, pa_time_event *event, const struct timeva
     uint64_t now = now_ms();
     for (Meter *meter = meters, *next; meter; meter = next) {
         next = meter->next;
+        // A monitor can fail asynchronously as an application recreates its
+        // audio ports. A non-null stream is not necessarily a live connection.
+        if (meter->stream && (pa_stream_get_state(meter->stream) == PA_STREAM_FAILED ||
+                              pa_stream_get_state(meter->stream) == PA_STREAM_TERMINATED ||
+                              (!meter->corked && now - meter->sampled > 2000)))
+            drop_stream(meter);
+        if (!meter->removed && !meter->stream && now >= meter->retry_at &&
+            pa_context_get_state(context) == PA_CONTEXT_READY) {
+            meter->retry_at = now + 1000;
+            unref(pa_context_get_sink_info_by_index(context, meter->sink, sink_info,
+                (void *)(uintptr_t)meter->id));
+        }
         bool sound = !meter->muted && !meter->corked && now - meter->sampled < 250 &&
             meter->peak >= (meter->active ? HOLD_LEVEL : ENTER_LEVEL);
         if (sound) {
