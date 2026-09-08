@@ -155,6 +155,8 @@ PanelWindow {
     }
 
     property string queryError: ""
+    // Keep quick chat out of search until the feature is enabled again.
+    property bool quickChatEnabled: false
     property bool chatMode: false
     property bool chatPending: false
     property string pendingChatPrompt: ""
@@ -378,6 +380,7 @@ PanelWindow {
         const updated = results.slice();
         for (let incomingIndex = 0; incomingIndex < incoming.length; incomingIndex += 1) {
             const result = incoming[incomingIndex];
+            if (!quickChatEnabled && isChatResult(result)) continue;
             let existingIndex = -1;
             for (let resultIndex = 0; resultIndex < updated.length; resultIndex += 1) {
                 if (updated[resultIndex].resultId === result.resultId) {
@@ -456,6 +459,7 @@ PanelWindow {
     }
 
     function activateChatResult(result) {
+        if (!quickChatEnabled) return;
         const prompt = chatPrompt();
         if (prompt === "")
             return ;
@@ -767,7 +771,7 @@ PanelWindow {
                     visible: searchInput.text === ""
                     color: Theme.muted
                     font.family: Theme.fontFamily; font.pixelSize: Theme.searchInputFontSize
-                    text: root.chatMode ? "Ask a follow-up…" : "Search apps, files, web… or ! to ask AI"
+                    text: root.chatMode ? "Ask a follow-up…" : "Search apps, files, web…"
                     textFormat: Text.PlainText
                     elide: Text.ElideRight
 
@@ -924,7 +928,7 @@ PanelWindow {
 
 
             ActionButton {
-                visible: searchInput.text.trim().startsWith("!") && root.chatPrompt() !== "" && root.queryComplete && root.results.length === 0 && !root.chatMode
+                visible: root.quickChatEnabled && searchInput.text.trim().startsWith("!") && root.chatPrompt() !== "" && root.queryComplete && root.results.length === 0 && !root.chatMode
                 text: "Set up AI in Bingux Settings"
                 iconName: "preferences-system-symbolic"
                 Layout.fillWidth: true

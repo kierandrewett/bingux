@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Wayland
 
 SearchOverlay {
+    quickChatEnabled: true
     id: overlay
     visible: true
     WlrLayershell.namespace: "bingux-ai-test"
