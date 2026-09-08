@@ -22,7 +22,7 @@ use std::{
 
 const METRICS_SOCKET_NAME: &str = "metrics-v1.sock";
 const OSD_SOCKET_NAME: &str = "osd-v2.sock";
-const SAMPLE_INTERVAL: Duration = Duration::from_secs(1);
+const SAMPLE_INTERVAL: Duration = Duration::from_secs(2);
 const MAX_CLIENTS: usize = 16;
 const EVENT_QUEUE_CAPACITY: usize = MAX_CLIENTS * 2 + 8;
 const CLIENT_LISTENER_INITIAL_RETRY_DELAY: Duration = Duration::from_millis(250);
@@ -44,12 +44,16 @@ struct RawSample {
 }
 
 struct Sampler {
+    extra: bingux_statusd::extra::Sampler,
     previous: Option<RawSample>,
 }
 
 impl Sampler {
     fn new() -> Self {
-        Self { previous: None }
+        Self {
+            previous: None,
+            extra: Default::default(),
+        }
     }
 
     fn sample(&mut self) -> io::Result<Metrics> {
@@ -59,10 +63,12 @@ impl Sampler {
             network: read_network_totals()?,
             captured_at: Instant::now(),
         };
+        let extra = self.extra.sample();
         let metrics = if let Some(previous) = &self.previous {
             let elapsed = current.captured_at.duration_since(previous.captured_at);
 
             Metrics {
+                extra,
                 cpu_percent: cpu_percent(previous.cpu, current.cpu),
                 memory_total_bytes: current.memory.total_bytes,
                 memory_used_bytes: current.memory.used_bytes,
@@ -79,6 +85,7 @@ impl Sampler {
             }
         } else {
             Metrics {
+                extra,
                 cpu_percent: None,
                 memory_total_bytes: current.memory.total_bytes,
                 memory_used_bytes: current.memory.used_bytes,
@@ -122,7 +129,7 @@ fn run() -> io::Result<()> {
     let mut sampler = Sampler::new();
     let mut latest_metrics = sampler.sample()?;
     let mut desktop_state = DesktopState::default();
-    let mut latest_record = record_json(latest_metrics, &desktop_state)?;
+    let mut latest_record = record_json(latest_metrics.clone(), &desktop_state)?;
     let mut metrics_clients = Vec::new();
     let mut osd_clients = Vec::new();
     let mut next_sample = Instant::now() + SAMPLE_INTERVAL;
@@ -165,7 +172,7 @@ fn run() -> io::Result<()> {
             }
             Ok(Event::DesktopState(state)) => {
                 desktop_state = state;
-                latest_record = record_json(latest_metrics, &desktop_state)?;
+                latest_record = record_json(latest_metrics.clone(), &desktop_state)?;
                 publish_record(&mut metrics_clients, &latest_record);
             }
             Ok(Event::OsdRequest(request)) => {
@@ -189,7 +196,7 @@ fn publish_sample(
     clients: &mut Vec<UnixStream>,
 ) -> io::Result<()> {
     *latest_metrics = sampler.sample()?;
-    *latest_record = record_json(*latest_metrics, desktop_state)?;
+    *latest_record = record_json(latest_metrics.clone(), desktop_state)?;
     publish_record(clients, latest_record);
     Ok(())
 }
@@ -308,7 +315,15 @@ fn probe_socket(path: &Path) -> io::Result<()> {
 }
 
 fn write_record(client: &mut UnixStream, record: &str) -> bool {
-    client.write_all(record.as_bytes()).is_ok()
+    // A complete process snapshot can exceed one nonblocking socket write.
+    // Bound slow clients, and restore nonblocking mode for disconnect probes.
+    if client.set_nonblocking(false).is_err()
+        || client.set_write_timeout(Some(Duration::from_millis(100))).is_err() {
+        return false;
+    }
+    let written = client.write_all(record.as_bytes()).is_ok();
+    let restored = client.set_nonblocking(true).is_ok();
+    written && restored
 }
 
 fn prune_disconnected_clients(clients: &mut Vec<UnixStream>) {
@@ -373,6 +388,21 @@ mod tests {
         let path = env::temp_dir().join(format!("bingux-statusd-{}-{nonce}", process::id()));
         fs::create_dir(&path).unwrap();
         TestDirectory(path)
+    }
+
+    #[test]
+    fn writes_a_process_snapshot_larger_than_one_socket_buffer() {
+        use std::io::Read;
+        let (mut writer, mut reader) = std::os::unix::net::UnixStream::pair().unwrap();
+        writer.set_nonblocking(true).unwrap();
+        let record = "x".repeat(512 * 1024);
+        let receiving = std::thread::spawn(move || {
+            let mut received = vec![0; 512 * 1024];
+            reader.read_exact(&mut received).unwrap();
+            received
+        });
+        assert!(super::write_record(&mut writer, &record));
+        assert_eq!(receiving.join().unwrap(), record.as_bytes());
     }
 
     #[test]

@@ -1,3 +1,5 @@
+pub mod extra;
+pub mod hardware;
 use serde::Serialize;
 use std::time::Duration;
 
@@ -23,8 +25,9 @@ pub struct NetworkTotals {
 }
 
 /// The complete metrics record sent to each Bingux desktop-shell client.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Metrics {
+    pub extra: extra::ExtraMetrics,
     pub cpu_percent: Option<f64>,
     pub memory_total_bytes: u64,
     pub memory_used_bytes: u64,
@@ -173,13 +176,16 @@ pub struct DesktopState {
 
 /// Encode a newline-delimited JSON metrics record for the local shell socket.
 pub fn metrics_json(metrics: Metrics) -> String {
-    format!(
-        "{{\"protocolVersion\":1,\"type\":\"metrics\",\"cpuPercent\":{},\"memoryTotalBytes\":{},\"memoryUsedBytes\":{},\"networkReceiveBytesPerSecond\":{},\"networkTransmitBytesPerSecond\":{}}}\n",
-        format_optional_number(metrics.cpu_percent),
-        metrics.memory_total_bytes,
-        metrics.memory_used_bytes,
-        format_optional_number(metrics.receive_bytes_per_second),
-        format_optional_number(metrics.transmit_bytes_per_second),
+    with_extra(
+        format!(
+            "{{\"protocolVersion\":1,\"type\":\"metrics\",\"cpuPercent\":{},\"memoryTotalBytes\":{},\"memoryUsedBytes\":{},\"networkReceiveBytesPerSecond\":{},\"networkTransmitBytesPerSecond\":{}}}\n",
+            format_optional_number(metrics.cpu_percent),
+            metrics.memory_total_bytes,
+            metrics.memory_used_bytes,
+            format_optional_number(metrics.receive_bytes_per_second),
+            format_optional_number(metrics.transmit_bytes_per_second),
+        ),
+        metrics.extra,
     )
 }
 
@@ -194,20 +200,33 @@ pub fn metrics_with_desktop_state_json(
     let input_sources = serde_json::to_string(&desktop_state.input_sources)?;
     let current_input_source = serde_json::to_string(&desktop_state.current_input_source)?;
 
-    Ok(format!(
-        "{{\"protocolVersion\":1,\"type\":\"metrics\",\"cpuPercent\":{},\"memoryTotalBytes\":{},\"memoryUsedBytes\":{},\"networkReceiveBytesPerSecond\":{},\"networkTransmitBytesPerSecond\":{},\"desktopStateAvailable\":{},\"inputSources\":{},\"currentInputSource\":{},\"screenSharing\":{},\"microphoneInUse\":{},\"locationInUse\":{}}}\n",
-        format_optional_number(metrics.cpu_percent),
-        metrics.memory_total_bytes,
-        metrics.memory_used_bytes,
-        format_optional_number(metrics.receive_bytes_per_second),
-        format_optional_number(metrics.transmit_bytes_per_second),
-        desktop_state.available,
-        input_sources,
-        current_input_source,
-        desktop_state.privacy.screen_sharing,
-        desktop_state.privacy.microphone_in_use,
-        desktop_state.privacy.location_in_use,
+    Ok(with_extra(
+        format!(
+            "{{\"protocolVersion\":1,\"type\":\"metrics\",\"cpuPercent\":{},\"memoryTotalBytes\":{},\"memoryUsedBytes\":{},\"networkReceiveBytesPerSecond\":{},\"networkTransmitBytesPerSecond\":{},\"desktopStateAvailable\":{},\"inputSources\":{},\"currentInputSource\":{},\"screenSharing\":{},\"microphoneInUse\":{},\"locationInUse\":{}}}\n",
+            format_optional_number(metrics.cpu_percent),
+            metrics.memory_total_bytes,
+            metrics.memory_used_bytes,
+            format_optional_number(metrics.receive_bytes_per_second),
+            format_optional_number(metrics.transmit_bytes_per_second),
+            desktop_state.available,
+            input_sources,
+            current_input_source,
+            desktop_state.privacy.screen_sharing,
+            desktop_state.privacy.microphone_in_use,
+            desktop_state.privacy.location_in_use,
+        ),
+        metrics.extra,
     ))
+}
+
+fn with_extra(mut record: String, extra: extra::ExtraMetrics) -> String {
+    if extra != extra::ExtraMetrics::default() {
+        record.truncate(record.len() - 2);
+        record.push_str(",\"extra\":");
+        record.push_str(&serde_json::to_string(&extra).expect("optional metrics are serializable"));
+        record.push_str("}\n");
+    }
+    record
 }
 
 /// Parse one aggregate CPU accounting sample from `/proc/stat`.
@@ -409,6 +428,7 @@ mod tests {
     #[test]
     fn serialises_a_complete_metrics_record_for_the_shell() {
         let record = metrics_json(Metrics {
+            extra: Default::default(),
             cpu_percent: Some(12.5),
             memory_total_bytes: 16_777_216,
             memory_used_bytes: 12_582_912,
@@ -608,6 +628,7 @@ mod tests {
     fn serialises_gnoblin_state_with_a_metrics_record() {
         let record = metrics_with_desktop_state_json(
             Metrics {
+                extra: Default::default(),
                 cpu_percent: Some(12.5),
                 memory_total_bytes: 16_777_216,
                 memory_used_bytes: 12_582_912,

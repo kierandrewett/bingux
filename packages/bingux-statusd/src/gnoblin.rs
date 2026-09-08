@@ -7,6 +7,13 @@ use zbus::{Connection, Proxy};
 const BUS_NAME: &str = "org.gnoblin.Shell";
 const OBJECT_PATH: &str = "/org/gnoblin/Shell";
 const INTERFACE: &str = "org.gnoblin.Shell";
+// Older installed Gnoblin builds expose OSD on org.gnoblin.Shell, but do not
+// yet expose input-source state there.  The hot-loaded compatibility service
+// intentionally has its own name so we can retain the canonical shell proxy
+// (and its OSD subscription) while sourcing just keyboard state from it.
+const INPUT_SOURCE_BUS_NAME: &str = "org.gnoblin.InputSources";
+const INPUT_SOURCE_OBJECT_PATH: &str = "/org/gnoblin/InputSources";
+const INPUT_SOURCE_INTERFACE: &str = "org.gnoblin.InputSources";
 const INITIAL_RECONNECT_DELAY: Duration = Duration::from_millis(250);
 const MAX_RECONNECT_DELAY: Duration = Duration::from_secs(5);
 // Reject oversized OSD messages before deserialization and bound text-bearing
@@ -59,6 +66,14 @@ async fn subscribe_to_gnoblin(
     let proxy = Proxy::new(&connection, BUS_NAME, OBJECT_PATH, INTERFACE)
         .await
         .map_err(|error| error.to_string())?;
+    let input_source_proxy = Proxy::new(
+        &connection,
+        INPUT_SOURCE_BUS_NAME,
+        INPUT_SOURCE_OBJECT_PATH,
+        INPUT_SOURCE_INTERFACE,
+    )
+    .await
+    .map_err(|error| error.to_string())?;
 
     // Install both subscriptions before reading the initial state. A later
     // relevant signal triggers a complete re-read, so a signal queued during
@@ -71,8 +86,16 @@ async fn subscribe_to_gnoblin(
         .receive_all_signals()
         .await
         .map_err(|error| error.to_string())?;
+    let mut input_source_owner_changes = input_source_proxy
+        .receive_owner_changed()
+        .await
+        .map_err(|error| error.to_string())?;
+    let mut input_source_signals = input_source_proxy
+        .receive_all_signals()
+        .await
+        .map_err(|error| error.to_string())?;
 
-    publish_snapshot(&proxy, sender).await?;
+    publish_snapshot(&proxy, &input_source_proxy, sender).await?;
     *reconnect_delay = INITIAL_RECONNECT_DELAY;
 
     loop {
@@ -84,7 +107,7 @@ async fn subscribe_to_gnoblin(
                             .call_method("Ping", &())
                             .await
                             .map_err(|error| error.to_string())?;
-                        publish_snapshot(&proxy, sender).await?;
+                        publish_snapshot(&proxy, &input_source_proxy, sender).await?;
                     }
                     Some(None) => sender
                         .send(Event::DesktopState(DesktopState::default()))
@@ -98,7 +121,7 @@ async fn subscribe_to_gnoblin(
                 };
 
                 if is_desktop_state_signal(&signal) {
-                    publish_snapshot(&proxy, sender).await?;
+                    publish_snapshot(&proxy, &input_source_proxy, sender).await?;
                 } else if is_osd_signal(&signal)
                     && has_supported_osd_body_size(signal.header().primary().body_len())
                 {
@@ -107,12 +130,35 @@ async fn subscribe_to_gnoblin(
                     }
                 }
             }
+            owner_change = input_source_owner_changes.next().fuse() => {
+                match owner_change {
+                    Some(Some(_)) => publish_snapshot(&proxy, &input_source_proxy, sender).await?,
+                    // The canonical proxy can still provide input sources. Do
+                    // not clear the published desktop state merely because the
+                    // optional compatibility service is being reloaded.
+                    Some(None) => {}
+                    None => return Err("Gnoblin input-source owner stream closed".to_owned()),
+                }
+            }
+            signal = input_source_signals.next().fuse() => {
+                let Some(signal) = signal else {
+                    return Err("Gnoblin input-source signal stream closed".to_owned());
+                };
+
+                if is_input_source_service_signal(&signal) {
+                    publish_snapshot(&proxy, &input_source_proxy, sender).await?;
+                }
+            }
         }
     }
 }
 
-async fn publish_snapshot(proxy: &Proxy<'_>, sender: &SyncSender<Event>) -> Result<(), String> {
-    let state = read_snapshot(proxy).await?;
+async fn publish_snapshot(
+    proxy: &Proxy<'_>,
+    input_source_proxy: &Proxy<'_>,
+    sender: &SyncSender<Event>,
+) -> Result<(), String> {
+    let state = read_snapshot(proxy, input_source_proxy).await?;
     sender
         .send(Event::DesktopState(state))
         .map_err(|_| "desktop-state receiver stopped".to_owned())
@@ -128,42 +174,25 @@ fn publish_osd_request(request: OsdRequestTuple, sender: &SyncSender<Event>) -> 
         .map_err(|_| "OSD receiver stopped".to_owned())
 }
 
-async fn read_snapshot(proxy: &Proxy<'_>) -> Result<DesktopState, String> {
-    let input_sources_reply = proxy
-        .call_method("ListInputSources", &())
-        .await
-        .map_err(|error| error.to_string())?;
-    if input_sources_reply.body().len() > MAX_INPUT_SOURCE_BODY_BYTES {
-        return Err("Gnoblin returned an oversized input source response".to_owned());
-    }
-    let input_sources: Vec<InputSourceTuple> = input_sources_reply
-        .body()
-        .deserialize()
-        .map_err(|error| error.to_string())?;
+async fn read_snapshot(
+    proxy: &Proxy<'_>,
+    input_source_proxy: &Proxy<'_>,
+) -> Result<DesktopState, String> {
+    let (input_sources, current_input_source) = match read_input_sources(proxy).await {
+        Ok(snapshot) => snapshot,
+        Err(error) if is_unknown_method(&error) => read_input_sources(input_source_proxy)
+            .await
+            .map_err(|error| error.to_string())?,
+        Err(error) => return Err(error.to_string()),
+    };
 
-    let current_input_source_reply = proxy
-        .call_method("GetCurrentInputSource", &())
-        .await
-        .map_err(|error| error.to_string())?;
-    if current_input_source_reply.body().len() > MAX_INPUT_SOURCE_BODY_BYTES {
-        return Err("Gnoblin returned an oversized input source response".to_owned());
-    }
-    let current_input_source: InputSourceTuple = current_input_source_reply
-        .body()
-        .deserialize()
-        .map_err(|error| error.to_string())?;
-
-    let privacy_reply = proxy
-        .call_method("GetPrivacyState", &())
-        .await
-        .map_err(|error| error.to_string())?;
-    if privacy_reply.body().len() > MAX_INPUT_SOURCE_BODY_BYTES {
-        return Err("Gnoblin returned an oversized desktop-state response".to_owned());
-    }
-    let (screen_sharing, microphone_in_use, location_in_use): (bool, bool, bool) = privacy_reply
-        .body()
-        .deserialize()
-        .map_err(|error| error.to_string())?;
+    let privacy = match read_privacy_state(proxy).await {
+        Ok(privacy) => privacy,
+        // Privacy did not exist on the older installed Gnoblin snapshot. Do
+        // not hide working input-source state for that one, known omission.
+        Err(error) if is_unknown_method(&error) => PrivacyState::default(),
+        Err(error) => return Err(error.to_string()),
+    };
 
     if !input_sources_are_valid(&input_sources)
         || !input_source_tuple_is_valid(&current_input_source)
@@ -175,12 +204,49 @@ async fn read_snapshot(proxy: &Proxy<'_>) -> Result<DesktopState, String> {
         available: true,
         input_sources: input_sources.into_iter().map(input_source).collect(),
         current_input_source: input_source_or_none(current_input_source),
-        privacy: PrivacyState {
-            screen_sharing,
-            microphone_in_use,
-            location_in_use,
-        },
+        privacy,
     })
+}
+
+async fn read_input_sources(
+    proxy: &Proxy<'_>,
+) -> Result<(Vec<InputSourceTuple>, InputSourceTuple), zbus::Error> {
+    let input_sources_reply = proxy.call_method("ListInputSources", &()).await?;
+    if input_sources_reply.body().len() > MAX_INPUT_SOURCE_BODY_BYTES {
+        return Err(zbus::Error::ExcessData);
+    }
+    let input_sources: Vec<InputSourceTuple> = input_sources_reply.body().deserialize()?;
+
+    let current_input_source_reply = proxy.call_method("GetCurrentInputSource", &()).await?;
+    if current_input_source_reply.body().len() > MAX_INPUT_SOURCE_BODY_BYTES {
+        return Err(zbus::Error::ExcessData);
+    }
+    let current_input_source: InputSourceTuple = current_input_source_reply.body().deserialize()?;
+
+    Ok((input_sources, current_input_source))
+}
+
+async fn read_privacy_state(proxy: &Proxy<'_>) -> Result<PrivacyState, zbus::Error> {
+    let privacy_reply = proxy.call_method("GetPrivacyState", &()).await?;
+    if privacy_reply.body().len() > MAX_INPUT_SOURCE_BODY_BYTES {
+        return Err(zbus::Error::ExcessData);
+    }
+    let (screen_sharing, microphone_in_use, location_in_use): (bool, bool, bool) =
+        privacy_reply.body().deserialize()?;
+
+    Ok(PrivacyState {
+        screen_sharing,
+        microphone_in_use,
+        location_in_use,
+    })
+}
+
+fn is_unknown_method(error: &zbus::Error) -> bool {
+    matches!(
+        error,
+        zbus::Error::MethodError(name, _, _)
+            if name.as_str() == "org.freedesktop.DBus.Error.UnknownMethod"
+    )
 }
 
 fn osd_request_from_tuple(request: OsdRequestTuple) -> Option<OsdRequest> {
@@ -252,6 +318,14 @@ fn is_desktop_state_signal(signal: &zbus::Message) -> bool {
     is_desktop_state_signal_name(signal.header().member().as_ref().map(|name| name.as_str()))
 }
 
+fn is_input_source_service_signal(signal: &zbus::Message) -> bool {
+    is_input_source_service_signal_name(signal.header().member().as_ref().map(|name| name.as_str()))
+}
+
+fn is_input_source_service_signal_name(name: Option<&str>) -> bool {
+    matches!(name, Some("InputSourceChanged" | "InputSourcesChanged"))
+}
+
 fn is_desktop_state_signal_name(name: Option<&str>) -> bool {
     matches!(
         name,
@@ -263,8 +337,8 @@ fn is_desktop_state_signal_name(name: Option<&str>) -> bool {
 mod tests {
     use super::{
         InputSourceTuple, input_source_or_none, input_source_tuple_is_valid,
-        input_sources_are_valid, is_desktop_state_signal_name, is_osd_signal_name,
-        osd_request_from_tuple,
+        input_sources_are_valid, is_desktop_state_signal_name, is_input_source_service_signal_name,
+        is_osd_signal_name, osd_request_from_tuple,
     };
 
     #[test]
@@ -356,6 +430,21 @@ mod tests {
         assert!(is_desktop_state_signal_name(Some("PrivacyStateChanged")));
         assert!(!is_desktop_state_signal_name(Some("SuperReleased")));
         assert!(!is_desktop_state_signal_name(None));
+    }
+
+    #[test]
+    fn recognises_only_input_source_compatibility_service_signals() {
+        assert!(is_input_source_service_signal_name(Some(
+            "InputSourceChanged"
+        )));
+        assert!(is_input_source_service_signal_name(Some(
+            "InputSourcesChanged"
+        )));
+        assert!(!is_input_source_service_signal_name(Some(
+            "PrivacyStateChanged"
+        )));
+        assert!(!is_input_source_service_signal_name(Some("OsdRequested")));
+        assert!(!is_input_source_service_signal_name(None));
     }
 
     fn empty_input_source() -> InputSourceTuple {
