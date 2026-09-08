@@ -397,8 +397,8 @@ ShellRoot {
                 Accessible.role: Accessible.Button
                 Keys.onReturnPressed: calendarPopup.visible = !calendarPopup.visible
                 Keys.onSpacePressed: calendarPopup.visible = !calendarPopup.visible
-                Text { id: clockLabel; text: root.currentTime.toLocaleDateString(Qt.locale(), "ddd d MMM"); color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize; font.weight: Font.DemiBold }
-                Text { id: timeLabel; text: root.currentTime.toLocaleTimeString(Qt.locale(), "hh:mm:ss"); color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize; font.weight: Font.DemiBold; font.features: ({"tnum": 1}) }
+                RollingNumber { id: clockLabel; text: root.currentTime.toLocaleDateString(Qt.locale(), "ddd d MMM"); value: root.currentTime.getTime(); pixelSize: Theme.fontSize; fontWeight: Font.DemiBold }
+                RollingNumber { id: timeLabel; text: root.currentTime.toLocaleTimeString(Qt.locale(), "hh:mm:ss"); value: root.currentTime.getTime(); pixelSize: Theme.fontSize; fontWeight: Font.DemiBold }
                 MouseArea { id: clockMouse; parent: clockPill; anchors.fill: parent; hoverEnabled: true; onClicked: calendarPopup.visible = !calendarPopup.visible }
             }
             Item {
