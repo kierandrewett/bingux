@@ -138,7 +138,9 @@ ShellPopup {
         ScriptAction { script: root.syncAgenda() }
         NumberAnimation { target: root; property: "agendaProgress"; to: 1; duration: Theme.reducedMotion ? 0 : 120; easing.type: Easing.OutCubic }
     }
-    onDayEventsChanged: Qt.callLater(updateAgenda)
+    // The pending refresh belongs to this view and is cancelled with it.
+    Timer { id: agendaUpdate; interval: 0; onTriggered: root.updateAgenda() }
+    onDayEventsChanged: agendaUpdate.restart()
     function syncAgenda() {
         presentedEvents = dayEvents;
         agendaDate = selectedDate;
