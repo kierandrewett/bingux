@@ -23,7 +23,7 @@ with tempfile.TemporaryDirectory(prefix='sidebar-fullscreen-') as directory:
                       + 'echo $? > ' + shlex.quote(str(root / 'exit')) + '\nswaymsg exit\n')
     runner.chmod(0o755)
     config = root / 'config'
-    config.write_text('output * mode 640x480\nexec ' + shlex.quote(str(runner)) + '\n')
+    config.write_text('output * mode 1280x800\nexec ' + shlex.quote(str(runner)) + '\n')
     with (root / 'sway.log').open('w') as log:
         subprocess.run(['dbus-run-session', '--', 'sway', '-c', str(config)], env=env,
                        stdout=log, stderr=log, timeout=30, check=True)

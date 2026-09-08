@@ -16,6 +16,45 @@ ShellRoot {
     TestCase {
         property string checks: ""
         when: app.visible
+        function test_drag_width() {
+            sidebar.selectContent("notes");
+            sidebar.open();
+            wait(400);
+            const initial = sidebar.rightInset;
+            sidebar.beginGesture(1000, 400, 400);
+            sidebar.updateGesture(1000 + initial - 300, 400);
+            wait(30);
+            checks += "Resize width " + sidebar.contentItem.width + " inset " + sidebar.rightInset + "\n";
+            compare(sidebar.contentItem.width, 300);
+            compare(sidebar.rightInset, 300);
+            sidebar.updateGesture(1000 + initial - 200, 400);
+            wait(30);
+            checks += "Slide width " + sidebar.contentItem.width + " inset " + sidebar.rightInset + "\n";
+            compare(sidebar.contentItem.width, 250);
+            compare(sidebar.rightInset, 200);
+            sidebar.updateGesture(1000 + initial - 100, 400);
+            wait(30);
+            checks += "Slide width " + sidebar.contentItem.width + " inset " + sidebar.rightInset + "\n";
+            compare(sidebar.contentItem.width, 250);
+            compare(sidebar.rightInset, 100);
+            sidebar.updateGesture(1000 + initial - 200, 400);
+            wait(30);
+            checks += "Slide width " + sidebar.contentItem.width + " inset " + sidebar.rightInset + "\n";
+            compare(sidebar.contentItem.width, 250);
+            sidebar.finishGesture(false);
+            wait(400);
+            wait(30);
+            checks += "Slide width " + sidebar.contentItem.width + " inset " + sidebar.rightInset + "\n";
+            compare(sidebar.contentItem.width, 250);
+            compare(sidebar.rightInset, 250);
+            sidebar.beginGesture(1000, 400, 400);
+            sidebar.updateGesture(1160, 400);
+            sidebar.finishGesture(false);
+            wait(400);
+            compare(sidebar.opened, false);
+            compare(sidebar.rightInset, 0);
+            checks += "250px minimum, sliding, reversal, release and close passed\n";
+        }
         function test_fullscreen() {
             sidebar.selectContent("notes");
             sidebar.open();
@@ -36,12 +75,12 @@ ShellRoot {
             checks += "Sensor visible " + sensor.visible + " width " + sensor.width + "\n";
             verify(sensor.visible);
             compare(sensor.width, 2);
-            mouseMove(sensor.contentItem, 1, 240);
-            mousePress(sensor.contentItem, 1, 240);
+            mouseMove(sensor.contentItem, 1, 400);
+            mousePress(sensor.contentItem, 1, 400);
             checks += "Gesture " + sidebar.gestureActive + " pointer " + sidebar.pointerPosition + "\n";
             verify(sidebar.gestureActive);
-            mouseMove(sensor.contentItem, -179, 240);
-            mouseRelease(sensor.contentItem, -179, 240);
+            mouseMove(sensor.contentItem, -179, 400);
+            mouseRelease(sensor.contentItem, -179, 400);
             checks += "Dragged: " + sidebar.opened + "\n";
             tryCompare(sidebar, "opened", true);
             wait(300);
