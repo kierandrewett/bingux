@@ -3,8 +3,8 @@
 import os
 from pathlib import Path
 import shutil
-import subprocess
 import tempfile
+from private_shell import run_reported_shell
 
 repo = Path(__file__).resolve().parent.parent
 if not os.environ.get('WAYLAND_DISPLAY', '').startswith('gnoblin-gs-'):
@@ -19,14 +19,7 @@ with tempfile.TemporaryDirectory(prefix='bingux-customise-') as directory:
     environment = os.environ | {'QT_QPA_PLATFORM': 'wayland', 'XDG_CONFIG_HOME': str(fixture / 'config'),
         'PATH': str(fixture / 'bin') + ':' + os.environ['PATH']}
     environment.pop('BINGUX_SETTINGS_HELPER', None)
-    try:
-        result = subprocess.run([os.environ.get('QS_TEST_BIN', 'qs'), '-p', str(fixture), '--no-color'], env=environment,
-            capture_output=True, text=True, timeout=30)
-    except subprocess.TimeoutExpired as error:
-        print((error.stdout or b" ").decode() if isinstance(error.stdout, bytes) else error.stdout)
-        print((error.stderr or b" ").decode() if isinstance(error.stderr, bytes) else error.stderr)
-        raise
-    output = result.stdout + result.stderr
+    report, output = run_reported_shell(fixture, environment, 'BINGUX_CUSTOMISE_REPORT')
     print(output)
-    if 'CUSTOMISE_TEST_FAILED' in output or result.returncode or 'DESKTOP_CUSTOMISE_PASS' not in output or any(error in output for error in ('ReferenceError', 'TypeError', 'Binding loop', 'FAIL!')):
+    if 'CUSTOMISE_TEST_FAILED' in output or report != 'PASS' or 'DESKTOP_CUSTOMISE_PASS' not in output or any(error in output for error in ('ReferenceError', 'TypeError', 'Binding loop', 'FAIL!', 'has crashed')):
         raise SystemExit(1)

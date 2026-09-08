@@ -163,7 +163,7 @@ ShellRoot {
             const small = findChild(cards.find(item => item.notificationId === 501), "notificationImagePreview");
             const large = findChild(cards.find(item => item.notificationId === 502), "notificationImagePreview");
             equal(small.width, 40, "profile image remains avatar-sized in mixed stack");
-            check(large.width > 40 && large.height > 40, "screenshot retains its large preview");
+            tryVerify(() => large.width > 40 && large.height > 40, 5000, "screenshot retains its large preview after its image loads");
             actionable.actions = actionable.actions.concat([{identifier: "save", text: "Save", invoke: () => {}}]);
             wait(250);
             check(findChild(actionCard, "notificationAction_save") !== null, "live action updates appear without replacing the card");
@@ -239,7 +239,7 @@ ShellRoot {
             results.setText(checks + "FAILURES " + qtest_results.failCount);
             centre.visible = false;
             history.visible = false;
-            quitAfterUnmap.start();
+            if (!Quickshell.env("BINGUX_CONTROL_TEST_NO_QUIT")) quitAfterUnmap.start();
         }
     }
 }

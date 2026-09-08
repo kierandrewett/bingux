@@ -3,6 +3,7 @@ import QtTest
 import Quickshell
 import Quickshell.Io
 ShellRoot {
+    FileView { id: report; path: Quickshell.env("BINGUX_CUSTOMISE_REPORT") }
     BinguxSettings { id: settings; visible: true }
     TestCase {
         id: test
@@ -62,8 +63,8 @@ ShellRoot {
             compare(settings.draft.desktop.dockSize, 40);
             compare(settings.draft.desktop.dockAlignment, 'left');
             console.log('DESKTOP_CUSTOMISE_PASS');
-            } catch (error) { console.error("CUSTOMISE_TEST_FAILED", error.message, error.stack); }
+            report.setText('PASS');
+            } catch (error) { console.error("CUSTOMISE_TEST_FAILED", error.message, error.stack); report.setText('FAIL ' + error.stack); }
         }
-        function cleanupTestCase() { Qt.quit(); }
     }
 }
