@@ -9,6 +9,7 @@ Item {
     property string iconName: ""
     property string trailingIcon: ""
     property string tooltip: ""
+    property var presentation: null
     property bool filled: false
     property bool interactive: false
     property bool reorderable: false
@@ -18,7 +19,7 @@ Item {
     readonly property bool pressed: mouse.pressed
     signal clicked()
     implicitHeight: Theme.barHeight
-    implicitWidth: row.implicitWidth + Theme.activityIndicatorPadding * 2
+    implicitWidth: (presentation?.custom ? customFace.implicitWidth : row.implicitWidth) + Theme.activityIndicatorPadding * 2
     activeFocusOnTab: interactive
     Accessible.role: interactive ? Accessible.Button : Accessible.StaticText
     Accessible.name: tooltip
@@ -41,6 +42,7 @@ Item {
     }
     RowLayout {
         id: row
+        visible: !root.presentation?.custom
         anchors.centerIn: parent
         spacing: Theme.spaceSmall
         SymbolicIcon {
@@ -81,6 +83,7 @@ Item {
             }
         }
     }
+    WidgetFace { id: customFace; anchors.centerIn: parent; visible: !!root.presentation?.custom; presentation: root.presentation }
     MouseArea {
         id: mouse
         anchors.fill: parent

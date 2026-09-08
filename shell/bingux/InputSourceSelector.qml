@@ -11,6 +11,7 @@ Item {
     required property string gnoblinCtlPath
     property alias menuOpen: inputMenu.visible
     property bool shortcutsEnabled: true
+    property var presentation: null
     signal opening()
     property bool cycling: false
     property var pendingSource: null
@@ -131,7 +132,7 @@ Item {
         selectSource(sources[selectedIndex]);
     }
 
-    implicitWidth: Math.max(Theme.barIconTarget, labelWidth + Theme.barPrimaryPadding * 2)
+    implicitWidth: Math.max(Theme.barIconTarget, (presentation?.custom ? customFace.implicitWidth : labelWidth) + Theme.barPrimaryPadding * 2)
     readonly property real labelWidth: sources.reduce((width, source) => Math.max(width, Math.ceil(labelMetrics.boundingRect(source.shortName || source.id).width)), Math.ceil(labelMetrics.boundingRect("--").width))
     FontMetrics { id: labelMetrics; font: inputLabel.font }
     implicitHeight: Theme.barHeight
@@ -165,6 +166,7 @@ Item {
 
     AnimatedCount {
         id: inputLabel
+        visible: !root.presentation?.custom
         objectName: "keyboardLayoutLabel"
         anchors.centerIn: parent
         width: root.labelWidth
@@ -175,6 +177,7 @@ Item {
         font.pixelSize: Theme.fontSize
         font.weight: Font.DemiBold
     }
+    WidgetFace { id: customFace; anchors.centerIn: parent; visible: !!root.presentation?.custom; presentation: root.presentation }
 
     MouseArea {
         id: selectorMouse
