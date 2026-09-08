@@ -325,6 +325,15 @@ in
                 };
             };
 
+            # Applications can request notifications before the shell starts.
+            # Activate Bingux instead of an installed fallback such as Mako.
+            xdg.dataFile."dbus-1/services/org.freedesktop.Notifications.service".text = ''
+                [D-BUS Service]
+                Name=org.freedesktop.Notifications
+                Exec=${lib.getExe cfg.package} -c ${cfg.configName}
+                SystemdService=quickshell.service
+            '';
+
             dconf.settings."org/gnoblin/shell".disabled-features = [
                 "notifications"
                 "osd"
@@ -363,6 +372,8 @@ in
             # owns its lifecycle so a daemon restart cannot remove the other
             # daemon's socket.
             systemd.user.services = {
+                quickshell.Service.Type = lib.mkForce "dbus";
+                quickshell.Service.BusName = "org.freedesktop.Notifications";
                 # User-systemd does not always import the session's Qt platform
                 # selection before graphical-session.target. Select Wayland
                 # explicitly so Qt does not attempt an unavailable X11 backend.
