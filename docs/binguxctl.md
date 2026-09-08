@@ -190,3 +190,44 @@ means the request was accepted, not that the backend completed it. Inspect
 Network and desktop-service status include `busy` and `error`. Bluetooth
 reports each device's connection state. Commands never retry an operation
 when the connection closes or its result is uncertain.
+
+## Applications, keyboard sources and control visibility
+
+```sh
+binguxctl apps list
+binguxctl apps list "Text Editor"
+binguxctl apps launch org.gnome.Nautilus
+binguxctl apps launch org.gnome.Nautilus --new-window
+binguxctl keyboard list
+binguxctl keyboard select xkb gb
+binguxctl controls list
+binguxctl controls show nightLight
+binguxctl controls hide awake
+binguxctl vpn list
+binguxctl vpn connect tailscale
+binguxctl vpn disconnect tailscale
+```
+
+`apps list` returns installed applications in name order. Its optional search
+text matches app IDs, names and generic names, without case sensitivity.
+`apps launch` requires an exact listed ID; the `.desktop` suffix is optional.
+It uses the dock's launch feedback and works for apps outside the dock.
+`--new-window` requests the app's `new-window` desktop action when one exists,
+otherwise it performs a normal launch. The app decides whether that creates
+another window. A pending response confirms dispatch, not a successfully
+opened window.
+
+`keyboard list` returns configured sources with `type`, `id`, `name` and
+`selected`, plus `ready`, `busy` and `error`. Selection requires both the type
+and ID because an XKB layout and an IBus engine can have the same ID. It uses
+the same source-selection operation as the top bar without opening its menu.
+
+`controls list` reports each optional button's availability and visibility.
+`show` and `hide` save the control-centre preference. They do not change the
+underlying setting: showing Night Light does not enable it. Unsupported
+controls and preferences that have not loaded yet return errors.
+
+`vpn list` and `vpn status` return the control centre's known connections,
+including Mullvad, Tailscale and saved NetworkManager VPNs when available.
+Connect and disconnect require an exact returned ID and respect the backend's
+availability and busy state. Use `vpn status` to check completion and errors.
