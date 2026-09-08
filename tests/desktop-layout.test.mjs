@@ -30,3 +30,18 @@ test("palette removal and same-zone reordering preserve all remaining widgets", 
     assert.equal(current.sidebar[0], "notes");
     assert.equal(current.sidebar.length, 6);
 });
+test("presentation preserves native defaults and supports container inheritance and widget overrides", () => {
+    const native = layout.presentation({}, "clock", "top-center", "12:30", "clock", false, true);
+    assert.equal(native.custom, false);
+    assert.equal(native.showIcon, false);
+    assert.equal(native.showText, true);
+    const desktop = {containers: {dock: {display: "text"}}, widgetOptions: {clock: {display: "inherit", label: "Time"}}};
+    let face = layout.presentation(desktop, "clock", "dock", "12:30", "clock", false, true);
+    assert.equal(face.label, "Time"); assert.equal(face.showIcon, false); assert.equal(face.showText, true);
+    desktop.widgetOptions.clock = {display: "icons", icon: "starred-symbolic"};
+    face = layout.presentation(desktop, "clock", "dock", "12:30", "clock", false, true);
+    assert.equal(face.icon, "starred-symbolic"); assert.equal(face.showIcon, true); assert.equal(face.showText, false);
+    desktop.widgetOptions.clock.display = "native";
+    face = layout.presentation(desktop, "clock", "dock", "12:30", "clock", false, true);
+    assert.equal(face.showIcon, false); assert.equal(face.showText, true);
+});

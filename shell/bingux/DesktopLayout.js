@@ -26,6 +26,15 @@ const controlWidgets = [
     {id: "control-awake", label: "Keep Awake", icon: "display-brightness-symbolic"}
 ];
 function controlOrder() { return controlWidgets.map(item => item.id.slice(8)); }
+function presentation(desktop, id, container, label, icon, nativeIcon, nativeText) {
+    const options = desktop.widgetOptions?.[id] || {};
+    const inherited = desktop.containers?.[container]?.display || "native";
+    const mode = !options.display || options.display === "inherit" ? inherited : options.display;
+    return {mode, label: options.label || label, icon: options.icon || icon, labelOverridden: !!options.label, iconOverridden: !!options.icon,
+        showIcon: mode === "native" ? nativeIcon : mode !== "text",
+        showText: mode === "native" ? nativeText : mode !== "icons",
+        custom: mode !== "native" || !!options.label || !!options.icon};
+}
 function defaults() {
     return {"top-left": ["search"], "top-center": ["clock"],
         "top-right": ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications"],
