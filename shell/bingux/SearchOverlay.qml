@@ -242,9 +242,11 @@ PanelWindow {
         });
     }
 
-    function toggleSearch() { if (visible && !closing) closeSearch(); else showSearch(); }
+    property bool chromeRevealed: false
+    function toggleSearch() { if (visible && !closing) closeSearch(false, true); else showSearch(); }
 
     function showSearch() {
+        chromeRevealed = true;
         browserFocus.cancel();
         webFocusOnClose = "";
         launchEffect.cancel();
@@ -268,7 +270,8 @@ PanelWindow {
         Qt.callLater(() => { if (root.acceptingKeyboard) inputHandoff.send({op: "shortcut-input", name: "search", state: "ready"}); });
     }
 
-    function closeSearch(keepLaunchFeedback = false) {
+    function closeSearch(keepLaunchFeedback = false, keepChrome = false) {
+        if (!keepChrome) chromeRevealed = false;
         inputHandoff.send({op: "shortcut-input", name: "search", state: "closed"});
         if (!visible || closing)
             return ;

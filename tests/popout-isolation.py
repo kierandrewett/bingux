@@ -39,25 +39,37 @@ import Meta from 'gi://Meta';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 export default function enable(api) {
  const keyboard = global.stage.context.get_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+ const pointer = global.stage.context.get_backend().get_default_seat().create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
  const settings = new Gio.Settings({schema_id: 'org.gnome.desktop.wm.keybindings'});
  for (const key of ['switch-applications', 'switch-applications-backward', 'switch-windows', 'switch-windows-backward']) settings.set_strv(key, []);
+ const motion = {};
  const windows = () => global.display.list_all_windows();
  const impl = Gio.DBusExportedObject.wrapJSObject(`<node><interface name="org.gnoblin.PopoutTest">
  <method name="Key"><arg type="u" direction="in"/><arg type="b" direction="in"/></method>
+ <method name="Click"><arg type="u" direction="in"/><arg type="u" direction="in"/><arg type="u" direction="in"/></method>
+ <method name="Move"><arg type="u" direction="in"/><arg type="u" direction="in"/></method>
+ <method name="ResetMotion"/>
+ <method name="Pointer"><arg type="s" direction="out"/></method>
  <method name="State"><arg type="s" direction="out"/></method>
  <method name="Focus"><arg type="s" direction="in"/></method>
+ <method name="Unfullscreen"><arg type="s" direction="in"/></method>
  <method name="Fullscreen"><arg type="s" direction="in"/></method>
  </interface></node>`, {
  Key(code, down) { keyboard.notify_key(GLib.get_monotonic_time(), code, down ? Clutter.KeyState.PRESSED : Clutter.KeyState.RELEASED); },
+ Move(x, y) { pointer.notify_absolute_motion(GLib.get_monotonic_time(), x, y); },
+ Click(x, y, button) { GLib.timeout_add(GLib.PRIORITY_DEFAULT, 40, () => { pointer.notify_button(GLib.get_monotonic_time(), button, Clutter.ButtonState.PRESSED); GLib.timeout_add(GLib.PRIORITY_DEFAULT, 30, () => { pointer.notify_button(GLib.get_monotonic_time(), button, Clutter.ButtonState.RELEASED); return GLib.SOURCE_REMOVE; }); return GLib.SOURCE_REMOVE; }); },
  Focus(title) { Main.activateWindow(windows().find(w => w.title === title), global.get_current_time()); },
+ Unfullscreen(title) { windows().find(w => w.title === title).unmake_fullscreen(); },
  Fullscreen(title) { windows().find(w => w.title === title).make_fullscreen(); },
- State() { return JSON.stringify({focus: global.display.focus_window?.title,
+ ResetMotion() { for (const actor of global.get_window_actors()) { const name=Meta.gnoblin_layer_namespace(actor.meta_window); if (!['bingux-top-bar','bingux-dock'].includes(name)) continue; motion[name]=[]; actor.connect('notify::translation-y', () => motion[name].push(actor.translation_y)); } },
+ Pointer() { const [x,y] = global.get_pointer(); let a = global.stage.get_actor_at_pos(Clutter.PickMode.REACTIVE,x,y); while(a && !a.meta_window) a=a.get_parent(); return JSON.stringify({x,y,picked:a?.meta_window ? Meta.gnoblin_layer_namespace(a.meta_window):null}); },
+ State() { return JSON.stringify({motion, panels: global.get_window_actors().filter(a => ['bingux-top-bar','bingux-dock'].includes(Meta.gnoblin_layer_namespace(a.meta_window))).map(a => ({name: Meta.gnoblin_layer_namespace(a.meta_window), offset: a.translation_y})), focus: global.display.focus_window?.title,
   windows: windows().map(w => ({title: w.title, fullscreen: w.is_fullscreen()})),
   order: global.window_group.get_children().filter(a => a.meta_window && a.visible).map(a => Meta.gnoblin_layer_namespace(a.meta_window) || a.meta_window.title)}); }
  });
  impl.export(Gio.DBus.session, '/org/gnoblin/PopoutTest');
  const name = Gio.bus_own_name(Gio.BusType.SESSION, 'org.gnoblin.PopoutTest', Gio.BusNameOwnerFlags.NONE, null, null, null);
- api._disposers.push(() => { impl.unexport(); Gio.bus_unown_name(name); keyboard.run_dispose(); });
+ api._disposers.push(() => { impl.unexport(); Gio.bus_unown_name(name); keyboard.run_dispose(); pointer.run_dispose(); });
 }
 ''')
 
@@ -71,7 +83,7 @@ def state():
     return json.loads(native('State')[0])
 
 def ipc(target, action='status'):
-    return json.loads(run(ctl + [target, action]) or '{}')
+    return json.loads(run(ctl + ([target] if target == 'status' else [target, action])) or '{}')
 
 def wait(predicate, message, timeout=5):
     end = time.monotonic() + timeout
@@ -83,14 +95,23 @@ def wait(predicate, message, timeout=5):
         except (subprocess.SubprocessError, json.JSONDecodeError):
             pass
         time.sleep(.04)
-    raise AssertionError((message, state(), last))
+    run(['grim', '/tmp/popout-failure.png'])
+    raise AssertionError((message, state(), last, native('Pointer')))
 
 def key(code, down): native('Key', code, 'true' if down else 'false')
 def tap(code): key(code, True); key(code, False)
+def click(x, y, button):
+    def move_to_target():
+        native('Move', x, y)
+        p = json.loads(native('Pointer')[0])
+        return p['x'] == x and p['y'] == y
+    wait(move_to_target, 'pointer reaches click target')
+    time.sleep(.15)
+    native('Click', x, y, button)
 
 def companions_above_fullscreen():
     order = state()['order']
-    return all(name in order for name in ['Popout Fullscreen', 'bingux-top-bar', 'bingux-dock', 'bingux-search']) and all(order.index('Popout Fullscreen') < order.index(name) < order.index('bingux-search') for name in ['bingux-top-bar', 'bingux-dock'])
+    return all(name in order for name in ['Popout Fullscreen', 'bingux-top-bar', 'bingux-dock', 'bingux-search']) and all(order.index('Popout Fullscreen') < order.index('bingux-search') < order.index(name) for name in ['bingux-top-bar', 'bingux-dock'])
 
 run([str(gnoblin / 'src/tools/gnoblinctl'), 'reload-config'])
 run([str(gnoblin / 'src/tools/gnoblinctl'), 'reload-scripts'])
@@ -129,12 +150,70 @@ try:
     native('Fullscreen', 'Popout Fullscreen')
     wait(lambda: any(w['title'] == 'Popout Fullscreen' and w['fullscreen'] for w in state()['windows']), 'fullscreen')
     time.sleep(.5)
+    # A fresh fullscreen transition ends the persistent Super reveal.
+    for hide_search in (False, True):
+        native('Unfullscreen', 'Popout Fullscreen')
+        wait(lambda: not next(w for w in state()['windows'] if w['title'] == 'Popout Fullscreen')['fullscreen'], 'leave fullscreen')
+        tap(125)
+        wait(lambda: ipc('search').get('acceptingKeyboard'), 'reveal before fullscreen')
+        if hide_search:
+            tap(125)
+            wait(lambda: 'bingux-search-chrome' in state()['order'], 'search hidden but chrome revealed')
+        native('Fullscreen', 'Popout Fullscreen')
+        wait(lambda: not ipc('search').get('visible') and 'bingux-search-chrome' not in state()['order'], 'fullscreen resets reveal')
+        wait(lambda: all(state()['order'].index(panel) < state()['order'].index('Popout Fullscreen') for panel in ('bingux-top-bar', 'bingux-dock')), 'fullscreen hides both panels again')
+    tap(125)
+    wait(lambda: ipc('search').get('acceptingKeyboard'), 'search before returning to video')
+    tap(125)
+    wait(lambda: 'bingux-search-chrome' in state()['order'], 'chrome only before video click')
+    native('ResetMotion')
+    click(640, 400, 1)
+    wait(lambda: (lambda motion: any(y < 0 for y in motion.get('bingux-top-bar', [])) and any(y > 0 for y in motion.get('bingux-dock', [])))(state()['motion']), 'panels slide toward opposite screen edges')
+    wait(lambda: 'bingux-search-chrome' not in state()['order'], 'video click dismisses chrome')
+    wait(lambda: all(state()['order'].index(panel) < state()['order'].index('Popout Fullscreen') for panel in ('bingux-top-bar', 'bingux-dock')), 'video click hides both panels')
+    # Real clicks must reach the visible panels, not the search dismiss area.
+    tap(125)
+    wait(lambda: ipc('search').get('acceptingKeyboard'), 'search before bar click')
+    time.sleep(.25)
+    click(640, 16, 1)
+    wait(lambda: ipc('status').get('calendar'), 'clock click opens calendar above fullscreen')
+    run(ctl + ['calendar', 'close'])
+    wait(lambda: not ipc('search').get('visible'), 'calendar closes search')
+    tap(125)
+    wait(lambda: ipc('search').get('acceptingKeyboard'), 'search before dock click')
+    time.sleep(.25)
+    click(640, 748, 3)
+    wait(lambda: 'gnoblin-shell-popup' in state()['order'], 'dock right click opens app menu above fullscreen')
+    wait(lambda: not ipc('search').get('visible'), 'dock interaction releases search keyboard focus')
+    tap(1)
+    wait(lambda: 'gnoblin-shell-popup' not in state()['order'], 'Escape closes dock menu')
+    run(ctl + ['search', 'close'])
+    wait(lambda: not ipc('search').get('visible'), 'close search after panel clicks')
+    native('Focus', 'Popout Other')
+    native('Focus', 'Popout Fullscreen')
+    # Repeated Super presses hide only search and preserve clickable chrome.
+    for attempt in range(2):
+        tap(125)
+        wait(lambda: ipc('search').get('acceptingKeyboard'), 'Super restores search')
+        tap(125)
+        wait(lambda: not ipc('search').get('visible'), 'second Super hides search')
+        wait(lambda: 'bingux-search-chrome' in state()['order'] and state()['order'].index('bingux-top-bar') > state()['order'].index('Popout Fullscreen'), 'chrome remains above fullscreen')
+    click(640, 16, 1)
+    wait(lambda: ipc('status').get('calendar'), 'clock remains clickable without search')
+    run(ctl + ['calendar', 'close'])
+    wait(lambda: 'gnoblin-shell-popup' not in state()['order'], 'calendar finishes closing')
+    click(640, 748, 3)
+    wait(lambda: 'gnoblin-shell-popup' in state()['order'], 'dock remains clickable without search')
+    tap(1)
+    run(ctl + ['search', 'close'])
+    native('Focus', 'Popout Other')
+    native('Focus', 'Popout Fullscreen')
     # Stop only the main UI process. Both popouts must still handle real keys.
     main.send_signal(signal.SIGSTOP)
     for attempt in range(3):
         tap(125)
         wait(lambda: ipc('search').get('acceptingKeyboard'), 'Super opens search with frozen desktop')
-        wait(companions_above_fullscreen, 'both panels above fullscreen and below search')
+        wait(companions_above_fullscreen, 'both panels above search and fullscreen')
         if attempt == 0:
             run(['grim', '/tmp/bingux-popout-fullscreen.png'])
         tap(1)
@@ -196,7 +275,7 @@ try:
     key(56, True); tap(15); tap(1); key(56, False)
     time.sleep(.15)
     assert state()['focus'] == previous, 'fallback Escape changed focus'
-    print('PASS: Super and Alt+Tab during desktop SIGSTOP and exit; fullscreen panel reveal/restoration; fallback with frozen and dead UI; stale-message rejection; Escape and modifier release')
+    print('PASS: clickable bar and dock with search shown or hidden; repeated Super cycle; Super and Alt+Tab during desktop SIGSTOP and exit; fullscreen panel reveal/restoration; fallback with frozen and dead UI; stale-message rejection; Escape and modifier release')
 finally:
     for process in processes:
         if process.poll() is None: process.send_signal(signal.SIGCONT)

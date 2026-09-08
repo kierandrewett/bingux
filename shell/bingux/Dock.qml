@@ -13,6 +13,7 @@ import "DesktopLayout.js" as DesktopLayout
 
 PanelWindow {
     id: root
+    signal applicationInteracted()
     signal widgetEditRequested(string widgetId, var control)
 
     readonly property real popupAnchorTop: (screen ? screen.height : 0) - height - margins.bottom + dockSurface.y
@@ -1113,6 +1114,7 @@ PanelWindow {
                         onCanceled: root.cancelDrag()
                         onClicked: function(mouse) {
                             if (moved) return;
+                            root.applicationInteracted();
                             if (mouse.button === Qt.LeftButton) {
                                 const action = root.preferences.dockClick || "toggle";
                                 if (action === "launch") root.launch(dockButton.currentGroup, true);

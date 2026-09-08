@@ -18,9 +18,15 @@ switcher UI is unavailable.
 
 Super invokes `SearchShell.qml` directly through `binguxctl`. While search is
 open, the compositor raises the existing top bar and dock buffers above
-fullscreen windows. It restores their order when search closes or disconnects.
-This also works when the desktop UI is paused. The compositor suppresses this
-reveal on the lock screen.
+fullscreen windows. It restores their order when the reveal ends or the search
+process disconnects.
+This also works when the desktop UI is paused. The panels sit above search so
+pointer input reaches them. Repeated Super presses toggle search while keeping
+the top bar and dock revealed and clickable. Closing search with Escape or an
+explicit search-close command ends the reveal. Re-entering fullscreen or clicking
+back into the fullscreen window after hiding search slides the top bar upward
+and dock downward before restoring their normal stacking. Super can interrupt
+the exit and reveal them again. The compositor suppresses the reveal on the lock screen.
 
 - Alt+Tab selects the previous window. Further Tab presses move forward.
 - Alt+Shift+Tab moves backwards. Super+Tab and Super+Shift+Tab also work.

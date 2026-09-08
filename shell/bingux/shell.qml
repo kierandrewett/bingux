@@ -145,7 +145,7 @@ ShellRoot {
         readonly property bool visible: popouts.states.search?.visible || false
         onVisibleChanged: if (visible) root.closePanelsExcept(searchOverlay)
         function showSearch() { popouts.command("search", {action: "open"}); }
-        function closeSearch() { popouts.command("search", {action: "close"}); }
+        function closeSearch() { popouts.command("search", {action: "hide"}); }
     }
     QtObject {
         id: windowSwitcher
@@ -547,9 +547,9 @@ ShellRoot {
         exclusiveZone: Theme.barHeight
         implicitHeight: Theme.barHeight
         color: "transparent"
-        WlrLayershell.layer: DesktopEditing.active ? WlrLayer.Overlay : WlrLayer.Top
+        WlrLayershell.layer: DesktopEditing.active || !!popouts.states.search?.revealCompanions ? WlrLayer.Overlay : WlrLayer.Top
         WlrLayershell.namespace: "bingux-top-bar"
-        WlrLayershell.keyboardFocus: DesktopEditing.active ? WlrKeyboardFocus.None : WlrKeyboardFocus.OnDemand
+        WlrLayershell.keyboardFocus: DesktopEditing.active || !!popouts.states.search?.revealCompanions ? WlrKeyboardFocus.None : WlrKeyboardFocus.OnDemand
         anchors { top: true; left: true; right: true }
 
         Rectangle {
@@ -756,6 +756,8 @@ ShellRoot {
 
     Dock {
         id: dock
+        WlrLayershell.layer: DesktopEditing.active || !!popouts.states.search?.revealCompanions ? WlrLayer.Overlay : WlrLayer.Top
+        onApplicationInteracted: popouts.command("search", {action: "hide"})
         onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, dock)
         notifications: notificationState.allEntries
         notificationStore: notificationState

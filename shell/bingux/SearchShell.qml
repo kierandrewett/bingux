@@ -1,16 +1,19 @@
 //@ pragma UseQApplication
 import QtQuick
 import Quickshell
+import Quickshell.Wayland
 
 ShellRoot {
     Connections { target: Quickshell; function onReloadCompleted() { Quickshell.inhibitReloadPopup(); } }
     UiSession {
         id: session
         sessionName: "search"
-        state: ({visible: search.visible, surface: "bingux-search",
+        state: ({visible: search.visible, revealCompanions: search.chromeRevealed,
+            surface: search.visible ? "bingux-search" : "bingux-search-chrome", companionsAbove: true,
             companions: ["bingux-top-bar", "bingux-dock", "bingux-panel-outline"]})
         onCommandReceived: command => {
             if (command.action === "open") search.showSearch();
+            else if (command.action === "hide") search.closeSearch(false, true);
             else if (command.action === "close") search.closeSearch();
             else if (command.action === "toggle") search.toggleSearch();
         }
@@ -25,6 +28,21 @@ ShellRoot {
         function setPinned(group, pinned) {
             session.command("desktop", {action: "pin", id: group.desktopEntry?.id || group.id, pinned});
         }
+    }
+    // Keep a non-interactive overlay anchor while Super hides only search.
+    // The compositor raises the real panel buffers relative to this surface.
+    PanelWindow {
+        screen: search.screen
+        visible: search.chromeRevealed && !search.visible
+        implicitWidth: 1
+        implicitHeight: 1
+        color: "transparent"
+        exclusionMode: ExclusionMode.Ignore
+        mask: Region {}
+        anchors { top: true; left: true }
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "bingux-search-chrome"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     }
     SearchOverlay {
         id: search
