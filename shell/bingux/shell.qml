@@ -28,7 +28,7 @@ ShellRoot {
     function layoutSnapshot() {
         return {version: 1, layout: topBar.snapshotLayout(),
             desktop: BinguxPreferences.data.desktop, dock: dock.snapshotLayout(),
-            controlCentre: ControlCentreServices.effectiveControls,
+            controlCentre: ControlCentreServices.effectiveControls, controlLayout: controlCentre.snapshotLayout(),
             sidebar: {edge: terminalSidebar.edge, opened: terminalSidebar.opened,
                 contentType: terminalSidebar.contentType},
             controlCentreReady: ControlCentreServices.preferencesReady};
@@ -36,7 +36,7 @@ ShellRoot {
     Timer {
         interval: 200
         running: Quickshell.env("BINGUX_LAYOUT_IMPORT") !== "0" && BinguxPreferences.loaded &&
-            !BinguxPreferences.layoutError && !BinguxPreferences.data.desktop.layoutVersion &&
+            !BinguxPreferences.layoutError && (!BinguxPreferences.data.desktop.layoutVersion || !BinguxPreferences.data.desktop.controlLayout) &&
             ControlCentreServices.preferencesReady && dock.appGroupsInitialised
         onTriggered: BinguxPreferences.importDesktop(root.layoutSnapshot())
     }

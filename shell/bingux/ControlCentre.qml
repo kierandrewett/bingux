@@ -5,10 +5,15 @@ import Quickshell
 import Quickshell.Bluetooth
 import Quickshell.Services.Mpris
 import "DesktopLayout.js" as DesktopLayout
+import "ControlLayout.js" as ControlLayout
 
 ShellPopup {
     id: root
     keepWindowAlive: DesktopEditing.editor !== null
+    readonly property var groupedLayout: DesktopEditing.desktop.controlLayout || ControlLayout.defaults()
+    function snapshotLayout() { return JSON.parse(JSON.stringify(BinguxPreferences.data.desktop.controlLayout || ControlLayout.defaults())); }
+    function sectionRow(id) { return ControlLayout.position(groupedLayout, "control-centre", id); }
+    function groupPosition(group, id) { return ControlLayout.position(groupedLayout, group, id); }
     required property var indicators
     signal widgetEditRequested(string widgetId, var control)
     signal customiseRequested()
@@ -167,41 +172,74 @@ ShellPopup {
         opacity: 1 - root.detailProgress
         visible: root.detailProgress < 1
         enabled: !root.detailOpen
-    ColumnLayout {
+    GridLayout {
         id: controls
         objectName: "controlOverviewRows"
         width: overview.width
-        spacing: 12
-        RowLayout {
+        columns: 1
+        rowSpacing: 12
+        columnSpacing: 0
+        GridLayout {
+            id: headerControls
+            objectName: "controlHeader"
+            Layout.row: root.sectionRow("controls-header")
+            visible: root.sectionRow("controls-header") >= 0
             Layout.fillWidth: true
-            spacing: 8
+            rows: 1
+            rowSpacing: 0
+            columnSpacing: 8
             IconButton {
                 objectName: "controlUserAccount"
+                Layout.column: root.groupPosition("controls-header", "control-account")
+                visible: root.groupPosition("controls-header", "control-account") >= 0
                 iconName: "avatar-default-symbolic"
                 imageSource: "file:///var/lib/AccountsService/icons/" + Quickshell.env("USER")
                 label: "User account"
                 onClicked: root.settings("users")
             }
-            Item { Layout.fillWidth: true }
-            SymbolicIcon { visible: root.indicators.laptopBatteryAvailable; implicitSize: 16; color: Theme.muted; source: Quickshell.iconPath("battery-good-symbolic") }
-            Text { visible: root.indicators.laptopBatteryAvailable; text: root.indicators.batteryAccessibleName().replace(/^Battery /, "").replace(" percent", "%").replace(/,.*$/, ""); Accessible.name: root.indicators.batteryAccessibleName(); color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+            Item {
+                objectName: "controlHeaderSpace"
+                Layout.column: root.groupPosition("controls-header", "control-header-space")
+                visible: root.groupPosition("controls-header", "control-header-space") >= 0
+                Layout.fillWidth: true
+            }
+            RowLayout {
+                objectName: "controlBattery"
+                Layout.column: root.groupPosition("controls-header", "control-battery")
+                visible: root.groupPosition("controls-header", "control-battery") >= 0 && root.indicators.laptopBatteryAvailable
+                spacing: 8
+                SymbolicIcon { implicitSize: 16; color: Theme.muted; source: Quickshell.iconPath("battery-good-symbolic") }
+                Text { text: root.indicators.batteryAccessibleName().replace(/^Battery /, "").replace(" percent", "%").replace(/,.*$/, ""); Accessible.name: root.indicators.batteryAccessibleName(); color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+            }
             IconButton {
                 objectName: "controlSettings"
+                Layout.column: root.groupPosition("controls-header", "control-settings")
+                visible: root.groupPosition("controls-header", "control-settings") >= 0
                 iconName: "org.gnome.Settings-symbolic"
                 label: "Settings"
                 onClicked: root.settings("")
             }
             IconButton {
                 objectName: "controlLock"
+                Layout.column: root.groupPosition("controls-header", "control-lock")
+                visible: root.groupPosition("controls-header", "control-lock") >= 0
                 iconName: "system-lock-screen-symbolic"
                 label: "Lock"
                 onClicked: { Quickshell.execDetached(["loginctl", "lock-session"]); root.visible = false }
             }
         }
-        ColumnLayout {
+        GridLayout {
+            objectName: "controlAudioRows"
+            Layout.row: root.sectionRow("controls-audio")
+            visible: root.sectionRow("controls-audio") >= 0
             Layout.fillWidth: true
-            spacing: 12
+            columns: 1
+            rowSpacing: 12
+            columnSpacing: 0
             AudioLevel {
+                objectName: "controlOutputRow"
+                Layout.row: root.groupPosition("controls-audio", "control-volume")
+                visible: root.groupPosition("controls-audio", "control-volume") >= 0
                 node: root.indicators.audioSink || null
                 label: "Volume"
                 iconName: root.indicators.audioIconName()
@@ -213,6 +251,9 @@ ShellPopup {
                 onDevicesRequested: trigger => root.openDetail("audio", trigger, "output")
             }
             AudioLevel {
+                objectName: "controlInputRow"
+                Layout.row: root.groupPosition("controls-audio", "control-microphone")
+                visible: root.groupPosition("controls-audio", "control-microphone") >= 0
                 node: root.microphone
                 label: "Microphone"
                 iconName: "audio-input-microphone-symbolic"
@@ -223,9 +264,17 @@ ShellPopup {
                 onDevicesRequested: trigger => root.openDetail("audio", trigger, "input")
             }
         }
-        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.outline; opacity: 0.5 }
+        Rectangle {
+            objectName: "controlDivider"
+            Layout.row: root.sectionRow("control-divider")
+            visible: root.sectionRow("control-divider") >= 0
+            Layout.fillWidth: true; implicitHeight: 1; color: Theme.outline; opacity: 0.5
+        }
         GridLayout {
             id: quickRows
+            objectName: "controlQuickRows"
+            Layout.row: root.sectionRow("controls-tiles")
+            visible: root.sectionRow("controls-tiles") >= 0
             Layout.fillWidth: true
             columns: 2
             uniformCellWidths: true
@@ -336,6 +385,9 @@ ShellPopup {
             }
         }
         ControlCentreMedia {
+            objectName: "controlMediaCard"
+            Layout.row: root.sectionRow("control-media")
+            visible: root.sectionRow("control-media") >= 0
             Layout.fillWidth: true
             player: root.mediaPlayer
             playerOptions: root.mediaPlayers
@@ -346,13 +398,15 @@ ShellPopup {
 
         ActionButton {
             objectName: "controlCustomise"
+            Layout.row: root.sectionRow("control-customise")
+            visible: root.sectionRow("control-customise") >= 0
             Layout.alignment: Qt.AlignRight
             implicitHeight: 28
             flat: true
             text: "Customise controls..."
             onClicked: root.customiseRequested()
         }
-        Text { Layout.fillWidth: true; visible: root.services.error !== ""; text: root.services.error; wrapMode: Text.Wrap; color: Theme.muted; font.pixelSize: Theme.fontSmall }
+        Text { Layout.row: ControlLayout.items(root.groupedLayout, "control-centre").length; Layout.fillWidth: true; visible: root.services.error !== ""; text: root.services.error; wrapMode: Text.Wrap; color: Theme.muted; font.pixelSize: Theme.fontSmall }
     }
     }
 

@@ -3,6 +3,7 @@ import QtTest
 import Quickshell
 import Quickshell.Io
 import Quickshell.Bluetooth
+import "ControlLayout.js" as ControlLayout
 ShellRoot {
     property string checks: ""
     FileView { id: results; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
@@ -156,6 +157,37 @@ ShellRoot {
             control.destroy();
             centre.visible = false;
             wait(200);
+        }
+        function test_groupLayouts() {
+            const previous = BinguxPreferences.data;
+            const setLayout = layout => BinguxPreferences.data = Object.assign({}, previous, {
+                desktop: Object.assign({}, previous.desktop, {controlLayout: layout})});
+            centre.visible = true; wait(250);
+            const header = findChild(centre.body, "controlHeader");
+            const account = findChild(centre.body, "controlUserAccount");
+            const settings = findChild(centre.body, "controlSettings");
+            const media = findChild(centre.body, "controlMediaCard");
+            const audioRows = findChild(centre.body, "controlAudioRows");
+            const output = findChild(centre.body, "controlOutputRow");
+            const microphone = findChild(centre.body, "controlInputRow");
+            const original = [header.y, media.y, audioRows.y, account.x, settings.x, output.y, microphone.y];
+            try {
+                let layout = ControlLayout.move(ControlLayout.defaults(), "control-centre", "control-media", 0);
+                layout = ControlLayout.move(layout, "controls-header", "control-settings", 0);
+                layout = ControlLayout.move(layout, "controls-audio", "control-microphone", 0);
+                setLayout(layout); wait(300);
+                check(media.y < header.y, "saved section order moves the existing media card");
+                check(settings.x < account.x, "saved header order moves the existing buttons");
+                check(microphone.y < output.y, "saved audio order moves the existing sliders");
+                equal(findChild(centre.body, "controlSettings"), settings, "group changes preserve the actual button instance");
+                equal(findChild(centre.body, "controlOutputRow"), output, "group changes preserve the actual audio control");
+                layout = ControlLayout.move(layout, "controls-audio", "control-volume", -1);
+                setLayout(layout); wait(150);
+                check(!output.visible, "removing a grouped control hides only that item");
+                check(microphone.visible, "the remaining audio control stays available");
+                setLayout(ControlLayout.defaults()); wait(300);
+                equal([header.y, media.y, audioRows.y, account.x, settings.x, output.y, microphone.y].join(), original.join(), "restoring groups recovers the original geometry");
+            } finally { BinguxPreferences.data = previous; centre.visible = false; wait(200); }
         }
         function test_zz_notificationVariants() {
             const invoked = {reply: 0, defaultAction: 0};

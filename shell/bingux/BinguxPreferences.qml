@@ -2,10 +2,11 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "ControlLayout.js" as ControlLayout
 
 Singleton {
     id: root
-    property var data: ({"search": {"disabledProviders": [], "ai": null, "fileRoots": null, "defaultEngine": "duckduckgo", "engines": [{"id": "duckduckgo", "name": "DuckDuckGo", "shortcut": "ddg", "url": "https://duckduckgo.com/?q={query}", "enabled": true}]}, "previews": {"enabled": true, "prewarm": true, "maxMegabytes": 20}, "desktop": {"dock": true, "sidebar": true, "metrics": true, "layout": null, "dockSize": 56, "dockAlignment": "center", "dockClick": "toggle", "dockMiddleClick": "launch", "dockScroll": "cycle", "dockScrollDirection": "natural", "sidebarEdge": null, "layoutVersion": 0, "dockApps": null, "controlCentre": null, "containers": {}, "widgetOptions": {}}})
+    property var data: ({"search": {"disabledProviders": [], "ai": null, "fileRoots": null, "defaultEngine": "duckduckgo", "engines": [{"id": "duckduckgo", "name": "DuckDuckGo", "shortcut": "ddg", "url": "https://duckduckgo.com/?q={query}", "enabled": true}]}, "previews": {"enabled": true, "prewarm": true, "maxMegabytes": 20}, "desktop": {"dock": true, "sidebar": true, "metrics": true, "layout": null, "dockSize": 56, "dockAlignment": "center", "dockClick": "toggle", "dockMiddleClick": "launch", "dockScroll": "cycle", "dockScrollDirection": "natural", "sidebarEdge": null, "layoutVersion": 0, "dockApps": null, "controlCentre": null, "controlLayout": null, "containers": {}, "widgetOptions": {}}})
     readonly property string path: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/bingux/settings.json"
     readonly property var helper: Quickshell.env("BINGUX_SETTINGS_HELPER") ? [Quickshell.env("BINGUX_SETTINGS_HELPER")] : ["python3", decodeURIComponent(Qt.resolvedUrl("settings-backend.py").toString().replace(/^file:\/\//, ""))]
     property bool loaded: false
@@ -18,7 +19,7 @@ Singleton {
         if (!writer.running) writer.running = true;
     }
     function importDesktop(snapshot) {
-        if (importer.running || data.desktop.layoutVersion === 1) return;
+        if (importer.running || (data.desktop.layoutVersion === 1 && data.desktop.controlLayout)) return;
         importer.snapshot = snapshot;
         importer.running = true;
     }
@@ -66,6 +67,7 @@ Singleton {
             try {
                 const incoming = JSON.parse(text());
                 if (![0, 1].includes(incoming.desktop?.layoutVersion || 0)) throw new Error("This desktop layout version is not supported.");
+                if (incoming.desktop?.controlLayout && !ControlLayout.valid(incoming.desktop.controlLayout)) throw new Error("This control-centre layout is not supported.");
                 root.data = {search: Object.assign({}, root.data.search, incoming.search || {}),
                     previews: Object.assign({}, root.data.previews, incoming.previews || {}),
                     desktop: Object.assign({}, root.data.desktop, incoming.desktop || {}, writer.running ? writer.submitted || {} : {}, root.pendingDesktop || {})};
