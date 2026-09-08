@@ -13,8 +13,8 @@ QtObject {
     readonly property int maxActionTextLength: 128
     readonly property int maxActionsPerNotification: 8
     readonly property int maxScannedActions: 32
-    readonly property int defaultTimeoutMs: 5000
-    readonly property int maxTimeoutMs: 30000
+    readonly property int minTimeoutMs: 4000
+    readonly property int maxTimeoutMs: 20000
     property var visibleEntries: []
     property var queuedEntries: []
     property var notificationWatchers: []
@@ -296,10 +296,15 @@ QtObject {
         if (notification.expireTimeout === 0)
             return 0;
 
-        if (notification.expireTimeout > 0)
-            return Math.min(Math.round(notification.expireTimeout * 1000), maxTimeoutMs);
-
-        return defaultTimeoutMs;
+        // Match the bounded plain text displayed by the card. Allow time to
+        // notice it, then roughly 200 words/minute. The character estimate also
+        // gives long tokens and text without spaces enough reading time.
+        const text = (boundedText(notification.summary, maxSummaryLength) + " "
+            + boundedText(notification.body, maxBodyLength)).replace(/\s+/g, " ").trim();
+        const words = text ? text.split(" ").length : 0;
+        const readingTime = 1500 + Math.max(words * 300, Array.from(text).length * 60);
+        const requestedTime = notification.expireTimeout > 0 ? notification.expireTimeout * 1000 : 0;
+        return Math.round(Math.min(maxTimeoutMs, Math.max(minTimeoutMs, readingTime, requestedTime)));
     }
 
     expiryTimer: Timer {
