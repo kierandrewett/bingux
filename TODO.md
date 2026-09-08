@@ -92,3 +92,7 @@ This file tracks implementation work. A checked item means the related configura
 - [x] Run all flake checks, Rust tests, and the relevant NixOS VM test.
 - [x] Update architecture, profile, package-management, secrets, and Proxmox operations documentation.
 - [x] Commit each validated increment with a conventional commit message.
+
+## Shared notification presentation
+
+- [x] Share notification cards across the desktop, control centre, and flat app dock lists. Verify gestures, history, normal/reduced motion, and rendered spacing.

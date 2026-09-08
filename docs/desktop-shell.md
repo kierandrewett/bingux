@@ -12,18 +12,17 @@ Quickshell is pre-1.0. Bingux source must target the pinned 0.2.1 release line. 
 ## Process model
 
 ```text
-Gnoblin org.gnoblin.Shell.SuperReleased
-                    |
-                    v
-          bingux-searchd user service
-                    |
-       $XDG_RUNTIME_DIR/bingux/search-v1.sock
-                    |
-                    v
-      Quickshell bingux desktop-shell process
+Gnoblin gnoblin.toml shortcut
+          |
+          v
+binguxctl -> Quickshell IPC -> Bingux popup
+                                 |
+                          search-v1.sock
+                                 |
+                          bingux-searchd
 ```
 
-`bingux-searchd` is the sole consumer of the Gnoblin `SuperReleased` D-Bus signal. `bingux-statusd` owns the Gnoblin OSD and desktop-state signal subscription. The QML process does not parse Gnoblin D-Bus output or start long-lived daemon monitors. It connects to local Unix sockets and renders typed records from the daemons. `SystemIndicators` also runs a bounded `nmcli` probe to identify the current NetworkManager connection type; the probe is killed after two seconds and is retried every five seconds.
+`gnoblin.toml` owns popup shortcuts and runs `binguxctl`; a bare `Super` binding toggles search on release without another key or pointer action. Search and Emoji no longer register popup shortcuts through daemon events or the shortcut-session socket. `bingux-statusd` owns the Gnoblin OSD and desktop-state signal subscription. The QML process does not parse Gnoblin D-Bus output or start long-lived daemon monitors. It connects to local Unix sockets and renders typed records from the daemons. `SystemIndicators` also runs a bounded `nmcli` probe to identify the current NetworkManager connection type; the probe is killed after two seconds and is retried every five seconds.
 
 The shell and daemon run as the profile user. The socket directory has mode `0700`. The socket has mode `0600`. The service does not listen on TCP or another network transport.
 
@@ -33,6 +32,15 @@ A missing or unsupported Gnoblin D-Bus service is an unavailable integration poi
 
 `bingux-statusd` samples `/proc/stat`, `/proc/meminfo`, and `/proc/net/dev` once per second. It publishes
 newline-delimited UTF-8 JSON records at `$XDG_RUNTIME_DIR/bingux/metrics-v1.sock`.
+
+An optional `extra` object adds `cpuTemperatureCelsius`, `load1`, `load5`, `load15`,
+`logicalCpus`, `swapUsedBytes`, `swapTotalBytes`, `diskReadBytesPerSecond` and
+`diskWriteBytesPerSecond`. Missing sensors and first-sample disk rates are null.
+CPU temperature uses recognised CPU hwmon drivers; generic board, GPU and NVMe
+sensors are excluded. Disk rates count whole physical devices, omit partitions
+and virtual devices, and ignore new devices or reset counters until a baseline
+exists. See the kernel's [disk statistics](https://docs.kernel.org/admin-guide/iostats.html)
+and [hwmon interfaces](https://docs.kernel.org/hwmon/sysfs-interface.html).
 
 The service sends the most recent record when a client connects. It then sends one record after each sample. The
 first record after service start has `null` CPU and network rates because there is no previous sample. The socket
@@ -62,6 +70,13 @@ consumer of this D-Bus signal. It validates the request and publishes one
 newline-delimited UTF-8 JSON record to
 `$XDG_RUNTIME_DIR/bingux/osd-v2.sock`.
 
+Bingux sets `[shell] osd = false` in `gnoblin.toml` as well as the session's
+disabled-features setting. `osd-bridge.js` supplies the same signal on older
+running Gnoblin builds which can suppress their OSD but cannot emit the event.
+It checks the native interface first and stays inactive when native support is
+present. Monitor connectors come from Mutter DisplayConfig, and unloading the
+script restores the original OSD handler.
+
 OSD records are transient. The daemon does not cache them. A new socket client
 receives only requests that arrive after its connection. The socket directory
 has mode `0700`, and the socket has mode `0600`.
@@ -90,8 +105,11 @@ and must not fall back to a positional screen index.
 `icon` is a themed icon name or an empty string. `icon` has at most 256 UTF-8
 bytes. `label` has at most 2048 UTF-8 bytes. Neither string contains a control
 character. `level` and `maxLevel` are finite values no less than `-1`. The shell
-shows the level bar only when `maxLevel` is greater than zero and `level` is
-non-negative. It clamps the displayed percentage to 100.
+shows the level bar when `maxLevel` and `level` are non-negative. A zero maximum
+from older compositor forwarding uses the standard maximum of one. The bar
+uses `level / maxLevel`; the percentage uses `level * 100`, so amplified volume
+can correctly show values above 100%. A tick marks normal volume on amplified
+ranges. Negative levels or maxima represent status-only requests.
 
 The shell keeps one request per monitor and replaces it when the next request
 for that monitor arrives. It expires every request after 1.5 seconds, including
@@ -99,25 +117,77 @@ a request whose output is not currently connected. The OSD surface has no
 keyboard focus and an empty pointer region. It cannot block an application
 input event.
 
+The card sits above the dock and uses the shell's surface, radius, and accent.
+It is centred in the desktop area remaining beside the sidebar on that output,
+including while the sidebar opens or closes. Percentages use the same sliding
+counter as dock badges, rolling in the direction of the value change.
+It separates the control name, optional device or mute detail, percentage, and
+level bar. Opening uses the shared scale and fade motion; closing retains the
+content while fading without scaling. Repeated requests replace the content and
+restart the timeout. Reduced motion skips these animations.
+
 ## Notification ownership
 
 Gnoblin disables its MessageTray UI in a Bingux session. The Bingux Quickshell
 process owns the desktop-notification service. It supports plain-text body
 content and notification actions. It does not advertise markup, hyperlinks,
-images, inline replies, action icons, or persistence because this shell does
-not yet provide a notification centre.
+images, inline replies, action icons, or persistence for closed notifications.
 
-The shell shows at most three notification cards at one time. It queues at most
-32 later notifications and observes the notification expiry time while queued.
-It uses a five-second default for an application timeout of `-1` and limits a
-positive application timeout to 30 seconds. A timeout of `0` remains until an
-application closes it or the user dismisses it. A full queue expires the newly
-received notification.
+The Control Centre uses the shared `ShellPopup` primitive, hosted in the same
+layer window as notifications. Opening it slides the existing notification
+cards below its controls; closing it returns them to the top-right position.
+Expiry pauses while the Control Centre is open. Cards retain their delegates,
+groups, gestures and actions, and overflow scrolls within the reserved area.
+The control layout groups connectivity and display shortcuts, exposes sound
+and session controls, and selects a playing MPRIS player (or the first available
+player) for the shared `MediaControls` widget. The dock's `DockMediaControls`
+and the compact `ControlCentreMedia` are presentation wrappers around that
+widget, including artwork caching/transitions, track-title scrolling, transport,
+seek previews and elapsed/remaining time. The seek binding waits for the player
+range to initialise, so a newly opened widget shows the current position.
+
+Control buttons fade fixed-colour layers in opacity, preventing a dark flash
+when hover leaves. Keyboard focus has its own outline. Detail pages restore
+focus to their opener on Back or Escape; Escape on the overview closes the panel.
+Bluetooth has a separate keyboard-accessible power switch, saved network
+connections refresh while open and sort connected entries first, and the sound
+slider supports keyboard steps and wheel input. Clear all retains notification
+cards until their normal slide-out animation completes.
+
+All open notifications remain in a newest-first stack. The stack scrolls when
+it exceeds the screen height. Arrival does not hide or expire an older card.
+Normal toasts hide after 2.5 seconds (or a shorter requested timeout). Hiding or
+swiping away a desktop toast retains the notification in the control centre and
+its app's dock badge and menu preview. Clear controls in the centre or dock menu,
+Clear all, and application withdrawals remove retained notifications. A timeout
+of `0` keeps the desktop toast visible until hidden or closed.
 
 When an application replaces a notification ID, the shell keeps the card in its
-current visible or queued position and calculates a new expiry from the
+current stack position and calculates a new expiry from the
 replacement timeout.
-Notification cards do not request keyboard focus. Their pointer mask contains
+Open notifications are retained and replayed across Quickshell configuration
+reloads, including their actions and received timestamps. Replayed notifications
+receive a fresh timeout only if their toast was visible; archived notifications
+remain hidden until the control centre or app dock menu is opened.
+Cards show an icon column on the left and the app name, title, and body on the
+right. The received time appears at the top-right, replaced by a dismiss button
+while the card is hovered. A circular indicator fills as the timeout elapses
+and pauses on hover. Notifications without a timeout have no progress ring.
+The top-bar New notification button sends a preview through the same D-Bus
+notification service as applications.
+Cards resolve the application name and missing icon from its desktop entry, with
+sender metadata as a fallback. Hovering anywhere on a card pauses its remaining
+expiry time, including over actions and the dismiss button. Expiry resumes when
+the pointer leaves. Updates to a hovered card retain this pause.
+
+Cards enter from the right with a 420 ms cubic ease-out and a subtle fade to
+full opacity. Existing cards shift in 320 ms to make space before the entrance
+finishes. Expired and closed
+cards slide to the right at full opacity before their visual card is removed. Dragging right by 48 px
+(or 15 percent of a narrow card) dismisses it. Shorter drags ease back into place. Grab a moving card and drag it left to
+cancel dismissal and return it to its original position.
+Set `BINGUX_REDUCED_MOTION=1` in the shell environment to make these transitions
+instant. Notification cards do not request keyboard focus. Their pointer mask contains
 only the visible card stack.
 
 ## Desktop UI rules
@@ -161,7 +231,7 @@ Every request contains these fields:
 }
 ```
 
-`show-search` is emitted only after the daemon validates a Gnoblin `SuperReleased` signal with protocol version `1`. `monotonicUsec` is a decimal string because the value can exceed JavaScript safe integer precision.
+`show-search` and `gnoblin-super-release` integration records are legacy wire formats. The daemon no longer emits them; the shell accepts and ignores old show-search records during upgrades. Popup opening is owned by `binguxctl` commands in `gnoblin.toml`.
 
 ```json
 {
@@ -421,3 +491,59 @@ socket path. The v1 host rejects unknown fields and other versions rather than g
 - Quickshell notification lifetime and action API: <https://quickshell.org/docs/v0.2.1/types/Quickshell.Services.Notifications/Notification/>
 - Quickshell layer-shell pointer masks: <https://quickshell.org/docs/v0.2.1/types/Quickshell/QsWindow/>
 - Gnoblin interface source: `~/dev/gnoblin/src/gnome-shell-overlay/js/ui/components/gnoblinControl.js`
+
+Notifications from the same app form a collapsed stack with a count. Click the card to expand the group, then use Show less to collapse it. Groups follow their newest notification; individual notifications retain their expiry and dismissal behaviour. Overflow scrolls, with a transparent gradient over the bottom 64 pixels while more content remains below.
+Collapsed app groups use progressively lower card opacity, down to 45%. Expanded cards and their background colours are fully opaque.
+Expansion moves cards out from behind the group head without fading; collapse returns them behind it. Expanded groups retain their count and share a subtle enclosing background. The collapsed layers are the same notification delegates: their positions, insets and heights animate continuously between the two layouts, including when a transition is reversed.
+Expanded groups use equal 6 px edge padding and 8 px gaps between cards. Backing cards keep their real geometry while their icons and contents fade away when collapsed and return on expansion.
+The expanded backdrop belongs to the app group and survives removal of its head card, remaining while multiple items exist. With one item left, the backdrop fades away and the extra group padding is removed. Notification cards have soft downward shadows.
+The head card uses a fully opaque surface colour. Group backgrounds start invisible and are shown only for expanded groups, avoiding an initial opacity flash.
+When a new card covers the previous head of a collapsed group, the previous contents stay visible until the new card has settled, then fade out over 180 ms.
+Dragging a collapsed group head progressively reveals the next card and its contents in proportion to drag distance; returning the head restores the original depth opacity.
+During that drag, the next card also widens and rises towards the front-card position, then tucks back if the drag is cancelled. Promotion preserves its revealed geometry rather than resetting its inset.
+A revealed successor keeps the stack-header height and shows the current count when multiple notifications will remain. The successor card count digits roll and crossfade towards the remaining count during dragging, while the outgoing card keeps its original count, and reverse on cancellation; the notification is only removed when dismissal completes. Only the final standalone successor sheds the group-control space.
+Dragging a group head advances every backing card towards the preceding depth slot, including width, position and depth opacity. Deeper cards retain hidden contents; cancelling restores the whole stack.
+
+Control Centre interaction and shared-window motion checks: `bash tests/control-centre.sh`; set `BINGUX_REDUCED_MOTION=1` to verify the instant-transition path.
+
+Network, Bluetooth, Sound and Display open in-panel detail pages with a subtle 12 px, 160 ms eased crossfade and a back control. The page deck does not clip against its padding; the control centre uses the same shared opening animation as the calendar. Network connects saved profiles through NetworkManager; Bluetooth exposes paired-device connections; Sound selects PipeWire outputs. Full system-settings shortcuts handle pairing, new network credentials and display configuration.
+
+The Control Centre closes through Escape, an outside click or its menu-bar toggle;
+there is no header close button. Network separates saved connections from nearby
+Wi-Fi, excludes container bridges and loopback interfaces, and supports explicit
+connect/disconnect actions. New Wi-Fi setup opens Network settings. Bluetooth
+shows paired and nearby devices, connection progress, and user-started discovery;
+leaving the page stops discovery started by this panel. Pairing opens Bluetooth
+settings. Sound includes separate output and microphone device selection, mute
+and volume controls, with disabled states when hardware is unavailable.
+
+Control Centre layout and interaction rules are defined in
+[control-centre-design.md](control-centre-design.md). Detail pages share grouped
+rows, selection checkmarks and one settings footer. Sound uses Output/Input tabs;
+Network keeps saved profiles and VPNs behind Other connections; Bluetooth reveals
+nearby devices only after Add a device. The overview omits the title and close button, and
+Display opens system settings directly.
+
+
+## Keyboard layout switcher
+
+The right-hand top-bar layout label opens the shared keyboard-layout popup.
+Super+Space advances through configured sources immediately; Super+Shift+Space
+cycles backwards. The popup stays visible while Super is held and closes on release, without
+taking keyboard focus from the application. A manual click opens the normal
+interactive menu. The top bar uses GNOME’s disambiguated short labels such as `en₁` and `en₂`. Rapid key presses queue the latest requested
+source instead of dropping input during a change.
+
+Bingux releases GNOME's `switch-input-source` and
+`switch-input-source-backward` bindings and registers its own through the shared
+compositor shortcut transport. Gnoblin's `[shell] input-source-switcher = false`
+option disables the native keyboard popup without disabling input sources.
+
+Top-bar controls can be rearranged with Ctrl + drag. The control follows the pointer,
+while its neighbours slide aside with the shared dock displacement animation. On release,
+it eases into its slot before the new order is saved.
+Release outside the bar or overflow menu to cancel. Normal clicks keep their usual action.
+The overflow menu supports the same gesture within its list. Search and the centred clock
+remain fixed. The order is saved in `$XDG_CONFIG_HOME/bingux/top-bar.ini` (by default
+`~/.config/bingux/top-bar.ini`) and restored after reloads and restarts. Hidden controls
+keep their saved position.

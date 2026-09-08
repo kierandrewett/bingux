@@ -5,6 +5,19 @@
     ...
 }:
 let
+    settingsBackend = pkgs.writeShellApplication {
+        name = "bingux-settings-backend";
+        runtimeInputs = [ pkgs.python3 pkgs.systemd ];
+        text = ''exec python3 ${../../shell/bingux/settings-backend.py} "$@"'';
+    };
+    filePreview = pkgs.callPackage ../../packages/bingux-file-preview { };
+    desktopControls = pkgs.callPackage ../../packages/bingux-controls { };
+    iconRenderer = pkgs.callPackage ../../packages/bingux-icon-renderer { };
+    audioMeter = pkgs.callPackage ../../packages/bingux-audio-meter { };
+    captureBackend = pkgs.callPackage ../../packages/bingux-capture { };
+    binguxctl = pkgs.callPackage ../../packages/binguxctl { quickshell = cfg.package; configName = cfg.configName; };
+    calendarBackend = pkgs.callPackage ../../packages/bingux-calendar { };
+    caretBackend = pkgs.callPackage ../../packages/bingux-caret { };
     shellFiles = lib.cleanSourceWith {
         src = ../../shell/bingux;
         filter = path: type: builtins.baseNameOf path != "ProfileSettings.qml";
@@ -13,9 +26,11 @@ let
         import QtQuick
 
         QtObject {
-            readonly property bool dockEnabled: ${lib.boolToString cfg.dock.enable}
-            readonly property bool metricsEnabled: ${lib.boolToString cfg.metrics.enable}
+            readonly property bool dockEnabled: ${lib.boolToString cfg.dock.enable} && BinguxPreferences.data.desktop.dock
+            readonly property bool sidebarEnabled: ${lib.boolToString cfg.sidebar.enable} && BinguxPreferences.data.desktop.sidebar
+            readonly property bool metricsEnabled: ${lib.boolToString cfg.metrics.enable} && BinguxPreferences.data.desktop.metrics
             readonly property var pinnedApps: ${builtins.toJSON cfg.dock.pinnedApps}
+            readonly property string notificationDbusPath: "${lib.getExe' pkgs.glib "gdbus"}"
             readonly property string timeoutPath: "${lib.getExe' pkgs.coreutils "timeout"}"
             readonly property string gnoblinCtlPath: "${lib.getExe' config.programs.gnoblin.package "gnoblinctl"}"
         }
@@ -31,6 +46,8 @@ let
     '';
     statusdPackage = pkgs.callPackage ../../packages/bingux-statusd { };
     searchdPackage = pkgs.callPackage ../../packages/bingux-searchd { };
+    terminalWidget = pkgs.callPackage ../../packages/bingux-qmltermwidget { };
+    textLayout = pkgs.callPackage ../../packages/bingux-text-layout { };
     searchConfig = pkgs.writeText "bingux-${cfg.configName}-search-v1.json" (
         builtins.toJSON {
             protocolVersion = 1;
@@ -73,6 +90,12 @@ in
             type = lib.types.str;
             default = "graphical-session.target";
             description = "The user-systemd target that owns the desktop-shell process.";
+        };
+
+        capture.shortcut = lib.mkOption {
+            type = lib.types.str;
+            default = "<Alt>s";
+            description = "Global shortcut to open capture, or stop an active recording.";
         };
 
         metrics = {
@@ -218,6 +241,12 @@ in
             };
         };
 
+        sidebar.enable = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Enable the edge-hover button and persistent terminal sidebar.";
+        };
+
         dock = {
             enable = lib.mkOption {
                 type = lib.types.bool;
@@ -248,8 +277,39 @@ in
         ];
 
         programs.dconf.enable = true;
+        bingux.desktop.gnoblin.settings = {
+            shell.osd = false;
+            window-rules = lib.mkAfter [ {
+                match.layer = "^bingux-osd$";
+                animation = "none";
+                opacity = 1.0;
+                blur = 0;
+            } {
+                # These surfaces are positioned or animated by Bingux itself.
+                match.layer = "^(bingux-bar-tooltip|gnoblin-dock-tooltip|gnoblin-shell-popup|bingux-popup-dismiss|gnoblin-dock-launch|bingux-notifications)$";
+                animation = "none";
+            } ];
+            shell.input-source-switcher = false;
+            keybindings.wm.switch-input-source = [ ];
+            keybindings.wm.switch-input-source-backward = [ ];
+            keybindings.shell.show-screenshot-ui = [ ];
+            shortcuts = lib.mkAfter [
+                { name = "search"; binding = "Super"; capture-input = true; command = [ "${binguxctl}/bin/binguxctl" "search" "toggle" ]; }
+                { name = "emoji"; binding = "<Super>period"; command = [ "${binguxctl}/bin/binguxctl" "emoji" "open" ]; }
+                { name = "capture"; binding = cfg.capture.shortcut; command = [ "${binguxctl}/bin/binguxctl" "capture" "toggle" ]; }
+            ];
+        };
 
         home-manager.users.${config.bingux.user.name} = {
+            home.packages = [ binguxctl ];
+            xdg.desktopEntries.bingux-settings = {
+                name = "Bingux Settings";
+                comment = "Search, AI, previews and desktop preferences";
+                exec = "${binguxctl}/bin/binguxctl settings open";
+                icon = "preferences-system";
+                categories = [ "Settings" "DesktopSettings" ];
+                terminal = false;
+            };
             programs.quickshell = {
                 enable = true;
                 package = cfg.package;
@@ -266,6 +326,9 @@ in
             ];
 
             # Bingux owns app switching. Release GNOME's built-in shortcuts.
+            # Win+Period belongs to the visual Bingux emoji picker, not IBus's
+            # inline emoji preedit. Keep IBus's alternate shortcut available.
+            dconf.settings."org/freedesktop/ibus/panel/emoji".hotkey = [ "<Super>semicolon" ];
             dconf.settings."org/gnome/desktop/wm/keybindings" = {
                 switch-applications = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
                 switch-applications-backward = lib.gvariant.mkEmptyArray lib.gvariant.type.string;
@@ -276,6 +339,7 @@ in
                 "${config.programs.gnoblin.package}/share/gnoblin/scripts/compositor-bridge.js";
             xdg.configFile."gnoblin/scripts/lib".source =
                 "${config.programs.gnoblin.package}/share/gnoblin/scripts/lib";
+            xdg.configFile."gnoblin/scripts/bingux-osd.js".source = "${shellSource}/osd-bridge.js";
             xdg.configFile."bingux/switcher.json".text = builtins.toJSON {
                 enabled = true;
                 showDelay = 80;
@@ -299,6 +363,17 @@ in
                 # explicitly so Qt does not attempt an unavailable X11 backend.
                 quickshell.Service.Environment = [
                     "QT_QPA_PLATFORM=wayland"
+                    "BINGUX_SETTINGS_HELPER=${lib.getExe settingsBackend}"
+                    "BINGUX_PREVIEW_HELPER=${filePreview}/bin/bingux-file-preview"
+                    "BINGUX_APP_LAUNCHER_HELPER=${desktopControls}/bin/bingux-launch-app"
+                    "BINGUX_CONTROLS_HELPER=${desktopControls}/bin/bingux-controls"
+                    "BINGUX_SESSION_INHIBIT=${pkgs.gnome-session}/bin/gnome-session-inhibit"
+                    "BINGUX_ICON_HELPER=${iconRenderer}/bin/bingux-icon-renderer"
+                    "BINGUX_AUDIO_METER=${audioMeter}/bin/bingux-audio-meter"
+                    "BINGUX_CAPTURE_HELPER=${lib.getExe captureBackend}"
+                    "BINGUX_CALENDAR_HELPER=${lib.getExe calendarBackend}"
+                    "BINGUX_CARET_HELPER=${lib.getExe caretBackend}"
+                    "QML_IMPORT_PATH=${pkgs.qt6.qtmultimedia}/lib/qt-6/qml:${textLayout}/lib/qt-6/qml${lib.optionalString cfg.sidebar.enable ":${terminalWidget}/lib/qt-6/qml"}"
                 ];
 
                 bingux-runtime-dir = {
@@ -363,7 +438,7 @@ in
                         PrivateTmp = true;
                         ProtectHome = "read-only";
                         ProtectSystem = "strict";
-                        ReadWritePaths = [ "%t/bingux" ];
+                        ReadWritePaths = [ "%t/bingux" "-%h/.pi" "-%h/.claude" ];
                         Restart = "on-failure";
                         RestartSec = "1s";
                         RestrictAddressFamilies = [

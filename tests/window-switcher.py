@@ -40,6 +40,7 @@ export default function enable(api) {
  <method name="Key"><arg type="u" direction="in"/><arg type="b" direction="in"/></method>
  <method name="State"><arg type="s" direction="out"/></method>
  <method name="Focus"><arg type="s" direction="in"/></method>
+ <method name="Minimize"><arg type="s" direction="in"/></method>
  <method name="Click"><arg type="u" direction="in"/><arg type="u" direction="in"/></method>
  </interface></node>`, {
   Key(code, down) {
@@ -49,6 +50,9 @@ export default function enable(api) {
   Focus(title) {
    const window = global.display.get_tab_list(Meta.TabList.NORMAL_ALL, null).find(w => w.title === title);
    Main.activateWindow(window, global.get_current_time());
+  },
+  Minimize(title) {
+   global.display.list_all_windows().find(window => window.title === title).minimize();
   },
   Click(x, y) {
    const pointer = global.__switcherTestPointer;
@@ -87,7 +91,8 @@ def state():
         check=True, capture_output=True, text=True).stdout
     switcher = json.loads(output)
     return {**native, 'shown': switcher['shown'], 'visible': switcher['active'],
-        'label': switcher['selected'] or '', 'ready': switcher['ready']}
+        'label': switcher['selected'] or '', 'ready': switcher['ready'],
+        'previewCount': switcher['previewCount'], 'previewRequests': switcher['previewRequests'], 'previewError': switcher['previewError']}
 
 
 
@@ -123,14 +128,37 @@ wait_for(lambda s: s['ready'])
 apps = []
 try:
     for title in ['Switcher One', 'Switcher Two', 'Switcher Three']:
-        apps.append(subprocess.Popen(['foot', '--app-id=gnoblin-switcher-test', '--title=' + title, 'sleep', '90'],
+        apps.append(subprocess.Popen(['foot', '--app-id=gnoblin-switcher-test', '--title=' + title, 'sh', '-c', 'printf \"\\033[44m Preview content \\033[0m\\n\"; sleep 90'],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
         wait_for(lambda s: s['focus'] == title)
     assert state()['windows'][:3] == ['Switcher Three', 'Switcher Two', 'Switcher One']
+    call('Minimize', 'Switcher One')
     key(56, True)
     tap(15)
     shown = wait_for(lambda s: s['shown'])
-    time.sleep(.1)
+    wait_for(lambda s: s['previewCount'] == 3)
+    captured = state()['previewRequests']
+    time.sleep(.65)
+    assert state()['previewRequests'] == captured == 3, 'Previews must stop capturing once the visible windows are cached'
+    # Inspect actual PNG content, not just a successful preview response.
+    import socket, base64
+    from PIL import Image
+    with socket.socket(socket.AF_UNIX) as connection:
+        connection.settimeout(3)
+        connection.connect(os.environ['GNOBLIN_COMPOSITOR_SOCKET'])
+        transport = connection.makefile('rwb', buffering=0)
+        json.loads(transport.readline())
+        transport.write(b'{"op":"windows"}\n')
+        snapshot = json.loads(transport.readline())['windows']
+        for window in snapshot:
+            transport.write((json.dumps({'op': 'preview', 'window': window['id'], 'width': 224, 'height': 126}) + '\n').encode())
+            response = json.loads(transport.readline())
+            data = base64.b64decode(response['source'].split(',')[1])
+            path = Path('/tmp/bingux-preview-' + window['id'] + '.png')
+            path.write_bytes(data)
+            image = Image.open(path).convert('RGBA')
+            assert image.getextrema()[3][1] > 0, ('Preview must contain visible pixels', window)
+            assert len(image.getcolors(image.width * image.height)) > 2, ('Preview must contain window content', window)
     subprocess.run(['grim', '/tmp/gnoblin-switcher-preview.png'], check=True)
     assert shown['focus'] == 'Switcher Three', shown
     assert shown['label'].startswith('Switcher Two'), shown
@@ -160,6 +188,15 @@ try:
     key(42, False)
     key(56, False)
     wait_for(lambda s: s['focus'] == 'Switcher Two')
+    for _ in range(10):
+        previous = state()['focus']
+        key(56, True)
+        tap(15)
+        wait_for(lambda s: s['shown'])
+        tap(1)
+        key(56, False)
+        cancelled = wait_for(lambda s: not s['visible'])
+        assert cancelled['focus'] == previous, ('rapid cancellation changed focus', cancelled)
     timings = []
     for _ in range(20):
         previous = state()['focus']

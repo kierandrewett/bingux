@@ -9,7 +9,10 @@ QtObject {
     property bool enabled: true
     property int boundCount: 0
     property bool trackWindows: false
+    property bool trackPrivacy: false
+    signal privacySnapshot(var state)
     readonly property bool ready: socket.connected && boundCount === bindings.length
+    readonly property bool connected: socket.connected
     signal activated(string id, bool first, int modifiers)
     signal keyPressed(int key, int modifiers)
     signal released()
@@ -17,6 +20,12 @@ QtObject {
     signal failed(string message)
     signal windowSnapshot(var windows)
     signal pointerPressed(real x, real y, int button)
+    signal previewReceived(string windowId, string source, string error)
+    signal textInserted(string windowId)
+    signal inputAnchor(var anchor)
+    function requestInputAnchor() { send({op: "input-anchor"}); }
+    function insertText(windowId, text) { send({op: "type-text", window: windowId, text: text}); }
+    function requestPreview(id, width, height) { send({op: "preview", window: id, width: width, height: height}); }
     function activateWindow(id) { send({op: "activate", window: id}); }
     function send(record) {
         if (!socket.connected) return;
@@ -28,6 +37,7 @@ QtObject {
         boundCount = 0;
         send({op: "clear"});
         if (trackWindows) send({op: "windows"});
+        if (trackPrivacy) send({op: "privacy"});
         if (enabled) for (const binding of bindings) send(Object.assign({op: "bind"}, binding));
     }
     onEnabledChanged: registerBindings()
@@ -49,9 +59,13 @@ QtObject {
                     else if (record.event === "activated") root.activated(record.id, record.first, record.modifiers);
                     else if (record.event === "key") root.keyPressed(record.key, record.modifiers);
                     else if (record.event === "released") root.released();
+                    else if (record.event === "typed") root.textInserted(record.window);
+                    else if (record.event === "input-anchor") root.inputAnchor(record);
                     else if (record.event === "cancelled") root.cancelled();
+                    else if (record.event === "privacy") root.privacySnapshot(record);
                     else if (record.event === "windows") root.windowSnapshot(record.windows);
                     else if (record.event === "pointer") root.pointerPressed(record.x, record.y, record.button);
+                    else if (record.event === "preview") root.previewReceived(record.window, record.source, record.message || "");
                     else if (record.event === "error") root.failed(record.message);
                 } catch (error) { root.failed(String(error)); }
             }

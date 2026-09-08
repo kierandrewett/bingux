@@ -94,7 +94,9 @@ let
     '';
 in
 assert quickshell.enable;
+assert builtins.any (package: (package.pname or "") == "binguxctl") host.config.home-manager.users.shell.home.packages;
 assert host.config.programs.dconf.enable;
+assert host.config.bingux.desktop.gnoblin.settings.shell.osd == false;
 assert !host.config.bingux.networking.tailscale.enable;
 assert !(host.config.home-manager.users.shell.systemd.user.services ? bingux-tailscale-systray);
 assert

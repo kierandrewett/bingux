@@ -84,12 +84,7 @@ A profile that selects Gnoblin needs these stable integration points:
   emits no handoff signal.
   `bingux-statusd` validates the signal and forwards it through the local OSD
   socket. The QML process does not subscribe to the D-Bus interface directly.
-- Gnoblin emits `org.gnoblin.Shell.SuperReleased` on `/org/gnoblin/Shell`
-  after Super is released with no other input. Its `(ut)` payload is
-  `[protocolVersion, monotonicUsec]`. Bingux supports protocol version `1`
-  only and ignores other versions. The event is a one-way edge, not key state.
-  The Bingux search service uses it to show the search surface. Holding Super
-  has no action in the shell.
+- Gnoblin executes configured `binguxctl` popup commands from `gnoblin.toml`; bare `Super` fires only on an unchorded release.
 - The Bingux desktop-shell process owns its own layer-shell surfaces. It does not patch or depend on GNOME Shell UI.
 
 `docs/desktop-shell.md` defines the Bingux desktop-shell, socket, and

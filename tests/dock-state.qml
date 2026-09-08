@@ -6,6 +6,7 @@ ShellRoot {
     id: test
     property int step: 0
     property var savedItems: []
+    property var exitingDot: null
     property var failures: []
     property int normalLaunches: 0
     property int newWindowLaunches: 0
@@ -70,6 +71,10 @@ ShellRoot {
     TestWindow { id: a; appId: "dock-test-a"; title: "A"; activated: true }
     TestWindow { id: b; appId: "dock-test-b"; title: "B" }
     TestWindow { id: a2; appId: "dock-test-a"; title: "A second window" }
+    TestWindow { id: a3; appId: "dock-test-a"; title: "A window 3" }
+    TestWindow { id: a4; appId: "dock-test-a"; title: "A window 4" }
+    TestWindow { id: a5; appId: "dock-test-a"; title: "A window 5" }
+    TestWindow { id: a6; appId: "dock-test-a"; title: "A window 6" }
     TestWindow { id: c; appId: "dock-test-c"; title: "C" }
 
     Dock {
@@ -89,7 +94,7 @@ ShellRoot {
                 if (item.modelData.id !== "dock-test-c") continue;
                 const frame = { progress: item.transitionProgress, scale: item.scale, slide: item.slideOffset, z: item.z,
                     opacity: item.opacity, width: dock.testSurface.width };
-                if (item.modelData.exiting)
+                if (item.currentGroup.exiting)
                     test.closingFrames.push(frame);
                 else
                     test.openingFrames.push(frame);
@@ -153,6 +158,21 @@ ShellRoot {
                 test.check(menu.revealOriginX === menu.popupWidth / 2 && menu.revealOriginY === menu.popupHeight, "menu opens from bottom centre");
                 const entry = test.findLabel(menu.body, a.title);
                 test.check(entry && entry.iconSource.toString().length > 0, "open-window entry has an app icon");
+                input.parent = menu.contentItem;
+                input.keyClick(Qt.Key_Up);
+                test.check(entry.activeFocus, "Up selects the last dock menu entry without clicking the menu");
+                input.keyClick(Qt.Key_Return);
+                test.check(a.activated && !dock.testItems.itemAt(0).menuOpen, "Enter activates the selected dock window and closes its menu");
+                const selectedLabel = entry.contentItem.children[0].children.find(child => child.text === a.title);
+                test.check(entry.selectedWindow && selectedLabel.color.toString() === Theme.accent.toString() && selectedLabel.font.bold,
+                           "active window label is blue and bold");
+                dock.testItems.itemAt(0).menuOpen = true;
+                a.activated = false;
+                manager.activeToplevel = null;
+                test.check(entry.selectedWindow && selectedLabel.font.bold && selectedLabel.color.toString() === Theme.accent.toString(),
+                           "active window stays blue and bold while the menu holds keyboard focus");
+                a.activate();
+                b.activate();
                 dock.testItems.itemAt(0).menuOpen = false;
                 manager.toplevels.values = [a, b, a2];
                 manager.toplevels.objectInsertedPost(a2, 2);
@@ -160,7 +180,7 @@ ShellRoot {
             case 3:
                 test.sameItems("second window preserves both buttons");
                 test.check(dock.appGroups[0].windows.length === 2, "second window updates group membership");
-                test.check(dock.testItems.itemAt(0).modelData.windows.length === 2, "rendered button receives changed window count");
+                test.check(dock.testItems.itemAt(0).currentGroup.windows.length === 2, "rendered button receives changed window count");
                 manager.toplevels.values = [a, b, a2, c];
                 manager.toplevels.objectInsertedPost(c, 3);
                 break;
@@ -212,8 +232,8 @@ ShellRoot {
                 test.check(a.closeRequests === 1 && b.closeRequests === 0 && !a.activated, "close targets only its window without activating it");
                 test.check(button.menuOpen, "close request keeps menu open while window handles the request");
                 button.menuOpen = false;
-                const originalGroup = button.modelData;
-                button.modelData = {
+                const originalGroup = button.currentGroup;
+                const launchGroup = {
                     id: "dock-test-a", windows: [a],
                     desktopEntry: {
                         name: "Test app", icon: "application-x-executable",
@@ -221,18 +241,19 @@ ShellRoot {
                         execute: () => { test.normalLaunches++; },
                     },
                 };
+                dock.appGroups = dock.appGroups.map(group => group.id === launchGroup.id ? launchGroup : group);
                 test.check((button.testMouse.acceptedButtons & Qt.MiddleButton) !== 0, "dock accepts middle clicks");
                 const edgeX = button.mapToItem(dock.contentItem, button.width / 2, 0).x;
-                test.check(dock.testSurface.bottomGap === Theme.padding - Theme.spaceSmall, "dock sits four pixels lower");
+                test.check(dock.testSurface.bottomGap === Theme.dockPadding && dock.testSurface.y === Theme.dockPadding, "dock safe zone has equal top and bottom padding");
                 input.mouseClick(dock.contentItem, edgeX, dock.height - 1, Qt.MiddleButton);
                 input.wait(30);
                 test.check(test.newWindowLaunches === 1 && test.normalLaunches === 0, "middle click uses explicit new-window action");
                 test.check(!!dock.launchFeedbackToken && LaunchFeedback.active.length === 1, "dock requests global launch cursor feedback");
-                button.modelData.desktopEntry.actions = [];
+                launchGroup.desktopEntry.actions = [];
                 input.mouseClick(button, button.width / 2, button.height / 2, Qt.MiddleButton);
                 input.wait(30);
                 test.check(test.normalLaunches === 1, "middle click falls back to normal launch without new-window action");
-                button.modelData = originalGroup;
+                dock.appGroups = dock.appGroups.map(group => group.id === originalGroup.id ? originalGroup : group);
                 manager.toplevels.values = [a, b, c];
                 manager.toplevels.objectInsertedPost(c, 2);
                 break;
@@ -280,8 +301,133 @@ ShellRoot {
                 break;
             case 16:
                 test.check(dock.pendingLaunchGroupId === "" && LaunchFeedback.active.length === 0, "launch timeout restores the global cursor");
+                manager.toplevels.values = [a, b, a2, a3, a4, a5, a6];
+                manager.toplevels.objectInsertedPost(a3, 3);
+                a6.activate();
+                steps.interval = 250;
+                break;
+            case 17: {
+                const dots = test.identities().find(item => item.modelData.id === "dock-test-a").testIndicators;
+                test.check(dots.windowCount === 6 && dots.visibleCount === 4 && dots.activeIndex === 5,
+                           "all six windows have indicators and the sixth is active: " + JSON.stringify({count: dots.windowCount, active: dots.activeIndex, start: dots.firstVisibleIndex, offset: dots.scrollOffset, groups: dock.appGroups.map(group => ({id: group.id, count: group.windows.length})), delegates: test.identities().map(item => ({id: item.modelData.id, modelCount: item.currentGroup.windows.length, dots: item.testIndicators.windows.map(w => w.title)}))}));
+                test.check(dots.firstVisibleIndex === 2 && dots.moreBefore && !dots.moreAfter && dots.width <= Theme.dockItemSize,
+                           "indicator strip reveals the focused overflow window within dock bounds");
+                test.check(Math.abs(dots.scrollOffset + 16) < 1, "indicator scroll settles at the focused range");
+                a3.activate();
+                break;
+            }
+            case 18:
+                const activeDots = test.identities().find(item => item.modelData.id === "dock-test-a").testIndicators;
+                const activeDot = activeDots.testView.itemAtIndex(activeDots.activeIndex);
+                test.check(activeDot && activeDot.width === 18 && activeDot.children[0].width === 16,
+                           "active dot uses a wider pill with a compact two-pixel gap");
+                test.check(test.identities().find(item => item.modelData.id === "dock-test-a").testIndicators.firstVisibleIndex === 2,
+                           "switching within the visible range keeps indicators stable");
+                a.activate();
+                break;
+            case 19: {
+                const dots = test.identities().find(item => item.modelData.id === "dock-test-a").testIndicators;
+                test.check(dots.firstVisibleIndex === 0 && !dots.moreBefore && dots.moreAfter,
+                           "switching back reveals the first window and remaining overflow");
+                a6.activate();
+                steps.interval = 60;
+                break;
+            }
+            case 20:
+                test.check(test.identities().find(item => item.modelData.id === "dock-test-a").testIndicators.scrollOffset < 0 && test.identities().find(item => item.modelData.id === "dock-test-a").testIndicators.scrollOffset > -16,
+                           "indicator range scrolls through intermediate positions");
+                manager.toplevels.values = [a, b, a2];
+                manager.toplevels.objectRemovedPost(a6, 6);
+                a2.activate();
+                steps.interval = 250;
+                break;
+            case 21: {
+                const dots = test.identities().find(item => item.modelData.id === "dock-test-a").testIndicators;
+                test.check(dots.windowCount === 2 && dots.firstVisibleIndex === 0 && !dots.moreBefore && !dots.moreAfter,
+                           "closing overflow windows clamps and recentres the indicator strip");
+                manager.toplevels.values = [a, b, a2, a3];
+                manager.toplevels.objectInsertedPost(a3, 3);
+                steps.interval = 60;
+                break;
+            }
+            case 22: {
+                const dots = test.identities().find(item => item.modelData.id === "dock-test-a").testIndicators;
+                test.exitingDot = dots.testView.itemAtIndex(2);
+                test.check(test.exitingDot && test.exitingDot.opacity > 0 && test.exitingDot.opacity < 1,
+                           "new window dot fades in through intermediate opacity: " + (test.exitingDot ? test.exitingDot.opacity : "missing"));
+                steps.interval = 250;
+                break;
+            }
+            case 23:
+                manager.toplevels.values = [a, b, a2];
+                manager.toplevels.objectRemovedPost(a3, 3);
+                steps.interval = 60;
+                break;
+            case 24:
+                test.check(test.exitingDot && test.exitingDot.opacity > 0 && test.exitingDot.opacity < 1,
+                           "closed window dot stays rendered while fading out: " + (test.exitingDot ? test.exitingDot.opacity : "missing"));
+                steps.interval = 200;
+                break;
+            case 25: {
+                a.activate();
+                a2.activate();
+                b.activate();
+                const button = test.identities().find(item => item.modelData.id === "dock-test-a");
+                input.mouseClick(button, button.width / 2, button.height / 2, Qt.LeftButton);
+                test.check(a2.activated && !a.activated, "dock click restores the most recently focused window of that app");
+                input.mouseClick(button, button.width / 2, button.height / 2, Qt.LeftButton);
+                test.check(a.minimized && a2.minimized && !b.minimized, "clicking the focused app minimises its entire group only");
+                b.activate();
+                input.mouseClick(button, button.width / 2, button.height / 2, Qt.LeftButton);
+                test.check(a2.activated && !a2.minimized, "dock restores its most recent minimised window");
+                b.activate();
+                a2.minimized = true;
+                a.minimized = false;
+                a.minimized = true;
+                input.mouseClick(button, button.width / 2, button.height / 2, Qt.LeftButton);
+                test.check(a.activated && !a.minimized && a2.minimized,
+                           "unfocused dock app restores its last minimised window even when another window was focused more recently");
+                b.activate();
+                input.mouseClick(button, button.width / 2, button.height / 2, Qt.LeftButton);
+                test.check(a2.activated && !a2.minimized,
+                           "restoring a window removes it from the minimised history");
+                a.minimized = true;
+                dock.cycleGroup(button.currentGroup, -120);
+                test.check(a.activated && !a.minimized, "scrolling selects and restores the next window");
+                input.mouseClick(button, button.width / 2, button.height / 2, Qt.LeftButton);
+                test.check(a.minimized, "click after scrolling minimises the selected window");
+                // The compositor clears activation after acknowledging minimise.
+                a.activated = false;
+                manager.activeToplevel = null;
+                input.mouseClick(button, button.width / 2, button.height / 2, Qt.LeftButton);
+                test.check(a.activated && !a.minimized,
+                           "second click restores the same window selected by scrolling");
+                b.activate();
+                manager.toplevels.values = [a, b];
+                manager.toplevels.objectRemovedPost(a2, 2);
+                break;
+            }
+            case 26: {
+                const button = test.identities().find(item => item.modelData.id === "dock-test-a");
+                input.mouseClick(button, button.width / 2, button.height / 2, Qt.LeftButton);
+                test.check(a.activated, "closing the remembered window falls back to a remaining window");
+                break;
+            }
+            case 27: {
+                const button = test.identities().find(item => item.modelData.id === "dock-test-a");
+                a.activated = false;
+                manager.activeToplevel = null;
+                input.mouseClick(button, button.width / 2, button.height / 2, Qt.LeftButton);
+                test.check(a.minimized && !a.activated,
+                           "dock click still minimises when shell pointer focus temporarily clears activation");
+                input.mouseClick(button, button.width / 2, button.height / 2, Qt.LeftButton);
+                test.check(a.activated && !a.minimized, "following click restores the same window without cycling");
+                break;
+            }
+            case 28:
                 console.info(test.failures.length ? "DOCK_TEST_FAILED" : "DOCK_TEST_PASSED");
                 Qt.quit();
+                break;
             }
         }
     }

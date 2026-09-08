@@ -12,3 +12,8 @@
 /banks/
 .env
 .env.*
+
+# Local runtime artifacts
+/core.*
+__pycache__/
+*.pyc

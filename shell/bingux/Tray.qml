@@ -23,7 +23,7 @@ Item {
         }
     }
 
-    implicitWidth: Math.min(trayRow.contentWidth, root.maximumVisibleItems * 36)
+    implicitWidth: Math.min(trayRow.contentWidth, root.maximumVisibleItems * Theme.barIconTarget)
     implicitHeight: trayRow.implicitHeight
     width: implicitWidth
     height: implicitHeight
@@ -34,10 +34,10 @@ Item {
 
         width: root.width
         height: Theme.barHeight
-        implicitWidth: Math.min(contentWidth, root.maximumVisibleItems * 36)
+        implicitWidth: Math.min(contentWidth, root.maximumVisibleItems * Theme.barIconTarget)
         implicitHeight: Theme.barHeight
         orientation: ListView.Horizontal
-        spacing: Theme.spaceSmall
+        spacing: 0
         clip: true
         interactive: contentWidth > width
         boundsBehavior: Flickable.StopAtBounds
@@ -101,30 +101,23 @@ Item {
                     return trayButton.isSafeIconSource(icon) ? icon : Quickshell.iconPath("application-x-executable", "application-x-executable");
                 }
 
-                width: 32
+                width: Theme.barIconTarget
                 height: Theme.barHeight
-
-                Item {
-                    anchors.fill: parent
-
-                    Rectangle {
-                        anchors.fill: parent
-                        anchors.margins: 2
-                        radius: Theme.insetRadius(Theme.controlHeight, Theme.gap)
-                        visible: trayMenu.visible || trayMouse.containsMouse
-                        color: Theme.hover
-                    }
-
-                    Rectangle {
-                        anchors.fill: parent
-                        anchors.margins: 2
-                        radius: Theme.insetRadius(Theme.controlHeight, Theme.gap)
-                        visible: trayMouse.pressed && !trayMenu.visible
-                        color: Theme.pressed
-                    }
+                BarTooltip {
+                    anchorItem: trayButton
+                    barWindow: root.parentWindow
+                    requested: (trayMouse.containsMouse || trayButton.activeFocus) && !trayMenu.visible
+                    text: trayButton.Accessible.name || "Tray application"
                 }
 
-                IconImage {
+                BarControlSurface {
+                    hovered: trayMouse.containsMouse
+                    pressed: trayMouse.pressed
+                    selected: trayMenu.visible
+                    focused: trayButton.activeFocus
+                }
+
+                OsIconImage {
                     visible: !trayButton.usesFallbackIcon
                     anchors.centerIn: parent
                     implicitSize: Theme.iconSize
@@ -184,17 +177,15 @@ Item {
                     id: trayMenu
                     menu: trayButton.modelData.menu
                     screen: root.parentWindow.screen
-                    onPopupWidthChanged: {
-                        if (visible)
-                            preferredX = trayButton.mapToItem(root.parentWindow.contentItem, 0, 0).x - popupWidth + trayButton.width;
-                    }
+                    anchorWindow: root.parentWindow
+                    anchorItem: trayButton
                     function open() {
-                        preferredX = trayButton.mapToItem(root.parentWindow.contentItem, 0, 0).x - popupWidth + trayButton.width;
                         visible = true;
                     }
                 }
                 MouseArea {
                     id: trayMouse
+                    hoverEnabled: true
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                     cursorShape: Qt.ArrowCursor

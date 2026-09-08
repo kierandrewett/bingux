@@ -260,6 +260,8 @@ ShellPopup {
             TextField {
                 id: input
                 objectName: "emojiSearch"
+                selectionColor: Theme.textSelection
+                selectedTextColor: Theme.text
                 Layout.fillWidth: true
                 implicitHeight: 40
                 padding: 12

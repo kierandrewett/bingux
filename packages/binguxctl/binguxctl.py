@@ -14,6 +14,7 @@ import time
 def parser():
     result = argparse.ArgumentParser(prog="binguxctl", description=__doc__)
     result.add_argument("--quickshell", default=os.environ.get("BINGUX_QUICKSHELL", "qs"), help="Quickshell executable")
+    result.add_argument("--any-display", action="store_true", default=os.environ.get("BINGUX_ANY_DISPLAY") == "1", help="Match the selected shell across display connections")
     selection = result.add_mutually_exclusive_group()
     selection.add_argument("--path", help="Running shell configuration path")
     selection.add_argument("--config", help="Running shell configuration name (default: bingux)")
@@ -67,7 +68,7 @@ def parser():
     search = commands.add_parser("search", help="Control search or set its query")
     search.add_argument("action", nargs="?", default="open", choices=["open", "close", "toggle", "status", "query"])
     search.add_argument("text", nargs="*")
-    for name in ("calendar", "controls", "metrics", "keyboard", "notifications"):
+    for name in ("settings", "calendar", "controls", "metrics", "keyboard", "notifications"):
         command = commands.add_parser(name, help=f"Control {name}")
         actions = ["open", "close", "toggle", "status"]
         if name == "controls": actions += ["page", "list", "show", "hide"]
@@ -184,7 +185,7 @@ def invocation(args, cli):
         call = ["search", "query", " ".join(args.text)]
     elif command == "search" and args.text: cli.error("query text requires search query")
     elif command == "dnd": call = ["shell", "dnd", action]
-    elif command in ("search", "calendar", "controls", "metrics", "keyboard", "notifications"):
+    elif command in ("settings", "search", "calendar", "controls", "metrics", "keyboard", "notifications"):
         call = ["shell", "panel", command, action]
     elif command == "sidebar":
         allowed = {"edge": ["left", "top", "right"], "select": ["terminal", "notes", "monitor", "calendar", "media", "tasks"]}
@@ -243,7 +244,7 @@ def main(argv=None):
     path = args.path or (None if args.config else os.environ.get("BINGUX_CONFIG_PATH"))
     selection = ["--path", path] if path else ["--config", args.config or os.environ.get("BINGUX_CONFIG_NAME", "bingux")]
     try:
-        prefix = [args.quickshell, "ipc", *selection]
+        prefix = [args.quickshell, "ipc", *(["--any-display"] if args.any_display else []), *selection]
         if args.command == "network" and args.action in ("list", "connect", "disconnect"):
             state = refresh_network(prefix)
             if args.action == "list":

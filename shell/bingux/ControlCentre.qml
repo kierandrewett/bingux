@@ -3,114 +3,329 @@ import QtQuick.Layouts
 import QtQuick.Controls
 import Quickshell
 import Quickshell.Bluetooth
+import Quickshell.Services.Mpris
 
 ShellPopup {
     id: root
     required property var indicators
-    popupWidth: 380
-    popupHeight: controls.implicitHeight + contentPadding * 2
-    preferredX: width - popupWidth - Theme.padding
+    readonly property var controlChoices: extrasView.choices
+    readonly property var deviceControls: detailView
+    property var services: ControlCentreServices
+    readonly property bool extraPage: ["vpn", "power", "customise"].includes(detailPage)
+    readonly property var activeDetailView: extraPage ? extrasView : detailView
+    readonly property var connectedVpns: services.vpns.filter(vpn => vpn.connected)
+    readonly property bool showVpn: services.showControl("vpn") && services.vpns.length > 0
+    onVisibleChanged: services.active = visible
+    property bool detailOpen: false
+    property string detailPage: "network"
+    property real detailProgress: detailOpen ? 1 : 0
+    Behavior on detailProgress { NumberAnimation { duration: Theme.reducedMotion ? 0 : 160; easing.type: Easing.OutCubic } }
+    property var detailTrigger: null
+    property bool pendingDetailFocus: false
+    property bool pendingOverviewFocus: false
+    function openDetail(page, trigger, audioTab) {
+        if (page === "audio") detailView.audioTab = audioTab || "output";
+        pendingOverviewFocus = false;
+        detailTrigger = trigger || null;
+        pendingDetailFocus = !!(trigger && trigger.visualFocus);
+        detailPage = page;
+        detailOpen = true;
+    }
+    Timer {
+        interval: 16
+        repeat: true
+        running: root.detailOpen && root.pendingDetailFocus
+        onTriggered: if (root.activeDetailView.visible) {
+            root.activeDetailView.focusBack(Qt.TabFocusReason);
+            root.pendingDetailFocus = false;
+        }
+    }
+    function closeDetail() {
+        const keyboard = activeDetailView.keyboardNavigation;
+        detailOpen = false;
+        pendingOverviewFocus = keyboard && !!detailTrigger;
+    }
+    Timer {
+        interval: 16
+        repeat: true
+        running: root.pendingOverviewFocus && !root.detailOpen
+        onTriggered: {
+            if (!root.visible) root.pendingOverviewFocus = false;
+            else if (controls.visible) {
+                if (root.detailTrigger) root.detailTrigger.forceActiveFocus(Qt.TabFocusReason);
+                root.pendingOverviewFocus = false;
+            }
+        }
+    }
+    Connections { target: root; function onVisibleChanged() { if (!root.visible) root.detailOpen = false; } }
+    property var bluetoothAdapter: Bluetooth.defaultAdapter
+    readonly property var microphone: indicators.audioSource || null
+    readonly property bool microphoneAvailable: microphone !== null && microphone.ready && microphone.audio !== null
+    property var mediaPlayers: Mpris.players.values
+    property var selectedMediaPlayer: null
+    property var mediaPlayer: mediaPlayers.indexOf(selectedMediaPlayer) >= 0 ? selectedMediaPlayer
+        : mediaPlayers.find(player => player.isPlaying) || mediaPlayers[0] || null
+    popupWidth: Theme.notificationWidth + contentPadding * 2
+    property real dockSafeInset: Theme.dockExclusiveHeight
+    readonly property real dockSafeBottom: height - dockSafeInset - Theme.gap
+    readonly property real maximumPopupHeight: Math.max(0, Math.min(height * 0.8, dockSafeBottom - preferredY))
+    property real controlsHeight: Math.min(detailOpen ? activeDetailView.implicitHeight : controls.implicitHeight,
+        Math.max(0, maximumPopupHeight - contentPadding * 2))
+    Behavior on controlsHeight {
+        enabled: root.visible && root.revealScale === 1
+        NumberAnimation { duration: Theme.reducedMotion ? 0 : 180; easing.type: Easing.OutCubic }
+    }
+    popupHeight: Math.ceil(controlsHeight) + contentPadding * 2
+    contentPadding: 16
+    cornerRadius: Theme.cardRadius
+    surfaceColor: Theme.shellSurface
+    preferredX: anchorItem ? anchorPosition.x - popupWidth : width - popupWidth - Theme.padding
+
     function settings(panel) {
         Quickshell.execDetached(["gnome-control-center", panel]);
         visible = false;
     }
+
+    Item {
+        id: controlDeck
+        width: parent.width
+        height: root.controlsHeight
+    Flickable {
+        id: overview
+        anchors.fill: parent
+        contentHeight: controls.implicitHeight
+        contentWidth: width
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: ScrollBar {
+            parent: controlDeck
+            x: overview.width + 4
+            y: 0
+            height: overview.height
+            width: 8
+            visible: overview.visible
+        }
+        transform: Translate { x: -root.detailProgress * 12 }
+        opacity: 1 - root.detailProgress
+        visible: root.detailProgress < 1
+        enabled: !root.detailOpen
     ColumnLayout {
         id: controls
-        width: parent.width
-        spacing: Theme.padding
+        objectName: "controlOverviewRows"
+        width: overview.width
+        spacing: 12
         RowLayout {
             Layout.fillWidth: true
-            Text { Layout.fillWidth: true; text: "Control Centre"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontHeading; font.weight: Font.DemiBold }
-            ActionButton { cornerRadius: root.contentRadius; text: "×"; Accessible.name: "Close control centre"; onClicked: root.visible = false }
+            spacing: 8
+            IconButton {
+                objectName: "controlUserAccount"
+                iconName: "avatar-default-symbolic"
+                imageSource: "file:///var/lib/AccountsService/icons/" + Quickshell.env("USER")
+                label: "User account"
+                onClicked: root.settings("users")
+            }
+            Item { Layout.fillWidth: true }
+            SymbolicIcon { visible: root.indicators.laptopBatteryAvailable; implicitSize: 16; color: Theme.muted; source: Quickshell.iconPath("battery-good-symbolic") }
+            Text { visible: root.indicators.laptopBatteryAvailable; text: root.indicators.batteryAccessibleName().replace(/^Battery /, "").replace(" percent", "%").replace(/,.*$/, ""); Accessible.name: root.indicators.batteryAccessibleName(); color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+            IconButton {
+                objectName: "controlSettings"
+                iconName: "org.gnome.Settings-symbolic"
+                label: "Settings"
+                onClicked: root.settings("")
+            }
+            IconButton {
+                objectName: "controlLock"
+                iconName: "system-lock-screen-symbolic"
+                label: "Lock"
+                onClicked: { Quickshell.execDetached(["loginctl", "lock-session"]); root.visible = false }
+            }
         }
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 12
+            AudioLevel {
+                node: root.indicators.audioSink || null
+                label: "Volume"
+                iconName: root.indicators.audioIconName()
+                maximum: 1.5
+                navigation: true
+                navigationObjectName: "controlSoundDetails"
+                muteObjectName: "controlMute"
+                sliderObjectName: "controlVolume"
+                onDevicesRequested: trigger => root.openDetail("audio", trigger, "output")
+            }
+            AudioLevel {
+                node: root.microphone
+                label: "Microphone"
+                iconName: "audio-input-microphone-symbolic"
+                navigation: true
+                navigationObjectName: "controlInputDetails"
+                muteObjectName: "controlMicrophoneQuick"
+                sliderObjectName: "controlMicrophoneVolume"
+                onDevicesRequested: trigger => root.openDetail("audio", trigger, "input")
+            }
+        }
+        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.outline; opacity: 0.5 }
         GridLayout {
+            id: quickRows
             Layout.fillWidth: true
             columns: 2
-            rowSpacing: Theme.gap
-            columnSpacing: Theme.gap
-            Tile {
+            uniformCellWidths: true
+            rowSpacing: 8
+            columnSpacing: 8
+            ControlRow {
+                tileLayout: true
+                Layout.columnSpan: 1
+                navigation: true
+                rowInteractive: false
+                objectName: "controlNetwork"
                 iconName: root.indicators.networkIconName()
-                title: "Network"
-                subtitle: root.indicators.networkAccessibleName()
-                onClicked: root.settings("network")
+                title: root.indicators.networkState === "wired" ? "Ethernet" : root.indicators.networkState === "vpn" ? "VPN" : "Wi-Fi"
+                subtitle: root.indicators.networkState === "offline" ? "Not connected" : root.indicators.networkState === "unknown" ? "Unavailable" : "Connected"
+                selected: root.indicators.networkState !== "offline" && root.indicators.networkState !== "unknown"
+                Accessible.description: root.indicators.networkAccessibleName()
+                onNavigationRequested: trigger => root.openDetail("network", trigger)
             }
-            Tile {
+            ControlRow {
+                tileLayout: true
+                Layout.columnSpan: 1
+                navigation: true
+                rowInteractive: false
+                objectName: "controlBluetooth"
                 iconName: "bluetooth-active-symbolic"
                 title: "Bluetooth"
-                enabled: Bluetooth.defaultAdapter !== null
-                subtitle: Bluetooth.defaultAdapter ? (Bluetooth.defaultAdapter.enabled ? "On" : "Off") : "Unavailable"
-                onClicked: if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.enabled = !Bluetooth.defaultAdapter.enabled
+                toggleVisible: true
+                enabled: root.bluetoothAdapter !== null
+                selected: root.bluetoothAdapter !== null && root.bluetoothAdapter.enabled
+                subtitle: root.bluetoothAdapter ? (root.bluetoothAdapter.enabled ? "On" : "Off") : "Unavailable"
+                onNavigationRequested: trigger => root.openDetail("bluetooth", trigger)
+                onToggleRequested: if (root.bluetoothAdapter) root.bluetoothAdapter.enabled = !root.bluetoothAdapter.enabled
             }
-            Tile { iconName: "display-brightness-symbolic"; title: "Display"; subtitle: "Brightness and screens"; onClicked: root.settings("display") }
-            Tile { iconName: "preferences-system-symbolic"; title: "Settings"; subtitle: "System preferences"; onClicked: root.settings("") }
+            ControlRow {
+                visible: root.showVpn
+                tileLayout: false
+                tileSurface: true
+                Layout.columnSpan: 2
+                objectName: "controlVpn"
+                rowInteractive: false
+                navigation: true
+                iconName: "network-vpn-symbolic"
+                title: "VPN"
+                selected: root.connectedVpns.length > 0
+                subtitle: root.connectedVpns.length ? root.connectedVpns.map(vpn => vpn.name).join(", ") : "Disconnected"
+                onNavigationRequested: trigger => root.openDetail("vpn", trigger)
+            }
+            ControlRow {
+                tileLayout: true
+                compactTile: true
+                Layout.columnSpan: root.services.showControl("dnd") && root.services.showControl("nightLight") ? 1 : 2
+                objectName: "controlDnd"
+                visible: root.services.showControl("dnd")
+                title: "Do Not Disturb"
+                subtitle: ""
+                iconName: "notifications-disabled-symbolic"
+                rowInteractive: false
+                toggleVisible: true
+                toggleEnabled: !!root.services.state.dndAvailable && !root.services.busy
+                selected: root.services.doNotDisturb
+                onToggleRequested: root.services.action({kind: "dnd", enabled: !root.services.doNotDisturb})
+            }
+            ControlRow {
+                tileLayout: true
+                compactTile: true
+                Layout.columnSpan: root.services.showControl("dnd") && root.services.showControl("nightLight") ? 1 : 2
+                objectName: "controlNightLight"
+                visible: root.services.showControl("nightLight")
+                title: "Night Light"
+                subtitle: !root.services.state.nightLightAvailable ? "Unavailable" : root.services.state.nightLight && !root.services.state.nightLightActive ? "Scheduled" : ""
+                iconName: "night-light-symbolic"
+                rowInteractive: false
+                toggleVisible: true
+                toggleEnabled: !!root.services.state.nightLightAvailable && !root.services.busy
+                selected: !!root.services.state.nightLight
+                onToggleRequested: root.services.action({kind: "nightLight", enabled: !root.services.state.nightLight})
+            }
+            ControlRow {
+                tileLayout: false
+                tileSurface: true
+                Layout.columnSpan: 2
+                objectName: "controlPower"
+                visible: root.services.showControl("power")
+                title: "Power mode"
+                subtitle: !root.services.state.power.available ? "Unavailable" : root.services.state.power.profile === "power-saver" ? "Power Saver" : root.services.state.power.profile === "performance" ? "Performance" : "Balanced"
+                iconName: "power-profile-balanced-symbolic"
+                rowInteractive: false
+                navigation: true
+                enabled: root.services.state.power.available
+                onNavigationRequested: trigger => root.openDetail("power", trigger)
+            }
+            ControlRow {
+                tileLayout: false
+                tileSurface: true
+                Layout.columnSpan: 2
+                objectName: "controlKeepAwake"
+                visible: root.services.showControl("awake") || root.services.keepAwake
+                title: "Keep Awake"
+                subtitle: root.services.keepAwake ? "Until sign out" : ""
+                iconName: "display-brightness-symbolic"
+                rowInteractive: false
+                toggleVisible: true
+                toggleEnabled: !!root.services.state.awakeAvailable
+                selected: root.services.keepAwake
+                onToggleRequested: root.services.toggleAwake()
+            }
         }
-        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.outline }
-        RowLayout {
+        ControlCentreMedia {
             Layout.fillWidth: true
-            ActionButton { cornerRadius: root.contentRadius;
-                Layout.preferredWidth: 40
-                enabled: root.indicators.audioAvailable
-                Accessible.name: root.indicators.audioMuted ? "Unmute" : "Mute"
-                onClicked: root.indicators.audioSink.audio.muted = !root.indicators.audioMuted
-                contentItem: Item { SymbolicIcon { anchors.centerIn: parent; source: Quickshell.iconPath(root.indicators.audioIconName()); implicitSize: 20 } }
-            }
-            Slider {
-                id: volume
-                Layout.fillWidth: true
-                from: 0
-                to: 1.5
-                enabled: root.indicators.audioAvailable
-                value: root.indicators.audioVolume
-                Accessible.name: "Volume"
-                onMoved: { root.indicators.audioSink.audio.muted = false; root.indicators.audioSink.audio.volume = value }
-                background: Rectangle {
-                    x: volume.leftPadding
-                    y: volume.topPadding + (volume.availableHeight - height) / 2
-                    width: volume.availableWidth
-                    height: 6
-                    radius: 3
-                    color: Theme.elevated
-                    Rectangle { width: volume.visualPosition * parent.width; height: parent.height; radius: parent.radius; color: Theme.accent }
-                }
-                handle: Rectangle {
-                    x: volume.leftPadding + volume.visualPosition * (volume.availableWidth - width)
-                    y: volume.topPadding + (volume.availableHeight - height) / 2
-                    width: 18; height: 18; radius: 9
-                    color: volume.pressed ? Theme.pressed : Theme.text
-                    border.width: volume.activeFocus ? 2 : 0
-                    border.color: Theme.accent
-                }
-            }
-            Text { Layout.preferredWidth: 42; horizontalAlignment: Text.AlignRight; text: root.indicators.audioAvailable ? Math.round(root.indicators.audioVolume * 100) + "%" : "—"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize }
+            player: root.mediaPlayer
+            playerOptions: root.mediaPlayers
+            onPlayerSelected: selectedPlayer => root.selectedMediaPlayer = selectedPlayer
+            active: root.visible
         }
-        RowLayout {
-            Layout.fillWidth: true
-            Text { Layout.fillWidth: true; text: root.indicators.laptopBatteryAvailable ? root.indicators.batteryAccessibleName() : ""; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
-            ActionButton { cornerRadius: root.contentRadius; text: "Sound settings"; onClicked: root.settings("sound") }
-            ActionButton { cornerRadius: root.contentRadius; text: "Lock"; onClicked: { Quickshell.execDetached(["loginctl", "lock-session"]); root.visible = false } }
+
+
+        ActionButton {
+            objectName: "controlCustomise"
+            Layout.alignment: Qt.AlignRight
+            implicitHeight: 28
+            flat: true
+            text: "Customise controls..."
+            onClicked: root.openDetail("customise", this)
+        }
+        Text { Layout.fillWidth: true; visible: root.services.error !== ""; text: root.services.error; wrapMode: Text.Wrap; color: Theme.muted; font.pixelSize: Theme.fontSmall }
+    }
+    }
+
+        ControlCentreExtras {
+            id: extrasView
+            objectName: "controlExtrasPage"
+            services: root.services
+            page: root.detailPage
+            x: (1 - root.detailProgress) * 12
+            opacity: root.detailProgress
+            width: parent.width
+            height: parent.height
+            visible: root.detailProgress > 0 && root.extraPage
+            enabled: root.detailOpen && root.extraPage
+            onBackRequested: root.closeDetail()
+            onSettingsRequested: panel => root.settings(panel)
+        }
+        ControlCentreDetails {
+            id: detailView
+            objectName: "controlDetailPage"
+            x: (1 - root.detailProgress) * 12
+            opacity: root.detailProgress
+            width: parent.width
+            height: parent.height
+            visible: root.detailProgress > 0 && !root.extraPage
+            enabled: root.detailOpen && !root.extraPage
+            indicators: root.indicators
+            bluetoothAdapter: root.bluetoothAdapter
+            page: root.detailPage
+            active: root.visible && root.detailOpen
+            onBackRequested: root.closeDetail()
+            onSettingsRequested: panel => root.settings(panel)
         }
     }
-    component Tile: AbstractButton {
-        id: tile
-        required property string iconName
-        required property string title
-        required property string subtitle
-        Layout.fillWidth: true
-        implicitHeight: 76
-        activeFocusOnTab: true
-        Accessible.name: title + ", " + subtitle
-        background: Rectangle { radius: root.contentRadius; color: !tile.enabled ? Theme.surface : tile.down ? Theme.pressed : tile.hovered || tile.activeFocus ? Theme.hover : Theme.elevated }
-        contentItem: RowLayout {
-            spacing: Theme.padding
-            anchors.fill: parent
-            anchors.margins: Theme.padding
-            SymbolicIcon { implicitSize: 20; source: Quickshell.iconPath(tile.iconName) }
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: Theme.spaceSmall
-                Text { Layout.fillWidth: true; text: tile.title; color: tile.enabled ? Theme.text : Theme.muted; elide: Text.ElideRight; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize; font.weight: Font.DemiBold }
-                Text { Layout.fillWidth: true; text: tile.subtitle; color: Theme.muted; elide: Text.ElideRight; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
-            }
-        }
-    }
+
 }

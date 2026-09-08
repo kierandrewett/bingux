@@ -18,6 +18,19 @@ class ApplicationLaunch(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertNotIn("Traceback", result.stderr)
 
+    def test_early_process_failure_is_reported(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            apps = Path(temporary) / "applications"
+            apps.mkdir()
+            (apps / "bingux-failure.desktop").write_text(
+                "[Desktop Entry]\nType=Application\nName=Failing app\nExec=/bin/sh -c 'exit 42'\n")
+            result = subprocess.run([sys.executable, str(launcher), "bingux-failure"],
+                env=os.environ | {"XDG_DATA_HOME": temporary, "XDG_DATA_DIRS": temporary},
+                capture_output=True, text=True, timeout=6)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("exited with code 42", result.stderr)
+            self.assertIn("Failing app", result.stderr)
+
     def test_desktop_action_and_field_codes(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)

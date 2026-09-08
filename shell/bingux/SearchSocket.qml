@@ -70,10 +70,10 @@ QtObject {
         }
     }
 
-    signal showSearch()
     signal resultsReceived(string requestId, var results, bool complete)
     signal requestFailed(string requestId, string code)
     signal activationCompleted(string requestId)
+    signal chatProgress(string requestId, string message)
     signal chatReceived(string requestId, string message)
 
     function utf8ByteLength(value) {
@@ -184,16 +184,16 @@ QtObject {
 
     function isValidChatMessage(message) {
         const trimmed = typeof message === "string" ? message.trim() : "";
-        return typeof message === "string" && trimmed !== "" && utf8ByteLength(message) <= maxChatMessageBytes && !/[\u0000-\u001f\u007f-\u009f]/.test(message);
+        return typeof message === "string" && trimmed !== "" && utf8ByteLength(message) <= maxChatMessageBytes && !/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/.test(message);
     }
 
     function isChatResponseRecord(record) {
-        return isCommonRecord(record) && hasOnlyFields(record, ["protocolVersion", "type", "requestId", "message"]) && record.type === "chat-response" && isValidRequestId(record.requestId) && isValidChatMessage(record.message);
+        return isCommonRecord(record) && hasOnlyFields(record, ["protocolVersion", "type", "requestId", "message"]) && (record.type === "chat-response" || record.type === "chat-progress") && isValidRequestId(record.requestId) && isValidChatMessage(record.message);
     }
 
     function acceptRecord(record) {
         if (isShowSearchRecord(record)) {
-            root.showSearch();
+            // Accept legacy daemon events during upgrades; config commands own opening.
             return true;
         }
         if (isIntegrationStateRecord(record)) {
@@ -213,7 +213,8 @@ QtObject {
             return true;
         }
         if (isChatResponseRecord(record)) {
-            root.chatReceived(record.requestId, record.message.trim());
+            if (record.type === "chat-progress") root.chatProgress(record.requestId, record.message);
+            else root.chatReceived(record.requestId, record.message.trim());
             return true;
         }
         return false;
@@ -302,6 +303,12 @@ QtObject {
     function failConnection() {
         rejectingConnection = true;
         connectionState = "unavailable";
+        localSocket.connected = false;
+        scheduleReconnect();
+    }
+
+    function resetChat() {
+        // Daemon histories are scoped to a connection. A new search starts clean.
         localSocket.connected = false;
         scheduleReconnect();
     }

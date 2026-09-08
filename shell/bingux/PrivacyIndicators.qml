@@ -3,69 +3,64 @@ import QtQuick.Layouts
 
 Item {
     id: root
-
-    required property var metrics
-
+    required property var systemMetrics
+    required property var privacyState
+    property var barWindow: null
+    readonly property bool screenSharing: privacyState.screenSharing || (!privacyState.available && systemMetrics.screenSharing)
+    readonly property bool active: sharingVisible || privacyState.cameraInUse
+        || systemMetrics.microphoneInUse || systemMetrics.locationInUse
+    visible: active
+    property bool sharingVisible: screenSharing
+    property double sharingShownAt: Date.now()
     implicitWidth: privacyRow.implicitWidth
-    implicitHeight: privacyRow.implicitHeight
+    implicitHeight: Theme.barHeight
     width: implicitWidth
     height: implicitHeight
-
-    component PrivacyIndicator: Item {
-        id: indicator
-
-        required property bool active
-        required property string label
-        required property string accessibleName
-
-        visible: active
-        implicitWidth: indicatorRow.implicitWidth
-        implicitHeight: 24
-        Accessible.name: accessibleName
-        Accessible.role: Accessible.StaticText
-
-        RowLayout {
-            id: indicatorRow
-
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: 4
-
-            Rectangle {
-                Layout.preferredWidth: 6
-                Layout.preferredHeight: 6
-                radius: width / 2
-                color: "#f4a340"
-            }
-
-            Text {
-                color: "#f4a340"
-                font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
-                text: indicator.label
-            }
+    onScreenSharingChanged: {
+        sharingDelay.stop();
+        if (screenSharing) {
+            if (!sharingVisible) sharingShownAt = Date.now();
+            sharingVisible = true;
+        } else {
+            sharingDelay.interval = Math.max(0, 5000 - (Date.now() - sharingShownAt));
+            sharingDelay.start();
         }
     }
-
+    Timer { id: sharingDelay; onTriggered: root.sharingVisible = false }
     RowLayout {
         id: privacyRow
-
-        spacing: 8
-
-        PrivacyIndicator {
-            active: root.metrics.screenSharing
-            label: "SHARE"
-            accessibleName: "Screen sharing is active"
+        spacing: Theme.barControlGap
+        ActivityIndicator {
+            objectName: "screenSharingIndicator"
+            visible: root.sharingVisible
+            barWindow: root.barWindow
+            filled: true
+            iconName: "screen-shared-symbolic"
+            trailingIcon: "screencast-stop-symbolic"
+            interactive: root.screenSharing && root.privacyState.available
+            tooltip: root.screenSharing ? "Stop screen sharing" : "Screen sharing ended"
+            onClicked: root.privacyState.stopSharing()
         }
-
-        PrivacyIndicator {
-            active: root.metrics.microphoneInUse
-            label: "MIC"
-            accessibleName: "Microphone is active"
+        ActivityIndicator {
+            objectName: "cameraIndicator"
+            visible: root.privacyState.cameraInUse
+            barWindow: root.barWindow
+            iconName: "camera-web-symbolic"
+            tooltip: "Camera in use"
         }
-
-        PrivacyIndicator {
-            active: root.metrics.locationInUse
-            label: "LOC"
-            accessibleName: "Location access is active"
+        ActivityIndicator {
+            objectName: "microphoneIndicator"
+            visible: root.systemMetrics.microphoneInUse
+            barWindow: root.barWindow
+            iconName: "microphone-sensitivity-high-symbolic"
+            tooltip: "Microphone in use"
+        }
+        ActivityIndicator {
+            objectName: "locationIndicator"
+            visible: root.systemMetrics.locationInUse
+            barWindow: root.barWindow
+            iconName: "find-location-symbolic"
+            tooltip: "Location in use"
         }
     }
 }

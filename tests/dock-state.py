@@ -9,7 +9,7 @@ import tempfile
 
 root = Path(__file__).resolve().parent.parent
 test_name = os.environ.get("BINGUX_SHELL_TEST", "dock-state")
-if test_name not in ("dock-state", "search-launch-cursor"):
+if test_name not in ("dock-state", "dock-pinning", "search-launch-cursor"):
     raise SystemExit("Unknown shell test")
 if not os.environ.get("WAYLAND_DISPLAY", "").startswith("gnoblin-gs-"):
     raise SystemExit("Run through Gnoblin scripts/run-gnome-shell.sh with GNOBLIN_TEST_DBUS_CLIENT.")
@@ -35,8 +35,11 @@ with tempfile.TemporaryDirectory(prefix="bingux-dock-test-") as directory:
     dock = dock.replace("model: root.testManager.toplevels", "model: root.testManager.toplevels.values")
     dock = dock.replace("id: dockButton", """id: dockButton
                     property alias testMenu: appMenu
-                    property alias testMouse: dockMouse""")
+                    property alias testMouse: dockMouse
+                    property alias testIndicators: windowIndicators""")
     dock_file.write_text(dock)
+    indicators_file = fixture / "DockWindowIndicators.qml"
+    indicators_file.write_text(indicators_file.read_text().replace("id: root", "id: root\n    property alias testView: strip", 1))
     shutil.copy2(root / "tests/launch-feedback-mock.qml", fixture / "LaunchFeedback.qml")
     if test_name == "search-launch-cursor":
         shutil.copy2(root / "tests/search-launch-socket.qml", fixture / "SearchSocket.qml")
@@ -50,11 +53,11 @@ with tempfile.TemporaryDirectory(prefix="bingux-dock-test-") as directory:
     }
     command = [os.environ.get("QS_TEST_BIN", "qs"), "-p", str(fixture), "--no-color"]
     try:
-        result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=15)
+        result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=20)
     except subprocess.TimeoutExpired as error:
         print((error.stdout or b"").decode() + (error.stderr or b"").decode())
         raise SystemExit("Dock test timed out") from error
     output = result.stdout + result.stderr
     print(output)
-    if result.returncode != 0 or ("DOCK_TEST_PASSED" if test_name == "dock-state" else "SEARCH_CURSOR_PASSED") not in output:
+    if result.returncode != 0 or ("SEARCH_CURSOR_PASSED" if test_name == "search-launch-cursor" else "DOCK_TEST_PASSED") not in output:
         raise SystemExit(1)

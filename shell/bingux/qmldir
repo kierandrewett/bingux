@@ -1,15 +1,21 @@
 singleton Theme 1.0 Theme.qml
 singleton LaunchFeedback 1.0 LaunchFeedback.qml
 ActionButton 1.0 ActionButton.qml
+AppIcon 1.0 AppIcon.qml
 CalendarPopup 1.0 CalendarPopup.qml
+CalendarEvents 1.0 CalendarEvents.qml
+CalendarMonthGrid 1.0 CalendarMonthGrid.qml
 ControlCentre 1.0 ControlCentre.qml
 Dock 1.0 Dock.qml
 DockTooltip 1.0 DockTooltip.qml
+TooltipBubble 1.0 TooltipBubble.qml
+ShellTooltip 1.0 ShellTooltip.qml
 InputSourceSelector 1.0 InputSourceSelector.qml
 Metrics 1.0 Metrics.qml
 MenuNavigator 1.0 MenuNavigator.qml
 NotificationState 1.0 NotificationState.qml
 NotificationSurface 1.0 NotificationSurface.qml
+NotificationTestButton 1.0 NotificationTestButton.qml
 OsdState 1.0 OsdState.qml
 OsdSurface 1.0 OsdSurface.qml
 Pill 1.0 Pill.qml
@@ -18,10 +24,100 @@ WindowSwitcher 1.0 WindowSwitcher.qml
 PrivacyIndicators 1.0 PrivacyIndicators.qml
 ProfileSettings 1.0 ProfileSettings.qml
 SearchOverlay 1.0 SearchOverlay.qml
+CaptureTool 1.0 CaptureTool.qml
+BrowserFocus 1.0 BrowserFocus.qml
+SearchResult 1.0 SearchResult.qml
+OsIconImage 1.0 OsIconImage.qml
+singleton OsIcons 1.0 OsIcons.qml
+SearchLaunchEffect 1.0 SearchLaunchEffect.qml
+MarqueeText 1.0 MarqueeText.qml
 SearchSocket 1.0 SearchSocket.qml
 ShellPopup 1.0 ShellPopup.qml
 SymbolicIcon 1.0 SymbolicIcon.qml
 SystemIndicators 1.0 SystemIndicators.qml
+StatusIndicator 1.0 StatusIndicator.qml
 Tray 1.0 Tray.qml
 TrayMenu 1.0 TrayMenu.qml
 TerminalSidebar 1.0 TerminalSidebar.qml
+BarControlSurface 1.0 BarControlSurface.qml
+DockMediaControls 1.0 DockMediaControls.qml
+DockActivity 1.0 DockActivity.qml
+DockBadge 1.0 DockBadge.qml
+AnimatedCount 1.0 AnimatedCount.qml
+IconAccent 1.0 IconAccent.qml
+singleton AlbumArtCache 1.0 AlbumArtCache.qml
+AlbumArtwork 1.0 AlbumArtwork.qml
+ControlCentreMedia 1.0 ControlCentreMedia.qml
+ControlCentreDetails 1.0 ControlCentreDetails.qml
+
+ControlCentreButtonSurface 1.0 ControlCentreButtonSurface.qml
+MediaControls 1.0 MediaControls.qml
+
+PlayPauseGlyph 1.0 PlayPauseGlyph.qml
+SearchPreview 1.0 SearchPreview.qml
+PreviewSpinner 1.0 PreviewSpinner.qml
+PreviewDatabase 1.0 PreviewDatabase.qml
+DocumentPreviewRequest 1.0 DocumentPreviewRequest.qml
+DockWindowIndicators 1.0 DockWindowIndicators.qml
+
+DockNotifications 1.0 DockNotifications.qml
+
+ControlRow 1.0 ControlRow.qml
+ControlSwitch 1.0 ControlSwitch.qml
+IconButton 1.0 IconButton.qml
+
+NotificationStack 1.0 NotificationStack.qml
+AudioLevel 1.0 AudioLevel.qml
+SegmentedControl 1.0 SegmentedControl.qml
+NotificationHistoryPopup 1.0 NotificationHistoryPopup.qml
+BarSearchButton 1.0 BarSearchButton.qml
+BarTooltip 1.0 BarTooltip.qml
+NotificationIndicator 1.0 NotificationIndicator.qml
+
+singleton PreviewService 1.0 PreviewService.qml
+
+ControlCentreExtras 1.0 ControlCentreExtras.qml
+TailscalePage 1.0 TailscalePage.qml
+EmojiPicker 1.0 EmojiPicker.qml
+singleton ControlCentreServices 1.0 ControlCentreServices.qml
+
+SidebarNotes 1.0 SidebarNotes.qml
+SidebarMonitor 1.0 SidebarMonitor.qml
+ShellCorner 1.0 ShellCorner.qml
+
+SystemMetrics 1.0 SystemMetrics.qml
+SystemMetricsPopup 1.0 SystemMetricsPopup.qml
+SystemPerformance 1.0 SystemPerformance.qml
+MetricGraph 1.0 MetricGraph.qml
+
+SeekSlider 1.0 SeekSlider.qml
+RollingNumber 1.0 RollingNumber.qml
+SidebarCalendar 1.0 SidebarCalendar.qml
+SidebarMedia 1.0 SidebarMedia.qml
+SidebarTasks 1.0 SidebarTasks.qml
+
+HardwareDetails 1.0 HardwareDetails.qml
+
+BarReorderHandle 1.0 BarReorderHandle.qml
+ReorderSlide 1.0 ReorderSlide.qml
+NotesContextMenu 1.0 NotesContextMenu.qml
+
+ActivityIndicator 1.0 ActivityIndicator.qml
+RecordingIndicator 1.0 RecordingIndicator.qml
+PrivacyState 1.0 PrivacyState.qml
+
+ProcessorDetails 1.0 ProcessorDetails.qml
+
+ProcessTable 1.0 ProcessTable.qml
+CalendarPeriodPicker 1.0 CalendarPeriodPicker.qml
+
+FilterField 1.0 FilterField.qml
+ServicesPanel 1.0 ServicesPanel.qml
+ApplicationLauncher 1.0 ApplicationLauncher.qml
+DataTable 1.0 DataTable.qml
+TableRowSurface 1.0 TableRowSurface.qml
+
+ShellCommands 1.0 ShellCommands.qml
+
+singleton BinguxPreferences 1.0 BinguxPreferences.qml
+BinguxSettings 1.0 BinguxSettings.qml

@@ -7,6 +7,8 @@ import Quickshell
 ShellPopup {
     id: root
     property var menu: null
+    property var actions: null
+    readonly property var menuEntries: actions !== null ? actions : opener.children.values
     property var parents: []
     property var currentMenu: menu
     readonly property bool keyboardNavigation: navigation.keyboardNavigation
@@ -31,7 +33,7 @@ ShellPopup {
     QsMenuOpener { id: opener; menu: root.currentMenu }
     MenuNavigator {
         id: navigation
-        entries: opener.children.values
+        entries: root.menuEntries
         view: entries
         focusTarget: entries
         onEscapeRequested: root.visible = false
@@ -39,7 +41,7 @@ ShellPopup {
     }
     Instantiator {
         id: menuTextMetrics
-        model: opener.children
+        model: root.menuEntries
         delegate: TextMetrics {
             required property var modelData
             text: modelData && typeof modelData.text === "string" ? modelData.text.replace(/&(.)/g, "$1") : ""
@@ -73,7 +75,7 @@ ShellPopup {
             id: entries
             Layout.fillWidth: true
             Layout.fillHeight: true
-            model: opener.children
+            model: root.menuEntries
             clip: true
             spacing: 2
             boundsBehavior: Flickable.StopAtBounds
