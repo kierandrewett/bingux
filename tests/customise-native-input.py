@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Click, type and drag through the private compositor's real input path."""
+"""Click, type and drag through a persistent private compositor input service."""
 import json
 import os
 from pathlib import Path
@@ -13,72 +13,94 @@ if not str(config).startswith('/tmp/gnoblin-gs.') or not os.environ.get('WAYLAND
 prepare = sys.argv[1:] == ['--prepare']
 x, y = (300, 300) if prepare else map(float, sys.argv[1:3])
 destination = list(map(float, sys.argv[4:6])) if sys.argv[3:4] == ['--drag-to'] else None
-click_only = sys.argv[3:4] in (['--click-only'], ['--right-click'])
-button = 3 if sys.argv[3:4] == ['--right-click'] else 1
 probe = config / 'gnoblin/scripts/bingux-customise-input.js'
-probe.parent.mkdir(parents=True, exist_ok=True)
 completion = probe.with_suffix('.done')
 completion.unlink(missing_ok=True)
-probe.write_text('''
+if prepare:
+    probe.parent.mkdir(parents=True, exist_ok=True)
+    probe.write_text('''
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 import Shell from 'gi://Shell';
-export default function () {
+export default function (api) {
     const seat = global.stage.context.get_backend().get_default_seat();
-    global.__customisePointer ??= seat.create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
-    global.__customiseKeyboard ??= seat.create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
-    const pointer = global.__customisePointer, keyboard = global.__customiseKeyboard;
-    const origin = __ORIGIN_POINT__;
-    // A second move clears the initial screen-edge barrier in the headless seat.
-    const actions = [
-        () => pointer.notify_absolute_motion(GLib.get_monotonic_time(), origin[0], origin[1]),
-        () => pointer.notify_absolute_motion(GLib.get_monotonic_time(), origin[0], origin[1]),
-        () => pointer.notify_button(GLib.get_monotonic_time(), __BUTTON__, Clutter.ButtonState.PRESSED)
-    ];
-    const destination = __DRAG_DESTINATION__;
-    if (destination) {
-        actions.push(() => pointer.notify_absolute_motion(GLib.get_monotonic_time(), origin[0] + Math.sign(destination[0] - origin[0]) * 12, origin[1] + Math.sign(destination[1] - origin[1]) * 12));
-        for (let step = 1; step <= 8; step++) {
-            const fraction = step / 8;
-            actions.push(() => pointer.notify_absolute_motion(GLib.get_monotonic_time(), origin[0] + (destination[0] - origin[0]) * fraction, origin[1] + (destination[1] - origin[1]) * fraction));
-            if (step === 4 && __DRAG_CAPTURE__) actions.push(() => {
-                const shot = new Shell.Screenshot();
-                return shot.screenshot(true, Gio.File.new_for_path(__DRAG_CAPTURE__).replace(null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null));
+    const pointer = seat.create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
+    const keyboard = seat.create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+    let timer = 0;
+    const screenshot = (path, cursor) => new Shell.Screenshot().screenshot(cursor,
+        Gio.File.new_for_path(path).replace(null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null));
+    const service = Gio.DBusExportedObject.wrapJSObject(
+        '<node><interface name="org.gnoblin.CustomiseInput"><method name="Run"><arg type="s" direction="in"/></method></interface></node>', {
+        Run(request) {
+            if (timer) throw new Error('An input gesture is already running');
+            const {origin, destination, button, prepare, clickOnly, capture, dragCapture} = JSON.parse(request);
+            // A second move clears the initial screen-edge barrier in the headless seat.
+            const actions = [
+                () => pointer.notify_absolute_motion(GLib.get_monotonic_time(), origin[0], origin[1]),
+                () => pointer.notify_absolute_motion(GLib.get_monotonic_time(), origin[0], origin[1])
+            ];
+            if (!prepare) {
+                actions.push(() => pointer.notify_button(GLib.get_monotonic_time(), button, Clutter.ButtonState.PRESSED));
+                if (destination) {
+                    actions.push(() => pointer.notify_absolute_motion(GLib.get_monotonic_time(), origin[0] + Math.sign(destination[0] - origin[0]) * 12, origin[1] + Math.sign(destination[1] - origin[1]) * 12));
+                    for (let step = 1; step <= 8; step++) {
+                        const fraction = step / 8;
+                        actions.push(() => pointer.notify_absolute_motion(GLib.get_monotonic_time(), origin[0] + (destination[0] - origin[0]) * fraction, origin[1] + (destination[1] - origin[1]) * fraction));
+                        if (step === 4 && dragCapture) actions.push(() => screenshot(dragCapture, true));
+                    }
+                }
+                actions.push(() => pointer.notify_button(GLib.get_monotonic_time(), button, Clutter.ButtonState.RELEASED));
+                for (const character of destination || clickOnly ? '' : 'Find') {
+                    actions.push(() => keyboard.notify_keyval(GLib.get_monotonic_time(), character.charCodeAt(0), Clutter.KeyState.PRESSED));
+                    actions.push(() => keyboard.notify_keyval(GLib.get_monotonic_time(), character.charCodeAt(0), Clutter.KeyState.RELEASED));
+                }
+                if (capture) actions.push(() => screenshot(capture, false));
+            }
+            let pending = false;
+            let failure = '';
+            timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 80, () => {
+                if (pending) return GLib.SOURCE_CONTINUE;
+                try {
+                    const result = actions.length ? actions.shift()() : null;
+                    if (result && typeof result.then === 'function') {
+                        pending = true;
+                        result.catch(error => { failure = String(error); actions.length = 0; })
+                            .finally(() => { pending = false; });
+                    }
+                } catch (error) { failure = String(error); actions.length = 0; }
+                if (actions.length || pending) return GLib.SOURCE_CONTINUE;
+                timer = 0;
+                GLib.file_set_contents(__COMPLETION__, failure || 'done');
+                return GLib.SOURCE_REMOVE;
             });
         }
-    }
-    actions.push(() => pointer.notify_button(GLib.get_monotonic_time(), __BUTTON__, Clutter.ButtonState.RELEASED));
-    for (const character of destination || __CLICK_ONLY__ ? '' : 'Find') {
-        actions.push(() => keyboard.notify_keyval(GLib.get_monotonic_time(), character.charCodeAt(0), Clutter.KeyState.PRESSED));
-        actions.push(() => keyboard.notify_keyval(GLib.get_monotonic_time(), character.charCodeAt(0), Clutter.KeyState.RELEASED));
-    }
-    if (PREPARE) actions.splice(2);
-    let pending = false;
-    let timer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 80, () => {
-        if (pending) return GLib.SOURCE_CONTINUE;
-        const result = actions.length ? actions.shift()() : null;
-        if (result && typeof result.then === 'function') {
-            pending = true;
-            result.finally(() => { pending = false; });
-        }
-        if (actions.length || pending) return GLib.SOURCE_CONTINUE;
-        if (!PREPARE && SCREENSHOT) {
-            const shot = new Shell.Screenshot();
-            shot.screenshot(false, Gio.File.new_for_path(SCREENSHOT).replace(null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null)).then(() => {});
-        }
-        timer = 0;
-        GLib.file_set_contents(__COMPLETION__, 'done');
-        return GLib.SOURCE_REMOVE;
     });
-    return () => {
+    service.export(Gio.DBus.session, '/org/gnoblin/CustomiseInput');
+    const name = Gio.bus_own_name(Gio.BusType.SESSION, 'org.gnoblin.CustomiseInput', Gio.BusNameOwnerFlags.NONE, null, null, null);
+    api._disposers.push(() => {
         if (timer) GLib.source_remove(timer);
-    };
+        service.unexport();
+        Gio.bus_unown_name(name);
+        pointer.run_dispose();
+        keyboard.run_dispose();
+    });
 }
-'''.replace('__DRAG_CAPTURE__', json.dumps(os.environ.get('BINGUX_NATIVE_DRAG_CAPTURE', ''))).replace('__COMPLETION__', json.dumps(str(completion))).replace('__BUTTON__', str(button)).replace('__CLICK_ONLY__', json.dumps(click_only)).replace('__DRAG_DESTINATION__', json.dumps(destination)).replace('__ORIGIN_POINT__', json.dumps([x, y])).replace('PREPARE', 'true' if prepare else 'false').replace('SCREENSHOT', json.dumps(os.environ.get('BINGUX_NATIVE_SCREENSHOT', ''))))
-subprocess.run(['gnoblinctl', 'reload-scripts'], env=os.environ | {'XDG_CONFIG_HOME': str(config)}, check=True, capture_output=True)
+'''.replace('__COMPLETION__', json.dumps(str(completion))))
+    subprocess.run(['gnoblinctl', 'reload-scripts'], env=os.environ | {'XDG_CONFIG_HOME': str(config)}, check=True, capture_output=True)
+
+request = json.dumps({'origin': [x, y], 'destination': destination, 'prepare': prepare,
+    'button': 3 if sys.argv[3:4] == ['--right-click'] else 1,
+    'clickOnly': sys.argv[3:4] in (['--click-only'], ['--right-click']),
+    'capture': os.environ.get('BINGUX_NATIVE_SCREENSHOT', ''),
+    'dragCapture': os.environ.get('BINGUX_NATIVE_DRAG_CAPTURE', '')})
+subprocess.run(['gdbus', 'call', '--session', '--dest', 'org.gnoblin.CustomiseInput',
+    '--object-path', '/org/gnoblin/CustomiseInput', '--method', 'org.gnoblin.CustomiseInput.Run', request],
+    check=True, capture_output=True, text=True, timeout=5)
 deadline = time.monotonic() + 8
 while not completion.exists():
     if time.monotonic() >= deadline:
         raise SystemExit('The private compositor did not complete the input gesture')
     time.sleep(.02)
+if completion.read_text() != 'done':
+    raise SystemExit(completion.read_text())
