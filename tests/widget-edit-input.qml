@@ -80,6 +80,12 @@ ShellRoot {
                 row.enabled = false;
                 mouseClick(disabledButton, 16, 16, Qt.RightButton, Qt.ShiftModifier);
                 compare(window.edits, 5, "An unavailable group retains editing for its children");
+                row.clip = true;
+                row.height = 0;
+                mouseClick(window.contentItem, row.x + 16, row.y + 16, Qt.RightButton, Qt.ShiftModifier);
+                compare(window.edits, 5, "Clipped widgets must not respond through the window observer");
+                row.height = row.implicitHeight;
+                row.clip = false;
                 disabledButton.visible = false;
                 mouseClick(row, 16, 16, Qt.RightButton, Qt.ShiftModifier);
                 compare(window.edits, 5, "Hidden widgets must not respond to editing gestures");

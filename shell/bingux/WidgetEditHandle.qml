@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 
 MouseArea {
     id: root
@@ -14,22 +15,26 @@ MouseArea {
     signal requested(string widgetId, var control)
     onPressed: mouse => { if (!(mouse.modifiers & Qt.ShiftModifier)) mouse.accepted = false; }
     onClicked: requested(widgetId, control)
-    // The normal action stays disabled. Observe editing gestures from its
-    // nearest enabled ancestor without adding an item to the container layout.
+    // Observe only the edit gesture at window level. Check state on the event
+    // so this handler does not join the control's layout and enabled bindings.
     TapHandler {
         id: disabledEdit
-        parent: {
-            let host = root.control;
-            for (let item = root.control; item; item = item.parent)
-                if (!item.enabled) host = item.parent;
-            return host;
-        }
-        enabled: parent !== root.control && root.visible && root.control.visible
+        parent: root.control.Window.window?.contentItem || null
         acceptedButtons: Qt.RightButton
         acceptedModifiers: Qt.ShiftModifier
         onTapped: {
-            if (root.control.contains(root.control.mapFromItem(parent, disabledEdit.point.position)))
-                root.requested(root.widgetId, root.control);
+            if (!root.visible) return;
+            let disabled = false;
+            for (let item = root.control; item; item = item.parent) {
+                if (!item.visible) return;
+                if (!item.enabled) disabled = true;
+            }
+            if (!disabled) return;
+            const point = disabledEdit.point.position;
+            if (!root.control.contains(root.control.mapFromItem(parent, point))) return;
+            for (let item = root.control.parent; item; item = item.parent)
+                if (item.clip && !item.contains(item.mapFromItem(parent, point))) return;
+            root.requested(root.widgetId, root.control);
         }
     }
 }

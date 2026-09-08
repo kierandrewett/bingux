@@ -41,5 +41,5 @@ with tempfile.TemporaryDirectory(prefix='bingux-layout-live-') as directory:
     time.sleep(.3)
     report, output = run_reported_shell(fixture, environment, 'BINGUX_LAYOUT_REPORT', timeout=55)
     print(output)
-    if report != 'PASS' or any(error in output for error in ('CUSTOMISE_TEST_FAILED', 'TypeError', 'ReferenceError', 'has crashed', 'property "maximumPopupHeight"', 'property "preferredY"', 'Cannot use same item on different windows', 'Updates can only be scheduled', 'QGridLayoutEngine::addItem')):
+    if report != 'PASS' or any(error in output for error in ('CUSTOMISE_TEST_FAILED', 'TypeError', 'ReferenceError', 'has crashed', 'property "maximumPopupHeight"', 'property "preferredY"', 'Cannot use same item on different windows', 'Updates can only be scheduled', 'QGridLayoutEngine::addItem', 'Binding loop detected')):
         raise SystemExit(report if report != 'PASS' else 'Runtime errors during layout test')
