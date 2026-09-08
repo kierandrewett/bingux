@@ -48,7 +48,7 @@ Scope {
     onShownChanged: {
         visibilityAnimation.stop();
         visibilityAnimation.to = shown ? 1 : 0;
-        visibilityAnimation.duration = Theme.reducedMotion ? 0 : shown ? 80 : 60;
+        visibilityAnimation.duration = Theme.reducedMotion ? 0 : shown ? 40 : 60;
         visibilityAnimation.start();
     }
     NumberAnimation {
