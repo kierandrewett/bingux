@@ -51,8 +51,9 @@ ShellRoot {
             id: test
             property bool saved: false
             when: window.visible
+            function cleanupTestCase() { if (qtest_results.failCount) report.setText(report.text() + "FAILURES " + qtest_results.failCount + "\n"); }
             function test_switcher() {
-                report.setText("FAILURES 1\n");
+                report.setText("RUNNING\n");
                 waitForRendering(media);
                 const selector = findChild(media, "mediaPlayerSelector");
                 const surface = findChild(media, "mediaCardSurface");

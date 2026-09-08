@@ -8,13 +8,13 @@ ShellRoot {
     property string checks: ""
     FileView { id: results; path: Quickshell.env("BINGUX_MEDIA_TEST_RESULTS") }
     NotificationState { id: notificationState }
-    NotificationSurface { id: notificationSurface; state: notificationState; controlCentre: centre }
+    NotificationSurface { id: notificationSurface; state: notificationState; notificationCentre: centre }
     ShellPopup {
         id: centre
-        hostItem: notificationSurface.contentItem
-        readonly property real notificationAreaHeight: 300
-        readonly property real notificationX: panelX + contentPadding
-        readonly property real notificationY: panelY + contentPadding
+        hostItem: notificationSurface.desktopViewport
+        readonly property real listHeight: 300
+        readonly property real listX: panelX + contentPadding
+        readonly property real listY: panelY + contentPadding
         popupWidth: Theme.notificationWidth + contentPadding * 2
         popupHeight: 320
     }
@@ -55,7 +55,7 @@ ShellRoot {
             check(title.text === "Test track" && title.textFormat === Text.PlainText, "Track metadata is plain text");
             check(play.text === "Play", "Paused player offers Play");
             const artButton = findChild(menu.body, "mediaArtButton");
-            const section = artButton.parent;
+            const section = findChild(menu.body, "mediaControls");
             mouseClick(artButton);
             wait(100);
             check(Theme.reducedMotion ? section.artExpansion === 1 : section.artExpansion > 0 && section.artExpansion < 1, "Artwork expansion respects motion preference");
@@ -66,7 +66,7 @@ ShellRoot {
             check(artButton.width === section.smallArtSize, "Artwork animates back to the compact size");
             waitForRendering(seek);
             wait(100); // Let the resized layer surface receive its configure event.
-            check(elapsed.width < elapsed.parent.width && elapsed.contentItem.horizontalAlignment === Text.AlignLeft,
+            check(elapsed.width < elapsed.parent.width && elapsed.x === 0 && findChild(elapsed, "rollingGlyph0").x === 0,
                 "Time toggle fits its text and stays left aligned");
             mouseMove(seek, seek.handle.width / 2 + (seek.availableWidth - seek.handle.width) / 4, seek.height / 2);
             wait(100);
@@ -153,7 +153,8 @@ ShellRoot {
             check(Theme.reducedMotion || number.animating, "New notifications animate the count up");
             tryCompare(app, "notificationCount", 2, 3000);
             check(badge.count === 2 && other.notificationCount === 0, "Real notifications badge only their owning application");
-            tryVerify(() => notificationState.visibleEntries.length === 0, 4000);
+            const toastTimeout = Math.max(...notificationState.visibleEntries.map(entry => entry.timeoutMs)) + 1000;
+            tryVerify(() => notificationState.visibleEntries.length === 0, toastTimeout);
             check(app.notificationCount === 2 && notificationState.allEntries.length === 2, "Toast expiry retains notifications and badge counts");
             tryCompare(notificationSurface, "renderedNotificationCount", 0);
             centre.visible = true;
@@ -207,9 +208,9 @@ ShellRoot {
             const originalMenuHeight = menu.popupHeight;
             const frames = Quickshell.env("BINGUX_NOTIFICATION_COLLAPSE_IMAGES");
             if (frames) { menu.body.grabToImage(result => result.saveToFile(frames + "-before.png")); wait(30); }
-            mouseClick(clear);
+            mouseClick(clear, clear.width / 2, clear.height / 2);
             if (!Theme.reducedMotion) {
-                wait(100);
+                tryVerify(() => card.collapseProgress > 0 && card.collapseProgress < 1 && menu.popupHeight < originalMenuHeight, 1000);
                 check(card.height > 0 && card.height < originalCardHeight && card.slideOffset === 0,
                     "X dismisses through vertical collapse without sideways movement");
                 check(menu.popupHeight < originalMenuHeight && menu.popupHeight > originalMenuHeight - originalCardHeight,
@@ -237,6 +238,7 @@ ShellRoot {
         function test_discordIcon() {
             Quickshell.execDetached(["notify-send", "--app-name=Discord", "--hint=string:desktop-entry:discord", "--icon=discord", "--expire-time=0", "Icon resolution test"]);
             tryVerify(() => notificationState.allEntries.some(entry => entry.desktopEntry === "discord"), 3000);
+            tryVerify(() => notificationState.allEntries.find(entry => entry.desktopEntry === "discord")?.appIcon === Quickshell.env("BINGUX_DISCORD_TEST_ICON"), 2000);
             const entry = notificationState.allEntries.find(entry => entry.desktopEntry === "discord");
             check(entry.appIcon === Quickshell.env("BINGUX_DISCORD_TEST_ICON"), "Discord's window identity resolves to the installed application icon");
             notificationState.dismiss(entry.notification);

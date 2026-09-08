@@ -104,20 +104,21 @@ try:
     with tempfile.TemporaryDirectory(prefix="bingux-media-test-") as directory:
         fixture = Path(directory)
         for file in (ROOT / "shell/bingux").iterdir():
-            if file.suffix in (".qml", ".js") or file.name == "qmldir": shutil.copy2(file, fixture)
+            if file.suffix in (".qml", ".js", ".py") or file.name == "qmldir": shutil.copy2(file, fixture)
         dock = (fixture / "Dock.qml").read_text().replace("required property var settings", "required property var settings\n    property alias testItems: dockItems")
         dock = dock.replace("id: dockButton", "id: dockButton\n                    property alias testMenu: appMenu")
         (fixture / "Dock.qml").write_text(dock)
         shutil.copy2(ROOT / "tests/dock-media.qml", fixture / "shell.qml")
         applications = fixture / "data/applications"
         applications.mkdir(parents=True)
+        (fixture / "data/icons").symlink_to("/usr/share/icons", target_is_directory=True)
         for name in ("dock-media-test", "no-media"):
             (applications / (name + ".desktop")).write_text(f"[Desktop Entry]\nType=Application\nName={name}\nExec=true\nIcon=audio-x-generic\n")
         discord_icon = fixture / "discord.png"
         discord_icon.write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGNQONCAFTEMLQkASsZYAa5usi0AAAAASUVORK5CYII="))
         (applications / "discord-canary.desktop").write_text(f"[Desktop Entry]\nType=Application\nName=Discord Canary\nStartupWMClass=discord\nExec=true\nIcon={discord_icon}\n")
         result_file = fixture / "results.txt"
-        environment = os.environ | {"XDG_DATA_HOME": str(fixture / "data"), "XDG_CONFIG_HOME": str(fixture / "config"),
+        environment = os.environ | {"XDG_DATA_HOME": str(fixture / "data"), "XDG_DATA_DIRS": str(fixture / "data"), "XDG_CONFIG_HOME": str(fixture / "config"),
                                     "BINGUX_MEDIA_TEST_RESULTS": str(result_file), "BINGUX_DISCORD_TEST_ICON": str(discord_icon)}
         result = subprocess.run([os.environ.get("QS_TEST_BIN", "qs"), "-p", str(fixture), "--no-color"],
                                 env=environment, capture_output=True, text=True, timeout=35)

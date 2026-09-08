@@ -53,8 +53,9 @@ ShellRoot {
         TestCase {
             id: test
             when: window.visible
+            function cleanupTestCase() { if (qtest_results.failCount) report.setText(report.text() + "FAILURES " + qtest_results.failCount + "\n"); }
             function test_video_controls() {
-                report.setText("FAILURES 1\n");
+                report.setText("RUNNING\n");
                 waitForRendering(media);
                 const next = findChild(media, "mediaNext");
                 const previous = findChild(media, "mediaPrevious");
