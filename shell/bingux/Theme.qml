@@ -9,8 +9,8 @@ QtObject {
 
     readonly property color background: "#f5161616"
     readonly property color surface: "#f0303030"
-    readonly property color shellSurface: Qt.rgba(surface.r, surface.g, surface.b, 0.96)
-    readonly property color popupSurface: Qt.rgba(surface.r, surface.g, surface.b, 0.96)
+    readonly property color shellSurface: "#1b1b1b"
+    readonly property color popupSurface: shellSurface
     readonly property int shellRadius: cardRadius + 4
     readonly property color elevated: "#383838"
     readonly property color menuWidgetBackground: elevated
@@ -40,7 +40,7 @@ QtObject {
     readonly property int cardRadius: 20
     readonly property int barHeight: 32
     // Keep the bar, sidebar, and joining corners identical over any wallpaper.
-    readonly property color barBackground: "#1b1b1b"
+    readonly property color barBackground: shellSurface
     readonly property color barDivider: "#20ffffff"
     readonly property int barControlPadding: 6
     readonly property int activityIndicatorPadding: 12
@@ -106,7 +106,7 @@ QtObject {
     readonly property int dockLaunchTimeout: 20000
     // Search has its own density so the launcher can feel deliberate without
     // changing the proportions of the rest of the shell.
-    readonly property color searchSurface: "#f528292e"
+    readonly property color searchSurface: shellSurface
     readonly property color searchHover: "#302f3543"
     readonly property color searchSelection: "#5b4c6f9b"
     readonly property color searchAccent: "#a9c8f7"
