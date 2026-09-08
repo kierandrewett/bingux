@@ -35,7 +35,8 @@ Scope {
     // A pointer-transparent surface keeps the pickup image above native containers.
     PanelWindow {
         id: dragWindow
-        visible: root.initialised
+        // Map after the containers so the pickup stays above their content.
+        visible: root.visible && root.draggedId !== ""
         screen: editWindow.screen
         color: "transparent"
         anchors { top: true; bottom: true; left: true; right: true }
