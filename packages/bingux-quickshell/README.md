@@ -10,6 +10,12 @@ the button click.
 `layer-initial-state.patch` records the initial settings in the existing
 committed-state snapshot. The NixOS desktop module uses this package by default.
 
+`clipping-window.patch` gives the rounded clipping texture source a visual
+parent. It then releases its old window reference when the widget moves. Without
+that parent, moving a populated media sidebar into a detached window produces
+cross-window warnings; closing or reloading it can crash Quickshell. The clipping
+shader and its appearance remain the same.
+
 The runtime disables Quickshell's built-in crash reporter and minidump writer.
 The service also sets `LimitCORE=0` to prevent kernel memory dumps. Systemd
 handles service restarts, and normal diagnostic messages remain in the journal.

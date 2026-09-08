@@ -1,0 +1,11 @@
+--- a/src/widgets/ClippingRectangle.qml
++++ b/src/widgets/ClippingRectangle.qml
+@@ -81,6 +81,8 @@
+ 		property color borderColor: root.border.color
+ 
+ 		property ShaderEffectSource content: ShaderEffectSource {
++			// Release the old source window before the item moves to another one.
++			parent: shader
+ 			hideSource: true
+ 			sourceItem: contentItemContainer
+ 		}
