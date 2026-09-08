@@ -124,6 +124,38 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(backup.read_bytes(), original_backup)
         with self.assertRaises(ValueError): settings.write({'desktop': {'layoutVersion': 0}})
 
+    def test_control_group_import_extends_existing_layout_without_resetting_it(self):
+        original = settings.write({'desktop': {'layoutVersion': 1, 'dockSize': 72,
+            'sidebarEdge': 'left', 'controlOrder': ['bluetooth', 'network', 'power'],
+            'dockApps': {'pinnedApps': ['example.app'], 'order': ['example.app']}}})
+        imported = settings.import_layout({'version': 1, 'controlCentreReady': True,
+            'controlLayout': settings.native_control_layout()})
+        expected = copy.deepcopy(original)
+        expected['desktop']['controlLayout'] = settings.native_control_layout()
+        self.assertEqual(imported, expected)
+        with self.assertRaises(ValueError): settings.write({'desktop': {'controlLayout': None}})
+        backup = settings.config_path().parent / 'control-layout-before-import.json'
+        self.assertTrue(backup.is_file())
+        previous = backup.read_bytes()
+        custom = settings.native_control_layout()
+        custom['groups']['control-centre'].reverse()
+        settings.write({'desktop': {'controlLayout': custom}})
+        self.assertEqual(settings.import_layout({})['desktop']['controlLayout'], custom)
+        self.assertEqual(backup.read_bytes(), previous)
+
+    def test_control_group_validation_preserves_the_last_saved_layout(self):
+        settings.write({'desktop': {'controlLayout': settings.native_control_layout()}})
+        before = settings.config_path().read_bytes()
+        invalid = []
+        for version in [2, True, '1']:
+            value = settings.native_control_layout(); value['version'] = version; invalid.append(value)
+        value = settings.native_control_layout(); value['groups']['controls-header'].append('control-account'); invalid.append(value)
+        value = settings.native_control_layout(); value['groups']['controls-audio'] = ['control-settings']; invalid.append(value)
+        value = settings.native_control_layout(); value['groups']['missing'] = []; invalid.append(value)
+        for value in invalid:
+            with self.assertRaises(ValueError): settings.write({'desktop': {'controlLayout': value}})
+            self.assertEqual(settings.config_path().read_bytes(), before)
+
     def test_unknown_version_and_failed_import_do_not_replace_settings(self):
         settings.write({})
         before = settings.config_path().read_bytes()

@@ -19,9 +19,32 @@ DEFAULTS = {'search': {'disabledProviders': [], 'ai': None, 'fileRoots': None, '
             'desktop': {'dock': True, 'sidebar': True, 'metrics': True, 'layout': None, 'dockSize': 56, 'dockAlignment': 'center',
                         'dockClick': 'toggle', 'dockMiddleClick': 'launch', 'dockScroll': 'cycle',
                         'dockScrollDirection': 'natural', 'sidebarEdge': None,
-                        'layoutVersion': 0, 'dockApps': None, 'controlCentre': None, 'controlOrder': None,
+                        'layoutVersion': 0, 'dockApps': None, 'controlCentre': None, 'controlOrder': None, 'controlLayout': None,
                         'containers': {}, 'widgetOptions': {}}}
 PROVIDERS = {'applications', 'files', 'calculation', 'conversions', 'web', 'web-shortcuts', 'external'}
+
+CONTROL_GROUPS = {
+    'control-centre': ['controls-header', 'controls-audio', 'control-divider', 'controls-tiles', 'control-media', 'control-customise'],
+    'controls-header': ['control-account', 'control-header-space', 'control-battery', 'control-settings', 'control-session', 'control-lock'],
+    'controls-audio': ['control-volume', 'control-microphone'],
+}
+
+
+def native_control_layout():
+    return {'version': 1, 'groups': copy.deepcopy(CONTROL_GROUPS)}
+
+
+def validate_control_layout(layout):
+    if layout is None:
+        return
+    if not isinstance(layout, dict) or set(layout) != {'version', 'groups'} or type(layout['version']) is not int or layout['version'] != 1:
+        raise ValueError('This control-centre layout version is not supported.')
+    groups = layout['groups']
+    if not isinstance(groups, dict) or set(groups) != set(CONTROL_GROUPS):
+        raise ValueError('Invalid control-centre groups.')
+    for group, items in groups.items():
+        if not isinstance(items, list) or any(not isinstance(item, str) or item not in CONTROL_GROUPS[group] for item in items) or len(items) != len(set(items)):
+            raise ValueError('A control-centre widget can only appear once in its group.')
 
 
 def config_path():
@@ -33,6 +56,7 @@ def read():
     version = data.get('desktop', {}).get('layoutVersion', 0)
     if type(version) is not int or version not in (0, 1):
         raise ValueError('This desktop layout version is not supported.')
+    validate_control_layout(data.get('desktop', {}).get('controlLayout'))
     return {key: DEFAULTS[key] | data.get(key, {}) for key in DEFAULTS}
 
 
@@ -80,6 +104,9 @@ def validate(data):
                 raise ValueError('Invalid dock application identifiers.')
     controls = desktop['controlCentre']
     control_order = desktop['controlOrder']
+    validate_control_layout(desktop['controlLayout'])
+    if current['desktop']['controlLayout'] is not None and desktop['controlLayout'] is None:
+        raise ValueError('The control-centre layout has changed. Reopen Settings before saving.')
     if control_order is not None and (not isinstance(control_order, list) or any(not isinstance(item, str) or item not in {'network', 'bluetooth', 'vpn', 'dnd', 'nightLight', 'power', 'awake'} for item in control_order) or len(control_order) != len(set(control_order))):
         raise ValueError('Invalid control-centre widget order.')
     if controls is not None and (not isinstance(controls, dict) or set(controls) != {'vpn', 'dnd', 'nightLight', 'power', 'awake'} or any(type(value) is not bool for value in controls.values())):
@@ -176,17 +203,20 @@ def import_layout(snapshot):
     with (path.parent / 'settings.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         current = read()
-        if current['desktop']['layoutVersion'] == 1:
+        already_imported = current['desktop']['layoutVersion'] == 1
+        if already_imported and current['desktop']['controlLayout'] is not None:
             return current
         if not isinstance(snapshot, dict) or snapshot.get('version') != 1 or snapshot.get('controlCentreReady') is not True:
             raise ValueError('Wait for the current desktop layout to finish loading.')
         desktop = copy.deepcopy(current['desktop'])
-        desktop.update(layoutVersion=1, layout=desktop['layout'] or snapshot['layout'],
-                       sidebarEdge=desktop['sidebarEdge'] or snapshot['sidebar']['edge'],
-                       dockApps={key: snapshot['dock'][key] for key in ('pinnedApps', 'order')},
-                       controlCentre=snapshot['controlCentre'])
+        if not already_imported:
+            desktop.update(layoutVersion=1, layout=desktop['layout'] or snapshot['layout'],
+                           sidebarEdge=desktop['sidebarEdge'] or snapshot['sidebar']['edge'],
+                           dockApps={key: snapshot['dock'][key] for key in ('pinnedApps', 'order')},
+                           controlCentre=snapshot['controlCentre'])
+        desktop['controlLayout'] = snapshot.get('controlLayout', native_control_layout())
         candidate = validate({'desktop': desktop})
-        backup = path.parent / 'layout-before-import.json'
+        backup = path.parent / ('control-layout-before-import.json' if already_imported else 'layout-before-import.json')
         if not backup.exists():
             with backup.open('x') as stream:
                 os.chmod(backup, 0o600)
