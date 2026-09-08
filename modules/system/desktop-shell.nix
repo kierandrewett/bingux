@@ -288,6 +288,11 @@ in
                 # These surfaces are positioned or animated by Bingux itself.
                 match.layer = "^(bingux-bar-tooltip|gnoblin-dock-tooltip|gnoblin-shell-popup|bingux-popup-dismiss|gnoblin-dock-launch|bingux-notifications)$";
                 animation = "none";
+            } {
+                # Joined opaque surfaces must not capture separate blurred backdrops.
+                match.layer = "^(bingux-top-bar|bingux-terminal-sidebar|bingux-sidebar-corner|bingux-panel-outline)$";
+                opacity = 1.0;
+                blur = 0;
             } ];
             shell.input-source-switcher = false;
             keybindings.wm.switch-input-source = [ ];

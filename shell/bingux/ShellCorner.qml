@@ -19,11 +19,15 @@ Item {
             strokeWidth: -1
             startX: 0; startY: 0
             PathLine { x: root.width; y: 0 }
+            // Keep an opaque surface beneath the translucent grey stroke.
+            PathLine { x: root.width; y: 1 }
             PathArc {
-                x: 0; y: root.height
-                radiusX: root.width; radiusY: root.height
+                x: 1; y: root.height
+                radiusX: Math.max(0.5, root.width - 1)
+                radiusY: Math.max(0.5, root.height - 1)
                 direction: PathArc.Counterclockwise
             }
+            PathLine { x: 0; y: root.height }
             PathLine { x: 0; y: 0 }
         }
         ShapePath {
