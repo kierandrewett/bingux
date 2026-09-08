@@ -5,11 +5,15 @@ import QtCore
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import "DesktopLayout.js" as DesktopLayout
 
 Scope {
     id: root
+    signal widgetEditRequested(string widgetId, var control, var window)
     required property var settings
     property var systemMetrics: null
+    readonly property alias editWindow: panel
+    readonly property alias editSurface: panelSurface
     readonly property alias contentItem: sidebarContents
     readonly property alias detachedSurface: detachedWindow
     readonly property alias edgeSurface: sensor
@@ -21,12 +25,12 @@ Scope {
         {id: "media", label: "Media", icon: "applications-multimedia-symbolic"},
         {id: "tasks", label: "Tasks", icon: "view-list-symbolic"}
     ]
-    readonly property var contentTypes: BinguxPreferences.data.desktop.layout ? BinguxPreferences.data.desktop.layout.sidebar.map(id => allContentTypes.find(type => type.id === id)).filter(type => type) : allContentTypes
+    readonly property var contentTypes: DesktopEditing.desktop.layout ? DesktopEditing.desktop.layout.sidebar.map(id => allContentTypes.find(type => type.id === id)).filter(type => type) : allContentTypes
     Connections {
         target: BinguxPreferences
         function onDataChanged() {
             const edge = BinguxPreferences.data.desktop.sidebarEdge;
-            if (edge && edge !== root.edge) root.setEdge(edge);
+            if (edge && edge !== saved.edge) root.syncEdge(edge);
         }
     }
     readonly property string contentType: contentTypes.some(type => type.id === saved.contentType) ? saved.contentType : (contentTypes[0]?.id || "terminal")
@@ -275,7 +279,7 @@ Scope {
         }
         onCanceled: root.finishGesture(true)
     }
-    readonly property string edge: ["left", "top", "right"].includes(saved.edge) ? saved.edge : "right"
+    readonly property string edge: DesktopEditing.desktop.sidebarEdge ? DesktopEditing.desktop.sidebarEdge : ["left", "top", "right"].includes(saved.edge) ? saved.edge : "right"
 
     Settings {
         id: saved
@@ -312,6 +316,13 @@ Scope {
         function onSidebarEnabledChanged() { if (!root.settings.sidebarEnabled) root.hide(); }
     }
 
+    Connections {
+        target: DesktopEditing
+        function onActiveChanged() {
+            if (DesktopEditing.active && root.contentType === "terminal") root.terminalCreated = true;
+            if (!root.detached) root.animateTo(DesktopEditing.active || root.opened ? 1 : 0);
+        }
+    }
     function open() {
         if (!settings.sidebarEnabled)
             return;
@@ -366,6 +377,12 @@ Scope {
     }
 
     function setEdge(value) {
+        if (!["left", "top", "right"].includes(value)) return;
+        if (DesktopEditing.active) DesktopEditing.editor.change("sidebarEdge", value);
+        else if (BinguxPreferences.data.desktop.layoutVersion === 1) BinguxPreferences.saveDesktop({sidebarEdge: value});
+        else syncEdge(value);
+    }
+    function syncEdge(value) {
         if (!["left", "top", "right"].includes(value))
             return;
         contentMenu.visible = false;
@@ -464,7 +481,7 @@ Scope {
         id: panel
         property real reveal: 0
         screen: root.screen
-        visible: !root.detached && (root.opened || root.dragging || slide.running)
+        visible: !root.detached && (DesktopEditing.active || root.opened || root.dragging || slide.running)
         onVisibleChanged: if (!visible)
             root.useDragSize = false
         color: "transparent"
@@ -485,7 +502,7 @@ Scope {
         }
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "bingux-terminal-sidebar"
-        WlrLayershell.keyboardFocus: root.inputSuspended ? WlrKeyboardFocus.None : root.focusRequested ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
+        WlrLayershell.keyboardFocus: root.inputSuspended || DesktopEditing.active ? WlrKeyboardFocus.None : root.focusRequested ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
         anchors {
             top: true
             bottom: root.edge !== "top"
@@ -496,6 +513,7 @@ Scope {
 
         Rectangle {
             id: panelSurface
+            NativeEditSurface { anchors.fill: parent; window: panel; zoneName: "sidebar"; vertical: true }
             width: root.edge === "top" ? panel.width : panel.extent
             height: root.edge === "top" ? panel.extent : panel.height
             x: root.edge === "right" ? panel.width - width : 0
@@ -580,13 +598,13 @@ Scope {
                             visible: root.contentType === "terminal"
                             active: root.terminalCreated
                             source: "SidebarTerminal.qml"
-                            onLoaded: if (root.opened && visible)
-                                item.focusTerminal()
+                            onLoaded: { DesktopEditing.registerSource("terminal", item); if (root.opened && visible) item.focusTerminal(); }
                             onActiveFocusChanged: if (activeFocus && visible && root.terminalReady)
                                 item.focusTerminal()
                         }
                         SidebarNotes {
                             id: notes
+                            Component.onCompleted: DesktopEditing.registerSource("notes", notes)
                             menuHost: root.detached ? detachedWindow.contentItem : null
                             screen: root.detached ? detachedWindow.screen : root.screen
                             anchors.fill: parent
@@ -594,6 +612,7 @@ Scope {
                         }
                         SidebarMonitor {
                             id: monitor
+                            Component.onCompleted: DesktopEditing.registerSource("monitor", monitor)
                             anchors.fill: parent
                             visible: root.contentType === "monitor"
                             metrics: root.systemMetrics
@@ -604,7 +623,7 @@ Scope {
                             active: ["calendar", "media", "tasks"].includes(root.contentType)
                             visible: active
                             source: root.contentType === "calendar" ? "SidebarCalendar.qml" : root.contentType === "media" ? "SidebarMedia.qml" : "SidebarTasks.qml"
-                            onLoaded: if (root.opened) item.focusContent()
+                            onLoaded: { DesktopEditing.registerSource(root.contentType, item); if (root.opened) item.focusContent(); }
                         }
                     }
                     Text {
@@ -732,10 +751,13 @@ Scope {
                 Repeater {
                     model: root.contentTypes
                     ActionButton {
+                        id: sidebarWidget
                         required property var modelData
+                        WidgetEditHandle { control: sidebarWidget; widgetId: sidebarWidget.modelData.id; onRequested: (id, item) => root.widgetEditRequested(id, item, contentMenu) }
                         readonly property bool menuEntry: true
                         signal triggered()
                         text: modelData.label
+                        presentation: DesktopLayout.presentation(DesktopEditing.desktop, modelData.id, "sidebar", modelData.label, modelData.icon, true, true)
                         alignLeft: true
                         cornerRadius: contentMenu.contentRadius
                         iconName: modelData.icon

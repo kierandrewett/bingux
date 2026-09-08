@@ -9,13 +9,16 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 import Quickshell.Services.Mpris
 import "MediaMatch.js" as MediaMatch
+import "DesktopLayout.js" as DesktopLayout
 
 PanelWindow {
     id: root
+    signal widgetEditRequested(string widgetId, var control)
 
     readonly property real popupAnchorTop: (screen ? screen.height : 0) - height - margins.bottom + dockSurface.y
+    readonly property alias editSurface: dockSurface
     readonly property alias widgetHost: dockWidgets
-    readonly property var preferences: BinguxPreferences.data.desktop
+    readonly property var preferences: DesktopEditing.desktop
     readonly property int itemSize: (preferences.dockSize || 56) + 16
     readonly property int iconSize: preferences.dockSize || 56
     required property var settings
@@ -671,7 +674,9 @@ PanelWindow {
     implicitHeight: root.itemSize + 16 + Theme.dockPadding * 2
     mask: Region { item: root.draggedId.length > 0 ? dragCapture : dockInputArea }
     color: "transparent"
-    WlrLayershell.layer: WlrLayer.Top
+    WlrLayershell.layer: DesktopEditing.active ? WlrLayer.Overlay : WlrLayer.Top
+    margins.bottom: DesktopEditing.active ? 64 : 0
+    Behavior on margins.bottom { NumberAnimation { duration: Theme.reducedMotion ? 0 : 220; easing.type: Easing.OutCubic } }
     WlrLayershell.namespace: "bingux-dock"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     Component.onCompleted: {
@@ -794,6 +799,17 @@ PanelWindow {
 
     Rectangle {
         id: dockSurface
+        NativeEditSurface {
+            anchors.fill: parent; window: root; zoneName: "dock"
+            entries: {
+                const result = [];
+                for (let i = 0; i < dockItems.count; i++) {
+                    const item = dockItems.itemAt(i);
+                    if (item) result.push({id: "app:" + root.pinIdentity(item.currentGroup.desktopEntry?.id || item.currentGroup.id), item});
+                }
+                return result.concat(Object.keys(DesktopEditing.sources).filter(id => root.preferences.layout?.dock.includes(id)).map(id => ({id, item: DesktopEditing.sources[id]})));
+            }
+        }
         readonly property real itemPadding: Math.max(0, (height - root.itemSize) / 2)
         readonly property real bottomGap: Math.max(0, root.height - y - height)
         onXChanged: rectangleUpdate.restart()
@@ -801,13 +817,13 @@ PanelWindow {
 
         anchors.verticalCenter: parent.verticalCenter
         x: root.preferences.dockAlignment === "left" ? Theme.padding : root.preferences.dockAlignment === "right" ? root.width - width - Theme.padding : (root.width - width) / 2
-        width: Math.min(root.width - Theme.padding * 2, dockRow.implicitWidth + dockSurface.itemPadding * 2)
+        width: Math.min(root.width - Theme.padding * 2, Math.max(DesktopEditing.active ? root.itemSize + 16 : 0, dockRow.implicitWidth + dockSurface.itemPadding * 2))
         height: root.itemSize + 16
         radius: Theme.shellRadius
         color: Theme.shellSurface
         border.width: 1
         border.color: Theme.outline
-        visible: root.appGroups.length > 0 || (root.preferences.layout?.dock.length || 0) > 0
+        visible: DesktopEditing.active || root.appGroups.length > 0 || (root.preferences.layout?.dock.length || 0) > 0
 
         Flickable {
             anchors.fill: parent
@@ -864,6 +880,11 @@ PanelWindow {
 
                 delegate: Item {
                     id: dockButton
+                    WidgetEditHandle {
+                        control: dockButton
+                        widgetId: "app:" + root.pinIdentity(dockButton.currentGroup.desktopEntry?.id || dockButton.currentGroup.id)
+                        onRequested: (id, item) => root.widgetEditRequested(id, item)
+                    }
 
                     required property var modelData
                     readonly property var currentGroup: root.appGroups.find(group => group.id === modelData.id)
@@ -1018,6 +1039,7 @@ PanelWindow {
 
                         AppIcon {
                             id: dockIcon
+                            presentation: DesktopLayout.presentation(root.preferences, "app:" + root.pinIdentity(dockButton.currentGroup.desktopEntry?.id || dockButton.currentGroup.id), "dock", dockButton.currentGroup.desktopEntry?.name || dockButton.currentGroup.id, dockButton.currentGroup.desktopEntry?.icon || "application-x-executable", true, false)
                             implicitSize: root.iconSize
                             group: dockButton.currentGroup
                             activeStreams: root.activity.activeStreams
