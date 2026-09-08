@@ -23,8 +23,11 @@ and also works for empty inputs. No renderer-accessibility launch flag is needed
 See [Chromium 142's accessibility implementation](https://chromium.googlesource.com/chromium/src/+/142.0.7444.175/ui/accessibility/platform/ax_platform_node_auralinux.cc).
 
 After the picker closes, Gnoblin commits the selected Unicode sequence to the
-focused input. It does not copy the emoji to the clipboard. A missing input or
-changed window focus produces an error instead of an unverified insertion.
+focused input. Native Wayland uses a direct text-input commit. XWayland uses a
+temporary clipboard and Ctrl+V, then restores the original formats and bytes,
+including images and rich text. A new copy made during paste is kept. Clipboard
+managers can retain the temporary emoji in their history. A failed clipboard
+capture or changed window focus before paste produces an error.
 
 ## Verification
 
@@ -55,7 +58,17 @@ Native GTK insertion also passed on the live session. Discord Canary 0.0.820
 (Electron 37.6.0) was verified on native Wayland: its search input received
 `😀👩🏽‍💻👍🏽` through the compositor, with no chat message sent.
 
-Older Electron apps must start with `--ozone-platform=wayland --enable-wayland-ime`.
-Discord's local desktop launcher was updated with these flags. Launch flags take
-effect after restarting the app. XWayland does not expose the required native
-text-input interface and is not supported by this insertion path.
+Electron apps can use `--ozone-platform=wayland --enable-wayland-ime` for direct
+insertion. Discord's local launcher retains these flags. Apps running through
+XWayland now use the paste workaround without requiring a restart.
+
+The XWayland test uses the same picker, shortcut and real Electron inputs:
+
+```sh
+GNOBLIN_TEST_XWAYLAND=1 BINGUX_TEST_ELECTRON=/path/to/electron tests/emoji-electron.sh
+```
+
+The tests compare original clipboard text, HTML, RTF and PNG bytes after insertion.
+They also check cancellation, an empty clipboard and a new copy during paste.
+A separate live desktop Electron XWayland receiver passed exact Unicode insertion
+and clipboard preservation. No chat message was sent.
