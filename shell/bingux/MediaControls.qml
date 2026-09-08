@@ -33,6 +33,7 @@ FocusScope {
     readonly property bool controllable: player !== null && player.canControl
     readonly property bool hasPosition: player !== null && player.positionSupported && player.lengthSupported && player.length > 0
     readonly property real position: hasPosition ? Math.max(0, Math.min(player.position, player.length)) : 0
+    readonly property bool seekButtons: MediaMatch.prefersSeeking(player)
     property int seekTrack: -1
     property bool showRemaining: false
     implicitHeight: contents.implicitHeight + Theme.padding * 2 + expandedArtSpace + playerSelectorHeight
@@ -298,11 +299,11 @@ FocusScope {
             }
             MediaButton {
                 objectName: "mediaPrevious"
-                text: "Previous track"
-                iconName: "media-skip-backward-symbolic"
+                text: root.seekButtons ? "Back 10 seconds" : "Previous track"
+                iconName: root.seekButtons ? "media-seek-backward-symbolic" : "media-skip-backward-symbolic"
                 direction: -1
-                enabled: root.controllable && root.player.canGoPrevious
-                onClicked: if (enabled) { animateAction(); root.player.previous(); }
+                enabled: MediaMatch.canStep(root.player, -1)
+                onClicked: if (enabled) { animateAction(); MediaMatch.step(root.player, -1); }
             }
             MediaButton {
                 id: playPause
@@ -320,11 +321,11 @@ FocusScope {
             }
             MediaButton {
                 objectName: "mediaNext"
-                text: "Next track"
-                iconName: "media-skip-forward-symbolic"
+                text: root.seekButtons ? "Forward 10 seconds" : "Next track"
+                iconName: root.seekButtons ? "media-seek-forward-symbolic" : "media-skip-forward-symbolic"
                 direction: 1
-                enabled: root.controllable && root.player.canGoNext
-                onClicked: if (enabled) { animateAction(); root.player.next(); }
+                enabled: MediaMatch.canStep(root.player, 1)
+                onClicked: if (enabled) { animateAction(); MediaMatch.step(root.player, 1); }
             }
             Text {
                 Layout.fillWidth: true
@@ -343,6 +344,12 @@ FocusScope {
         property string displayedIcon: iconName
         property real iconOffset: 0
         property real iconOpacity: 1
+        onIconNameChanged: {
+            actionMotion.stop();
+            displayedIcon = iconName;
+            iconOffset = 0;
+            iconOpacity = 1;
+        }
         function animateAction() {
             actionMotion.stop();
             iconOffset = 0;

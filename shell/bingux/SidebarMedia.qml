@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell.Services.Mpris
+import "MediaMatch.js" as MediaMatch
 
 ScrollView {
     id: root
@@ -51,9 +52,9 @@ ScrollView {
                     RowLayout {
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 2
-                        IconButton { iconName: "media-skip-backward-symbolic"; label: "Previous track"; enabled: !!entry.player && entry.player.canGoPrevious; onClicked: entry.player.previous() }
+                        IconButton { iconName: MediaMatch.prefersSeeking(entry.player) ? "media-seek-backward-symbolic" : "media-skip-backward-symbolic"; label: MediaMatch.prefersSeeking(entry.player) ? "Back 10 seconds" : "Previous track"; enabled: MediaMatch.canStep(entry.player, -1); onClicked: MediaMatch.step(entry.player, -1) }
                         IconButton { iconName: entry.player && entry.player.isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic"; label: "Play or pause"; enabled: !!entry.player && entry.player.canControl && (entry.player.isPlaying ? entry.player.canPause : entry.player.canPlay); onClicked: entry.player.isPlaying ? entry.player.pause() : entry.player.play() }
-                        IconButton { iconName: "media-skip-forward-symbolic"; label: "Next track"; enabled: !!entry.player && entry.player.canGoNext; onClicked: entry.player.next() }
+                        IconButton { iconName: MediaMatch.prefersSeeking(entry.player) ? "media-seek-forward-symbolic" : "media-skip-forward-symbolic"; label: MediaMatch.prefersSeeking(entry.player) ? "Forward 10 seconds" : "Next track"; enabled: MediaMatch.canStep(entry.player, 1); onClicked: MediaMatch.step(entry.player, 1) }
                     }
                 }
             }
