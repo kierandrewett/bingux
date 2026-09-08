@@ -293,7 +293,8 @@ ShellRoot {
             return layout;
         }
         readonly property var customLayout: DesktopEditing.desktop.layout
-        readonly property var spacingIds: customLayout ? ["top-left", "top-center", "top-right"].reduce((items, zone) => items.concat(customLayout[zone]), []).filter(DesktopLayout.isSpacing) : []
+        readonly property string spacingKey: customLayout ? ["top-left", "top-center", "top-right"].reduce((items, zone) => items.concat(customLayout[zone]), []).filter(DesktopLayout.isSpacing).join(";") : ""
+        readonly property var spacingIds: spacingKey ? spacingKey.split(";") : []
         property var spacingWidgets: []
         Instantiator {
             model: topBar.spacingIds
@@ -301,6 +302,7 @@ ShellRoot {
                 id: spacingWidget
                 required property string modelData
                 readonly property string widgetId: modelData
+                visible: topBar.spacingWidgets.includes(spacingWidget)
                 flexible: widgetId.startsWith("spring:")
                 gapSize: DesktopEditing.desktop.widgetOptions?.[widgetId]?.width || 20
                 parent: topBar.hostFor(spacingWidget)
@@ -308,7 +310,7 @@ ShellRoot {
                 Layout.row: 0
             }
             onObjectAdded: (index, object) => topBar.spacingWidgets = topBar.spacingWidgets.concat([object])
-            onObjectRemoved: (index, object) => topBar.spacingWidgets = topBar.spacingWidgets.filter(item => item !== object)
+            onObjectRemoved: (index, object) => { object.parent = null; topBar.spacingWidgets = topBar.spacingWidgets.filter(item => item !== object); }
         }
         function hasSpring(zone) { return customLayout?.[zone]?.some(id => id.startsWith("spring:")) || false; }
         function zoneBudget(zone) {

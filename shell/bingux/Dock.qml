@@ -1340,8 +1340,9 @@ PanelWindow {
             }
             GridLayout {
                 id: dockWidgets
-                // An empty widget section must not add RowLayout spacing after the last app.
-                visible: implicitWidth > 0
+                // Keep a populated section visible while its first child is laid out.
+                // Hiding it from its own zero implicit width prevents that first layout.
+                visible: (root.preferences.layout?.dock.length || 0) > 0
                 rows: 1
                 columnSpacing: Theme.barControlGap
                 Layout.alignment: Qt.AlignVCenter
