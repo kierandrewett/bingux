@@ -29,6 +29,7 @@ Item {
     }
 
     signal activated(var position)
+    signal contextMenuRequested(var position)
     signal previewToggled
     signal hovered
 
@@ -463,7 +464,7 @@ Item {
         id: rowMouse
 
         anchors.fill: parent
-        acceptedButtons: Qt.LeftButton
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.ArrowCursor
         // Keep pointer tracking alive while queries refresh; only activation
         // is gated. Re-enabling a MouseArea under a still pointer loses entry.
@@ -482,6 +483,10 @@ Item {
         }
         onClicked: mouse => {
             if (!root.activationEnabled) return;
+            if (mouse.button === Qt.RightButton) {
+                root.contextMenuRequested(Qt.point(mouse.x, mouse.y));
+                return;
+            }
             if (root.previewAvailable && root.selected && mouse.x >= width - 96)
                 root.previewToggled();
             else root.activated(Qt.point(mouse.x, mouse.y));

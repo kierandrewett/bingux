@@ -20,6 +20,75 @@ PanelWindow {
         }
     }
 
+    property var dockView: null
+    function openAppMenu(result, position) {
+        if (!dockView || activationPending || awaitingResults || closing
+            || result.providerId !== "applications" || result.kind !== "application") return;
+        const entry = dockView.desktopEntryFor(dockView.normaliseAppId(result.resultId));
+        if (!entry) return;
+        appMenu.result = result;
+        appMenu.group = {id: entry.id, desktopEntry: entry, windows: []};
+        appMenu.preferredX = position.x;
+        appMenu.preferredY = position.y;
+        appMenu.visible = true;
+        Qt.callLater(appMenuNavigation.focusMenu);
+    }
+    ShellPopup {
+        id: appMenu
+        objectName: "searchAppMenu"
+        hostItem: root.contentItem
+        screen: root.screen
+        property var result: null
+        property var group: null
+        popupWidth: 220
+        contentPadding: Theme.gap
+        popupHeight: appMenuColumn.implicitHeight + contentPadding * 2
+        onVisibleChanged: if (!visible && root.visible && !root.closing) root.focusSearchInput()
+        MenuNavigator {
+            id: appMenuNavigation
+            entries: appMenuColumn.children
+            focusTarget: appMenuColumn
+            onEscapeRequested: appMenu.visible = false
+            onActivateRequested: entry => entry.clicked()
+        }
+        ColumnLayout {
+            id: appMenuColumn
+            width: parent.width
+            spacing: 0
+            Keys.forwardTo: [appMenuNavigation]
+            ActionButton {
+                readonly property bool menuEntry: true
+                Layout.fillWidth: true
+                flat: true
+                alignLeft: true
+                text: "Open"
+                cornerRadius: appMenu.contentRadius
+                Keys.forwardTo: [appMenuNavigation]
+                onClicked: {
+                    const result = appMenu.result;
+                    appMenu.visible = false;
+                    root.activateResult(result);
+                }
+            }
+            ActionButton {
+                objectName: "searchAppPinAction"
+                readonly property bool menuEntry: true
+                Layout.fillWidth: true
+                flat: true
+                alignLeft: true
+                text: root.dockView && appMenu.group && root.dockView.isPinned(appMenu.group)
+                    ? "Unpin from dock" : "Pin to dock"
+                cornerRadius: appMenu.contentRadius
+                Keys.forwardTo: [appMenuNavigation]
+                onClicked: {
+                    const group = appMenu.group;
+                    appMenu.visible = false;
+                    root.dockView.setPinned(group, !root.dockView.isPinned(group));
+                }
+            }
+        }
+    }
+
     readonly property int resultLimit: 20
     readonly property int maxChatExchanges: 6
     readonly property bool serviceReady: searchSocket.connectionState === "ready"
@@ -125,7 +194,10 @@ PanelWindow {
         pointerResultIndex = -1;
         resultPointer.lastPosition = resultPointer.point.position;
     }
-    onDisplayedResultsChanged: pointerResultIndex = -1
+    onDisplayedResultsChanged: {
+        pointerResultIndex = -1;
+        appMenu.visible = false;
+    }
     // Profile-owned components implement the SearchResult interface.
     property var providerDelegates: ({})
 
@@ -207,6 +279,7 @@ PanelWindow {
         activationPending = false;
         queryError = "";
         closing = true;
+        appMenu.visible = false;
         openAnimation.stop();
         if (Theme.searchMotion === 0)
             finishClose();
@@ -251,6 +324,7 @@ PanelWindow {
     }
 
     function submitQuery() {
+        appMenu.visible = false;
         const query = queryForSearch();
         cancelPendingRequests();
         activeRequestId = "";
@@ -471,6 +545,7 @@ PanelWindow {
             openAnimation.restart();
             focusSearchInput();
         } else {
+            appMenu.visible = false;
             previewOpen = false;
             openAnimation.stop();
             closeAnimation.stop();
@@ -724,7 +799,12 @@ PanelWindow {
                     Accessible.name: root.chatMode ? "Ask a follow-up" : "Search"
                     onTextChanged: root.submitQuery()
                     Keys.onPressed: function(event) {
-                        if (event.key === Qt.Key_Escape) {
+                        if (event.key === Qt.Key_Menu || (event.key === Qt.Key_F10 && (event.modifiers & Qt.ShiftModifier))) {
+                            const row = resultsList.itemAtIndex(root.selectedIndex);
+                            if (row) root.openAppMenu(root.displayedResults[root.selectedIndex],
+                                row.mapToItem(root.contentItem, 24, row.height));
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Escape) {
                             root.closeSearch();
                             event.accepted = true;
                         } else if (event.key === Qt.Key_Left && root.previewOpen) {
@@ -1067,6 +1147,10 @@ PanelWindow {
                             const origin = position ? resultLoader.item.mapToItem(root.contentItem, position.x, position.y) : null;
                             root.activateResult(resultLoader.modelData, origin);
                         }
+                        function onContextMenuRequested(position) {
+                            root.openAppMenu(resultLoader.modelData,
+                                resultLoader.item.mapToItem(root.contentItem, position.x, position.y));
+                        }
                         function onPreviewToggled() { root.previewOpen = !root.previewOpen; root.focusSearchInput(); }
                     }
                     Component {
@@ -1135,7 +1219,7 @@ PanelWindow {
             sequence: "Escape"
             context: Qt.ApplicationShortcut
             enabled: root.visible && !root.closing
-            onActivated: root.closeSearch()
+            onActivated: if (appMenu.visible) appMenu.visible = false; else root.closeSearch()
         }
         Shortcut {
             sequence: "Ctrl+0"
