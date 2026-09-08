@@ -1,18 +1,30 @@
 import QtQuick
+import QtQuick.Window
+import Quickshell.Widgets
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 
-FloatingWindow {
+Window {
     id: root
     title: "Bingux Settings"
     visible: false
-    implicitWidth: 960
-    implicitHeight: 700
-    color: Theme.barBackground
+    width: 960
+    height: 700
+    minimumWidth: 520
+    minimumHeight: 420
+    flags: Qt.Window | Qt.FramelessWindowHint
+    color: "transparent"
+    readonly property bool maximised: visibility === Window.Maximized
+    function toggleMaximised() { if (maximised) showNormal(); else showMaximized(); }
+    property var currentLayout: null
+    property string currentSidebarEdge: "right"
+    readonly property alias searchPage: searchSettings
+    signal saved()
+    readonly property alias customiser: customiser
     property string page: "Search"
-    property var draft: ({search: {disabledProviders: [], ai: null}, previews: {enabled: true, prewarm: true, maxMegabytes: 20}, desktop: {dock: true, sidebar: true, metrics: true}})
+    property var draft: JSON.parse(JSON.stringify(BinguxPreferences.data))
     property var harnesses: []
     property bool dirty: false
     property string status: ""
@@ -20,7 +32,10 @@ FloatingWindow {
     property string model: ""
     property string executable: ""
     property bool aiEnabled: false
-    readonly property bool busy: backend.running
+    property bool ready: false
+    property string operation: ""
+    property var submittedDraft: ({})
+    readonly property bool busy: operation !== ""
     function update(section, key, value) {
         const next = JSON.parse(JSON.stringify(draft));
         next[section][key] = value;
@@ -33,24 +48,34 @@ FloatingWindow {
         if (!enabled) disabled.push(key);
         update("search", "disabledProviders", disabled);
     }
-    function read() { backend.command = helper.concat(["read"]); backend.running = true; }
+    function read() { if (busy) return; receivedReply = false; operation = "read"; backend.command = helper.concat(["read"]); backend.running = true; }
     function save() {
+        if (busy) return;
         update("search", "ai", aiEnabled ? {harness: selectedHarness, model: model.trim(), executable: executable.trim()} : null);
+        submittedDraft = JSON.parse(JSON.stringify(draft));
+        receivedReply = false;
+        operation = "save";
         backend.command = helper.concat(["save"]);
         backend.running = true;
     }
-    readonly property var helper: Quickshell.env("BINGUX_SETTINGS_HELPER") ? [Quickshell.env("BINGUX_SETTINGS_HELPER")] : ["python3", decodeURIComponent(Qt.resolvedUrl("settings-backend.py").toString().replace(/^file:\/\//, ""))]
-    onVisibleChanged: if (visible) read()
+    readonly property var helper: BinguxPreferences.helper
+    onVisibleChanged: if (visible && !dirty && !searchSettings.editing) read()
     Process {
         id: backend
         stdinEnabled: true
-        onStarted: if (command[command.length - 1] === "save") { write(JSON.stringify(root.draft)); stdinEnabled = false; }
-        onExited: { stdinEnabled = true; }
+        onStarted: if (command[command.length - 1] === "save") { write(JSON.stringify(root.submittedDraft)); stdinEnabled = false; }
+        onExited: {
+            stdinEnabled = true;
+            if (!root.receivedReply) root.status = "Settings could not be " + (root.operation === "save" ? "saved. Your changes are still here." : "loaded. Try again.");
+            root.operation = "";
+        }
         stdout: SplitParser {
             onRead: line => {
                 let result;
                 try { result = JSON.parse(line); } catch (_) { root.status = "Could not read settings."; return; }
+                root.receivedReply = true;
                 if (result.error) { root.status = result.error; return; }
+                root.ready = true;
                 root.draft = result.data;
                 root.dirty = false;
                 root.aiEnabled = !!result.data.search.ai;
@@ -60,13 +85,18 @@ FloatingWindow {
                 if (result.harnesses) root.harnesses = result.harnesses;
                 root.status = result.warning || (backend.command[backend.command.length - 1] === "save" ? "Saved" : "");
                 BinguxPreferences.data = result.data;
+                if (backend.command[backend.command.length - 1] === "save") root.saved();
             }
         }
     }
+    DesktopCustomise { id: customiser; settings: root; screen: Quickshell.screens.find(s => s.name === root.screen.name) || Quickshell.screens[0] }
     readonly property bool wideLayout: width >= 740
     property bool navigationOpen: false
     property bool advancedOpen: false
-    readonly property string pageTitle: page === "AI" ? "AI Assistant" : page === "Previews" ? "File Previews" : page
+    readonly property bool searchSubpage: page === "Search" && (searchSettings.editing || searchSettings.detail !== "")
+    readonly property string pageTitle: searchSubpage ? searchSettings.displayTitle : page === "AI" ? "AI Assistant" : page === "Previews" ? "File Previews" : page
+    readonly property string saveState: operation === "read" ? "Loading settings…" : operation === "save" ? "Saving changes…" : dirty ? "Unsaved changes" : status === "Saved" ? "Changes saved" : ""
+    property bool receivedReply: false
     onPageChanged: { navigationOpen = false; pageScroll.contentY = 0; pageFade.restart(); }
 
     component Caption: Text {
@@ -77,42 +107,8 @@ FloatingWindow {
         textFormat: Text.PlainText
         wrapMode: Text.Wrap
     }
-    component Section: ColumnLayout {
-        property string title
-        property string description: ""
-        Layout.fillWidth: true
-        spacing: Theme.gap
-        Text {
-            Layout.fillWidth: true
-            text: parent.title
-            color: Theme.text
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize
-            font.weight: Font.DemiBold
-            textFormat: Text.PlainText
-        }
-        Caption { text: parent.description; visible: text !== ""; Layout.bottomMargin: visible ? Theme.spaceSmall : 0 }
-    }
-    component Group: Rectangle {
-        default property alias rows: groupRows.data
-        Layout.fillWidth: true
-        implicitHeight: groupRows.implicitHeight + Theme.spaceSmall * 2
-        radius: Theme.radius
-        color: Theme.surface
-        ColumnLayout {
-            id: groupRows
-            x: Theme.spaceSmall; y: Theme.spaceSmall
-            width: parent.width - Theme.spaceSmall * 2
-            spacing: 0
-        }
-    }
-    component Divider: Rectangle {
-        Layout.fillWidth: true
-        Layout.leftMargin: Theme.padding
-        Layout.rightMargin: Theme.padding
-        implicitHeight: 1
-        color: Theme.barDivider
-    }
+    component Section: SettingsHeading {}
+    component Group: SettingsGroup {}
     component PreferenceRow: ControlRow {
         iconName: ""
         implicitHeight: subtitle ? 64 : 54
@@ -124,34 +120,12 @@ FloatingWindow {
         Accessible.role: Accessible.Grouping
         onClicked: toggleRequested()
     }
-    component EntryRow: ColumnLayout {
-        property string label
-        property alias text: entry.text
-        property alias placeholderText: entry.placeholderText
-        signal edited(string value)
-        Layout.fillWidth: true
-        Layout.margins: Theme.padding
-        spacing: Theme.spaceSmall
-        Caption { text: parent.label }
-        TextField {
-            id: entry
-            Layout.fillWidth: true
-            implicitHeight: 28
-            padding: 0
-            color: Theme.text
-            placeholderTextColor: Theme.muted
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize
-            selectByMouse: true
-            Accessible.name: parent.label
-            onTextEdited: parent.edited(text)
-            background: Rectangle {
-                color: "transparent"
-                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.accent; visible: entry.activeFocus }
-            }
-        }
-    }
+    component EntryRow: SettingsField {}
 
+    ClippingRectangle {
+        anchors.fill: parent
+        radius: root.maximised ? 0 : Theme.radius
+        color: Theme.barBackground
     Rectangle {
         anchors.fill: parent
         color: Theme.barBackground
@@ -166,22 +140,48 @@ FloatingWindow {
             width: parent.width
             height: 56
             color: Theme.barBackground
+            MouseArea {
+                anchors.fill: parent
+                onPressed: root.startSystemMove()
+                onDoubleClicked: root.toggleMaximised()
+            }
+            IconButton {
+                objectName: "settingsClose"
+                anchors.right: parent.right; anchors.rightMargin: 56
+                anchors.verticalCenter: parent.verticalCenter
+                iconName: "window-close-symbolic"; label: "Close Settings"
+                background: ControlCentreButtonSurface { control: parent; radius: 16; baseColor: Theme.surface }
+                onClicked: root.close()
+            }
             Text {
-                anchors.centerIn: parent
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: root.saveState ? 8 : (parent.height - height) / 2
+                width: Math.max(80, parent.width - 320)
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
                 text: root.pageTitle
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontHeading
                 font.weight: Font.DemiBold
                 color: Theme.text
             }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: 31
+                text: root.saveState
+                visible: text !== ""
+                color: Theme.muted
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSmall
+            }
             IconButton {
                 anchors.left: parent.left; anchors.leftMargin: Theme.padding
                 anchors.verticalCenter: parent.verticalCenter
-                visible: !root.wideLayout
-                iconName: "sidebar-show-symbolic"
-                label: "Show settings pages"
+                visible: !root.wideLayout || root.searchSubpage
+                iconName: root.searchSubpage ? "go-previous-symbolic" : "sidebar-show-symbolic"
+                label: root.searchSubpage ? "Back to Search" : "Show settings pages"
                 objectName: "settingsNavigationToggle"
-                onClicked: root.navigationOpen = !root.navigationOpen
+                onClicked: { if (root.searchSubpage) searchSettings.goBack(); else root.navigationOpen = !root.navigationOpen; }
             }
             RowLayout {
                 anchors.right: parent.right; anchors.rightMargin: Theme.padding
@@ -196,8 +196,8 @@ FloatingWindow {
                 }
                 ActionButton {
                     objectName: "settingsApply"
-                    text: root.busy ? "Saving…" : "Apply"
-                    enabled: root.dirty && !root.busy
+                    text: root.operation === "save" ? "Saving…" : "Apply"
+                    enabled: root.dirty && !root.busy && !searchSettings.editing
                     onClicked: root.save()
                 }
             }
@@ -218,7 +218,8 @@ FloatingWindow {
                 x: Math.round((parent.width - width) / 2)
                 y: 28
                 width: Math.min(600, parent.width - (root.wideLayout ? 64 : 32))
-                spacing: 28
+                spacing: 24
+                enabled: root.ready && !root.busy
                 NumberAnimation { id: pageFade; target: pageContent; property: "opacity"; from: 0.65; to: 1; duration: Theme.reducedMotion ? 0 : Theme.motion }
                 Rectangle {
                     visible: root.status !== "" && root.status !== "Saved"
@@ -227,33 +228,12 @@ FloatingWindow {
                     color: Theme.surface; radius: Theme.radius
                     Text { id: notice; anchors.fill: parent; anchors.margins: Theme.padding; text: root.status; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: Theme.warning; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
                 }
-                ColumnLayout {
+                SearchSettings {
+                    id: searchSettings
+                    settings: root
                     visible: root.page === "Search"
-                    Layout.fillWidth: true; spacing: 28
-                    Section {
-                        title: "On This Device"
-                        description: "Choose what appears when you search."
-                        Group {
-                            PreferenceRow { objectName: "settingsApplications"; title: "Applications"; subtitle: "Installed apps and desktop actions"; toggleChecked: !root.draft.search.disabledProviders.includes("applications"); onToggleRequested: root.setProvider("applications", !toggleChecked) }
-                            Divider {}
-                            PreferenceRow { title: "Files & Folders"; subtitle: "Find files in your indexed locations"; toggleChecked: !root.draft.search.disabledProviders.includes("files"); onToggleRequested: root.setProvider("files", !toggleChecked) }
-                            Divider {}
-                            PreferenceRow { title: "Calculator"; subtitle: "Calculate expressions and copy the answer"; toggleChecked: !root.draft.search.disabledProviders.includes("calculation"); onToggleRequested: root.setProvider("calculation", !toggleChecked) }
-                            Divider {}
-                            PreferenceRow { title: "Unit Conversions"; subtitle: "Length, weight, temperature, time and storage"; toggleChecked: !root.draft.search.disabledProviders.includes("conversions"); onToggleRequested: root.setProvider("conversions", !toggleChecked) }
-                        }
-                    }
-                    Section {
-                        title: "Online Search"
-                        Group {
-                            PreferenceRow { title: "Web Search"; subtitle: "Open a search in DuckDuckGo"; toggleChecked: !root.draft.search.disabledProviders.includes("web"); onToggleRequested: root.setProvider("web", !toggleChecked) }
-                            Divider {}
-                            PreferenceRow { title: "Website Shortcuts"; subtitle: "Wikipedia, GitHub, Maps and YouTube"; toggleChecked: !root.draft.search.disabledProviders.includes("web-shortcuts"); onToggleRequested: root.setProvider("web-shortcuts", !toggleChecked) }
-                            Divider {}
-                            PreferenceRow { title: "Connected Providers"; subtitle: "Include online suggestions from your providers"; toggleChecked: !root.draft.search.disabledProviders.includes("external"); onToggleRequested: root.setProvider("external", !toggleChecked) }
-                        }
-                        Caption { text: "Use wiki:, gh:, maps: or yt: before a website search."; Layout.leftMargin: Theme.spaceSmall }
-                    }
+                    onDetailChanged: pageScroll.contentY = 0
+                    onEditingChanged: pageScroll.contentY = 0
                 }
                 ColumnLayout {
                     visible: root.page === "AI"
@@ -275,7 +255,6 @@ FloatingWindow {
                                     required property var modelData
                                     required property int index
                                     Layout.fillWidth: true; spacing: 0
-                                    Divider { visible: index > 0 }
                                     ControlRow {
                                         Layout.fillWidth: true
                                         implicitHeight: 64
@@ -299,7 +278,6 @@ FloatingWindow {
                     }
                     Group {
                         ControlRow { objectName: "settingsAdvanced"; title: "Advanced"; navigationRotation: root.advancedOpen ? 90 : 0; subtitle: root.advancedOpen ? "Custom executable" : "Use a custom CLI executable"; iconName: ""; navigation: true; implicitHeight: 60; onClicked: root.advancedOpen = !root.advancedOpen }
-                        Divider { visible: root.advancedOpen }
                         EntryRow { visible: root.advancedOpen; objectName: "settingsExecutable"; label: "Executable path"; placeholderText: "Detect automatically"; text: root.executable; onEdited: value => { root.executable = value; root.dirty = true; } }
                     }
                     Caption { text: "Tools and project context are disabled. Press Esc in search to cancel an answer."; Layout.leftMargin: Theme.spaceSmall }
@@ -312,7 +290,6 @@ FloatingWindow {
                         description: "View files beside your search results."
                         Group {
                             PreferenceRow { title: "Show Previews"; subtitle: "Press Right Arrow on a selected file"; toggleChecked: root.draft.previews.enabled; onToggleRequested: root.update("previews", "enabled", !toggleChecked) }
-                            Divider {}
                             PreferenceRow { title: "Prepare Previews Ahead of Time"; subtitle: "Make nearby results faster to open"; toggleChecked: root.draft.previews.prewarm; onToggleRequested: root.update("previews", "prewarm", !toggleChecked) }
                         }
                     }
@@ -341,13 +318,16 @@ FloatingWindow {
                     visible: root.page === "Desktop"
                     Layout.fillWidth: true; spacing: 28
                     Section {
-                        title: "Desktop Layout"
-                        description: "Choose which parts of Bingux are visible."
+                        title: "Layout"
+                        Group {
+                            ControlRow { objectName: "customiseDesktop"; title: "Customise Desktop"; subtitle: "Arrange your top bar, dock and sidebar"; iconName: "preferences-desktop-display-symbolic"; navigation: true; implicitHeight: 72; enabled: root.ready && !root.busy; onClicked: customiser.open() }
+                        }
+                    }
+                    Section {
+                        title: "Visibility"
                         Group {
                             PreferenceRow { title: "Dock"; subtitle: "Pinned and running applications"; toggleChecked: root.draft.desktop.dock; onToggleRequested: root.update("desktop", "dock", !toggleChecked) }
-                            Divider {}
                             PreferenceRow { title: "Sidebar"; subtitle: "Notes, terminal, media and calendar"; toggleChecked: root.draft.desktop.sidebar; onToggleRequested: root.update("desktop", "sidebar", !toggleChecked) }
-                            Divider {}
                             PreferenceRow { title: "System Monitors"; subtitle: "Performance metrics in the top bar"; toggleChecked: root.draft.desktop.metrics; onToggleRequested: root.update("desktop", "metrics", !toggleChecked) }
                         }
                         Caption { text: "Right-click the system monitors to choose which metrics appear."; Layout.leftMargin: Theme.spaceSmall }
@@ -370,6 +350,11 @@ FloatingWindow {
         visible: root.wideLayout || root.navigationOpen
         color: Theme.surface
         Rectangle { anchors.right: parent.right; height: parent.height; width: 1; color: Theme.barDivider }
+        MouseArea {
+            width: parent.width; height: 56
+            onPressed: root.startSystemMove()
+            onDoubleClicked: root.toggleMaximised()
+        }
         Text {
             x: Theme.paddingLarge
             height: 56
@@ -411,4 +396,30 @@ FloatingWindow {
             }
         }
     }
+    }
+    Rectangle {
+        anchors.fill: parent
+        color: "transparent"
+        radius: root.maximised ? 0 : Theme.radius
+        border.width: root.maximised ? 0 : 1
+        border.color: Theme.barDivider
+    }
+    Repeater {
+        model: [Qt.LeftEdge, Qt.RightEdge, Qt.TopEdge, Qt.BottomEdge,
+                Qt.TopEdge | Qt.LeftEdge, Qt.TopEdge | Qt.RightEdge,
+                Qt.BottomEdge | Qt.LeftEdge, Qt.BottomEdge | Qt.RightEdge]
+        MouseArea {
+            required property int modelData
+            readonly property bool horizontalEdge: (modelData & (Qt.LeftEdge | Qt.RightEdge)) !== 0
+            readonly property bool verticalEdge: (modelData & (Qt.TopEdge | Qt.BottomEdge)) !== 0
+            enabled: !root.maximised
+            width: horizontalEdge ? 6 : root.width - 12
+            height: verticalEdge ? 6 : root.height - 12
+            x: modelData & Qt.RightEdge ? root.width - width : horizontalEdge ? 0 : 6
+            y: modelData & Qt.BottomEdge ? root.height - height : verticalEdge ? 0 : 6
+            cursorShape: horizontalEdge && verticalEdge ? ((modelData === (Qt.TopEdge | Qt.LeftEdge) || modelData === (Qt.BottomEdge | Qt.RightEdge)) ? Qt.SizeFDiagCursor : Qt.SizeBDiagCursor) : horizontalEdge ? Qt.SizeHorCursor : Qt.SizeVerCursor
+            onPressed: root.startSystemResize(modelData)
+        }
+    }
+
 }

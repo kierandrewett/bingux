@@ -27,3 +27,12 @@ not change between pages. Page fades and chevron motion honour reduced motion.
 Run `bash tests/bingux-settings.sh` for persistence, validation, row and switch
 interaction, keyboard navigation, the advanced expander and the narrow layout.
 Run the same check with `BINGUX_REDUCED_MOTION=1` for the reduced-motion path.
+
+Search detail pages use the window header for their title and back navigation.
+Engine default and removal actions belong in the engine editor. Filtering has an
+explicit empty state. SettingsGroup owns separators and SettingsField owns label,
+value, focus and validation styling; pages must not recreate those controls.
+
+The header reports unsaved changes, saving and completion. Disable the form during
+backend operations and keep unsaved drafts when the window is reopened. A helper
+that exits without a response must leave a visible error and preserve the draft.

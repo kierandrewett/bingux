@@ -124,3 +124,9 @@ BinguxSettings 1.0 BinguxSettings.qml
 
 singleton CompositorEnvironment 1.0 CompositorEnvironment.qml
 NotesSlashMenu 1.0 NotesSlashMenu.qml
+SettingsGroup 1.0 SettingsGroup.qml
+SettingsHeading 1.0 SettingsHeading.qml
+SettingsField 1.0 SettingsField.qml
+SettingsChoice 1.0 SettingsChoice.qml
+SearchSettings 1.0 SearchSettings.qml
+DesktopCustomise 1.0 DesktopCustomise.qml
