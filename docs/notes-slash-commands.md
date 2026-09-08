@@ -74,3 +74,15 @@ The test runner redirects note settings to a temporary file. It checks keyboard
 navigation, pointer activation, empty results, dismissal, literal slashes, actual
 formatting, editable table cells, grouped undo, persistence and menu bounds.
 Run `sidebar-notes` and `notes-headings` through the same runner for regressions.
+
+Heading formatting uses `DocumentEdit` from `Bingux.Text`. The native edit groups
+fragment replacement and spacing before Qt updates the layout. This prevents a
+partially removed document from changing the scroll position. The helper also
+provides the native undo group.
+
+`tests/sidebar-notes.sh notes-scroll` checks slash commands, typed Markdown and
+context-menu headings in a scrolled note. The original failure moved the caret by
+130 px and temporarily reduced document height from 605 px to 207 px. The fixed
+path preserves document height during insertion and moves the heading only by its
+14 px top margin. Offscreen and isolated Wayland runs pass, including continued
+typing and Enter. Updating this native plugin requires restarting Quickshell.
