@@ -8,6 +8,8 @@ The open centre palette has Widgets and Apps views. Drag an installed app into t
 
 The palette uses shared widget components with sample content. It does not continuously capture live widgets. The item you pick up follows the cursor, and a line marks its insertion position. Fixed Space and Flexible space items can be added more than once to the top bar. Flexible spaces share the available width in their section. Fixed spaces have an adjustable width from 8 to 160 pixels.
 
+Label and Icon tiles create independent items in the top bar or dock. Edit their text or choose a symbol from the icon grid. They follow the container display mode unless you set an override. Removing an instance clears its options; Undo restores both the item and its appearance.
+
 Click a container to open its settings beside it. Right-click a placed widget, double-click its palette preview, or focus the preview and press Enter to open widget options. Move and Remove are in those options. The icon grid and dock pointer settings expand on request. Undo and Redo reverse complete drops and individual settings changes.
 
 Changes stay in the preview until **Done**. Cancel discards the preview. Escape closes the current options panel first, then the editor. Restore defaults resets the top-bar and sidebar widget arrangement in the preview. Existing settings changes are also saved when applying the desktop.

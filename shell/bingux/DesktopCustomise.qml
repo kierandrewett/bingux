@@ -247,7 +247,22 @@ Scope {
             if (target !== "palette") change("dock", true);
             return;
         }
+        const previous = layout;
         layout = DesktopLayout.move(layout, id, target, index);
+        if (layout === previous) return;
+        if (DesktopLayout.isTemplate(id)) {
+            const created = layout[target]?.find(value => !previous[target].includes(value));
+            const options = Object.assign({}, desktop.widgetOptions || {});
+            if (created) {
+                delete options[created];
+                if (options[id]) options[created] = Object.assign({}, options[id]);
+                change("widgetOptions", options);
+            }
+        } else if (target === "palette" && (DesktopLayout.isSpacing(id) || DesktopLayout.isDecoration(id))) {
+            const options = Object.assign({}, desktop.widgetOptions || {});
+            delete options[id];
+            change("widgetOptions", options);
+        }
         if (target === "dock") change("dock", true);
         if (id === "metrics" && target !== "palette") change("metrics", true);
         if (target === "sidebar") change("sidebar", true);
@@ -379,7 +394,7 @@ Scope {
                     objectName: "customiseWidgetGrid"
                     Layout.fillWidth: true; Layout.fillHeight: true
                     cellWidth: width / Math.max(1, Math.floor(width / 190)); cellHeight: 144; clip: true; cacheBuffer: 100; reuseItems: true
-                    model: !root.visible ? [] : root.tab === "Apps" ? root.applications.map(entry => "app:" + root.appId(entry.id)) : DesktopLayout.layoutWidgets.concat(DesktopLayout.widgets, DesktopLayout.controlWidgets).filter(widget => !root.appFilter || widget.label.toLowerCase().includes(root.appFilter.toLowerCase())).map(widget => widget.id)
+                    model: !root.visible ? [] : root.tab === "Apps" ? root.applications.map(entry => "app:" + root.appId(entry.id)) : DesktopLayout.layoutWidgets.concat(DesktopLayout.decorationWidgets, DesktopLayout.widgets, DesktopLayout.controlWidgets).filter(widget => !root.appFilter || widget.label.toLowerCase().includes(root.appFilter.toLowerCase())).map(widget => widget.id)
                     delegate: Chip { required property string modelData; widgetId: modelData }
                     boundsBehavior: Flickable.StopAtBounds
                     ScrollBar.vertical: ScrollBar {}

@@ -28,7 +28,7 @@ Item {
             height: root.panelWidget ? 240 : item ? item.implicitHeight : 0
             scale: Math.min(1, root.width / Math.max(1, width))
             transformOrigin: Item.TopLeft
-            sourceComponent: root.spec.layoutItem ? space : root.widgetId.startsWith("control-") ? control
+            sourceComponent: root.spec.decoration ? decoration : root.spec.layoutItem ? space : root.widgetId.startsWith("control-") ? control
                 : ({search, clock, controls: indicators, notifications, metrics: monitor, keyboard, privacy, capture,
                     overflow, tray, notes, calendar, media, tasks, terminal, monitor: performance})[root.widgetId] || empty
         }
@@ -52,6 +52,7 @@ Item {
             rowInteractive: false
         }
     }
+    Component { id: decoration; DesktopDecoration { widgetId: root.widgetId } }
     Component { id: space; BarSpace { flexible: root.widgetId.startsWith("spring"); editing: true; implicitWidth: flexible ? 120 : 32 } }
     Component { id: search; BarSearchButton { presentation: root.face } }
     Component {

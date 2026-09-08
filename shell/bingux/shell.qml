@@ -312,6 +312,22 @@ ShellRoot {
             onObjectAdded: (index, object) => topBar.spacingWidgets = topBar.spacingWidgets.concat([object])
             onObjectRemoved: (index, object) => { object.parent = null; topBar.spacingWidgets = topBar.spacingWidgets.filter(item => item !== object); }
         }
+        readonly property string decorationKey: customLayout ? ["top-left", "top-center", "top-right", "dock"].reduce((items, zone) => items.concat(customLayout[zone]), []).filter(DesktopLayout.isDecoration).join(";") : ""
+        property var decorationWidgets: []
+        Instantiator {
+            model: topBar.decorationKey ? topBar.decorationKey.split(";") : []
+            delegate: DesktopDecoration {
+                id: decorationWidget
+                required property string modelData
+                widgetId: modelData
+                visible: topBar.decorationWidgets.includes(decorationWidget)
+                parent: topBar.hostFor(decorationWidget)
+                Layout.column: topBar.controlColumn(decorationWidget)
+                Layout.row: 0
+            }
+            onObjectAdded: (index, object) => topBar.decorationWidgets = topBar.decorationWidgets.concat([object])
+            onObjectRemoved: (index, object) => { object.parent = null; topBar.decorationWidgets = topBar.decorationWidgets.filter(item => item !== object); }
+        }
         function hasSpring(zone) { return customLayout?.[zone]?.some(id => id.startsWith("spring:")) || false; }
         function zoneBudget(zone) {
             const centre = availableControls.filter(item => zoneFor(item) === "top-center");
@@ -326,7 +342,7 @@ ShellRoot {
             JSON.stringify(customLayout["top-left"]) === '["search"]' &&
             JSON.stringify(customLayout["top-center"]) === '["clock"]' &&
             customLayout.dock.length === 0 &&
-            !["top-left", "top-center", "top-right"].some(zone => customLayout[zone].some(id => id.startsWith("control-") || DesktopLayout.isSpacing(id))) &&
+            !["top-left", "top-center", "top-right"].some(zone => customLayout[zone].some(id => id.startsWith("control-") || DesktopLayout.isSpacing(id) || DesktopLayout.isDecoration(id))) &&
             ["top-left", "top-center", "top-right"].every(zone => !DesktopEditing.desktop.containers?.[zone]?.display || DesktopEditing.desktop.containers[zone].display === "native") &&
             Object.keys(DesktopEditing.desktop.widgetOptions || {}).every(id => !DesktopLayout.zone(customLayout, id).startsWith("top-") || !appearance(id, "", "", false, false).custom) &&
             ["capture", "tray", "privacy", "metrics", "keyboard", "controls", "notifications"].every(id => customLayout["top-right"].includes(id)))
@@ -348,8 +364,8 @@ ShellRoot {
         readonly property real controlsBudget: Math.max(0, (width - clockPill.implicitWidth) / 2 - Theme.gap)
         // Display order is independent of overflow priority and reparenting order.
         readonly property var defaultControls: [captureStatus, trayContainer, privacyContainer,
-            metricsPill, inputSourceSelector, overflowButton, systemPill, notificationButton, searchPill, clockPill].concat(controlCentre.movableWidgets, spacingWidgets)
-        readonly property var controlNames: ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "search", "clock"].concat(controlCentre.movableWidgets.map(item => item.widgetId), spacingWidgets.map(item => item.widgetId))
+            metricsPill, inputSourceSelector, overflowButton, systemPill, notificationButton, searchPill, clockPill].concat(controlCentre.movableWidgets, spacingWidgets, decorationWidgets)
+        readonly property var controlNames: ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "search", "clock"].concat(controlCentre.movableWidgets.map(item => item.widgetId), spacingWidgets.map(item => item.widgetId), decorationWidgets.map(item => item.widgetId))
         Settings {
             id: barPreferences
             location: "file://" + (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/bingux/top-bar.ini"
@@ -455,7 +471,7 @@ ShellRoot {
             [privacyContainer, privacyContainer.active], [metricsPill, profileSettings.metricsEnabled],
             [inputSourceSelector, metrics.desktopStateAvailable], [systemPill, true],
             [notificationButton, notificationState.allEntries.length > 0], [searchPill, true], [clockPill, true]
-        ].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat(controlCentre.movableWidgets.filter(item => chosen(item)), spacingWidgets)
+        ].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat(controlCentre.movableWidgets.filter(item => chosen(item)), spacingWidgets, decorationWidgets)
         readonly property var overflowItems: {
             if (customLayout && !nativeTopBarLayout) {
                 const hidden = [];

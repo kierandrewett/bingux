@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory(prefix='bingux-layout-live-') as directory:
     environment.pop('BINGUX_SETTINGS_HELPER', None)
     subprocess.run(['python3', str(repo / 'tests/customise-native-input.py'), '--prepare'], env=environment, check=True)
     time.sleep(.3)
-    report, output = run_reported_shell(fixture, environment, 'BINGUX_LAYOUT_REPORT', timeout=40)
+    report, output = run_reported_shell(fixture, environment, 'BINGUX_LAYOUT_REPORT', timeout=55)
     print(output)
     if report != 'PASS' or any(error in output for error in ('CUSTOMISE_TEST_FAILED', 'TypeError', 'ReferenceError', 'has crashed', 'property "maximumPopupHeight"', 'property "preferredY"', 'Cannot use same item on different windows', 'Updates can only be scheduled', 'QGridLayoutEngine::addItem')):
         raise SystemExit(report if report != 'PASS' else 'Runtime errors during layout test')

@@ -142,3 +142,4 @@ WidgetDropArea 1.0 WidgetDropArea.qml
 PanelOutline 1.0 PanelOutline.qml
 
 BarSpace 1.0 BarSpace.qml
+DesktopDecoration 1.0 DesktopDecoration.qml
