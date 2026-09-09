@@ -29,6 +29,7 @@ Window {
     property string page: "Search"
     property var draft: JSON.parse(JSON.stringify(BinguxPreferences.data))
     property var harnesses: []
+    property var desktopDefaults: null
     property bool dirty: false
     property string status: ""
     property string selectedHarness: "pi"
@@ -104,6 +105,7 @@ Window {
                 root.model = result.data.search.ai?.model || "";
                 root.executable = result.data.search.ai?.executable || "";
                 if (result.harnesses) root.harnesses = result.harnesses;
+                if (result.desktopDefaults) root.desktopDefaults = result.desktopDefaults;
                 root.status = result.warning || (backend.command[backend.command.length - 1] === "save" ? "Saved" : "");
                 BinguxPreferences.data = result.data;
                 if (backend.command[backend.command.length - 1] === "save") root.saved();

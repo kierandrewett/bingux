@@ -1,6 +1,7 @@
 import copy
 import importlib.util
 import json
+import io
 import os
 from pathlib import Path
 import tempfile
@@ -20,6 +21,16 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.read(), data)
         settings.write({'previews': {'enabled': False}})
         self.assertEqual(settings.read()['desktop']['dockSize'], 40)
+    def test_read_exposes_canonical_defaults_without_resetting_saved_settings(self):
+        settings.write({'desktop': {'dockSize': 40, 'dockAlignment': 'left'}})
+        before = settings.config_path().read_bytes()
+        output = io.StringIO()
+        with patch('sys.argv', ['settings-backend.py', 'read']), patch('sys.stdout', output):
+            settings.main()
+        result = json.loads(output.getvalue())
+        self.assertEqual(result['desktopDefaults'], settings.DEFAULTS['desktop'])
+        self.assertEqual(result['data']['desktop']['dockSize'], 40)
+        self.assertEqual(settings.config_path().read_bytes(), before)
     def test_search_engine_validation_preserves_file_on_failure(self):
         data = settings.write({})
         before = settings.config_path().read_bytes()

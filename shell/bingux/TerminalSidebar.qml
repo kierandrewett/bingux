@@ -10,6 +10,7 @@ import "DesktopLayout.js" as DesktopLayout
 Scope {
     id: root
     signal widgetEditRequested(string widgetId, var control, var window)
+    signal customiseRequested()
     required property var settings
     property var systemMetrics: null
     property var widgetLayout: null
@@ -780,7 +781,7 @@ Scope {
         cornerRadius: Theme.radius
         surfaceColor: Theme.popupSurface
         screen: root.floating ? detachedWindow.screen : root.screen
-        popupWidth: 190
+        popupWidth: Math.max(190, Math.ceil(sidebarCustomise.implicitWidth + contentPadding * 2))
         popupHeight: Math.min(contentMenuColumn.implicitHeight + contentPadding * 2, height - preferredY - Theme.gap)
         contentPadding: Theme.spaceSmall
         property point anchorPoint: Qt.point(0, 0)
@@ -861,68 +862,21 @@ Scope {
                     onClicked: triggered()
                     onTriggered: root.detached ? root.dockBack() : root.popOut()
                 }
-                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.barDivider; Layout.topMargin: 4; Layout.bottomMargin: 4 }
-                Text { text: "Position"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall; Layout.leftMargin: 8 }
-                RowLayout {
+                Rectangle { visible: !DesktopEditing.active; Layout.fillWidth: true; implicitHeight: 1; color: Theme.barDivider; Layout.topMargin: 4; Layout.bottomMargin: 4 }
+                ActionButton {
+                    id: sidebarCustomise
+                    readonly property bool menuEntry: true
+                    signal triggered()
+                    text: "Customise sidebar…"
+                    iconName: "preferences-system-symbolic"
                     Layout.fillWidth: true
-                    spacing: 4
-                    Repeater {
-                        model: ["left", "top", "right"]
-                        AbstractButton {
-                            id: sideButton
-                            required property string modelData
-                            Layout.fillWidth: true
-                            Layout.preferredWidth: 1
-                            implicitHeight: 48
-                            hoverEnabled: true
-                            activeFocusOnTab: true
-                            Accessible.name: "Move sidebar to " + modelData
-                            Accessible.role: Accessible.Button
-                            Accessible.onPressAction: clicked()
-                            onClicked: root.setEdge(modelData)
-                            Keys.onReturnPressed: clicked()
-                            background: BarControlSurface {
-                                hovered: sideButton.hovered
-                                pressed: sideButton.down
-                                selected: root.edge === sideButton.modelData
-                                focused: sideButton.visualFocus
-                            }
-                            contentItem: Item {
-                                Text {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: 5
-                                    text: sideButton.modelData.charAt(0).toUpperCase() + sideButton.modelData.slice(1)
-                                    color: root.edge === sideButton.modelData ? Theme.text : Theme.muted
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: Theme.fontSmall
-                                }
-                                Rectangle {
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    y: 8
-                                    width: Theme.iconSize
-                                    height: Theme.iconSize - 4
-                                    radius: 2
-                                    color: "transparent"
-                                    border.width: 1
-                                    border.color: root.edge === sideButton.modelData ? Theme.text : Theme.muted
-                                    Rectangle {
-                                        x: sideButton.modelData === "right" ? parent.width - width - 2 : 2
-                                        y: 2
-                                        width: sideButton.modelData === "top" ? parent.width - 4 : 3
-                                        height: sideButton.modelData === "top" ? 2 : parent.height - 4
-                                        radius: 0.5
-                                        color: parent.border.color
-                                    }
-                                }
-                            }
-                            ShellTooltip {
-                                parent: sideButton
-                                visible: sideButton.hovered
-                                text: sideButton.Accessible.name
-                            }
-                        }
-                    }
+                    implicitHeight: 32
+                    flat: true
+                    alignLeft: true
+                    cornerRadius: contentMenu.contentRadius
+                    Keys.forwardTo: [contentNavigation]
+                    onClicked: triggered()
+                    onTriggered: { contentMenu.visible = false; root.customiseRequested(); }
                 }
             }
         }

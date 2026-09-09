@@ -296,7 +296,8 @@ def main():
                 if result.returncode: warning = 'Saved. Restart the search service to apply search settings.'
             print(json.dumps({'data': data, 'warning': warning}))
         else:
-            print(json.dumps({'data': read(), 'harnesses': [{'id': name, 'path': shutil.which(name) or ''} for name in ('pi', 'claude')]}))
+            print(json.dumps({'data': read(), 'desktopDefaults': DEFAULTS['desktop'],
+                              'harnesses': [{'id': name, 'path': shutil.which(name) or ''} for name in ('pi', 'claude')]}))
     except Exception as error:
         print(json.dumps({'error': str(error)}))
         sys.exit(1)

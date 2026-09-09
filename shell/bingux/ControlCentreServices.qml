@@ -15,7 +15,8 @@ Singleton {
     readonly property var vpns: state.vpns || []
     readonly property bool doNotDisturb: !!state.doNotDisturb
     property bool keepAwake: false
-    property var controls: ({vpn: true, dnd: true, nightLight: false, power: false, awake: false})
+    readonly property var defaultControls: ({vpn: true, dnd: true, nightLight: false, power: false, awake: false})
+    property var controls: Object.assign({}, defaultControls)
     property bool preferencesReady: false
     readonly property string preferencesDirectory: Quickshell.statePath("control-centre")
     readonly property var effectiveControls: DesktopEditing.desktop.controlCentre || controls

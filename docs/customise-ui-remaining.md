@@ -30,10 +30,6 @@ layout tests does not prove that every existing desktop widget is editable.
   now also move into this host, using their full panel layout. Header labels
   wrap within the sidebar width. Longer layouts scroll while preserving space
   for the selected panel, and group handles follow the scroll position.
-- `TerminalSidebar.qml` still offers ordinary position changes outside Customise
-  UI. The requested exception is ordinary dock application rearrangement.
-- Restore defaults resets the arrangement. Container and widget options need a
-  defined reset that is reversible through Undo and Cancel.
 
 ## Next implementation boundary
 
@@ -123,6 +119,16 @@ menus also follow the detached sidebar. Normal and reduced motion save and
 reload their placements in a fresh shell process. An empty control centre keeps
 a visible drop target. The bar/dock group, utility, status-sidebar, full editor
 and seven reload cases pass; original control-centre geometry remains unchanged.
+
+Restore defaults now resets native control groups, widget placement, visibility,
+container and widget appearance, sidebar edge and dock behaviour in one undoable
+step. It uses the settings backend's defaults and preserves pinned apps and their
+order. The native reset case checks the button, Undo/Redo, Cancel without a disk
+change, and fresh-process persistence with normal and reduced motion. The existing
+native editor regression also passes. The sidebar picker now opens its Customise
+UI inspector instead of changing the screen edge directly. Panel selection and
+pop-out remain available in the picker. Its new action fits the menu without
+truncation, including fractional text widths.
 
 Remaining broad checks include all existing widget actions, notification
 interactions after layout changes, different scale factors,

@@ -123,6 +123,18 @@ Scope {
         const state = redoStack[redoStack.length - 1];
         redoStack = redoStack.slice(0, -1); restoreSnapshot(state);
     }
+    function restoreDefaults() {
+        if (!settings.desktopDefaults || draggedId) return;
+        checkpoint();
+        const defaults = JSON.parse(JSON.stringify(settings.desktopDefaults));
+        desktop = Object.assign({}, desktop, defaults, {
+            layoutVersion: 1, dockApps: desktop.dockApps, sidebarEdge: defaults.sidebarEdge || "right",
+            layout: DesktopLayout.defaults(), controlLayout: ControlLayout.defaults(), controlOrder: DesktopLayout.controlOrder(),
+            controlCentre: Object.assign({}, ControlCentreServices.defaultControls)
+        });
+        layout = desktop.layout;
+        optionsPage = ""; selectedWidget = "";
+    }
     property string tab: "Widgets"
     property string appFilter: ""
     property bool iconsExpanded: false
@@ -472,7 +484,12 @@ Scope {
                 IconButton { objectName: "customiseRedo"; iconName: "edit-redo-symbolic"; label: "Redo"; enabled: root.redoStack.length > 0 && !root.draggedId; onClicked: root.redo() }
                 Item { Layout.fillWidth: true }
                 Text { visible: root.settings.status !== "" && root.settings.status !== "Saved"; text: root.settings.status; color: Theme.warning; Layout.maximumWidth: 260; elide: Text.ElideRight; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
-                ActionButton { text: "Restore defaults"; flat: true; enabled: !root.settings.busy; onClicked: { root.checkpoint(); root.layout = DesktopLayout.defaults(); } }
+                ActionButton {
+                    text: "Restore defaults"; flat: true
+                    enabled: !root.settings.busy && !!root.settings.desktopDefaults && !root.draggedId
+                    onClicked: root.restoreDefaults()
+                    ShellTooltip { visible: parent.hovered; text: "Reset widget layout, appearance and behaviour. Keep pinned apps." }
+                }
                 ActionButton { objectName: "customiseCancel"; text: "Cancel"; enabled: !root.settings.busy; onClicked: root.cancel() }
                 ActionButton { objectName: "customiseApply"; text: root.settings.busy ? "Saving…" : "Done"; enabled: !root.settings.busy; onClicked: root.apply() }
             }

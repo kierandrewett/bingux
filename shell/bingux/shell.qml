@@ -101,6 +101,10 @@ ShellRoot {
     TerminalSidebar {
         id: terminalSidebar
         onWidgetEditRequested: (id, item, window) => root.openWidgetMenu(id, item, window)
+        onCustomiseRequested: {
+            if (DesktopEditing.active) desktopCustomiser.selectContainer("sidebar");
+            else binguxSettings.openCustomise("", "Sidebar");
+        }
         systemMetrics: metrics
         widgetLayout: topBar
         settings: profileSettings
