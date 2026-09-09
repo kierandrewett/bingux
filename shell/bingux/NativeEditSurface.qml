@@ -76,7 +76,9 @@ MouseArea {
         return expandedEntries.find(entry => {
             if (!entry.item || !entry.item.visible) return false;
             const p = root.mapToItem(entry.item, x, y);
-            return p.x >= 0 && p.y >= 0 && p.x <= entry.item.width && p.y <= entry.item.height;
+            const paddingX = Math.max(0, (12 - entry.item.width) / 2);
+            const paddingY = Math.max(0, (12 - entry.item.height) / 2);
+            return p.x >= -paddingX && p.y >= -paddingY && p.x <= entry.item.width + paddingX && p.y <= entry.item.height + paddingY;
         });
     }
     function destinationAt(point, id) {

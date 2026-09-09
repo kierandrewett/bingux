@@ -25,7 +25,7 @@ PROVIDERS = {'applications', 'files', 'calculation', 'conversions', 'web', 'web-
 
 CONTROL_ACTIONS = {"control-account", "control-settings", "control-session", "control-lock"}
 
-PORTABLE_CONTROLS = CONTROL_ACTIONS | {"control-volume", "control-microphone", "control-battery", "control-media", "controls-header", "controls-audio", "controls-tiles"}
+PORTABLE_CONTROLS = CONTROL_ACTIONS | {"control-volume", "control-microphone", "control-battery", "control-media", "controls-header", "controls-audio", "controls-tiles", "control-divider", "control-header-space", "control-customise"}
 
 CONTROL_GROUPS = {
     'control-centre': ['controls-header', 'controls-audio', 'control-divider', 'controls-tiles', 'control-media', 'control-customise'],
@@ -138,7 +138,7 @@ def validate(data):
     for key, options in desktop['widgetOptions'].items():
         if not isinstance(key, str) or not isinstance(options, dict) or set(options) - {'display', 'label', 'icon', 'width'}:
             raise ValueError('Invalid widget display options.')
-        if 'width' in options and (not re.fullmatch(r'spacer:[1-9][0-9]{0,3}', key) or type(options['width']) is not int or not 8 <= options['width'] <= 160):
+        if 'width' in options and (not (key == 'control-header-space' or re.fullmatch(r'spacer:[1-9][0-9]{0,3}', key)) or type(options['width']) is not int or not 8 <= options['width'] <= 160):
             raise ValueError('Fixed spaces must be between 8 and 160 pixels.')
         if options.get('display', 'inherit') not in modes + ('inherit',):
             raise ValueError('Invalid widget display mode.')

@@ -67,10 +67,11 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.config_path().read_bytes(), before)
 
     def test_fixed_space_width_validation(self):
-        settings.write({'desktop': {'widgetOptions': {'spacer:1': {'width': 48}}}})
+        settings.write({'desktop': {'widgetOptions': {'spacer:1': {'width': 48}, 'control-header-space': {'width': 64}}}})
         self.assertEqual(settings.read()['desktop']['widgetOptions']['spacer:1']['width'], 48)
+        self.assertEqual(settings.read()['desktop']['widgetOptions']['control-header-space']['width'], 64)
         before = settings.config_path().read_bytes()
-        for key, width in [('spacer:1', 0), ('spacer:1', 161), ('spacer:1', True), ('spring:1', 40), ('search', 40)]:
+        for key, width in [('spacer:1', 0), ('spacer:1', 161), ('spacer:1', True), ('spring:1', 40), ('search', 40), ('control-header-space', 0), ('control-header-space', 161), ('control-header-space', True)]:
             with self.assertRaises(ValueError): settings.write({'desktop': {'widgetOptions': {key: {'width': width}}}})
             self.assertEqual(settings.config_path().read_bytes(), before)
 

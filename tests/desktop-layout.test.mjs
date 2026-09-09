@@ -103,7 +103,7 @@ test("labels and icons create independent movable instances", () => {
 });
 
 test("native portable controls can move through bar and dock without duplicate placements", () => {
-    for (const id of ["control-account", "control-settings", "control-session", "control-lock", "control-volume", "control-microphone", "control-battery", "control-media", "controls-header", "controls-audio", "controls-tiles"]) {
+    for (const id of ["control-account", "control-settings", "control-session", "control-lock", "control-volume", "control-microphone", "control-battery", "control-media", "controls-header", "controls-audio", "controls-tiles", "control-divider", "control-header-space", "control-customise"]) {
         let current = layout.defaults();
         for (const zone of ["top-left", "top-center", "top-right", "dock", "palette"]) {
             assert.ok(layout.accepts(id, zone));

@@ -19,7 +19,9 @@ layout tests does not prove that every existing desktop widget is editable.
   groups now move as a unit into the bar and dock. They retain their native
   children, ordering, command dispatch and detail-page anchors. Group display
   settings inherit from the host container; individual children can override
-  them or move out of the group and back.
+  them or move out of the group and back. The divider, header space and
+  Customise button also move into the bar and dock. The space has a fixed-width
+  override and can return to its original flexible header behaviour.
 - `DesktopLayout.accepts()` confines sidebar panels to the sidebar. Status,
   label and icon widgets cannot enter the control centre or sidebar.
 - `TerminalSidebar.qml` still offers ordinary position changes outside Customise
@@ -29,9 +31,10 @@ layout tests does not prove that every existing desktop widget is editable.
 
 ## Next implementation boundary
 
-Extend sidebar panels and the remaining native utility items (divider, header
-space and Customise button) into the other real containers. Allow status, label
-and icon widgets inside the control centre and sidebar. Preserve the same
+Extend sidebar panels into the other real containers. Allow status, label and
+icon widgets inside the control centre and sidebar. The control-centre section
+list currently accepts only native members; the sidebar host exposes one active
+panel. Extend placement validation and these real hosts together. Preserve the same
 component instances and service actions. The palette group previews also need
 to share the complete native group composition, including display inheritance,
 instead of their current representative layouts.
@@ -78,6 +81,13 @@ restore group placement, child membership and display overrides in a fresh
 shell process. Geometry comparisons preserve the original full control centre.
 Screenshots verify the compact group rendering and tooltip placement in the
 dock and top bar.
+
+Utility checks cover native divider and spacer drags, Undo/Redo, Cancel, display
+overrides, fixed and original spacing, Shift-right-click and opening the editor
+from the moved Customise button. Normal and reduced-motion cases save and reload
+their placements in a fresh shell process. Their palette previews match the
+placed utility dimensions. The unchanged group regression and original native
+geometry comparison also pass.
 
 Remaining broad checks include all existing widget actions, notification
 interactions after layout changes, different scale factors,

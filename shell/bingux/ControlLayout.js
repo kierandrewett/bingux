@@ -53,7 +53,7 @@ function isAction(id) { return widget(id)?.action === true; }
 
 function isContainer(id) { return ["controls-header", "controls-audio", "controls-tiles"].includes(id); }
 
-function isPortable(id) { return isAction(id) || isContainer(id) || audio.includes(id) || ["control-battery", "control-media"].includes(id); }
+function isPortable(id) { return isAction(id) || isContainer(id) || audio.includes(id) || ["control-battery", "control-media", "control-divider", "control-header-space", "control-customise"].includes(id); }
 
 function validPlacement(desktop) {
     if (!desktop.layout) return true;

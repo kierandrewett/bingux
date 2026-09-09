@@ -21,12 +21,7 @@ ShellPopup {
     property var widgetLayout: null
     property Item movedAnchor: null
     property var actionWidgets: []
-    readonly property var groupedEntries: [
-        {id: "control-header-space", item: headerSpace},
-        {id: "control-divider", item: dividerControl},
-        {id: "control-customise", item: customiseControl}
-    ]
-    readonly property var movableWidgets: [networkWidget, bluetoothWidget, vpnWidget, dndWidget, nightLightWidget, powerWidget, awakeWidget, outputControl, inputControl, batteryControl, mediaControl, headerControls, audioRows, quickRows].concat(actionWidgets)
+    readonly property var movableWidgets: [networkWidget, bluetoothWidget, vpnWidget, dndWidget, nightLightWidget, powerWidget, awakeWidget, outputControl, inputControl, batteryControl, mediaControl, headerControls, audioRows, quickRows, headerSpace, dividerControl, customiseControl].concat(actionWidgets)
     component NativeGroup: GridLayout {
         id: group
         required property string widgetId
@@ -35,7 +30,7 @@ ShellPopup {
         readonly property string container: DesktopLayout.zone(DesktopEditing.desktop.layout || {}, widgetId)
         readonly property bool barLayout: !!root.widgetLayout && container !== ""
         readonly property var barWindow: barLayout ? root.widgetLayout.windowFor(group) : root.nativeWindow
-        readonly property var memberEntries: root.movableWidgets.filter(item => item.nativeGroup === widgetId && !item.placed).map(item => ({id: item.widgetId, item})).concat(widgetId === "controls-header" ? [{id: "control-header-space", item: headerSpace}] : [])
+        readonly property var memberEntries: root.movableWidgets.filter(item => item.nativeGroup === widgetId && !item.placed).map(item => ({id: item.widgetId, item}))
         parent: barLayout ? root.widgetLayout.hostFor(group) : controls
         visible: barLayout || root.sectionRow(widgetId) >= 0
         Layout.fillWidth: !barLayout
@@ -222,7 +217,7 @@ ShellPopup {
             return group === "controls-header" && headerControls.visible ? headerControls
                 : group === "controls-audio" && audioRows.visible ? audioRows : root.body.parent;
         }
-        entries: root.movableWidgets.filter(item => !item.barLayout && !item.memberEntries).map(item => ({id: item.widgetId, item})).concat(root.groupedEntries, root.movableWidgets.filter(item => !item.barLayout && item.memberEntries).map(item => ({id: item.widgetId, item}))).filter(entry => entry.item.Window.window === root.body.Window.window)
+        entries: root.movableWidgets.filter(item => !item.barLayout && !item.memberEntries).map(item => ({id: item.widgetId, item})).concat(root.movableWidgets.filter(item => !item.barLayout && item.memberEntries).map(item => ({id: item.widgetId, item}))).filter(entry => entry.item.Window.window === root.body.Window.window)
     }
 
     function settings(panel) {
@@ -276,13 +271,29 @@ ShellPopup {
                 label: "User account"
                 onClicked: root.settings("users")
             }
-            Item {
+            BarSpace {
                 id: headerSpace
                 objectName: "controlHeaderSpace"
-                Layout.column: root.groupPosition("controls-header", "control-header-space")
-                visible: root.groupPosition("controls-header", "control-header-space") >= 0
-                Layout.fillWidth: !headerControls.barLayout
-                Layout.preferredWidth: headerControls.barLayout ? 16 : -1
+                readonly property string widgetId: "control-header-space"
+                readonly property string nativeGroup: "controls-header"
+                readonly property string container: DesktopLayout.zone(DesktopEditing.desktop.layout || {}, widgetId)
+                readonly property bool placed: container !== ""
+                readonly property bool barLayout: placed || headerControls.barLayout
+                readonly property var barWindow: placed ? root.widgetLayout.windowFor(headerSpace) : headerControls.barWindow
+                readonly property bool fixedWidth: DesktopEditing.desktop.widgetOptions?.[widgetId]?.width !== undefined
+                gapSize: DesktopEditing.desktop.widgetOptions?.[widgetId]?.width || 16
+                flexible: !barLayout && !fixedWidth
+                Layout.minimumWidth: barLayout || fixedWidth ? gapSize : 0
+                Layout.maximumWidth: barLayout || fixedWidth ? gapSize : Infinity
+                parent: placed ? root.widgetLayout.hostFor(headerSpace) : headerControls
+                Layout.row: placed ? root.widgetLayout.controlRow(headerSpace) : 0
+                Layout.column: placed ? root.widgetLayout.controlColumn(headerSpace) : root.groupPosition(nativeGroup, widgetId)
+                visible: placed || root.groupPosition(nativeGroup, widgetId) >= 0
+                implicitWidth: barLayout || fixedWidth ? gapSize : 0
+                implicitHeight: Theme.barHeight
+                Layout.fillWidth: !barLayout && !fixedWidth
+                Layout.preferredWidth: barLayout || fixedWidth ? gapSize : -1
+                WidgetEditHandle { control: headerSpace; widgetId: headerSpace.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
             }
             BatteryStatus {
                 id: batteryControl
@@ -357,9 +368,20 @@ ShellPopup {
         Rectangle {
             id: dividerControl
             objectName: "controlDivider"
-            Layout.row: root.sectionRow("control-divider")
-            visible: root.sectionRow("control-divider") >= 0
-            Layout.fillWidth: true; implicitHeight: 1; color: Theme.outline; opacity: 0.5
+            readonly property string widgetId: "control-divider"
+            readonly property string container: DesktopLayout.zone(DesktopEditing.desktop.layout || {}, widgetId)
+            readonly property bool barLayout: container !== ""
+            readonly property var barWindow: barLayout ? root.widgetLayout.windowFor(dividerControl) : root.nativeWindow
+            parent: barLayout ? root.widgetLayout.hostFor(dividerControl) : controls
+            Layout.row: barLayout ? root.widgetLayout.controlRow(dividerControl) : root.sectionRow(widgetId)
+            Layout.column: barLayout ? root.widgetLayout.controlColumn(dividerControl) : 0
+            visible: barLayout || root.sectionRow(widgetId) >= 0
+            Layout.fillWidth: !barLayout
+            Layout.alignment: Qt.AlignVCenter
+            implicitWidth: barLayout ? 1 : 0
+            implicitHeight: barLayout ? Theme.barHeight - 12 : 1
+            color: Theme.outline; opacity: 0.5
+            WidgetEditHandle { control: dividerControl; anchors.margins: -5; widgetId: dividerControl.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
         }
         NativeGroup {
             id: quickRows
@@ -499,12 +521,22 @@ ShellPopup {
         ActionButton {
             id: customiseControl
             objectName: "controlCustomise"
-            Layout.row: root.sectionRow("control-customise")
-            visible: root.sectionRow("control-customise") >= 0
+            readonly property string widgetId: "control-customise"
+            readonly property string container: DesktopLayout.zone(DesktopEditing.desktop.layout || {}, widgetId)
+            readonly property bool barLayout: container !== ""
+            readonly property var barWindow: barLayout ? root.widgetLayout.windowFor(customiseControl) : root.nativeWindow
+            parent: barLayout ? root.widgetLayout.hostFor(customiseControl) : controls
+            Layout.row: barLayout ? root.widgetLayout.controlRow(customiseControl) : root.sectionRow(widgetId)
+            Layout.column: barLayout ? root.widgetLayout.controlColumn(customiseControl) : 0
+            visible: barLayout || root.sectionRow(widgetId) >= 0
             Layout.alignment: Qt.AlignRight
-            implicitHeight: 28
+            implicitHeight: barLayout ? Theme.barHeight : 28
             flat: true
             text: "Customise controls..."
+            iconName: "document-edit-symbolic"
+            presentation: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, container || "control-centre", text, iconName, barLayout, !barLayout)
+            WidgetEditHandle { control: customiseControl; widgetId: customiseControl.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
+            BarTooltip { anchorItem: customiseControl; barWindow: customiseControl.barWindow; requested: customiseControl.barLayout && customiseControl.hovered; text: customiseControl.displayedText }
             onClicked: root.customiseRequested()
         }
         Text { Layout.row: ControlLayout.items(root.groupedLayout, "control-centre").length; Layout.fillWidth: true; visible: root.services.error !== ""; text: root.services.error; wrapMode: Text.Wrap; color: Theme.muted; font.pixelSize: Theme.fontSmall }

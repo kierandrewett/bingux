@@ -11,6 +11,7 @@ FocusScope {
     property var metrics: null
     readonly property var spec: ControlLayout.widget(widgetId) || DesktopLayout.widget(widgetId) || {}
     readonly property bool groupedWidget: !!ControlLayout.groupFor(widgetId)
+    readonly property bool utilityWidget: ["control-divider", "control-header-space", "control-customise"].includes(widgetId)
     readonly property bool panelWidget: !!spec.panel
     readonly property string container: DesktopLayout.zone(DesktopEditing.desktop.layout || {}, widgetId) || (widgetId.startsWith("control-") ? "control-centre" : "top-right")
     readonly property var face: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, container, spec.label || "", spec.icon || "", !["clock", "keyboard"].includes(widgetId), ["clock", "keyboard"].includes(widgetId))
@@ -31,7 +32,7 @@ FocusScope {
             id: component
             active: DesktopEditing.active
             onLoaded: root.isolateKeyboard(item)
-            width: root.groupedWidget ? (root.spec.group ? 300 : item ? item.implicitWidth : 0) : root.panelWidget ? 300 : root.widgetId.startsWith("control-") && root.container === "control-centre" ? 188 : item ? item.implicitWidth : 0
+            width: root.utilityWidget ? (item ? item.implicitWidth : 0) : root.groupedWidget ? (root.spec.group ? 300 : item ? item.implicitWidth : 0) : root.panelWidget ? 300 : root.widgetId.startsWith("control-") && root.container === "control-centre" ? 188 : item ? item.implicitWidth : 0
             height: root.panelWidget ? 240 : item ? item.implicitHeight : 0
             scale: Math.min(1, root.width / Math.max(1, width))
             transformOrigin: Item.TopLeft
@@ -79,9 +80,13 @@ FocusScope {
         }
     }
     Component { id: mediaControl; ControlCentreMedia { player: samplePlayer; playerOptions: [samplePlayer]; active: false } }
-    Component { id: divider; Rectangle { implicitHeight: 1; color: Theme.outline; opacity: 0.5 } }
+    Component { id: divider; Rectangle { implicitWidth: root.container === "control-centre" ? 300 : 1; implicitHeight: root.container === "control-centre" ? 1 : Theme.barHeight - 12; color: Theme.outline; opacity: 0.5 } }
     Component { id: battery; BatteryStatus { available: true; summary: "Battery 84 percent, charging" } }
-    Component { id: customiseButton; ActionButton { text: "Customise controls..."; flat: true; implicitHeight: 28 } }
+    Component { id: customiseButton; ActionButton {
+        text: "Customise controls..."; iconName: "document-edit-symbolic"; flat: true
+        implicitHeight: root.container === "control-centre" ? 28 : Theme.barHeight
+        presentation: DesktopLayout.presentation(DesktopEditing.desktop, root.widgetId, root.container, text, iconName, root.container !== "control-centre", root.container === "control-centre")
+    } }
     QtObject { id: sampleAudioNode; property bool ready: true; property var audio: QtObject { property real volume: 0.6; property bool muted: false } }
     Component {
         id: control
@@ -103,7 +108,11 @@ FocusScope {
         }
     }
     Component { id: decoration; DesktopDecoration { widgetId: root.widgetId } }
-    Component { id: space; BarSpace { flexible: root.widgetId.startsWith("spring"); editing: true; implicitWidth: flexible ? 120 : 32 } }
+    Component { id: space; BarSpace {
+        flexible: root.widgetId.startsWith("spring") || (root.widgetId === "control-header-space" && root.container === "control-centre" && DesktopEditing.desktop.widgetOptions?.[root.widgetId]?.width === undefined)
+        gapSize: DesktopEditing.desktop.widgetOptions?.[root.widgetId]?.width || (root.widgetId === "control-header-space" ? 16 : 20)
+        editing: true; implicitWidth: flexible ? 120 : gapSize
+    } }
     Component { id: search; BarSearchButton { presentation: root.face } }
     Component {
         id: clock
