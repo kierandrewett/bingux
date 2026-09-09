@@ -1,3 +1,4 @@
+singleton ApplicationCatalog 1.0 ApplicationCatalog.qml
 singleton Theme 1.0 Theme.qml
 singleton LaunchFeedback 1.0 LaunchFeedback.qml
 ActionButton 1.0 ActionButton.qml
@@ -132,6 +133,11 @@ SettingsChoice 1.0 SettingsChoice.qml
 SearchSettings 1.0 SearchSettings.qml
 DesktopCustomise 1.0 DesktopCustomise.qml
 
+SettingsRow 1.0 SettingsRow.qml
+SettingsReveal 1.0 SettingsReveal.qml
+SettingsNavigationRow 1.0 SettingsNavigationRow.qml
+SettingsOptionRow 1.0 SettingsOptionRow.qml
+
 singleton DesktopEditing 1.0 DesktopEditing.qml
 NativeEditSurface 1.0 NativeEditSurface.qml
 WidgetEditHandle 1.0 WidgetEditHandle.qml
@@ -139,10 +145,23 @@ WidgetPreview 1.0 WidgetPreview.qml
 WidgetDrag 1.0 WidgetDrag.qml
 WidgetDropArea 1.0 WidgetDropArea.qml
 
-PanelOutline 1.0 PanelOutline.qml
+SnapAssist 1.0 SnapAssist.qml
 
+DesktopSettings 1.0 DesktopSettings.qml
+
+SessionPower 1.0 SessionPower.qml
 BarSpace 1.0 BarSpace.qml
 DesktopDecoration 1.0 DesktopDecoration.qml
+
+singleton BlurRegions 1.0 BlurRegions.qml
+BlurRegion 1.0 BlurRegion.qml
+
+HorizontalWheelScroll 1.0 HorizontalWheelScroll.qml
+
+PanelOutline 1.0 PanelOutline.qml
+
+singleton PopupTransitions 1.0 PopupTransitions.qml
+LaunchErrorDialog 1.0 LaunchErrorDialog.qml
 
 UiSession 1.0 UiSession.qml
 

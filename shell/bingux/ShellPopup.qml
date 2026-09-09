@@ -12,6 +12,7 @@ Scope {
     property bool visible: false
     property bool keepWindowAlive: false
     property bool keyboardInteractive: true
+    property bool pointerInteractive: true
     property bool dismissOnOutsideClick: true
     property alias screen: window.screen
     readonly property alias nativeWindow: window
@@ -77,6 +78,8 @@ Scope {
     property int popupHeight: body.childrenRect.height + contentPadding * 2
     signal aboutToOpen()
     property bool retained: false
+    readonly property bool compositorClose: !hostItem && !keepWindowAlive && !motionSource
+        && PopupTransitions.matches(closeMotion, closeEasing)
 
     onVisibleChanged: {
         reveal.stop();
@@ -86,6 +89,7 @@ Scope {
             return;
         }
         if (visible) {
+            PopupTransitions.refresh();
             aboutToOpen();
             if (!retained) {
                 revealScale = Theme.reducedMotion ? 1 : root.initialRevealScale;
@@ -96,9 +100,14 @@ Scope {
             reveal.start();
             if (keyboardInteractive) contentItem.forceActiveFocus();
         } else if (retained) {
-            // Stopping reveal freezes its scale, including an interrupted open.
-            // Only opacity changes during dismissal.
-            dismiss.start();
+            // The last committed buffer already contains the current entrance
+            // opacity and scale. Freeze it, then let the compositor fade it once.
+            if (compositorClose) {
+                retained = false;
+                dismissWindow.visible = false;
+            } else {
+                dismiss.start();
+            }
         }
     }
     function setRevealOrigin(x, y) {
@@ -168,7 +177,7 @@ Scope {
         mask: Region {
             x: card.x
             y: card.y
-            width: root.visible ? card.width : 0
+            width: root.visible && root.pointerInteractive ? card.width : 0
             height: root.visible ? card.height : 0
         }
         contentItem.enabled: root.visible
