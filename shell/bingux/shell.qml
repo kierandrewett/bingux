@@ -87,7 +87,6 @@ ShellRoot {
         actions: (application ? [
             {text: appGroup && dock.isPinned(appGroup) ? "Unpin from dock" : "Pin to dock",
                 enabled: !!appGroup && (dock.isPinned(appGroup) || !!appGroup.desktopEntry),
-                icon: appGroup && dock.isPinned(appGroup) ? "list-remove-symbolic" : "view-pin-symbolic",
                 triggered: () => { if (appGroup) dock.setPinned(appGroup, !dock.isPinned(appGroup)); }}
         ] : []).concat([
             {text: "Customise…", enabled: true, icon: "preferences-system-symbolic", triggered: () => binguxSettings.openCustomise(widgetId, "Widget")},

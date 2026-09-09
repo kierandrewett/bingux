@@ -68,6 +68,7 @@
                 gesture(shiftApp, dock, shiftApp.width / 2, shiftApp.height / 2, ["--shift-right-click"]);
                 tryCompare(widgetMenu, "visible", true, 3000);
                 compare(widgetMenu.menuEntries[0].text, "Unpin from dock");
+                verify(!widgetMenu.menuEntries[0].icon, "The edit menu keeps Unpin from dock text-only");
                 const shiftUnpin = actionWithText(widgetMenu.body, "Unpin from dock");
                 verify(shiftUnpin !== null);
                 gesture(shiftUnpin, widgetMenu.nativeWindow, shiftUnpin.width / 2, shiftUnpin.height / 2, ["--click-only"]);
@@ -82,6 +83,7 @@
                 const menu = findChild(area, "customiseAppActions");
                 tryCompare(menu, "visible", true);
                 compare(menu.menuEntries[0].text, "Unpin from dock");
+                verify(!menu.menuEntries[0].icon, "The customise menu keeps Unpin from dock text-only");
                 verify(menu.menuEntries[0].enabled);
                 const action = actionWithText(menu.body, "Unpin from dock");
                 verify(action !== null);

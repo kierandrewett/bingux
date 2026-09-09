@@ -52,7 +52,7 @@ MouseArea {
         screen: root.window.screen
         anchorWindow: root.window
         actions: [
-            {text: "Unpin from dock", icon: "list-remove-symbolic", enabled: !!DesktopEditing.editor?.dockApplications.includes(widgetId),
+            {text: "Unpin from dock", enabled: !!DesktopEditing.editor?.dockApplications.includes(widgetId),
                 triggered: () => DesktopEditing.editor.put(widgetId, "palette", 0)},
             {text: "Customise…", icon: "preferences-system-symbolic", enabled: true,
                 triggered: () => { DesktopEditing.editor.selectedWidget = widgetId; DesktopEditing.editor.optionsPage = "Widget"; }}
