@@ -261,7 +261,7 @@ ShellRoot {
         function capture(): void { captureTool.open() }
     }
 
-    ControlCentre { id: controlCentre; widgetLayout: topBar; onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, item.editWindow || (item.barLayout ? topBar.windowFor(item) : controlCentre)); onCustomiseRequested: binguxSettings.openCustomise("", ""); anchorWindow: topBar.windowFor(controlCentre.movedAnchor || systemPill); anchorItem: controlCentre.movedAnchor || systemPill; dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom); indicators: systemIndicators; screen: topBar.screen; onVisibleChanged: if (visible) root.closePanelsExcept(controlCentre) }
+    ControlCentre { id: controlCentre; widgetLayout: topBar; onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, item.editWindow || (item.barLayout ? item.barWindow || topBar.windowFor(item) : controlCentre)); onCustomiseRequested: binguxSettings.openCustomise("", ""); anchorWindow: controlCentre.movedAnchor?.barWindow || topBar.windowFor(controlCentre.movedAnchor || systemPill); anchorItem: controlCentre.movedAnchor || systemPill; dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom); indicators: systemIndicators; screen: topBar.screen; onVisibleChanged: if (visible) root.closePanelsExcept(controlCentre) }
 
     SystemMetricsPopup {
         id: metricsPopup
@@ -371,13 +371,13 @@ ShellRoot {
             JSON.stringify(customLayout["top-left"]) === '["search"]' &&
             JSON.stringify(customLayout["top-center"]) === '["clock"]' &&
             customLayout.dock.length === 0 &&
-            !["top-left", "top-center", "top-right"].some(zone => customLayout[zone].some(id => id.startsWith("control-") || DesktopLayout.isSpacing(id) || DesktopLayout.isDecoration(id))) &&
+            !["top-left", "top-center", "top-right"].some(zone => customLayout[zone].some(id => id.startsWith("control-") || id.startsWith("controls-") || DesktopLayout.isSpacing(id) || DesktopLayout.isDecoration(id))) &&
             ["top-left", "top-center", "top-right"].every(zone => !DesktopEditing.desktop.containers?.[zone]?.display || DesktopEditing.desktop.containers[zone].display === "native") &&
             Object.keys(DesktopEditing.desktop.widgetOptions || {}).every(id => !DesktopLayout.zone(customLayout, id).startsWith("top-") || !appearance(id, "", "", false, false).custom) &&
             ["capture", "tray", "privacy", "metrics", "keyboard", "controls", "notifications"].every(id => customLayout["top-right"].includes(id)))
         function chosen(item) {
             const name = item.widgetId || controlNames[defaultControls.indexOf(item)];
-            return customLayout ? DesktopLayout.zone(customLayout, name) !== "" : !name.startsWith("control-");
+            return customLayout ? DesktopLayout.zone(customLayout, name) !== "" : !name.startsWith("control-") && !name.startsWith("controls-");
         }
         function zoneFor(item) {
             const name = item.widgetId || controlNames[defaultControls.indexOf(item)];

@@ -44,9 +44,9 @@ const controlWidgets = [
     {id: "control-awake", label: "Keep Awake", icon: "display-brightness-symbolic"}
 ];
 function controlOrder() { return controlWidgets.map(item => item.id.slice(8)); }
-function presentation(desktop, id, container, label, icon, nativeIcon, nativeText) {
+function presentation(desktop, id, container, label, icon, nativeIcon, nativeText, parentContainer) {
     const options = desktop.widgetOptions?.[id] || {};
-    const inherited = desktop.containers?.[container]?.display || "native";
+    const inherited = desktop.containers?.[container]?.display || desktop.containers?.[parentContainer]?.display || "native";
     const mode = !options.display || options.display === "inherit" ? inherited : options.display;
     return {mode, label: options.label || label, icon: options.icon || icon, labelOverridden: !!options.label, iconOverridden: !!options.icon,
         showIcon: mode === "native" ? nativeIcon : mode !== "text",
@@ -75,7 +75,7 @@ function insertionIndex(order, draggedId, visibleIds, before) {
 function accepts(id, target) {
     const item = widget(id);
     if (item?.layoutItem) return ["top-left", "top-center", "top-right", "palette"].includes(target);
-    if (id.startsWith("control-")) return !!item && ["control-centre", "top-left", "top-center", "top-right", "dock", "palette"].includes(target);
+    if (id.startsWith("control-") || ControlLayout.isContainer(id)) return !!item && ["control-centre", "top-left", "top-center", "top-right", "dock", "palette"].includes(target);
     return !!item && (target === "palette" || (item.panel ? target === "sidebar" : ["top-left", "top-center", "top-right", "dock"].includes(target)));
 }
 function move(layout, id, target, index) {

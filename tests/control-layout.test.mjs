@@ -61,7 +61,7 @@ test('action placement rejects duplicate ownership after loading settings', () =
 });
 
 test('portable media, audio and battery reject simultaneous native and external ownership', () => {
-    for (const id of ['control-volume', 'control-microphone', 'control-battery', 'control-media']) {
+    for (const id of ['control-volume', 'control-microphone', 'control-battery', 'control-media', 'controls-header', 'controls-audio', 'controls-tiles']) {
         const desktop = {controlLayout: model.defaults(), layout: {'top-left': [id]}};
         assert.equal(model.validPlacement(desktop), false);
         desktop.controlLayout = model.move(desktop.controlLayout, model.groupFor(id), id, -1);

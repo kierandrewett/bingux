@@ -128,11 +128,13 @@ Scope {
     property bool iconsExpanded: false
     property bool behaviourExpanded: false
     property rect paletteSelection: Qt.rect(0, 0, 0, 0)
-    readonly property string inspectedZone: optionsPage === "Container" ? selectedContainer : optionsPage === "Dock" ? "dock" : optionsPage === "Sidebar" ? "sidebar" : containerFor(selectedWidget)
+    readonly property string inspectedZone: optionsPage === "Container" ? (ControlLayout.isContainer(selectedContainer) ? DesktopLayout.zone(layout, selectedContainer) || "control-centre" : selectedContainer) : optionsPage === "Dock" ? "dock" : optionsPage === "Sidebar" ? "sidebar" : containerFor(selectedWidget)
     readonly property rect inspectionAnchor: {
         const surface = DesktopEditing.surfaces.find(area => area.zoneName === inspectedZone && area.visible && area.window.visible);
         if (surface) {
-            const item = optionsPage === "Widget" || optionsPage === "Move" ? surface.entries.find(entry => entry.id === selectedWidget)?.item : null;
+            const targetId = optionsPage === "Container" && ControlLayout.isContainer(selectedContainer) ? selectedContainer
+                : ["Widget", "Move"].includes(optionsPage) ? selectedWidget : "";
+            const item = targetId ? surface.expandedEntries.find(entry => entry.id === targetId)?.item : null;
             if (item && item.visible) {
                 const geometry = [item.x, item.y, item.width, item.height, surface.screenRect];
                 const point = DesktopEditing.point(item, surface.window, 0, 0);
@@ -146,10 +148,10 @@ Scope {
     onDraggedIdChanged: if (draggedId) optionsPage = "";
     property string optionsPage: ""
     property string selectedContainer: "top-right"
-    readonly property var containerChoices: [{id: "top-left", label: "Top left"}, {id: "top-center", label: "Top centre"}, {id: "top-right", label: "Top right"}, {id: "dock", label: "Dock"}, {id: "sidebar", label: "Sidebar"}, {id: "control-centre", label: "Control centre"}]
+    readonly property var containerChoices: [{id: "top-left", label: "Top left"}, {id: "top-center", label: "Top centre"}, {id: "top-right", label: "Top right"}, {id: "dock", label: "Dock"}, {id: "sidebar", label: "Sidebar"}, {id: "control-centre", label: "Control centre"}].concat(ControlLayout.widgets.filter(item => ControlLayout.isContainer(item.id)))
     readonly property var iconChoices: ["system-search-symbolic", "preferences-system-symbolic", "x-office-calendar-symbolic", "preferences-system-notifications-symbolic", "computer-symbolic", "input-keyboard-symbolic", "view-more-symbolic", "microphone-sensitivity-high-symbolic", "media-record-symbolic", "utilities-terminal-symbolic", "accessories-text-editor-symbolic", "applications-multimedia-symbolic", "view-list-symbolic", "network-wireless-symbolic", "bluetooth-active-symbolic", "network-vpn-symbolic", "notifications-disabled-symbolic", "night-light-symbolic", "power-profile-balanced-symbolic", "display-brightness-symbolic", "audio-volume-high-symbolic", "audio-input-microphone-symbolic", "system-lock-screen-symbolic", "avatar-default-symbolic", "starred-symbolic", "user-home-symbolic", "folder-symbolic", "web-browser-symbolic", "mail-unread-symbolic", "camera-photo-symbolic", "view-pin-symbolic", "document-edit-symbolic"]
     property string selectedWidget: ""
-    readonly property bool appearanceEditable: !DesktopLayout.isSpacing(selectedWidget) && (!ControlLayout.groupFor(selectedWidget) || ControlLayout.isPortable(selectedWidget))
+    readonly property bool appearanceEditable: !ControlLayout.isContainer(selectedWidget) && !DesktopLayout.isSpacing(selectedWidget) && (!ControlLayout.groupFor(selectedWidget) || ControlLayout.isPortable(selectedWidget))
     property url dragImage: ""
     property point dragHotSpot: Qt.point(0, 0)
     property size dragSize: Qt.size(0, 0)
@@ -187,7 +189,8 @@ Scope {
         const entry = appEntry(id.slice(4));
         return {id, label: entry?.name || id.slice(4), icon: entry?.icon || "application-x-executable", app: true};
     }
-    function containerFor(id) { if (ControlLayout.groupFor(id)) return DesktopLayout.zone(layout, id) || "control-centre"; return id.startsWith("app:") ? "dock" : DesktopLayout.zone(layout, id) || (id.startsWith("control-") ? "control-centre" : ""); }
+    function memberGroup(id) { return ControlLayout.groupFor(id) || (DesktopLayout.controlWidgets.some(item => item.id === id) ? "controls-tiles" : ""); }
+    function containerFor(id) { if (memberGroup(id)) return DesktopLayout.zone(layout, id) || DesktopLayout.zone(layout, memberGroup(id)) || "control-centre"; return id.startsWith("app:") ? "dock" : DesktopLayout.zone(layout, id) || (id.startsWith("control-") ? "control-centre" : ""); }
     function appearance(id) {
         const item = baseInfo(id);
         return DesktopLayout.presentation(desktop, id, containerFor(id), item?.label || "", item?.icon || "", id !== "clock", id === "clock");
@@ -199,7 +202,10 @@ Scope {
         change("widgetOptions", options);
     }
     function containerDisplay(value) {
-        change("containers", Object.assign({}, desktop.containers || {}, {[selectedContainer]: {display: value}}));
+        const options = Object.assign({}, desktop.containers || {});
+        if (value === "inherit") delete options[selectedContainer];
+        else options[selectedContainer] = {display: value};
+        change("containers", options);
     }
     readonly property var applications: DesktopEntries.applications.values.filter(entry => !appFilter || entry.name.toLowerCase().includes(appFilter.toLowerCase())).slice().sort((a, b) => a.name.localeCompare(b.name))
     readonly property var dockApplications: {
@@ -212,11 +218,13 @@ Scope {
     }
     function orderFor(zone, id) {
         const group = ControlLayout.groupFor(id);
+        if (ControlLayout.isContainer(zone)) return zone === "controls-tiles" ? (desktop.controlOrder || DesktopLayout.controlOrder()).map(name => "control-" + name) : ControlLayout.items(desktop.controlLayout, zone);
         if (zone === "control-centre") return group ? ControlLayout.items(desktop.controlLayout, group)
             : (desktop.controlOrder || DesktopLayout.controlOrder()).map(name => "control-" + name);
         return zone === "dock" && id.startsWith("app:") ? dockApplications : layout[zone] || [];
     }
     function accepts(id, target) {
+        if (ControlLayout.isContainer(target)) return memberGroup(id) === target;
         if (ControlLayout.groupFor(id) && !ControlLayout.isPortable(id)) return ["control-centre", "palette"].includes(target);
         return id.startsWith("app:") ? ["dock-apps", "dock", "palette"].includes(target) : DesktopLayout.accepts(id, target);
     }
@@ -246,23 +254,31 @@ Scope {
     function putItem(id, target, index) {
         const group = ControlLayout.groupFor(id);
         if (group) {
-            let next = ControlLayout.move(desktop.controlLayout, group, id, target === "control-centre" ? index : -1);
-            if (target === "control-centre" && group !== "control-centre" && !ControlLayout.contains(next, "control-centre", group))
+            const nativeTarget = target === "control-centre" || target === group;
+            let next = ControlLayout.move(desktop.controlLayout, group, id, nativeTarget ? index : -1);
+            if (target === "control-centre" && group !== "control-centre" && !ControlLayout.contains(next, "control-centre", group)) {
+                layout = DesktopLayout.move(layout, group, "palette", 0);
                 next = ControlLayout.move(next, "control-centre", group, ControlLayout.position(null, "control-centre", group));
+            }
             change("controlLayout", next);
             if (ControlLayout.isPortable(id)) {
-                layout = DesktopLayout.move(layout, id, target === "control-centre" ? "palette" : target, index);
+                layout = DesktopLayout.move(layout, id, nativeTarget ? "palette" : target, index);
                 if (target === "dock") change("dock", true);
             }
             return;
         }
         if (id.startsWith("control-")) {
             if (!accepts(id, target)) return;
+            const nativeTarget = target === "control-centre" || target === "controls-tiles";
+            if (target === "control-centre" && !ControlLayout.contains(desktop.controlLayout, "control-centre", "controls-tiles")) {
+                layout = DesktopLayout.move(layout, "controls-tiles", "palette", 0);
+                change("controlLayout", ControlLayout.move(desktop.controlLayout, "control-centre", "controls-tiles", ControlLayout.position(null, "control-centre", "controls-tiles")));
+            }
             const name = id.slice(8);
             const order = (desktop.controlOrder || DesktopLayout.controlOrder()).filter(value => value !== name);
-            if (target === "control-centre") order.splice(Math.max(0, Math.min(index, order.length)), 0, name);
+            if (nativeTarget) order.splice(Math.max(0, Math.min(index, order.length)), 0, name);
             change("controlOrder", order);
-            layout = DesktopLayout.move(layout, id, target === "control-centre" ? "palette" : target, index);
+            layout = DesktopLayout.move(layout, id, nativeTarget ? "palette" : target, index);
             if (target === "dock") change("dock", true);
             if (!["network", "bluetooth"].includes(name)) change("controlCentre", Object.assign({vpn: true, dnd: true, nightLight: false, power: false, awake: false}, desktop.controlCentre || {}, {[name]: target !== "palette"}));
             return;
@@ -485,7 +501,7 @@ Scope {
                     }
                     ColumnLayout {
                         visible: root.optionsPage === "Container"; Layout.fillWidth: true; spacing: 12
-                        SettingsChoice { label: "Show"; choices: ["Original", "Icons", "Text", "Icons and text"]; values: ["native", "icons", "text", "both"]; value: root.desktop.containers?.[root.selectedContainer]?.display || "native"; onChosen: value => root.containerDisplay(value) }
+                        SettingsChoice { label: "Show"; choices: (ControlLayout.isContainer(root.selectedContainer) ? ["Follow container"] : []).concat(["Original", "Icons", "Text", "Icons and text"]); values: (ControlLayout.isContainer(root.selectedContainer) ? ["inherit"] : []).concat(["native", "icons", "text", "both"]); value: root.desktop.containers?.[root.selectedContainer]?.display || (ControlLayout.isContainer(root.selectedContainer) ? "inherit" : "native"); onChosen: value => root.containerDisplay(value) }
                     }
                     ColumnLayout {
                         visible: root.optionsPage === "Widget"; Layout.fillWidth: true; spacing: 12
@@ -496,6 +512,7 @@ Scope {
                             SeekSlider { Layout.fillWidth: true; from: 8; to: 160; stepSize: 4; value: root.desktop.widgetOptions?.[root.selectedWidget]?.width || 20; onMoved: root.widgetOption("width", Math.round(value)); Accessible.name: "Space width" }
                             Text { text: (root.desktop.widgetOptions?.[root.selectedWidget]?.width || 20) + " px"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
                         }
+                        ActionButton { visible: ControlLayout.isContainer(root.selectedWidget); text: "Group display…"; flat: true; onClicked: root.selectContainer(root.selectedWidget) }
                         SettingsChoice { visible: root.appearanceEditable; label: "Show"; choices: ["Follow container", "Original", "Icons", "Text", "Both"]; values: ["inherit", "native", "icons", "text", "both"]; value: root.desktop.widgetOptions?.[root.selectedWidget]?.display || "inherit"; onChosen: value => root.widgetOption("display", value) }
                         SettingsField { visible: root.appearanceEditable; objectName: "customiseWidgetLabel"; Layout.margins: 0; label: "Label"; text: root.desktop.widgetOptions?.[root.selectedWidget]?.label || ""; placeholderText: root.baseInfo(root.selectedWidget)?.label || "Widget label"; onEdited: value => root.widgetOption("label", value) }
                         ActionButton { objectName: "customiseIconPickerToggle"; visible: root.appearanceEditable; text: root.iconsExpanded ? "Hide icons" : "Change icon…"; flat: true; onClicked: root.iconsExpanded = !root.iconsExpanded }

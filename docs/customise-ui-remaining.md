@@ -15,7 +15,11 @@ layout tests does not prove that every existing desktop widget is editable.
   bar and dock, supports appearance overrides and uses the same component in
   the palette. The media player now moves into both containers with its original
   artwork, title and transport buttons. Its full controls open in an anchored
-  popup using those same instances. Group containers still need portability.
+  popup using those same instances. The account/session, audio and quick-control
+  groups now move as a unit into the bar and dock. They retain their native
+  children, ordering, command dispatch and detail-page anchors. Group display
+  settings inherit from the host container; individual children can override
+  them or move out of the group and back.
 - `DesktopLayout.accepts()` confines sidebar panels to the sidebar. Status,
   label and icon widgets cannot enter the control centre or sidebar.
 - `TerminalSidebar.qml` still offers ordinary position changes outside Customise
@@ -25,10 +29,12 @@ layout tests does not prove that every existing desktop widget is editable.
 
 ## Next implementation boundary
 
-Extend group widgets into the other real containers
-without flattening native header, audio, tile and media layouts. Use the same component instances
-and service actions. Add presentation overrides and shared edit actions to these
-controls. Improve the group drag affordance while retaining direct child drags.
+Extend sidebar panels and the remaining native utility items (divider, header
+space and Customise button) into the other real containers. Allow status, label
+and icon widgets inside the control centre and sidebar. Preserve the same
+component instances and service actions. The palette group previews also need
+to share the complete native group composition, including display inheritance,
+instead of their current representative layouts.
 
 ## Current verification
 
@@ -62,6 +68,16 @@ action and subsequent command dispatch after enabling it. Palette keyboard
 checks cover every registered preview type: loading keeps the current focus,
 and Tab cannot enter the sample controls. The previous preview implementation
 fails this keyboard regression.
+
+The native group case covers moving the original header, audio and quick-control
+layouts, child extraction and reinsertion, Undo/Redo, saved placement, group
+and child display settings, native command dispatch, mute and audio/network
+popup anchoring. Visible group handles support dragging and click-to-configure;
+the inspector follows the selected group. Both normal and reduced-motion cases
+restore group placement, child membership and display overrides in a fresh
+shell process. Geometry comparisons preserve the original full control centre.
+Screenshots verify the compact group rendering and tooltip placement in the
+dock and top bar.
 
 Remaining broad checks include all existing widget actions, notification
 interactions after layout changes, different scale factors,

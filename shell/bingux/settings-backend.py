@@ -25,7 +25,7 @@ PROVIDERS = {'applications', 'files', 'calculation', 'conversions', 'web', 'web-
 
 CONTROL_ACTIONS = {"control-account", "control-settings", "control-session", "control-lock"}
 
-PORTABLE_CONTROLS = CONTROL_ACTIONS | {"control-volume", "control-microphone", "control-battery", "control-media"}
+PORTABLE_CONTROLS = CONTROL_ACTIONS | {"control-volume", "control-microphone", "control-battery", "control-media", "controls-header", "controls-audio", "controls-tiles"}
 
 CONTROL_GROUPS = {
     'control-centre': ['controls-header', 'controls-audio', 'control-divider', 'controls-tiles', 'control-media', 'control-customise'],
@@ -131,7 +131,7 @@ def validate(data):
     # Native preserves each existing widget's presentation on first import.
     modes = ('native', 'icons', 'text', 'both')
     for key, options in desktop['containers'].items() if isinstance(desktop['containers'], dict) else [(None, None)]:
-        if key not in ('top-left', 'top-center', 'top-right', 'dock', 'sidebar', 'control-centre') or not isinstance(options, dict) or set(options) != {'display'} or options['display'] not in modes:
+        if key not in ('top-left', 'top-center', 'top-right', 'dock', 'sidebar', 'control-centre', 'controls-header', 'controls-audio', 'controls-tiles') or not isinstance(options, dict) or set(options) != {'display'} or options['display'] not in modes:
             raise ValueError('Invalid container display options.')
     if not isinstance(desktop['widgetOptions'], dict) or len(desktop['widgetOptions']) > 256:
         raise ValueError('Invalid widget display options.')

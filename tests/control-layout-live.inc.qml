@@ -103,14 +103,14 @@
                 editor.open();
                 editor.change("controlLayout", JSON.parse(original));
                 editor.put("control-volume", "control-centre", 1);
-                editor.apply(); tryCompare(editor, "visible", false, 4000);
+                editor.apply(); tryCompare(editor, "visible", false, 4000); tryCompare(binguxSettings, "busy", false, 4000);
                 compare(BinguxPreferences.data.desktop.controlLayout.groups["controls-audio"][0], "control-microphone");
                 const lock = findChild(controlCentre.body, "controlLock");
                 editor.open();
                 editor.put("control-settings", "dock", 0);
                 editor.put("control-account", "top-left", 0);
                 editor.put("control-lock", "top-right", 0);
-                editor.apply(); tryCompare(editor, "visible", false, 4000);
+                editor.apply(); tryCompare(editor, "visible", false, 4000); tryCompare(binguxSettings, "busy", false, 4000);
                 compare(settings.parent, dock.widgetHost);
                 compare(account.parent, leftControls);
                 compare(findChild(account, "iconButtonImage"), avatar);
@@ -154,8 +154,7 @@
                 verify(battery.presentation.showIcon && battery.presentation.icon === "starred-symbolic");
                 editor.widgetOption("label", ""); editor.widgetOption("icon", ""); editor.widgetOption("display", "inherit");
                 editor.containerDisplay("native");
-                editor.apply(); tryCompare(editor, "visible", false, 4000);
-                tryCompare(binguxSettings, "busy", false, 4000);
+                editor.apply(); tryCompare(editor, "visible", false, 4000); tryCompare(binguxSettings, "busy", false, 4000);
                 compare(BinguxPreferences.data.desktop.layout.dock[0], "control-battery");
                 verify(!battery.visible, "Outside the editor an absent battery stays hidden");
                 battery.summary = "Battery 84 percent, charging"; battery.available = true;

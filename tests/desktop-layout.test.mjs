@@ -103,7 +103,7 @@ test("labels and icons create independent movable instances", () => {
 });
 
 test("native portable controls can move through bar and dock without duplicate placements", () => {
-    for (const id of ["control-account", "control-settings", "control-session", "control-lock", "control-volume", "control-microphone", "control-battery", "control-media"]) {
+    for (const id of ["control-account", "control-settings", "control-session", "control-lock", "control-volume", "control-microphone", "control-battery", "control-media", "controls-header", "controls-audio", "controls-tiles"]) {
         let current = layout.defaults();
         for (const zone of ["top-left", "top-center", "top-right", "dock", "palette"]) {
             assert.ok(layout.accepts(id, zone));
@@ -113,4 +113,14 @@ test("native portable controls can move through bar and dock without duplicate p
         }
         assert.equal(layout.accepts(id, "sidebar"), false);
     }
+});
+
+test("group display inherits its host while child overrides stay independent", () => {
+    const desktop = {containers: {dock: {display: "text"}}, widgetOptions: {}};
+    const face = () => layout.presentation(desktop, "control-settings", "controls-header", "Settings", "settings", true, false, "dock");
+    assert.equal(face().mode, "text");
+    desktop.containers["controls-header"] = {display: "icons"};
+    assert.equal(face().mode, "icons");
+    desktop.widgetOptions["control-settings"] = {display: "both", label: "Preferences"};
+    assert.equal(face().mode, "both"); assert.equal(face().label, "Preferences");
 });
