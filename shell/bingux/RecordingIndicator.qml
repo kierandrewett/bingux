@@ -4,9 +4,10 @@ ActivityIndicator {
     id: root
     required property var capture
     required property var privacy
+    readonly property bool active: capture.busy || privacy.recording
     readonly property bool isRecording: capture.recording || privacy.recording
     readonly property bool finalizing: capture.state === "finalizing"
-    visible: capture.busy || privacy.recording
+    visible: active
     filled: true
     activityColor: isRecording || finalizing ? Theme.recordingIndicator : Theme.privacyIndicator
     interactive: !finalizing && (capture.busy || privacy.available)

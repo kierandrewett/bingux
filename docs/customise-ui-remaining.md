@@ -541,5 +541,21 @@ changing the active application. Screenshots show the complete popup above the
 sidebar, and native clicks reach its power and device controls. Normal and
 reduced-motion checks pass, alongside direct dock unpin, nested overflow menus
 and Gnoblin's eleven layer-animation lifetime cases. Native input measurements
-wait for QML layout and popup resizing to finish. The recording-status widget's
-active stop/cancel/saving actions are the next unverified action group.
+wait for QML layout and popup resizing to finish.
+
+Recording-status checks use the real CaptureTool command transport with a
+controlled helper that does not start an encoder. The original indicator moves
+through the dock, top bar, control centre and sidebar. Native clicks stop a
+recording, ignore input while saving, and cancel a countdown. Editing does not
+send a stop command. Display overrides, Undo/Redo, Shift-right-click and saved
+placement after a fresh shell process also pass with normal and reduced motion.
+The existing privacy/recording/timer checks and overflow regression pass.
+
+This exposed an `availableControls` binding loop: capture availability depended
+on the indicator's inherited visibility while the same model controlled its
+parent. RecordingIndicator now exposes activity from the capture/privacy state,
+and both shell visibility and availability use it. Closing the control centre
+keeps an active recording in the layout model. These checks verify capture UI
+dispatch and state events; they do not verify recording output or an encoder.
+The next review maps the seven compatibility gates to the existing evidence and
+identifies specific remaining gaps.

@@ -12,7 +12,7 @@ import time
 from private_shell import run_reported_shell, stage_compositor_bridge
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--case', choices=('desktop-layout', 'control-layout', 'control-audio', 'control-media', 'control-groups', 'control-connectivity', 'control-utilities', 'control-external', 'sidebar-layout', 'sidebar-controls', 'sidebar-panels', 'editor-reset', 'dock-unpin', 'panel-placement', 'editor-compact', 'editor-save-input', 'metrics-placement', 'tray-placement', 'overflow-edit', 'overflow-detached'), default='desktop-layout')
+parser.add_argument('--case', choices=('desktop-layout', 'control-layout', 'control-audio', 'control-media', 'control-groups', 'control-connectivity', 'control-utilities', 'control-external', 'control-capture', 'sidebar-layout', 'sidebar-controls', 'sidebar-panels', 'editor-reset', 'dock-unpin', 'panel-placement', 'editor-compact', 'editor-save-input', 'metrics-placement', 'tray-placement', 'overflow-edit', 'overflow-detached'), default='desktop-layout')
 case = parser.parse_args().case
 repo = Path(__file__).resolve().parent.parent
 if not os.environ.get('WAYLAND_DISPLAY', '').startswith('gnoblin-gs-'):
@@ -41,6 +41,9 @@ with tempfile.TemporaryDirectory(prefix='bingux-layout-live-') as directory:
             helper = fixture / 'bin' / name
             helper.write_text('#!/usr/bin/python3\nimport json,os,sys\nwith open(os.environ["BINGUX_ACTION_REPORT"],"a") as output: output.write(json.dumps({"command":os.path.basename(sys.argv[0]),"arguments":sys.argv[1:]})+"\\n")\n')
             helper.chmod(0o700)
+    if case == 'control-capture':
+        environment['BINGUX_CAPTURE_HELPER'] = str(repo / 'tests/customise-capture-helper.py')
+        environment['BINGUX_CAPTURE_ACTION_REPORT'] = str(fixture / 'capture-actions.jsonl')
     environment.pop('BINGUX_SETTINGS_HELPER', None)
     stage_compositor_bridge(repo, os.environ['XDG_CONFIG_HOME'])
     subprocess.run(['python3', str(repo / 'tests/customise-native-input.py'), '--prepare'], env=environment, check=True)
@@ -57,7 +60,7 @@ with tempfile.TemporaryDirectory(prefix='bingux-layout-live-') as directory:
             print(output)
             if report != 'PASS' or any(error in output for error in ('CUSTOMISE_TEST_FAILED', 'TypeError', 'ReferenceError', 'has crashed', 'property "maximumPopupHeight"', 'property "preferredY"', 'Cannot use same item on different windows', 'Updates can only be scheduled', 'QGridLayoutEngine::addItem', 'Binding loop detected')):
                 raise SystemExit(report if report != 'PASS' else 'Runtime errors during layout test')
-            if case in ('control-groups', 'control-connectivity', 'control-utilities', 'control-external', 'sidebar-layout', 'sidebar-controls', 'editor-reset', 'panel-placement', 'metrics-placement', 'tray-placement', 'overflow-edit'):
+            if case in ('control-groups', 'control-connectivity', 'control-utilities', 'control-external', 'control-capture', 'sidebar-layout', 'sidebar-controls', 'editor-reset', 'panel-placement', 'metrics-placement', 'tray-placement', 'overflow-edit'):
                 (fixture / 'shell.qml').write_text(base_shell.rstrip()[:-1] + (repo / ('tests/' + case + '-reload.inc.qml')).read_text() + '\n}\n')
                 (fixture / 'report').unlink()
                 report, output = run_reported_shell(fixture, environment, 'BINGUX_LAYOUT_REPORT', timeout=30)

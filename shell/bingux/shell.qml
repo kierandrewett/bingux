@@ -604,7 +604,7 @@ ShellRoot {
             onFinished: topBar.completeReorder()
         }
         readonly property var availableControls: [
-            [captureStatus, captureStatus.visible], [trayContainer, tray.implicitWidth > 0],
+            [captureStatus, captureStatus.active], [trayContainer, tray.implicitWidth > 0],
             [privacyContainer, privacyContainer.active], [metricsPill, profileSettings.metricsEnabled],
             [inputSourceSelector, metrics.desktopStateAvailable], [systemPill, true],
             [notificationButton, notificationState.allEntries.length > 0], [searchPill, true], [clockPill, true]
@@ -751,7 +751,7 @@ ShellRoot {
                         Layout.row: topBar.controlRow(captureStatus)
                         capture: captureTool
                         privacy: privacySession
-                        visible: topBar.chosen(captureStatus) && (captureTool.busy || privacySession.recording)
+                        visible: topBar.chosen(captureStatus) && captureStatus.active
                         barWindow: topBar.windowFor(captureStatus)
                         reorderable: true
                     }
