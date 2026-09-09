@@ -1,6 +1,7 @@
 //@ pragma UseQApplication
 
 import QtQuick
+import QtQuick.Window
 import QtCore
 import QtQml.Models
 import QtQuick.Controls
@@ -323,18 +324,51 @@ ShellRoot {
         contentPadding: Theme.gap
         onVisibleChanged: if (visible) {
             root.closePanelsExcept(barOverflow);
+            overflowViewport.contentY = 0;
             Qt.callLater(() => overflowColumn.forceActiveFocus());
         }
         Item {
             width: parent.width
             implicitHeight: overflowColumn.implicitHeight
-            height: implicitHeight
-            GridLayout {
-                id: overflowColumn
-                columns: 1
-                width: parent.width
-                rowSpacing: Theme.gap
-                Keys.onEscapePressed: barOverflow.visible = false
+            height: parent.height
+            Flickable {
+                id: overflowViewport
+                objectName: "overflowViewport"
+                anchors.fill: parent
+                contentWidth: width
+                contentHeight: overflowColumn.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                interactive: contentHeight > height
+                onContentHeightChanged: contentY = Math.max(0, Math.min(contentY, contentHeight - height))
+                onHeightChanged: contentY = Math.max(0, Math.min(contentY, contentHeight - height))
+                function reveal(item) {
+                    if (!interactive) return;
+                    const top = item.mapToItem(contentItem, 0, 0).y;
+                    const bottom = top + Math.min(item.height, height);
+                    const next = top < contentY ? top : bottom > contentY + height ? bottom - height : contentY;
+                    contentY = Math.max(0, Math.min(next, contentHeight - height));
+                }
+                Connections {
+                    target: overflowViewport.Window.window
+                    function onActiveFocusItemChanged() {
+                        const item = target.activeFocusItem;
+                        for (let parent = item; parent; parent = parent.parent) {
+                            if (parent === overflowColumn) {
+                                overflowViewport.reveal(item);
+                                return;
+                            }
+                        }
+                    }
+                }
+                ScrollBar.vertical: ScrollBar {}
+                GridLayout {
+                    id: overflowColumn
+                    columns: 1
+                    width: parent.width
+                    rowSpacing: Theme.gap
+                    Keys.onEscapePressed: barOverflow.visible = false
+                }
             }
             NativeEditSurface {
                 anchors.fill: parent
@@ -450,7 +484,9 @@ ShellRoot {
             return customLayout ? DesktopLayout.placement(DesktopEditing.desktop, name) : name === "search" ? "top-left" : name === "clock" ? "top-center" : "top-right";
         }
         function windowFor(item) {
-            if (overflows(item)) return barOverflow.hostItem ? barOverflow.anchorWindow : barOverflow.nativeWindow;
+            // More is never its own overflow child. Its anchor must not depend
+            // on content that reflows when that anchor changes windows.
+            if (item !== overflowButton && overflows(item)) return barOverflow.hostItem ? barOverflow.anchorWindow : barOverflow.nativeWindow;
             const zone = zoneFor(item);
             if (zone === "sidebar") return terminalSidebar.widgetWindow;
             if (zone === "dock") return dock;
@@ -719,7 +755,7 @@ ShellRoot {
                         barWindow: topBar.windowFor(captureStatus)
                         reorderable: true
                     }
-                    Pill { id: trayContainer; panelLayout: ["sidebar", "control-centre"].includes(topBar.zoneFor(trayContainer)); parent: topBar.hostFor(trayContainer); Layout.column: topBar.controlColumn(trayContainer); Layout.row: topBar.controlRow(trayContainer); horizontalPadding: 0; visible: topBar.chosen(trayContainer) && tray.implicitWidth > 0; Tray { id: tray; panelLayout: trayContainer.panelLayout; presentation: topBar.appearance("tray", "System tray", "view-more-symbolic", true, false); parentWindow: topBar.windowFor(trayContainer) } }
+                    Pill { id: trayContainer; panelLayout: ["sidebar", "control-centre"].includes(topBar.zoneFor(trayContainer)) || (topBar.overflows(trayContainer) && !!barOverflow.hostItem); parent: topBar.hostFor(trayContainer); Layout.column: topBar.controlColumn(trayContainer); Layout.row: topBar.controlRow(trayContainer); horizontalPadding: 0; visible: topBar.chosen(trayContainer) && tray.implicitWidth > 0; Tray { id: tray; panelLayout: trayContainer.panelLayout; presentation: topBar.appearance("tray", "System tray", "view-more-symbolic", true, false); parentWindow: topBar.windowFor(trayContainer) } }
                     PrivacyIndicators {
                         id: privacyContainer
                         parent: topBar.hostFor(privacyContainer)
@@ -732,7 +768,7 @@ ShellRoot {
                     }
                     SystemMetrics {
                         id: metricsPill
-                        panelLayout: ["sidebar", "control-centre"].includes(topBar.zoneFor(metricsPill))
+                        panelLayout: ["sidebar", "control-centre"].includes(topBar.zoneFor(metricsPill)) || (topBar.overflows(metricsPill) && !!barOverflow.hostItem)
                         presentation: topBar.appearance("metrics", "System monitors", "computer-symbolic", true, true)
                         parent: topBar.hostFor(metricsPill); Layout.column: topBar.controlColumn(metricsPill); Layout.row: topBar.controlRow(metricsPill)
                         systemMetrics: metrics

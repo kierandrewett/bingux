@@ -33,6 +33,34 @@
             tryCompare(barOverflow, "visible", true, 3000);
             tryCompare(barOverflow, "revealScale", 1, 3000);
         }
+        function resize(window, width, height) {
+            nativeCapture.gestureArguments = ["0", "0", "--resize-to", String(width), String(height),
+                "--window-title", window.title, "--window-size", String(window.width), String(window.height)];
+            nativeCapture.running = true;
+            tryCompare(nativeCapture, "running", false, 4000);
+            compare(nativeCapture.resultCode, 0);
+            tryCompare(window, "width", width, 3000);
+            tryCompare(window, "height", height, 3000);
+        }
+        function checkContentFits(viewport) {
+            const items = metricsPill.monitorNames.map(name => findChild(metricsPill, name + "Readout"))
+                .concat(tray.trayItems.map(item => findChild(tray, "trayItem-" + item.id)));
+            for (const item of items) {
+                tryVerify(() => {
+                    const point = item.mapToItem(viewport.contentItem, 0, 0);
+                    return point.x >= 0 && point.x + item.width <= viewport.width + 1
+                        && point.y >= 0 && point.y + item.height <= viewport.contentHeight + 1;
+                }, 2000, item.objectName + " fits the scrollable content");
+            }
+        }
+        function scroll(viewport, window, direction) {
+            const point = viewport.mapToItem(window.contentItem, viewport.width / 2, viewport.height / 2);
+            nativeCapture.gestureArguments = [String(point.x), String(point.y), "--scroll-" + direction,
+                "--window-title", window.title, "--window-size", String(window.width), String(window.height)];
+            nativeCapture.running = true;
+            tryCompare(nativeCapture, "running", false, 4000);
+            compare(nativeCapture.resultCode, 0);
+        }
         function capture(name) {
             const prefix = Quickshell.env("BINGUX_GROUP_CAPTURE");
             if (!prefix) return;
@@ -73,12 +101,7 @@
                 let initialFrame = null;
                 verify(overflowButton.grabToImage(result => initialFrame = result));
                 tryVerify(() => initialFrame !== null, 3000);
-                nativeCapture.gestureArguments = ["0", "0", "--resize-to", String(window.width), "360",
-                    "--window-title", window.title, "--window-size", String(window.width), String(window.height)];
-                nativeCapture.running = true;
-                tryCompare(nativeCapture, "running", false, 4000);
-                compare(nativeCapture.resultCode, 0);
-                tryCompare(window, "height", 360, 3000);
+                resize(window, window.width, 360);
                 tryCompare(overflowButton, "parent", terminalSidebar.widgetHost);
                 tryVerify(() => topBar.overflows(trayContainer), 3000);
                 tryVerify(() => topBar.overflows(metricsPill), 3000);
@@ -87,6 +110,40 @@
                 compare(barOverflow.hostItem, window.contentItem);
                 compare(topBar.windowFor(trayContainer), window);
                 const first = findChild(tray, "trayItem-detached-0");
+                const viewport = findChild(barOverflow.body, "overflowViewport");
+                verify(viewport !== null);
+                const barWidth = metricsPill.implicitWidth;
+                for (const width of [384, 224, 180]) {
+                    resize(window, width, 360);
+                    checkContentFits(viewport);
+                    compare(metricsPill.implicitWidth, barWidth, "Wrapping keeps overflow membership stable");
+                    verify(topBar.overflows(metricsPill) && topBar.overflows(trayContainer));
+                    compare(findChild(tray, "trayItem-detached-0"), first, "Resizing keeps the native item");
+                }
+                verify(viewport.interactive, "The narrow menu scrolls vertically");
+                first.forceActiveFocus(Qt.TabFocusReason);
+                tryVerify(() => first.mapToItem(viewport, 0, 0).y >= 0, 2000);
+                metricsPill.forceActiveFocus(Qt.TabFocusReason);
+                tryVerify(() => viewport.contentY > 0, 2000, "Keyboard focus reveals the monitors");
+                capture("narrow-monitors");
+                first.forceActiveFocus(Qt.BacktabFocusReason);
+                tryVerify(() => {
+                    const y = first.mapToItem(viewport, 0, 0).y;
+                    return y >= 0 && y + first.height <= viewport.height;
+                }, 2000, "Reverse focus reveals the first tray item");
+                capture("narrow-tray");
+                const beforeScroll = viewport.contentY;
+                scroll(viewport, window, "down");
+                tryVerify(() => viewport.contentY > beforeScroll, 2000, "The native wheel scrolls More");
+                scroll(viewport, window, "down");
+                tryCompare(viewport, "moving", false, 2000);
+                verify(viewport.contentY <= viewport.contentHeight - viewport.height, "Wheel scrolling stops at the lower bound");
+                scroll(viewport, window, "up");
+                scroll(viewport, window, "up");
+                tryCompare(viewport, "moving", false, 2000);
+                verify(viewport.contentY >= 0, "Wheel scrolling stops at the upper bound");
+                resize(window, 384, 360);
+                checkContentFits(viewport);
                 click(first, window, Qt.RightButton, Qt.ShiftModifier);
                 tryCompare(widgetMenu, "visible", true, 3000);
                 compare(widgetMenu.hostItem, window.contentItem);
@@ -94,6 +151,7 @@
                 verify(barOverflow.visible, "The detached More parent stays open for widget actions");
                 widgetMenu.visible = false;
                 tryCompare(widgetMenu, "retained", false, 3000);
+                metricsPill.forceActiveFocus(Qt.TabFocusReason);
                 click(metricsPill, window);
                 tryCompare(metricsPopup, "visible", true, 3000);
                 compare(metricsPopup.hostItem, window.contentItem);

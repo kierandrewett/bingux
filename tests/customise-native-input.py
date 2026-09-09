@@ -34,7 +34,7 @@ export default function (api) {
         '<node><interface name="org.gnoblin.CustomiseInput"><method name="Run"><arg type="s" direction="in"/></method></interface></node>', {
         Run(request) {
             if (timer) throw new Error('An input gesture is already running');
-            const {origin, destination, button, shift, prepare, hoverOnly, clickOnly, capture, captureOnly, dragCapture, windowTitle, windowSize, resizeTo} = JSON.parse(request);
+            const {origin, destination, button, shift, prepare, hoverOnly, clickOnly, capture, captureOnly, dragCapture, windowTitle, windowSize, resizeTo, scroll} = JSON.parse(request);
             if (windowTitle) {
                 const matches = global.get_window_actors().filter(actor => actor.meta_window.title === windowTitle);
                 if (matches.length !== 1) throw new Error('Expected one test window: ' + windowTitle);
@@ -51,7 +51,9 @@ export default function (api) {
                 () => pointer.notify_absolute_motion(GLib.get_monotonic_time(), origin[0], origin[1]),
                 () => pointer.notify_absolute_motion(GLib.get_monotonic_time(), origin[0], origin[1])
             ];
-            if (!prepare && !hoverOnly && !captureOnly && !resizeTo) {
+            if (scroll) actions.push(() => pointer.notify_discrete_scroll(GLib.get_monotonic_time(),
+                scroll > 0 ? Clutter.ScrollDirection.DOWN : Clutter.ScrollDirection.UP, Clutter.ScrollSource.WHEEL));
+            if (!prepare && !hoverOnly && !captureOnly && !resizeTo && !scroll) {
                 if (shift) actions.push(() => keyboard.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Shift_L, Clutter.KeyState.PRESSED));
                 actions.push(() => pointer.notify_button(GLib.get_monotonic_time(), button, Clutter.ButtonState.PRESSED));
                 if (destination) {
@@ -106,6 +108,7 @@ window_title = sys.argv[sys.argv.index('--window-title') + 1] if '--window-title
 window_size = list(map(float, sys.argv[sys.argv.index('--window-size') + 1:sys.argv.index('--window-size') + 3])) if window_title else []
 request = json.dumps({'origin': [x, y], 'destination': destination, 'prepare': prepare, 'windowTitle': window_title, 'windowSize': window_size,
     'resizeTo': list(map(float, sys.argv[4:6])) if sys.argv[3:4] == ['--resize-to'] else None,
+    'scroll': 1 if sys.argv[3:4] == ['--scroll-down'] else -1 if sys.argv[3:4] == ['--scroll-up'] else 0,
     'hoverOnly': sys.argv[3:4] == ['--hover-only'],
     'shift': sys.argv[3:4] == ['--shift-right-click'],
     'button': 3 if sys.argv[3:4] in (['--right-click'], ['--shift-right-click']) else 1,

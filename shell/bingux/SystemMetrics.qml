@@ -77,6 +77,7 @@ Pill {
     pressed: mouse.pressed
     activeFocusOnTab: true
     horizontalPadding: Theme.barPrimaryPadding
+    contentImplicitWidth: readouts.barImplicitWidth
     spacing: 12
     Accessible.role: Accessible.Button
     Accessible.name: "System monitors"
@@ -101,6 +102,15 @@ Pill {
 
     GridLayout {
         id: readouts
+        objectName: "metricReadoutGrid"
+        // Overflow decisions use the two-row bar layout, even while wrapped.
+        readonly property real barImplicitWidth: {
+            let width = 0;
+            for (let index = 0; index < metricsRepeater.count; index += 2)
+                width += Math.ceil(Math.max(metricsRepeater.itemAt(index)?.implicitWidth || 0,
+                    metricsRepeater.itemAt(index + 1)?.implicitWidth || 0));
+            return width + Math.max(0, Math.ceil(metricsRepeater.count / 2) - 1) * columnSpacing;
+        }
         Layout.fillWidth: root.panelLayout
         readonly property real widestReadout: {
             let width = 1;
@@ -121,6 +131,7 @@ Pill {
                 required property string modelData
                 objectName: modelData + "Readout"
                 Layout.fillWidth: true
+                Layout.minimumWidth: root.panelLayout ? 0 : implicitWidth
                 label: ({cpu: "CPU", memory: "RAM", receive: "↓", send: "↑", temperature: "Temp", load: "Load", swap: "Swap", diskRead: "R", diskWrite: "W"})[modelData]
                 value: root.valueFor(modelData)
                 metric: modelData
@@ -181,7 +192,8 @@ Pill {
             objectName: readout.metric + "BarGraph"
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            width: 42
+            width: Math.max(0, Math.min(42, readout.width - reading.x - reading.width - 6))
+            visible: width > 0
             height: 12
             history: root.history
             endTime: root.chartTime

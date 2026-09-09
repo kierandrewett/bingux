@@ -411,9 +411,8 @@ repeats completed before the scheduled stack capture, so no stalled stack was
 obtained. More now retains its registered native window between openings; the
 final normal/reduced-motion and compact-editor loop passed. That does not establish
 the timeout's precise cause. Keep cold-start reliability in the remaining audit.
-Other open checks include overflow content fitting in detached sidebar windows,
-other sidebar edges, mixed-scale and multiple-monitor behaviour, and third-party
-tray services.
+Other open checks include other sidebar edges, mixed-scale and multiple-monitor
+behaviour, and third-party tray services.
 
 Detached popup checks found failures in the existing shell. Opening a nested
 monitor popup closed More because the parent check compared its unused layer
@@ -450,7 +449,21 @@ Screenshots show the monitor controls inside the short window and above More.
 The live reload preserves the exact desktop, layout and dock snapshot, with no
 QML errors or shell-process restart. Core dumps remain disabled.
 
-The screenshots also expose a remaining width problem: native tray and monitor
-rows can extend past More's card in a narrow floating window. This needs a content
-fit pass; successful nested-menu input does not prove that all overflow content
-fits. The wider compatibility audit remains open.
+The narrow floating More menu now wraps the original tray items and monitor
+readouts. Monitor values retain their space while the small graphs shrink.
+The monitor's natural bar width remains independent of wrapping, so resizing
+does not change overflow membership. More's anchor also excludes its own overflow
+content dependency. This removes a binding loop when changing windows.
+
+More scrolls vertically when its content exceeds the card height. It stops at
+both ends without overshoot and reveals focused controls. The detached fixture
+checks all 18 tray items and nine readouts at 384, 224 and 180 pixels, retaining
+the same native items. It exercises native wheel input, focus in both directions,
+child menus, monitor switches and return from Customise UI. The monitor fixture
+also checks the original two-row width and restoration after wrapping.
+These checks pass against staged sources with normal and reduced motion,
+alongside overflow editing and sidebar save/restart cases. The live reload
+preserves the exact desktop, layout and dock snapshot without QML errors or a
+shell-process restart. Similarity checks found no duplicated functions in the
+changed QML files or private input helper.
+The wider compatibility audit remains open.

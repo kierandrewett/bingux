@@ -55,10 +55,14 @@ ShellRoot {
                     wait(100);
                     const barWidth = monitor.width;
                     const barHeight = monitor.height;
+                    const readoutGrid = findChild(monitor, "metricReadoutGrid");
+                    compare(monitor.implicitWidth, readoutGrid.implicitWidth + monitor.horizontalPadding * 2,
+                        "The natural width matches the original two-row grid");
                     if ("panelLayout" in monitor) monitor.panelLayout = true;
-                    for (const width of [208, 376, 208]) {
+                    for (const width of [208, 376, 148, 208]) {
                         panel.width = width;
                         tryVerify(() => monitor.width <= panel.width, 1000, "All selected monitors fit the panel width");
+                        compare(monitor.implicitWidth, barWidth, "Wrapping does not change the bar width budget");
                         for (const name of monitor.monitorNames) {
                             const readout = findChild(monitor, name + "Readout");
                             tryVerify(() => {

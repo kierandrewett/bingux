@@ -13,8 +13,9 @@ Item {
     property int horizontalPadding: Theme.barControlPadding
     property var presentation: null
     property bool panelLayout: false
+    property real contentImplicitWidth: row.implicitWidth
     readonly property bool customPresentation: !!presentation?.custom
-    implicitWidth: (customPresentation ? customFace.implicitWidth : row.implicitWidth) + horizontalPadding * 2
+    implicitWidth: (customPresentation ? customFace.implicitWidth : contentImplicitWidth) + horizontalPadding * 2
     implicitHeight: panelLayout && !customPresentation
         ? Math.max(Theme.barHeight, row.implicitHeight + Theme.gap * 2) : Theme.barHeight
     width: panelLayout && parent ? parent.width : implicitWidth
