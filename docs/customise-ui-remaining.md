@@ -484,3 +484,31 @@ not support 150%; that was a test-display configuration failure, not a shell
 layout failure. Staged-source checks also pass at 125% with normal motion and
 200% with reduced motion, including both fresh-process reloads. Multiple
 displays with different origins and scales remain outside this check.
+
+The two-display matrix now covers horizontal and vertical arrangements at 100%
+and 150%, with each display tested as the edited output and with the primary
+output changed between arrangements. The dock explicitly follows the top bar's
+screen. Gnoblin also keeps layer-surface output reporting tied to the assigned
+display during compositor animations. The old compositor reported a neighbouring
+output while the bar slid across its stage view; the dock could then remain on
+that output after the bar returned. Wayland traces confirm the corrected output
+assignment, and the old sources fail the real-container screen assertion.
+
+All twelve compact-editor, sidebar-layout and overflow-edit combinations pass
+with normal motion. The twelve reduced-motion combinations also pass against
+staged sources. Native input covers Clock drags into the actual dock, all three
+sidebar edges, nested overflow menus, and sidebar/overflow save and fresh-process
+reloads. Screenshots verify the secondary display's dock, inspector and sidebar
+anchors. Direct unpin actions also pass on both vertically arranged outputs with
+normal and reduced motion, including saved state and editor Undo/Redo. The input
+helper now preserves D-Bus error text if preparation or a gesture fails.
+
+Run `tests/customise-monitors-live.py` inside the Gnoblin private session with
+`MONITOR=1920x1200 EXTRA_MONITOR=1920x1200` and the patched compositor. Use
+`--cases dock-unpin` for the app-menu check. Gnoblin's configuration guide contains
+the complete invocation. The broader action audit remains open; direct Notes
+context-menu coordinates on nonzero-origin displays are the next regression.
+The live Bingux reload preserves the exact desktop, layout and dock snapshot
+without QML errors or a process restart. The tested Mutter library is installed
+for the next login; the current compositor continues to use its previous library.
+Its eleven layer-animation lifetime cases pass in the private session.

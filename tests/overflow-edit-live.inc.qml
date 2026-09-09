@@ -26,6 +26,8 @@
         function test_overflow_widgets() {
             try {
                 tray.serviceEnabled = false;
+                // Fill the bar on wide displays as well as the compact fixture.
+                metricsPill.previewMonitors = metricsPill.monitorNames;
                 tray.trayItems = Array.from({length: 18}, (_, index) => ({
                     id: "overflow-" + index, title: "Application " + index, tooltipTitle: "Application " + index,
                     icon: Quickshell.iconPath("applications-other"), menu: null, hasMenu: true, onlyMenu: true,

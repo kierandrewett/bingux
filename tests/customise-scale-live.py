@@ -6,7 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from gi.repository import Gio
+from private_shell import display_state
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--scales", nargs="+", type=float, default=[1.25, 1.5, 2.0])
@@ -17,22 +17,11 @@ if not os.environ.get("WAYLAND_DISPLAY", "").startswith("gnoblin-gs-"):
     raise SystemExit("Only a private Gnoblin compositor can change scale for this test")
 if not str(Path(os.environ["XDG_CONFIG_HOME"]).resolve()).startswith("/tmp/gnoblin-gs."):
     raise SystemExit("The test requires private compositor settings")
-bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-
-
-def state():
-    return bus.call_sync(
-        "org.gnome.Mutter.DisplayConfig", "/org/gnome/Mutter/DisplayConfig",
-        "org.gnome.Mutter.DisplayConfig", "GetCurrentState", None, None,
-        Gio.DBusCallFlags.NONE, 5000, None,
-    ).unpack()
-
-
 subprocess.run([
     "gsettings", "set", "org.gnome.mutter", "experimental-features",
     "['scale-monitor-framebuffer']",
 ], check=True)
-initial = state()
+initial = display_state()
 if len(initial[1]) != 1:
     raise SystemExit("Use one virtual monitor for the scale matrix")
 monitor = initial[1][0]
@@ -47,7 +36,7 @@ for scale in args.scales:
         "gdctl", "set", "--layout-mode", "logical", "--logical-monitor",
         "--monitor", connector, "--primary", "--scale", str(scale),
     ], check=True)
-    actual = state()
+    actual = display_state()
     if abs(actual[2][0][2] - scale) > 0.001:
         raise SystemExit("The compositor did not apply the requested scale")
     environment = os.environ | {

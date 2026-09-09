@@ -836,6 +836,7 @@ ShellRoot {
 
     Dock {
         id: dock
+        screen: topBar.screen
         WlrLayershell.layer: DesktopEditing.active || !!popouts.states.search?.revealCompanions ? WlrLayer.Overlay : WlrLayer.Top
         onApplicationInteracted: popouts.command("search", {action: "hide"})
         onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, dock)

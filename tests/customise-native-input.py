@@ -34,7 +34,15 @@ export default function (api) {
         '<node><interface name="org.gnoblin.CustomiseInput"><method name="Run"><arg type="s" direction="in"/></method></interface></node>', {
         Run(request) {
             if (timer) throw new Error('An input gesture is already running');
-            const {origin, destination, button, shift, prepare, hoverOnly, clickOnly, capture, captureOnly, dragCapture, windowTitle, windowSize, resizeTo, scroll} = JSON.parse(request);
+            const {origin, destination, button, shift, prepare, hoverOnly, clickOnly, capture, captureOnly, dragCapture, windowTitle, windowSize, resizeTo, scroll, screenOrigin} = JSON.parse(request);
+            // Layer-surface fixtures provide screen-local coordinates. Native
+            // virtual input uses the compositor's combined desktop coordinates.
+            if (!windowTitle && screenOrigin) {
+                origin[0] += screenOrigin[0]; origin[1] += screenOrigin[1];
+                if (destination) {
+                    destination[0] += screenOrigin[0]; destination[1] += screenOrigin[1];
+                }
+            }
             if (windowTitle) {
                 const matches = global.get_window_actors().filter(actor => actor.meta_window.title === windowTitle);
                 if (matches.length !== 1) throw new Error('Expected one test window: ' + windowTitle);
@@ -107,6 +115,7 @@ export default function (api) {
 window_title = sys.argv[sys.argv.index('--window-title') + 1] if '--window-title' in sys.argv else ''
 window_size = list(map(float, sys.argv[sys.argv.index('--window-size') + 1:sys.argv.index('--window-size') + 3])) if window_title else []
 request = json.dumps({'origin': [x, y], 'destination': destination, 'prepare': prepare, 'windowTitle': window_title, 'windowSize': window_size,
+    'screenOrigin': json.loads(os.environ.get('BINGUX_TEST_INPUT_ORIGIN', '[0, 0]')),
     'resizeTo': list(map(float, sys.argv[4:6])) if sys.argv[3:4] == ['--resize-to'] else None,
     'scroll': 1 if sys.argv[3:4] == ['--scroll-down'] else -1 if sys.argv[3:4] == ['--scroll-up'] else 0,
     'hoverOnly': sys.argv[3:4] == ['--hover-only'],
@@ -116,9 +125,11 @@ request = json.dumps({'origin': [x, y], 'destination': destination, 'prepare': p
     'capture': os.environ.get('BINGUX_NATIVE_SCREENSHOT', ''),
     'captureOnly': sys.argv[3:4] == ['--capture-only'],
     'dragCapture': os.environ.get('BINGUX_NATIVE_DRAG_CAPTURE', '')})
-subprocess.run(['gdbus', 'call', '--session', '--dest', 'org.gnoblin.CustomiseInput',
+result = subprocess.run(['gdbus', 'call', '--session', '--dest', 'org.gnoblin.CustomiseInput',
     '--object-path', '/org/gnoblin/CustomiseInput', '--method', 'org.gnoblin.CustomiseInput.Run', request],
-    check=True, capture_output=True, text=True, timeout=5)
+    capture_output=True, text=True, timeout=5)
+if result.returncode:
+    raise SystemExit(result.stderr.strip() or result.stdout.strip() or f'Native input exited with status {result.returncode}')
 deadline = time.monotonic() + 8
 while not completion.exists():
     if time.monotonic() >= deadline:

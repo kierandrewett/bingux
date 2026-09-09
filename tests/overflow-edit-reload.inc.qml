@@ -5,6 +5,7 @@
         function test_saved_overflow() {
             try {
                 tray.serviceEnabled = false;
+                metricsPill.previewMonitors = metricsPill.monitorNames;
                 tray.trayItems = Array.from({length: 18}, (_, index) => ({
                     id: "overflow-" + index, title: "Application " + index, tooltipTitle: "Application " + index,
                     icon: Quickshell.iconPath("applications-other"), menu: null, hasMenu: false, onlyMenu: false,

@@ -35,6 +35,8 @@
                 tryCompare(binguxSettings, "busy", false, 4000);
                 const editor = desktopCustomiser;
                 editor.open();
+                for (const window of [dock, terminalSidebar.editWindow, controlCentre.nativeWindow, editor.nativeWindow])
+                    tryVerify(() => window.screen.name === topBar.screen.name, 3000, "All real containers use the edited display");
                 editor.change("sidebarEdge", "right");
                 wait(400);
                 const before = JSON.stringify(BinguxPreferences.data.desktop);
@@ -62,6 +64,13 @@
                 const remove = editor.preview.paletteRect;
                 gesture(spacer, topBar, ["--drag-to", String(remove.x + remove.width / 2), String(remove.y + remove.height / 2)]);
                 tryVerify(() => !topBar.spacingWidgets.some(item => !item.flexible), 3000, "The visible Remove target accepts native container drags");
+                const dockArea = DesktopEditing.surfaces.find(surface => surface.zoneName === "dock");
+                gesture(clockPill, topBar, ["--drag-to", String(dockArea.screenRect.x + dockArea.screenRect.width / 2),
+                    String(dockArea.screenRect.y + dockArea.screenRect.height / 2)]);
+                tryVerify(() => editor.containerFor("clock") === "dock", 3000, "Native drag reaches the dock on the edited display");
+                compare(clockPill.parent, dock.widgetHost);
+                editor.undo();
+                tryVerify(() => editor.containerFor("clock") === "top-center", 3000);
                 if (editor.compactPalette) gesture(toggle, editor.nativeWindow, ["--click-only"]);
                 tryCompare(palette, "visible", true);
                 gesture(findChild(palette, "customise-tab-Apps"), editor.paletteNativeWindow, ["--click-only"]);
@@ -88,6 +97,9 @@
                 layoutReport.setText("PASS");
             } catch (error) {
                 console.error("CUSTOMISE_TEST_FAILED", error.message, error.stack);
+                console.error("CONTAINER_SCREENS", JSON.stringify({bar: topBar.screen?.name, dock: dock.screen?.name,
+                    sidebar: terminalSidebar.editWindow.screen?.name, controls: controlCentre.nativeWindow.screen?.name,
+                    editor: desktopCustomiser.nativeWindow.screen?.name}));
                 layoutReport.setText("FAIL " + error.stack);
             }
         }

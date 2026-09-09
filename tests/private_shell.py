@@ -8,6 +8,17 @@ import subprocess
 import time
 
 
+def display_state():
+    """Read the compositor's physical and logical monitor configuration."""
+    from gi.repository import Gio
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    return bus.call_sync(
+        "org.gnome.Mutter.DisplayConfig", "/org/gnome/Mutter/DisplayConfig",
+        "org.gnome.Mutter.DisplayConfig", "GetCurrentState", None, None,
+        Gio.DBusCallFlags.NONE, 5000, None,
+    ).unpack()
+
+
 def stage_compositor_bridge(repo, config):
     """Stage the current bridge before the private input service reloads scripts."""
     config = Path(config).resolve()

@@ -22,6 +22,8 @@ with tempfile.TemporaryDirectory(prefix='bingux-layout-live-') as directory:
     for source in (repo / 'shell/bingux').iterdir():
         if source.suffix in ('.qml', '.js', '.py') or source.name == 'qmldir': shutil.copy2(source, fixture)
     shell = (fixture / 'shell.qml').read_text().replace('import QtQuick\n', 'import QtQuick\nimport QtQuick.Window\nimport QtTest\n', 1)
+    if os.environ.get('BINGUX_TEST_SCREEN_NAME'):
+        shell = shell.replace('id: topBar\n', 'id: topBar\n        screen: Quickshell.screens.find(screen => screen.name === Quickshell.env("BINGUX_TEST_SCREEN_NAME"))\n', 1)
     if case in ('control-layout', 'control-groups', 'control-utilities', 'sidebar-controls'): shell = 'import "ControlLayout.js" as ControlLayout\n' + shell
     base_shell = shell
     shell = shell.rstrip()[:-1] + (repo / ('tests/' + case + '-live.inc.qml')).read_text() + '\n}\n'
