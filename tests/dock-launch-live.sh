@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Opens and closes a new Nautilus window to check real launch completion.
+# Opens and closes a real isolated desktop application to check launch completion.
 set -euo pipefail
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 helper="$(mktemp)"
