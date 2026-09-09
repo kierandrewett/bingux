@@ -49,11 +49,16 @@ MouseArea {
         id: appActions
         objectName: "customiseAppActions"
         property string widgetId: ""
+        readonly property bool pinned: !!DesktopEditing.editor?.dockApplications.includes(widgetId)
         screen: root.window.screen
         anchorWindow: root.window
         actions: [
-            {text: "Unpin from dock", enabled: !!DesktopEditing.editor?.dockApplications.includes(widgetId),
-                triggered: () => DesktopEditing.editor.put(widgetId, "palette", 0)},
+            {text: pinned ? "Unpin from dock" : "Pin to dock", enabled: pinned || !!DesktopEditing.editor?.appEntry(widgetId.slice(4)),
+                triggered: () => {
+                    const editor = DesktopEditing.editor;
+                    if (!editor) return;
+                    editor.put(widgetId, pinned ? "palette" : "dock", pinned ? 0 : editor.orderFor("dock", widgetId).length);
+                }},
             {text: "Customise…", icon: "preferences-system-symbolic", enabled: true,
                 triggered: () => { DesktopEditing.editor.selectedWidget = widgetId; DesktopEditing.editor.optionsPage = "Widget"; }},
             {text: "Move…", icon: "transform-move-symbolic", enabled: true,

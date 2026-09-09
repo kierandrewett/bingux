@@ -93,6 +93,9 @@
                 verify(editor.optionsPage === "", "Unpin does not open the options panel");
                 editor.undo(); verify(editor.dockApplications.includes(appId));
                 editor.redo(); verify(!editor.dockApplications.includes(appId));
+                compare(menu.pinned, false, "The edit menu tracks an unpinned running app");
+                compare(menu.menuEntries[0].text, "Pin to dock");
+                verify(menu.menuEntries[0].enabled, "An eligible running app can be pinned from its edit menu");
                 editor.apply(); tryCompare(editor, "visible", false, 4000);
                 verify(!BinguxPreferences.data.desktop.dockApps.pinnedApps.includes(appId.slice(4)), "Unpin is saved");
                 layoutReport.setText("PASS");
