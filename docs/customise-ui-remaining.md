@@ -380,9 +380,36 @@ shared fixture runner and locates the tray button by name instead of ListView
 internals. Live reload preserves the exact desktop, layout and dock snapshot,
 with no QML errors or shell-process restart.
 
-Overflow-menu editing still needs a direct interaction check. A crowded bar can
-place the tray in a hidden More popup when the editor opens. Its source cannot be
-dragged until that popup is visible, and `topBar.windowFor()` currently selects
-the configured container without accounting for the overflow host. Check opening,
-editing, tooltip/menu anchors and moving these hidden widgets. Mixed-scale and
-multiple-monitor checks also remain open.
+More now opens from its real button during Customise UI and exposes the existing
+overflow widgets through the shared editing handles. It does not become a saved
+container or change those widgets' placement until the user moves them. Its
+outside-click layer is disabled during editing so it cannot intercept drops onto
+the desktop containers. The same native window remains available to the editor,
+as with the control centre; closed popup handles are inactive. The control centre
+stays open while More is being edited, and leaving the editor closes More.
+
+Overflow widgets now report their actual host window for menus, tooltips and
+Shift-right-click. Opening a nested performance popup keeps More open. The More
+button also follows its dock anchor instead of retaining a fixed top-bar Y
+position. Inspector placement uses the widget's visible surface and clears the
+whole temporary popup, below it when space permits and above it near the dock.
+Tray app tooltips are suppressed during editing. Container outlines observe both
+ends of their coordinate mapping so popup padding does not leave a shifted border.
+
+The native `overflow-edit` case covers the tray's app menu and anchor, opening
+More in the editor, inspector and outline bounds, native dragging into the sidebar,
+retained widget identity, Undo/Redo, Cancel without a disk change, nested monitor
+menus, Shift-right-click, moving More into the dock, and saved placement after a
+fresh shell process. Screenshots verify clear inspector headings in both bar and
+dock positions. Final staged-source checks pass with normal and reduced motion,
+along with the compact-editor regression. The tray placement and keyboard
+regressions also pass. Live reload preserves the exact desktop, layout and dock
+snapshot without QML errors or a shell-process restart.
+
+Two earlier staged runs timed out before the first editor capture. Diagnostic
+repeats completed before the scheduled stack capture, so no stalled stack was
+obtained. More now retains its registered native window between openings; the
+final normal/reduced-motion and compact-editor loop passed. That does not establish
+the timeout's precise cause. Keep cold-start reliability in the remaining audit.
+Other open checks include overflow in detached sidebar windows, other sidebar
+edges, mixed-scale and multiple-monitor behaviour, and third-party tray services.

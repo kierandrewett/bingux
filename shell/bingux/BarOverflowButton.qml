@@ -7,6 +7,7 @@ AbstractButton {
     property var presentation: null
     property var barWindow: null
     property bool selected: false
+    function activateInEditor() { clicked(); }
     implicitWidth: presentation?.custom ? face.implicitWidth + Theme.barPrimaryPadding * 2 : Theme.barEdgeHitWidth
     implicitHeight: Theme.barHeight
     hoverEnabled: true

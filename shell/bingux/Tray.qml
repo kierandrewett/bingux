@@ -130,7 +130,7 @@ Item {
                     BarTooltip {
                         anchorItem: trayButton
                         barWindow: root.parentWindow
-                        requested: (trayMouse.containsMouse || trayButton.activeFocus) && !trayMenu.visible
+                        requested: !DesktopEditing.active && (trayMouse.containsMouse || trayButton.activeFocus) && !trayMenu.visible
                         text: trayButton.Accessible.name || "Tray application"
                     }
 

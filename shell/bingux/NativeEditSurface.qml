@@ -8,6 +8,8 @@ MouseArea {
     required property string zoneName
     required property var window
     property var entries: []
+    // Overflow exposes existing placements without becoming a saved container.
+    property bool sourceOnly: false
     readonly property var expandedEntries: {
         const result = [];
         for (const entry of entries)
@@ -138,12 +140,17 @@ MouseArea {
         if (hadDrag) { nativeDrag.cancelPending(); pressedId = ""; return; }
         if (mouse.button === Qt.RightButton && pressedId) {
             inspect(pressedId);
-        } else editor.selectContainer(entries.find(entry => entry.item?.memberEntries && (entry.id === pressedId || entry.item.memberEntries.some(member => member.id === pressedId)))?.id || zoneName);
+        } else {
+            const target = expandedEntries.find(entry => entry.id === pressedId)?.item;
+            if (typeof target?.activateInEditor === "function") target.activateInEditor();
+            else if (sourceOnly) editor.selectContainer(editor.containerFor(pressedId || zoneName));
+            else editor.selectContainer(entries.find(entry => entry.item?.memberEntries && (entry.id === pressedId || entry.item.memberEntries.some(member => member.id === pressedId)))?.id || zoneName);
+        }
         pressedId = "";
     }
     onCanceled: { nativeDrag.cancelPending(); pressedId = ""; }
     WidgetDrag { id: nativeDrag }
-    WidgetDropArea { anchors.fill: parent; zoneName: root.zoneName; window: root.window; surface: root }
+    WidgetDropArea { enabled: DesktopEditing.active && !root.sourceOnly; anchors.fill: parent; zoneName: root.zoneName; window: root.window; surface: root }
     readonly property bool dropActive: DesktopEditing.editor?.hoverZone === zoneName || entries.some(entry => entry.item?.memberEntries && entry.id === DesktopEditing.editor?.hoverZone)
     readonly property rect insertionRect: {
         if (!dropActive) return Qt.rect(0, 0, 0, 0);
@@ -167,10 +174,15 @@ MouseArea {
         radius: 1.5; color: Theme.accent
     }
     Rectangle {
+        objectName: "customiseContainerOutline"
         readonly property Item target: root.entries.find(entry => entry.item?.memberEntries && entry.id === (root.dropActive ? DesktopEditing.editor.hoverZone : DesktopEditing.editor?.selectedContainer))?.item || root.geometryItem
-        readonly property point origin: target.mapToItem(root, 0, 0)
+        readonly property point origin: {
+            DesktopEditing.observeGeometry(target);
+            DesktopEditing.observeGeometry(root);
+            return target.mapToItem(root, 0, 0);
+        }
         x: origin.x; y: origin.y; width: target.width; height: target.height
-        radius: typeof root.parent.radius === "number" ? root.parent.radius : 0; color: "transparent"
+        radius: typeof root.geometryItem.radius === "number" ? root.geometryItem.radius : typeof root.parent.radius === "number" ? root.parent.radius : 0; color: "transparent"
         border.width: 1
         border.color: root.dropActive || (DesktopEditing.editor?.optionsPage === "Container" && (DesktopEditing.editor.selectedContainer === root.zoneName || target !== root.geometryItem)) ? Theme.accent : Theme.outline
     }

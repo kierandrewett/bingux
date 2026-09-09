@@ -42,6 +42,8 @@ ShellRoot {
     }
 
     function closePanelsExcept(panel) {
+        const anchorWindow = panel?.anchorWindow || panel?.parentWindow || panel?.barWindow;
+        const editingContainers = DesktopEditing.active && (panel === barOverflow || panel === controlCentre);
         for (const widget of terminalSidebar.panelWidgets) {
             if (panel !== widget.popup) widget.popup.visible = false;
         }
@@ -49,9 +51,9 @@ ShellRoot {
         if (panel !== searchOverlay && searchOverlay.visible) searchOverlay.closeSearch();
         if (panel !== emojiPicker) emojiPicker.visible = false;
         if (panel !== calendarPopup) calendarPopup.visible = false;
-        if (panel !== controlCentre && panel?.anchorWindow !== controlCentre.nativeWindow) controlCentre.visible = false;
+        if (!editingContainers && panel !== controlCentre && anchorWindow !== controlCentre.nativeWindow) controlCentre.visible = false;
         if (panel !== metricsPopup) metricsPopup.visible = false;
-        if (panel !== barOverflow) barOverflow.visible = false;
+        if (!editingContainers && panel !== barOverflow && anchorWindow !== barOverflow.nativeWindow) barOverflow.visible = false;
         if (panel !== notificationCentre) notificationCentre.visible = false;
         if (panel !== inputSourceSelector) inputSourceSelector.menuOpen = false;
         if (panel !== captureTool && captureTool.opened) captureTool.close();
@@ -94,7 +96,7 @@ ShellRoot {
                 widgetMenu.visible = false;
                 controlCentre.detailOpen = false;
                 Qt.callLater(() => controlCentre.visible = DesktopEditing.active);
-            } else controlCentre.visible = false;
+            } else { controlCentre.visible = false; barOverflow.visible = false; }
         }
     }
     ProfileSettings {
@@ -302,23 +304,40 @@ ShellRoot {
 
     ShellPopup {
         id: barOverflow
+        keepWindowAlive: DesktopEditing.editor !== null
+        dismissOnOutsideClick: !DesktopEditing.active
+        keyboardInteractive: !DesktopEditing.active
         anchorWindow: topBar.windowFor(overflowButton)
         anchorItem: overflowButton
         screen: topBar.screen
         popupWidth: Math.max(200, ...topBar.overflowItems.map(item => item.implicitWidth + contentPadding * 2))
         popupHeight: overflowColumn.implicitHeight + contentPadding * 2
         contentPadding: Theme.gap
-        preferredY: Theme.barHeight + Theme.gap
         onVisibleChanged: if (visible) {
             root.closePanelsExcept(barOverflow);
             Qt.callLater(() => overflowColumn.forceActiveFocus());
         }
-        GridLayout {
-            id: overflowColumn
-            columns: 1
+        Item {
             width: parent.width
-            rowSpacing: Theme.gap
-            Keys.onEscapePressed: barOverflow.visible = false
+            implicitHeight: overflowColumn.implicitHeight
+            height: implicitHeight
+            GridLayout {
+                id: overflowColumn
+                columns: 1
+                width: parent.width
+                rowSpacing: Theme.gap
+                Keys.onEscapePressed: barOverflow.visible = false
+            }
+            NativeEditSurface {
+                anchors.fill: parent
+                zoneName: "overflow"
+                visible: DesktopEditing.active && barOverflow.visible
+                geometryItem: barOverflow.body.parent
+                window: barOverflow.hostItem ? barOverflow.anchorWindow : barOverflow.nativeWindow
+                sourceOnly: true
+                vertical: true
+                entries: topBar.overflowItems.map(item => ({id: topBar.nameFor(item), item}))
+            }
         }
     }
 
@@ -422,7 +441,14 @@ ShellRoot {
             if (!customLayout && DesktopLayout.widget(name)?.panel) return "sidebar";
             return customLayout ? DesktopLayout.placement(DesktopEditing.desktop, name) : name === "search" ? "top-left" : name === "clock" ? "top-center" : "top-right";
         }
-        function windowFor(item) { return zoneFor(item) === "sidebar" ? terminalSidebar.widgetWindow : zoneFor(item) === "dock" ? dock : zoneFor(item) === "control-centre" ? (controlCentre.hostItem ? controlCentre.anchorWindow : controlCentre.nativeWindow) : topBar; }
+        function windowFor(item) {
+            if (overflows(item)) return barOverflow.hostItem ? barOverflow.anchorWindow : barOverflow.nativeWindow;
+            const zone = zoneFor(item);
+            if (zone === "sidebar") return terminalSidebar.widgetWindow;
+            if (zone === "dock") return dock;
+            if (zone === "control-centre") return controlCentre.hostItem ? controlCentre.anchorWindow : controlCentre.nativeWindow;
+            return topBar;
+        }
         function hostFor(item) {
             if (overflows(item)) return overflowColumn;
             const zone = zoneFor(item);
@@ -608,15 +634,15 @@ ShellRoot {
         readonly property real editRightBoundary: Math.min(width - rightControls.width, Math.max(centerControls.x + centerControls.width, (centerControls.x + centerControls.width + width - rightControls.width) / 2))
         NativeEditSurface {
             window: topBar; zoneName: "top-left"; x: 0; width: topBar.editLeftBoundary; height: topBar.height
-            entries: topBar.defaultControls.filter(item => topBar.zoneFor(item) === zoneName).map(item => ({id: topBar.controlNames[topBar.defaultControls.indexOf(item)], item}))
+            entries: topBar.defaultControls.filter(item => topBar.zoneFor(item) === zoneName && !topBar.overflows(item)).map(item => ({id: topBar.controlNames[topBar.defaultControls.indexOf(item)], item}))
         }
         NativeEditSurface {
             window: topBar; zoneName: "top-center"; x: topBar.editLeftBoundary; width: Math.max(0, topBar.editRightBoundary - x); height: topBar.height
-            entries: topBar.defaultControls.filter(item => topBar.zoneFor(item) === zoneName).map(item => ({id: topBar.controlNames[topBar.defaultControls.indexOf(item)], item}))
+            entries: topBar.defaultControls.filter(item => topBar.zoneFor(item) === zoneName && !topBar.overflows(item)).map(item => ({id: topBar.controlNames[topBar.defaultControls.indexOf(item)], item}))
         }
         NativeEditSurface {
             window: topBar; zoneName: "top-right"; x: topBar.editRightBoundary; width: topBar.width - x; height: topBar.height
-            entries: topBar.defaultControls.filter(item => topBar.zoneFor(item) === zoneName).map(item => ({id: topBar.controlNames[topBar.defaultControls.indexOf(item)], item}))
+            entries: topBar.defaultControls.filter(item => topBar.zoneFor(item) === zoneName && !topBar.overflows(item)).map(item => ({id: topBar.controlNames[topBar.defaultControls.indexOf(item)], item}))
         }
         Item {
             anchors.fill: parent

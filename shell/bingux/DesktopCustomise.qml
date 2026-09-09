@@ -142,12 +142,19 @@ Scope {
     property bool behaviourExpanded: false
     property rect paletteSelection: Qt.rect(0, 0, 0, 0)
     readonly property string inspectedZone: optionsPage === "Container" ? (ControlLayout.isContainer(selectedContainer) ? DesktopLayout.zone(layout, selectedContainer) || "control-centre" : selectedContainer) : optionsPage === "Dock" ? "dock" : optionsPage === "Sidebar" ? "sidebar" : containerFor(selectedWidget)
+    readonly property string inspectionTargetId: optionsPage === "Container" && ControlLayout.isContainer(selectedContainer) ? selectedContainer
+        : ["Widget", "Move"].includes(optionsPage) ? selectedWidget : ""
+    readonly property var inspectionSurface: {
+        const visibleSurfaces = DesktopEditing.surfaces.filter(area => area.visible && area.window.visible);
+        return (inspectionTargetId ? visibleSurfaces.find(area => area.expandedEntries.some(entry => entry.id === inspectionTargetId && entry.item?.visible)) : null)
+            || visibleSurfaces.find(area => area.zoneName === inspectedZone);
+    }
     readonly property rect inspectionAnchor: {
-        const surface = DesktopEditing.surfaces.find(area => area.zoneName === inspectedZone && area.visible && area.window.visible);
+        const surface = inspectionSurface;
         if (surface) {
-            const targetId = optionsPage === "Container" && ControlLayout.isContainer(selectedContainer) ? selectedContainer
-                : ["Widget", "Move"].includes(optionsPage) ? selectedWidget : "";
-            const item = targetId ? surface.expandedEntries.find(entry => entry.id === targetId)?.item : null;
+            // Keep the inspector clear of the whole temporary popup.
+            if (surface.sourceOnly) return surface.screenRect;
+            const item = inspectionTargetId ? surface.expandedEntries.find(entry => entry.id === inspectionTargetId)?.item : null;
             if (item && item.visible) {
                 const geometry = [item.x, item.y, item.width, item.height, surface.screenRect];
                 const point = DesktopEditing.point(item, surface.window, 0, 0);
@@ -549,7 +556,12 @@ Scope {
             readonly property rect target: root.inspectionAnchor
             readonly property bool beside: ["sidebar", "control-centre"].includes(root.inspectedZone)
             readonly property real desiredX: beside ? (target.x > canvas.width / 2 ? target.x - width - 12 : target.x + target.width + 12) : target.x + target.width / 2 - width / 2
-            readonly property real desiredY: root.inspectedZone === "dock" ? target.y - height - 12 : beside ? target.y : target.y + target.height + 12
+            readonly property real desiredY: {
+                const below = target.y + target.height + 12;
+                if (root.inspectionSurface?.sourceOnly)
+                    return below + height <= footer.y - 12 ? below : target.y - height - 12;
+                return root.inspectedZone === "dock" ? target.y - height - 12 : beside ? target.y : below;
+            }
             x: Math.max(root.leftInset + 12, Math.min(desiredX, canvas.width - root.rightInset - width - 12))
             y: Math.max(Theme.barHeight + root.topInset + 12, Math.min(desiredY, footer.y - height - 12))
             width: Math.min(380, canvas.width - root.leftInset - root.rightInset - 24)
