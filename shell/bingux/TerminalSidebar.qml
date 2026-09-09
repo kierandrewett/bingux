@@ -750,6 +750,7 @@ Scope {
                             }
                             SidebarNotes {
                                 id: notes
+                                menuWindow: root.widgetWindow
                                 Component.onCompleted: DesktopEditing.registerSource("notes", notes)
                                 parent: notesWidget.contentHost
                                 menuHost: notesWidget.sidebarMode ? (root.floating ? detachedWindow.contentItem : null) : notesWidget.inlinePanel ? notesWidget.barWindow?.contentItem : notesWidget.popup.contentItem

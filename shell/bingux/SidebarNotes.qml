@@ -10,6 +10,7 @@ Item {
     property string previewText: ""
     property var screen: Quickshell.screens[0]
     property Item menuHost: null
+    property var menuWindow: null
     function closeContextMenu() { if (contextMenuLoader.item) contextMenuLoader.item.visible = false; }
     onVisibleChanged: if (!visible) { closeContextMenu(); slashMenu.close(); }
     onMenuHostChanged: slashMenu.close()
@@ -17,7 +18,9 @@ Item {
         slashMenu.close();
         if (editor.selectionStart === editor.selectionEnd)
             editor.cursorPosition = editor.positionAt(position.x, position.y);
-        const point = menuHost ? editor.mapToItem(menuHost, position.x, position.y) : editor.mapToGlobal(position.x, position.y);
+        const point = menuHost ? editor.mapToItem(menuHost, position.x, position.y)
+            : menuWindow ? DesktopEditing.point(editor, menuWindow, position.x, position.y)
+            : editor.mapToGlobal(position.x, position.y);
         if (!contextMenuLoader.item) contextMenuLoader.setSource("NotesContextMenu.qml", {notes: root, editor: editor});
         const contextMenu = contextMenuLoader.item;
         if (!contextMenu) return;

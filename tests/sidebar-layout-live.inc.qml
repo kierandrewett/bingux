@@ -123,6 +123,25 @@
                     capture("sidebar-calendar-" + edge, clockPill, terminalSidebar.editWindow);
                     calendarPopup.visible = false;
                     tryCompare(calendarPopup, "retained", false, 3000);
+                    notesEditor.text = "Alpha beta";
+                    notesEditor.select(0, 5);
+                    const notePoint = DesktopEditing.point(notesEditor, terminalSidebar.editWindow, 40, 24);
+                    gesture(notesEditor, terminalSidebar.editWindow, 40, 24, ["--right-click"]);
+                    const notesMenu = findChild(terminalSidebar.contentItem, "notesContextMenu");
+                    verify(notesMenu !== null);
+                    tryCompare(notesMenu, "visible", true, 3000);
+                    tryCompare(notesMenu, "revealScale", 1, 3000);
+                    capture("sidebar-notes-" + edge, notesEditor, terminalSidebar.editWindow);
+                    compare(notesMenu.screen.name, topBar.screen.name);
+                    fuzzyCompare(notesMenu.preferredX, notePoint.x, 1, "Notes menu uses the pointer's display-local X");
+                    fuzzyCompare(notesMenu.preferredY, notePoint.y, 1, "Notes menu uses the pointer's display-local Y");
+                    verify(notesMenu.panelX >= 0 && notesMenu.panelY >= 0);
+                    verify(notesMenu.panelX + notesMenu.body.parent.width <= topBar.screen.width);
+                    verify(notesMenu.panelY + notesMenu.body.parent.height <= topBar.screen.height);
+                    const bold = findChild(notesMenu.body, "notesAction_bold");
+                    gesture(bold, notesMenu.nativeWindow, bold.width / 2, bold.height / 2, ["--click-only"]);
+                    tryVerify(() => notesEditor.text.includes("**Alpha**"), 3000, "Notes formatting works on the " + edge + " edge");
+                    tryCompare(notesMenu, "retained", false, 3000);
                 }
                 terminalSidebar.popOut(); tryCompare(terminalSidebar.detachedSurface, "visible", true, 3000); wait(250);
                 compare(clockPill.parent, terminalSidebar.widgetHost);

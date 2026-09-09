@@ -506,9 +506,23 @@ helper now preserves D-Bus error text if preparation or a gesture fails.
 Run `tests/customise-monitors-live.py` inside the Gnoblin private session with
 `MONITOR=1920x1200 EXTRA_MONITOR=1920x1200` and the patched compositor. Use
 `--cases dock-unpin` for the app-menu check. Gnoblin's configuration guide contains
-the complete invocation. The broader action audit remains open; direct Notes
-context-menu coordinates on nonzero-origin displays are the next regression.
+the complete invocation. The broader action audit remains open.
 The live Bingux reload preserves the exact desktop, layout and dock snapshot
 without QML errors or a process restart. The tested Mutter library is installed
 for the next login; the current compositor continues to use its previous library.
 Its eleven layer-animation lifetime cases pass in the private session.
+
+Notes context menus now use the actual sidebar host window and the shared
+screen-local coordinate mapping. Native right-click tests exposed two offsets:
+the global display origin was counted twice, and global mapping omitted the
+32-pixel margin of the top sidebar. The shared mapping handles both. Floating
+and moved-panel menus continue to use their existing inline host.
+
+The sidebar regression now opens Notes through native right-click at each edge,
+checks the menu position and bounds, and applies Bold to the selected text.
+Both horizontal and vertical arrangements pass on the 100% and 150% displays
+with normal and reduced motion, including every saved-layout reload. The original
+floating Notes menu, formatting, heading and keyboard checks also pass.
+The live reload preserves the saved Notes file and the exact desktop, layout
+and dock snapshot, with no QML errors or process restart. Remaining work is the
+wider widget-action audit in the compatibility contract.
