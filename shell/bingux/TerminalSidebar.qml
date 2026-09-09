@@ -11,14 +11,30 @@ Scope {
     id: root
     signal widgetEditRequested(string widgetId, var control, var window)
     signal customiseRequested()
+    signal panelOpening(var popup)
     required property var settings
     property var systemMetrics: null
     property var widgetLayout: null
     readonly property alias widgetHost: widgetGrid
+    readonly property alias panelHost: nativePanelHost
+    readonly property var panelWidgets: [terminalWidget, notesWidget, monitorWidget, calendarWidget, mediaWidget, tasksWidget]
+    function panelWidget(id) { return panelWidgets.find(item => item.widgetId === id); }
+    component PanelWidget: SidebarPanelWidget {
+        sidebar: root
+        widgetLayout: root.widgetLayout
+        onEditRequested: (id, item, window) => root.widgetEditRequested(id, item, window)
+        onOpening: popup => root.panelOpening(popup)
+    }
+    PanelWidget { id: terminalWidget; widgetId: "terminal" }
+    PanelWidget { id: notesWidget; widgetId: "notes" }
+    PanelWidget { id: monitorWidget; widgetId: "monitor" }
+    PanelWidget { id: calendarWidget; widgetId: "calendar" }
+    PanelWidget { id: mediaWidget; widgetId: "media" }
+    PanelWidget { id: tasksWidget; widgetId: "tasks" }
     readonly property alias widgetViewport: widgetViewport
     readonly property var widgetWindow: floating ? detachedWindow : panel
     readonly property var externalEntries: widgetLayout ? widgetLayout.defaultControls
-        .filter(item => widgetLayout.zoneFor(item) === "sidebar")
+        .filter(item => !panelWidgets.includes(item) && widgetLayout.zoneFor(item) === "sidebar")
         .map(item => ({id: widgetLayout.nameFor(item), item})) : []
     function widgetRow(id) { return (DesktopEditing.desktop.layout?.sidebar || allContentTypes.map(type => type.id)).indexOf(id); }
     readonly property alias editWindow: panel
@@ -46,24 +62,26 @@ Scope {
     property string previewContentType: ""
     readonly property string contentType: {
         const selected = DesktopEditing.active && previewContentType ? previewContentType : saved.contentType;
-        return contentTypes.some(type => type.id === selected) ? selected : (contentTypes[0]?.id || "terminal");
+        return contentTypes.some(type => type.id === selected) ? selected : (contentTypes[0]?.id || "");
     }
-    readonly property var currentContent: contentTypes.find(type => type.id === contentType) || contentTypes[0] || allContentTypes[0]
-    readonly property Item activePanel: ({terminal: terminalLoader.item, notes, monitor,
-        calendar: calendarPanel.item, media: mediaPanel.item, tasks: tasksPanel.item})[contentType] || null
-    function focusContent() {
-        if (contentType === "terminal" && terminalReady)
-            terminalLoader.item.focusTerminal();
-        else if (contentType === "notes")
-            notes.focusContent();
-        else if (contentType === "monitor")
-            monitor.focusContent();
-        else if (activePanel)
-            activePanel.focusContent();
+    readonly property var currentContent: contentTypes.find(type => type.id === contentType) || {id: "", label: "Sidebar", icon: "sidebar-show-symbolic"}
+    readonly property Item activePanel: panelFor(contentType)
+    function panelFor(id) {
+        return ({terminal: terminalLoader.item, notes, monitor,
+            calendar: calendarPanel.item, media: mediaPanel.item, tasks: tasksPanel.item})[id] || null;
     }
+    function focusPanel(id) {
+        const item = panelFor(id);
+        if (!item) return;
+        if (id === "terminal") item.focusTerminal();
+        else item.focusContent();
+    }
+    function focusContent() { focusPanel(contentType); }
     component RetainedPanel: Loader {
         required property string panelId
-        readonly property bool selected: root.contentType === panelId
+        readonly property var hostWidget: root.panelWidget(panelId)
+        readonly property bool selected: hostWidget.contentVisible
+        parent: hostWidget.contentHost
         anchors.fill: parent
         visible: selected
         active: false
@@ -71,7 +89,7 @@ Scope {
         Component.onCompleted: if (selected) active = true
         onLoaded: {
             DesktopEditing.registerSource(panelId, item);
-            if (root.opened && visible) item.focusContent();
+            if (root.opened && root.contentType === panelId) item.focusContent();
         }
         Component.onDestruction: DesktopEditing.unregisterSource(panelId, item)
     }
@@ -345,6 +363,12 @@ Scope {
     }
 
     property bool terminalCreated: false
+    Connections {
+        target: terminalWidget
+        function onContentVisibleChanged() {
+            if (terminalWidget.contentVisible && (!terminalWidget.sidebarMode || root.opened || DesktopEditing.active)) root.terminalCreated = true;
+        }
+    }
     readonly property bool terminalReady: terminalLoader.status === Loader.Ready && terminalLoader.item !== null
 
     Connections {
@@ -562,7 +586,7 @@ Scope {
             NativeEditSurface {
                 anchors.fill: parent; anchors.topMargin: sidebarHeader.height; geometryItem: panelSurface
                 window: panel; zoneName: "sidebar"; vertical: true
-                entries: [{id: root.contentType, item: root.activePanel}].concat(root.externalEntries)
+                entries: (root.activePanel ? [{id: root.contentType, item: root.activePanel}] : []).concat(root.externalEntries)
             }
             width: root.edge === "top" ? panel.width : panel.extent
             height: root.edge === "top" ? panel.extent : panel.height
@@ -663,7 +687,21 @@ Scope {
                     width: widgetViewport.width
                     height: Math.max(widgetViewport.height, implicitHeight)
                     rowSpacing: Theme.gap
+                    Text {
+                        objectName: "sidebarEmptyHint"
+                        visible: !root.contentType && !root.externalEntries.length
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        text: DesktopEditing.active ? "Drop widgets here" : "Add widgets in Customise UI"
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        wrapMode: Text.Wrap
+                        color: Theme.muted
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize
+                    }
                     ColumnLayout {
+                        visible: root.contentType !== ""
                         Layout.row: root.widgetRow(root.contentType)
                         Layout.column: 0
                         Layout.fillWidth: true
@@ -671,54 +709,65 @@ Scope {
                         Layout.minimumHeight: root.externalEntries.length ? Math.min(240, widgetViewport.height / 2) : 1
                         spacing: Theme.gap
                         Item {
+                            id: nativePanelHost
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             Layout.minimumWidth: 0
                             Layout.minimumHeight: 1
                             clip: true
-                            Loader {
-                                id: terminalLoader
-                                activeFocusOnTab: visible
+                            ColumnLayout {
+                                parent: terminalWidget.contentHost
                                 anchors.fill: parent
-                                visible: root.contentType === "terminal"
-                                active: root.terminalCreated
-                                source: "SidebarTerminal.qml"
-                                onLoaded: { DesktopEditing.registerSource("terminal", item); if (root.opened && visible) item.focusTerminal(); }
-                                onActiveFocusChanged: if (activeFocus && visible && root.terminalReady)
-                                    item.focusTerminal()
+                                visible: terminalWidget.contentVisible
+                                spacing: Theme.gap
+                                Loader {
+                                    id: terminalLoader
+                                    activeFocusOnTab: visible
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    Layout.minimumWidth: 0
+                                    Layout.minimumHeight: 1
+                                    active: root.terminalCreated
+                                    source: "SidebarTerminal.qml"
+                                    onLoaded: { DesktopEditing.registerSource("terminal", item); if (root.opened && visible) item.focusTerminal(); }
+                                    onActiveFocusChanged: if (activeFocus && visible && root.terminalReady)
+                                        item.focusTerminal()
+                                }
+                                Text {
+                                    visible: terminalLoader.status === Loader.Error || (root.terminalReady && !terminalLoader.item?.shellRunning)
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WordWrap
+                                    text: terminalLoader.status === Loader.Error ? "Terminal component unavailable. Install QMLTermWidget for Qt 6, then retry." : "Shell exited. Start a new shell to continue."
+                                    color: Theme.muted
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSize
+                                }
+                                ActionButton {
+                                    visible: terminalLoader.status === Loader.Error || (root.terminalReady && !terminalLoader.item?.shellRunning)
+                                    text: terminalLoader.status === Loader.Error ? "Retry" : "New shell"
+                                    onClicked: root.restartTerminal()
+                                }
                             }
                             SidebarNotes {
                                 id: notes
                                 Component.onCompleted: DesktopEditing.registerSource("notes", notes)
-                                menuHost: root.floating ? detachedWindow.contentItem : null
-                                screen: root.floating ? detachedWindow.screen : root.screen
+                                parent: notesWidget.contentHost
+                                menuHost: notesWidget.sidebarMode ? (root.floating ? detachedWindow.contentItem : null) : notesWidget.inlinePanel ? notesWidget.barWindow?.contentItem : notesWidget.popup.contentItem
+                                screen: notesWidget.sidebarMode ? (root.floating ? detachedWindow.screen : root.screen) : notesWidget.barWindow?.screen
                                 anchors.fill: parent
-                                visible: root.contentType === "notes"
+                                visible: notesWidget.contentVisible
                             }
                             SidebarMonitor {
                                 id: monitor
+                                parent: monitorWidget.contentHost
                                 Component.onCompleted: DesktopEditing.registerSource("monitor", monitor)
                                 anchors.fill: parent
-                                visible: root.contentType === "monitor"
+                                visible: monitorWidget.contentVisible
                                 metrics: root.systemMetrics
                             }
                             RetainedPanel { id: calendarPanel; panelId: "calendar"; source: "SidebarCalendar.qml" }
                             RetainedPanel { id: mediaPanel; panelId: "media"; source: "SidebarMedia.qml" }
                             RetainedPanel { id: tasksPanel; panelId: "tasks"; source: "SidebarTasks.qml" }
-                        }
-                        Text {
-                            visible: root.contentType === "terminal" && (terminalLoader.status === Loader.Error || (root.terminalReady && !terminalLoader.item?.shellRunning))
-                            Layout.fillWidth: true
-                            wrapMode: Text.WordWrap
-                            text: terminalLoader.status === Loader.Error ? "Terminal component unavailable. Install QMLTermWidget for Qt 6, then retry." : "Shell exited. Start a new shell to continue."
-                            color: Theme.muted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSize
-                        }
-                        ActionButton {
-                            visible: root.contentType === "terminal" && (terminalLoader.status === Loader.Error || (root.terminalReady && !terminalLoader.item?.shellRunning))
-                            text: terminalLoader.status === Loader.Error ? "Retry" : "New shell"
-                            onClicked: root.restartTerminal()
                         }
                     }
                 }

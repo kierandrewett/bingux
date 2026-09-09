@@ -22,7 +22,7 @@ layout tests does not prove that every existing desktop widget is editable.
   them or move out of the group and back. The divider, header space and
   Customise button also move into the bar and dock. The space has a fixed-width
   override and can return to its original flexible header behaviour.
-- `DesktopLayout.accepts()` still confines sidebar panels to the sidebar. Status,
+- Sidebar panels now move into the top bar, dock and control centre. Status,
   label and icon widgets now enter the control centre, interleaved with its native
   sections. They keep their original instances, display settings and popup
   anchors. The sidebar now accepts these widgets in its real layout, before or
@@ -33,14 +33,11 @@ layout tests does not prove that every existing desktop widget is editable.
 
 ## Next implementation boundary
 
-Extend sidebar panels into the other real containers. The sidebar host still
-selects one native panel, but now retains each native instance after its first
-use. Calendar, Media and Tasks no longer share a loader that destroys the old
-panel during selection. Extend placement validation and the real panel hosts
-together. Preserve the same
-component instances and service actions. The palette group previews also need
-to share the complete native group composition, including display inheritance,
-instead of their current representative layouts.
+Complete the palette group previews using the native group composition and
+container display inheritance. The sidebar, bar, dock and control centre now host
+the same retained panel instances. Bar and dock buttons open the original panel
+in an anchored popup; the control centre displays the full panel. Moving the last
+panel out leaves an empty sidebar drop target. Adding a panel back selects it.
 
 ## Current verification
 
@@ -151,3 +148,17 @@ Remaining broad checks include all existing widget actions, notification
 interactions after layout changes, different scale factors,
 multiple monitors, keyboard use and reduced motion. Record unavailable hardware
 checks as unverified, rather than treating an isolated render as equivalent.
+
+The panel-placement case moves all six original sidebar panels through the bar,
+dock, control centre and back. It checks a native Notes drag, Undo/Redo, Cancel,
+original sidebar dimensions, container and widget display settings, Shift-right-click,
+Notes context-menu hosting, media playback, a retained task draft and calendar date,
+and the original terminal process. Normal and reduced-motion cases pass and reload
+the saved placements in a fresh shell process. Screenshots verify the settled
+Notes and media popups; the media popup fits its content. The status-sidebar,
+full editor, external control-centre and seven reload regressions also pass.
+The initial test switched
+six panels before rendering them and stalled in Mesa context destruction. The
+fixture now waits for each selected panel to render before the next selection,
+as the native picker test already does through mouse input. That artificial rapid
+selection stress case remains separate from the verified user interaction path.

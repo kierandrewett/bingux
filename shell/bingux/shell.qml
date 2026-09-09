@@ -42,6 +42,9 @@ ShellRoot {
     }
 
     function closePanelsExcept(panel) {
+        for (const widget of terminalSidebar.panelWidgets) {
+            if (panel !== widget.popup) widget.popup.visible = false;
+        }
         if (panel !== windowSwitcher && windowSwitcher.active) windowSwitcher.close();
         if (panel !== searchOverlay && searchOverlay.visible) searchOverlay.closeSearch();
         if (panel !== emojiPicker) emojiPicker.visible = false;
@@ -100,6 +103,7 @@ ShellRoot {
 
     TerminalSidebar {
         id: terminalSidebar
+        onPanelOpening: popup => root.closePanelsExcept(popup)
         onWidgetEditRequested: (id, item, window) => root.openWidgetMenu(id, item, window)
         onCustomiseRequested: {
             if (DesktopEditing.active) desktopCustomiser.selectContainer("sidebar");
@@ -219,7 +223,7 @@ ShellRoot {
 
     ShellCommands { inputSelector: inputSourceSelector; indicators: systemIndicators; mediaControls: controlCentre; notificationState: root.commandNotifications; dockView: dock }
 
-    DesktopCustomise { id: desktopCustomiser; settings: binguxSettings; screen: topBar.screen }
+    DesktopCustomise { id: desktopCustomiser; settings: binguxSettings; screen: topBar.screen; onSidebarPanelRequested: id => terminalSidebar.selectContent(id) }
     BinguxSettings { id: binguxSettings; customiser: desktopCustomiser; shellHosted: true; systemMetrics: metrics; dockView: dock; currentLayout: topBar.snapshotLayout(); currentSidebarEdge: terminalSidebar.edge; onVisibleChanged: if (visible) root.closePanelsExcept(null) }
 
     IpcHandler {
@@ -409,11 +413,12 @@ ShellRoot {
         function nameFor(item) { return item.widgetId || controlNames[defaultControls.indexOf(item)]; }
         function chosen(item) {
             const name = item.widgetId || controlNames[defaultControls.indexOf(item)];
-            return customLayout ? DesktopLayout.placement(DesktopEditing.desktop, name) !== "" : !name.startsWith("control-") && !name.startsWith("controls-");
+            return customLayout ? DesktopLayout.placement(DesktopEditing.desktop, name) !== "" : !DesktopLayout.widget(name)?.panel && !name.startsWith("control-") && !name.startsWith("controls-");
         }
         function zoneFor(item) {
             const name = item.widgetId || controlNames[defaultControls.indexOf(item)];
             if (name === "overflow" && (!customLayout || !DesktopLayout.placement(DesktopEditing.desktop, name))) return "top-right";
+            if (!customLayout && DesktopLayout.widget(name)?.panel) return "sidebar";
             return customLayout ? DesktopLayout.placement(DesktopEditing.desktop, name) : name === "search" ? "top-left" : name === "clock" ? "top-center" : "top-right";
         }
         function windowFor(item) { return zoneFor(item) === "sidebar" ? terminalSidebar.widgetWindow : zoneFor(item) === "dock" ? dock : zoneFor(item) === "control-centre" ? (controlCentre.hostItem ? controlCentre.anchorWindow : controlCentre.nativeWindow) : topBar; }
@@ -425,8 +430,8 @@ ShellRoot {
         readonly property real controlsBudget: Math.max(0, (width - clockPill.implicitWidth) / 2 - Theme.gap)
         // Display order is independent of overflow priority and reparenting order.
         readonly property var defaultControls: [captureStatus, trayContainer, privacyContainer,
-            metricsPill, inputSourceSelector, overflowButton, systemPill, notificationButton, searchPill, clockPill].concat(controlCentre.movableWidgets, spacingWidgets, decorationWidgets)
-        readonly property var controlNames: ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "search", "clock"].concat(controlCentre.movableWidgets.map(item => item.widgetId), spacingWidgets.map(item => item.widgetId), decorationWidgets.map(item => item.widgetId))
+            metricsPill, inputSourceSelector, overflowButton, systemPill, notificationButton, searchPill, clockPill].concat(controlCentre.movableWidgets, spacingWidgets, decorationWidgets, terminalSidebar.panelWidgets)
+        readonly property var controlNames: ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "search", "clock"].concat(controlCentre.movableWidgets.map(item => item.widgetId), spacingWidgets.map(item => item.widgetId), decorationWidgets.map(item => item.widgetId), terminalSidebar.panelWidgets.map(item => item.widgetId))
         Settings {
             id: barPreferences
             location: "file://" + (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/bingux/top-bar.ini"
@@ -532,7 +537,7 @@ ShellRoot {
             [privacyContainer, privacyContainer.active], [metricsPill, profileSettings.metricsEnabled],
             [inputSourceSelector, metrics.desktopStateAvailable], [systemPill, true],
             [notificationButton, notificationState.allEntries.length > 0], [searchPill, true], [clockPill, true]
-        ].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat(controlCentre.movableWidgets.filter(item => chosen(item)), spacingWidgets.filter(item => chosen(item)), decorationWidgets.filter(item => chosen(item)))
+        ].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat(controlCentre.movableWidgets.filter(item => chosen(item)), spacingWidgets.filter(item => chosen(item)), decorationWidgets.filter(item => chosen(item)), terminalSidebar.panelWidgets.filter(item => item.placed))
         readonly property var overflowItems: {
             if (customLayout && !nativeTopBarLayout) {
                 const hidden = [];
@@ -655,7 +660,7 @@ ShellRoot {
                     id: rightControls
                     width: topBar.hasSpring("top-right") ? topBar.zoneBudget("top-right") : implicitWidth
                     Instantiator {
-                        model: topBar.defaultControls.filter(item => !controlCentre.movableWidgets.includes(item))
+                        model: topBar.defaultControls.filter(item => !controlCentre.movableWidgets.includes(item) && !terminalSidebar.panelWidgets.includes(item))
                         delegate: WidgetEditHandle {
                             required property var modelData
                             control: modelData

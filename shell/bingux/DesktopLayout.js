@@ -79,13 +79,11 @@ function accepts(id, target) {
     const item = widget(id);
     if (item?.layoutItem) return ["top-left", "top-center", "top-right", "palette"].includes(target);
     if (id.startsWith("control-") || ControlLayout.isContainer(id)) return !!item && ["control-centre", "top-left", "top-center", "top-right", "dock", "sidebar", "palette"].includes(target);
-    return !!item && (target === "palette" || (item.panel ? target === "sidebar" : ["top-left", "top-center", "top-right", "dock", "control-centre", "sidebar"].includes(target)));
+    return !!item && ["palette", "top-left", "top-center", "top-right", "dock", "control-centre", "sidebar"].includes(target);
 }
 function move(layout, id, target, index) {
     if (!accepts(id, target)) return layout;
     if (target !== "palette" && !(target in layout)) return layout;
-    if (target !== "sidebar" && layout.sidebar.includes(id) && widget(id)?.panel
-        && layout.sidebar.filter(value => widget(value)?.panel).length === 1) return layout;
     if (isTemplate(id)) {
         if (target === "palette") return layout;
         id = freshInstanceId(layout, id);

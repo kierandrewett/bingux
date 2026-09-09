@@ -95,6 +95,7 @@ Scope {
         contentItem.Keys.onEscapePressed: root.optionsPage = ""
     }
     property var desktop: ({})
+    signal sidebarPanelRequested(string widgetId)
     property var layout: DesktopLayout.defaults()
     property var undoStack: []
     property var redoStack: []
@@ -281,6 +282,7 @@ Scope {
             layout = DesktopLayout.move(layout, id, target === "control-centre" ? "palette" : target, index);
             if (target === "dock") change("dock", true);
             if (target === "sidebar") change("sidebar", true);
+            if (target === "sidebar" && DesktopLayout.widget(id)?.panel) sidebarPanelRequested(id);
             if (id === "metrics" && target !== "palette") change("metrics", true);
             if (target === "palette" && DesktopLayout.isDecoration(id)) {
                 const options = Object.assign({}, desktop.widgetOptions || {}); delete options[id]; change("widgetOptions", options);

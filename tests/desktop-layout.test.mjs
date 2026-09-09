@@ -17,13 +17,18 @@ test("moving widgets preserves other placements and never duplicates a widget", 
     assert.deepEqual(plain(reordered.dock), ["notifications", "search"]);
     assert.equal(Object.values(reordered).flat().filter(id => id === "notifications").length, 1);
 });
-test("sidebar panels stay in compatible zones and the last panel cannot be removed", () => {
-    const original = layout.defaults();
-    assert.equal(layout.move(original, "notes", "dock", 0), original);
-    assert.equal(layout.move(original, "search", "sidebar", 0).sidebar[0], "search");
-    original.sidebar = ["search", "notes", "label:1"];
-    assert.equal(layout.move(original, "notes", "palette", 0), original);
-    assert.equal(layout.move(original, "unrecognised", "dock", 0), original);
+test("sidebar panels move into every container and allow an empty sidebar", () => {
+    for (const id of ["terminal", "notes", "monitor", "calendar", "media", "tasks"]) {
+        for (const target of ["top-left", "top-center", "top-right", "dock", "sidebar", "control-centre", "palette"])
+            assert.equal(layout.accepts(id, target), true, id + " accepts " + target);
+        const next = layout.move(layout.defaults(), id, "dock", 0);
+        assert.equal(next.dock[0], id);
+        assert.equal(next.sidebar.includes(id), false);
+    }
+    let current = layout.defaults();
+    for (const id of current.sidebar.slice()) current = layout.move(current, id, "palette", 0);
+    assert.deepEqual(plain(current.sidebar), []);
+    assert.equal(layout.move(current, "unrecognised", "dock", 0), current);
 });
 test("palette removal and same-zone reordering preserve all remaining widgets", () => {
     let current = layout.move(layout.defaults(), "clock", "palette", 0);
@@ -125,11 +130,11 @@ test("group display inherits its host while child overrides stay independent", (
     assert.equal(face().mode, "both"); assert.equal(face().label, "Preferences");
 });
 
-test('status and decoration widgets accept the control centre while panels keep their existing hosts', () => {
-    assert.deepEqual(plain(vm.runInContext('widgets.filter(item => !item.panel).map(item => item.id).sort()', layout)),
+test('status, decoration and panel widgets accept the control centre', () => {
+    assert.deepEqual(plain(vm.runInContext('widgets.map(item => item.id).sort()', layout)),
         plain(vm.runInContext('externalIds.slice().sort()', controls)));
     for (const id of ['search', 'clock', 'controls', 'metrics', 'keyboard', 'tray', 'privacy', 'capture', 'overflow', 'notifications', 'label', 'label:1', 'icon:2'])
         assert.equal(layout.accepts(id, 'control-centre'), true);
-    for (const id of ['terminal', 'spacer:1', 'spring:1', 'unknown'])
+    for (const id of ['spacer:1', 'spring:1', 'unknown'])
         assert.equal(layout.accepts(id, 'control-centre'), false);
 });

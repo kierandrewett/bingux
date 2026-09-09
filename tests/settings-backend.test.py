@@ -44,9 +44,27 @@ class SettingsTests(unittest.TestCase):
     def test_rejects_duplicate_widgets_and_incompatible_destinations(self):
         layout = {'top-left': ['search'], 'top-center': ['clock'], 'top-right': [], 'dock': [], 'sidebar': ['notes']}
         settings.write({'desktop': {'layout': layout}})
-        for key, items in [('dock', ['search']), ('dock', ['notes']), ('sidebar', []), ('top-left', ['search', 'search'])]:
+        for key, items in [('dock', ['search']), ('dock', ['notes']), ('sidebar', ['unknown']), ('top-left', ['search', 'search'])]:
             invalid = copy.deepcopy(layout); invalid[key] = items
             with self.assertRaises(ValueError): settings.write({'desktop': {'layout': invalid}})
+    def test_sidebar_panels_can_leave_an_empty_sidebar(self):
+        panels = ['terminal', 'notes', 'monitor', 'calendar', 'media', 'tasks']
+        for zone in ['top-left', 'top-center', 'top-right', 'dock']:
+            layout = {key: [] for key in ['top-left', 'top-center', 'top-right', 'dock', 'sidebar']}
+            layout[zone] = panels
+            settings.write({'desktop': {'layout': layout}})
+            self.assertEqual(settings.read()['desktop']['layout'], layout)
+        layout = {key: [] for key in ['top-left', 'top-center', 'top-right', 'dock', 'sidebar']}
+        controls = settings.native_control_layout()
+        controls['groups']['control-centre'].extend(panels)
+        settings.write({'desktop': {'layout': layout, 'controlLayout': controls}})
+        self.assertEqual(settings.read()['desktop']['controlLayout'], controls)
+        before = settings.config_path().read_bytes()
+        for panel in panels:
+            duplicate = dict(layout, dock=[panel])
+            with self.assertRaises(ValueError):
+                settings.write({'desktop': {'layout': duplicate, 'controlLayout': controls}})
+            self.assertEqual(settings.config_path().read_bytes(), before)
     def test_rejects_invalid_behaviour_and_locations(self):
         for data in [{'desktop': {'dockSize': 999}}, {'desktop': {'dockClick': 'unknown'}}, {'search': {'fileRoots': ['relative/path']}}]:
             with self.assertRaises(ValueError): settings.write(data)
@@ -135,14 +153,14 @@ class SettingsTests(unittest.TestCase):
             with self.assertRaises(ValueError): settings.write({'desktop': {'layout': invalid}})
             self.assertEqual(settings.config_path().read_bytes(), before)
 
-    def test_sidebar_status_and_decorations_keep_a_native_panel(self):
+    def test_sidebar_status_and_decorations_allow_no_native_panel(self):
         layout = {'top-left': [], 'top-center': [], 'top-right': [], 'dock': [],
                   'sidebar': ['clock', 'label:1', 'notes', 'icon:1', 'search']}
         settings.write({'desktop': {'layout': layout}})
         self.assertEqual(settings.read()['desktop']['layout'], layout)
+        settings.write({'desktop': {'layout': dict(layout, sidebar=['clock', 'label:1'])}})
         before = settings.config_path().read_bytes()
-        for invalid in [dict(layout, sidebar=['clock', 'label:1']),
-                        dict(layout, dock=['clock']),
+        for invalid in [dict(layout, dock=['clock']),
                         dict(layout, sidebar=layout['sidebar'] + ['spring:1'])]:
             with self.assertRaises(ValueError): settings.write({'desktop': {'layout': invalid}})
             self.assertEqual(settings.config_path().read_bytes(), before)

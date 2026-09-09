@@ -1,4 +1,4 @@
-const externalIds = ["search", "clock", "capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications"];
+const externalIds = ["search", "clock", "capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "terminal", "notes", "monitor", "calendar", "media", "tasks"];
 function isExternal(id) { return externalIds.includes(id) || /^(label|icon):[1-9][0-9]{0,3}$/.test(id); }
 function acceptsMember(group, id) { return items(defaults(), group).includes(id) || (group === "control-centre" && isExternal(id)); }
 

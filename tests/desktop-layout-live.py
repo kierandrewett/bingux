@@ -12,7 +12,7 @@ import time
 from private_shell import run_reported_shell, stage_compositor_bridge
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--case', choices=('desktop-layout', 'control-layout', 'control-audio', 'control-media', 'control-groups', 'control-utilities', 'control-external', 'sidebar-layout', 'sidebar-controls', 'sidebar-panels', 'editor-reset', 'dock-unpin'), default='desktop-layout')
+parser.add_argument('--case', choices=('desktop-layout', 'control-layout', 'control-audio', 'control-media', 'control-groups', 'control-utilities', 'control-external', 'sidebar-layout', 'sidebar-controls', 'sidebar-panels', 'editor-reset', 'dock-unpin', 'panel-placement'), default='desktop-layout')
 case = parser.parse_args().case
 repo = Path(__file__).resolve().parent.parent
 if not os.environ.get('WAYLAND_DISPLAY', '').startswith('gnoblin-gs-'):
@@ -54,7 +54,7 @@ with tempfile.TemporaryDirectory(prefix='bingux-layout-live-') as directory:
             print(output)
             if report != 'PASS' or any(error in output for error in ('CUSTOMISE_TEST_FAILED', 'TypeError', 'ReferenceError', 'has crashed', 'property "maximumPopupHeight"', 'property "preferredY"', 'Cannot use same item on different windows', 'Updates can only be scheduled', 'QGridLayoutEngine::addItem', 'Binding loop detected')):
                 raise SystemExit(report if report != 'PASS' else 'Runtime errors during layout test')
-            if case in ('control-groups', 'control-utilities', 'control-external', 'sidebar-layout', 'sidebar-controls', 'editor-reset'):
+            if case in ('control-groups', 'control-utilities', 'control-external', 'sidebar-layout', 'sidebar-controls', 'editor-reset', 'panel-placement'):
                 (fixture / 'shell.qml').write_text(base_shell.rstrip()[:-1] + (repo / ('tests/' + case + '-reload.inc.qml')).read_text() + '\n}\n')
                 (fixture / 'report').unlink()
                 report, output = run_reported_shell(fixture, environment, 'BINGUX_LAYOUT_REPORT', timeout=30)

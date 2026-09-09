@@ -147,3 +147,4 @@ DesktopDecoration 1.0 DesktopDecoration.qml
 UiSession 1.0 UiSession.qml
 
 BatteryStatus 1.0 BatteryStatus.qml
+SidebarPanelWidget 1.0 SidebarPanelWidget.qml
