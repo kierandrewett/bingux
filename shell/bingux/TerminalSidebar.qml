@@ -666,6 +666,11 @@ Scope {
                 Flickable {
                     id: widgetViewport
                     objectName: "sidebarWidgetViewport"
+                    // Keep the panel picker above this viewport usable. The
+                    // actual sidebar widgets remain visible but inert while
+                    // the editor owns their drag gestures.
+                    enabled: !DesktopEditing.active
+                    opacity: DesktopEditing.active ? 0.68 : 1
                     anchors.top: sidebarHeader.bottom
                     anchors.bottom: parent.bottom
                     anchors.left: parent.left

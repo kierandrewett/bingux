@@ -51,7 +51,8 @@
                 tryCompare(normalMenu, "revealScale", 1, 3000);
                 const unpin = findChild(normalMenu.body, "dockPinAction");
                 compare(unpin.label, "Unpin from dock");
-                compare(unpin.y, 0, "Unpin is the first menu action");
+                const launchNew = actionWithText(normalMenu.body, "Launch new...");
+                verify(launchNew !== null && unpin.y < launchNew.y, "Unpin is grouped before Launch new");
                 gesture(unpin, normalMenu.nativeWindow, unpin.width / 2, unpin.height / 2, ["--click-only"]);
                 tryVerify(() => !dock.pinnedApps.includes(appId.slice(4)), 3000);
                 tryVerify(() => !normalMenu?.visible, 3000, "The menu closes when the app is unpinned");

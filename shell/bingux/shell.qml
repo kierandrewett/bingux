@@ -689,6 +689,12 @@ ShellRoot {
             entries: topBar.defaultControls.filter(item => topBar.zoneFor(item) === zoneName && !topBar.overflows(item)).map(item => ({id: topBar.controlNames[topBar.defaultControls.indexOf(item)], item}))
         }
         Item {
+            // The native edit surfaces above this item own all edit gestures.
+            // Disable the live controls underneath them so a click while
+            // arranging widgets cannot open a menu or change a setting.
+            objectName: "topBarLiveWidgets"
+            enabled: !DesktopEditing.active
+            opacity: DesktopEditing.active ? 0.68 : 1
             anchors.fill: parent
             GridLayout { id: leftControls; width: topBar.hasSpring("top-left") ? topBar.zoneBudget("top-left") : implicitWidth; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; rows: 1; columnSpacing: Theme.barControlGap }
             GridLayout { id: centerControls; width: topBar.hasSpring("top-center") ? topBar.zoneBudget("top-center") : implicitWidth; anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: parent.verticalCenter; rows: 1; columnSpacing: Theme.barControlGap }

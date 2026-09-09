@@ -829,6 +829,11 @@ PanelWindow {
         visible: DesktopEditing.active || root.appGroups.length > 0 || (root.preferences.layout?.dock.length || 0) > 0
 
         Flickable {
+            // Dock editing is handled by NativeEditSurface. Keep the live app
+            // buttons inert while the editor is open.
+            objectName: "dockLiveWidgets"
+            enabled: !DesktopEditing.active
+            opacity: DesktopEditing.active ? 0.68 : 1
             anchors.fill: parent
             anchors.leftMargin: dockSurface.itemPadding
             anchors.rightMargin: dockSurface.itemPadding
@@ -1223,19 +1228,6 @@ PanelWindow {
                                     right: parent.right
                                 }
 
-                                MenuAction {
-                                    objectName: "dockPinAction"
-                                    cornerRadius: appMenu.contentRadius
-                                    navigation: menuNavigation
-                                    label: root.isPinned(dockButton.currentGroup) ? "Unpin from dock" : "Pin to dock"
-                                    iconSource: Quickshell.iconPath(root.isPinned(dockButton.currentGroup) ? "list-remove-symbolic" : "view-pin-symbolic")
-                                    enabled: dockButton.currentGroup.desktopEntry !== null || root.isPinned(dockButton.currentGroup)
-                                    onTriggered: {
-                                        dockButton.menuOpen = false;
-                                        root.setPinned(dockButton.currentGroup, !root.isPinned(dockButton.currentGroup));
-                                    }
-                                }
-
                                 Repeater {
                                     model: appMenu.mediaPlayers
                                     delegate: DockMediaControls {
@@ -1259,6 +1251,18 @@ PanelWindow {
                                     entries: dockButton.appNotifications
                                 }
                                 MenuSeparator { visible: notificationPreview.visible; implicitHeight: Theme.gap * notificationPreview.presence }
+
+                                MenuAction {
+                                    objectName: "dockPinAction"
+                                    cornerRadius: appMenu.contentRadius
+                                    navigation: menuNavigation
+                                    label: root.isPinned(dockButton.currentGroup) ? "Unpin from dock" : "Pin to dock"
+                                    enabled: dockButton.currentGroup.desktopEntry !== null || root.isPinned(dockButton.currentGroup)
+                                    onTriggered: {
+                                        dockButton.menuOpen = false;
+                                        root.setPinned(dockButton.currentGroup, !root.isPinned(dockButton.currentGroup));
+                                    }
+                                }
 
                                 MenuAction {
                                     cornerRadius: appMenu.contentRadius

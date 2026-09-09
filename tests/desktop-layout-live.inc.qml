@@ -73,6 +73,14 @@
             const editor = binguxSettings.customiser;
             editor.open();
             tryCompare(controlCentre, 'visible', true, 2000);
+            const liveTopBar = findChild(topBar.contentItem, 'topBarLiveWidgets');
+            const liveDock = findChild(dock.contentItem, 'dockLiveWidgets');
+            const liveControlCentre = findChild(controlCentre.body, 'controlLiveWidgets');
+            const liveSidebar = findChild(terminalSidebar.widgetWindow.contentItem, 'sidebarWidgetViewport');
+            verify(liveTopBar && !liveTopBar.enabled, 'Top-bar widgets are disabled while customising');
+            verify(liveDock && !liveDock.enabled, 'Dock widgets are disabled while customising');
+            verify(liveControlCentre && !liveControlCentre.enabled, 'Control-centre widgets are disabled while customising');
+            verify(liveSidebar && !liveSidebar.enabled, 'Sidebar widgets are disabled while customising');
             compare(searchPill.parent, leftControls, 'Entering edit mode keeps the original widget instance in its native container');
             compare(controlCentre.hostItem, null, 'Control centre stays in its native window');
             wait(1000);

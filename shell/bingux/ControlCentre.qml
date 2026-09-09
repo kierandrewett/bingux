@@ -125,6 +125,9 @@ ShellPopup {
 
     Item {
         id: controlDeck
+        objectName: "controlLiveWidgets"
+        enabled: !DesktopEditing.active
+        opacity: DesktopEditing.active ? 0.68 : 1
         width: parent.width
         height: root.controlsHeight
         Text {
