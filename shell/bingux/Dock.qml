@@ -1228,6 +1228,7 @@ PanelWindow {
                                     cornerRadius: appMenu.contentRadius
                                     navigation: menuNavigation
                                     label: root.isPinned(dockButton.currentGroup) ? "Unpin from dock" : "Pin to dock"
+                                    iconSource: Quickshell.iconPath(root.isPinned(dockButton.currentGroup) ? "list-remove-symbolic" : "view-pin-symbolic")
                                     enabled: dockButton.currentGroup.desktopEntry !== null || root.isPinned(dockButton.currentGroup)
                                     onTriggered: {
                                         dockButton.menuOpen = false;

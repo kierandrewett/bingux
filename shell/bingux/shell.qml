@@ -66,12 +66,21 @@ ShellRoot {
     TrayMenu {
         id: widgetMenu
         property string widgetId: ""
+        readonly property bool application: widgetId.startsWith("app:")
+        readonly property var appGroup: application ? dock.appGroups.find(group =>
+            "app:" + dock.pinIdentity(group.desktopEntry?.id || group.id) === widgetId) : null
         screen: topBar.screen
-        actions: [
+        actions: (application ? [
+            {text: appGroup && dock.isPinned(appGroup) ? "Unpin from dock" : "Pin to dock",
+                enabled: !!appGroup && (dock.isPinned(appGroup) || !!appGroup.desktopEntry),
+                icon: appGroup && dock.isPinned(appGroup) ? "list-remove-symbolic" : "view-pin-symbolic",
+                triggered: () => { if (appGroup) dock.setPinned(appGroup, !dock.isPinned(appGroup)); }}
+        ] : []).concat([
             {text: "Customise…", enabled: true, icon: "preferences-system-symbolic", triggered: () => binguxSettings.openCustomise(widgetId, "Widget")},
-            {text: "Move…", enabled: true, icon: "transform-move-symbolic", triggered: () => binguxSettings.openCustomise(widgetId, "Move")},
+            {text: "Move…", enabled: true, icon: "transform-move-symbolic", triggered: () => binguxSettings.openCustomise(widgetId, "Move")}
+        ], application ? [] : [
             {text: "Remove", enabled: true, icon: "list-remove-symbolic", triggered: () => binguxSettings.openCustomise(widgetId, "Remove")}
-        ].map(action => Object.assign({isSeparator: false, hasChildren: false, checkState: Qt.Unchecked}, action))
+        ]).map(action => Object.assign({isSeparator: false, hasChildren: false, checkState: Qt.Unchecked}, action))
     }
 
     Connections {
