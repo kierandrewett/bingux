@@ -34,7 +34,9 @@ layout tests does not prove that every existing desktop widget is editable.
 ## Next implementation boundary
 
 Extend sidebar panels into the other real containers. The sidebar host still
-selects one native panel. Extend placement validation and the real panel hosts
+selects one native panel, but now retains each native instance after its first
+use. Calendar, Media and Tasks no longer share a loader that destroys the old
+panel during selection. Extend placement validation and the real panel hosts
 together. Preserve the same
 component instances and service actions. The palette group previews also need
 to share the complete native group composition, including display inheritance,
@@ -129,6 +131,21 @@ native editor regression also passes. The sidebar picker now opens its Customise
 UI inspector instead of changing the screen edge directly. Panel selection and
 pop-out remain available in the picker. Its new action fits the menu without
 truncation, including fractional text widths.
+
+The panel-lifetime case uses native picker clicks across all six sidebar panels.
+It verifies the same component and drag-preview source, unchanged panel geometry,
+calendar month and date, unsent task text, and media transport controls before
+and after switching. The original media controls also work in the detached
+sidebar, and their instances survive editor reorder, Undo/Redo and Cancel.
+Normal and reduced-motion switching pass, as do the status-sidebar regression
+and the seven reload cases. A compositor screenshot verifies the terminal's
+rendered text after switching back. The test exposed a terminal FBO paint
+crash when making its retained item visible again. A native debugger traced it
+through QQuickPaintedItem and QOpenGL2PaintEngineExPrivate::fill into Mesa's vertex
+upload. The terminal now uses its supported image paint mode, preserving the
+same shell process and GPU composition. This can cost more CPU during heavy
+terminal output; sustained-output performance is not yet measured. The private
+runner now distinguishes early process exit from a genuine timeout.
 
 Remaining broad checks include all existing widget actions, notification
 interactions after layout changes, different scale factors,

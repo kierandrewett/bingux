@@ -49,7 +49,8 @@ Scope {
         return contentTypes.some(type => type.id === selected) ? selected : (contentTypes[0]?.id || "terminal");
     }
     readonly property var currentContent: contentTypes.find(type => type.id === contentType) || contentTypes[0] || allContentTypes[0]
-    readonly property Item activePanel: contentType === "terminal" ? terminalLoader.item : contentType === "notes" ? notes : contentType === "monitor" ? monitor : extraPanel.item
+    readonly property Item activePanel: ({terminal: terminalLoader.item, notes, monitor,
+        calendar: calendarPanel.item, media: mediaPanel.item, tasks: tasksPanel.item})[contentType] || null
     function focusContent() {
         if (contentType === "terminal" && terminalReady)
             terminalLoader.item.focusTerminal();
@@ -57,8 +58,22 @@ Scope {
             notes.focusContent();
         else if (contentType === "monitor")
             monitor.focusContent();
-        else if (extraPanel.item)
-            extraPanel.item.focusContent();
+        else if (activePanel)
+            activePanel.focusContent();
+    }
+    component RetainedPanel: Loader {
+        required property string panelId
+        readonly property bool selected: root.contentType === panelId
+        anchors.fill: parent
+        visible: selected
+        active: false
+        onSelectedChanged: if (selected) active = true
+        Component.onCompleted: if (selected) active = true
+        onLoaded: {
+            DesktopEditing.registerSource(panelId, item);
+            if (root.opened && visible) item.focusContent();
+        }
+        Component.onDestruction: DesktopEditing.unregisterSource(panelId, item)
     }
     function selectContent(value) {
         if (!contentTypes.some(type => type.id === value))
@@ -687,14 +702,9 @@ Scope {
                                 visible: root.contentType === "monitor"
                                 metrics: root.systemMetrics
                             }
-                            Loader {
-                                id: extraPanel
-                                anchors.fill: parent
-                                active: ["calendar", "media", "tasks"].includes(root.contentType)
-                                visible: active
-                                source: root.contentType === "calendar" ? "SidebarCalendar.qml" : root.contentType === "media" ? "SidebarMedia.qml" : "SidebarTasks.qml"
-                                onLoaded: { DesktopEditing.registerSource(root.contentType, item); if (root.opened) item.focusContent(); }
-                            }
+                            RetainedPanel { id: calendarPanel; panelId: "calendar"; source: "SidebarCalendar.qml" }
+                            RetainedPanel { id: mediaPanel; panelId: "media"; source: "SidebarMedia.qml" }
+                            RetainedPanel { id: tasksPanel; panelId: "tasks"; source: "SidebarTasks.qml" }
                         }
                         Text {
                             visible: root.contentType === "terminal" && (terminalLoader.status === Loader.Error || (root.terminalReady && !terminalLoader.item?.shellRunning))

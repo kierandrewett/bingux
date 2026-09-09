@@ -12,6 +12,9 @@ QMLTermWidget {
         pointSize: Theme.fontSize * 0.75
     })
     colorScheme: "Bingux"
+    // The FBO paint path can crash when a retained terminal becomes visible again.
+    // Paint its image on the CPU and let the scene graph composite the texture.
+    useFBORendering: false
     focus: true
     Accessible.name: "Sidebar terminal"
 

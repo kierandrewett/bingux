@@ -12,7 +12,7 @@ import time
 from private_shell import run_reported_shell, stage_compositor_bridge
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--case', choices=('desktop-layout', 'control-layout', 'control-audio', 'control-media', 'control-groups', 'control-utilities', 'control-external', 'sidebar-layout', 'sidebar-controls', 'editor-reset', 'dock-unpin'), default='desktop-layout')
+parser.add_argument('--case', choices=('desktop-layout', 'control-layout', 'control-audio', 'control-media', 'control-groups', 'control-utilities', 'control-external', 'sidebar-layout', 'sidebar-controls', 'sidebar-panels', 'editor-reset', 'dock-unpin'), default='desktop-layout')
 case = parser.parse_args().case
 repo = Path(__file__).resolve().parent.parent
 if not os.environ.get('WAYLAND_DISPLAY', '').startswith('gnoblin-gs-'):
