@@ -20,8 +20,8 @@ test("moving widgets preserves other placements and never duplicates a widget", 
 test("sidebar panels stay in compatible zones and the last panel cannot be removed", () => {
     const original = layout.defaults();
     assert.equal(layout.move(original, "notes", "dock", 0), original);
-    assert.equal(layout.move(original, "search", "sidebar", 0), original);
-    original.sidebar = ["notes"];
+    assert.equal(layout.move(original, "search", "sidebar", 0).sidebar[0], "search");
+    original.sidebar = ["search", "notes", "label:1"];
     assert.equal(layout.move(original, "notes", "palette", 0), original);
     assert.equal(layout.move(original, "unrecognised", "dock", 0), original);
 });
@@ -95,7 +95,8 @@ test("labels and icons create independent movable instances", () => {
     assert.equal(current["top-left"][0], "label:1");
     current = layout.move(current, "label:1", "dock", 1);
     assert.deepEqual(plain(current.dock), ["label:2", "label:1", "icon:1"]);
-    assert.equal(layout.move(current, "icon:1", "sidebar", 0), current);
+    current = layout.move(current, "icon:1", "sidebar", 0);
+    assert.equal(current.sidebar[0], "icon:1");
     assert.equal(layout.widget("label:0"), undefined);
     current = layout.move(current, "label:2", "palette", 0);
     assert.equal(layout.zone(current, "label:2"), "");

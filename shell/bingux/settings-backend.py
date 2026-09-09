@@ -168,8 +168,8 @@ def validate(data):
         if not isinstance(layout, dict) or set(layout) != zones: raise ValueError('Invalid desktop layout.')
         seen = set()
         for zone, items in layout.items():
-            allowed = panels if zone == 'sidebar' else widgets | controls | PORTABLE_CONTROLS
-            instance_kinds = 'spacer|spring|label|icon' if zone.startswith('top-') else 'label|icon' if zone == 'dock' else None
+            allowed = panels | widgets if zone == 'sidebar' else widgets | controls | PORTABLE_CONTROLS
+            instance_kinds = 'spacer|spring|label|icon' if zone.startswith('top-') else 'label|icon'
             if not isinstance(items, list) or len(items) > 256:
                 raise ValueError('Invalid container widget list.')
             for item in items:
@@ -180,7 +180,7 @@ def validate(data):
                     raise ValueError('A widget can only be placed once in a compatible area.')
             if len(items) != len(set(items)): raise ValueError('A widget can only be placed once.')
             seen.update(items)
-        if not layout['sidebar']: raise ValueError('Keep at least one sidebar panel.')
+        if not panels.intersection(layout['sidebar']): raise ValueError('Keep at least one sidebar panel.')
         validate_control_action_placement(desktop)
         if seen & controls and (control_order is None or any('control-' + name in seen for name in control_order)):
             raise ValueError('A control can only be placed in one container.')

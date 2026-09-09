@@ -102,6 +102,7 @@ ShellRoot {
         id: terminalSidebar
         onWidgetEditRequested: (id, item, window) => root.openWidgetMenu(id, item, window)
         systemMetrics: metrics
+        widgetLayout: topBar
         settings: profileSettings
         screen: topBar.screen
         inputSuspended: captureTool.opened
@@ -367,7 +368,7 @@ ShellRoot {
             onObjectAdded: (index, object) => topBar.spacingWidgets = topBar.spacingWidgets.concat([object])
             onObjectRemoved: (index, object) => { object.parent = null; topBar.spacingWidgets = topBar.spacingWidgets.filter(item => item !== object); }
         }
-        readonly property string decorationKey: customLayout ? ["top-left", "top-center", "top-right", "dock"].reduce((items, zone) => items.concat(customLayout[zone]), []).concat(DesktopEditing.desktop.controlLayout?.groups["control-centre"] || []).filter(DesktopLayout.isDecoration).join(";") : ""
+        readonly property string decorationKey: customLayout ? ["top-left", "top-center", "top-right", "dock", "sidebar"].reduce((items, zone) => items.concat(customLayout[zone]), []).concat(DesktopEditing.desktop.controlLayout?.groups["control-centre"] || []).filter(DesktopLayout.isDecoration).join(";") : ""
         property var decorationWidgets: []
         Instantiator {
             model: decorationInstances
@@ -411,11 +412,11 @@ ShellRoot {
             if (name === "overflow" && (!customLayout || !DesktopLayout.placement(DesktopEditing.desktop, name))) return "top-right";
             return customLayout ? DesktopLayout.placement(DesktopEditing.desktop, name) : name === "search" ? "top-left" : name === "clock" ? "top-center" : "top-right";
         }
-        function windowFor(item) { return zoneFor(item) === "dock" ? dock : zoneFor(item) === "control-centre" ? controlCentre.nativeWindow : topBar; }
+        function windowFor(item) { return zoneFor(item) === "sidebar" ? terminalSidebar.widgetWindow : zoneFor(item) === "dock" ? dock : zoneFor(item) === "control-centre" ? (controlCentre.hostItem ? controlCentre.anchorWindow : controlCentre.nativeWindow) : topBar; }
         function hostFor(item) {
             if (overflows(item)) return overflowColumn;
             const zone = zoneFor(item);
-            return zone === "control-centre" ? controlCentre.widgetHost : zone === "dock" ? dock.widgetHost : zone === "top-left" ? leftControls : zone === "top-center" ? centerControls : rightControls;
+            return zone === "sidebar" ? terminalSidebar.widgetHost : zone === "control-centre" ? controlCentre.widgetHost : zone === "dock" ? dock.widgetHost : zone === "top-left" ? leftControls : zone === "top-center" ? centerControls : rightControls;
         }
         readonly property real controlsBudget: Math.max(0, (width - clockPill.implicitWidth) / 2 - Theme.gap)
         // Display order is independent of overflow priority and reparenting order.
@@ -566,8 +567,8 @@ ShellRoot {
         }
         readonly property var barControls: orderedControls.filter(item => (item === overflowButton ? overflowItems.length > 0 : availableControls.includes(item)) && !overflows(item))
         function overflows(item) { return overflowItems.includes(item); }
-        function controlColumn(item) { if (zoneFor(item) === "control-centre") return 0; return overflows(item) ? 0 : Math.max(0, barControls.filter(other => zoneFor(other) === zoneFor(item)).indexOf(item)); }
-        function controlRow(item) { if (zoneFor(item) === "control-centre") return controlCentre.sectionRow(nameFor(item)); return overflows(item) ? overflowItems.indexOf(item) : 0; }
+        function controlColumn(item) { if (["sidebar", "control-centre"].includes(zoneFor(item))) return 0; return overflows(item) ? 0 : Math.max(0, barControls.filter(other => zoneFor(other) === zoneFor(item)).indexOf(item)); }
+        function controlRow(item) { if (zoneFor(item) === "sidebar") return terminalSidebar.widgetRow(nameFor(item)); if (zoneFor(item) === "control-centre") return controlCentre.sectionRow(nameFor(item)); return overflows(item) ? overflowItems.indexOf(item) : 0; }
         onOverflowItemsChanged: if (overflowItems.length === 0) barOverflow.visible = false
         margins.left: terminalSidebar.leftInset
         margins.right: terminalSidebar.rightInset

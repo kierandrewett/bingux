@@ -25,7 +25,9 @@ layout tests does not prove that every existing desktop widget is editable.
 - `DesktopLayout.accepts()` still confines sidebar panels to the sidebar. Status,
   label and icon widgets now enter the control centre, interleaved with its native
   sections. They keep their original instances, display settings and popup
-  anchors. The sidebar still needs to accept these widgets.
+  anchors. The sidebar now accepts these widgets in its real layout, before or
+  after the selected native panel. Native control-centre controls and groups
+  still need sidebar placement.
 - `TerminalSidebar.qml` still offers ordinary position changes outside Customise
   UI. The requested exception is ordinary dock application rearrangement.
 - Restore defaults resets the arrangement. Container and widget options need a
@@ -33,9 +35,9 @@ layout tests does not prove that every existing desktop widget is editable.
 
 ## Next implementation boundary
 
-Extend sidebar panels into the other real containers and allow status, label and
-icon widgets inside the sidebar. The sidebar host currently exposes one active
-panel. Extend placement validation and this real host together. Preserve the same
+Extend sidebar panels into the other real containers and allow native
+control-centre controls and groups inside the sidebar. The sidebar host still
+selects one native panel. Extend placement validation and this real host together. Preserve the same
 component instances and service actions. The palette group previews also need
 to share the complete native group composition, including display inheritance,
 instead of their current representative layouts.
@@ -99,6 +101,16 @@ The Control Centre button also works from inside the panel. Normal and reduced
 motion pass, as do the full editor regression, seven reload cases and unchanged
 native control-centre geometry. Validation rejects duplicate placement and
 oversized section lists without changing the saved file.
+
+The sidebar case verifies a native Clock drag and its insertion before Notes,
+Undo/Redo, all ten status-widget instances, labels moved through the control
+centre without recreation, appearance inheritance, and saved placements after a
+fresh shell process. Cancel restores the exact original panel padding and size.
+Normal and reduced motion pass. The drop rectangle follows the sidebar's slide
+timeline; it previously kept a stale position and could insert after Notes when
+the pointer was above it. Calendar and keyboard menus, tooltips and edit actions
+use the detached sidebar window. Screenshots verify the actual panel and its
+detached Calendar menu. Physical input-source switching remains unverified.
 
 Remaining broad checks include all existing widget actions, notification
 interactions after layout changes, different scale factors,

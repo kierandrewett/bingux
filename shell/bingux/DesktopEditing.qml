@@ -17,7 +17,17 @@ Singleton {
     }
     function registerSurface(surface) { surfaces = surfaces.concat([surface]); }
     function unregisterSurface(surface) { surfaces = surfaces.filter(value => value !== surface); }
+    function observeGeometry(item) {
+        // mapToItem does not observe geometry changes. Containers with custom
+        // transforms expose geometryRevision for their animation timeline.
+        for (let current = item; current; current = current.parent) {
+            const geometry = [current.x, current.y, current.width, current.height,
+                current.scale, current.rotation, current.transformOrigin];
+            if ("geometryRevision" in current) geometry.push(current.geometryRevision);
+        }
+    }
     function point(item, window, x, y) {
+        observeGeometry(item);
         const local = item.mapToItem(window.contentItem, x, y);
         return Qt.point(local.x + (window.anchors.right && !window.anchors.left ? window.screen.width - window.width - window.margins.right : window.margins.left),
             local.y + (window.anchors.bottom && !window.anchors.top ? window.screen.height - window.height - window.margins.bottom : window.margins.top));

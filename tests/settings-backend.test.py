@@ -117,10 +117,22 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.read()['desktop']['layout'], layout)
         self.assertEqual(settings.read()['desktop']['widgetOptions'], options)
         before = settings.config_path().read_bytes()
-        for zone, item in [('sidebar', 'label:3'), ('dock', 'icon:0'), ('top-left', 'label'),
+        for zone, item in [('sidebar', 'label:0'), ('dock', 'icon:0'), ('top-left', 'label'),
                            ('dock', 'label:1'), ('dock', 'icon:10000')]:
             invalid = copy.deepcopy(layout)
             invalid[zone].append(item)
+            with self.assertRaises(ValueError): settings.write({'desktop': {'layout': invalid}})
+            self.assertEqual(settings.config_path().read_bytes(), before)
+
+    def test_sidebar_status_and_decorations_keep_a_native_panel(self):
+        layout = {'top-left': [], 'top-center': [], 'top-right': [], 'dock': [],
+                  'sidebar': ['clock', 'label:1', 'notes', 'icon:1', 'search']}
+        settings.write({'desktop': {'layout': layout}})
+        self.assertEqual(settings.read()['desktop']['layout'], layout)
+        before = settings.config_path().read_bytes()
+        for invalid in [dict(layout, sidebar=['clock', 'label:1']),
+                        dict(layout, dock=['clock']),
+                        dict(layout, sidebar=layout['sidebar'] + ['spring:1'])]:
             with self.assertRaises(ValueError): settings.write({'desktop': {'layout': invalid}})
             self.assertEqual(settings.config_path().read_bytes(), before)
 

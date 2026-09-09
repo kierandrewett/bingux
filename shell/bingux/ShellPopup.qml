@@ -14,23 +14,24 @@ Scope {
     property bool dismissOnOutsideClick: true
     property alias screen: window.screen
     readonly property alias nativeWindow: window
-    property Item hostItem: null
+    // Floating windows have no layer-surface margins. Keep their menus in
+    // the same native window so Wayland does not need global coordinates.
+    property Item hostItem: anchorWindow && !("anchors" in anchorWindow) ? anchorWindow.contentItem : null
     property var anchorWindow: null
     property Item anchorItem: null
     property int anchorAlignment: Qt.AlignRight
-    readonly property real placementLeft: anchorWindow ? anchorWindow.margins.left : 0
-    readonly property real placementRight: width - (anchorWindow ? anchorWindow.margins.right : 0)
+    readonly property real placementLeft: !hostItem && anchorWindow ? anchorWindow.margins.left : 0
+    readonly property real placementRight: width - (!hostItem && anchorWindow ? anchorWindow.margins.right : 0)
     readonly property real belowAnchorY: anchorItem ? anchorPosition.y + Theme.gap : Theme.barHeight + Theme.gap
-    readonly property bool anchorAbove: !!anchorWindow && anchorWindow.anchors.bottom && !anchorWindow.anchors.top
+    readonly property bool anchorAbove: !hostItem && !!anchorWindow && anchorWindow.anchors.bottom && !anchorWindow.anchors.top
     readonly property real anchorTop: anchorAbove && typeof anchorWindow.popupAnchorTop === "number" ? anchorWindow.popupAnchorTop : anchorPosition.y - (anchorItem ? anchorItem.height : 0)
     readonly property point anchorPosition: {
         // Reparenting a launcher must not anchor a popup to its own content.
         if (!anchorItem || anchorItem.Window.window === window.contentItem.Window.window) return Qt.point(0, Theme.barHeight);
         // Track layout and reparenting, including controls moved into overflow.
-        for (let item = anchorItem; item; item = item.parent) {
-            const geometry = [item.x, item.y, item.width, item.height];
-        }
+        DesktopEditing.observeGeometry(anchorItem);
         const x = anchorAlignment === Qt.AlignHCenter ? anchorItem.width / 2 : anchorItem.width;
+        if (hostItem) return anchorItem.mapToItem(hostItem, x, anchorItem.height);
         if (anchorWindow && anchorItem.Window.window === anchorWindow.contentItem.Window.window) {
             // Convert bar-local coordinates with the layer-surface margins.
             const point = anchorItem.mapToItem(anchorWindow.contentItem, x, anchorItem.height);

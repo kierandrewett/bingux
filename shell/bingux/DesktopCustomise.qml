@@ -268,6 +268,7 @@ Scope {
             change("controlLayout", ControlLayout.move(desktop.controlLayout, "control-centre", id, target === "control-centre" ? index : -1));
             layout = DesktopLayout.move(layout, id, target === "control-centre" ? "palette" : target, index);
             if (target === "dock") change("dock", true);
+            if (target === "sidebar") change("sidebar", true);
             if (id === "metrics" && target !== "palette") change("metrics", true);
             if (target === "palette" && DesktopLayout.isDecoration(id)) {
                 const options = Object.assign({}, desktop.widgetOptions || {}); delete options[id]; change("widgetOptions", options);
