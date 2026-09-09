@@ -27,7 +27,9 @@ layout tests does not prove that every existing desktop widget is editable.
   sections. They keep their original instances, display settings and popup
   anchors. The sidebar now accepts these widgets in its real layout, before or
   after the selected native panel. Native control-centre controls and groups
-  still need sidebar placement.
+  now also move into this host, using their full panel layout. Header labels
+  wrap within the sidebar width. Longer layouts scroll while preserving space
+  for the selected panel, and group handles follow the scroll position.
 - `TerminalSidebar.qml` still offers ordinary position changes outside Customise
   UI. The requested exception is ordinary dock application rearrangement.
 - Restore defaults resets the arrangement. Container and widget options need a
@@ -35,9 +37,9 @@ layout tests does not prove that every existing desktop widget is editable.
 
 ## Next implementation boundary
 
-Extend sidebar panels into the other real containers and allow native
-control-centre controls and groups inside the sidebar. The sidebar host still
-selects one native panel. Extend placement validation and this real host together. Preserve the same
+Extend sidebar panels into the other real containers. The sidebar host still
+selects one native panel. Extend placement validation and the real panel hosts
+together. Preserve the same
 component instances and service actions. The palette group previews also need
 to share the complete native group composition, including display inheritance,
 instead of their current representative layouts.
@@ -111,6 +113,16 @@ timeline; it previously kept a stale position and could insert after Notes when
 the pointer was above it. Calendar and keyboard menus, tooltips and edit actions
 use the detached sidebar window. Screenshots verify the actual panel and its
 detached Calendar menu. Physical input-source switching remains unverified.
+
+The native sidebar-controls case covers an audio-group drag, every portable
+control's original instance, Undo/Redo and Cancel, saved groups and child
+appearance overrides, header wrapping, scrolling during editing, and hidden
+offscreen group handles. Native clicks dispatch Settings, mute and change volume,
+open audio and network detail pages, and play the original media widget. Detail
+menus also follow the detached sidebar. Normal and reduced motion save and
+reload their placements in a fresh shell process. An empty control centre keeps
+a visible drop target. The bar/dock group, utility, status-sidebar, full editor
+and seven reload cases pass; original control-centre geometry remains unchanged.
 
 Remaining broad checks include all existing widget actions, notification
 interactions after layout changes, different scale factors,

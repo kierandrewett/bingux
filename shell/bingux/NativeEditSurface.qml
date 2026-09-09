@@ -63,12 +63,19 @@ MouseArea {
         return Qt.rect(p.x, p.y, geometryItem.width, geometryItem.height);
     }
     readonly property var groups: entries.filter(entry => entry.item?.memberEntries && entry.item.visible)
+    function groupVisible(entry) {
+        DesktopEditing.observeGeometry(entry.item);
+        const point = entry.item.mapToItem(root, 0, 0);
+        return point.x + entry.item.width > 0 && point.x < width && point.y + entry.item.height > 0 && point.y < height;
+    }
     function groupHandleRect(entry) {
+        DesktopEditing.observeGeometry(entry.item);
         const point = entry.item.mapToItem(root, 0, 0);
         return Qt.rect(Math.max(0, point.x + entry.item.width / 2 - 14), Math.max(0, point.y - 4), 28, 8);
     }
     function entryAt(x, y) {
         const group = groups.find(entry => {
+            if (!groupVisible(entry)) return false;
             const rect = groupHandleRect(entry);
             return x >= rect.x && y >= rect.y && x <= rect.x + rect.width && y <= rect.y + rect.height;
         });
@@ -107,6 +114,7 @@ MouseArea {
             required property var modelData
             objectName: "customise-group-handle-" + modelData.id
             readonly property rect bounds: root.groupHandleRect(modelData)
+            visible: root.groupVisible(modelData)
             x: bounds.x; y: bounds.y; width: bounds.width; height: bounds.height
             Rectangle { anchors.centerIn: parent; width: 24; height: 4; radius: 2; color: gripHover.hovered ? Theme.accent : Theme.muted }
             HoverHandler { id: gripHover; cursorShape: Qt.OpenHandCursor }
@@ -145,6 +153,7 @@ MouseArea {
         const previous = remaining.slice(0, editor.hoverIndex).reverse().map(id => expandedEntries.find(entry => entry.id === id)).find(entry => entry?.item?.visible);
         const item = next?.item || previous?.item;
         if (!item) return vertical ? Qt.rect(6, 6, width - 12, 3) : Qt.rect(6, 5, 3, height - 10);
+        DesktopEditing.observeGeometry(item);
         const p = item.mapToItem(root, 0, 0);
         return vertical ? Qt.rect(Math.max(4, p.x), p.y + (next ? 0 : item.height) - 2, Math.min(width - 8, item.width), 3)
             : Qt.rect(p.x + (next ? 0 : item.width) - 2, 5, 3, height - 10);

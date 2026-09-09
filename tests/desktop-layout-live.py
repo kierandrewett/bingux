@@ -12,7 +12,7 @@ import time
 from private_shell import run_reported_shell, stage_compositor_bridge
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--case', choices=('desktop-layout', 'control-layout', 'control-audio', 'control-media', 'control-groups', 'control-utilities', 'control-external', 'sidebar-layout', 'dock-unpin'), default='desktop-layout')
+parser.add_argument('--case', choices=('desktop-layout', 'control-layout', 'control-audio', 'control-media', 'control-groups', 'control-utilities', 'control-external', 'sidebar-layout', 'sidebar-controls', 'dock-unpin'), default='desktop-layout')
 case = parser.parse_args().case
 repo = Path(__file__).resolve().parent.parent
 if not os.environ.get('WAYLAND_DISPLAY', '').startswith('gnoblin-gs-'):
@@ -22,7 +22,7 @@ with tempfile.TemporaryDirectory(prefix='bingux-layout-live-') as directory:
     for source in (repo / 'shell/bingux').iterdir():
         if source.suffix in ('.qml', '.js', '.py') or source.name == 'qmldir': shutil.copy2(source, fixture)
     shell = (fixture / 'shell.qml').read_text().replace('import QtQuick\n', 'import QtQuick\nimport QtQuick.Window\nimport QtTest\n', 1)
-    if case in ('control-layout', 'control-groups', 'control-utilities'): shell = 'import "ControlLayout.js" as ControlLayout\n' + shell
+    if case in ('control-layout', 'control-groups', 'control-utilities', 'sidebar-controls'): shell = 'import "ControlLayout.js" as ControlLayout\n' + shell
     base_shell = shell
     shell = shell.rstrip()[:-1] + (repo / ('tests/' + case + '-live.inc.qml')).read_text() + '\n}\n'
     (fixture / 'shell.qml').write_text(shell)
@@ -31,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix='bingux-layout-live-') as directory:
     systemctl = fixture / 'bin/systemctl'; systemctl.write_text('#!/bin/sh\nexit 0\n'); systemctl.chmod(0o700)
     environment = os.environ | {'BINGUX_TEST_COMPOSITOR_CONFIG': os.environ['XDG_CONFIG_HOME'], 'BINGUX_TEST_NATIVE_INPUT': str(repo / 'tests/customise-native-input.py'), 'QT_QPA_PLATFORM': 'wayland', 'XDG_CONFIG_HOME': str(fixture / 'config'),
         'XDG_STATE_HOME': str(fixture / 'state'), 'BINGUX_LAYOUT_IMPORT': '0', 'PATH': str(fixture / 'bin') + ':' + os.environ['PATH']}
-    if case in ('control-layout', 'control-groups', 'control-utilities'):
+    if case in ('control-layout', 'control-groups', 'control-utilities', 'sidebar-controls'):
         (fixture / 'action-avatar.svg').write_text('<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><circle cx="24" cy="24" r="24" fill="#77aaff"/></svg>')
         environment['BINGUX_ACTION_REPORT'] = str(fixture / 'actions.jsonl')
         for name in ('gnome-control-center', 'loginctl'):
@@ -54,7 +54,7 @@ with tempfile.TemporaryDirectory(prefix='bingux-layout-live-') as directory:
             print(output)
             if report != 'PASS' or any(error in output for error in ('CUSTOMISE_TEST_FAILED', 'TypeError', 'ReferenceError', 'has crashed', 'property "maximumPopupHeight"', 'property "preferredY"', 'Cannot use same item on different windows', 'Updates can only be scheduled', 'QGridLayoutEngine::addItem', 'Binding loop detected')):
                 raise SystemExit(report if report != 'PASS' else 'Runtime errors during layout test')
-            if case in ('control-groups', 'control-utilities', 'control-external', 'sidebar-layout'):
+            if case in ('control-groups', 'control-utilities', 'control-external', 'sidebar-layout', 'sidebar-controls'):
                 (fixture / 'shell.qml').write_text(base_shell.rstrip()[:-1] + (repo / ('tests/' + case + '-reload.inc.qml')).read_text() + '\n}\n')
                 (fixture / 'report').unlink()
                 report, output = run_reported_shell(fixture, environment, 'BINGUX_LAYOUT_REPORT', timeout=30)

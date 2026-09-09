@@ -168,7 +168,7 @@ def validate(data):
         if not isinstance(layout, dict) or set(layout) != zones: raise ValueError('Invalid desktop layout.')
         seen = set()
         for zone, items in layout.items():
-            allowed = panels | widgets if zone == 'sidebar' else widgets | controls | PORTABLE_CONTROLS
+            allowed = widgets | controls | PORTABLE_CONTROLS | (panels if zone == 'sidebar' else set())
             instance_kinds = 'spacer|spring|label|icon' if zone.startswith('top-') else 'label|icon'
             if not isinstance(items, list) or len(items) > 256:
                 raise ValueError('Invalid container widget list.')

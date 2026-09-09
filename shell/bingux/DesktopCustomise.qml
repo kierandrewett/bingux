@@ -287,6 +287,7 @@ Scope {
             if (ControlLayout.isPortable(id)) {
                 layout = DesktopLayout.move(layout, id, nativeTarget ? "palette" : target, index);
                 if (target === "dock") change("dock", true);
+                if (target === "sidebar") change("sidebar", true);
             }
             return;
         }
@@ -303,6 +304,7 @@ Scope {
             change("controlOrder", order);
             layout = DesktopLayout.move(layout, id, nativeTarget ? "palette" : target, index);
             if (target === "dock") change("dock", true);
+            if (target === "sidebar") change("sidebar", true);
             if (!["network", "bluetooth"].includes(name)) change("controlCentre", Object.assign({vpn: true, dnd: true, nightLight: false, power: false, awake: false}, desktop.controlCentre || {}, {[name]: target !== "palette"}));
             return;
         }

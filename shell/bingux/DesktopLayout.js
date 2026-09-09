@@ -78,7 +78,7 @@ function insertionIndex(order, draggedId, visibleIds, before) {
 function accepts(id, target) {
     const item = widget(id);
     if (item?.layoutItem) return ["top-left", "top-center", "top-right", "palette"].includes(target);
-    if (id.startsWith("control-") || ControlLayout.isContainer(id)) return !!item && ["control-centre", "top-left", "top-center", "top-right", "dock", "palette"].includes(target);
+    if (id.startsWith("control-") || ControlLayout.isContainer(id)) return !!item && ["control-centre", "top-left", "top-center", "top-right", "dock", "sidebar", "palette"].includes(target);
     return !!item && (target === "palette" || (item.panel ? target === "sidebar" : ["top-left", "top-center", "top-right", "dock", "control-centre", "sidebar"].includes(target)));
 }
 function move(layout, id, target, index) {

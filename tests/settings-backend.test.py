@@ -136,6 +136,20 @@ class SettingsTests(unittest.TestCase):
             with self.assertRaises(ValueError): settings.write({'desktop': {'layout': invalid}})
             self.assertEqual(settings.config_path().read_bytes(), before)
 
+    def test_native_controls_persist_in_sidebar_without_duplicate_members(self):
+        layout = {'top-left': [], 'top-center': [], 'top-right': [], 'dock': [],
+                  'sidebar': ['controls-audio', 'controls-header', 'control-network', 'notes']}
+        groups = settings.native_control_layout()
+        groups['groups']['control-centre'].remove('controls-audio')
+        groups['groups']['control-centre'].remove('controls-header')
+        settings.write({'desktop': {'layout': layout, 'controlLayout': groups, 'controlOrder': ['bluetooth']}})
+        self.assertEqual(settings.read()['desktop']['layout'], layout)
+        before = settings.config_path().read_bytes()
+        invalid = copy.deepcopy(groups)
+        invalid['groups']['control-centre'].append('controls-audio')
+        with self.assertRaises(ValueError): settings.write({'desktop': {'controlLayout': invalid}})
+        self.assertEqual(settings.config_path().read_bytes(), before)
+
     def test_runtime_import_is_exact_and_happens_once(self):
         snapshot = {'version': 1, 'controlCentreReady': True,
             'layout': {'top-left': ['search'], 'top-center': ['clock'],

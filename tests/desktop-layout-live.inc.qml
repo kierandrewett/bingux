@@ -92,7 +92,7 @@
             const notesChoice = findChild(terminalSidebar.contentSelector.contentItem, 'sidebar-select-notes');
             verify(notesChoice);
             tryCompare(notesChoice, 'visible', true);
-            wait(200);
+            tryCompare(terminalSidebar.contentSelector, 'revealScale', 1, 3000);
             clickNative(notesChoice, terminalSidebar.contentSelector.nativeWindow, 20, notesChoice.height / 2, false);
             tryCompare(terminalSidebar, 'contentType', 'notes', 3000, 'The real sidebar picker works while customising');
             tryCompare(terminalSidebar.contentSelector, 'retained', false, 2000, 'The panel selector releases its native surface before dragging');

@@ -14,6 +14,7 @@ Scope {
     property var systemMetrics: null
     property var widgetLayout: null
     readonly property alias widgetHost: widgetGrid
+    readonly property alias widgetViewport: widgetViewport
     readonly property var widgetWindow: floating ? detachedWindow : panel
     readonly property var externalEntries: widgetLayout ? widgetLayout.defaultControls
         .filter(item => widgetLayout.zoneFor(item) === "sidebar")
@@ -622,9 +623,9 @@ Scope {
 
 
                 }
-                GridLayout {
-                    id: widgetGrid
-                    columns: 1
+                Flickable {
+                    id: widgetViewport
+                    objectName: "sidebarWidgetViewport"
                     anchors.top: sidebarHeader.bottom
                     anchors.bottom: parent.bottom
                     anchors.left: parent.left
@@ -632,13 +633,26 @@ Scope {
                     anchors.margins: Theme.gap
                     anchors.leftMargin: Theme.gap * 2
                     anchors.rightMargin: Theme.gap * 2
+                    contentWidth: width
+                    contentHeight: widgetGrid.height
+                    interactive: contentHeight > height
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: ScrollBar {}
+                }
+                GridLayout {
+                    id: widgetGrid
+                    parent: widgetViewport.contentItem
+                    columns: 1
+                    width: widgetViewport.width
+                    height: Math.max(widgetViewport.height, implicitHeight)
                     rowSpacing: Theme.gap
                     ColumnLayout {
                         Layout.row: root.widgetRow(root.contentType)
                         Layout.column: 0
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        Layout.minimumHeight: 1
+                        Layout.minimumHeight: root.externalEntries.length ? Math.min(240, widgetViewport.height / 2) : 1
                         spacing: Theme.gap
                         Item {
                             Layout.fillWidth: true
