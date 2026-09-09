@@ -526,3 +526,20 @@ floating Notes menu, formatting, heading and keyboard checks also pass.
 The live reload preserves the saved Notes file and the exact desktop, layout
 and dock snapshot, with no QML errors or process restart. Remaining work is the
 wider widget-action audit in the compatibility contract.
+
+The Bluetooth action check moves the original tile into the dock, top bar and
+sidebar. Native input verifies dragging, Undo/Redo, label/display overrides,
+inline power switching, device-page navigation, power/discovery state, paired
+device connect/disconnect, and Shift-right-click. A fresh shell restores the
+saved sidebar placement and appearance. The adapter and device are test objects;
+these checks do not establish a physical Bluetooth connection.
+
+This check exposed a compositor stacking failure: the reopened control centre
+could remain below the sidebar because its native window stays mapped. Gnoblin
+now raises retained shell menus when they request keyboard input again, without
+changing the active application. Screenshots show the complete popup above the
+sidebar, and native clicks reach its power and device controls. Normal and
+reduced-motion checks pass, alongside direct dock unpin, nested overflow menus
+and Gnoblin's eleven layer-animation lifetime cases. Native input measurements
+wait for QML layout and popup resizing to finish. The recording-status widget's
+active stop/cancel/saving actions are the next unverified action group.
