@@ -33,7 +33,7 @@ ShellPopup {
             visible: root.customising
             width: parent.width
             spacing: 12
-            Text { text: "Top bar monitors"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontHeading; font.weight: Font.DemiBold }
+            Text { text: "System monitors"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontHeading; font.weight: Font.DemiBold }
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 0

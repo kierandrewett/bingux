@@ -46,6 +46,7 @@ FocusScope {
             width: {
                 if (root.nativeGroupPreview && !root.barLayout) return Theme.notificationWidth;
                 if (!root.barLayout && !root.utilityWidget) {
+                    if (root.widgetId === "metrics") return DesktopEditing.sources.metrics?.width || 300;
                     if (["control-volume", "control-microphone", "control-media"].includes(root.widgetId)) return 300;
                     if (root.nativeGroup === "controls-tiles") return 188;
                 }
@@ -192,7 +193,10 @@ FocusScope {
         }
     }
     Component { id: keyboard; InputSourceSelector { parentWindow: DesktopEditing.editor?.nativeWindow; metrics: sampleMetrics; gnoblinCtlPath: ""; shortcutsEnabled: false; presentation: root.face } }
-    Component { id: monitor; SystemMetrics { systemMetrics: sampleMetrics; presentation: root.face } }
+    Component { id: monitor; SystemMetrics {
+        systemMetrics: sampleMetrics; presentation: root.face; panelLayout: !root.barLayout
+        previewMonitors: DesktopEditing.sources.metrics?.selectedNames || null
+    } }
     Component { id: performance; SidebarMonitor { metrics: sampleMetrics } }
     Component { id: notes; SidebarNotes { previewText: "# Weekend plans\n\nA few things to remember.\n\n- Pick up groceries\n- Book a table\n\n## Ideas\n\nKeep the afternoon free." } }
     Component { id: tasks; SidebarTasks { previewTasks: [{text: "Plan the week", done: false}, {text: "Book tickets", done: false}, {text: "Reply to messages", done: true}] } }

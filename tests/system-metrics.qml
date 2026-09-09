@@ -9,7 +9,16 @@ ShellRoot {
     QtObject {
         id: sample
         property bool available: true
-        property var latest: ({cpuPercent: 24, memoryUsedBytes: 12.4 * 1073741824, memoryTotalBytes: 32 * 1073741824, networkReceiveBytesPerSecond: 240000, networkTransmitBytesPerSecond: 32000, extra: {cpuCores: Array.from({length: 16}, (_, id) => ({id, usage: id * 5})), cpuTemperatureCelsius: 54.2, load1: 2.35, logicalCpus: 16, swapUsedBytes: 1073741824, swapTotalBytes: 8589934592, diskReadBytesPerSecond: 24000000, diskWriteBytesPerSecond: 1200000}})
+        property var sampleHardware: ({
+            gpus: [], storage: [], processCount: 80,
+            processes: Array.from({length: 80}, (_, index) => ({
+                pid: 900000 + index,
+                name: (index % 2 ? "Worker " : "Sample ") + index,
+                executable: index % 2 ? "worker" : "sample",
+                cpuPercent: index / 2, memoryBytes: 1048576 * (index + 1), state: "S"
+            }))
+        })
+        property var latest: ({cpuPercent: 24, memoryUsedBytes: 12.4 * 1073741824, memoryTotalBytes: 32 * 1073741824, networkReceiveBytesPerSecond: 240000, networkTransmitBytesPerSecond: 32000, extra: {hardware: sample.sampleHardware, cpuCores: Array.from({length: 16}, (_, id) => ({id, usage: id * 5})), cpuTemperatureCelsius: 54.2, load1: 2.35, logicalCpus: 16, swapUsedBytes: 1073741824, swapTotalBytes: 8589934592, diskReadBytesPerSecond: 24000000, diskWriteBytesPerSecond: 1200000}})
         property var history: []
         readonly property string cpuLabel: "CPU " + latest.cpuPercent + "%"
         function formatRate(rate) { return Math.round(rate / 1024) + "K/s"; }

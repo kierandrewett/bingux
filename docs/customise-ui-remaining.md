@@ -324,3 +324,33 @@ in about ten seconds after requesting their frames; an earlier run had timed out
 The live reload preserves the exact desktop settings, layout and dock snapshot,
 with no QML errors or shell-process restart. These scale checks use one virtual
 output; they do not establish mixed-scale, multiple-monitor behaviour.
+
+System monitors now adapt their original readout grid to panel width in the
+sidebar and control centre. All nine readouts fit, with their values and graphs
+kept separate. The top bar and dock retain the original two-row layout and
+height. Custom label/icon presentations retain their original 32-pixel target
+and constrain long labels. The palette projects the live widget's selected
+readouts into the same component with sample values and the panel's width.
+
+The narrow-host fixture covers 208- and 376-pixel panels, all readouts, long
+labels, native activation, preview selection updates and restoring bar geometry.
+The previous implementation fails the panel-width check. The native
+`metrics-placement` case moves the original widget through the sidebar and control
+centre, opens performance and configuration through pointer input, changes a
+readout toggle, invokes Shift-right-click and reloads the saved placement and
+monitor selection in a fresh process. Captured sample histories verify the
+rendered mini graphs. Preview and keyboard-isolation regressions pass with normal
+and reduced motion.
+
+The original monitor regression now includes 80 sample process records for its
+table-scroll checks. `BINGUX_HARDWARE_RECORD` can still replace these samples for
+live-probe runs. Without records, it had been trying to scroll an empty list. These checks cover graph history, digit motion, sorting, filtering,
+scrolling, configuration and outage states. They do not exercise process signals
+against live applications. The new grid also avoids deriving its column count
+from a width assigned during its own layout pass, which caused recursive
+rearrangement during placement.
+
+Staged-source placement, reload and original monitor regressions pass with normal
+and reduced motion. The live reload preserves the exact desktop settings, layout
+and dock snapshot, with no QML errors or shell-process restart. Tray width and
+mixed-scale, multiple-monitor behaviour remain separate checks.

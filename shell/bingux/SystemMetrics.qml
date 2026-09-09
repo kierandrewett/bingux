@@ -32,7 +32,8 @@ Pill {
         property bool diskWrite: false
     }
     readonly property var monitorNames: ["cpu", "memory", "receive", "send", "temperature", "load", "swap", "diskRead", "diskWrite"]
-    readonly property var selectedNames: monitorNames.filter(name => isShown(name))
+    property var previewMonitors: null
+    readonly property var selectedNames: monitorNames.filter(name => previewMonitors ? previewMonitors.includes(name) : isShown(name))
     function isShown(name) { return monitorNames.includes(name) && preferences[name] === true; }
     function setShown(name, shown) {
         if (!monitorNames.includes(name) || (!shown && isShown(name) && selectedNames.length <= 1)) return;
@@ -99,11 +100,22 @@ Pill {
     }
 
     GridLayout {
-        rows: 2
+        id: readouts
+        Layout.fillWidth: root.panelLayout
+        readonly property real widestReadout: {
+            let width = 1;
+            for (let index = 0; index < metricsRepeater.count; index++)
+                width = Math.max(width, metricsRepeater.itemAt(index)?.implicitWidth || 0);
+            return width;
+        }
+        columns: root.panelLayout ? Math.max(1, Math.floor((root.width - root.horizontalPadding * 2 + columnSpacing)
+            / (widestReadout + columnSpacing))) : -1
+        rows: root.panelLayout ? Math.ceil(root.selectedNames.length / columns) : 2
         flow: GridLayout.TopToBottom
-        rowSpacing: 0
+        rowSpacing: root.panelLayout ? Theme.spaceSmall : 0
         columnSpacing: 14
         Repeater {
+            id: metricsRepeater
             model: root.selectedNames
             Readout {
                 required property string modelData

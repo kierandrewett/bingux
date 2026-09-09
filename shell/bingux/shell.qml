@@ -698,6 +698,7 @@ ShellRoot {
                     }
                     SystemMetrics {
                         id: metricsPill
+                        panelLayout: ["sidebar", "control-centre"].includes(topBar.zoneFor(metricsPill))
                         presentation: topBar.appearance("metrics", "System monitors", "computer-symbolic", true, true)
                         parent: topBar.hostFor(metricsPill); Layout.column: topBar.controlColumn(metricsPill); Layout.row: topBar.controlRow(metricsPill)
                         systemMetrics: metrics
