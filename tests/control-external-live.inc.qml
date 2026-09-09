@@ -11,6 +11,16 @@
     Component { id: sampleComponent; WidgetPreview { width: 280; height: 160 } }
     SignalSpy { id: searchClicks; target: searchPill; signalName: "clicked" }
     QtObject {
+        id: samplePrivacy
+        property bool available: true
+        property bool cameraInUse: false
+        property bool microphoneInUse: false
+        property string microphoneTooltip: "Microphone in use"
+        property bool screenSharing: true
+        property int stops: 0
+        function stopSharing() { stops++; screenSharing = false; }
+    }
+    QtObject {
         id: sampleNotification
         property int id: 101
         property real expireTimeout: 0
@@ -99,6 +109,8 @@
                     editor.put(id, "control-centre", 0); wait(80);
                     verify(item.parent === controlCentre.widgetHost, id + " uses the original control in the real host");
                     verify(topBar.windowFor(item) === controlCentre.nativeWindow);
+                    if (id === "privacy") compare(privacyContainer.appearance("Camera in use", "camera-web-symbolic").mode, "text",
+                        "Privacy indicators inherit the control-centre display mode");
                 }
                 verify(Number.isFinite(controlCentre.preferredX) && Number.isFinite(controlCentre.preferredY));
                 editor.cancel(); wait(200); compare(JSON.stringify(BinguxPreferences.data.desktop), original);
@@ -115,6 +127,19 @@
                     compare(notificationButton.count, 1, "Closing history keeps its notification badge");
                 }
                 editor.open(); editor.put("notifications", "top-right", 7); save();
+                const privacyService = privacyContainer.privacyState;
+                const containerOptions = BinguxPreferences.data.desktop.containers || {};
+                privacyContainer.privacyState = samplePrivacy;
+                editor.open(); editor.put("privacy", "control-centre", 0);
+                editor.selectedContainer = "control-centre"; editor.containerDisplay("text"); save();
+                controlCentre.visible = true; tryCompare(controlCentre, "revealScale", 1, 3000);
+                const sharing = findChild(privacyContainer, "screenSharingIndicator");
+                verify(waitForRendering(sharing, 2000));
+                verify(sharing.presentation.showText && !sharing.presentation.showIcon);
+                gesture(sharing, controlCentre.nativeWindow, sharing.width / 2, sharing.height / 2, ["--click-only"]);
+                compare(samplePrivacy.stops, 1, "The moved privacy control dispatches its native stop action");
+                privacyContainer.privacyState = privacyService;
+                editor.open(); editor.put("privacy", "top-right", 2); editor.change("containers", containerOptions); save();
                 editor.open(); editor.put("controls", "control-centre", 0); save();
                 controlCentre.visible = true; tryCompare(controlCentre, "revealScale", 1, 3000); wait(150);
                 gesture(systemPill, controlCentre.nativeWindow, systemPill.width / 2, 16, ["--click-only"]);

@@ -33,8 +33,8 @@ layout tests does not prove that every existing desktop widget is editable.
 
 ## Next implementation boundary
 
-Audit the wider widget interaction and popup-placement matrix, including privacy
-appearance after a control-centre move and remaining direct widget menus.
+Audit the wider widget interaction and popup-placement matrix, including small
+screens, scale factors and wide status groups in panel containers.
 Individual control-centre actions, audio, battery,
 media and quick controls now inherit the same container, group and widget display
 settings as their native components. The three native control groups use the same overview view
@@ -222,6 +222,17 @@ cancelling each route leaves the saved desktop unchanged. The complete Settings
 UI regression also passes, including search links to container options and the
 existing search-provider configuration. The remaining Settings visual changes
 in the working tree are separate from this layout-routing change.
+
+Privacy indicators now resolve their placement through the same lookup as other
+status widgets, including control-centre membership. The old lookup ignored this
+container and failed both a focused appearance test and the native move test.
+All four activity indicators now inherit icons, text, both or native mode and
+retain per-widget overrides. A native click on the sharing control after moving
+it into the control centre reaches the supplied privacy service. Normal and
+reduced-motion cases pass and reload the saved layout. Privacy and recording
+palette entries now use their real component types with inert sample state.
+The all-widget keyboard test and existing recording, stop and timer checks pass.
+These tests do not start or stop a physical capture session.
 
 The disabled-control click failure also reproduced with native dock input.
 The shared edit handler was destroyed when created before its window existed,

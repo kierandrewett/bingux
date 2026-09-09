@@ -145,14 +145,14 @@ FocusScope {
         }
     }
     Component { id: notifications; BarNotificationButton { count: 3; presentation: root.face; barWindow: DesktopEditing.editor?.nativeWindow } }
-    Component { id: capture; ActivityIndicator {
-        barWindow: DesktopEditing.editor?.nativeWindow; filled: true; label: "00:24"
-        activityColor: Theme.recordingIndicator; trailingIcon: "screencast-stop-symbolic"
+    Component { id: capture; RecordingIndicator {
+        barWindow: DesktopEditing.editor?.nativeWindow
+        capture: sampleCapture; privacy: samplePrivacy
         presentation: DesktopLayout.presentation(DesktopEditing.desktop, root.widgetId, root.container, label, "media-record-symbolic", false, true)
     } }
-    Component { id: privacy; ActivityIndicator {
-        barWindow: DesktopEditing.editor?.nativeWindow; iconName: "microphone-sensitivity-high-symbolic"
-        presentation: root.face
+    Component { id: privacy; PrivacyIndicators {
+        barWindow: DesktopEditing.editor?.nativeWindow
+        systemMetrics: sampleMetrics; privacyState: samplePrivacy
     } }
     Component { id: overflow; BarOverflowButton { presentation: root.face; barWindow: DesktopEditing.editor?.nativeWindow } }
     Component {
@@ -205,6 +205,9 @@ FocusScope {
     Component { id: empty; Item {} }
     QtObject {
         id: sampleMetrics
+        property bool screenSharing: false
+        property bool microphoneInUse: true
+        property bool locationInUse: false
         property bool available: true
         property var sampleSnapshot: ({cpuPercent: 24, memoryUsedBytes: 8589934592, memoryTotalBytes: 34359738368,
             networkReceiveBytesPerSecond: 128000, networkTransmitBytesPerSecond: 32000,
@@ -218,6 +221,26 @@ FocusScope {
         property var currentInputSource: inputSources[0]
         function formatBytes(value) { return (value / 1073741824).toFixed(0) + "G"; }
         function formatRate(value) { return (value / 1000).toFixed(0) + "K/s"; }
+    }
+    QtObject {
+        id: sampleCapture
+        property bool recording: true
+        property bool busy: true
+        property string state: "recording"
+        property string elapsedText: "00:24"
+        function stop() {}
+    }
+    QtObject {
+        id: samplePrivacy
+        property bool available: true
+        property bool recording: false
+        property bool screenSharing: false
+        property bool cameraInUse: false
+        property bool microphoneInUse: true
+        property string microphoneTooltip: "Microphone in use"
+        property string elapsedText: "00:24"
+        function stopRecording() {}
+        function stopSharing() {}
     }
     QtObject {
         id: samplePlayer

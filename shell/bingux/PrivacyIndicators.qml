@@ -8,7 +8,7 @@ Item {
     required property var privacyState
     property var barWindow: null
     function appearance(label, icon) {
-        return DesktopLayout.presentation(DesktopEditing.desktop, "privacy", DesktopLayout.zone(DesktopEditing.desktop.layout || {}, "privacy"), label, icon, true, false);
+        return DesktopLayout.presentation(DesktopEditing.desktop, "privacy", DesktopLayout.placement(DesktopEditing.desktop, "privacy"), label, icon, true, false);
     }
     readonly property bool screenSharing: privacyState.screenSharing || (!privacyState.available && systemMetrics.screenSharing)
     readonly property bool active: sharingVisible || privacyState.cameraInUse

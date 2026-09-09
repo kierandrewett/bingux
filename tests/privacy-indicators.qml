@@ -23,6 +23,8 @@ ShellRoot {
         property bool recording: false
         property bool cameraInUse: false
         property bool screenSharing: false
+        property bool microphoneInUse: fixtureMetrics.microphoneInUse
+        property string microphoneTooltip: "Microphone in use"
         property string elapsedText: "2:45"
         function stopRecording() { test.stopped++; fixturePrivacy.recording = false; }
         function stopSharing() { test.stopped++; fixturePrivacy.screenSharing = false; }

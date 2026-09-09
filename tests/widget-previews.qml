@@ -114,10 +114,11 @@ ShellRoot {
                         editor.desktop = {controlLayout: ControlLayout.move(ControlLayout.defaults(), "control-centre", data.id, container === "control-centre" ? 0 : -1),
                             containers: {[container]: {display: "text"}}, widgetOptions: {}};
                         compare(preview.container, container);
-                        verify(item.presentation.showText && !item.presentation.showIcon);
+                        const face = data.id === "privacy" ? findChild(item, "microphoneIndicator") : item;
+                        verify(face.presentation.showText && !face.presentation.showIcon);
                         editor.desktop = Object.assign({}, editor.desktop, {widgetOptions: {[data.id]: {display: "both", label: "My status", icon: "starred-symbolic"}}});
-                        compare(item.presentation.label, "My status"); compare(item.presentation.icon, "starred-symbolic");
-                        verify(item.presentation.showText && item.presentation.showIcon);
+                        compare(face.presentation.label, "My status"); compare(face.presentation.icon, "starred-symbolic");
+                        verify(face.presentation.showText && face.presentation.showIcon);
                     }
                     compare(item.implicitHeight, Theme.barHeight, "The preview retains its full pointer target");
                     if (data.id === "notifications") {
