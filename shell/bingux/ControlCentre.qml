@@ -19,6 +19,8 @@ ShellPopup {
     signal widgetEditRequested(string widgetId, var control)
     signal customiseRequested()
     property var widgetLayout: null
+    readonly property alias widgetHost: controls
+    readonly property var externalEntries: widgetLayout ? widgetLayout.defaultControls.map(item => ({id: widgetLayout.nameFor(item), item})).filter(entry => ControlLayout.isExternal(entry.id) && ControlLayout.contains(groupedLayout, "control-centre", entry.id)) : []
     property Item movedAnchor: null
     property var actionWidgets: []
     readonly property var movableWidgets: [networkWidget, bluetoothWidget, vpnWidget, dndWidget, nightLightWidget, powerWidget, awakeWidget, outputControl, inputControl, batteryControl, mediaControl, headerControls, audioRows, quickRows, headerSpace, dividerControl, customiseControl].concat(actionWidgets)
@@ -217,7 +219,7 @@ ShellPopup {
             return group === "controls-header" && headerControls.visible ? headerControls
                 : group === "controls-audio" && audioRows.visible ? audioRows : root.body.parent;
         }
-        entries: root.movableWidgets.filter(item => !item.barLayout && !item.memberEntries).map(item => ({id: item.widgetId, item})).concat(root.movableWidgets.filter(item => !item.barLayout && item.memberEntries).map(item => ({id: item.widgetId, item}))).filter(entry => entry.item.Window.window === root.body.Window.window)
+        entries: root.movableWidgets.filter(item => !item.barLayout && !item.memberEntries).map(item => ({id: item.widgetId, item})).concat(root.movableWidgets.filter(item => !item.barLayout && item.memberEntries).map(item => ({id: item.widgetId, item}))).concat(root.externalEntries).filter(entry => entry.item.Window.window === root.body.Window.window)
     }
 
     function settings(panel) {

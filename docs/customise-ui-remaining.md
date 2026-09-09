@@ -22,8 +22,10 @@ layout tests does not prove that every existing desktop widget is editable.
   them or move out of the group and back. The divider, header space and
   Customise button also move into the bar and dock. The space has a fixed-width
   override and can return to its original flexible header behaviour.
-- `DesktopLayout.accepts()` confines sidebar panels to the sidebar. Status,
-  label and icon widgets cannot enter the control centre or sidebar.
+- `DesktopLayout.accepts()` still confines sidebar panels to the sidebar. Status,
+  label and icon widgets now enter the control centre, interleaved with its native
+  sections. They keep their original instances, display settings and popup
+  anchors. The sidebar still needs to accept these widgets.
 - `TerminalSidebar.qml` still offers ordinary position changes outside Customise
   UI. The requested exception is ordinary dock application rearrangement.
 - Restore defaults resets the arrangement. Container and widget options need a
@@ -31,10 +33,9 @@ layout tests does not prove that every existing desktop widget is editable.
 
 ## Next implementation boundary
 
-Extend sidebar panels into the other real containers. Allow status, label and
-icon widgets inside the control centre and sidebar. The control-centre section
-list currently accepts only native members; the sidebar host exposes one active
-panel. Extend placement validation and these real hosts together. Preserve the same
+Extend sidebar panels into the other real containers and allow status, label and
+icon widgets inside the sidebar. The sidebar host currently exposes one active
+panel. Extend placement validation and this real host together. Preserve the same
 component instances and service actions. The palette group previews also need
 to share the complete native group composition, including display inheritance,
 instead of their current representative layouts.
@@ -88,6 +89,16 @@ from the moved Customise button. Normal and reduced-motion cases save and reload
 their placements in a fresh shell process. Their palette previews match the
 placed utility dimensions. The unchanged group regression and original native
 geometry comparison also pass.
+
+The external control-centre case verifies native Search dragging, moving labels
+between the panel and dock, all ten original status-widget instances in the
+panel, container and per-widget display settings, unique decoration instances that survive cross-container moves and additions,
+Cancel and saved placements after a fresh shell process. The original Clock
+opens its anchored calendar, and Search opens its real separate UI process.
+The Control Centre button also works from inside the panel. Normal and reduced
+motion pass, as do the full editor regression, seven reload cases and unchanged
+native control-centre geometry. Validation rejects duplicate placement and
+oversized section lists without changing the saved file.
 
 Remaining broad checks include all existing widget actions, notification
 interactions after layout changes, different scale factors,

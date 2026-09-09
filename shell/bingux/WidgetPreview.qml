@@ -13,7 +13,7 @@ FocusScope {
     readonly property bool groupedWidget: !!ControlLayout.groupFor(widgetId)
     readonly property bool utilityWidget: ["control-divider", "control-header-space", "control-customise"].includes(widgetId)
     readonly property bool panelWidget: !!spec.panel
-    readonly property string container: DesktopLayout.zone(DesktopEditing.desktop.layout || {}, widgetId) || (widgetId.startsWith("control-") ? "control-centre" : "top-right")
+    readonly property string container: DesktopLayout.placement(DesktopEditing.desktop, widgetId) || (widgetId.startsWith("control-") ? "control-centre" : "top-right")
     readonly property var face: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, container, spec.label || "", spec.icon || "", !["clock", "keyboard"].includes(widgetId), ["clock", "keyboard"].includes(widgetId))
     readonly property Item visualItem: frame
     readonly property Item previewControl: component.item

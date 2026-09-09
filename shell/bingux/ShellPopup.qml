@@ -24,7 +24,8 @@ Scope {
     readonly property bool anchorAbove: !!anchorWindow && anchorWindow.anchors.bottom && !anchorWindow.anchors.top
     readonly property real anchorTop: anchorAbove && typeof anchorWindow.popupAnchorTop === "number" ? anchorWindow.popupAnchorTop : anchorPosition.y - (anchorItem ? anchorItem.height : 0)
     readonly property point anchorPosition: {
-        if (!anchorItem) return Qt.point(0, Theme.barHeight);
+        // Reparenting a launcher must not anchor a popup to its own content.
+        if (!anchorItem || anchorItem.Window.window === window.contentItem.Window.window) return Qt.point(0, Theme.barHeight);
         // Track layout and reparenting, including controls moved into overflow.
         for (let item = anchorItem; item; item = item.parent) {
             const geometry = [item.x, item.y, item.width, item.height];

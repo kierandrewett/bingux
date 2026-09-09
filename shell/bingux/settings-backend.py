@@ -23,6 +23,13 @@ DEFAULTS = {'search': {'disabledProviders': [], 'ai': None, 'fileRoots': None, '
                         'containers': {}, 'widgetOptions': {}}}
 PROVIDERS = {'applications', 'files', 'calculation', 'conversions', 'web', 'web-shortcuts', 'external'}
 
+EXTERNAL_CONTROL_IDS = {"search", "clock", "capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications"}
+
+
+def is_external_control(item):
+    return isinstance(item, str) and (item in EXTERNAL_CONTROL_IDS or bool(re.fullmatch(r'(label|icon):[1-9][0-9]{0,3}', item)))
+
+
 CONTROL_ACTIONS = {"control-account", "control-settings", "control-session", "control-lock"}
 
 PORTABLE_CONTROLS = CONTROL_ACTIONS | {"control-volume", "control-microphone", "control-battery", "control-media", "controls-header", "controls-audio", "controls-tiles", "control-divider", "control-header-space", "control-customise"}
@@ -47,7 +54,7 @@ def validate_control_layout(layout):
     if not isinstance(groups, dict) or set(groups) != set(CONTROL_GROUPS):
         raise ValueError('Invalid control-centre groups.')
     for group, items in groups.items():
-        if not isinstance(items, list) or any(not isinstance(item, str) or item not in CONTROL_GROUPS[group] for item in items) or len(items) != len(set(items)):
+        if not isinstance(items, list) or len(items) > 256 or any(not isinstance(item, str) or (item not in CONTROL_GROUPS[group] and not (group == "control-centre" and is_external_control(item))) for item in items) or len(items) != len(set(items)):
             raise ValueError('A control-centre widget can only appear once in its group.')
 
 
@@ -59,6 +66,9 @@ def validate_control_action_placement(desktop):
         raise ValueError('Invalid desktop layout.')
     actions = {item for items in layout.values() for item in items if isinstance(item, str)} & PORTABLE_CONTROLS
     grouped = desktop.get('controlLayout')
+    external = {item for items in layout.values() for item in items if is_external_control(item)}
+    if grouped and external & set(grouped['groups']['control-centre']):
+        raise ValueError('A status or decoration widget can only be placed in one container.')
     if actions and (grouped is None or actions & {item for items in grouped['groups'].values() for item in items}):
         raise ValueError('A control widget can only be placed in one container.')
 
@@ -152,7 +162,7 @@ def validate(data):
     layout = desktop['layout']
     if layout is not None:
         zones = {'top-left', 'top-center', 'top-right', 'dock', 'sidebar'}
-        widgets = {'search', 'clock', 'capture', 'tray', 'privacy', 'metrics', 'keyboard', 'overflow', 'controls', 'notifications'}
+        widgets = EXTERNAL_CONTROL_IDS
         controls = {'control-' + name for name in ('network', 'bluetooth', 'vpn', 'dnd', 'nightLight', 'power', 'awake')}
         panels = {'terminal', 'notes', 'monitor', 'calendar', 'media', 'tasks'}
         if not isinstance(layout, dict) or set(layout) != zones: raise ValueError('Invalid desktop layout.')

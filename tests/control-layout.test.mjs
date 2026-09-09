@@ -68,3 +68,21 @@ test('portable media, audio and battery reject simultaneous native and external 
         assert.equal(model.validPlacement(desktop), true);
     }
 });
+
+test('status and decoration placement shares section order and rejects duplicate ownership', () => {
+    for (const id of ['search', 'clock', 'controls', 'label:1', 'icon:3']) {
+        const layout = model.move(null, 'control-centre', id, 1);
+        assert.equal(layout.groups['control-centre'][1], id);
+        assert.equal(model.valid(layout), true);
+        assert.equal(model.validPlacement({layout: {'top-left': [id]}, controlLayout: layout}), false);
+        assert.equal(model.validPlacement({layout: {'top-left': []}, controlLayout: layout}), true);
+        assert.equal(model.move(layout, 'controls-header', id, 0), layout);
+    }
+    for (const id of ['unknown', 'label', 'icon:0', 'label:10000', 'terminal']) {
+        const layout = model.defaults(); layout.groups['control-centre'].push(id);
+        assert.equal(model.valid(layout), false);
+    }
+    const excessive = model.defaults(); excessive.groups['control-centre'] = Array.from({length: 257}, (_, index) => 'label:' + (index + 1));
+    assert.equal(model.valid(excessive), false);
+    assert.equal(model.validPlacement({layout: {'top-left': ['search']}}), true);
+});

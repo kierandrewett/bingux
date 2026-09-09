@@ -63,6 +63,9 @@ function widget(id) {
     if (isDecoration(id)) return Object.assign({}, decorationWidgets.find(item => item.id === id.split(":")[0]), {id});
     return widgets.concat(controlWidgets).find(w => w.id === id) || (ControlLayout.isPortable(id) ? ControlLayout.widget(id) : undefined);
 }
+function placement(desktop, id) {
+    return zone(desktop.layout || {}, id) || (ControlLayout.isExternal(id) && ControlLayout.contains(desktop.controlLayout, "control-centre", id) ? "control-centre" : "");
+}
 function zone(layout, id) { return Object.keys(layout).find(key => layout[key].includes(id)) || ""; }
 // A drop is positioned against visible neighbours, but saved orders include hidden widgets.
 function insertionIndex(order, draggedId, visibleIds, before) {
@@ -76,7 +79,7 @@ function accepts(id, target) {
     const item = widget(id);
     if (item?.layoutItem) return ["top-left", "top-center", "top-right", "palette"].includes(target);
     if (id.startsWith("control-") || ControlLayout.isContainer(id)) return !!item && ["control-centre", "top-left", "top-center", "top-right", "dock", "palette"].includes(target);
-    return !!item && (target === "palette" || (item.panel ? target === "sidebar" : ["top-left", "top-center", "top-right", "dock"].includes(target)));
+    return !!item && (target === "palette" || (item.panel ? target === "sidebar" : ["top-left", "top-center", "top-right", "dock", "control-centre"].includes(target)));
 }
 function move(layout, id, target, index) {
     if (!accepts(id, target)) return layout;

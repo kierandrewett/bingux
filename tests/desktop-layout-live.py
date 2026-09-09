@@ -6,11 +6,13 @@ from pathlib import Path
 import shutil
 import tempfile
 import subprocess
+import signal
+import resource
 import time
 from private_shell import run_reported_shell, stage_compositor_bridge
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--case', choices=('desktop-layout', 'control-layout', 'control-audio', 'control-media', 'control-groups', 'control-utilities', 'dock-unpin'), default='desktop-layout')
+parser.add_argument('--case', choices=('desktop-layout', 'control-layout', 'control-audio', 'control-media', 'control-groups', 'control-utilities', 'control-external', 'dock-unpin'), default='desktop-layout')
 case = parser.parse_args().case
 repo = Path(__file__).resolve().parent.parent
 if not os.environ.get('WAYLAND_DISPLAY', '').startswith('gnoblin-gs-'):
@@ -40,15 +42,33 @@ with tempfile.TemporaryDirectory(prefix='bingux-layout-live-') as directory:
     stage_compositor_bridge(repo, os.environ['XDG_CONFIG_HOME'])
     subprocess.run(['python3', str(repo / 'tests/customise-native-input.py'), '--prepare'], env=environment, check=True)
     time.sleep(.3)
-    report, output = run_reported_shell(fixture, environment, 'BINGUX_LAYOUT_REPORT', timeout=55)
-    print(output)
-    if report != 'PASS' or any(error in output for error in ('CUSTOMISE_TEST_FAILED', 'TypeError', 'ReferenceError', 'has crashed', 'property "maximumPopupHeight"', 'property "preferredY"', 'Cannot use same item on different windows', 'Updates can only be scheduled', 'QGridLayoutEngine::addItem', 'Binding loop detected')):
-        raise SystemExit(report if report != 'PASS' else 'Runtime errors during layout test')
-    if case in ('control-groups', 'control-utilities'):
-        (fixture / 'shell.qml').write_text(base_shell.rstrip()[:-1] + (repo / ('tests/' + case + '-reload.inc.qml')).read_text() + '\n}\n')
-        (fixture / 'report').unlink()
-        report, output = run_reported_shell(fixture, environment, 'BINGUX_LAYOUT_REPORT', timeout=30)
-        print(output)
-        if report != 'PASS' or any(error in output for error in ('CUSTOMISE_TEST_FAILED', 'TypeError', 'ReferenceError', 'Binding loop detected', 'has crashed')):
-            raise SystemExit(report if report != 'PASS' else 'Runtime errors after restoring saved groups')
-        print('PASS: saved widget placements and settings survive a fresh shell process')
+    # Search is a separate UI session, so exercise its actual receiver too.
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    search_process = None
+    with (fixture / 'search-runtime.log').open('w') as search_log:
+        if case == 'control-external':
+            search_process = subprocess.Popen([os.environ.get('QS_TEST_BIN', 'qs'), '-p', str(fixture / 'SearchShell.qml'), '--no-color'],
+                env=environment, stdout=search_log, stderr=subprocess.STDOUT, start_new_session=True)
+        try:
+            report, output = run_reported_shell(fixture, environment, 'BINGUX_LAYOUT_REPORT', timeout=55)
+            print(output)
+            if report != 'PASS' or any(error in output for error in ('CUSTOMISE_TEST_FAILED', 'TypeError', 'ReferenceError', 'has crashed', 'property "maximumPopupHeight"', 'property "preferredY"', 'Cannot use same item on different windows', 'Updates can only be scheduled', 'QGridLayoutEngine::addItem', 'Binding loop detected')):
+                raise SystemExit(report if report != 'PASS' else 'Runtime errors during layout test')
+            if case in ('control-groups', 'control-utilities', 'control-external'):
+                (fixture / 'shell.qml').write_text(base_shell.rstrip()[:-1] + (repo / ('tests/' + case + '-reload.inc.qml')).read_text() + '\n}\n')
+                (fixture / 'report').unlink()
+                report, output = run_reported_shell(fixture, environment, 'BINGUX_LAYOUT_REPORT', timeout=30)
+                print(output)
+                if report != 'PASS' or any(error in output for error in ('CUSTOMISE_TEST_FAILED', 'TypeError', 'ReferenceError', 'Binding loop detected', 'has crashed')):
+                    raise SystemExit(report if report != 'PASS' else 'Runtime errors after restoring saved groups')
+                print('PASS: saved widget placements and settings survive a fresh shell process')
+        finally:
+            if search_process:
+                try: os.killpg(search_process.pid, signal.SIGKILL)
+                except ProcessLookupError: pass
+                search_process.wait(timeout=5)
+                search_log.flush()
+                search_output = (fixture / 'search-runtime.log').read_text()
+                if any(error in search_output for error in ('TypeError', 'ReferenceError', 'Binding loop detected', 'has crashed')):
+                    print(search_output)
+                    raise SystemExit('Runtime errors in the real search UI session')

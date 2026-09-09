@@ -124,3 +124,12 @@ test("group display inherits its host while child overrides stay independent", (
     desktop.widgetOptions["control-settings"] = {display: "both", label: "Preferences"};
     assert.equal(face().mode, "both"); assert.equal(face().label, "Preferences");
 });
+
+test('status and decoration widgets accept the control centre while panels keep their existing hosts', () => {
+    assert.deepEqual(plain(vm.runInContext('widgets.filter(item => !item.panel).map(item => item.id).sort()', layout)),
+        plain(vm.runInContext('externalIds.slice().sort()', controls)));
+    for (const id of ['search', 'clock', 'controls', 'metrics', 'keyboard', 'tray', 'privacy', 'capture', 'overflow', 'notifications', 'label', 'label:1', 'icon:2'])
+        assert.equal(layout.accepts(id, 'control-centre'), true);
+    for (const id of ['terminal', 'spacer:1', 'spring:1', 'unknown'])
+        assert.equal(layout.accepts(id, 'control-centre'), false);
+});

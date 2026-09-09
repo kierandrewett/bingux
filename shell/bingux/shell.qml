@@ -46,7 +46,7 @@ ShellRoot {
         if (panel !== searchOverlay && searchOverlay.visible) searchOverlay.closeSearch();
         if (panel !== emojiPicker) emojiPicker.visible = false;
         if (panel !== calendarPopup) calendarPopup.visible = false;
-        if (panel !== controlCentre) controlCentre.visible = false;
+        if (panel !== controlCentre && panel?.anchorWindow !== controlCentre.nativeWindow) controlCentre.visible = false;
         if (panel !== metricsPopup) metricsPopup.visible = false;
         if (panel !== barOverflow) barOverflow.visible = false;
         if (panel !== notificationCentre) notificationCentre.visible = false;
@@ -261,7 +261,7 @@ ShellRoot {
         function capture(): void { captureTool.open() }
     }
 
-    ControlCentre { id: controlCentre; widgetLayout: topBar; onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, item.editWindow || (item.barLayout ? item.barWindow || topBar.windowFor(item) : controlCentre)); onCustomiseRequested: binguxSettings.openCustomise("", ""); anchorWindow: controlCentre.movedAnchor?.barWindow || topBar.windowFor(controlCentre.movedAnchor || systemPill); anchorItem: controlCentre.movedAnchor || systemPill; dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom); indicators: systemIndicators; screen: topBar.screen; onVisibleChanged: if (visible) root.closePanelsExcept(controlCentre) }
+    ControlCentre { id: controlCentre; widgetLayout: topBar; onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, item.editWindow || (item.barLayout ? item.barWindow || topBar.windowFor(item) : controlCentre)); onCustomiseRequested: binguxSettings.openCustomise("", ""); anchorWindow: DesktopEditing.active ? topBar : controlCentre.movedAnchor?.barWindow || (topBar.zoneFor(systemPill) === "control-centre" ? topBar : topBar.windowFor(controlCentre.movedAnchor || systemPill)); anchorItem: DesktopEditing.active ? null : controlCentre.movedAnchor || (topBar.zoneFor(systemPill) === "control-centre" ? null : systemPill); dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom); indicators: systemIndicators; screen: topBar.screen; onVisibleChanged: if (visible) root.closePanelsExcept(controlCentre) }
 
     SystemMetricsPopup {
         id: metricsPopup
@@ -325,13 +325,30 @@ ShellRoot {
         readonly property string spacingKey: customLayout ? ["top-left", "top-center", "top-right"].reduce((items, zone) => items.concat(customLayout[zone]), []).filter(DesktopLayout.isSpacing).join(";") : ""
         readonly property var spacingIds: spacingKey ? spacingKey.split(";") : []
         property var spacingWidgets: []
+        ListModel { id: spacingInstances }
+        ListModel { id: decorationInstances }
+        function reconcileInstances(model, ids) {
+            for (let index = model.count - 1; index >= 0; index--)
+                if (!ids.includes(model.get(index).instanceId)) model.remove(index);
+            const existing = [];
+            for (let index = 0; index < model.count; index++) existing.push(model.get(index).instanceId);
+            for (const id of ids) if (!existing.includes(id)) model.append({instanceId: id});
+        }
+        function syncWidgetInstances() {
+            reconcileInstances(spacingInstances, spacingIds);
+            reconcileInstances(decorationInstances, decorationKey ? decorationKey.split(";") : []);
+        }
+        // A cross-container move updates two lists. Reconcile after both changes.
+        onSpacingKeyChanged: Qt.callLater(syncWidgetInstances)
+        onDecorationKeyChanged: Qt.callLater(syncWidgetInstances)
+        Component.onCompleted: syncWidgetInstances()
         Instantiator {
-            model: topBar.spacingIds
+            model: spacingInstances
             delegate: BarSpace {
                 id: spacingWidget
-                required property string modelData
-                readonly property string widgetId: modelData
-                visible: topBar.spacingWidgets.includes(spacingWidget)
+                required property string instanceId
+                readonly property string widgetId: instanceId
+                visible: topBar.spacingWidgets.includes(spacingWidget) && topBar.chosen(spacingWidget)
                 flexible: widgetId.startsWith("spring:")
                 gapSize: DesktopEditing.desktop.widgetOptions?.[widgetId]?.width || 20
                 parent: topBar.hostFor(spacingWidget)
@@ -341,18 +358,18 @@ ShellRoot {
             onObjectAdded: (index, object) => topBar.spacingWidgets = topBar.spacingWidgets.concat([object])
             onObjectRemoved: (index, object) => { object.parent = null; topBar.spacingWidgets = topBar.spacingWidgets.filter(item => item !== object); }
         }
-        readonly property string decorationKey: customLayout ? ["top-left", "top-center", "top-right", "dock"].reduce((items, zone) => items.concat(customLayout[zone]), []).filter(DesktopLayout.isDecoration).join(";") : ""
+        readonly property string decorationKey: customLayout ? ["top-left", "top-center", "top-right", "dock"].reduce((items, zone) => items.concat(customLayout[zone]), []).concat(DesktopEditing.desktop.controlLayout?.groups["control-centre"] || []).filter(DesktopLayout.isDecoration).join(";") : ""
         property var decorationWidgets: []
         Instantiator {
-            model: topBar.decorationKey ? topBar.decorationKey.split(";") : []
+            model: decorationInstances
             delegate: DesktopDecoration {
                 id: decorationWidget
-                required property string modelData
-                widgetId: modelData
-                visible: topBar.decorationWidgets.includes(decorationWidget)
+                required property string instanceId
+                widgetId: instanceId
+                visible: topBar.decorationWidgets.includes(decorationWidget) && topBar.chosen(decorationWidget)
                 parent: topBar.hostFor(decorationWidget)
                 Layout.column: topBar.controlColumn(decorationWidget)
-                Layout.row: 0
+                Layout.row: topBar.controlRow(decorationWidget)
             }
             onObjectAdded: (index, object) => topBar.decorationWidgets = topBar.decorationWidgets.concat([object])
             onObjectRemoved: (index, object) => { object.parent = null; topBar.decorationWidgets = topBar.decorationWidgets.filter(item => item !== object); }
@@ -365,7 +382,7 @@ ShellRoot {
         }
         function appearance(id, label, icon, nativeIcon, nativeText) {
             return DesktopLayout.presentation(DesktopEditing.desktop, id,
-                customLayout ? DesktopLayout.zone(customLayout, id) : "top-right", label, icon, nativeIcon, nativeText);
+                customLayout ? DesktopLayout.placement(DesktopEditing.desktop, id) : "top-right", label, icon, nativeIcon, nativeText);
         }
         readonly property bool nativeTopBarLayout: !customLayout || (
             JSON.stringify(customLayout["top-left"]) === '["search"]' &&
@@ -375,20 +392,21 @@ ShellRoot {
             ["top-left", "top-center", "top-right"].every(zone => !DesktopEditing.desktop.containers?.[zone]?.display || DesktopEditing.desktop.containers[zone].display === "native") &&
             Object.keys(DesktopEditing.desktop.widgetOptions || {}).every(id => !DesktopLayout.zone(customLayout, id).startsWith("top-") || !appearance(id, "", "", false, false).custom) &&
             ["capture", "tray", "privacy", "metrics", "keyboard", "controls", "notifications"].every(id => customLayout["top-right"].includes(id)))
+        function nameFor(item) { return item.widgetId || controlNames[defaultControls.indexOf(item)]; }
         function chosen(item) {
             const name = item.widgetId || controlNames[defaultControls.indexOf(item)];
-            return customLayout ? DesktopLayout.zone(customLayout, name) !== "" : !name.startsWith("control-") && !name.startsWith("controls-");
+            return customLayout ? DesktopLayout.placement(DesktopEditing.desktop, name) !== "" : !name.startsWith("control-") && !name.startsWith("controls-");
         }
         function zoneFor(item) {
             const name = item.widgetId || controlNames[defaultControls.indexOf(item)];
-            if (name === "overflow" && (!customLayout || !DesktopLayout.zone(customLayout, name))) return "top-right";
-            return customLayout ? DesktopLayout.zone(customLayout, name) : name === "search" ? "top-left" : name === "clock" ? "top-center" : "top-right";
+            if (name === "overflow" && (!customLayout || !DesktopLayout.placement(DesktopEditing.desktop, name))) return "top-right";
+            return customLayout ? DesktopLayout.placement(DesktopEditing.desktop, name) : name === "search" ? "top-left" : name === "clock" ? "top-center" : "top-right";
         }
-        function windowFor(item) { return zoneFor(item) === "dock" ? dock : topBar; }
+        function windowFor(item) { return zoneFor(item) === "dock" ? dock : zoneFor(item) === "control-centre" ? controlCentre.nativeWindow : topBar; }
         function hostFor(item) {
             if (overflows(item)) return overflowColumn;
             const zone = zoneFor(item);
-            return zone === "dock" ? dock.widgetHost : zone === "top-left" ? leftControls : zone === "top-center" ? centerControls : rightControls;
+            return zone === "control-centre" ? controlCentre.widgetHost : zone === "dock" ? dock.widgetHost : zone === "top-left" ? leftControls : zone === "top-center" ? centerControls : rightControls;
         }
         readonly property real controlsBudget: Math.max(0, (width - clockPill.implicitWidth) / 2 - Theme.gap)
         // Display order is independent of overflow priority and reparenting order.
@@ -500,7 +518,7 @@ ShellRoot {
             [privacyContainer, privacyContainer.active], [metricsPill, profileSettings.metricsEnabled],
             [inputSourceSelector, metrics.desktopStateAvailable], [systemPill, true],
             [notificationButton, notificationState.allEntries.length > 0], [searchPill, true], [clockPill, true]
-        ].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat(controlCentre.movableWidgets.filter(item => chosen(item)), spacingWidgets, decorationWidgets)
+        ].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat(controlCentre.movableWidgets.filter(item => chosen(item)), spacingWidgets.filter(item => chosen(item)), decorationWidgets.filter(item => chosen(item)))
         readonly property var overflowItems: {
             if (customLayout && !nativeTopBarLayout) {
                 const hidden = [];
@@ -539,8 +557,8 @@ ShellRoot {
         }
         readonly property var barControls: orderedControls.filter(item => (item === overflowButton ? overflowItems.length > 0 : availableControls.includes(item)) && !overflows(item))
         function overflows(item) { return overflowItems.includes(item); }
-        function controlColumn(item) { return overflows(item) ? 0 : Math.max(0, barControls.filter(other => zoneFor(other) === zoneFor(item)).indexOf(item)); }
-        function controlRow(item) { return overflows(item) ? overflowItems.indexOf(item) : 0; }
+        function controlColumn(item) { if (zoneFor(item) === "control-centre") return 0; return overflows(item) ? 0 : Math.max(0, barControls.filter(other => zoneFor(other) === zoneFor(item)).indexOf(item)); }
+        function controlRow(item) { if (zoneFor(item) === "control-centre") return controlCentre.sectionRow(nameFor(item)); return overflows(item) ? overflowItems.indexOf(item) : 0; }
         onOverflowItemsChanged: if (overflowItems.length === 0) barOverflow.visible = false
         margins.left: terminalSidebar.leftInset
         margins.right: terminalSidebar.rightInset
@@ -588,7 +606,7 @@ ShellRoot {
                 id: searchPill
                 presentation: topBar.appearance("search", "Search", "system-search-symbolic", true, false)
                 parent: topBar.hostFor(searchPill)
-                Layout.column: topBar.controlColumn(searchPill); Layout.row: 0
+                Layout.column: topBar.controlColumn(searchPill); Layout.row: topBar.controlRow(searchPill)
                 visible: topBar.chosen(searchPill)
                 onClicked: root.openSearch()
             }
@@ -596,7 +614,7 @@ ShellRoot {
                 id: clockPill
                 presentation: topBar.appearance("clock", clockLabel.text + " " + timeLabel.text, "x-office-calendar-symbolic", false, true)
                 parent: topBar.hostFor(clockPill)
-                Layout.column: topBar.controlColumn(clockPill); Layout.row: 0
+                Layout.column: topBar.controlColumn(clockPill); Layout.row: topBar.controlRow(clockPill)
                 visible: topBar.chosen(clockPill)
                 z: 1
                 horizontalPadding: Theme.barPrimaryPadding
@@ -700,7 +718,7 @@ ShellRoot {
                         parent: topBar.hostFor(overflowButton)
                         readonly property var presentation: topBar.appearance("overflow", "More", "view-more-symbolic", true, false)
                         Layout.column: topBar.controlColumn(overflowButton)
-                        Layout.row: 0
+                        Layout.row: topBar.controlRow(overflowButton)
                         visible: topBar.overflowItems.length > 0
                         implicitWidth: presentation.custom ? overflowFace.implicitWidth + Theme.barPrimaryPadding * 2 : Theme.barEdgeHitWidth
                         implicitHeight: Theme.barHeight

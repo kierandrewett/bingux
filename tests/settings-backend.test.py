@@ -66,6 +66,27 @@ class SettingsTests(unittest.TestCase):
                 settings.write({'desktop': {'layout': duplicate}})
         self.assertEqual(settings.config_path().read_bytes(), before)
 
+    def test_status_and_decoration_control_centre_placement(self):
+        layout = {'top-left': [], 'top-center': [], 'top-right': [], 'dock': [], 'sidebar': ['terminal']}
+        for item in ['search', 'clock', 'controls', 'label:1', 'icon:3']:
+            groups = settings.native_control_layout()
+            groups['groups']['control-centre'].insert(1, item)
+            settings.write({'desktop': {'layout': layout, 'controlLayout': groups}})
+            self.assertEqual(settings.read()['desktop']['controlLayout'], groups)
+            before = settings.config_path().read_bytes()
+            duplicate = copy.deepcopy(layout)
+            duplicate['top-left'].append(item)
+            with self.assertRaises(ValueError):
+                settings.write({'desktop': {'layout': duplicate}})
+            self.assertEqual(settings.config_path().read_bytes(), before)
+        for item in ['unknown', 'label', 'icon:0', 'label:10000', 'terminal']:
+            groups = settings.native_control_layout()
+            groups['groups']['control-centre'].append(item)
+            with self.assertRaises(ValueError): settings.write({'desktop': {'controlLayout': groups}})
+        groups = settings.native_control_layout()
+        groups['groups']['control-centre'] = ['label:' + str(index) for index in range(1, 258)]
+        with self.assertRaises(ValueError): settings.write({'desktop': {'controlLayout': groups}})
+
     def test_fixed_space_width_validation(self):
         settings.write({'desktop': {'widgetOptions': {'spacer:1': {'width': 48}, 'control-header-space': {'width': 64}}}})
         self.assertEqual(settings.read()['desktop']['widgetOptions']['spacer:1']['width'], 48)

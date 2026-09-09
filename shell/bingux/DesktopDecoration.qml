@@ -6,7 +6,7 @@ Item {
     required property string widgetId
     readonly property var spec: DesktopLayout.widget(widgetId) || {}
     readonly property var presentation: DesktopLayout.presentation(DesktopEditing.desktop, widgetId,
-        DesktopLayout.zone(DesktopEditing.desktop.layout || {}, widgetId), spec.label, spec.icon,
+        DesktopLayout.placement(DesktopEditing.desktop, widgetId), spec.label, spec.icon,
         widgetId.startsWith("icon"), widgetId.startsWith("label"))
     implicitWidth: face.implicitWidth + Theme.barControlPadding * 2
     implicitHeight: Theme.barHeight

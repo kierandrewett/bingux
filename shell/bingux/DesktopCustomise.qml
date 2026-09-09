@@ -190,7 +190,7 @@ Scope {
         return {id, label: entry?.name || id.slice(4), icon: entry?.icon || "application-x-executable", app: true};
     }
     function memberGroup(id) { return ControlLayout.groupFor(id) || (DesktopLayout.controlWidgets.some(item => item.id === id) ? "controls-tiles" : ""); }
-    function containerFor(id) { if (memberGroup(id)) return DesktopLayout.zone(layout, id) || DesktopLayout.zone(layout, memberGroup(id)) || "control-centre"; return id.startsWith("app:") ? "dock" : DesktopLayout.zone(layout, id) || (id.startsWith("control-") ? "control-centre" : ""); }
+    function containerFor(id) { if (ControlLayout.isExternal(id) && ControlLayout.contains(desktop.controlLayout, "control-centre", id)) return "control-centre"; if (memberGroup(id)) return DesktopLayout.zone(layout, id) || DesktopLayout.zone(layout, memberGroup(id)) || "control-centre"; return id.startsWith("app:") ? "dock" : DesktopLayout.zone(layout, id) || (id.startsWith("control-") ? "control-centre" : ""); }
     function appearance(id) {
         const item = baseInfo(id);
         return DesktopLayout.presentation(desktop, id, containerFor(id), item?.label || "", item?.icon || "", id !== "clock", id === "clock");
@@ -219,7 +219,7 @@ Scope {
     function orderFor(zone, id) {
         const group = ControlLayout.groupFor(id);
         if (ControlLayout.isContainer(zone)) return zone === "controls-tiles" ? (desktop.controlOrder || DesktopLayout.controlOrder()).map(name => "control-" + name) : ControlLayout.items(desktop.controlLayout, zone);
-        if (zone === "control-centre") return group ? ControlLayout.items(desktop.controlLayout, group)
+        if (zone === "control-centre") return ControlLayout.isExternal(id) || DesktopLayout.isDecoration(id) ? ControlLayout.items(desktop.controlLayout, zone) : group ? ControlLayout.items(desktop.controlLayout, group)
             : (desktop.controlOrder || DesktopLayout.controlOrder()).map(name => "control-" + name);
         return zone === "dock" && id.startsWith("app:") ? dockApplications : layout[zone] || [];
     }
@@ -252,6 +252,28 @@ Scope {
         try { putItem(id, target, index); } finally { groupingChange = false; }
     }
     function putItem(id, target, index) {
+        if (DesktopLayout.isTemplate(id)) {
+            if (target === "palette") return;
+            const allPlacements = Object.assign({}, layout, {"control-centre": ControlLayout.items(desktop.controlLayout, "control-centre")});
+            const created = DesktopLayout.freshInstanceId(allPlacements, id);
+            if (!created) return;
+            putItem(created, target, index);
+            const options = Object.assign({}, desktop.widgetOptions || {});
+            delete options[created];
+            if (options[id]) options[created] = Object.assign({}, options[id]);
+            change("widgetOptions", options);
+            return;
+        }
+        if (ControlLayout.isExternal(id)) {
+            change("controlLayout", ControlLayout.move(desktop.controlLayout, "control-centre", id, target === "control-centre" ? index : -1));
+            layout = DesktopLayout.move(layout, id, target === "control-centre" ? "palette" : target, index);
+            if (target === "dock") change("dock", true);
+            if (id === "metrics" && target !== "palette") change("metrics", true);
+            if (target === "palette" && DesktopLayout.isDecoration(id)) {
+                const options = Object.assign({}, desktop.widgetOptions || {}); delete options[id]; change("widgetOptions", options);
+            }
+            return;
+        }
         const group = ControlLayout.groupFor(id);
         if (group) {
             const nativeTarget = target === "control-centre" || target === group;
@@ -295,15 +317,7 @@ Scope {
         const previous = layout;
         layout = DesktopLayout.move(layout, id, target, index);
         if (layout === previous) return;
-        if (DesktopLayout.isTemplate(id)) {
-            const created = layout[target]?.find(value => !previous[target].includes(value));
-            const options = Object.assign({}, desktop.widgetOptions || {});
-            if (created) {
-                delete options[created];
-                if (options[id]) options[created] = Object.assign({}, options[id]);
-                change("widgetOptions", options);
-            }
-        } else if (target === "palette" && (DesktopLayout.isSpacing(id) || DesktopLayout.isDecoration(id))) {
+        if (target === "palette" && DesktopLayout.isSpacing(id)) {
             const options = Object.assign({}, desktop.widgetOptions || {});
             delete options[id];
             change("widgetOptions", options);
