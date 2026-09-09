@@ -21,6 +21,9 @@ RowLayout {
         source: root.iconSource; sourceSize: Qt.size(64, 64); fillMode: Image.PreserveAspectFit
     }
     Text {
+        objectName: "widgetFaceLabel"
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
         visible: !!root.presentation?.showText
         Layout.maximumWidth: 220
         text: root.presentation?.label || ""

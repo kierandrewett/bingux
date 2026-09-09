@@ -16,9 +16,16 @@ Item {
     visible: active
     property bool sharingVisible: screenSharing
     property double sharingShownAt: Date.now()
-    implicitWidth: privacyRow.implicitWidth
-    implicitHeight: Theme.barHeight
-    width: implicitWidth
+    readonly property bool panelLayout: ["sidebar", "control-centre"].includes(DesktopLayout.placement(DesktopEditing.desktop, "privacy"))
+    readonly property var shownIndicators: privacyRow.children.filter(item => item.visible)
+    readonly property real naturalWidth: shownIndicators.reduce((sum, item) => sum + item.implicitWidth, 0)
+        + Math.max(0, shownIndicators.length - 1) * Theme.barControlGap
+    readonly property real availableWidth: panelLayout && parent ? parent.width : naturalWidth
+    implicitWidth: naturalWidth
+    Layout.fillWidth: panelLayout
+    Layout.maximumWidth: availableWidth
+    implicitHeight: Math.max(Theme.barHeight, privacyRow.implicitHeight)
+    width: Math.min(implicitWidth, availableWidth)
     height: implicitHeight
     onScreenSharingChanged: {
         sharingDelay.stop();
@@ -31,10 +38,15 @@ Item {
         }
     }
     Timer { id: sharingDelay; onTriggered: root.sharingVisible = false }
-    RowLayout {
+    component Indicator: ActivityIndicator {
+        width: Math.min(implicitWidth, privacyRow.width)
+        height: implicitHeight
+    }
+    Flow {
         id: privacyRow
+        width: root.width
         spacing: Theme.barControlGap
-        ActivityIndicator {
+        Indicator {
             presentation: root.appearance(tooltip, iconName)
             objectName: "screenSharingIndicator"
             visible: root.sharingVisible
@@ -46,7 +58,7 @@ Item {
             tooltip: root.screenSharing ? "Stop screen sharing" : "Screen sharing ended"
             onClicked: root.privacyState.stopSharing()
         }
-        ActivityIndicator {
+        Indicator {
             presentation: root.appearance(tooltip, iconName)
             objectName: "cameraIndicator"
             visible: root.privacyState.cameraInUse
@@ -54,7 +66,7 @@ Item {
             iconName: "camera-web-symbolic"
             tooltip: "Camera in use"
         }
-        ActivityIndicator {
+        Indicator {
             presentation: root.appearance(tooltip, iconName)
             objectName: "microphoneIndicator"
             visible: root.systemMetrics.microphoneInUse
@@ -62,7 +74,7 @@ Item {
             iconName: "microphone-sensitivity-high-symbolic"
             tooltip: "Microphone in use"
         }
-        ActivityIndicator {
+        Indicator {
             presentation: root.appearance(tooltip, iconName)
             objectName: "locationIndicator"
             visible: root.systemMetrics.locationInUse

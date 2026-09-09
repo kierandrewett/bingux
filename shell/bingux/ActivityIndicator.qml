@@ -83,7 +83,13 @@ Item {
             }
         }
     }
-    WidgetFace { id: customFace; anchors.centerIn: parent; visible: !!root.presentation?.custom; presentation: root.presentation }
+    WidgetFace {
+        id: customFace
+        anchors.centerIn: parent
+        width: Math.min(implicitWidth, Math.max(0, root.width - Theme.activityIndicatorPadding * 2))
+        visible: !!root.presentation?.custom
+        presentation: root.presentation
+    }
     MouseArea {
         id: mouse
         anchors.fill: parent

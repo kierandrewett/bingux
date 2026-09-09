@@ -273,3 +273,20 @@ covers the saved-layout input boundary without depending on the full editor
 scenario. Normal and reduced-motion runs pass, as does the full normal-motion
 editor regression. It does not establish input correctness during an unfinished
 sidebar animation.
+
+Privacy indicators now wrap within the sidebar and control centre when their
+combined width exceeds the container. The same indicator instances retain their
+normal single-row geometry in the top bar and dock. Constrained widget labels
+can shrink and show an ellipsis. The narrow-panel test covers all four active
+indicators, normal labels and long overrides in a 208-pixel host. The previous
+privacy component fails both panel cases. Native tests move the original group
+through the control centre and sidebar, click its sharing action in each host,
+and restore its saved placement after restarting the shell. These use supplied
+privacy state and verify the stop callback. Screenshots cover both real panel
+containers and the long-label rendering; preview and keyboard checks also pass.
+
+The shared native test runner now rereads the result file after observing process
+exit. A fixture can finish and exit between polls; previously the runner could
+report an incomplete test using a stale RUNNING result. A real subprocess test
+fails with the old runner and passes with the final read; an early exit without
+a report remains a failure.

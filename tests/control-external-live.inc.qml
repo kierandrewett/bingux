@@ -129,6 +129,10 @@
                 editor.open(); editor.put("notifications", "top-right", 7); save();
                 const privacyService = privacyContainer.privacyState;
                 const containerOptions = BinguxPreferences.data.desktop.containers || {};
+                const privacyMetrics = privacyContainer.systemMetrics;
+                privacyContainer.systemMetrics = {screenSharing: false, locationInUse: true, microphoneInUse: true};
+                samplePrivacy.cameraInUse = true;
+                samplePrivacy.microphoneInUse = true;
                 privacyContainer.privacyState = samplePrivacy;
                 editor.open(); editor.put("privacy", "control-centre", 0);
                 editor.selectedContainer = "control-centre"; editor.containerDisplay("text"); save();
@@ -136,9 +140,30 @@
                 const sharing = findChild(privacyContainer, "screenSharingIndicator");
                 verify(waitForRendering(sharing, 2000));
                 verify(sharing.presentation.showText && !sharing.presentation.showIcon);
+                for (const name of ["screenSharingIndicator", "cameraIndicator", "microphoneIndicator", "locationIndicator"])
+                    verify(findChild(privacyContainer, name).visible, "Every active privacy indicator remains visible");
+                tryVerify(() => privacyContainer.width <= controlCentre.widgetHost.width, 1000, "All active privacy indicators fit inside the real control centre");
+                verify(privacyContainer.height > Theme.barHeight);
+                capture("privacy-control-centre", privacyContainer, controlCentre.nativeWindow);
                 gesture(sharing, controlCentre.nativeWindow, sharing.width / 2, sharing.height / 2, ["--click-only"]);
                 compare(samplePrivacy.stops, 1, "The moved privacy control dispatches its native stop action");
+                samplePrivacy.screenSharing = true;
+                const sidebarOpened = terminalSidebar.opened;
+                editor.open(); editor.put("privacy", "sidebar", 0);
+                editor.selectedContainer = "sidebar"; editor.containerDisplay("text"); save();
+                terminalSidebar.open(); tryCompare(terminalSidebar.editWindow, "reveal", 1, 3000);
+                verify(waitForRendering(sharing, 2000));
+                tryVerify(() => privacyContainer.width <= terminalSidebar.widgetHost.width, 1000, "All active privacy indicators fit inside the real sidebar");
+                verify(privacyContainer.height > Theme.barHeight);
+                capture("privacy-sidebar", privacyContainer, terminalSidebar.widgetWindow);
+                gesture(sharing, terminalSidebar.widgetWindow, sharing.width / 2, sharing.height / 2, ["--click-only"]);
+                compare(samplePrivacy.stops, 2, "The same wrapped sharing control remains interactive in the sidebar");
+                if (!sidebarOpened) {
+                    terminalSidebar.hide(); tryCompare(terminalSidebar.editWindow, "reveal", 0, 3000);
+                    tryVerify(() => topBar.width === topBar.screen.width - topBar.margins.left - topBar.margins.right, 3000);
+                }
                 privacyContainer.privacyState = privacyService;
+                privacyContainer.systemMetrics = privacyMetrics;
                 editor.open(); editor.put("privacy", "top-right", 2); editor.change("containers", containerOptions); save();
                 editor.open(); editor.put("controls", "control-centre", 0); save();
                 controlCentre.visible = true; tryCompare(controlCentre, "revealScale", 1, 3000); wait(150);
