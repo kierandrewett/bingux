@@ -22,11 +22,21 @@ Item {
     property string pendingConnection: ""
     property string networkAction: "up"
     property var wirelessNetworks: []
+    // Keep the radio state separate from connection state. NetworkManager
+    // reports saved Wi-Fi profiles even while the wireless radio is disabled,
+    // which otherwise makes those rows look connectable and produces a
+    // confusing generic connection error.
+    property string wifiRadioState: "unknown"
+    property string wifiRadioError: ""
+    property bool wifiRadioTarget: true
     property bool commandDiscovery: false
     property string networkError: ""
     property string connectionError: ""
     property double networkUpdatedAt: 0
-    readonly property bool networkBusy: networkQuery.running || wifiQuery.running || connectNetwork.running
+    readonly property bool wifiEnabled: wifiRadioState === "enabled"
+    readonly property bool wifiDisabled: wifiRadioState === "disabled"
+    readonly property bool wifiRadioBusy: wifiRadioQuery.running || wifiRadioToggle.running
+    readonly property bool networkBusy: networkQuery.running || wifiQuery.running || connectNetwork.running || wifiRadioBusy
     function scanForCommand(enabled) {
         commandDiscovery = enabled;
         if (enabled) scanTimeout.restart(); else { scanTimeout.stop(); syncDiscovery(); }
@@ -37,6 +47,8 @@ Item {
         if (connectNetwork.running) return {ok: false, error: "A connection change is in progress"};
         const connection = connections.find(item => item.uuid === identity);
         if (!connection) return {ok: false, error: "Saved connection not found; refresh the network list"};
+        if (action === "up" && connection.type === "802-11-wireless" && wifiDisabled)
+            return {ok: false, error: "Wi-Fi is off. Turn it on before connecting."};
         if (connection.connected === (action === "up")) return {ok: true, changed: false};
         networkAction = action;
         connectionError = "";
@@ -98,7 +110,22 @@ Item {
     onActiveChanged: { if (active && page === "network") refreshNetwork(); if (!active && !commandDiscovery) stopDiscovery(); }
     onAudioTabChanged: { deviceList.cancelFlick(); deviceList.contentY = 0; }
     onPageChanged: { deviceList.cancelFlick(); deviceList.contentY = 0; if (page !== "bluetooth" && !commandDiscovery) stopDiscovery(); errorText = ""; if (active && page === "network") refreshNetwork(); }
-    function refreshNetwork() { if (!networkQuery.running && !connectNetwork.running) { errorText = ""; networkError = ""; networkQuery.running = true; } if (!wifiQuery.running) wifiQuery.running = true; }
+    function setWifiEnabled(enabled) {
+        if (wifiRadioToggle.running || wifiRadioState === (enabled ? "enabled" : "disabled")) return;
+        wifiRadioTarget = enabled;
+        wifiRadioError = "";
+        errorText = "";
+        wifiRadioToggle.running = true;
+    }
+    function refreshNetwork() {
+        if (!networkQuery.running && !connectNetwork.running) {
+            errorText = "";
+            networkError = "";
+            networkQuery.running = true;
+        }
+        if (!wifiQuery.running && !wifiRadioToggle.running) wifiQuery.running = true;
+        if (!wifiRadioQuery.running && !wifiRadioToggle.running) wifiRadioQuery.running = true;
+    }
     Timer { interval: 10000; repeat: true; running: root.active && root.page === "network"; onTriggered: root.refreshNetwork() }
     Process {
         id: networkQuery
@@ -129,6 +156,40 @@ Item {
             root.refreshNetwork();
             root.connectionError = exitCode === 0 ? "" : "Could not change this connection. Open Network settings to check it.";
             root.errorText = root.connectionError;
+        }
+    }
+    Process {
+        id: wifiRadioQuery
+        command: ["nmcli", "--terse", "--fields", "WIFI", "radio"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const state = text.trim().toLowerCase();
+                root.wifiRadioState = state === "enabled" || state === "disabled" ? state : "unknown";
+                if (root.wifiRadioState === "disabled") root.wirelessNetworks = [];
+                if (root.wifiRadioState !== "disabled") root.wifiRadioError = "";
+            }
+        }
+        onExited: exitCode => {
+            if (exitCode !== 0) {
+                root.wifiRadioState = "unknown";
+                root.wifiRadioError = "Could not read the Wi-Fi radio state.";
+            }
+        }
+    }
+    Process {
+        id: wifiRadioToggle
+        command: ["nmcli", "radio", "wifi", root.wifiRadioTarget ? "on" : "off"]
+        onExited: exitCode => {
+            const enabled = root.wifiRadioTarget;
+            if (exitCode === 0) {
+                root.wifiRadioState = enabled ? "enabled" : "disabled";
+                root.wifiRadioError = "";
+                root.refreshNetwork();
+            } else {
+                root.wifiRadioError = enabled ? "Could not enable Wi-Fi. Check Network settings." : "Could not disable Wi-Fi.";
+                root.errorText = root.wifiRadioError;
+                root.wifiRadioQuery.running = true;
+            }
         }
     }
     Process {
@@ -188,6 +249,15 @@ Item {
                 checked: !!root.bluetoothAdapter && root.bluetoothAdapter.enabled
                 Accessible.name: "Bluetooth"
                 onToggled: if (root.bluetoothAdapter) root.bluetoothAdapter.enabled = checked
+            }
+            ControlSwitch {
+                id: wifiPower
+                objectName: "controlWifiPower"
+                visible: root.page === "network"
+                enabled: root.wifiRadioState !== "unknown" && !root.wifiRadioBusy
+                checked: root.wifiEnabled
+                Accessible.name: "Wi-Fi"
+                onToggled: root.setWifiEnabled(checked)
             }
         }
         SegmentedControl {
@@ -250,6 +320,16 @@ Item {
                         model: root.networkSections.current
                         ConnectionEntry { required property var modelData; connection: modelData }
                     }
+                }
+                ControlRow {
+                    objectName: "controlWifiDisabled"
+                    visible: root.page === "network" && root.wifiDisabled
+                    title: "Wi-Fi is off"
+                    subtitle: root.wifiRadioBusy ? "Turning on Wi-Fi…" : "Turn it on to find and connect to networks"
+                    iconName: "network-wireless-disabled-symbolic"
+                    actionLabel: root.wifiRadioBusy ? "Turning on…" : "Turn on"
+                    enabled: !root.wifiRadioBusy
+                    onActionTriggered: root.setWifiEnabled(true)
                 }
                 DetailSection {
                     visible: root.page === "network" && (root.networkSections.nearby.length > 0 || root.connections.some(connection => connection.type === "802-11-wireless"))
@@ -379,6 +459,7 @@ Item {
     }
     component ConnectionEntry: ControlRow {
         required property var connection
+        readonly property bool wifiConnection: connection.type === "802-11-wireless"
         title: DetailModel.connectionName(connection)
         subtitle: root.pendingConnection === connection.uuid ? (root.networkAction === "up" ? "Connecting…" : "Disconnecting…")
             : connection.connected ? (connection.type === "802-3-ethernet" ? connection.name + " · Connected" : "Connected") : ""
@@ -388,7 +469,7 @@ Item {
         actionLabel: connection.connected ? "Disconnect" : ""
         selected: connection.connected
         iconName: DetailModel.connectionIcon(connection)
-        enabled: !connectNetwork.running
+        enabled: !connectNetwork.running && (!wifiConnection || !root.wifiDisabled)
         focusPolicy: connection.connected ? Qt.NoFocus : Qt.StrongFocus
         Accessible.description: connection.connected ? "Current connection" : "Connect network"
         onClicked: if (!connection.connected) changeConnection()

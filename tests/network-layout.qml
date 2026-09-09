@@ -41,7 +41,16 @@ ShellRoot {
                 wait(100);
                 canvas.grabToImage(result => { test.saved = result.saveToFile("/tmp/bingux-network-layout.png"); });
                 tryCompare(test, "saved", true, 2000);
-                report.setText("PASS physical network grouping, standard saved-network section and settings row\nFAILURES 0\n");
+                detail.wifiRadioState = "disabled";
+                wait(50);
+                verify(findChild(detail, "controlWifiDisabled").visible, "disabled Wi-Fi shows an enable prompt");
+                verify(!findChild(detail, "controlWifiPower").checked, "disabled Wi-Fi switch is off");
+                const blocked = detail.connectionForCommand("wifi", "up");
+                verify(!blocked.ok && blocked.error.indexOf("Wi-Fi is off") >= 0, "disabled Wi-Fi blocks a misleading connection attempt");
+                detail.wifiRadioState = "enabled";
+                wait(50);
+                verify(!findChild(detail, "controlWifiDisabled").visible, "enabling Wi-Fi removes the prompt");
+                report.setText("PASS physical network grouping, Wi-Fi radio prompt, standard saved-network section and settings row\nFAILURES 0\n");
             }
         }
     }
