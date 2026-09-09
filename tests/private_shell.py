@@ -38,7 +38,9 @@ def run_reported_shell(fixture, environment, report_variable, timeout=30, comple
                         break
                 time.sleep(.05)
             if not complete(report):
-                report = 'Timed out before completion\n' + report
+                exit_code = process.poll()
+                report = ('Timed out before completion' if exit_code is None else
+                          f'Shell exited before completion (exit status {exit_code})') + '\n' + report
         finally:
             # End only this fixture's asynchronous services after its assertions.
             try:
