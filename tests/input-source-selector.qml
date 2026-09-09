@@ -16,6 +16,11 @@ ShellRoot {
         property string inputSourceLabel: currentInputSource ? currentInputSource.shortName : ""
     }
     FileView { id: result; path: Quickshell.env("BINGUX_KEYBOARD_TEST_RESULTS") }
+    Process {
+        id: selectionReader
+        command: ["cat", Quickshell.env("BINGUX_KEYBOARD_TEST_SELECTION")]
+        stdout: StdioCollector { id: selectionOutput }
+    }
     Timer { id: finish; interval: 100; onTriggered: Qt.quit() }
     FloatingWindow {
         id: top
@@ -57,6 +62,9 @@ ShellRoot {
                 selector.openMenu(); wait(200); compare(selector.selectedIndex, 1);
                 selector.selectCurrentSource();
                 tryCompare(selector, "menuOpen", false, 2000);
+                selectionReader.running = true;
+                tryCompare(selectionReader, "running", false, 2000);
+                compare(selectionOutput.text.trim(), "set-input-source xkb us", "manual selection dispatches the selected source");
                 selector.openMenu(); wait(200);
                 metrics.inputSources = [metrics.inputSources[1]];
                 compare(selector.selectedIndex, 0, "selection survives a reordered source list");
