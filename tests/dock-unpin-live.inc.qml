@@ -54,7 +54,7 @@
                 compare(unpin.y, 0, "Unpin is the first menu action");
                 gesture(unpin, normalMenu.nativeWindow, unpin.width / 2, unpin.height / 2, ["--click-only"]);
                 tryVerify(() => !dock.pinnedApps.includes(appId.slice(4)), 3000);
-                tryCompare(normalMenu, "visible", false, 3000);
+                tryVerify(() => !normalMenu?.visible, 3000, "The menu closes when the app is unpinned");
                 // Wait for Settings to reload the file before opening another draft.
                 binguxSettings.read();
                 tryCompare(binguxSettings, "busy", false, 4000);
