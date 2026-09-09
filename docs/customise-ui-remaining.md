@@ -239,3 +239,24 @@ The shared edit handler was destroyed when created before its window existed,
 because its initial parent was null. It now stays attached to the widget until
 the window is available. Both unchanged regressions pass, including disabled
 groups, hidden widgets, movement, re-enabling and normal command dispatch.
+
+Small-screen editing now uses a compact palette when the sidebar and control
+centre leave less than 240 pixels of width, or the top sidebar leaves less than
+300 pixels of height. The same preview grid opens above the real containers.
+Dragging hides the palette and exposes every drop target. A footer button reopens
+Widgets and becomes a Remove target during container drags. The palette's source
+window remains mapped until the native drag finishes; unmapping it at pickup
+can stall Qt. Container options take precedence over the palette.
+
+The native `editor-compact` case covers preview geometry, dragging a spacer into
+the actual top bar, dragging it back to Remove, reopening the palette and clicking
+both tabs above the control centre, inspector access, all three sidebar edges,
+and Cancel without a saved-layout change. At 800x600, the previous implementation
+fails the palette-width assertion; normal and reduced-motion runs pass with the
+compact palette. A compositor screenshot verifies its visible layout. Fractional
+scale factors and wide status groups still need separate checks.
+The 1280x800 compact-case geometry and full editor regression pass. The full
+reduced-motion regression passed on a repeat with screenshot capture; its first
+run missed the moved Network control immediately after saving. No source change
+separates those two runs. Keep this timing-sensitive native click in the wider
+popup/input audit rather than treating the repeat as proof that it cannot recur.

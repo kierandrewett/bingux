@@ -158,7 +158,26 @@ Scope {
         return paletteSelection.width ? paletteSelection : Qt.rect(palette.x, palette.y + 100, 160, 100);
     }
     onOptionsPageChanged: { iconsExpanded = false; behaviourExpanded = false; }
-    onDraggedIdChanged: if (draggedId) optionsPage = "";
+    onDraggedIdChanged: if (draggedId) { optionsPage = ""; paletteOpen = false; }
+    readonly property real paletteSpace: width - leftInset - rightInset - Theme.notificationWidth - 112
+    readonly property real paletteHeight: height - Theme.barHeight - topInset - 220
+    readonly property bool compactPalette: paletteSpace < 240 || paletteHeight < 300
+    property bool paletteOpen: true
+    readonly property var paletteNativeWindow: compactPalette ? paletteWindow : editWindow
+    PanelWindow {
+        id: paletteWindow
+        // Keep the source window mapped until Qt finishes its native drag.
+        visible: root.visible && root.compactPalette && (root.paletteOpen || !!root.draggedId) && !root.optionsPage
+        screen: editWindow.screen
+        color: "transparent"
+        anchors { top: true; bottom: true; left: true; right: true }
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "gnoblin-shell-popup"
+        WlrLayershell.keyboardFocus: root.visible && root.paletteOpen && !root.optionsPage ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        mask: Region { x: palette.x; y: palette.y; width: palette.visible ? palette.width : 0; height: palette.visible ? palette.height : 0 }
+        contentItem.Keys.onEscapePressed: root.paletteOpen = false
+    }
     property string optionsPage: ""
     property string selectedContainer: "top-right"
     readonly property var containerChoices: [{id: "top-left", label: "Top left"}, {id: "top-center", label: "Top centre"}, {id: "top-right", label: "Top right"}, {id: "dock", label: "Dock"}, {id: "sidebar", label: "Sidebar"}, {id: "control-centre", label: "Control centre"}].concat(ControlLayout.widgets.filter(item => ControlLayout.isContainer(item.id)))
@@ -249,7 +268,7 @@ Scope {
         desktop.sidebarEdge = desktop.sidebarEdge || settings.currentSidebarEdge;
         layout = JSON.parse(JSON.stringify(desktop.layout || settings.currentLayout || DesktopLayout.defaults()));
         undoStack = []; redoStack = [];
-        selectedWidget = ""; draggedId = ""; applying = false; tab = "Widgets"; optionsPage = ""; appFilter = "";
+        selectedWidget = ""; draggedId = ""; applying = false; tab = "Widgets"; optionsPage = ""; appFilter = ""; paletteOpen = true;
         restoreSettings = settings.visible;
         settings.visible = false;
         DesktopEditing.editor = root;
@@ -390,7 +409,7 @@ Scope {
             onPositionChanged: mouse => {
                 if (pressed && !hadDrag && Math.abs(mouse.x - start.x) + Math.abs(mouse.y - start.y) > 6) {
                     hadDrag = true;
-                    nativeDrag.begin(widgetId, dragVisual, root.nativeWindow, DesktopEditing.point(this, root.nativeWindow, start.x, start.y));
+                    nativeDrag.begin(widgetId, dragVisual, root.paletteNativeWindow, DesktopEditing.point(this, root.paletteNativeWindow, start.x, start.y));
                 }
             }
             onReleased: nativeDrag.cancelPending()
@@ -427,7 +446,7 @@ Scope {
         activeFocusOnTab: true
         Accessible.role: Accessible.Button; Accessible.name: info?.label || "Widget"
         function inspect() {
-            const point = DesktopEditing.point(chip, root.nativeWindow, 0, 0);
+            const point = DesktopEditing.point(chip, root.paletteNativeWindow, 0, 0);
             root.paletteSelection = Qt.rect(point.x, point.y, width, height);
             root.selectedWidget = widgetId; root.optionsPage = "Widget";
         }
@@ -438,7 +457,11 @@ Scope {
         id: canvas
         parent: editWindow.contentItem
         visible: root.visible
-        readonly property rect paletteRect: Qt.rect(palette.x, palette.y, palette.width, palette.height)
+        readonly property rect paletteRect: {
+            if (!root.compactPalette) return Qt.rect(palette.x, palette.y, palette.width, palette.height);
+            const point = paletteToggle.mapToItem(canvas, 0, 0);
+            return Qt.rect(point.x, point.y, paletteToggle.width, paletteToggle.height);
+        }
         anchors.fill: parent
         focus: true
         Keys.onEscapePressed: {
@@ -452,16 +475,24 @@ Scope {
             id: palette
             objectName: "customisePalette"
             readonly property string zoneName: "palette"
-            WidgetDropArea { anchors.fill: parent; zoneName: "palette"; window: root.nativeWindow }
-            x: root.leftInset + 24
-            y: Theme.barHeight + 40 + root.topInset; width: Math.max(200, canvas.width - root.rightInset - x - Theme.notificationWidth - 88); height: canvas.height - y - 180
-            Rectangle { anchors.fill: parent; radius: 8; color: "transparent"; border.width: root.hoverZone === "palette" ? 1 : 0; border.color: Theme.accent }
+            parent: root.compactPalette ? paletteWindow.contentItem : canvas
+            visible: root.visible && (!root.compactPalette || (root.paletteOpen && !root.draggedId && !root.optionsPage))
+            WidgetDropArea { anchors.fill: parent; zoneName: "palette"; window: root.paletteNativeWindow }
+            x: root.compactPalette ? (canvas.width - width) / 2 : root.leftInset + 24
+            y: Theme.barHeight + 40 + (root.compactPalette ? 0 : root.topInset)
+            width: root.compactPalette ? Math.min(600, canvas.width - 48) : root.paletteSpace
+            height: canvas.height - y - 180
+            Rectangle { anchors.fill: parent; anchors.margins: root.compactPalette ? -12 : 0; radius: 8; color: root.compactPalette ? Theme.popupSurface : "transparent"; border.width: root.compactPalette || root.hoverZone === "palette" ? 1 : 0; border.color: root.hoverZone === "palette" ? Theme.accent : Theme.outline }
             ColumnLayout {
                 anchors.fill: parent; spacing: 14
-                Text { Layout.fillWidth: true; text: root.draggedId ? "Drop into a highlighted container, or here to remove." : "Drag items into your desktop."; wrapMode: Text.Wrap; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize; font.weight: Font.DemiBold }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text { Layout.fillWidth: true; text: root.draggedId ? "Drop into a highlighted container, or here to remove." : "Drag items into your desktop."; wrapMode: Text.Wrap; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize; font.weight: Font.DemiBold }
+                    IconButton { visible: root.compactPalette; objectName: "customisePaletteClose"; iconName: "window-close-symbolic"; label: "Close widgets"; onClicked: root.paletteOpen = false }
+                }
                 RowLayout {
                     spacing: 4
-                    Repeater { model: ["Widgets", "Apps"]; ActionButton { required property string modelData; text: modelData; flat: root.tab !== modelData; onClicked: { root.tab = modelData; root.appFilter = ""; root.optionsPage = ""; } } }
+                    Repeater { model: ["Widgets", "Apps"]; ActionButton { required property string modelData; objectName: "customise-tab-" + modelData; text: modelData; flat: root.tab !== modelData; onClicked: { root.tab = modelData; root.appFilter = ""; root.optionsPage = ""; } } }
                     Item { Layout.fillWidth: true }
                 }
                 SettingsField { objectName: "customiseFilter"; label: root.tab === "Apps" ? "Find an app" : "Find a widget"; placeholderText: root.tab === "Apps" ? "Search installed apps" : "Search widgets"; Layout.margins: 0; text: root.appFilter; onEdited: value => root.appFilter = value }
@@ -484,10 +515,19 @@ Scope {
                 anchors.fill: parent; anchors.margins: 10; spacing: 6
                 IconButton { objectName: "customiseUndo"; iconName: "edit-undo-symbolic"; label: "Undo"; enabled: root.undoStack.length > 0 && !root.draggedId; onClicked: root.undo() }
                 IconButton { objectName: "customiseRedo"; iconName: "edit-redo-symbolic"; label: "Redo"; enabled: root.redoStack.length > 0 && !root.draggedId; onClicked: root.redo() }
+                ActionButton {
+                    id: paletteToggle
+                    objectName: "customisePaletteToggle"
+                    visible: root.compactPalette
+                    text: root.draggedId ? "Remove" : "Widgets"
+                    flat: !root.paletteOpen
+                    onClicked: { root.optionsPage = ""; root.paletteOpen = !root.paletteOpen; }
+                    WidgetDropArea { anchors.fill: parent; zoneName: "palette"; window: root.nativeWindow }
+                }
                 Item { Layout.fillWidth: true }
                 Text { visible: root.settings.status !== "" && root.settings.status !== "Saved"; text: root.settings.status; color: Theme.warning; Layout.maximumWidth: 260; elide: Text.ElideRight; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
                 ActionButton {
-                    text: "Restore defaults"; flat: true
+                    text: root.compactPalette ? "" : "Restore defaults"; iconName: root.compactPalette ? "edit-clear-all-symbolic" : ""; Accessible.name: "Restore defaults"; flat: true
                     enabled: !root.settings.busy && !!root.settings.desktopDefaults && !root.draggedId
                     onClicked: root.restoreDefaults()
                     ShellTooltip { visible: parent.hovered; text: "Reset widget layout, appearance and behaviour. Keep pinned apps." }
