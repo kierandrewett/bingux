@@ -39,6 +39,57 @@ ShellRoot {
                 verify(previewHost.grabToImage(result => { saved = result.saveToFile(prefix + "-" + name + ".png"); }));
                 tryVerify(() => saved, 2000);
             }
+            function test_individual_presentation_data() {
+                const rows = [];
+                const ids = ControlLayout.widgets.filter(widget => widget.action).map(widget => widget.id)
+                    .concat(["control-volume", "control-microphone", "control-battery", "control-media"])
+                    .concat(DesktopLayout.controlOrder().map(name => "control-" + name));
+                for (const id of ids) {
+                    const group = ControlLayout.groupFor(id) || "controls-tiles";
+                    for (const container of ["dock", "sidebar", "control-centre"]) {
+                        rows.push({tag: id + "-" + container, id, group, container, grouped: false});
+                        if (group !== "control-centre") rows.push({tag: id + "-group-" + container, id, group, container, grouped: true});
+                    }
+                }
+                return rows;
+            }
+            function test_individual_presentation(data) {
+                const target = data.grouped ? data.group : data.id;
+                const containers = {[data.container]: {display: "text"}};
+                editor.desktop = {controlLayout: ControlLayout.defaults(), containers, widgetOptions: {}};
+                editor.layout = DesktopLayout.defaults();
+                if (data.container !== "control-centre") editor.layout = Object.assign({}, editor.layout, {[data.container]: [target]});
+                const preview = previewComponent.createObject(previewHost, {widgetId: data.id});
+                try {
+                    tryVerify(() => !!preview.previewControl, 1500);
+                    const item = preview.previewControl;
+                    compare(preview.container, data.container, "A child follows its placed group");
+                    compare(ControlLayout.isAction(data.id) ? item.barStyle : item.barLayout, data.container === "dock",
+                        "Sidebar controls keep their full panel layout");
+                    verify(!!item.presentation, "The preview receives the native presentation settings");
+                    compare(item.presentation.mode, "text");
+                    verify(item.presentation.showText && !item.presentation.showIcon);
+                    if (data.grouped) {
+                        editor.desktop = Object.assign({}, editor.desktop, {containers: Object.assign({}, containers, {[data.group]: {display: "icons"}})});
+                        compare(item.presentation.mode, "icons", "Group display overrides its host container");
+                    }
+                    editor.desktop = Object.assign({}, editor.desktop, {widgetOptions: {[data.id]: {display: "both", label: "My widget", icon: "starred-symbolic"}}});
+                    verify(item.presentation.showText && item.presentation.showIcon);
+                    compare(item.presentation.label, "My widget");
+                    compare(item.presentation.icon, "starred-symbolic");
+                    verify(waitForRendering(preview, 2000));
+                    if (data.container === "dock") {
+                        compare(item.width, item.implicitWidth, "A compact preview uses its native width");
+                        compare(item.height, item.implicitHeight);
+                    }
+                    verify(preview.visualItem.width <= preview.width && preview.visualItem.height <= preview.height);
+                    if (["control-media", "control-network", "control-volume", "control-settings"].includes(data.id) && !data.grouped)
+                        capture(data.tag);
+                } finally {
+                    preview.destroy(); wait(50);
+                    editor.desktop = {}; editor.layout = {};
+                }
+            }
             function test_shared_group_previews() {
                 const originalSources = Object.assign({}, DesktopEditing.sources);
                 editor.desktop = {controlLayout: ControlLayout.defaults(),

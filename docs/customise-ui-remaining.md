@@ -33,8 +33,10 @@ layout tests does not prove that every existing desktop widget is editable.
 
 ## Next implementation boundary
 
-Audit the remaining individual widget previews and their context-specific
-presentation. The three native control groups now use the same overview view
+Audit the remaining status, utility and sidebar-panel previews and their
+context-specific presentation. Individual control-centre actions, audio, battery,
+media and quick controls now inherit the same container, group and widget display
+settings as their native components. The three native control groups use the same overview view
 as the live control centre, with inert sample data and saved member ordering.
 The sidebar, bar, dock and control centre now host
 the same retained panel instances. Bar and dock buttons open the original panel
@@ -175,6 +177,16 @@ items, dock text inheritance, per-item overrides, focus isolation and source
 registry stability. Rendered previews confirm the full quick-control grid and
 both audio rows. The extracted native view passes bar/dock and sidebar group
 movement and reload tests, and the original populated/empty geometry comparison.
+
+Individual control previews now follow their parent group's placement, use the
+full panel layout in the sidebar, and use their natural width in the dock.
+The same native visual components receive container and group display modes,
+per-widget label/icon overrides, and inert sample data. Quick-control tiles keep
+their native background. The presentation fixture covers all fifteen individual
+controls in the dock, sidebar and control centre, both independently and within
+their groups. The previous implementation fails these assertions. Rendered samples
+verify compact audio, media and action controls and the full sidebar quick tile.
+
 The disabled-control click failure also reproduced with native dock input.
 The shared edit handler was destroyed when created before its window existed,
 because its initial parent was null. It now stays attached to the widget until

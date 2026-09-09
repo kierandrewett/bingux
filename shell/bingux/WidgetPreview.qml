@@ -14,11 +14,19 @@ FocusScope {
     readonly property bool nativeGroupPreview: ["controls-header", "controls-audio", "controls-tiles"].includes(widgetId)
     readonly property bool utilityWidget: ["control-divider", "control-header-space", "control-customise"].includes(widgetId)
     readonly property bool panelWidget: !!spec.panel
-    readonly property string container: DesktopLayout.placement(DesktopEditing.desktop, widgetId) || (groupedWidget || widgetId.startsWith("control-") ? "control-centre" : "top-right")
+    readonly property string nativeGroup: ControlLayout.groupFor(widgetId) || (DesktopLayout.controlOrder().includes(widgetId.slice(8)) ? "controls-tiles" : "")
+    readonly property string ownContainer: DesktopLayout.placement(DesktopEditing.desktop, widgetId)
+    readonly property string groupContainer: DesktopLayout.zone(DesktopEditing.desktop.layout || {}, nativeGroup)
+    readonly property string container: ownContainer || groupContainer || (nativeGroup ? "control-centre" : "top-right")
+    readonly property bool barLayout: !["control-centre", "sidebar"].includes(container)
     readonly property var face: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, container, spec.label || "", spec.icon || "", !["clock", "keyboard"].includes(widgetId), ["clock", "keyboard"].includes(widgetId))
     readonly property Item visualItem: frame
     readonly property Item previewControl: component.item
     clip: true
+    function controlPresentation(label, icon, nativeIcon, nativeText) {
+        return DesktopLayout.presentation(DesktopEditing.desktop, widgetId, ownContainer || nativeGroup || container,
+            label, icon, nativeIcon, nativeText, ownContainer ? "" : groupContainer || "control-centre");
+    }
     function isolateKeyboard(item) {
         item.activeFocusOnTab = false;
         for (const child of item.children) isolateKeyboard(child);
@@ -33,8 +41,15 @@ FocusScope {
             id: component
             active: DesktopEditing.active
             onLoaded: root.isolateKeyboard(item)
-            width: root.nativeGroupPreview ? (["control-centre", "sidebar"].includes(root.container) ? Theme.notificationWidth : item ? item.implicitWidth : 0)
-                : root.utilityWidget ? (item ? item.implicitWidth : 0) : root.groupedWidget ? (root.spec.group ? 300 : item ? item.implicitWidth : 0) : root.panelWidget ? 300 : root.widgetId.startsWith("control-") && root.container === "control-centre" ? 188 : item ? item.implicitWidth : 0
+            width: {
+                if (root.nativeGroupPreview && !root.barLayout) return Theme.notificationWidth;
+                if (root.panelWidget) return 300;
+                if (!root.barLayout && !root.utilityWidget) {
+                    if (["control-volume", "control-microphone", "control-media"].includes(root.widgetId)) return 300;
+                    if (root.nativeGroup === "controls-tiles") return 188;
+                }
+                return item ? item.implicitWidth : 0;
+            }
             height: root.panelWidget ? 240 : item ? item.implicitHeight : 0
             scale: Math.min(1, root.width / Math.max(1, width), root.height / Math.max(1, height))
             transformOrigin: Item.TopLeft
@@ -48,15 +63,32 @@ FocusScope {
                     overflow, tray, notes, calendar, media, tasks, terminal, monitor: performance})[root.widgetId] || empty
         }
     }
-    Component { id: headerButton; IconButton { iconName: root.spec.icon || ""; label: root.spec.label || ""; presentation: root.face } }
+    Component { id: headerButton; IconButton {
+        iconName: root.spec.icon || ""; label: root.spec.label || ""
+        barStyle: root.barLayout; barWindow: DesktopEditing.editor?.nativeWindow
+        implicitHeight: barStyle ? Theme.barHeight : 32
+        presentation: root.controlPresentation(label, iconName, true, false)
+    } }
     Component { id: groupPreview; ControlGroupPreview { widgetId: root.widgetId } }
     Component {
         id: audioControl
-        AudioLevel { node: sampleAudioNode; label: root.spec.label; iconName: root.spec.icon; navigation: true }
+        AudioLevel {
+            node: sampleAudioNode; label: root.spec.label; iconName: root.spec.icon; navigation: true
+            barLayout: root.barLayout; barWindow: DesktopEditing.editor?.nativeWindow
+            presentation: root.controlPresentation(label, muteIconName, true, false)
+        }
     }
-    Component { id: mediaControl; ControlCentreMedia { player: samplePlayer; playerOptions: [samplePlayer]; active: false } }
+    Component { id: mediaControl; ControlCentreMedia {
+        player: samplePlayer; playerOptions: [samplePlayer]; active: false
+        barLayout: root.barLayout; barWindow: DesktopEditing.editor?.nativeWindow
+        presentation: root.controlPresentation(player.trackTitle, "applications-multimedia-symbolic", true, true)
+    } }
     Component { id: divider; Rectangle { implicitWidth: root.container === "control-centre" ? 300 : 1; implicitHeight: root.container === "control-centre" ? 1 : Theme.barHeight - 12; color: Theme.outline; opacity: 0.5 } }
-    Component { id: battery; BatteryStatus { available: true; summary: "Battery 84 percent, charging" } }
+    Component { id: battery; BatteryStatus {
+        available: true; summary: "Battery 84 percent, charging"
+        barLayout: root.barLayout; barWindow: DesktopEditing.editor?.nativeWindow
+        presentation: root.controlPresentation(label, "battery-good-symbolic", true, true)
+    } }
     Component { id: customiseButton; ActionButton {
         text: "Customise controls..."; iconName: "document-edit-symbolic"; flat: true
         implicitHeight: root.container === "control-centre" ? 28 : Theme.barHeight
@@ -67,13 +99,13 @@ FocusScope {
         id: control
         ControlRow {
             readonly property string kind: root.widgetId.slice(8)
-            barLayout: root.container !== "control-centre"
+            barLayout: root.barLayout
             title: root.spec.label || ""
             subtitle: ({network: "Home network", bluetooth: "Connected", vpn: "Connected", power: "Balanced"})[kind] || ""
             iconName: root.spec.icon || ""
-            presentation: DesktopLayout.presentation(DesktopEditing.desktop, root.widgetId, root.container, title, iconName, true, !barLayout)
+            presentation: root.controlPresentation(title, iconName, true, !barLayout)
             tileLayout: !["vpn", "power", "awake"].includes(kind)
-            tileSurface: !tileLayout
+            tileSurface: true
             compactTile: ["dnd", "nightLight"].includes(kind)
             selected: ["network", "bluetooth", "vpn"].includes(kind)
             navigation: ["network", "bluetooth", "vpn", "power"].includes(kind)
