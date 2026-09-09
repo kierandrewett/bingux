@@ -197,11 +197,17 @@ ShellRoot {
             dock = loader.item;
             test.parent = dock.contentItem;
             tryCompare(dock.testItems, "count", 4);
+            tryVerify(() => Array.from({length: dock.testItems.count}, (_, index) => dock.testItems.itemAt(index)).every(item => item && item.transitionProgress === 1), 2000,
+                "Dock icons finish entering before the next drag");
+            verify(waitForRendering(dock.testSurface), "Dock layout renders before the next drag");
             check(dock.appGroups[0].id === draggedApp && dock.isPinned(dock.appGroups[0]), "Dropped position and pin survive recreating the dock");
             const unpinOrigin = dock.testItems.itemAt(0).mapToItem(dock.contentItem, 36, 36);
             const unpinTarget = dock.testItems.itemAt(3).mapToItem(dock.contentItem, 36, 36);
             mousePress(dock.contentItem, unpinOrigin.x, unpinOrigin.y, Qt.LeftButton);
-            mouseMove(dock.contentItem, unpinTarget.x, unpinTarget.y, 50);
+            wait(50);
+            for (let step = 1; step <= 6; step++)
+                mouseMove(dock.contentItem, unpinOrigin.x + (unpinTarget.x - unpinOrigin.x) * step / 6,
+                    unpinOrigin.y + (unpinTarget.y - unpinOrigin.y) * step / 6, 20);
             mouseRelease(dock.contentItem, unpinTarget.x, unpinTarget.y, Qt.LeftButton);
             tryVerify(() => dock.draggedId === "");
             check(dock.appGroups[3].id === draggedApp && !dock.isPinned(dock.appGroups[3]), "Dropping back into running apps unpins and keeps the new position");
