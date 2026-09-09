@@ -395,6 +395,50 @@ PanelWindow {
         launchError.show(id, group?.desktopEntry?.name || attempt.name || id, message);
     }
 
+    function animateLaunchFor(groupId) {
+        for (let index = 0; index < dockItems.count; index++) {
+            const button = dockItems.itemAt(index);
+            if (button && button.currentGroup.id === groupId) {
+                button.animateLaunch();
+                return;
+            }
+        }
+    }
+
+    // External launchers (search, notifications and calendar) dispatch the
+    // application themselves. Share the same dock loading state so every
+    // launch source presents the same pill while its window is appearing.
+    function beginExternalLaunch(appId, name) {
+        const entry = desktopEntryFor(normaliseAppId(appId));
+        if (!entry)
+            return false;
+        const group = appGroups.find(item => item.desktopEntry && item.desktopEntry.id === entry.id);
+        const groupId = group ? group.id : normaliseAppId(entry.startupClass || entry.id);
+        const windows = group ? (group.windows || []).slice() : [];
+        clearLaunchFailure(groupId);
+        const serial = ++root.launchSequence;
+        root.launchAttempts = Object.assign({}, root.launchAttempts, { [groupId]: {
+            serial: serial, name: name || entry.name || groupId, windows: windows,
+            deadline: Date.now() + Theme.launchTimeout, reportFailure: false
+        }});
+        animateLaunchFor(groupId);
+        return true;
+    }
+
+    function endExternalLaunch(appId) {
+        const entry = desktopEntryFor(normaliseAppId(appId));
+        if (!entry)
+            return;
+        const group = appGroups.find(item => item.desktopEntry && item.desktopEntry.id === entry.id);
+        const groupId = group ? group.id : normaliseAppId(entry.startupClass || entry.id);
+        const attempt = launchAttempts[groupId];
+        if (!attempt || attempt.reportFailure !== false)
+            return;
+        const attempts = Object.assign({}, launchAttempts);
+        delete attempts[groupId];
+        launchAttempts = attempts;
+    }
+
     LaunchErrorDialog {
         id: launchError
         screen: root.screen
@@ -420,8 +464,15 @@ PanelWindow {
             }
             root.launchAttempts = attempts;
             for (const id of Object.keys(attempts)) {
-                if (Date.now() >= attempts[id].deadline)
+                if (Date.now() < attempts[id].deadline)
+                    continue;
+                if (attempts[id].reportFailure === false) {
+                    const pending = Object.assign({}, root.launchAttempts);
+                    delete pending[id];
+                    root.launchAttempts = pending;
+                } else {
                     root.failLaunch(id, attempts[id].serial, "No new application window appeared. The app may still be starting or running in the background.");
+                }
             }
             for (const id of Object.keys(root.launchFailures)) {
                 const group = root.appGroups.find(item => item.id === id);
@@ -730,13 +781,7 @@ PanelWindow {
         });
         pendingLaunchTimer.restart();
         root.dismissTooltip();
-        for (let index = 0; index < dockItems.count; index++) {
-            const button = dockItems.itemAt(index);
-            if (button.modelData.id === group.id) {
-                button.animateLaunch();
-                break;
-            }
-        }
+        animateLaunchFor(group.id);
     }
 
     function activeWindow(group) {

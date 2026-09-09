@@ -208,9 +208,11 @@ ShellPopup {
         selectDate(new Date(next.getFullYear(), next.getMonth(), Math.min(selectedDate.getDate(), last)));
     }
     property var launchCalendar: (command, prepareCommand) => calendarLauncher.launch(command, prepareCommand)
+    signal applicationLaunchStarted(string desktopId)
     ApplicationLauncher {
         id: calendarLauncher
         desktopId: "org.gnome.Calendar"
+        onLaunchStarted: desktopId => root.applicationLaunchStarted(desktopId)
         onFailed: message => { root.eventSource.error = message; root.visible = true; }
     }
     function eventCommand(event) {

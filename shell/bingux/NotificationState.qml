@@ -26,6 +26,7 @@ Scope {
     property var desktopEntryWatcher
     readonly property alias retainedState: notificationMetadata
     property var notificationServer
+    property var dockView: null
     property bool historyReady: false
     property string historyDirectory: Quickshell.statePath("notifications")
     onAllEntriesChanged: if (historyReady) historySave.restart()
@@ -155,6 +156,8 @@ Scope {
         if (target.window) {
             target.window.activate();
         } else if (target.application) {
+            if (root.dockView && typeof root.dockView.beginExternalLaunch === "function")
+                root.dockView.beginExternalLaunch(target.application.id, target.application.name || "");
             const helper = Quickshell.env("BINGUX_APP_LAUNCHER_HELPER");
             const command = helper ? [helper] : ["python3", decodeURIComponent(Qt.resolvedUrl("launch-application.py").toString().replace(/^file:\/\//, ""))];
             Quickshell.execDetached(command.concat(["--notify-errors", "--", target.application.id]));

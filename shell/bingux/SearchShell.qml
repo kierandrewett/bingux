@@ -28,6 +28,13 @@ ShellRoot {
         function setPinned(group, pinned) {
             session.command("desktop", {action: "pin", id: group.desktopEntry?.id || group.id, pinned});
         }
+        function beginExternalLaunch(id, name) {
+            session.command("desktop", {action: "launch-start", id, name});
+            return true;
+        }
+        function endExternalLaunch(id) {
+            session.command("desktop", {action: "launch-end", id});
+        }
     }
     // Keep a non-interactive overlay anchor while Super hides only search.
     // The compositor raises the real panel buffers relative to this surface.

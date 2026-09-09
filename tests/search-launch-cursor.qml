@@ -6,7 +6,8 @@ ShellRoot {
     property int step: 0
     property string token: ""
     property string timedOutRequest: ""
-    property var sample: ({resultId: "test-app", title: "Test Application", kind: "application", providerId: "applications"})
+    property var launches: []
+    property var sample: ({resultId: "test-app", title: "Test Application", kind: "application", providerId: "applications", desktopId: "test-app.desktop"})
     function check(condition, message) {
         if (!condition) {
             console.error("FAIL: " + message);
@@ -19,8 +20,20 @@ ShellRoot {
         search.activateResult(sample);
         test.token = search.launchFeedbackToken;
         test.check(!!test.token && LaunchFeedback.active.length === 1, "search requests global cursor feedback");
+        test.check(test.launches.length > 0 && test.launches[test.launches.length - 1].id === sample.desktopId,
+            "search starts the matching dock loading pill");
     }
-    SearchOverlay { id: search }
+    SearchOverlay { id: search; dockView: dockProxy }
+    QtObject {
+        id: dockProxy
+        function beginExternalLaunch(id, name) {
+            test.launches = test.launches.concat([{id, name}]);
+            return true;
+        }
+        function endExternalLaunch(id) {
+            test.launches = test.launches.concat([{id: "end:" + id}]);
+        }
+    }
     Timer {
         id: steps
         interval: 200

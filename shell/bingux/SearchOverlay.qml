@@ -135,11 +135,17 @@ PanelWindow {
     property bool activationPending: false
     readonly property bool launchCursorActive: visible && activationPending && !chatPending && !closing
     property string launchFeedbackToken: ""
+    property string launchDesktopId: ""
+    function endDockLaunch() {
+        if (launchDesktopId !== "" && dockView && typeof dockView.endExternalLaunch === "function")
+            dockView.endExternalLaunch(launchDesktopId);
+        launchDesktopId = "";
+    }
     function endLaunchFeedback() {
         LaunchFeedback.end(launchFeedbackToken);
         launchFeedbackToken = "";
     }
-    Component.onDestruction: endLaunchFeedback()
+    Component.onDestruction: { endDockLaunch(); endLaunchFeedback(); }
     Timer {
         interval: Theme.launchTimeout
         running: root.launchCursorActive
@@ -147,6 +153,7 @@ PanelWindow {
             const requestId = root.activeActivationRequestId;
             root.activeActivationRequestId = "";
             root.activationPending = false;
+            root.endDockLaunch();
             root.endLaunchFeedback();
             root.queryError = "Opening timed out. Try again.";
             if (requestId !== "")
@@ -279,8 +286,10 @@ PanelWindow {
 
         if (keepLaunchFeedback)
             launchFeedbackToken = ""; // Gnoblin waits for the application window.
-        else
+        else {
+            endDockLaunch();
             endLaunchFeedback();
+        }
         cancelPendingRequests();
         activeRequestId = "";
         activeActivationRequestId = "";
@@ -501,15 +510,21 @@ PanelWindow {
         queryComplete = true;
         queryError = "";
         animateActivation(result, position);
+        endDockLaunch();
         endLaunchFeedback();
         activatedWebTitle = result.providerId === "web" || result.providerId === "web-suggestions" ? result.title : "";
         activationPending = true;
+        if (result.providerId === "applications" && result.kind === "application"
+            && result.desktopId && dockView && typeof dockView.beginExternalLaunch === "function"
+            && dockView.beginExternalLaunch(result.desktopId, result.title || ""))
+            launchDesktopId = result.desktopId;
         const token = LaunchFeedback.begin(result.title || "", () => {
             if (!root.activationPending || root.launchFeedbackToken !== token)
                 return;
             const requestId = searchSocket.activate(result.resultId);
             if (requestId === "") {
                 root.activationPending = false;
+                root.endDockLaunch();
                 root.endLaunchFeedback();
                 root.queryError = "Search unavailable.";
                 return;
@@ -591,6 +606,7 @@ PanelWindow {
     Connections {
         function onConnectionStateChanged() {
             if (searchSocket.connectionState !== "ready") {
+                root.endDockLaunch();
                 root.endLaunchFeedback();
                 root.activeRequestId = "";
                 root.activeActivationRequestId = "";
@@ -618,6 +634,7 @@ PanelWindow {
         function onRequestFailed(requestId, code) {
             if (requestId === root.activeActivationRequestId) {
                 const failedChat = root.chatPending;
+                root.endDockLaunch();
                 root.endLaunchFeedback();
                 root.activeActivationRequestId = "";
                 root.activationPending = false;

@@ -11,6 +11,7 @@ Item {
     property var nativeWindows: []
     property var pendingCommand: []
     property int attempts: 0
+    signal launchStarted(string desktopId)
     signal failed(string message)
     ShortcutSession {
         id: compositor
@@ -21,6 +22,7 @@ Item {
         focusRetry.stop();
         attempts = 0;
         pendingCommand = prepareCommand && prepareCommand.length ? command : [];
+        launchStarted(root.desktopId);
         Quickshell.execDetached(pendingCommand.length ? prepareCommand : command);
         focusRetry.start();
     }

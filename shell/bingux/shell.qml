@@ -167,7 +167,10 @@ ShellRoot {
             else if (command.action === "pin" && typeof command.id === "string") {
                 const entry = dock.desktopEntryFor(dock.normaliseAppId(command.id));
                 if (entry) dock.setPinned({id: entry.id, desktopEntry: entry, windows: []}, command.pinned === true);
-            }
+            } else if (command.action === "launch-start" && typeof command.id === "string")
+                dock.beginExternalLaunch(command.id, command.name || "");
+            else if (command.action === "launch-end" && typeof command.id === "string")
+                dock.endExternalLaunch(command.id);
         }
     }
     QtObject {
@@ -200,6 +203,7 @@ ShellRoot {
 
     NotificationState {
         doNotDisturb: ControlCentreServices.doNotDisturb
+        dockView: dock
         id: notificationState
     }
 
@@ -386,6 +390,7 @@ ShellRoot {
 
     CalendarPopup {
         id: calendarPopup
+        onApplicationLaunchStarted: desktopId => dock.beginExternalLaunch(desktopId, "Calendar")
         screen: topBar.screen
         anchorWindow: topBar.windowFor(clockPill)
         anchorItem: clockPill
