@@ -99,7 +99,7 @@ ShellRoot {
                 return rows;
             }
             function test_status_presentation_data() {
-                return ["search", "clock", "controls", "metrics", "keyboard", "notifications", "overflow", "capture", "privacy"]
+                return ["search", "clock", "controls", "metrics", "keyboard", "notifications", "overflow", "capture", "privacy", "tray"]
                     .map(id => ({tag: id, id}));
             }
             function test_status_presentation(data) {
@@ -124,7 +124,58 @@ ShellRoot {
                         compare(item.count, 3);
                         verify(!!findChild(item, "notificationCountBadge"), "Custom appearance retains the notification count");
                     }
+                    if (data.id === "tray") {
+                        compare(item.serviceEnabled, false);
+                        compare(item.trayItems.length, 3);
+                        const samples = item.trayItems;
+                        item.refreshItems();
+                        compare(item.trayItems, samples, "Preview items never refresh from the real system tray");
+                    }
                     verify(waitForRendering(preview, 2000)); capture("status-" + data.id);
+                } finally {
+                    preview.destroy(); wait(50);
+                    editor.desktop = {}; editor.layout = {};
+                }
+            }
+            function test_panel_contexts_data() {
+                const rows = [];
+                for (const id of ["terminal", "notes", "monitor", "calendar", "media", "tasks"]) {
+                    for (const container of ["dock", "top-left", "sidebar", "control-centre", "palette"])
+                        rows.push({tag: id + "-" + container, id, container});
+                }
+                return rows;
+            }
+            function test_panel_contexts(data) {
+                editor.desktop = {controlLayout: ControlLayout.defaults(), containers: {}, widgetOptions: {}};
+                editor.layout = {};
+                if (data.container === "control-centre") editor.desktop = Object.assign({}, editor.desktop, {controlLayout: ControlLayout.move(editor.desktop.controlLayout, "control-centre", data.id, 0)});
+                else if (data.container !== "palette") editor.layout = {[data.container]: [data.id]};
+                const preview = previewComponent.createObject(previewHost, {widgetId: data.id});
+                try {
+                    tryVerify(() => !!preview.previewControl, 1500);
+                    const item = preview.previewControl;
+                    const compact = ["dock", "top-left"].includes(data.container);
+                    compare(item.inlinePanel, !compact, "A placed panel previews its launcher or its complete body");
+                    compare(item.showHeader, data.container === "control-centre");
+                    const content = findChild(item, "sidebarPanelPreviewContent");
+                    verify(!!content);
+                    compare(content.active, !compact, "Compact samples do not load hidden panel content");
+                    if (!compact) tryVerify(() => !!content.item, 1500);
+                    editor.desktop = Object.assign({}, editor.desktop, {widgetOptions: {[data.id]: {display: "both", label: "My panel", icon: "starred-symbolic"}}});
+                    verify(item.presentation.showText && item.presentation.showIcon);
+                    compare(item.presentation.label, "My panel"); compare(item.presentation.icon, "starred-symbolic");
+                    if (compact) {
+                        compare(item.implicitHeight, Theme.barHeight);
+                        compare(item.width, item.implicitWidth);
+                    }
+                    verify(waitForRendering(preview, 2000));
+                    if (data.id === "media" && data.container === "control-centre")
+                        verify(item.panelBody.height >= content.item.contentHeight - 0.5, "The media frame includes room for its heading");
+                    verify(preview.visualItem.width <= preview.width && preview.visualItem.height <= preview.height);
+                    if (["notes", "media"].includes(data.id)) capture(data.tag);
+                } catch (error) {
+                    console.error("PREVIEW_TEST_FAILED", data.tag, error.message, error.stack);
+                    throw error;
                 } finally {
                     preview.destroy(); wait(50);
                     editor.desktop = {}; editor.layout = {};

@@ -17,7 +17,7 @@ FocusScope {
     readonly property string nativeGroup: ControlLayout.groupFor(widgetId) || (DesktopLayout.controlOrder().includes(widgetId.slice(8)) ? "controls-tiles" : "")
     readonly property string ownContainer: DesktopLayout.placement(DesktopEditing.desktop, widgetId)
     readonly property string groupContainer: DesktopLayout.zone(DesktopEditing.desktop.layout || {}, nativeGroup)
-    readonly property string container: ownContainer || groupContainer || (nativeGroup ? "control-centre" : "top-right")
+    readonly property string container: ownContainer || groupContainer || (nativeGroup ? "control-centre" : panelWidget ? "sidebar" : "top-right")
     readonly property bool barLayout: !["control-centre", "sidebar"].includes(container)
     readonly property string sampleLabel: ({clock: "Tue 8 Sep 12:30", keyboard: "en", overflow: "More", privacy: "Microphone in use"})[widgetId] || spec.label || ""
     readonly property var face: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, container, sampleLabel,
@@ -45,14 +45,13 @@ FocusScope {
             onLoaded: root.isolateKeyboard(item)
             width: {
                 if (root.nativeGroupPreview && !root.barLayout) return Theme.notificationWidth;
-                if (root.panelWidget) return 300;
                 if (!root.barLayout && !root.utilityWidget) {
                     if (["control-volume", "control-microphone", "control-media"].includes(root.widgetId)) return 300;
                     if (root.nativeGroup === "controls-tiles") return 188;
                 }
                 return item ? item.implicitWidth : 0;
             }
-            height: root.panelWidget ? 240 : item ? item.implicitHeight : 0
+            height: item ? item.implicitHeight : 0
             scale: Math.min(1, root.width / Math.max(1, width), root.height / Math.max(1, height))
             transformOrigin: Item.TopLeft
             sourceComponent: root.groupedWidget ? ({
@@ -60,9 +59,9 @@ FocusScope {
                     "control-volume": audioControl, "control-microphone": audioControl, "control-media": mediaControl,
                     "control-divider": divider, "control-header-space": space, "control-battery": battery,
                     "control-customise": customiseButton
-                })[root.widgetId] || headerButton : root.spec.decoration ? decoration : root.spec.layoutItem ? space : root.widgetId.startsWith("control-") ? control
+                })[root.widgetId] || headerButton : root.panelWidget ? panel : root.spec.decoration ? decoration : root.spec.layoutItem ? space : root.widgetId.startsWith("control-") ? control
                 : ({search, clock, controls: indicators, notifications, metrics: monitor, keyboard, privacy, capture,
-                    overflow, tray, notes, calendar, media, tasks, terminal, monitor: performance})[root.widgetId] || empty
+                    overflow, tray})[root.widgetId] || empty
         }
     }
     Component { id: headerButton; IconButton {
@@ -158,9 +157,38 @@ FocusScope {
     Component { id: overflow; BarOverflowButton { presentation: root.face; barWindow: DesktopEditing.editor?.nativeWindow } }
     Component {
         id: tray
-        Row {
-            spacing: Theme.gap
-            Repeater { model: ["mail-unread-symbolic", "network-vpn-symbolic", "drive-harddisk-symbolic"]; SymbolicIcon { required property string modelData; implicitSize: Theme.iconSize; source: Quickshell.iconPath(modelData); color: Theme.text } }
+        Tray {
+            parentWindow: DesktopEditing.editor?.nativeWindow
+            serviceEnabled: false
+            enabled: false
+            presentation: root.face
+            trayItems: [
+                {id: "mail", title: "Mail", tooltipTitle: "Mail", icon: Quickshell.iconPath("mail-unread-symbolic"), menu: null, onlyMenu: false, hasMenu: false},
+                {id: "vpn", title: "VPN", tooltipTitle: "VPN", icon: Quickshell.iconPath("network-vpn-symbolic"), menu: null, onlyMenu: false, hasMenu: false},
+                {id: "drive", title: "Files", tooltipTitle: "Files", icon: Quickshell.iconPath("drive-harddisk-symbolic"), menu: null, onlyMenu: false, hasMenu: false}
+            ]
+        }
+    }
+    Component {
+        id: panel
+        SidebarPanelFace {
+            id: panelFace
+            widgetId: root.widgetId
+            inlinePanel: !root.barLayout
+            showHeader: root.container === "control-centre"
+            barWindow: DesktopEditing.editor?.nativeWindow
+            presentation: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, root.container, spec.label, spec.icon, true, showHeader)
+            panelHeight: root.container === "sidebar" ? 240 : widgetId === "media" ? Math.max(160, contents.item?.contentHeight || 0) : 360
+            fitContent: widgetId === "media"
+            Loader {
+                id: contents
+                objectName: "sidebarPanelPreviewContent"
+                parent: panelFace.panelBody
+                anchors.fill: parent
+                active: panelFace.inlinePanel
+                onLoaded: root.isolateKeyboard(item)
+                sourceComponent: ({notes, calendar, media, tasks, terminal, monitor: performance})[root.widgetId]
+            }
         }
     }
     Component { id: keyboard; InputSourceSelector { parentWindow: DesktopEditing.editor?.nativeWindow; metrics: sampleMetrics; gnoblinCtlPath: ""; shortcutsEnabled: false; presentation: root.face } }

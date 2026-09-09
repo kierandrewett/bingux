@@ -8,16 +8,19 @@ Item {
 
     required property var parentWindow
     property var presentation: null
+    property bool serviceEnabled: true
     readonly property int maximumVisibleItems: 12
     property var trayItems: []
 
     function refreshItems() {
-        root.trayItems = SystemTray.items.values;
+        if (serviceEnabled) root.trayItems = SystemTray.items.values;
     }
 
     Component.onCompleted: root.refreshItems()
+    onServiceEnabledChanged: root.refreshItems()
 
     Connections {
+        enabled: root.serviceEnabled
         target: SystemTray.items
         function onValuesChanged() {
             root.refreshItems();

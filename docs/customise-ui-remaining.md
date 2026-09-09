@@ -33,8 +33,8 @@ layout tests does not prove that every existing desktop widget is editable.
 
 ## Next implementation boundary
 
-Audit the remaining tray and sidebar-panel previews and their
-context-specific presentation. Individual control-centre actions, audio, battery,
+Audit remaining container-editing routes outside Customise UI and the wider
+widget interaction and popup-placement matrix. Individual control-centre actions, audio, battery,
 media and quick controls now inherit the same container, group and widget display
 settings as their native components. The three native control groups use the same overview view
 as the live control centre, with inert sample data and saved member ordering.
@@ -197,6 +197,20 @@ cover these utility contexts and nine status widgets with container and per-widg
 overrides, with normal and reduced motion. Native notification-button clicks work
 after moving into the dock and control centre, and closing history retains the
 count. The shared buttons keep the original live geometry, backgrounds and actions.
+
+Tray samples now use the real tray renderer with service updates disabled and
+three inert entries. Sidebar-panel samples share `SidebarPanelFace` with the
+retained live panels. They show a compact launcher in the bar or dock, the headed
+panel in the control centre, and panel content in the sidebar or unused palette.
+Compact samples do not load hidden panel content. The fixture checks all six
+panels across these contexts, label/icon overrides, and tray data isolation.
+Task rows created after loading the sample now keep a non-focusable policy;
+the unchanged all-widget keyboard regression catches the previous focus leak.
+Rendered media samples exposed a missing heading allowance in the real inline
+panel too. Both paths now include that space, with a shared height calculation.
+Preview and native regressions failed before this fix. Native panel checks cover
+retained instances and drafts, launcher clicks, popup contents, task input and
+checkbox actions, media transport, Cancel, and saved placements after restart.
 
 The disabled-control click failure also reproduced with native dock input.
 The shared edit handler was destroyed when created before its window existed,

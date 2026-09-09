@@ -53,6 +53,7 @@ ColumnLayout {
         }
         TextField {
             id: input
+            focusPolicy: root.previewTasks ? Qt.NoFocus : Qt.StrongFocus
             objectName: "taskInput"
             anchors.left: parent.left
             anchors.right: addButton.left
@@ -73,6 +74,7 @@ ColumnLayout {
         }
         IconButton {
             id: addButton
+            focusPolicy: root.previewTasks ? Qt.NoFocus : Qt.StrongFocus
             anchors.right: parent.right
             anchors.rightMargin: 4
             anchors.verticalCenter: parent.verticalCenter
@@ -108,6 +110,7 @@ ColumnLayout {
             }
             CheckBox {
                 id: check
+                focusPolicy: root.previewTasks ? Qt.NoFocus : Qt.StrongFocus
                 objectName: "taskCheck" + taskRow.index
                 anchors.left: parent.left
                 anchors.right: removeButton.left
@@ -139,6 +142,7 @@ ColumnLayout {
             }
             IconButton {
                 id: removeButton
+                focusPolicy: root.previewTasks ? Qt.NoFocus : Qt.StrongFocus
                 anchors.right: parent.right
                 anchors.rightMargin: 8
                 anchors.verticalCenter: parent.verticalCenter

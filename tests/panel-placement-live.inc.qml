@@ -86,6 +86,8 @@
                         compare(terminalSidebar.panelFor(id), originals[id]);
                         if (target === "sidebar") compare(terminalSidebar.contentType, id);
                         else verify(waitForRendering(widget, 2000));
+                        if (id === "media" && target === "control-centre")
+                            verify(widget.contentHost.height >= originals.media.contentHeight - 0.5, "The inline media frame fits its controls below the heading");
                     }
                 }
                 const destinations = {notes: "dock", terminal: "top-right", calendar: "control-centre", tasks: "top-left", media: "dock", monitor: "control-centre"};
@@ -133,6 +135,18 @@
                     if (id === "media") {
                         gesture(findChild(originals.media, "mediaPlayPause"), widget.popup.nativeWindow);
                         tryCompare(retainedPlayer, "isPlaying", true, 2000);
+                    }
+                    if (id === "tasks") {
+                        gesture(input, widget.popup.nativeWindow);
+                        verify(input.activeFocus, "The moved task input still accepts keyboard focus");
+                        originals.tasks.addTask("Check the moved task control");
+                        tryVerify(() => !!findChild(originals.tasks, "taskCheck0"), 1500);
+                        const check = findChild(originals.tasks, "taskCheck0");
+                        verify(waitForRendering(check, 2000));
+                        compare(check.focusPolicy, Qt.StrongFocus, "Real task controls retain their focus policy");
+                        gesture(check, widget.popup.nativeWindow);
+                        verify(originals.tasks.tasks[0].done, "The native checkbox still updates its task");
+                        originals.tasks.removeTask(0);
                     }
                     widget.popup.visible = false; wait(180);
                 }
