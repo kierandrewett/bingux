@@ -80,7 +80,7 @@ FocusScope {
     Component {
         id: audioControl
         AudioLevel {
-            node: sampleAudioNode; label: root.spec.label; iconName: root.spec.icon; navigation: true
+            node: sampleAudioNode; label: root.spec.label || ""; iconName: root.spec.icon || ""; navigation: true
             barLayout: root.barLayout; barWindow: DesktopEditing.editor?.nativeWindow
             presentation: root.controlPresentation(label, muteIconName, true, false)
         }
@@ -154,7 +154,7 @@ FocusScope {
     Component { id: capture; RecordingIndicator {
         barWindow: DesktopEditing.editor?.nativeWindow
         capture: sampleCapture; privacy: samplePrivacy
-        presentation: DesktopLayout.presentation(DesktopEditing.desktop, root.widgetId, root.container, label, "media-record-symbolic", false, true)
+        presentation: DesktopLayout.presentation(DesktopEditing.desktop, root.widgetId, root.container, label || "", "media-record-symbolic", false, true)
     } }
     Component { id: privacy; PrivacyIndicators {
         barWindow: DesktopEditing.editor?.nativeWindow
@@ -184,7 +184,7 @@ FocusScope {
             inlinePanel: !root.barLayout
             showHeader: root.container === "control-centre"
             barWindow: DesktopEditing.editor?.nativeWindow
-            presentation: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, root.container, spec.label, spec.icon, true, showHeader)
+            presentation: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, root.container, spec.label || "", spec.icon || "", true, showHeader)
             panelHeight: root.container === "sidebar" ? 240 : widgetId === "media" ? Math.max(160, contents.item?.contentHeight || 0) : 360
             fitContent: widgetId === "media"
             Loader {
