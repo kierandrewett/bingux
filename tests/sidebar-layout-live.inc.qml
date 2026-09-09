@@ -37,6 +37,11 @@
         }
         function test_sidebar_widgets() {
             try {
+                if (Quickshell.env("BINGUX_TEST_SCREEN_WIDTH")) {
+                    tryCompare(topBar.screen, "width", Number(Quickshell.env("BINGUX_TEST_SCREEN_WIDTH")), 3000);
+                    tryCompare(topBar.screen, "height", Number(Quickshell.env("BINGUX_TEST_SCREEN_HEIGHT")), 3000);
+                    console.log("VERIFIED_SCREEN", topBar.screen.width, topBar.screen.height, topBar.screen.devicePixelRatio);
+                }
                 BinguxPreferences.importDesktop(root.layoutSnapshot());
                 tryVerify(() => !!BinguxPreferences.data.desktop.controlLayout, 4000);
                 binguxSettings.read(); tryCompare(binguxSettings, "ready", true, 4000); tryCompare(binguxSettings, "busy", false, 4000);
@@ -84,11 +89,41 @@
                 editor.put("keyboard", "sidebar", 3);
                 editor.selectedWidget = "label:1"; editor.widgetOption("label", "My sidebar");
                 save();
-                gesture(clockPill, terminalSidebar.editWindow, clockPill.width / 2, 16, ["--click-only"]);
-                tryCompare(calendarPopup, "visible", true, 3000); tryCompare(calendarPopup, "revealScale", 1, 3000);
-                compare(calendarPopup.anchorWindow, terminalSidebar.editWindow);
-                capture("sidebar-calendar", clockPill, terminalSidebar.editWindow);
-                calendarPopup.visible = false; wait(150);
+                for (const edge of ["left", "top", "right"]) {
+                    editor.open();
+                    editor.change("sidebarEdge", edge);
+                    tryCompare(terminalSidebar, "edge", edge, 3000);
+                    tryCompare(terminalSidebar.editWindow, "reveal", 1, 3000);
+                    wait(250);
+                    const bar = DesktopEditing.surfaces.find(surface => surface.zoneName === "top-left");
+                    drag(clockPill, terminalSidebar.editWindow, clockPill.width / 2, 16,
+                        Qt.point(bar.screenRect.x + 24, bar.screenRect.y + 16));
+                    compare(editor.containerFor("clock"), "top-left", "Native drag leaves the " + edge + " sidebar");
+                    drag(clockPill, topBar, clockPill.width / 2, 16,
+                        Qt.point(area.screenRect.x + 40, area.screenRect.y + Theme.barHeight + 12));
+                    compare(editor.containerFor("clock"), "sidebar", "Native drag returns to the " + edge + " sidebar");
+                    compare(terminalSidebar.activePanel, panel, "Changing edges retains Notes");
+                    save();
+                    const notesEditor = findChild(terminalSidebar.contentItem, "notesEditor");
+                    notesEditor.forceActiveFocus();
+                    gesture(clockPill, terminalSidebar.editWindow, clockPill.width / 2, 16, ["--shift-right-click"]);
+                    tryCompare(widgetMenu, "visible", true, 3000);
+                    compare(widgetMenu.widgetId, "clock");
+                    verify(!findChild(terminalSidebar.contentItem, "notesContextMenu")?.visible,
+                        "Editing a sidebar widget does not open Notes' menu on the " + edge + " edge");
+                    widgetMenu.visible = false;
+                    tryCompare(widgetMenu, "retained", false, 3000);
+                    gesture(clockPill, terminalSidebar.editWindow, clockPill.width / 2, 16, ["--click-only"]);
+                    tryCompare(calendarPopup, "visible", true, 3000);
+                    tryCompare(calendarPopup, "revealScale", 1, 3000);
+                    compare(calendarPopup.anchorWindow, terminalSidebar.editWindow);
+                    verify(calendarPopup.panelX >= 0 && calendarPopup.panelY >= 0);
+                    verify(calendarPopup.panelX + calendarPopup.body.parent.width <= topBar.screen.width);
+                    verify(calendarPopup.panelY + calendarPopup.body.parent.height <= topBar.screen.height);
+                    capture("sidebar-calendar-" + edge, clockPill, terminalSidebar.editWindow);
+                    calendarPopup.visible = false;
+                    tryCompare(calendarPopup, "retained", false, 3000);
+                }
                 terminalSidebar.popOut(); tryCompare(terminalSidebar.detachedSurface, "visible", true, 3000); wait(250);
                 compare(clockPill.parent, terminalSidebar.widgetHost);
                 compare(topBar.windowFor(clockPill), terminalSidebar.detachedSurface);

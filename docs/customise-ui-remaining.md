@@ -411,8 +411,8 @@ repeats completed before the scheduled stack capture, so no stalled stack was
 obtained. More now retains its registered native window between openings; the
 final normal/reduced-motion and compact-editor loop passed. That does not establish
 the timeout's precise cause. Keep cold-start reliability in the remaining audit.
-Other open checks include other sidebar edges, mixed-scale and multiple-monitor
-behaviour, and third-party tray services.
+Other open checks include mixed-scale and multiple-monitor behaviour, and
+third-party tray services.
 
 Detached popup checks found failures in the existing shell. Opening a nested
 monitor popup closed More because the parent check compared its unused layer
@@ -467,3 +467,20 @@ preserves the exact desktop, layout and dock snapshot without QML errors or a
 shell-process restart. Similarity checks found no duplicated functions in the
 changed QML files or private input helper.
 The wider compatibility audit remains open.
+
+The sidebar layout regression now changes between left, top and right edges.
+At each edge, native input drags the retained Clock to the bar and back, opens
+its Shift-right-click actions while Notes has focus, and opens the anchored
+Calendar. Assertions check the destination, retained Notes instance, absence of
+an unintended Notes context menu and popup bounds. The saved widgets reload in
+a fresh shell process. The scale runner also verifies the shell's logical screen
+dimensions and rejects unsupported display scales before starting the matrix.
+
+The current-source matrix passes at 125%, 150% and 200% with normal and reduced
+motion on a 1920-by-1200 virtual display. The corresponding logical sizes are
+1536 by 960, 1280 by 800 and 960 by 600. Screenshots confirm left, top and right
+Calendar placement. The earlier 1280-by-800 test display passed at 125% but did
+not support 150%; that was a test-display configuration failure, not a shell
+layout failure. Staged-source checks also pass at 125% with normal motion and
+200% with reduced motion, including both fresh-process reloads. Multiple
+displays with different origins and scales remain outside this check.

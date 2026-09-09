@@ -11,7 +11,7 @@ from gi.repository import Gio
 parser = argparse.ArgumentParser()
 parser.add_argument("--scales", nargs="+", type=float, default=[1.25, 1.5, 2.0])
 parser.add_argument("--capture-dir", type=Path)
-parser.add_argument("--cases", nargs="+", choices=["editor-compact", "control-external"], default=["editor-compact", "control-external"])
+parser.add_argument("--cases", nargs="+", choices=["editor-compact", "control-external", "sidebar-layout"], default=["editor-compact", "control-external"])
 args = parser.parse_args()
 if not os.environ.get("WAYLAND_DISPLAY", "").startswith("gnoblin-gs-"):
     raise SystemExit("Only a private Gnoblin compositor can change scale for this test")
@@ -38,6 +38,9 @@ if len(initial[1]) != 1:
 monitor = initial[1][0]
 connector = monitor[0][0]
 mode = next(mode for mode in monitor[1] if mode[6].get("is-current"))
+unsupported = [scale for scale in args.scales if not any(abs(scale - supported) < 0.001 for supported in mode[5])]
+if unsupported:
+    raise SystemExit(f"Mode {mode[1]}x{mode[2]} does not support scales {unsupported}; supported scales: {mode[5]}")
 runner = Path(__file__).with_name("desktop-layout-live.py")
 for scale in args.scales:
     subprocess.run([
