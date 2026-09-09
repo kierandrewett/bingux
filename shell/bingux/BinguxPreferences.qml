@@ -2,7 +2,6 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "ControlLayout.js" as ControlLayout
 
 Singleton {
     id: root
@@ -12,6 +11,12 @@ Singleton {
     property bool loaded: false
     property string layoutError: ""
     property var pendingDesktop: null
+    property int readRevision: 0
+    function reload() {
+        readRevision++;
+        if (reader.running) reader.requested = true;
+        else reader.running = true;
+    }
     function saveLayout(layout) { saveDesktop({layout}); }
     function saveDesktop(changes) {
         pendingDesktop = Object.assign({}, pendingDesktop || {}, changes);
@@ -35,7 +40,7 @@ Singleton {
                 try {
                     const result = JSON.parse(text);
                     if (result.error) root.layoutError = result.error;
-                    else { root.data = result.data; root.layoutError = ""; }
+                    else { root.data = result.data; root.layoutError = ""; file.reload(); }
                 } catch (_) { root.layoutError = "Could not import the current desktop layout."; }
             }
         }
@@ -56,25 +61,37 @@ Singleton {
             }
         }
     }
+    Process {
+        id: reader
+        command: root.helper.concat(["read"])
+        property bool requested: false
+        property int revision: 0
+        onStarted: { requested = false; revision = root.readRevision; }
+        onExited: if (requested) Qt.callLater(() => reader.running = true)
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (reader.revision !== root.readRevision) return;
+                try {
+                    const result = JSON.parse(text);
+                    if (result.error) throw new Error(result.error);
+                    const incoming = result.data;
+                    if (root.data.desktop.layoutVersion === 1 && incoming.desktop.layoutVersion !== 1)
+                        throw new Error("The desktop layout has changed. Restore a version 1 layout.");
+                    root.data = {search: incoming.search, previews: incoming.previews,
+                        desktop: Object.assign({}, incoming.desktop, writer.running ? writer.submitted || {} : {}, root.pendingDesktop || {})};
+                    root.layoutError = "";
+                } catch (error) { root.layoutError = error.message || "Could not load desktop settings."; }
+                root.loaded = true;
+            }
+        }
+    }
     FileView {
         id: file
         path: root.path
         watchChanges: true
         printErrors: false
-        onFileChanged: reload()
-        onLoadFailed: root.loaded = true
-        onLoaded: {
-            try {
-                const incoming = JSON.parse(text());
-                if (![0, 1].includes(incoming.desktop?.layoutVersion || 0)) throw new Error("This desktop layout version is not supported.");
-                if (incoming.desktop?.controlLayout && !ControlLayout.valid(incoming.desktop.controlLayout)) throw new Error("This control-centre layout is not supported.");
-                if (!ControlLayout.validPlacement(incoming.desktop || {})) throw new Error("A control action can only be placed in one container.");
-                root.data = {search: Object.assign({}, root.data.search, incoming.search || {}),
-                    previews: Object.assign({}, root.data.previews, incoming.previews || {}),
-                    desktop: Object.assign({}, root.data.desktop, incoming.desktop || {}, writer.running ? writer.submitted || {} : {}, root.pendingDesktop || {})};
-                root.layoutError = "";
-            } catch (error) { root.layoutError = error.message; }
-            root.loaded = true;
-        }
+        onFileChanged: root.reload()
+        onLoadFailed: root.reload()
+        onLoaded: root.reload()
     }
 }

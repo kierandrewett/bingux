@@ -559,3 +559,21 @@ keeps an active recording in the layout model. These checks verify capture UI
 dispatch and state events; they do not verify recording output or an encoder.
 The next review maps the seven compatibility gates to the existing evidence and
 identifies specific remaining gaps.
+### Saved layout validation and recovery
+
+The shell now uses the settings backend's desktop validator when loading files,
+as well as when saving changes. Invalid containers, duplicate or unknown widgets,
+invalid app identities, display options and field types cannot replace the last
+valid runtime layout. Import also restores file watching when the settings
+directory did not exist at startup.
+
+The `settings-recovery` private full-shell case rejects nine damaged file cases,
+recovers after each valid-file restoration, and exercises a denied directory
+write. Failed saving keeps the editor draft available; Cancel restores the
+runtime, and a subsequent successful save survives a fresh shell process. This
+passes with normal and reduced motion. The full desktop-layout case and repeated
+in-process reload checks also pass with the shared reader. Backend tests cover
+read rejection and atomic-write cleanup (21 tests pass). Replaying the user's
+original migration backup in an isolated config directory preserves the recorded
+layout, dock app identities and order, sidebar edge and control preferences;
+repeating import leaves the saved bytes unchanged.

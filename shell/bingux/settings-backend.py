@@ -79,46 +79,19 @@ def config_path():
 
 def read():
     data = json.loads(config_path().read_text()) if config_path().exists() else {}
-    version = data.get('desktop', {}).get('layoutVersion', 0)
-    if type(version) is not int or version not in (0, 1):
-        raise ValueError('This desktop layout version is not supported.')
-    validate_control_layout(data.get('desktop', {}).get('controlLayout'))
-    validate_control_action_placement(data.get('desktop', {}))
-    return {key: DEFAULTS[key] | data.get(key, {}) for key in DEFAULTS}
-
-
-def validate(data):
-    if not isinstance(data, dict) or set(data) - set(DEFAULTS): raise ValueError('Unknown settings section.')
-    current = read()
-    result = copy.deepcopy(current)
+    if not isinstance(data, dict) or set(data) - set(DEFAULTS):
+        raise ValueError('Unknown settings section.')
     for key, values in data.items():
-        if not isinstance(values, dict) or set(values) - set(DEFAULTS[key]): raise ValueError('Unknown setting.')
-        result[key].update(values)
-    search = result['search']
-    disabled = search['disabledProviders']
-    if not isinstance(disabled, list) or any(p not in PROVIDERS for p in disabled): raise ValueError('Unknown search provider.')
-    roots = search['fileRoots']
-    if roots is not None and (not isinstance(roots, list) or len(roots) > 32 or any(not isinstance(p, str) or not Path(p).is_absolute() or '\0' in p for p in roots)):
-        raise ValueError('Use absolute paths for search locations, with at most 32 locations.')
-    engines = search['engines']
-    if not isinstance(engines, list) or not 1 <= len(engines) <= 32: raise ValueError('Add between 1 and 32 search engines.')
-    ids, shortcuts = set(), set()
-    for engine in engines:
-        if not isinstance(engine, dict) or set(engine) != {'id', 'name', 'shortcut', 'url', 'enabled'}: raise ValueError('Invalid search engine.')
-        for field in ('id', 'name', 'shortcut', 'url'):
-            if not isinstance(engine[field], str) or any(ord(c) < 32 for c in engine[field]): raise ValueError('Invalid search engine text.')
-        if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,63}', engine['id']) or engine['id'] in ids: raise ValueError('Search engine identifiers must be unique.')
-        if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,23}', engine['shortcut']) or engine['shortcut'] in shortcuts or engine['shortcut'] in ('wiki', 'gh', 'maps', 'yt'):
-            raise ValueError('Choose a unique shortcut with letters, numbers or hyphens. wiki, gh, maps and yt are reserved.')
-        if not engine['name'].strip() or len(engine['name']) > 80: raise ValueError('Enter a name of up to 80 characters.')
-        url = urlsplit(engine['url'])
-        if url.scheme not in ('https', 'http') or not url.hostname or url.username or url.password or len(engine['url']) > 2048 or engine['url'].count('{query}') != 1 or '{query}' in url.netloc:
-            raise ValueError('Use an HTTP or HTTPS URL with {query} in its path or query.')
-        if type(engine['enabled']) is not bool: raise ValueError('Invalid engine toggle.')
-        ids.add(engine['id']); shortcuts.add(engine['shortcut'])
-    if not any(e['id'] == search['defaultEngine'] and e['enabled'] for e in engines): raise ValueError('The default search engine must be enabled.')
-    desktop = result['desktop']
-    if current['desktop']['layoutVersion'] == 1 and desktop['layoutVersion'] != 1:
+        if not isinstance(values, dict) or set(values) - set(DEFAULTS[key]):
+            raise ValueError('Unknown setting.')
+    result = {key: DEFAULTS[key] | data.get(key, {}) for key in DEFAULTS}
+    validate_desktop(result['desktop'])
+    return result
+
+
+def validate_desktop(desktop, previous=None):
+    """Use the same desktop schema for disk reads and proposed writes."""
+    if previous is not None and previous['layoutVersion'] == 1 and desktop['layoutVersion'] != 1:
         raise ValueError('The desktop layout has changed. Reopen Settings before saving.')
     if type(desktop['layoutVersion']) is not int or desktop['layoutVersion'] not in (0, 1):
         raise ValueError('This desktop layout version is not supported.')
@@ -132,7 +105,7 @@ def validate(data):
     controls = desktop['controlCentre']
     control_order = desktop['controlOrder']
     validate_control_layout(desktop['controlLayout'])
-    if current['desktop']['controlLayout'] is not None and desktop['controlLayout'] is None:
+    if previous is not None and previous['controlLayout'] is not None and desktop['controlLayout'] is None:
         raise ValueError('The control-centre layout has changed. Reopen Settings before saving.')
     if control_order is not None and (not isinstance(control_order, list) or any(not isinstance(item, str) or item not in {'network', 'bluetooth', 'vpn', 'dnd', 'nightLight', 'power', 'awake'} for item in control_order) or len(control_order) != len(set(control_order))):
         raise ValueError('Invalid control-centre widget order.')
@@ -182,6 +155,41 @@ def validate(data):
         validate_control_action_placement(desktop)
         if seen & controls and (control_order is None or any('control-' + name in seen for name in control_order)):
             raise ValueError('A control can only be placed in one container.')
+    if any(type(desktop[key]) is not bool for key in ('dock', 'sidebar', 'metrics')):
+        raise ValueError('Invalid toggle value.')
+
+
+def validate(data):
+    if not isinstance(data, dict) or set(data) - set(DEFAULTS): raise ValueError('Unknown settings section.')
+    current = read()
+    result = copy.deepcopy(current)
+    for key, values in data.items():
+        if not isinstance(values, dict) or set(values) - set(DEFAULTS[key]): raise ValueError('Unknown setting.')
+        result[key].update(values)
+    search = result['search']
+    disabled = search['disabledProviders']
+    if not isinstance(disabled, list) or any(p not in PROVIDERS for p in disabled): raise ValueError('Unknown search provider.')
+    roots = search['fileRoots']
+    if roots is not None and (not isinstance(roots, list) or len(roots) > 32 or any(not isinstance(p, str) or not Path(p).is_absolute() or '\0' in p for p in roots)):
+        raise ValueError('Use absolute paths for search locations, with at most 32 locations.')
+    engines = search['engines']
+    if not isinstance(engines, list) or not 1 <= len(engines) <= 32: raise ValueError('Add between 1 and 32 search engines.')
+    ids, shortcuts = set(), set()
+    for engine in engines:
+        if not isinstance(engine, dict) or set(engine) != {'id', 'name', 'shortcut', 'url', 'enabled'}: raise ValueError('Invalid search engine.')
+        for field in ('id', 'name', 'shortcut', 'url'):
+            if not isinstance(engine[field], str) or any(ord(c) < 32 for c in engine[field]): raise ValueError('Invalid search engine text.')
+        if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,63}', engine['id']) or engine['id'] in ids: raise ValueError('Search engine identifiers must be unique.')
+        if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,23}', engine['shortcut']) or engine['shortcut'] in shortcuts or engine['shortcut'] in ('wiki', 'gh', 'maps', 'yt'):
+            raise ValueError('Choose a unique shortcut with letters, numbers or hyphens. wiki, gh, maps and yt are reserved.')
+        if not engine['name'].strip() or len(engine['name']) > 80: raise ValueError('Enter a name of up to 80 characters.')
+        url = urlsplit(engine['url'])
+        if url.scheme not in ('https', 'http') or not url.hostname or url.username or url.password or len(engine['url']) > 2048 or engine['url'].count('{query}') != 1 or '{query}' in url.netloc:
+            raise ValueError('Use an HTTP or HTTPS URL with {query} in its path or query.')
+        if type(engine['enabled']) is not bool: raise ValueError('Invalid engine toggle.')
+        ids.add(engine['id']); shortcuts.add(engine['shortcut'])
+    if not any(e['id'] == search['defaultEngine'] and e['enabled'] for e in engines): raise ValueError('The default search engine must be enabled.')
+    validate_desktop(result['desktop'], current['desktop'])
     ai = search['ai']
     if ai is not None:
         if not isinstance(ai, dict) or set(ai) - {'harness', 'executable', 'model'}: raise ValueError('Invalid AI settings.')
@@ -191,7 +199,7 @@ def validate(data):
         executable = ai.get('executable') or shutil.which(ai['harness'])
         if not executable or not Path(executable).is_absolute() or not os.access(executable, os.X_OK): raise ValueError('The selected CLI is not installed or executable.')
         ai['executable'] = executable
-    for section, fields in [('previews', ('enabled', 'prewarm')), ('desktop', ('dock', 'sidebar', 'metrics'))]:
+    for section, fields in [('previews', ('enabled', 'prewarm'))]:
         if any(type(result[section][key]) is not bool for key in fields): raise ValueError('Invalid toggle value.')
     limit = result['previews']['maxMegabytes']
     if type(limit) is not int or not 1 <= limit <= 20: raise ValueError('Preview limit must be between 1 and 20 MB.')

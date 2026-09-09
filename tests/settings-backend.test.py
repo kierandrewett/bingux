@@ -255,6 +255,36 @@ class SettingsTests(unittest.TestCase):
             with self.assertRaises(ValueError): settings.write({'desktop': {'controlLayout': value}})
             self.assertEqual(settings.config_path().read_bytes(), before)
 
+    def test_read_rejects_invalid_desktop_data_without_rewriting_it(self):
+        valid = settings.write({'desktop': {'layout': {
+            'top-left': ['search'], 'top-center': ['clock'], 'top-right': [],
+            'dock': [], 'sidebar': ['notes']}}})
+        mutations = [
+            lambda d: d['layout'].pop('dock'),
+            lambda d: d['layout'].update(dock=['clock']),
+            lambda d: d['layout'].update(dock=['unknown']),
+            lambda d: d.update(dockApps={'pinnedApps': [None], 'order': []}),
+            lambda d: d.update(containers={'dock': {'display': 'invalid'}}),
+            lambda d: d.update(widgetOptions={'clock': {'label': 42}}),
+            lambda d: d.update(dockSize='large'),
+        ]
+        for mutate in mutations:
+            value = copy.deepcopy(valid); mutate(value['desktop'])
+            raw = json.dumps(value)
+            settings.config_path().write_text(raw)
+            with self.subTest(desktop=value['desktop']):
+                with self.assertRaises(ValueError): settings.read()
+                self.assertEqual(settings.config_path().read_text(), raw)
+
+    def test_failed_atomic_replace_preserves_settings_and_removes_temporary_file(self):
+        settings.write({'desktop': {'dockSize': 40}})
+        before = settings.config_path().read_bytes()
+        files = set(settings.config_path().parent.iterdir())
+        with patch.object(settings.os, 'replace', side_effect=PermissionError('Test write denied')):
+            with self.assertRaises(PermissionError): settings.write({'desktop': {'dockSize': 64}})
+        self.assertEqual(settings.config_path().read_bytes(), before)
+        self.assertEqual(set(settings.config_path().parent.iterdir()), files)
+
     def test_unknown_version_and_failed_import_do_not_replace_settings(self):
         settings.write({})
         before = settings.config_path().read_bytes()
