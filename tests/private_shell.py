@@ -37,6 +37,10 @@ def run_reported_shell(fixture, environment, report_variable, timeout=30, comple
                     if complete(report):
                         break
                 time.sleep(.05)
+            # A successful fixture can write its report and exit between polls.
+            # Read once more after observing termination or reaching the deadline.
+            if (fixture / 'report').exists():
+                report = (fixture / 'report').read_text()
             if not complete(report):
                 exit_code = process.poll()
                 report = ('Timed out before completion' if exit_code is None else
