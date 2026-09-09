@@ -60,7 +60,8 @@ MouseArea {
     readonly property rect screenRect: {
         const dependencies = [geometryItem.x, geometryItem.y, geometryItem.width, geometryItem.height, window.width, window.height, window.margins.left, window.margins.right, window.margins.top, window.margins.bottom];
         const p = DesktopEditing.point(geometryItem, window, 0, 0);
-        return Qt.rect(p.x, p.y, geometryItem.width, geometryItem.height);
+        const end = DesktopEditing.point(geometryItem, window, geometryItem.width, geometryItem.height);
+        return Qt.rect(p.x, p.y, end.x - p.x, end.y - p.y);
     }
     readonly property var groups: entries.filter(entry => entry.item?.memberEntries && entry.item.visible)
     function groupVisible(entry) {

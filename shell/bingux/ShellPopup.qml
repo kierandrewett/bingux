@@ -167,6 +167,8 @@ Scope {
         contentItem.Keys.onEscapePressed: root.visible = false
         Rectangle {
             id: card
+            readonly property var geometryRevision: [popupScale.xScale, popupScale.yScale,
+                popupScale.origin.x, popupScale.origin.y]
             parent: root.contentItem
             visible: root.retained
             enabled: root.visible
@@ -182,6 +184,7 @@ Scope {
             border.width: root.surfaceVisible ? 1 : 0
             PanelOutline { surface: card }
             transform: Scale {
+                id: popupScale
                 origin.x: root.motionSource ? root.motionSource.panelX + root.motionSource.revealOriginX - card.x : root.revealOriginX
                 origin.y: root.motionSource ? root.motionSource.panelY + root.motionSource.revealOriginY - card.y : root.revealOriginY
                 xScale: root.motionSource ? root.motionSource.revealScale : root.revealScale

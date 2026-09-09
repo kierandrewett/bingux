@@ -64,6 +64,11 @@
         }
         function test_external_widgets() {
             try {
+                if (Quickshell.env("BINGUX_TEST_SCREEN_WIDTH")) {
+                    tryCompare(topBar.screen, "width", Number(Quickshell.env("BINGUX_TEST_SCREEN_WIDTH")), 3000);
+                    tryCompare(topBar.screen, "height", Number(Quickshell.env("BINGUX_TEST_SCREEN_HEIGHT")), 3000);
+                    console.log("VERIFIED_SCREEN", topBar.screen.width, topBar.screen.height, topBar.screen.devicePixelRatio);
+                }
                 BinguxPreferences.importDesktop(root.layoutSnapshot());
                 tryVerify(() => !!BinguxPreferences.data.desktop.controlLayout, 4000);
                 binguxSettings.read(); tryCompare(binguxSettings, "ready", true, 4000); tryCompare(binguxSettings, "busy", false, 4000);
@@ -72,6 +77,7 @@
                 editor.open(); tryCompare(controlCentre, "visible", true, 3000); tryCompare(controlCentre, "revealScale", 1, 4000); wait(300);
                 const header = findChild(controlCentre.body, "controlHeader");
                 const centre = DesktopEditing.surfaces.find(surface => surface.zoneName === "control-centre");
+                verify(Math.abs(centre.screenRect.x - controlCentre.panelX) < 0.01, "The control-centre drop area follows the completed reveal");
                 drag(searchPill, topBar, searchPill.width / 2, 16,
                     DesktopEditing.point(header, controlCentre.nativeWindow, 1, 1));
                 verify(searchPill.parent === controlCentre.widgetHost);
@@ -182,7 +188,12 @@
                 tryCompare(calendarPopup, "visible", true, 3000); verify(calendarPopup.anchorWindow === controlCentre.nativeWindow);
                 verify(controlCentre.visible, "An anchored child popup retains its parent control centre");
                 tryCompare(calendarPopup, "revealScale", 1, 3000);
-                verify(calendarPopup.panelY >= clockPill.mapToItem(controlCentre.contentItem, 0, clockPill.height).y);
+                verify(calendarPopup.panelY >= Theme.gap);
+                verify(calendarPopup.panelY + calendarPopup.body.parent.height <= calendarPopup.height - Theme.gap);
+                const agenda = findChild(calendarPopup.body, "agendaCard");
+                // Reduced motion can finish revealing before the next layout pass.
+                tryVerify(() => agenda.mapToItem(calendarPopup.body, 0, agenda.height).y <= calendarPopup.body.height + 0.01, 1000,
+                    "The complete agenda remains inside the moved calendar popup");
                 capture("external-calendar", clockPill, controlCentre.nativeWindow);
                 calendarPopup.visible = false; wait(300);
                 capture("external-before-search", searchPill, controlCentre.nativeWindow);

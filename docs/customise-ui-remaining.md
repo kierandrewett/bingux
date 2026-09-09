@@ -254,7 +254,7 @@ both tabs above the control centre, inspector access, all three sidebar edges,
 and Cancel without a saved-layout change. At 800x600, the previous implementation
 fails the palette-width assertion; normal and reduced-motion runs pass with the
 compact palette. A compositor screenshot verifies its visible layout. Fractional
-scale factors and wide status groups still need separate checks.
+scale factors are covered below; wide status groups still need separate checks.
 The 1280x800 compact-case geometry and full editor regression pass. The missed
 Network click after saving was traced to the native test's coordinate mapping:
 it sampled x=1002 while the bar still had its old width, then Network moved to
@@ -290,3 +290,37 @@ exit. A fixture can finish and exit between polls; previously the runner could
 report an incomplete test using a stale RUNNING result. A real subprocess test
 fails with the old runner and passes with the final read; an early exit without
 a report remains a failure.
+
+Popup drop geometry now follows the actual Scale transform, including its origin,
+width and height. Previously, the opening animation could leave the control-centre
+drop origin 20.8 pixels to the right of the visible card. A native Search drag at
+125% exposed this. The focused fixture covers both independent popup motion and
+motion shared with another popup, including intermediate scale values.
+
+The scale runner changes only a private compositor and private settings. It checks
+Mutter's reported scale and the shell's logical screen dimensions before running
+native editor and moved-widget tests. On a 1920x1200 output, 125%, 150% and 200%
+cover 1536x960, 1280x800 and 960x600 logical desktops. Normal and reduced-motion
+runs pass, including fresh-process restoration of the moved widgets. Screenshots
+cover the compact palette, privacy groups, calendar and search at these scales.
+
+The 200% run exposed a calendar clipping defect: its agenda extended 52 pixels
+past the popup body. The agenda now shrinks when the screen is short. On still
+shorter screens, the full calendar scrolls without overshoot; keyboard focus
+reveals the active control. Inline sidebar calendars keep their expanding agenda.
+The old calendar fails the agenda-bounds check at 600 pixels. The new fixture
+covers 720-, 600- and 480-pixel hosts, wheel input, keyboard focus and agenda
+scrolling, and restoring normal size. Existing calendar navigation, events,
+month transitions and sidebar-calendar checks pass with normal and reduced motion.
+
+Reduced-motion geometry assertions wait for the layout pass, which can finish
+after the zero-duration reveal. The compact input fixture requests an image frame
+before mapping each gesture. Waiting for an unrequested frame on an unchanged
+item had consumed five seconds per check without proving that it rendered.
+
+A fresh 200% session also passes the compact and moved-widget cases against the
+staged source tree, with normal and reduced motion. The compact cases complete
+in about ten seconds after requesting their frames; an earlier run had timed out.
+The live reload preserves the exact desktop settings, layout and dock snapshot,
+with no QML errors or shell-process restart. These scale checks use one virtual
+output; they do not establish mixed-scale, multiple-monitor behaviour.

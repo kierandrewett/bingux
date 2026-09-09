@@ -11,7 +11,11 @@
         parent: topBar.contentItem
         when: topBar.visible && BinguxPreferences.loaded && ControlCentreServices.preferencesReady && dock.appGroupsInitialised
         function gesture(item, window, options) {
-            waitForRendering(item);
+            // An unchanged item may never request the next frame that
+            // waitForRendering waits for. Request a frame before mapping input.
+            let frame = null;
+            verify(item.grabToImage(result => frame = result));
+            tryVerify(() => frame !== null, 4000);
             const point = DesktopEditing.point(item, window, item.width / 2, Math.min(50, item.height / 2));
             compactInput.gestureArguments = [String(point.x), String(point.y)].concat(options);
             compactInput.running = true;
@@ -20,6 +24,11 @@
         }
         function test_palette_and_containers() {
             try {
+                if (Quickshell.env("BINGUX_TEST_SCREEN_WIDTH")) {
+                    tryCompare(topBar.screen, "width", Number(Quickshell.env("BINGUX_TEST_SCREEN_WIDTH")), 3000);
+                    tryCompare(topBar.screen, "height", Number(Quickshell.env("BINGUX_TEST_SCREEN_HEIGHT")), 3000);
+                    console.log("VERIFIED_SCREEN", topBar.screen.width, topBar.screen.height, topBar.screen.devicePixelRatio);
+                }
                 BinguxPreferences.importDesktop(root.layoutSnapshot());
                 tryVerify(() => !!BinguxPreferences.data.desktop.controlLayout, 4000);
                 binguxSettings.read();
