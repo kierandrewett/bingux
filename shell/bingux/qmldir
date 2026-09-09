@@ -148,3 +148,5 @@ UiSession 1.0 UiSession.qml
 
 BatteryStatus 1.0 BatteryStatus.qml
 SidebarPanelWidget 1.0 SidebarPanelWidget.qml
+ControlCentreOverview 1.0 ControlCentreOverview.qml
+ControlGroupPreview 1.0 ControlGroupPreview.qml

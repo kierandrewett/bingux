@@ -11,9 +11,10 @@ FocusScope {
     property var metrics: null
     readonly property var spec: ControlLayout.widget(widgetId) || DesktopLayout.widget(widgetId) || {}
     readonly property bool groupedWidget: !!ControlLayout.groupFor(widgetId)
+    readonly property bool nativeGroupPreview: ["controls-header", "controls-audio", "controls-tiles"].includes(widgetId)
     readonly property bool utilityWidget: ["control-divider", "control-header-space", "control-customise"].includes(widgetId)
     readonly property bool panelWidget: !!spec.panel
-    readonly property string container: DesktopLayout.placement(DesktopEditing.desktop, widgetId) || (widgetId.startsWith("control-") ? "control-centre" : "top-right")
+    readonly property string container: DesktopLayout.placement(DesktopEditing.desktop, widgetId) || (groupedWidget || widgetId.startsWith("control-") ? "control-centre" : "top-right")
     readonly property var face: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, container, spec.label || "", spec.icon || "", !["clock", "keyboard"].includes(widgetId), ["clock", "keyboard"].includes(widgetId))
     readonly property Item visualItem: frame
     readonly property Item previewControl: component.item
@@ -25,19 +26,20 @@ FocusScope {
     Item {
         id: frame
         anchors.centerIn: parent
-        width: Math.min(root.width, component.width)
+        width: Math.min(root.width, component.width * component.scale)
         height: Math.min(root.height, component.height * component.scale)
         clip: true
         Loader {
             id: component
             active: DesktopEditing.active
             onLoaded: root.isolateKeyboard(item)
-            width: root.utilityWidget ? (item ? item.implicitWidth : 0) : root.groupedWidget ? (root.spec.group ? 300 : item ? item.implicitWidth : 0) : root.panelWidget ? 300 : root.widgetId.startsWith("control-") && root.container === "control-centre" ? 188 : item ? item.implicitWidth : 0
+            width: root.nativeGroupPreview ? (["control-centre", "sidebar"].includes(root.container) ? Theme.notificationWidth : item ? item.implicitWidth : 0)
+                : root.utilityWidget ? (item ? item.implicitWidth : 0) : root.groupedWidget ? (root.spec.group ? 300 : item ? item.implicitWidth : 0) : root.panelWidget ? 300 : root.widgetId.startsWith("control-") && root.container === "control-centre" ? 188 : item ? item.implicitWidth : 0
             height: root.panelWidget ? 240 : item ? item.implicitHeight : 0
-            scale: Math.min(1, root.width / Math.max(1, width))
+            scale: Math.min(1, root.width / Math.max(1, width), root.height / Math.max(1, height))
             transformOrigin: Item.TopLeft
             sourceComponent: root.groupedWidget ? ({
-                    "controls-header": headerGroup, "controls-audio": audioGroup, "controls-tiles": tileGroup,
+                    "controls-header": groupPreview, "controls-audio": groupPreview, "controls-tiles": groupPreview,
                     "control-volume": audioControl, "control-microphone": audioControl, "control-media": mediaControl,
                     "control-divider": divider, "control-header-space": space, "control-battery": battery,
                     "control-customise": customiseButton
@@ -47,37 +49,10 @@ FocusScope {
         }
     }
     Component { id: headerButton; IconButton { iconName: root.spec.icon || ""; label: root.spec.label || ""; presentation: root.face } }
-    Component {
-        id: headerGroup
-        RowLayout {
-            spacing: 8
-            IconButton { iconName: "avatar-default-symbolic"; label: "User account" }
-            Item { Layout.fillWidth: true }
-            Repeater {
-                model: ["control-settings", "control-session", "control-lock"]
-                IconButton { required property string modelData; iconName: ControlLayout.widget(modelData).icon; label: ControlLayout.widget(modelData).label }
-            }
-        }
-    }
+    Component { id: groupPreview; ControlGroupPreview { widgetId: root.widgetId } }
     Component {
         id: audioControl
         AudioLevel { node: sampleAudioNode; label: root.spec.label; iconName: root.spec.icon; navigation: true }
-    }
-    Component {
-        id: audioGroup
-        ColumnLayout {
-            spacing: 12
-            AudioLevel { node: sampleAudioNode; label: "Volume"; iconName: "audio-volume-high-symbolic"; maximum: 1.5; navigation: true }
-            AudioLevel { node: sampleAudioNode; label: "Microphone"; iconName: "audio-input-microphone-symbolic"; navigation: true }
-        }
-    }
-    Component {
-        id: tileGroup
-        Row {
-            spacing: 8
-            Loader { width: 146; height: 72; Component.onCompleted: setSource("WidgetPreview.qml", {widgetId: "control-network"}) }
-            Loader { width: 146; height: 72; Component.onCompleted: setSource("WidgetPreview.qml", {widgetId: "control-bluetooth"}) }
-        }
     }
     Component { id: mediaControl; ControlCentreMedia { player: samplePlayer; playerOptions: [samplePlayer]; active: false } }
     Component { id: divider; Rectangle { implicitWidth: root.container === "control-centre" ? 300 : 1; implicitHeight: root.container === "control-centre" ? 1 : Theme.barHeight - 12; color: Theme.outline; opacity: 0.5 } }

@@ -33,8 +33,10 @@ layout tests does not prove that every existing desktop widget is editable.
 
 ## Next implementation boundary
 
-Complete the palette group previews using the native group composition and
-container display inheritance. The sidebar, bar, dock and control centre now host
+Audit the remaining individual widget previews and their context-specific
+presentation. The three native control groups now use the same overview view
+as the live control centre, with inert sample data and saved member ordering.
+The sidebar, bar, dock and control centre now host
 the same retained panel instances. Bar and dock buttons open the original panel
 in an anchored popup; the control centre displays the full panel. Moving the last
 panel out leaves an empty sidebar drop target. Adding a panel back selects it.
@@ -162,3 +164,17 @@ six panels before rendering them and stalled in Mesa context destruction. The
 fixture now waits for each selected panel to render before the next selection,
 as the native picker test already does through mouse input. That artificial rapid
 selection stress case remains separate from the verified user interaction path.
+
+The account/session, audio and quick-control palette groups now use
+`ControlCentreOverview`, the same layout used by the live control centre.
+`ControlGroupPreview` supplies sample device data and projects the saved group
+membership and display settings. It does not register drag sources or call real
+services. Previews fit both dimensions without cropping; compact groups use their
+natural width. Dedicated checks cover every member, reordered and removed header
+items, dock text inheritance, per-item overrides, focus isolation and source
+registry stability. Rendered previews confirm the full quick-control grid and
+both audio rows. The extracted native view passes bar/dock and sidebar group
+movement and reload tests, and the original populated/empty geometry comparison.
+The old synthetic disabled-control click test currently fails at its first
+Shift-right-click assertion with both the unchanged and extended fixtures; this
+is separate from the preview checks and needs a native-input follow-up.
