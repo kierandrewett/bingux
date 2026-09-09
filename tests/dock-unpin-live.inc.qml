@@ -85,6 +85,7 @@
                 compare(menu.menuEntries[0].text, "Unpin from dock");
                 verify(!menu.menuEntries[0].icon, "The customise menu keeps Unpin from dock text-only");
                 verify(menu.menuEntries[0].enabled);
+                verify(actionWithText(menu.body, "Move…") !== null, "The customise menu keeps the shared Move action");
                 const action = actionWithText(menu.body, "Unpin from dock");
                 verify(action !== null);
                 gesture(action, menu.nativeWindow, action.width / 2, action.height / 2, ["--click-only"]);

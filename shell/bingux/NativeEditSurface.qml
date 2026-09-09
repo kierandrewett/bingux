@@ -55,7 +55,9 @@ MouseArea {
             {text: "Unpin from dock", enabled: !!DesktopEditing.editor?.dockApplications.includes(widgetId),
                 triggered: () => DesktopEditing.editor.put(widgetId, "palette", 0)},
             {text: "Customise…", icon: "preferences-system-symbolic", enabled: true,
-                triggered: () => { DesktopEditing.editor.selectedWidget = widgetId; DesktopEditing.editor.optionsPage = "Widget"; }}
+                triggered: () => { DesktopEditing.editor.selectedWidget = widgetId; DesktopEditing.editor.optionsPage = "Widget"; }},
+            {text: "Move…", icon: "transform-move-symbolic", enabled: true,
+                triggered: () => { DesktopEditing.editor.selectedWidget = widgetId; DesktopEditing.editor.optionsPage = "Move"; }}
         ].map(action => Object.assign({isSeparator: false, hasChildren: false, checkState: Qt.Unchecked}, action))
     }
     cursorShape: pressedId ? Qt.ClosedHandCursor : Qt.ArrowCursor
