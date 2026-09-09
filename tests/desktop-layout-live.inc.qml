@@ -6,6 +6,7 @@
         command: ["python3", Quickshell.env("BINGUX_TEST_NATIVE_INPUT"), position.x.toString(), position.y.toString()].concat(extraArguments)
 
     }
+    SignalSpy { id: movedNetworkRequests; target: DesktopEditing.sources["control-network"] || null; signalName: "navigationRequested" }
     Component { id: externalSettingsComponent; BinguxSettings {} }
     Component { id: samplePreviewComponent; WidgetPreview { width: 240; height: 160 } }
     Connections {
@@ -304,7 +305,14 @@
             tryCompare(widgetMenu, 'retained', false);
             tryCompare(topBar.margins, 'top', 0);
             verify(waitForRendering(network), 'The saved bar placement has reached the native window');
+            if (terminalSidebar.opened && !terminalSidebar.floating) tryCompare(terminalSidebar.editWindow, "reveal", 1, 3000);
+            // Layer margins update before the compositor confirms the new
+            // surface width. Wait for that configure before mapping a click.
+            tryVerify(() => topBar.width === topBar.screen.width - topBar.margins.left - topBar.margins.right, 3000, 'The top bar has acknowledged its sidebar insets');
+            verify(waitForRendering(network));
+            movedNetworkRequests.clear();
             clickNative(network, topBar, network.width / 2, network.height / 2, false);
+            compare(movedNetworkRequests.count, 1, 'The moved Network control receives one native click');
             tryCompare(controlCentre, 'visible', true, 3000);
             verify(controlCentre.detailOpen, 'The moved network control still opens its real settings');
             compare(controlCentre.detailPage, 'network');

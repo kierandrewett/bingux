@@ -255,8 +255,21 @@ and Cancel without a saved-layout change. At 800x600, the previous implementatio
 fails the palette-width assertion; normal and reduced-motion runs pass with the
 compact palette. A compositor screenshot verifies its visible layout. Fractional
 scale factors and wide status groups still need separate checks.
-The 1280x800 compact-case geometry and full editor regression pass. The full
-reduced-motion regression passed on a repeat with screenshot capture; its first
-run missed the moved Network control immediately after saving. No source change
-separates those two runs. Keep this timing-sensitive native click in the wider
-popup/input audit rather than treating the repeat as proof that it cannot recur.
+The 1280x800 compact-case geometry and full editor regression pass. The missed
+Network click after saving was traced to the native test's coordinate mapping:
+it sampled x=1002 while the bar still had its old width, then Network moved to
+x=810 before delivery as the compositor acknowledged the left sidebar inset.
+The action received no click. The test now waits for the sidebar's reveal and
+for the acknowledged bar width to equal the screen width minus its margins,
+then waits for rendering before mapping the input point. It also asserts that
+the original Network action receives exactly one native click. Three consecutive
+full reduced-motion runs passed with the width check.
+
+The focused `editor-save-input` case repeats saving and clicking 12 times while
+alternating an open sidebar between the left and right edges. It retains live
+metrics and a flexible space before Network, closes an edit menu before each
+native click, and checks the original control's action and detail page. This
+covers the saved-layout input boundary without depending on the full editor
+scenario. Normal and reduced-motion runs pass, as does the full normal-motion
+editor regression. It does not establish input correctness during an unfinished
+sidebar animation.
