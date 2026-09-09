@@ -33,8 +33,9 @@ layout tests does not prove that every existing desktop widget is editable.
 
 ## Next implementation boundary
 
-Audit remaining container-editing routes outside Customise UI and the wider
-widget interaction and popup-placement matrix. Individual control-centre actions, audio, battery,
+Audit the wider widget interaction and popup-placement matrix, including privacy
+appearance after a control-centre move and remaining direct widget menus.
+Individual control-centre actions, audio, battery,
 media and quick controls now inherit the same container, group and widget display
 settings as their native components. The three native control groups use the same overview view
 as the live control centre, with inert sample data and saved member ordering.
@@ -211,6 +212,16 @@ panel too. Both paths now include that space, with a shared height calculation.
 Preview and native regressions failed before this fix. Native panel checks cover
 retained instances and drafts, launcher clicks, popup contents, task input and
 checkbox actions, media transport, Cancel, and saved placements after restart.
+
+Settings now links to the real container inspector instead of changing layout,
+visibility, sidebar membership or container appearance directly. The standalone
+window forwards the selected container over IPC, preserving that target while
+pending Settings changes save. Native checks cover the dock, sidebar, control
+centre and top-left container, with normal and reduced motion. Opening and
+cancelling each route leaves the saved desktop unchanged. The complete Settings
+UI regression also passes, including search links to container options and the
+existing search-provider configuration. The remaining Settings visual changes
+in the working tree are separate from this layout-routing change.
 
 The disabled-control click failure also reproduced with native dock input.
 The shared edit handler was destroyed when created before its window existed,

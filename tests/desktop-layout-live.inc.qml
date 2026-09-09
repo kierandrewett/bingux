@@ -346,6 +346,22 @@
             tryCompare(editor, 'visible', true, 5000, 'Standalone Settings opens the actual shell editor over IPC');
             verify(!externalSettings.customiser.initialised, 'Standalone Settings does not create another editor window');
             editor.cancel();
+            const savedPreviewLimit = BinguxPreferences.data.previews.maxMegabytes;
+            const pendingPreviewLimit = savedPreviewLimit === 7 ? 8 : 7;
+            externalSettings.update('previews', 'maxMegabytes', pendingPreviewLimit);
+            for (const container of ['dock', 'sidebar', 'control-centre', 'top-left']) {
+                const savedDesktop = JSON.stringify(BinguxPreferences.data.desktop);
+                externalSettings.openContainerCustomise(container);
+                tryCompare(editor, 'visible', true, 5000, 'Standalone Settings forwards the requested container over IPC');
+                compare(editor.optionsPage, 'Container');
+                compare(editor.selectedContainer, container);
+                compare(BinguxPreferences.data.previews.maxMegabytes, pendingPreviewLimit, 'Pending settings save before the container request is sent');
+                verify(!externalSettings.customiser.initialised);
+                editor.cancel();
+                compare(JSON.stringify(BinguxPreferences.data.desktop), savedDesktop, 'Opening and cancelling a container does not save an edit');
+            }
+            externalSettings.update('previews', 'maxMegabytes', savedPreviewLimit);
+            externalSettings.save(); tryCompare(externalSettings, 'busy', false, 4000);
             externalSettings.destroy();
             terminalSidebar.selectContent('notes'); terminalSidebar.open(); wait(250);
             terminalSidebar.popOut();

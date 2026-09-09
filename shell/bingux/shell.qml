@@ -229,6 +229,7 @@ ShellRoot {
     IpcHandler {
         target: "shell"
         function customise(): void { binguxSettings.openCustomise("", ""); }
+        function customiseContainer(container: string): void { binguxSettings.openContainerCustomise(container); }
         function status(): string {
             return JSON.stringify({search: searchOverlay.visible, calendar: calendarPopup.visible,
                 controls: controlCentre.visible, notifications: notificationCentre.visible,

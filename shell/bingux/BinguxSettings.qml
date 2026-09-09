@@ -41,6 +41,13 @@ Window {
     property var submittedDraft: ({})
     property var changedSettings: ({})
     property var requestedCustomise: null
+    function openContainerCustomise(container) {
+        if (!customiser.containerChoices.some(item => item.id === container)) return;
+        if (!shellHosted) { requestShellCustomise(container); return; }
+        requestedCustomise = {widgetId: "", options: "Container", container};
+        if (dirty && !busy) showCustomiser();
+        else if (!busy) read();
+    }
     function openCustomise(widgetId, options) {
         requestedCustomise = {widgetId: widgetId || "", options: options || ""};
         if (dirty && !busy) showCustomiser();
@@ -53,7 +60,8 @@ Window {
         customiser.selectedWidget = request.widgetId;
         if (request.options === "Remove") customiser.put(request.widgetId, "palette", 0);
         else customiser.optionsPage = request.options;
-        if (!request.widgetId) customiser.selectedContainer = "control-centre";
+        if (request.container) customiser.selectContainer(request.container);
+        else if (!request.widgetId) customiser.selectedContainer = "control-centre";
     }
     readonly property bool busy: operation !== ""
     function update(section, key, value) {
@@ -115,7 +123,7 @@ Window {
     }
     Process {
         id: customiseRequest
-        command: ["qs", "-p", Quickshell.shellPath("shell.qml"), "ipc", "call", "shell", "customise"]
+        command: ["qs", "-p", Quickshell.shellPath("shell.qml"), "ipc", "call", "shell"].concat(root.shellCustomiseContainer ? ["customiseContainer", root.shellCustomiseContainer] : ["customise"])
         stderr: StdioCollector { onStreamFinished: if (text.trim()) console.warn("Customise IPC:", text.trim()) }
         onExited: code => {
             if (code !== 0) root.status = "Could not open desktop customisation.";
@@ -124,15 +132,20 @@ Window {
     }
 
     property bool shellCustomisePending: false
-    function requestShellCustomise() {
+    property string shellCustomiseContainer: ""
+    function requestShellCustomise(container = "") {
+        shellCustomiseContainer = container;
         shellCustomisePending = true;
+        dispatchShellCustomise();
+    }
+    function dispatchShellCustomise() {
         if (busy) return;
         if (dirty) { save(); return; }
         shellCustomisePending = false;
         customiseRequest.running = true;
     }
     onBusyChanged: if (!busy && shellCustomisePending) {
-        if (ready && !dirty) Qt.callLater(root.requestShellCustomise);
+        if (ready && !dirty) Qt.callLater(root.dispatchShellCustomise);
         else shellCustomisePending = false;
     }
     DesktopCustomise { id: standaloneCustomiser; settings: root; screen: Quickshell.screens.find(s => s.name === root.screen.name) || Quickshell.screens[0] }
@@ -360,25 +373,12 @@ Window {
                         Caption { text: "Ctrl + scroll to zoom. Ctrl + 0 resets the preview to 100%." }
                     }
                 }
-                ColumnLayout {
-                    visible: root.page === "Desktop"
-                    Layout.fillWidth: true; spacing: 28
-                    Section {
-                        title: "Layout"
-                        Group {
-                            ControlRow { objectName: "customiseDesktop"; title: "Customise Desktop"; subtitle: "Arrange your top bar, dock and sidebar"; iconName: "preferences-desktop-display-symbolic"; navigation: true; implicitHeight: 72; enabled: root.ready && !root.busy; onClicked: customiser.open() }
-                        }
-                    }
-                    Section {
-                        title: "Visibility"
-                        Group {
-                            PreferenceRow { title: "Dock"; subtitle: "Pinned and running applications"; toggleChecked: root.draft.desktop.dock; onToggleRequested: root.update("desktop", "dock", !toggleChecked) }
-                            PreferenceRow { title: "Sidebar"; subtitle: "Notes, terminal, media and calendar"; toggleChecked: root.draft.desktop.sidebar; onToggleRequested: root.update("desktop", "sidebar", !toggleChecked) }
-                            PreferenceRow { title: "System Monitors"; subtitle: "Performance metrics in the top bar"; toggleChecked: root.draft.desktop.metrics; onToggleRequested: root.update("desktop", "metrics", !toggleChecked) }
-                        }
-                        Caption { text: "Right-click the system monitors to choose which metrics appear."; Layout.leftMargin: Theme.spaceSmall }
-                    }
+                DesktopLayoutSettings {
+                    id: desktopLayoutSettings
+                    settings: root
+                    visible: ["Desktop", "TopBar", "Dock", "Sidebar", "Controls"].includes(root.page)
                 }
+
             }
         }
     }
