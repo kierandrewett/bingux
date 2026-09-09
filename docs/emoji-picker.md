@@ -22,12 +22,13 @@ the character-extents call. The native Wayland rectangle avoids this dependency
 and also works for empty inputs. No renderer-accessibility launch flag is needed.
 See [Chromium 142's accessibility implementation](https://chromium.googlesource.com/chromium/src/+/142.0.7444.175/ui/accessibility/platform/ax_platform_node_auralinux.cc).
 
-After the picker closes, Gnoblin commits the selected Unicode sequence to the
-focused input. Native Wayland uses a direct text-input commit. XWayland uses a
-temporary clipboard and Ctrl+V, then restores the original formats and bytes,
-including images and rich text. A new copy made during paste is kept. Clipboard
-managers can retain the temporary emoji in their history. A failed clipboard
-capture or changed window focus before paste produces an error.
+Each selected emoji is committed to the focused input while the picker stays
+open, so several emoji can be inserted without reopening it. Native Wayland
+uses a direct text-input commit. XWayland uses a temporary clipboard and Ctrl+V,
+then restores the original formats and bytes, including images and rich text. A
+new copy made during paste is kept. Clipboard managers can retain the temporary
+emoji in their history. A failed clipboard capture or changed window focus
+before paste produces an error. Escape or a click outside closes the picker.
 
 ## Verification
 

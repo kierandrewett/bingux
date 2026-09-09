@@ -76,9 +76,11 @@ ShellRoot {
                 keyClick(Qt.Key_Down);
                 compare(picker.selectedIndex, 9);
                 keyClick(Qt.Key_Return);
-                compare(picker.visible, false);
+                compare(picker.visible, true, "Selecting an emoji keeps the picker open");
                 verify(chosen.length > 0);
                 compare(picker.recent[0], chosen);
+                keyClick(Qt.Key_Escape);
+                compare(picker.visible, false, "Escape closes the picker after selection");
                 picker.open();
                 picker.category = "recent";
                 compare(picker.results.length, 1);

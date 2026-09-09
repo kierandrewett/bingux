@@ -25,6 +25,7 @@ ShellPopup {
     property string lastFocusedTitle: ""
     property string targetWindow: ""
     property string pendingText: ""
+    property bool inserting: false
     property bool persistRecent: true
     property var catalogue: []
     property var recent: []
@@ -128,10 +129,18 @@ ShellPopup {
         recent = EmojiSearch.remember(recent, emoji);
         if (persistRecent && recentReady) history.setText(JSON.stringify(recent));
         chosen(emoji);
-        if (insertOnSelect) pendingText = emoji;
-        visible = false;
+        if (insertOnSelect) {
+            pendingText = emoji;
+            beginInsertion();
+        }
     }
-    onRetainedChanged: if (!retained && pendingText) {
+    onRetainedChanged: if (!retained && pendingText && !inserting) beginInsertion();
+    function beginInsertion() {
+        if (!pendingText || !targetWindow || !shortcut.connected) return;
+        inserting = true;
+        // Release the popup's keyboard grab while the compositor commits the
+        // text to the original input. The picker stays mapped and visible.
+        keyboardInteractive = false;
         shortcut.activateWindow(targetWindow);
         insertDelay.restart();
     }
@@ -148,8 +157,17 @@ ShellPopup {
         insertDelay.stop();
         insertTimeout.stop();
         pendingText = "";
+        inserting = false;
+        keyboardInteractive = true;
         error = message;
         visible = true;
+        focusInput.restart();
+    }
+    function insertionFinished() {
+        pendingText = "";
+        insertTimeout.stop();
+        inserting = false;
+        keyboardInteractive = true;
         focusInput.restart();
     }
     function moveSelection(delta) {
@@ -201,7 +219,7 @@ ShellPopup {
                 root.lastFocusedTitle = focused ? focused.title : "";
             }
         }
-        onTextInserted: { root.pendingText = ""; insertTimeout.stop(); }
+        onTextInserted: if (root.inserting) root.insertionFinished();
         // Popup commands are registered in gnoblin.toml through binguxctl.
         // Keep this transport for window tracking, caret lookup and insertion.
         onFailed: message => { if (root.pendingText) root.insertionFailed(message); else console.warn("Emoji shortcut:", message); }

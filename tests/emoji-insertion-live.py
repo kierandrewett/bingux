@@ -70,6 +70,7 @@ def exercise():
         key(0xff0d, True)
         key(0xff0d, False)
         time.sleep(.6)
+        assert status()['visible'], 'Picker closed after inserting emoji; Escape or outside click should close it'
         def verify():
             text = entry.get_text()
             outcome.append(text == 'Before 😀')

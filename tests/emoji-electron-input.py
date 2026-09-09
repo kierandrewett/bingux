@@ -99,7 +99,7 @@ def drive(mode, pid, query):
                 subprocess.run(["grim", os.environ["BINGUX_EMOJI_SCREENSHOT"]], check=True, timeout=3)
             key(0xff0d, True)
             key(0xff0d, False)
-            wait_for(lambda: not status()["visible"], "Enter did not dismiss picker")
+            wait_for(lambda: status()["visible"], "Picker closed after inserting emoji")
             time.sleep(1.1 if X11 else .5)
             assert not status()["error"], status()
         finally:
