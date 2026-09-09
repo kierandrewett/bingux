@@ -1430,6 +1430,9 @@ PanelWindow {
                                     cornerRadius: appMenu.contentRadius
                                     navigation: menuNavigation
                                     label: root.isPinned(dockButton.currentGroup) ? "Unpin from dock" : "Pin to dock"
+                                    // Keep pinning in the same plain action group as
+                                    // Launch new…; this action intentionally has no icon.
+                                    iconSource: ""
                                     enabled: dockButton.currentGroup.desktopEntry !== null || root.isPinned(dockButton.currentGroup)
                                     onTriggered: {
                                         dockButton.menuOpen = false;
