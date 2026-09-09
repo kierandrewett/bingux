@@ -19,7 +19,8 @@ MouseArea {
     // so this handler does not join the control's layout and enabled bindings.
     TapHandler {
         id: disabledEdit
-        parent: root.control.Window.window?.contentItem || null
+        // A null parent destroys a handler created before its window exists.
+        parent: root.control.Window.window?.contentItem || root
         acceptedButtons: Qt.RightButton
         acceptedModifiers: Qt.ShiftModifier
         onTapped: {

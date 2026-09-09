@@ -175,6 +175,8 @@ items, dock text inheritance, per-item overrides, focus isolation and source
 registry stability. Rendered previews confirm the full quick-control grid and
 both audio rows. The extracted native view passes bar/dock and sidebar group
 movement and reload tests, and the original populated/empty geometry comparison.
-The old synthetic disabled-control click test currently fails at its first
-Shift-right-click assertion with both the unchanged and extended fixtures; this
-is separate from the preview checks and needs a native-input follow-up.
+The disabled-control click failure also reproduced with native dock input.
+The shared edit handler was destroyed when created before its window existed,
+because its initial parent was null. It now stays attached to the widget until
+the window is available. Both unchanged regressions pass, including disabled
+groups, hidden widgets, movement, re-enabling and normal command dispatch.
