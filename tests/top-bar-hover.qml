@@ -5,7 +5,7 @@ import Quickshell.Io
 
 ShellRoot {
     property string checks: ""
-    FileView { id: results; path: Quickshell.env("BINGUX_TOP_BAR_TEST_RESULTS") }
+    FileView { id: results; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
     FloatingWindow {
         id: window
         implicitWidth: 560
@@ -24,6 +24,7 @@ ShellRoot {
         Tray { id: tray; x: 200; y: 20; parentWindow: window }
         QtObject {
             id: trayItem
+            property string id: "hover-test"
             property string title: "Test"
             property string icon: "application-x-executable"
             property bool onlyMenu: false
@@ -95,7 +96,8 @@ ShellRoot {
             function test_tray() {
                 tray.trayItems = [trayItem];
                 wait(150);
-                const button = tray.children[0].itemAtIndex(0);
+                const button = findChild(tray, "trayItem-hover-test");
+                tryCompare(button, "scale", 1);
                 mouseMove(button, 16, 0);
                 equal(surface(button).color, Theme.hover, "Tray hover before press");
                 mousePress(button, 16, 0);
@@ -107,8 +109,7 @@ ShellRoot {
                 equal(surface(button).color, Theme.hover, "Tray keyboard focus is visible");
             }
             function cleanupTestCase() {
-                results.setText(checks + "FAILURES " + qtest_results.failCount + "\n");
-                Qt.quit();
+                results.setText(checks + "FAILURES " + qtest_results.failCount);
             }
         }
     }

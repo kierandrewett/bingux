@@ -354,3 +354,35 @@ Staged-source placement, reload and original monitor regressions pass with norma
 and reduced motion. The live reload preserves the exact desktop settings, layout
 and dock snapshot, with no QML errors or shell-process restart. Tray width and
 mixed-scale, multiple-monitor behaviour remain separate checks.
+
+The system tray now wraps its retained app buttons in the sidebar and control
+centre. The top bar and dock keep their horizontal row and twelve-icon width
+limit, with wheel scrolling and focus reveal for offscreen items. Natural width
+remains independent of panel width so wrapping cannot change overflow priority.
+Long custom labels fit their targets, and the palette uses the same Tray component
+with inert sample items and the placed container width. Each button owns its
+entrance animation; a Flow transition could leave scale at zero when a resize
+interrupted insertion.
+
+The `tray-layout` fixture covers eighteen items in 208- and 376-pixel hosts,
+left/middle clicks, wheel dispatch, keyboard activation, long labels, retained
+instances, bar geometry restoration and empty state. The previous tray remains
+384 pixels wide in a 208-pixel host and fails the regression. Native
+`tray-placement` input drags the original tray from the control centre into the
+sidebar, checks Undo/Redo, opens and activates its app menus, invokes
+Shift-right-click, saves placement and verifies a fresh shell process. Menu and
+app callbacks use sample service data; this does not prove a third-party tray
+service's D-Bus implementation. Normal and reduced-motion checks pass, including
+staged-source runs. Screenshots show all eighteen icons inside both panels.
+The original hover checks, palette previews and keyboard isolation also pass.
+The hover runner now copies the complete component dependencies through the
+shared fixture runner and locates the tray button by name instead of ListView
+internals. Live reload preserves the exact desktop, layout and dock snapshot,
+with no QML errors or shell-process restart.
+
+Overflow-menu editing still needs a direct interaction check. A crowded bar can
+place the tray in a hidden More popup when the editor opens. Its source cannot be
+dragged until that popup is visible, and `topBar.windowFor()` currently selects
+the configured container without accounting for the overflow host. Check opening,
+editing, tooltip/menu anchors and moving these hidden widgets. Mixed-scale and
+multiple-monitor checks also remain open.

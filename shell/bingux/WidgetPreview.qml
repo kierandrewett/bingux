@@ -46,7 +46,7 @@ FocusScope {
             width: {
                 if (root.nativeGroupPreview && !root.barLayout) return Theme.notificationWidth;
                 if (!root.barLayout && !root.utilityWidget) {
-                    if (root.widgetId === "metrics") return DesktopEditing.sources.metrics?.width || 300;
+                    if (["metrics", "tray"].includes(root.widgetId)) return DesktopEditing.sources[root.widgetId]?.width || 300;
                     if (["control-volume", "control-microphone", "control-media"].includes(root.widgetId)) return 300;
                     if (root.nativeGroup === "controls-tiles") return 188;
                 }
@@ -159,6 +159,7 @@ FocusScope {
     Component {
         id: tray
         Tray {
+            panelLayout: !root.barLayout
             parentWindow: DesktopEditing.editor?.nativeWindow
             serviceEnabled: false
             enabled: false

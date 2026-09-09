@@ -90,6 +90,7 @@ ShellPopup {
                 id: entryButton
                 required property var modelData
                 required property int index
+                objectName: "trayMenuEntry" + index
                 width: entries.width
                 height: modelData.isSeparator ? 9 : 38
                 enabled: modelData.enabled && !modelData.isSeparator

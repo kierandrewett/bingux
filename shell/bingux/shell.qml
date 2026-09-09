@@ -685,7 +685,7 @@ ShellRoot {
                         barWindow: topBar.windowFor(captureStatus)
                         reorderable: true
                     }
-                    Pill { id: trayContainer; parent: topBar.hostFor(trayContainer); Layout.column: topBar.controlColumn(trayContainer); Layout.row: topBar.controlRow(trayContainer); horizontalPadding: 0; visible: topBar.chosen(trayContainer) && tray.implicitWidth > 0; Tray { id: tray; presentation: topBar.appearance("tray", "System tray", "view-more-symbolic", true, false); parentWindow: topBar.windowFor(trayContainer) } }
+                    Pill { id: trayContainer; panelLayout: ["sidebar", "control-centre"].includes(topBar.zoneFor(trayContainer)); parent: topBar.hostFor(trayContainer); Layout.column: topBar.controlColumn(trayContainer); Layout.row: topBar.controlRow(trayContainer); horizontalPadding: 0; visible: topBar.chosen(trayContainer) && tray.implicitWidth > 0; Tray { id: tray; panelLayout: trayContainer.panelLayout; presentation: topBar.appearance("tray", "System tray", "view-more-symbolic", true, false); parentWindow: topBar.windowFor(trayContainer) } }
                     PrivacyIndicators {
                         id: privacyContainer
                         parent: topBar.hostFor(privacyContainer)
