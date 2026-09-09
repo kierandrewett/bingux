@@ -56,7 +56,11 @@ with tempfile.TemporaryDirectory(prefix='bingux-layout-live-') as directory:
             search_process = subprocess.Popen([os.environ.get('QS_TEST_BIN', 'qs'), '-p', str(fixture / 'SearchShell.qml'), '--no-color'],
                 env=environment, stdout=search_log, stderr=subprocess.STDOUT, start_new_session=True)
         try:
-            report, output = run_reported_shell(fixture, environment, 'BINGUX_LAYOUT_REPORT', timeout=55)
+            # Recovery deliberately rewrites and reloads the settings file for
+            # every malformed-case probe; give its nine-file matrix enough
+            # time to finish on a cold private compositor.
+            timeout = 90 if case == 'settings-recovery' else 55
+            report, output = run_reported_shell(fixture, environment, 'BINGUX_LAYOUT_REPORT', timeout=timeout)
             print(output)
             if report != 'PASS' or any(error in output for error in ('CUSTOMISE_TEST_FAILED', 'TypeError', 'ReferenceError', 'has crashed', 'property "maximumPopupHeight"', 'property "preferredY"', 'Cannot use same item on different windows', 'Updates can only be scheduled', 'QGridLayoutEngine::addItem', 'Binding loop detected')):
                 raise SystemExit(report if report != 'PASS' else 'Runtime errors during layout test')
