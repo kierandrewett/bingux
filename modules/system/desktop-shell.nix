@@ -37,6 +37,11 @@ let
     '';
     shellEnvironment = [
         "QT_QPA_PLATFORM=wayland"
+        # Gnoblin's session launcher exports its own Mutter lookup path. Do
+        # not let that path make the Nix Qt libraries resolve against the
+        # host Qt build; Quickshell and its QML modules must stay on one Qt
+        # runtime or native reloads can crash.
+        "LD_LIBRARY_PATH="
         "BINGUX_SETTINGS_HELPER=${lib.getExe settingsBackend}"
         "BINGUX_PREVIEW_HELPER=${filePreview}/bin/bingux-file-preview"
         "BINGUX_APP_LAUNCHER_HELPER=${desktopControls}/bin/bingux-launch-app"
@@ -63,6 +68,10 @@ let
         name = "bingux-settings";
         runtimeInputs = [ cfg.package ];
         text = ''
+            # The desktop session may carry Gnoblin's Mutter library path.
+            # Settings launches the Nix Quickshell package, so keep it on the
+            # Qt runtime it was built with as the systemd shell services do.
+            unset LD_LIBRARY_PATH
             export QML_IMPORT_PATH=${settingsPlatform}/lib/qt-6/qml
             export BINGUX_SETTINGS_QML=${shellSource}/settings.qml
             export BINGUX_QUICKSHELL=${lib.getExe cfg.package}

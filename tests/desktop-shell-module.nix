@@ -41,6 +41,7 @@ let
         ];
     };
     quickshell = host.config.home-manager.users.shell.programs.quickshell;
+    quickshellService = host.config.home-manager.users.shell.systemd.user.services.quickshell;
     shellConfig = host.config.home-manager.users.shell.xdg.configFile."quickshell/bingux";
     runtimeService = host.config.home-manager.users.shell.systemd.user.services.bingux-runtime-dir;
     statusService = host.config.home-manager.users.shell.systemd.user.services.bingux-statusd;
@@ -109,6 +110,7 @@ assert
     ];
 assert quickshell.activeConfig == "bingux";
 assert quickshell.systemd.enable;
+assert builtins.elem "LD_LIBRARY_PATH=" quickshellService.Service.Environment;
 assert host.config.services.upower.enable;
 assert runtimeService.Service.Type == "oneshot";
 assert runtimeService.Service.RemainAfterExit;
