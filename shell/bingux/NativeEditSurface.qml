@@ -60,6 +60,9 @@ MouseArea {
     }
     cursorShape: pressedId ? Qt.ClosedHandCursor : Qt.ArrowCursor
     readonly property rect screenRect: {
+        // Detached containers return to their layer window when editing starts.
+        // Their inactive floating host has no desktop-space layer margins.
+        if (!window || !("anchors" in window)) return Qt.rect(0, 0, 0, 0);
         const dependencies = [geometryItem.x, geometryItem.y, geometryItem.width, geometryItem.height, window.width, window.height, window.margins.left, window.margins.right, window.margins.top, window.margins.bottom];
         const p = DesktopEditing.point(geometryItem, window, 0, 0);
         const end = DesktopEditing.point(geometryItem, window, geometryItem.width, geometryItem.height);

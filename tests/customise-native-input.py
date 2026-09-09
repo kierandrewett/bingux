@@ -34,13 +34,24 @@ export default function (api) {
         '<node><interface name="org.gnoblin.CustomiseInput"><method name="Run"><arg type="s" direction="in"/></method></interface></node>', {
         Run(request) {
             if (timer) throw new Error('An input gesture is already running');
-            const {origin, destination, button, shift, prepare, hoverOnly, clickOnly, capture, dragCapture} = JSON.parse(request);
+            const {origin, destination, button, shift, prepare, hoverOnly, clickOnly, capture, captureOnly, dragCapture, windowTitle, windowSize, resizeTo} = JSON.parse(request);
+            if (windowTitle) {
+                const matches = global.get_window_actors().filter(actor => actor.meta_window.title === windowTitle);
+                if (matches.length !== 1) throw new Error('Expected one test window: ' + windowTitle);
+                // Qt's content excludes its title bar. The compositor frame
+                // excludes buffer shadows and includes that title bar.
+                const rect = matches[0].meta_window.get_frame_rect();
+                origin[0] += rect.x + (rect.width - windowSize[0]) / 2;
+                origin[1] += rect.y + rect.height - windowSize[1];
+                if (resizeTo) matches[0].meta_window.move_resize_frame(true, rect.x, rect.y,
+                    resizeTo[0] + rect.width - windowSize[0], resizeTo[1] + rect.height - windowSize[1]);
+            }
             // A second move clears the initial screen-edge barrier in the headless seat.
-            const actions = [
+            const actions = captureOnly || resizeTo ? [] : [
                 () => pointer.notify_absolute_motion(GLib.get_monotonic_time(), origin[0], origin[1]),
                 () => pointer.notify_absolute_motion(GLib.get_monotonic_time(), origin[0], origin[1])
             ];
-            if (!prepare && !hoverOnly) {
+            if (!prepare && !hoverOnly && !captureOnly && !resizeTo) {
                 if (shift) actions.push(() => keyboard.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Shift_L, Clutter.KeyState.PRESSED));
                 actions.push(() => pointer.notify_button(GLib.get_monotonic_time(), button, Clutter.ButtonState.PRESSED));
                 if (destination) {
@@ -91,12 +102,16 @@ export default function (api) {
 '''.replace('__COMPLETION__', json.dumps(str(completion))))
     subprocess.run(['gnoblinctl', 'reload-scripts'], env=os.environ | {'XDG_CONFIG_HOME': str(config)}, check=True, capture_output=True)
 
-request = json.dumps({'origin': [x, y], 'destination': destination, 'prepare': prepare,
+window_title = sys.argv[sys.argv.index('--window-title') + 1] if '--window-title' in sys.argv else ''
+window_size = list(map(float, sys.argv[sys.argv.index('--window-size') + 1:sys.argv.index('--window-size') + 3])) if window_title else []
+request = json.dumps({'origin': [x, y], 'destination': destination, 'prepare': prepare, 'windowTitle': window_title, 'windowSize': window_size,
+    'resizeTo': list(map(float, sys.argv[4:6])) if sys.argv[3:4] == ['--resize-to'] else None,
     'hoverOnly': sys.argv[3:4] == ['--hover-only'],
     'shift': sys.argv[3:4] == ['--shift-right-click'],
     'button': 3 if sys.argv[3:4] in (['--right-click'], ['--shift-right-click']) else 1,
     'clickOnly': sys.argv[3:4] in (['--click-only'], ['--right-click'], ['--shift-right-click']),
     'capture': os.environ.get('BINGUX_NATIVE_SCREENSHOT', ''),
+    'captureOnly': sys.argv[3:4] == ['--capture-only'],
     'dragCapture': os.environ.get('BINGUX_NATIVE_DRAG_CAPTURE', '')})
 subprocess.run(['gdbus', 'call', '--session', '--dest', 'org.gnoblin.CustomiseInput',
     '--object-path', '/org/gnoblin/CustomiseInput', '--method', 'org.gnoblin.CustomiseInput.Run', request],

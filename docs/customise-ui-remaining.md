@@ -411,5 +411,46 @@ repeats completed before the scheduled stack capture, so no stalled stack was
 obtained. More now retains its registered native window between openings; the
 final normal/reduced-motion and compact-editor loop passed. That does not establish
 the timeout's precise cause. Keep cold-start reliability in the remaining audit.
-Other open checks include overflow in detached sidebar windows, other sidebar
-edges, mixed-scale and multiple-monitor behaviour, and third-party tray services.
+Other open checks include overflow content fitting in detached sidebar windows,
+other sidebar edges, mixed-scale and multiple-monitor behaviour, and third-party
+tray services.
+
+Detached popup checks found failures in the existing shell. Opening a nested
+monitor popup closed More because the parent check compared its unused layer
+window with the floating host. In a short floating window, the monitor popup also
+reserved desktop dock space and could put its switches outside its clipped card.
+The shell now checks the anchor's ancestry for inline popups, and monitor menus
+use the floating host's available height. Shared popup cards and outside-click
+surfaces use their nesting depth to keep child menus above their parent. Inactive
+floating edit surfaces no longer read layer-window margins. The monitor tooltip
+closes while its popup is open.
+
+A native right-click on the monitor popup also opened the Notes context menu
+behind it. The next outside click dismissed that hidden menu instead of More.
+The shared popup card now handles context-menu events so they cannot reach the
+editor behind it. A mouse-event trace identified the Notes menu's dismissal area
+as the actual recipient of the click. This was not a stale coordinate or a
+disabled More surface.
+
+The `overflow-detached` case uses compositor input for More, Shift-right-click,
+monitor popups and switches, outside-click dismissal and the sidebar clock. The
+input helper resolves the private test window by its unique title and accounts
+for Qt's title bar. The test resizes the actual compositor window to a 360-pixel
+content height before exercising the switches. It also enters Customise UI,
+checks the real container's layer-window host and editing bounds, cancels and
+reopens More in the restored floating window. Optional screenshots do not move
+the pointer. The old shell fails the parent-retention check and reports undefined
+layer margins.
+
+Staged-source `overflow-detached`, `overflow-edit` and `sidebar-layout` checks pass
+with normal and reduced motion, including the latter two cases' fresh-process
+reload checks. The detached case also verifies that the monitor right-click does
+not open Notes' menu, while a right-click on Notes still opens its own menu.
+Screenshots show the monitor controls inside the short window and above More.
+The live reload preserves the exact desktop, layout and dock snapshot, with no
+QML errors or shell-process restart. Core dumps remain disabled.
+
+The screenshots also expose a remaining width problem: native tray and monitor
+rows can extend past More's card in a narrow floating window. This needs a content
+fit pass; successful nested-menu input does not prove that all overflow content
+fits. The wider compatibility audit remains open.

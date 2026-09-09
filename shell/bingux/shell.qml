@@ -41,8 +41,16 @@ ShellRoot {
         onTriggered: BinguxPreferences.importDesktop(root.layoutSnapshot())
     }
 
-    function closePanelsExcept(panel) {
+    function anchoredInPopup(panel, popup) {
         const anchorWindow = panel?.anchorWindow || panel?.parentWindow || panel?.barWindow;
+        if (!popup.hostItem) return anchorWindow === popup.nativeWindow;
+        // Inline popups share their floating window with unrelated controls.
+        // Retain only the popup that contains this control's actual anchor.
+        for (let item = panel?.anchorItem || panel; item; item = item.parent)
+            if (item === popup.body) return true;
+        return false;
+    }
+    function closePanelsExcept(panel) {
         const editingContainers = DesktopEditing.active && (panel === barOverflow || panel === controlCentre);
         for (const widget of terminalSidebar.panelWidgets) {
             if (panel !== widget.popup) widget.popup.visible = false;
@@ -51,9 +59,9 @@ ShellRoot {
         if (panel !== searchOverlay && searchOverlay.visible) searchOverlay.closeSearch();
         if (panel !== emojiPicker) emojiPicker.visible = false;
         if (panel !== calendarPopup) calendarPopup.visible = false;
-        if (!editingContainers && panel !== controlCentre && anchorWindow !== controlCentre.nativeWindow) controlCentre.visible = false;
+        if (!editingContainers && panel !== controlCentre && !anchoredInPopup(panel, controlCentre)) controlCentre.visible = false;
         if (panel !== metricsPopup) metricsPopup.visible = false;
-        if (!editingContainers && panel !== barOverflow && anchorWindow !== barOverflow.nativeWindow) barOverflow.visible = false;
+        if (!editingContainers && panel !== barOverflow && !anchoredInPopup(panel, barOverflow)) barOverflow.visible = false;
         if (panel !== notificationCentre) notificationCentre.visible = false;
         if (panel !== inputSourceSelector) inputSourceSelector.menuOpen = false;
         if (panel !== captureTool && captureTool.opened) captureTool.close();
@@ -736,7 +744,7 @@ ShellRoot {
                         onPerformanceRequested: {
                             metricsPopup.showPage(false);
                         }
-                        BarTooltip { reorderable: true; anchorItem: metricsPill; barWindow: topBar.windowFor(metricsPill); requested: metricsPill.pointerHovered; text: metricsPill.description }
+                        BarTooltip { reorderable: true; anchorItem: metricsPill; barWindow: topBar.windowFor(metricsPill); requested: metricsPill.pointerHovered && !metricsPopup.visible; text: metricsPill.description }
                     }
                     InputSourceSelector { id: inputSourceSelector; presentation: topBar.appearance("keyboard", displayLabel, "input-keyboard-symbolic", false, true); parent: topBar.hostFor(inputSourceSelector); Layout.column: topBar.controlColumn(inputSourceSelector); Layout.row: topBar.controlRow(inputSourceSelector); visible: topBar.chosen(inputSourceSelector) && metrics.desktopStateAvailable; parentWindow: topBar.windowFor(inputSourceSelector); metrics: metrics; gnoblinCtlPath: profileSettings.gnoblinCtlPath; onOpening: root.closePanelsExcept(inputSourceSelector) }
                     Pill {

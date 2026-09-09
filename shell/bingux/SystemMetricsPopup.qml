@@ -12,7 +12,8 @@ ShellPopup {
         customising = settings;
         visible = true;
     }
-    readonly property real maximumHeight: Math.max(0, Math.min(640, height * 0.65,
+    readonly property real maximumHeight: hostItem ? Math.max(0, Math.min(640, height - Theme.gap * 2))
+        : Math.max(0, Math.min(640, height * 0.65,
         anchorAbove ? anchorTop - Theme.barHeight - Theme.gap : height - Theme.dockExclusiveHeight - Theme.gap - belowAnchorY))
     popupWidth: customising ? 336 : 520
     popupHeight: !customising && performance.page !== "usage" ? maximumHeight

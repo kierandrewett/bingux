@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Window
 import Quickshell
 import Quickshell.Wayland
@@ -19,6 +20,13 @@ Scope {
     property Item hostItem: anchorWindow && !("anchors" in anchorWindow) ? anchorWindow.contentItem : null
     property var anchorWindow: null
     property Item anchorItem: null
+    readonly property int popupDepth: {
+        for (let item = anchorItem; item; item = item.parent) {
+            if (item === card) return 0;
+            if ("shellPopupDepth" in item) return item.shellPopupDepth + 1;
+        }
+        return 0;
+    }
     property int anchorAlignment: Qt.AlignRight
     readonly property real placementLeft: !hostItem && anchorWindow ? anchorWindow.margins.left : 0
     readonly property real placementRight: width - (!hostItem && anchorWindow ? anchorWindow.margins.right : 0)
@@ -142,7 +150,7 @@ Scope {
             }
         }
         contentItem.enabled: root.visible
-        MouseArea { parent: root.hostItem ? root.contentItem : dismissWindow.contentItem; anchors.fill: parent; visible: root.retained; enabled: root.visible && root.dismissOnOutsideClick; z: 5; acceptedButtons: Qt.AllButtons; onClicked: root.visible = false }
+        MouseArea { parent: root.hostItem ? root.contentItem : dismissWindow.contentItem; anchors.fill: parent; visible: root.retained; enabled: root.visible && root.dismissOnOutsideClick; z: 5 + root.popupDepth * 2; acceptedButtons: Qt.AllButtons; onClicked: root.visible = false }
     }
 
     // A layer surface avoids native xdg-popup grabs on layer-shell parents.
@@ -167,12 +175,18 @@ Scope {
         contentItem.Keys.onEscapePressed: root.visible = false
         Rectangle {
             id: card
+            // Keep native context-menu events inside the popup, including
+            // right-clicks handled by controls before this event arrives.
+            ContextMenu.menu: null
+            ContextMenu.onRequested: position => {}
+            // Inline child menus share one scene with their parent popup.
+            readonly property int shellPopupDepth: root.popupDepth
             readonly property var geometryRevision: [popupScale.xScale, popupScale.yScale,
                 popupScale.origin.x, popupScale.origin.y]
             parent: root.contentItem
             visible: root.retained
             enabled: root.visible
-            z: 6
+            z: 6 + root.popupDepth * 2
             x: Math.max(root.placementLeft + Theme.gap, Math.min(root.preferredX, root.placementRight - width - Theme.gap))
             y: Math.max(Theme.gap, Math.min(root.preferredY, root.height - height - Theme.gap))
             width: Math.max(0, Math.min(root.popupWidth, root.placementRight - root.placementLeft - Theme.gap * 2))
