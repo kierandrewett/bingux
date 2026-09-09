@@ -120,18 +120,142 @@ MouseArea {
         });
         return DesktopLayout.insertionIndex(order, id, items.map(value => value.entry.id), before);
     }
+    function beginNativeDrag(id, item, position) { nativeDrag.begin(id, item, window, position); }
+    function cancelNativeDrag() { nativeDrag.cancelPending(); }
+    function selectGroup(id) {
+        if (!DesktopEditing.editor) return;
+        DesktopEditing.editor.selectContainer(id);
+    }
+    WidgetDrag { id: nativeDrag }
+    Repeater {
+        model: root.expandedEntries.filter(entry => entry.item && entry.item.visible && !entry.item.memberEntries)
+        Item {
+            required property var modelData
+            parent: root
+            objectName: "customise-widget-drag-" + modelData.id
+            readonly property point origin: {
+                DesktopEditing.observeGeometry(modelData.item);
+                return modelData.item.mapToItem(root, 0, 0);
+            }
+            x: origin.x
+            y: origin.y
+            width: modelData.item.width
+            height: modelData.item.height
+            z: 10000
+            visible: DesktopEditing.active && modelData.item.Window.window === root.window.contentItem.Window.window
+            MouseArea {
+                id: entryDragMouse
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                hoverEnabled: true
+                preventStealing: true
+                objectName: "customise-widget-drag-handler-" + modelData.id
+                property point pressPoint: Qt.point(0, 0)
+                property bool moved: false
+                onPressed: mouse => {
+                    mouse.accepted = true;
+                    root.pressedId = modelData.id;
+                    root.start = Qt.point(mouse.x, mouse.y);
+                    root.hadDrag = false;
+                    pressPoint = Qt.point(mouse.x, mouse.y);
+                    moved = false;
+                }
+                onPositionChanged: mouse => {
+                    if (!(pressedButtons & Qt.LeftButton) || moved ||
+                        Math.abs(mouse.x - pressPoint.x) + Math.abs(mouse.y - pressPoint.y) <= 6) return;
+                    moved = true;
+                    root.hadDrag = true;
+                    root.beginNativeDrag(modelData.id, modelData.item,
+                        DesktopEditing.point(entryDragMouse, root.window, mouse.x, mouse.y));
+                }
+                onReleased: mouse => {
+                    mouse.accepted = true;
+                    if (!moved) {
+                        if (mouse.button === Qt.RightButton) root.inspect(modelData.id);
+                        else {
+                            const target = modelData.item;
+                            if (typeof target?.activateInEditor === "function") target.activateInEditor();
+                            else if (modelData.item?.memberEntries) DesktopEditing.editor.selectContainer(modelData.id);
+                            else if (root.sourceOnly) DesktopEditing.editor.selectContainer(DesktopEditing.editor.containerFor(modelData.id));
+                            else DesktopEditing.editor.optionsPage = "Widget", DesktopEditing.editor.selectedWidget = modelData.id;
+                        }
+                    }
+                    root.pressedId = "";
+                    root.hadDrag = false;
+                    moved = false;
+                }
+                onCanceled: {
+                    root.cancelNativeDrag(); root.pressedId = ""; root.hadDrag = false; moved = false;
+                }
+            }
+        }
+    }
     Repeater {
         model: root.groups
         Item {
             id: grip
             required property var modelData
             objectName: "customise-group-handle-" + modelData.id
+            z: 10001
             readonly property rect bounds: root.groupHandleRect(modelData)
             visible: root.groupVisible(modelData)
             x: bounds.x; y: bounds.y; width: bounds.width; height: bounds.height
             Rectangle { anchors.centerIn: parent; width: 24; height: 4; radius: 2; color: gripHover.hovered ? Theme.accent : Theme.muted }
             HoverHandler { id: gripHover; cursorShape: Qt.OpenHandCursor }
             ShellTooltip { parent: grip; visible: DesktopEditing.active && gripHover.hovered; text: "Drag " + (DesktopLayout.widget(grip.modelData.id)?.label || "group") }
+            MouseArea {
+                id: groupGripMouse
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                hoverEnabled: true
+                preventStealing: true
+                property point pressPoint: Qt.point(0, 0)
+                property bool moved: false
+                cursorShape: moved ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                Timer {
+                    id: groupDragDelay
+                    // Nested audio controls can release the parent pointer grab
+                    // before the first motion event reaches this surface.
+                    interval: modelData.id === "controls-audio" ? 120 : 3600000
+                    onTriggered: {
+                        if (!(groupGripMouse.pressedButtons & Qt.LeftButton) || groupGripMouse.moved) return;
+                        const surface = grip.parent;
+                        groupGripMouse.moved = true;
+                        surface.pressedId = modelData.id;
+                        surface.hadDrag = true;
+                        surface.beginNativeDrag(modelData.id, modelData.item,
+                            DesktopEditing.point(grip, surface.window, grip.width / 2, grip.height / 2));
+                    }
+                }
+                onPressed: mouse => {
+                    mouse.accepted = true;
+                    grip.parent.selectGroup(modelData.id);
+                    pressPoint = Qt.point(mouse.x, mouse.y);
+                    moved = false;
+                    groupDragDelay.restart();
+                }
+                onPositionChanged: mouse => {
+                    if (!(pressedButtons & Qt.LeftButton) || moved ||
+                        Math.abs(mouse.x - pressPoint.x) + Math.abs(mouse.y - pressPoint.y) <= 6) return;
+                    moved = true;
+                    const surface = grip.parent;
+                    surface.pressedId = modelData.id;
+                    surface.hadDrag = true;
+                    surface.beginNativeDrag(modelData.id, modelData.item,
+                        DesktopEditing.point(grip, surface.window, mouse.x, mouse.y));
+                }
+                onReleased: mouse => {
+                    mouse.accepted = true;
+                    const surface = grip.parent;
+                    groupDragDelay.stop();
+                    if (moved) surface.pressedId = "";
+                    moved = false;
+                }
+                onCanceled: {
+                    const surface = grip.parent;
+                    surface.cancelNativeDrag(); surface.pressedId = ""; groupDragDelay.stop(); moved = false;
+                }
+            }
         }
     }
     onPressed: mouse => {
@@ -151,15 +275,16 @@ MouseArea {
         if (mouse.button === Qt.RightButton && pressedId) {
             inspect(pressedId);
         } else {
+            const pressedEntry = entryAt(start.x, start.y);
             const target = expandedEntries.find(entry => entry.id === pressedId)?.item;
             if (typeof target?.activateInEditor === "function") target.activateInEditor();
+            else if (pressedEntry?.item?.memberEntries) editor.selectContainer(pressedEntry.id);
             else if (sourceOnly) editor.selectContainer(editor.containerFor(pressedId || zoneName));
             else editor.selectContainer(entries.find(entry => entry.item?.memberEntries && (entry.id === pressedId || entry.item.memberEntries.some(member => member.id === pressedId)))?.id || zoneName);
         }
         pressedId = "";
     }
     onCanceled: { nativeDrag.cancelPending(); pressedId = ""; }
-    WidgetDrag { id: nativeDrag }
     WidgetDropArea { enabled: DesktopEditing.active && !root.sourceOnly; anchors.fill: parent; zoneName: root.zoneName; window: root.window; surface: root }
     readonly property bool dropActive: DesktopEditing.editor?.hoverZone === zoneName || entries.some(entry => entry.item?.memberEntries && entry.id === DesktopEditing.editor?.hoverZone)
     readonly property rect insertionRect: {

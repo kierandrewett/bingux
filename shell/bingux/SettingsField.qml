@@ -46,7 +46,7 @@ ColumnLayout {
                 width: parent.width
                 height: entry.activeFocus || root.errorText ? 2 : 1
                 color: root.errorText ? Theme.danger : entry.activeFocus ? Theme.accent : Theme.outline
-                opacity: entry.activeFocus || root.errorText ? 1 : 0.5
+                opacity: entry.activeFocus || root.errorText ? 1 : 0
             }
         }
     }

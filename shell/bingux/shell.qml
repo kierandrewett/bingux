@@ -23,6 +23,8 @@ ShellRoot {
         function onReloadCompleted() { Quickshell.inhibitReloadPopup(); }
     }
 
+    SnapAssist {}
+
     readonly property var commandNotifications: notificationState
     property var currentTime: new Date()
 
@@ -850,7 +852,7 @@ ShellRoot {
         margins.left: terminalSidebar.leftInset
         margins.right: terminalSidebar.rightInset
         settings: profileSettings
-        visible: DesktopEditing.active || profileSettings.dockEnabled
+        visible: dock.startupReady && (DesktopEditing.active || profileSettings.dockEnabled)
     }
 
 }

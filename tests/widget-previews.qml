@@ -62,6 +62,7 @@ ShellRoot {
                 const preview = previewComponent.createObject(previewHost, {widgetId: data.id});
                 try {
                     tryVerify(() => !!preview.previewControl, 1500);
+                    verify(!preview.enabled, "Widget previews are inert while customising");
                     const item = preview.previewControl;
                     compare(preview.container, data.container, "A child follows its placed group");
                     compare(ControlLayout.isAction(data.id) ? item.barStyle : item.barLayout, data.container === "dock",
@@ -108,6 +109,7 @@ ShellRoot {
                 const preview = previewComponent.createObject(previewHost, {widgetId: data.id});
                 try {
                     tryVerify(() => !!preview.previewControl, 1500);
+                    verify(!preview.enabled, "Status previews are inert while customising");
                     const item = preview.previewControl;
                     for (const container of ["dock", "control-centre", "sidebar"]) {
                         editor.layout = {[container]: container === "control-centre" ? [] : [data.id]};
@@ -154,6 +156,7 @@ ShellRoot {
                 const preview = previewComponent.createObject(previewHost, {widgetId: data.id});
                 try {
                     tryVerify(() => !!preview.previewControl, 1500);
+                    verify(!preview.enabled, "Panel previews are inert while customising");
                     const item = preview.previewControl;
                     const compact = ["dock", "top-left"].includes(data.container);
                     compare(item.inlinePanel, !compact, "A placed panel previews its launcher or its complete body");

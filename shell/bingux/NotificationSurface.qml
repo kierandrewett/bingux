@@ -33,6 +33,19 @@ PanelWindow {
     surfaceFormat.opaque: false
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "bingux-notifications"
+    BlurRegion {
+        window: root
+        surfaceNamespace: "bingux-notifications"
+        // Include the footer and shadow margin. Sliding cards remain inside
+        // this final-position rectangle until the desktop clips them away.
+        region: root.inHistory
+            ? Qt.rect(desktopArea.x + root.notificationCentre.panelX - Theme.padding,
+                Math.max(0, root.notificationCentre.panelY - Theme.padding),
+                root.notificationCentre.popupWidth + Theme.padding * 2,
+                root.notificationCentre.popupHeight + Theme.padding * 2)
+            : Qt.rect(desktopArea.x + stack.x - Theme.padding, Math.max(0, stack.y - Theme.padding),
+                stack.width + Theme.padding * 2, stack.height + Theme.padding * 2)
+    }
     WlrLayershell.keyboardFocus: inHistory && notificationCentre.visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     anchors { top: true; bottom: true; left: true; right: true }
 

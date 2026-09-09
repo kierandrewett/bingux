@@ -65,6 +65,8 @@ Scope {
                 ? Object.assign({}, current, {image: "file://" + path}) : current);
         });
     }
+    property var applicationAliases: new Map()
+
     function boundedText(value, maxLength) {
         const text = String(value || "").replace(/[\u0000-\u001f\u007f]/g, " ").trim();
         if (text.length <= maxLength)
@@ -108,10 +110,20 @@ Scope {
             || DesktopEntries.byId(desktopId) : null;
         if (direct) return direct;
         // Electron variants can advertise their window class instead of their desktop ID.
-        const matches = DesktopEntries.applications.values.filter(application =>
-            [application.id, application.startupClass, application.name].some(value =>
-                String(value || "").replace(/\.desktop$/, "").toLowerCase() === identity));
-        return matches.length === 1 ? matches[0] : null;
+        return applicationAliases.get(identity) || null;
+    }
+
+    // Snapshot aliases outside property bindings: a catalogue diff emits a
+    // change for each row, and notification cards must not rescan it each time.
+    function refreshApplicationAliases() {
+        const aliases = new Map();
+        for (const application of DesktopEntries.applications.values) {
+            const keys = new Set([application.id, application.startupClass, application.name]
+                .map(value => String(value || "").replace(/\.desktop$/, "").toLowerCase()).filter(Boolean));
+            for (const key of keys)
+                aliases.set(key, aliases.has(key) && aliases.get(key) !== application ? null : application);
+        }
+        applicationAliases = aliases;
     }
 
     function activationTarget(entry) {
@@ -477,17 +489,18 @@ Scope {
         }
     }
 
-    // DesktopEntries emits one change per entry during a rescan. Refresh once
-    // after the batch, rather than once for every installed application.
+    // Refresh after a complete catalogue scan, including metadata-only changes.
+    // Cards never observe the intermediate per-row updates.
     Timer {
         id: applicationRefresh
         interval: 100
-        onTriggered: root.refreshApplicationMetadata()
+        running: true
+        onTriggered: { root.refreshApplicationAliases(); root.refreshApplicationMetadata(); }
     }
 
     desktopEntryWatcher: Connections {
-        target: DesktopEntries.applications
-        function onValuesChanged() { applicationRefresh.restart(); }
+        target: DesktopEntries
+        function onApplicationsChanged() { applicationRefresh.restart(); }
     }
 
     notificationServer: NotificationServer {

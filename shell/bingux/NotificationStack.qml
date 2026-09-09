@@ -18,6 +18,7 @@ Flickable {
     readonly property real presence: !collapseOnDismiss || cards.count > 1 ? 1
         : cardRepeater.count > 0 && cardRepeater.itemAt(0) ? 1 - cardRepeater.itemAt(0).collapseProgress : 0
     property bool animationsEnabled: true
+    readonly property bool smoothScrolling: !Theme.reducedMotion
     readonly property bool reducedMotion: Theme.reducedMotion || !animationsEnabled
     readonly property int cardMotion: animationsEnabled ? Theme.notificationMotion : 0
     readonly property int groupMotion: reducedMotion ? 0 : historyMode ? 180 : Theme.notificationGroupMotion
@@ -361,7 +362,7 @@ Flickable {
             const destination = wheelMotion.running ? wheelMotion.to : root.contentY;
             const next = root.originY + Math.max(0, Math.min(root.contentHeight - root.height, destination - root.originY - delta));
             wheelMotion.stop();
-            if (root.reducedMotion) root.contentY = next;
+            if (!root.smoothScrolling) root.contentY = next;
             else { wheelMotion.to = next; wheelMotion.start(); }
             event.accepted = true;
         }
@@ -910,7 +911,7 @@ Flickable {
                         y: largePreview ? 0 : notificationCard.contentPadding + Theme.notificationHeaderHeight + Theme.notificationSpacing
                         width: largePreview ? cardContents.width : 40
                         opacity: notificationCard.contentsOpacity
-                        height: !visible ? 0 : largePreview && implicitWidth > 0 ? Math.min(width * implicitHeight / implicitWidth, 180) : 40
+                        height: !visible ? 0 : largePreview && implicitWidth > 0 ? Math.min(width * implicitHeight / implicitWidth, 240) : 40
                         visible: source.toString() !== "" && status !== Image.Error
                         readonly property string imageSource: notificationCard.entry.image || ""
                         readonly property string normalizedImage: !imageSource || imageSource.startsWith("/") || /^[a-z][a-z0-9+.-]*:/i.test(imageSource)
@@ -922,7 +923,7 @@ Flickable {
                         // Decode for the available column width, not the card's
                         // animated inset. Changing sourceSize reloads the image.
                         sourceSize.width: largePreview ? Math.round(Math.max(0, notificationColumn.width - notificationCard.contentPadding * 2) * 2) : 80
-                        sourceSize.height: 360
+                        sourceSize.height: largePreview ? 480 : 80
                         asynchronous: true
                         retainWhileLoading: true
                         fillMode: Image.PreserveAspectFit

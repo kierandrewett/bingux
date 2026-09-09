@@ -102,3 +102,11 @@ This file tracks implementation work. A checked item means the related configura
 ## Shared notification presentation
 
 - [x] Share notification cards across the desktop, control centre, and flat app dock lists. Verify gestures, history, normal/reduced motion, and rendered spacing.
+
+## Region snapping
+
+- [x] Identify the existing Tiling Shell layouts and import them once.
+- [x] Keep the picker and previews in Bingux and window operations in Gnoblin.
+- [x] Add top-edge selection, Ctrl-drag regions, and Super+Z keyboard selection.
+- [x] Verify real Wayland and X11 input, cancellation, focus, and size restoration.
+- [x] Verify the live picker, imported layouts, registered shortcut, and reserved work area.

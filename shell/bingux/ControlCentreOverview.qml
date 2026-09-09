@@ -234,6 +234,14 @@ GridLayout {
             onClicked: root.settings("")
         }
         ActionWidget {
+            widgetId: "control-session"
+            id: sessionPowerButton
+            objectName: "controlSessionPower"
+            iconName: "system-shutdown-symbolic"
+            label: "Power options"
+            onClicked: root.openDetail("session", sessionPowerButton)
+        }
+        ActionWidget {
             widgetId: "control-lock"
             id: lockControl
             objectName: "controlLock"
@@ -291,6 +299,9 @@ GridLayout {
         visible: placed || root.sectionRow(widgetId) >= 0
         Layout.fillWidth: !barLayout
         Layout.alignment: Qt.AlignVCenter
+        Layout.minimumWidth: barLayout ? 1 : 0
+        Layout.maximumWidth: barLayout ? 1 : Infinity
+        Layout.preferredWidth: barLayout ? 1 : -1
         implicitWidth: barLayout ? 1 : 0
         implicitHeight: barLayout ? Theme.barHeight - 12 : 1
         color: Theme.outline; opacity: 0.5

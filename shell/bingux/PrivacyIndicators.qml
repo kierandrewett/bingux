@@ -12,7 +12,7 @@ Item {
     }
     readonly property bool screenSharing: privacyState.screenSharing || (!privacyState.available && systemMetrics.screenSharing)
     readonly property bool active: sharingVisible || privacyState.cameraInUse
-        || systemMetrics.microphoneInUse || systemMetrics.locationInUse
+        || privacyState.microphoneInUse || systemMetrics.locationInUse
     visible: active
     property bool sharingVisible: screenSharing
     property double sharingShownAt: Date.now()
@@ -69,10 +69,10 @@ Item {
         Indicator {
             presentation: root.appearance(tooltip, iconName)
             objectName: "microphoneIndicator"
-            visible: root.systemMetrics.microphoneInUse
+            visible: root.privacyState.microphoneInUse
             barWindow: root.barWindow
             iconName: "microphone-sensitivity-high-symbolic"
-            tooltip: "Microphone in use"
+            tooltip: root.privacyState.microphoneTooltip
         }
         Indicator {
             presentation: root.appearance(tooltip, iconName)

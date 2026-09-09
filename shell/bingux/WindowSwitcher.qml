@@ -307,7 +307,7 @@ Scope {
         Item {
             id: presentation
             anchors.centerIn: parent
-            width: Math.max(strip.width, caption.width)
+            width: strip.width
             height: strip.height
             opacity: root.revealProgress
             scale: Theme.popupInitialScale + (1 - Theme.popupInitialScale) * root.revealProgress
@@ -434,21 +434,7 @@ Scope {
                 }
                 }
             }
-            TooltipBubble {
-                id: caption
-                objectName: "switcherTooltip"
-                anchors.top: strip.bottom
-                anchors.topMargin: Theme.gap
-                anchors.horizontalCenter: parent.horizontalCenter
-                maximumWidth: Math.min(420, window.width - Theme.paddingLarge * 2)
-                wrapText: true
-                text: {
-                    if (!root.selectedWindow) return "";
-                    const app = root.appName(root.selectedWindow);
-                    const activity = root.selectedIcon ? root.selectedIcon.tooltipText : app;
-                    return activity + (root.selectedWindow.title !== app ? "\n" + root.selectedWindow.title : "");
-                }
-            }
+
         }
     }
 }

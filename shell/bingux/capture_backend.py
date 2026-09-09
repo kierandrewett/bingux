@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Bingux capture worker: portal/PipeWire, optional compositor fast paths, H.264."""
 import json
+import ctypes
 import os
 from pathlib import Path
 import shutil
 import signal
+import socket
 import select
 import subprocess
 import sys
@@ -16,11 +18,34 @@ from concurrent.futures import ThreadPoolExecutor
 import gi
 gi.require_version("Gst", "1.0")
 gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import Gio, GLib, Gst, GdkPixbuf
+gi.require_version("GstVideo", "1.0")
+from gi.repository import Gio, GLib, Gst, GdkPixbuf, GstVideo
 
 PORTAL = "org.freedesktop.portal.Desktop"
 PORTAL_PATH = "/org/freedesktop/portal/desktop"
 MUTTER = "org.gnome.Mutter.ScreenCast"
+
+
+class VideoCropMeta(ctypes.Structure):
+    # Public GstVideoCropMeta ABI. PyGObject exposes get_meta() as Gst.Meta,
+    # without the crop fields; read them while the buffer owns this metadata.
+    _fields_ = [("flags", ctypes.c_uint), ("info", ctypes.c_void_p),
+        ("x", ctypes.c_uint), ("y", ctypes.c_uint), ("width", ctypes.c_uint), ("height", ctypes.c_uint)]
+
+
+def window_crop(buffer, width, height, fallback=None):
+    meta = buffer.get_meta(GstVideo.video_crop_meta_api_get_type())
+    if meta is None:
+        if not fallback:
+            raise ValueError("Window stream did not provide crop bounds")
+        # Older PipeWire GStreamer plugins omit VideoCrop metadata. Mutter
+        # draws the backing buffer at (0, 0); use its compositor pixel bounds.
+        crop = VideoCropMeta(0, None, 0, 0, min(width, fallback["bufferWidth"]), min(height, fallback["bufferHeight"]))
+    else:
+        crop = VideoCropMeta.from_address(hash(meta))
+    if not crop.width or not crop.height or crop.x + crop.width > width or crop.y + crop.height > height:
+        raise ValueError("Window stream provided invalid crop bounds")
+    return dict(left=crop.x, top=crop.y, right=width - crop.x - crop.width, bottom=height - crop.y - crop.height)
 
 
 def play_shutter():
@@ -41,6 +66,23 @@ def play_shutter():
             stderr=subprocess.DEVNULL, start_new_session=True)
     except OSError:
         pass  # Sound availability must not prevent saving a screenshot.
+
+
+def capture_windows():
+    path = os.environ.get("GNOBLIN_COMPOSITOR_SOCKET") or str(Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "gnoblin/compositor-v1.sock")
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        connection.settimeout(2)
+        connection.connect(path)
+        connection.sendall(b'{"op":"command","id":"capture-windows","command":"capture-windows"}\n')
+        with connection.makefile("rb") as stream:
+            for _ in range(8):
+                line = stream.readline(1024 * 1024)
+                if not line: break
+                reply = json.loads(line)
+                if reply.get("id") == "capture-windows":
+                    if reply.get("event") == "error": raise ValueError(reply.get("message", "Window picker unavailable"))
+                    return reply["result"]["windows"]
+    raise ValueError("Window picker did not respond")
 
 
 def settings(record):
@@ -68,6 +110,11 @@ def settings(record):
         result["region"] = {key: int(region.get(key, 0)) for key in ("x", "y", "width", "height")}
         if not 2 <= result["region"]["width"] <= 16384 or not 2 <= result["region"]["height"] <= 16384:
             raise ValueError("Select a region at least 2 × 2 pixels")
+    if result["target"] == "window" and record.get("windowId") is not None:
+        identity = str(record["windowId"])
+        if not identity.isdecimal() or not 0 < int(identity) < 2**64:
+            raise ValueError("Invalid window ID")
+        result["windowId"] = identity
     return result
 
 
@@ -123,6 +170,11 @@ class Capture:
             self.portal_properties = self.call(PORTAL, PORTAL_PATH, "org.freedesktop.DBus.Properties", "GetAll", "(s)", ("org.freedesktop.portal.ScreenCast",))[0]
         except GLib.Error:
             self.portal_properties = {}
+        try:
+            capture_windows()
+            self.window_picker = self.native
+        except (OSError, ValueError, KeyError):
+            self.window_picker = False
         self.encoders = [name for name in ("vah264enc", "nvh264enc", "x264enc", "openh264enc") if Gst.ElementFactory.find(name)]
 
     def emit(self, event, **fields):
@@ -135,7 +187,7 @@ class Capture:
         GLib.io_add_watch(sys.stdin, GLib.IO_IN | GLib.IO_HUP, self.read)
         for sig in (signal.SIGINT, signal.SIGTERM):
             GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, sig, self.shutdown)
-        self.emit("ready", native=self.native, portal=bool(self.portal_properties), window=bool(self.portal_properties.get("AvailableSourceTypes", 0) & 2), encoders=self.encoders,
+        self.emit("ready", native=self.native, portal=bool(self.portal_properties), window=self.window_picker or bool(self.portal_properties.get("AvailableSourceTypes", 0) & 2), windowPicker=self.window_picker, encoders=self.encoders,
                   audio=bool(Gst.ElementFactory.find("pulsesrc") and Gst.ElementFactory.find("avenc_aac")))
         try:
             self.loop.run()
@@ -182,6 +234,7 @@ class Capture:
 
     def preview(self, record):
         self.clear_preview()
+        windows = capture_windows() if self.window_picker else []
         token = uuid.uuid4().hex
         tasks = []
         for index, screen in enumerate(record.get("screens", [])[:16]):
@@ -198,11 +251,11 @@ class Capture:
                 results = list(pool.map(lambda command: subprocess.run(command, capture_output=True, timeout=4).returncode, tasks))
             if any(results): raise ValueError("This compositor cannot freeze the capture preview")
             self.preview_token = token
-            self.emit("preview", request=record.get("request"), token=token,
+            self.emit("preview", request=record.get("request"), token=token, windows=windows,
                       images={name: {kind: path.as_uri() for kind, path in screen["paths"].items()} for name, screen in self.previews.items()})
         except (OSError, ValueError, subprocess.SubprocessError) as error:
             self.clear_preview()
-            self.emit("preview", request=record.get("request"), token="", images={}, warning=str(error))
+            self.emit("preview", request=record.get("request"), token="", images={}, windows=windows, warning=str(error))
 
     def frozen_screenshot(self):
         if not self.job.get("previewToken") or self.job["previewToken"] != self.preview_token or self.job["delay"] or self.job["target"] == "window":
@@ -257,7 +310,7 @@ class Capture:
                 if self.grim():
                     self.complete()
                     return False
-            if self.native and self.job["backend"] == "auto" and self.job["target"] != "window":
+            if self.native and self.job["backend"] == "auto" and (self.job["target"] != "window" or self.job.get("windowId")):
                 self.native_stream()
             else:
                 self.portal_stream()
@@ -283,7 +336,11 @@ class Capture:
         self.portal_session = False
         self.session = self.call(MUTTER, "/org/gnome/Mutter/ScreenCast", MUTTER, "CreateSession", "(a{sv})", ({},))[0]
         properties = {"cursor-mode": GLib.Variant("u", int(self.job["cursor"])), "is-recording": GLib.Variant("b", self.job["kind"] == "recording")}
-        if self.job["target"] == "region":
+        if self.job["target"] == "window":
+            self.refresh_window_bounds()
+            properties["window-id"] = GLib.Variant("t", int(self.job["windowId"]))
+            stream = self.call(MUTTER, self.session, MUTTER + ".Session", "RecordWindow", "(a{sv})", (properties,))[0]
+        elif self.job["target"] == "region":
             r = self.job["region"]
             stream = self.call(MUTTER, self.session, MUTTER + ".Session", "RecordArea", "(iiiia{sv})", (r["x"], r["y"], r["width"], r["height"], properties))[0]
         else:
@@ -346,12 +403,13 @@ class Capture:
                 source += " num-buffers=1"
             else:
                 source += " keepalive-time=100 resend-last=true"
-            crop = ""
+            window_source = self.job["target"] == "window" and not self.portal_session
+            crop = " ! videocrop name=windowcrop" if window_source else ""
             if "portalRegion" in self.job:
                 metadata, r = self.job["portalRegion"], self.job["region"]
                 region_crop(r, metadata, 100, 100)  # Validate before streaming.
                 crop = " ! videocrop name=regioncrop"
-            if recording or crop:
+            if recording:
                 encoder = self.choose_encoder(self.job["encoder"])
                 if not encoder:
                     raise ValueError("No working H.264 encoder; install GStreamer's x264 or OpenH264 plugin for CPU encoding")
@@ -365,8 +423,10 @@ class Capture:
                 pipeline = source + crop + " ! videoconvert ! " + encoder + " ! filesink name=output"
             self.pipeline = Gst.parse_launch(pipeline)
             self.pipeline.get_by_name("output").set_property("location", str(self.temporary))
+            if window_source:
+                self.pipeline.get_by_name("capture").get_static_pad("src").add_probe(Gst.PadProbeType.BUFFER, self.window_crop_probe)
             if recording:
-                self.pipeline.get_by_name("capture").get_static_pad("src").add_probe(Gst.PadProbeType.EVENT_DOWNSTREAM, self.size_probe)
+                self.pipeline.get_by_name("windowcrop" if window_source else "capture").get_static_pad("src").add_probe(Gst.PadProbeType.EVENT_DOWNSTREAM, self.size_probe)
             bus = self.pipeline.get_bus()
             bus.add_signal_watch()
             bus.connect("message", self.message)
@@ -374,6 +434,25 @@ class Capture:
                 raise ValueError("Could not start the video encoder")
         except (GLib.Error, ValueError, TypeError, OSError, subprocess.SubprocessError) as error:
             self.fail(str(error))
+
+    def refresh_window_bounds(self):
+        selected = next((window for window in capture_windows() if window["id"] == self.job["windowId"]), None)
+        if selected is None:
+            raise ValueError("The selected window is no longer available")
+        self.job["windowBounds"] = selected
+
+    def window_crop_probe(self, pad, info):
+        try:
+            caps = pad.get_current_caps().get_structure(0)
+            bounds = window_crop(info.get_buffer(), caps.get_value("width"), caps.get_value("height"), self.job.get("windowBounds"))
+            element = self.pipeline.get_by_name("windowcrop")
+            for key, value in bounds.items():
+                if element.get_property(key) != value:
+                    element.set_property(key, value)
+        except (ValueError, TypeError) as error:
+            GLib.idle_add(self.fail, str(error))
+            return Gst.PadProbeReturn.DROP
+        return Gst.PadProbeReturn.OK
 
     def choose_encoder(self, mode):
         return next((name for name in self.encoders

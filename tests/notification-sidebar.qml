@@ -112,6 +112,7 @@ ShellRoot {
             }
             tryVerify(() => !history.retained);
             check(state.allEntries.length === 1, "Closing history preserves the notification");
+            tryVerify(() => !surface.visible, 2000, "Archived history must unmap the empty full-screen surface");
             history.visible = true;
             if (!Theme.reducedMotion) wait(50);
             history.visible = false;

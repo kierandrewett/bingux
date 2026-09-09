@@ -4,6 +4,7 @@ import Quickshell
 Rectangle {
     id: root
     property bool shown: false
+    readonly property int cutoutMargin: 2
     property int count: 0
     property string iconName: ""
     property color foreground: Theme.shellSurface
@@ -12,8 +13,6 @@ Rectangle {
     height: Theme.dockBadgeSize
     width: iconName ? height : Math.max(height, number.implicitWidth + Theme.padding)
     radius: height / 2
-    border.width: 2
-    border.color: Theme.shellSurface
     opacity: 0
     onShownChanged: {
         fade.stop();

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+settings_qml="${BINGUX_SETTINGS_QML:-${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/bingux/settings.qml}"
+settings_runtime="${BINGUX_QUICKSHELL:-qs}"
+action="${1:-open}"
+case "$action" in open|close|toggle|status) ;; *) echo "Usage: bingux-settings [open|close|toggle|status]" >&2; exit 2;; esac
+if reply=$("$settings_runtime" ipc -p "$settings_qml" call settings "$action" 2>/dev/null); then
+    if [[ "$action" == status ]]; then printf '%s\n' "$reply"; fi
+    exit 0
+fi
+case "$action" in
+    close) exit 0;;
+    status) printf '{"open":false}\n'; exit 0;;
+    *) exec "$settings_runtime" -p "$settings_qml" --no-duplicate --daemonize;;
+esac

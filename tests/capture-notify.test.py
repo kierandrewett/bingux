@@ -43,7 +43,7 @@ class NotificationActions(unittest.TestCase):
         self.notice.call.return_value = (42,)
         module.CaptureNotification.notify(self.notice)
         values = self.notice.call.call_args.args[-1]
-        self.assertEqual(values[2:4], ("camera-video", "Recording saved"))
+        self.assertEqual(values[2:4], ("media-record-symbolic", "Recording saved"))
         self.assertEqual(values[5], ["default", "Open", "save", "Save As…", "discard", "Discard"])
         self.assertNotIn("image-path", values[6])
         with patch.object(module.subprocess, "run") as run:

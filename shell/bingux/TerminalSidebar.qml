@@ -307,11 +307,16 @@ Scope {
             dismiss.stop();
             if (tracksEdge)
                 root.trackPointer(root.edge === "top" ? mouseX : mouseY);
-            root.handleVisible = true;
+            if (!root.handleVisible)
+                revealDelay.restart();
         }
-        onExited: if (!root.gestureActive)
-            dismiss.restart()
+        onExited: {
+            revealDelay.stop();
+            if (!root.gestureActive)
+                dismiss.restart();
+        }
         onPressed: mouse => {
+            revealDelay.stop();
             if (!root.pillAllowed) {
                 mouse.accepted = false;
                 return;
@@ -331,6 +336,7 @@ Scope {
             const point = mapToGlobal(mouse.x, mouse.y);
             root.updateGesture(point.x, point.y);
             root.finishGesture(false);
+            dismiss.restart();
         }
         onCanceled: root.finishGesture(true)
     }
@@ -571,6 +577,14 @@ Scope {
         }
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "bingux-terminal-sidebar"
+        BlurRegion {
+            window: panel
+            surfaceNamespace: "bingux-terminal-sidebar"
+            region: root.edge === "top"
+                ? Qt.rect(0, 0, panel.width, panel.extent)
+                : Qt.rect(root.edge === "right" ? panel.width - panel.extent : 0,
+                    0, panel.extent, panel.height)
+        }
         WlrLayershell.keyboardFocus: root.inputSuspended || DesktopEditing.active ? WlrKeyboardFocus.None : root.focusRequested ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
         anchors {
             top: true
@@ -948,8 +962,15 @@ Scope {
     }
 
     Timer {
+        id: revealDelay
+        interval: 300
+        onTriggered: if (root.handleHovered && !root.inputSuspended && !root.detached)
+            root.handleVisible = true;
+    }
+
+    Timer {
         id: dismiss
-        interval: 650
+        interval: 2000
         onTriggered: if (!root.gestureActive && !root.handleHovered) {
             root.handleVisible = false
             root.followingPointer = false
@@ -1014,7 +1035,7 @@ Scope {
 
     PanelWindow {
         id: handleWindow
-        readonly property bool revealed: root.gestureActive || (root.pillAllowed && (root.opened || (sensor.visible && root.handleVisible)))
+        readonly property bool revealed: root.gestureActive || (root.pillAllowed && sensor.visible && root.handleVisible)
         property real reveal: revealed ? 1 : 0
         screen: root.screen
         visible: !root.detached && !root.inputSuspended && (revealed || reveal > 0)

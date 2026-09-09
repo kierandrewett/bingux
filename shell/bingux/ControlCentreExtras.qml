@@ -31,7 +31,7 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             IconButton { id: back; objectName: "controlExtrasBack"; iconName: "go-previous-symbolic"; label: root.tailscaleOpen ? "Back to VPN" : "Back to Control Centre"; onClicked: root.goBack() }
-            Text { Layout.fillWidth: true; text: root.tailscaleOpen ? "Tailscale" : root.page === "vpn" ? "VPN" : root.page === "power" ? "Power mode" : "Customise controls"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontHeading; font.weight: Font.Medium }
+            Text { Layout.fillWidth: true; text: root.tailscaleOpen ? "Tailscale" : root.page === "vpn" ? "VPN" : root.page === "power" ? "Power mode" : root.page === "session" ? "Power options" : "Customise controls"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontHeading; font.weight: Font.Medium }
         }
         Text {
             visible: root.page === "customise"
@@ -63,6 +63,7 @@ Item {
             ColumnLayout {
                 id: rows
                 width: list.width
+                SessionPower { Layout.fillWidth: true; visible: root.page === "session" }
                 spacing: 4
                 Repeater {
                     model: root.page === "vpn" ? root.services.vpns : []

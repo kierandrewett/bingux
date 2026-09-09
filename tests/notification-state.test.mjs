@@ -197,6 +197,7 @@ test('reload restores hidden notifications without replaying their toasts', () =
 test('Electron notification identity resolves an installed variant and its application icon', () => {
     const { state, make } = fixture();
     state.DesktopEntries.applications.values = [{id: 'discord-canary', startupClass: 'discord', name: 'Discord Canary', icon: '/opt/discord-canary/discord.png'}];
+    state.refreshApplicationAliases();
     const notification = make();
     Object.assign(notification, {desktopEntry: 'discord', appName: 'Discord', appIcon: 'discord'});
     const entry = state.entryFor(notification, 0);
@@ -274,6 +275,7 @@ test('notification default actions also transfer focus to the matching app', () 
     const calls = [];
     state.ToplevelManager = {toplevels: {values: [{appId: 'editor', activate() { calls.push('focus'); }}]}};
     state.DesktopEntries.applications.values = [{id: 'editor', name: 'Editor'}];
+    state.refreshApplicationAliases();
     const entry = {desktopEntry: 'editor', actions: [{defaultAction: true, action: {invoke() { calls.push('action'); }}}]};
     assert.equal(state.activate(entry), true);
     assert.deepEqual(calls, ['focus', 'action']);
@@ -283,6 +285,7 @@ test('notification clicks focus matching windows or launch their desktop entry',
     const { state, make } = fixture();
     const app = {id: 'org.example.Editor', name: 'Editor', startupClass: 'editor'};
     state.DesktopEntries.applications.values = [app];
+    state.refreshApplicationAliases();
     let focused = 0;
     state.ToplevelManager = {toplevels: {values: [{appId: 'editor', activate() { focused++; }}]}};
     const notification = make();
@@ -316,4 +319,26 @@ test('unchanged desktop metadata preserves the notification model and entry iden
     state.refreshApplicationMetadata();
     assert.notEqual(state.allEntries, entries);
     assert.equal(state.allEntries[0].appName, 'Changed name');
+});
+
+test('notification lookups use one catalogue snapshot and preserve ambiguous aliases', () => {
+    const {state} = fixture();
+    const first = {id: 'first', name: 'Shared', startupClass: 'First'};
+    const second = {id: 'second', name: 'Shared', startupClass: 'Second'};
+    let reads = 0;
+    Object.defineProperty(state.DesktopEntries.applications, 'values', {
+        get() { reads++; return [first, second]; },
+    });
+    state.refreshApplicationAliases();
+    for (let i = 0; i < 1000; i++) {
+        assert.equal(state.applicationFor({appName: 'First'}), first);
+        assert.equal(state.applicationFor({appName: 'Shared'}), null);
+        assert.equal(state.applicationFor({appName: 'Missing'}), null);
+    }
+    assert.equal(reads, 1);
+    second.name = 'Renamed';
+    state.refreshApplicationAliases();
+    assert.equal(state.applicationFor({appName: 'Shared'}), first);
+    assert.equal(state.applicationFor({appName: 'Renamed'}), second);
+    assert.equal(reads, 2);
 });

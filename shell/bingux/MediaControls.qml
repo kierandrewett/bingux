@@ -95,7 +95,13 @@ FocusScope {
     readonly property bool menuEntry: true
     readonly property bool controllable: player !== null && player.canControl
     readonly property bool hasPosition: player !== null && player.positionSupported && player.lengthSupported && player.length > 0
-    readonly property real position: hasPosition ? Math.max(0, Math.min(player.position, player.length)) : 0
+    property int playheadFrame: 0
+    readonly property real position: {
+        // Sample Quickshell's extrapolated position without emitting a shared
+        // player signal and waking every other media control.
+        playheadFrame;
+        return hasPosition ? Math.max(0, Math.min(player.position, player.length)) : 0;
+    }
     readonly property bool seekButtons: MediaMatch.prefersSeeking(player)
     property int seekTrack: -1
     property bool showRemaining: false
@@ -105,11 +111,17 @@ FocusScope {
     Accessible.role: Accessible.Grouping
     Accessible.name: player ? player.identity + " playback" : "Media playback"
 
+    FrameAnimation {
+        running: root.menuActive && root.visible && root.hasPosition && root.player.isPlaying
+            && !seek.pressed && !seek.wheelActive && !Theme.reducedMotion
+        onTriggered: root.playheadFrame = (root.playheadFrame + 1) % 1000000
+    }
     Timer {
         interval: 1000
         repeat: true
-        running: root.menuActive && root.hasPosition && root.player.isPlaying && !seek.pressed
-        onTriggered: if (root.player) root.player.positionChanged()
+        running: root.menuActive && root.visible && root.hasPosition && root.player.isPlaying
+            && !seek.pressed && Theme.reducedMotion
+        onTriggered: root.playheadFrame = (root.playheadFrame + 1) % 1000000
     }
     // Reparented controls must stay above the card when they return from the bar.
     Rectangle { parent: fullContent; z: -1; objectName: "mediaCardSurface"; anchors.fill: parent; radius: root.cornerRadius; color: Theme.menuWidgetBackground }

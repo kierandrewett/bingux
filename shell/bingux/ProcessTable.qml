@@ -267,7 +267,7 @@ ColumnLayout {
                 onCanceled: root.dragSelecting = false
             }
             HoverHandler { id: hover }
-            ShellTooltip { objectName: "processTooltip"; maximumWidth: root.mode === "processes" ? 640 : 320; timeout: root.mode === "processes" ? -1 : 8000; visible: hover.hovered; text: root.mode === "services" ? row.name + "\n" + row.description : row.name + (row.desktopEntry ? " · " + row.desktopEntry.name : "") + "\n" + (row.commandLine || "Command line unavailable") + "\nPID " + row.pid + " · CPU 100% = one logical core" }
+            ShellTooltip { objectName: "processTooltip"; maximumWidth: root.mode === "processes" ? 640 : 320; timeout: root.mode === "processes" ? -1 : 8000; visible: hover.hovered; text: root.mode === "services" ? row.name + "\n" + row.description : row.name + (row.desktopEntry ? " · " + row.desktopEntry.name : "") + "\n" + (row.commandLine || "Command line unavailable") + "\nPID " + row.pid }
         }
     }
     component Cell: Text {

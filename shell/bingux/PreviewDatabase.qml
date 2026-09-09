@@ -72,6 +72,7 @@ Rectangle {
             contentWidth: Math.max(width, root.tableData ? root.tableData.columns.length * root.columnWidth : 0)
             contentHeight: height
             boundsBehavior: Flickable.StopAtBounds
+            HorizontalWheelScroll { viewport: horizontal }
             ScrollBar.horizontal: ScrollBar {}
             ListView {
                 anchors.top: parent.top

@@ -9,7 +9,7 @@ import tempfile
 
 root = Path(__file__).resolve().parent.parent
 test_name = os.environ.get("BINGUX_SHELL_TEST", "dock-state")
-if test_name not in ("dock-state", "dock-pinning", "dock-behaviour", "search-launch-cursor", "dock-launch-timeout"):
+if test_name not in ("dock-state", "dock-pinning", "dock-behaviour", "search-launch-cursor", "dock-launch-timeout", "dock-startup"):
     raise SystemExit("Unknown shell test")
 if not os.environ.get("WAYLAND_DISPLAY", "").startswith("gnoblin-gs-"):
     raise SystemExit("Run through Gnoblin scripts/run-gnome-shell.sh with GNOBLIN_TEST_DBUS_CLIENT.")
@@ -60,6 +60,13 @@ with tempfile.TemporaryDirectory(prefix="bingux-dock-test-") as directory:
         print((error.stdout or b"").decode() + (error.stderr or b"").decode())
         raise SystemExit("Dock test timed out") from error
     output = result.stdout + result.stderr
+    if test_name == "dock-startup" and result.returncode == 0 and "DOCK_TEST_PASSED" in output:
+        # A second process reads the real Settings cache written by the first.
+        result = subprocess.run(command, env=environment | {"DOCK_REPLAY": "1"}, capture_output=True, text=True, timeout=50)
+        output += result.stdout + result.stderr
+        if "DOCK_TEST_PASSED" not in result.stdout + result.stderr:
+            output += "\nDOCK_BEHAVIOUR_FAILED restart did not complete\n"
     print(output)
+    print(f"Shell exit status: {result.returncode}")
     if "DOCK_BEHAVIOUR_FAILED" in output or result.returncode != 0 or ("SEARCH_CURSOR_PASSED" if test_name == "search-launch-cursor" else "DOCK_TEST_PASSED") not in output:
         raise SystemExit(1)

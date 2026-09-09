@@ -246,6 +246,7 @@ PanelWindow {
     function toggleSearch() { if (visible && !closing) closeSearch(false, true); else showSearch(); }
 
     function showSearch() {
+        PopupTransitions.refresh("bingux-search");
         chromeRevealed = true;
         browserFocus.cancel();
         webFocusOnClose = "";
@@ -288,7 +289,8 @@ PanelWindow {
         closing = true;
         appMenu.visible = false;
         openAnimation.stop();
-        if (Theme.searchMotion === 0)
+        if (Theme.searchMotion === 0 || (!launchEffect.running &&
+            PopupTransitions.matches(Theme.searchExitMotion, Easing.OutCubic, "bingux-search")))
             finishClose();
         else
             closeAnimation.restart();

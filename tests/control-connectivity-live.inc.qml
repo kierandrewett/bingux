@@ -62,7 +62,7 @@
                 const editor = desktopCustomiser;
                 const bluetooth = controlCentre.movableWidgets.find(item => item.widgetId === "control-bluetooth");
                 const originalParent = bluetooth.parent;
-                editor.open(); tryCompare(controlCentre, "revealScale", 1, 3000); wait(250);
+                editor.open(); tryCompare(controlCentre, "revealScale", 1, 3000); wait(500);
                 const dockArea = DesktopEditing.surfaces.find(surface => surface.zoneName === "dock");
                 gesture(bluetooth, controlCentre.nativeWindow, ["--hover-only"]);
                 gesture(bluetooth, controlCentre.nativeWindow, ["--drag-to", String(dockArea.screenRect.x + dockArea.screenRect.width / 2), String(dockArea.screenRect.y + 16)]);

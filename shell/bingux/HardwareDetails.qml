@@ -85,7 +85,7 @@ Item {
     property var selectedProcesses: []
     readonly property var selectedProcess: selectedProcesses[0] || null
     property string actionMessage: ""
-    readonly property var applicationIndex: ProcessApplications.index(DesktopEntries.applications.values)
+    readonly property var applicationIndex: ProcessApplications.index(ApplicationCatalog.entries)
     function applicationFor(process) {
         return ProcessApplications.lookup(process, applicationIndex, DesktopEntries);
     }

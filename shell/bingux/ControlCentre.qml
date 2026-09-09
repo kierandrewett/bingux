@@ -31,7 +31,7 @@ ShellPopup {
     readonly property var controlChoices: extrasView.choices
     readonly property var deviceControls: detailView
     property var services: ControlCentreServices
-    readonly property bool extraPage: ["vpn", "power", "customise"].includes(detailPage)
+    readonly property bool extraPage: ["vpn", "power", "customise", "session"].includes(detailPage)
     readonly property var activeDetailView: extraPage ? extrasView : detailView
     readonly property var connectedVpns: services.vpns.filter(vpn => vpn.connected)
     readonly property bool showVpn: services.showControl("vpn") && services.vpns.length > 0

@@ -7,6 +7,24 @@ Scope {
     property bool available: false
     property bool screenSharing: false
     property bool cameraInUse: false
+    property bool microphoneAvailable: false
+    property var microphoneCaptures: []
+    readonly property bool microphoneInUse: microphoneCaptures.length > 0
+    readonly property string microphoneTooltip: "Microphone in use\n" + microphoneCaptures.map(
+        capture => capture.app + " — " + capture.device + (capture.muted ? " (muted)" : "")).join("\n")
+    Process {
+        command: ["python3", Qt.resolvedUrl("microphone-status.py").toString().replace("file://", "")]
+        running: true
+        stdout: SplitParser {
+            onRead: data => {
+                try {
+                    const state = JSON.parse(data);
+                    root.microphoneAvailable = state.available === true;
+                    root.microphoneCaptures = state.captures || [];
+                } catch (error) { console.warn("Microphone state:", error); }
+            }
+        }
+    }
     property bool recording: false
     property int recordingCount: 0
     property int elapsed: 0
@@ -43,6 +61,7 @@ Scope {
     IpcHandler {
         target: "privacy"
         function status(): string { return JSON.stringify({available: root.available, screenSharing: root.screenSharing,
+            microphoneAvailable: root.microphoneAvailable, microphoneCaptures: root.microphoneCaptures,
             cameraInUse: root.cameraInUse, recording: root.recording, elapsed: root.elapsed}); }
     }
 }

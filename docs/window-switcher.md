@@ -70,12 +70,13 @@ rebases equivalent copies at wraparound; it does not replace pages.
 The dock and switcher both instantiate `AppIcon.qml`. Its inputs are `group`
 (`id`, `desktopEntry`, and `windows`), `activeStreams`, `notifications`, and
 `implicitSize`. It owns the OS icon renderer, audio badge, notification badge,
-app accent, and matching rules. Consumers can read `playingAudio`,
+app accent, and matching rules. Badges remove icon pixels beneath their shape
+and a two-pixel clearance. The gap is transparent and follows count resizing
+and fades, including dock warning and pin badges. Consumers can read `playingAudio`,
 `notificationCount`, `appNotifications`, `tooltipText`, `accentColor`, and
 `accentForeground`. The switcher uses the dock's existing audio stream source.
 
-Both surfaces use `TooltipBubble.qml` for tooltip rendering. The switcher adds
-the full window title to the shared app/activity text.
+The switcher shows window and app names inside each card, without a tooltip.
 
 ## Configuration
 
@@ -142,7 +143,7 @@ runtime. The test reports Alt-release-to-focus time from the compositor clock;
 this measures focus changes, not display scanout latency.
 
 `tests/window-switcher-ui.py`, run through the same launcher with `QS_TEST_BIN`,
-checks badge matching, delegate identity during window updates, tooltip content,
+checks badge matching, delegate identity during window updates,
 rendered animation progress, and rapid carousel wraparound. The keyboard test
 also checks preview pixels and that a held chooser stops capturing. Repeat
 with `BINGUX_REDUCED_MOTION=1` to check the immediate presentation path.

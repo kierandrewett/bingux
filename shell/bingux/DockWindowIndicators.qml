@@ -5,6 +5,11 @@ Item {
     id: root
     property var windows: []
     property bool launching: false
+    property real launchCompletion: launching ? 0 : 1
+    Behavior on launchCompletion {
+        enabled: !root.launching
+        NumberAnimation { duration: Theme.reducedMotion ? 0 : 260; easing.type: Easing.OutCubic }
+    }
     readonly property int windowCount: windows.length
     readonly property int visibleCount: Math.min(4, windowCount)
     readonly property int activeIndex: {
@@ -18,12 +23,12 @@ Item {
     readonly property bool moreBefore: firstVisibleIndex > 0
     readonly property bool moreAfter: firstVisibleIndex + visibleCount < windowCount
     readonly property real scrollOffset: strip.originX - strip.contentX
-    implicitWidth: visibleCount > 0 ? visibleCount * 8 + 10 + (activeIndex >= firstVisibleIndex && activeIndex < firstVisibleIndex + visibleCount ? 10 : 0) : 0
+    implicitWidth: launching ? 28 : visibleCount > 0 ? visibleCount * 8 + 10 + (activeIndex >= firstVisibleIndex && activeIndex < firstVisibleIndex + visibleCount ? 10 : 0) : 0
     implicitHeight: 8
     visible: width > 0
     Behavior on implicitWidth { NumberAnimation { duration: Theme.reducedMotion ? 0 : 220; easing.type: Easing.OutCubic } }
     Accessible.role: Accessible.StaticText
-    Accessible.name: windowCount + " windows" + (activeIndex >= 0 ? ", window " + (activeIndex + 1) + " active" : "")
+    Accessible.name: launching ? "Opening window" : windowCount + " windows" + (activeIndex >= 0 ? ", window " + (activeIndex + 1) + " active" : "")
 
     function revealActiveWindow() {
         let start = Math.min(firstVisibleIndex, Math.max(0, windowCount - 4));
@@ -39,8 +44,43 @@ Item {
     onWindowCountChanged: revealActiveWindow()
     Component.onCompleted: revealActiveWindow()
 
+    Rectangle {
+        id: loadingPill
+        anchors.centerIn: parent
+        width: 16
+        height: 6
+        radius: 3
+        color: Qt.alpha(Theme.accent, 0.25 + 0.75 * root.launchCompletion)
+        opacity: 1 - Math.max(0, (root.launchCompletion - 0.65) / 0.35)
+        visible: opacity > 0
+        property real phase: 0
+        NumberAnimation on phase {
+            from: 0
+            to: 1
+            duration: 750
+            loops: Animation.Infinite
+            running: root.launching && root.visible && !Theme.reducedMotion
+        }
+        Rectangle {
+            // Grow into the track, then shrink out at the other end.
+            readonly property real head: Theme.reducedMotion ? 0.7 : Math.min(1, loadingPill.phase * 1.65)
+            readonly property real tail: Theme.reducedMotion ? 0.3 : Math.max(0, (loadingPill.phase - 0.35) / 0.65)
+            readonly property real inset: 1 - root.launchCompletion
+            readonly property real fillHead: head + (1 - head) * root.launchCompletion
+            readonly property real fillTail: tail * (1 - root.launchCompletion)
+            x: inset + fillTail * (parent.width - 2 * inset)
+            y: inset
+            width: Math.max(0, (fillHead - fillTail) * (parent.width - 2 * inset))
+            height: parent.height - 2 * inset
+            radius: height / 2
+            color: Theme.accent
+        }
+    }
+
     ListView {
         id: strip
+        opacity: Math.max(0, (root.launchCompletion - 0.65) / 0.35)
+        visible: opacity > 0
         x: 5
         width: Math.max(0, root.width - 10)
         height: parent.height
@@ -99,13 +139,13 @@ Item {
     Rectangle {
         x: 0; y: 3; width: 2; height: 2; radius: 1
         color: Theme.muted
-        opacity: root.moreBefore ? 0.5 : 0
+        opacity: !root.launching && root.moreBefore ? 0.5 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.reducedMotion ? 0 : 140; easing.type: Easing.InOutSine } }
     }
     Rectangle {
         x: parent.width - width; y: 3; width: 2; height: 2; radius: 1
         color: Theme.muted
-        opacity: root.moreAfter ? 0.5 : 0
+        opacity: !root.launching && root.moreAfter ? 0.5 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.reducedMotion ? 0 : 140; easing.type: Easing.InOutSine } }
     }
 }

@@ -55,7 +55,7 @@ class CaptureNotification:
         actions += ["save", "Save As…", "discard", "Discard"]
         self.identifier = self.call(NOTIFICATIONS, NOTIFICATION_PATH, NOTIFICATIONS, "Notify",
             "(susssasa{sv}i)", ("Capture", self.identifier,
-                "camera-video" if self.kind == "recording" else "camera-photo",
+                "media-record-symbolic" if self.kind == "recording" else "screenshot-selection-symbolic",
                 summary if summary is not None else self.title + " saved",
                 body if body is not None else self.path.name, actions, hints, -1))[0]
 

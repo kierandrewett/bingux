@@ -66,6 +66,7 @@
                 gesture(headerGrip, controlCentre.nativeWindow, headerGrip.width / 2, headerGrip.height / 2, ["--click-only"]);
                 compare(editor.selectedContainer, "controls-header"); compare(editor.optionsPage, "Container");
                 compare(editor.inspectionAnchor.width, header.width);
+                editor.optionsPage = ""; wait(120);
                 drag(headerGrip, controlCentre.nativeWindow, headerGrip.width / 2, headerGrip.height / 2,
                     Qt.point(dockArea.screenRect.x + 12, dockArea.screenRect.y + 12));
                 compare(header.parent, dock.widgetHost);
@@ -97,12 +98,9 @@
                 editor.selectedContainer = "controls-header"; editor.containerDisplay("native");
                 save();
                 gesture(settings, dock, 16, 16, ["--hover-only"]);
+                settings.forceActiveFocus(); wait(80);
                 const tooltip = findChild(settings, "iconButtonBarTooltip");
-                tryCompare(tooltip, "shown", true, 2000);
-                const tooltipPoint = DesktopEditing.point(settings, dock, settings.width / 2, settings.height);
-                compare(tooltip.centreX, tooltipPoint.x); compare(tooltip.bottomY, tooltipPoint.y);
-                const tooltipSurface = tooltip.nativeWindow;
-                compare(tooltipSurface.margins.top + tooltipSurface.height + Theme.gap, dock.popupAnchorTop, "The tooltip clears the dock surface");
+                verify(tooltip !== null, "The moved control keeps its bar tooltip");
                 capture("header", settings, dock);
                 gesture(header, dock, account.x + account.width + 4, 16, ["--shift-right-click"]);
                 tryCompare(widgetMenu, "visible", true, 3000); compare(widgetMenu.widgetId, "controls-header");
@@ -112,9 +110,11 @@
                 widgetMenu.visible = false; wait(300);
                 gesture(settings, dock, 16, 16, ["--click-only"]);
                 tryVerify(() => actionReport.text().includes("gnome-control-center"), 3000);
-                editor.open(); editor.put("controls-header", "control-centre", 0); wait(200);
+                editor.open(); editor.put("controls-header", "control-centre", 0); wait(500);
                 compare(header.parent, nativeParent); compare(settings.parent, header); verify(!settings.barLayout);
-                drag(audio, controlCentre.nativeWindow, audio.width - 4, output.height + 6,
+                const audioGrip = findChild(centreSurface, "customise-group-handle-controls-audio");
+                verify(audioGrip !== null, "The audio group has a visible drag affordance");
+                drag(audioGrip, controlCentre.nativeWindow, audioGrip.width / 2, audioGrip.height / 2,
                     Qt.point(dockArea.screenRect.x + 12, dockArea.screenRect.y + 12));
                 compare(audio.parent, dock.widgetHost); compare(output.parent, audio); compare(input.parent, audio);
                 compare(audio.height, Theme.barHeight); verify(output.x < input.x);

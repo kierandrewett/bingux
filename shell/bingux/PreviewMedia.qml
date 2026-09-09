@@ -56,7 +56,7 @@ Item {
         ShellTooltip { visible: button.hovered; text: button.text }
     }
     Flickable {
-        id: viewport
+        id: mediaViewport
         anchors.fill: parent
         clip: true
         contentWidth: width * root.zoom
@@ -65,13 +65,13 @@ Item {
         onContentWidthChanged: contentX = Math.max(0, (contentWidth - width) / 2)
         onContentHeightChanged: contentY = Math.max(0, (contentHeight - height) / 2)
         Item {
-            width: Math.max(viewport.width, viewport.contentWidth)
-            height: Math.max(viewport.height, viewport.contentHeight)
+            width: Math.max(mediaViewport.width, mediaViewport.contentWidth)
+            height: Math.max(mediaViewport.height, mediaViewport.contentHeight)
             VideoOutput {
                 id: video
                 anchors.centerIn: parent
-                width: viewport.contentWidth
-                height: viewport.contentHeight
+                width: mediaViewport.contentWidth
+                height: mediaViewport.contentHeight
                 visible: !root.animation && root.details && root.details.kind === "video"
                 fillMode: VideoOutput.PreserveAspectFit
             }
@@ -79,8 +79,8 @@ Item {
                 id: gif
                 objectName: "previewAnimatedImage"
                 anchors.centerIn: parent
-                width: viewport.contentWidth
-                height: viewport.contentHeight
+                width: mediaViewport.contentWidth
+                height: mediaViewport.contentHeight
                 source: root.animation ? root.details.source : ""
                 playing: root.animation && root.visible && !root.animationPaused
                 fillMode: Image.PreserveAspectFit
@@ -90,8 +90,8 @@ Item {
             }
             Image {
                 anchors.centerIn: parent
-                width: viewport.contentWidth
-                height: viewport.contentHeight
+                width: mediaViewport.contentWidth
+                height: mediaViewport.contentHeight
                 source: root.details && root.details.poster ? root.details.poster : ""
                 fillMode: Image.PreserveAspectFit
                 opacity: root.animation ? (gif.status === Image.Ready ? 0 : 1) : (player.position > 0 ? 0 : 1)
@@ -107,6 +107,7 @@ Item {
             TapHandler { onTapped: root.togglePlayback() }
         }
         ScrollBar.vertical: ScrollBar {}
+        HorizontalWheelScroll { viewport: mediaViewport }
         ScrollBar.horizontal: ScrollBar {}
         PreviewSpinner {
             anchors.centerIn: parent

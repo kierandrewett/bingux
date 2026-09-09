@@ -7,10 +7,17 @@ QtObject {
         return Math.max(0, outerRadius - padding);
     }
 
+    // Opaque application surfaces, following Adwaita's dark preference pages.
+    readonly property color settingsBackground: "#222226"
+    readonly property color settingsSidebar: "#2e2e32"
+    readonly property color settingsSurface: "#343438"
+    readonly property color settingsSelection: "#454549"
+    readonly property color settingsSeparator: "#28000000"
     readonly property color background: "#f5161616"
     readonly property color surface: "#f0303030"
-    readonly property color shellSurface: "#1b1b1b"
-    readonly property color popupSurface: "#303030"
+    // Keep the tint distinct from opacity used by popup transitions.
+    readonly property color shellSurface: "#f01b1b1b"
+    readonly property color popupSurface: "#ee303030"
     readonly property int shellRadius: cardRadius + 4
     readonly property color elevated: "#383838"
     readonly property color menuWidgetBackground: elevated

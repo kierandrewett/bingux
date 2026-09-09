@@ -246,7 +246,7 @@ Scope {
         else options[selectedContainer] = {display: value};
         change("containers", options);
     }
-    readonly property var applications: DesktopEntries.applications.values.filter(entry => !appFilter || entry.name.toLowerCase().includes(appFilter.toLowerCase())).slice().sort((a, b) => a.name.localeCompare(b.name))
+    readonly property var applications: ApplicationCatalog.entries.filter(entry => !appFilter || entry.name.toLowerCase().includes(appFilter.toLowerCase())).slice().sort((a, b) => a.name.localeCompare(b.name))
     readonly property var dockApplications: {
         const saved = desktop.dockApps || {pinnedApps: [], order: []};
         const order = saved.order.map(id => appId(appEntry(id)?.id || id));

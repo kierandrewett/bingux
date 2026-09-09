@@ -98,9 +98,7 @@ ShellRoot {
                 test.check(audio && audio.visible && audio.opacity === 1, "Audio badge is rendered");
                 test.check(notifications && notifications.visible && notifications.count === 2, "Notification count is rendered");
                 let presentation = chooser.selectedIcon;
-                while (presentation && !test.findChild(presentation, "switcherTooltip")) presentation = presentation.parent;
-                const tooltip = test.findChild(presentation, "switcherTooltip");
-                test.check(tooltip && tooltip.text.includes("Playing audio") && tooltip.text.includes("Second window"), "Shared tooltip includes activity and window title");
+                while (presentation && !test.findChild(presentation, "switcherViewport")) presentation = presentation.parent;
                 test.selection = test.findChild(presentation, "switcherSelection");
                 test.viewport = test.findChild(presentation, "switcherViewport");
                 test.selectionStart = test.selection.x;

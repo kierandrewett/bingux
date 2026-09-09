@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Effects
 import QtCore
 import QtQml.Models
 import Quickshell
@@ -49,6 +50,47 @@ PanelWindow {
     // toplevels or changes the order of its foreign-toplevel list.
     property var observedGroupOrder: []
     property bool appGroupsInitialised: false
+    property bool startupReady: false
+    property string startupLayoutKey: ""
+    visible: startupReady
+    Timer {
+        id: startupSettle
+        interval: 150
+        onTriggered: if (BinguxPreferences.loaded) root.finishStartup()
+    }
+    Timer {
+        id: startupDeadline
+        interval: 1500
+        onTriggered: root.finishStartup()
+    }
+    Connections {
+        target: BinguxPreferences
+        function onLoadedChanged() {
+            if (!root.startupReady && BinguxPreferences.loaded) {
+                root.refreshAppGroups();
+                startupSettle.restart();
+            }
+        }
+    }
+    function finishStartup() {
+        refreshDebounce.stop();
+        root.refreshAppGroupsNow();
+        startupSettle.stop();
+        startupDeadline.stop();
+        // Let the Repeater and RowLayout polish their final sizes before map.
+        Qt.callLater(() => { root.startupReady = true; orderCache.restart(); });
+    }
+    Timer {
+        id: orderCache
+        interval: 500
+        onTriggered: {
+            const order = root.appGroups.filter(group => !group.exiting).map(group => group.id);
+            if (JSON.stringify(order) !== JSON.stringify(dockState.observedOrder)) {
+                dockState.observedOrder = order;
+                dockState.sync();
+            }
+        }
+    }
     onAppGroupsChanged: rectangleUpdate.restart()
     onWidthChanged: rectangleUpdate.restart()
     onHeightChanged: rectangleUpdate.restart()
@@ -220,6 +262,7 @@ PanelWindow {
         property var order: []
         property var pinnedApps: []
         property var unpinnedApps: []
+        property var observedOrder: []
     }
     function pinIdentity(appId) {
         const entry = desktopEntryFor(normaliseAppId(appId));
@@ -326,6 +369,67 @@ PanelWindow {
         return slotPosition(destination, previewPinnedCount) - slotPosition(index, pinnedGroupCount);
     }
     property var emptyAppIdGroupAssociations: []
+    property var launchAttempts: ({})
+    property var launchFailures: ({})
+    property int launchSequence: 0
+
+    function clearLaunchFailure(id) {
+        const failures = Object.assign({}, launchFailures);
+        delete failures[id];
+        launchFailures = failures;
+        launchError.resolve(id);
+    }
+
+    function failLaunch(id, serial, message) {
+        const attempt = launchAttempts[id];
+        if (!attempt || attempt.serial !== serial)
+            return;
+        const group = appGroups.find(item => item.id === id);
+        if (group && group.windows.some(window => !attempt.windows.includes(window)))
+            return;
+        launchFailures = Object.assign({}, launchFailures, { [id]: {message: message, windows: attempt.windows} });
+        const attempts = Object.assign({}, launchAttempts);
+        delete attempts[id];
+        launchAttempts = attempts;
+        if (pendingLaunchGroupId === id) pendingLaunchGroupId = "";
+        launchError.show(id, group?.desktopEntry?.name || attempt.name || id, message);
+    }
+
+    LaunchErrorDialog {
+        id: launchError
+        screen: root.screen
+        onRetryRequested: id => {
+            const group = root.appGroups.find(item => item.id === id);
+            if (group) root.launch(group, true);
+        }
+    }
+
+    Timer {
+        interval: 250
+        running: Object.keys(root.launchAttempts).length > 0 || Object.keys(root.launchFailures).length > 0
+        repeat: true
+        onTriggered: {
+            const attempts = Object.assign({}, root.launchAttempts);
+            for (const id of Object.keys(attempts)) {
+                const attempt = attempts[id];
+                const group = root.appGroups.find(item => item.id === id);
+                if (group && group.windows.some(window => !attempt.windows.includes(window))) {
+                    delete attempts[id];
+                    root.clearLaunchFailure(id);
+                }
+            }
+            root.launchAttempts = attempts;
+            for (const id of Object.keys(attempts)) {
+                if (Date.now() >= attempts[id].deadline)
+                    root.failLaunch(id, attempts[id].serial, "No new application window appeared. The app may still be starting or running in the background.");
+            }
+            for (const id of Object.keys(root.launchFailures)) {
+                const group = root.appGroups.find(item => item.id === id);
+                if (group && group.windows.some(window => !root.launchFailures[id].windows.includes(window))) root.clearLaunchFailure(id);
+            }
+        }
+    }
+
     property string pendingLaunchGroupId: ""
     property string launchFeedbackToken: ""
     onPendingLaunchGroupIdChanged: {
@@ -521,7 +625,7 @@ PanelWindow {
                         || discoveredWindows.indexOf(a) - discoveredWindows.indexOf(b);
                 });
             }
-            group.entering = root.appGroupsInitialised && !previousIds[group.id];
+            group.entering = root.startupReady && !previousIds[group.id];
         }
 
         const nextObservedOrder = observedOrder.slice();
@@ -533,6 +637,7 @@ PanelWindow {
         // Keep a departing group's slot until its animation finishes. This
         // is the same ordered model used for layout and drag indices.
         for (let index = 0; index < previousGroups.length; index++) {
+            if (!root.startupReady) break;
             const previous = previousGroups[index];
             if (groupIndexes[previous.id] !== undefined)
                 continue;
@@ -551,6 +656,14 @@ PanelWindow {
         root.appGroups = groups.filter(group => root.isPinned(group))
             .concat(groups.filter(group => !root.isPinned(group)));
         root.appGroupsInitialised = true;
+        const layoutKey = JSON.stringify([groups.map(group => group.id), root.iconSize,
+            root.pinnedGroupCount, root.preferences.layout?.dock]);
+        if (!root.startupReady && layoutKey !== root.startupLayoutKey) {
+            root.startupLayoutKey = layoutKey;
+            startupSettle.restart();
+        }
+        if (root.startupReady && JSON.stringify(previousGroups.map(group => group.id)) !== JSON.stringify(groups.map(group => group.id)))
+            orderCache.restart();
     }
 
     function finishGroupExit(id) {
@@ -566,8 +679,20 @@ PanelWindow {
         id: applicationLaunchProcess
         Process {
             property string groupId: ""
-            stderr: SplitParser { onRead: data => console.warn("Application launch:", data) }
+            property int serial: 0
+            property string diagnostic: ""
+            stdout: SplitParser {
+                onRead: data => {
+                    if (!data.startsWith("BINGUX_LAUNCH_ERROR ")) return;
+                    try {
+                        const error = JSON.parse(data.slice(20));
+                        root.failLaunch(groupId, serial, error.message);
+                    } catch (error) { console.warn("Invalid launch result:", error); }
+                }
+            }
+            stderr: SplitParser { onRead: data => { diagnostic = (diagnostic + "\n" + data).slice(-2000); } }
             onExited: (code, status) => {
+                if (code !== 0) root.failLaunch(groupId, serial, diagnostic.trim() || "The application launch service failed.");
                 if (code !== 0 && root.pendingLaunchGroupId === groupId) {
                     pendingLaunchTimer.stop();
                     root.pendingLaunchGroupId = "";
@@ -578,8 +703,15 @@ PanelWindow {
     }
 
     function launch(group, newWindow) {
-        if (!group.desktopEntry)
-            return ;
+        const serial = ++root.launchSequence;
+        root.clearLaunchFailure(group.id);
+        root.launchAttempts = Object.assign({}, root.launchAttempts, { [group.id]: {
+            serial: serial, name: group.desktopEntry?.name || group.id, windows: (group.windows || []).slice(), deadline: Date.now() + Theme.dockLaunchTimeout
+        }});
+        if (!group.desktopEntry) {
+            root.failLaunch(group.id, serial, "The installed application could not be found. It may have been removed.");
+            return;
+        }
 
         if (root.pendingLaunchToplevel) {
             root.removeToplevelAssociation(root.pendingLaunchToplevel);
@@ -590,10 +722,10 @@ PanelWindow {
         root.launchFeedbackToken = LaunchFeedback.begin(group.id, () => {
             const helper = Quickshell.env("BINGUX_APP_LAUNCHER_HELPER");
             const command = helper ? [helper] : ["python3", decodeURIComponent(Qt.resolvedUrl("launch-application.py").toString().replace(/^file:\/\//, ""))];
-            command.push("--notify-errors");
+            command.push("--dock-feedback");
             if (newWindow) command.push("--new-window");
             command.push("--", group.desktopEntry.id);
-            const process = applicationLaunchProcess.createObject(root, {command: command, groupId: group.id});
+            const process = applicationLaunchProcess.createObject(root, {command: command, groupId: group.id, serial: serial});
             process.running = true;
         });
         pendingLaunchTimer.restart();
@@ -682,6 +814,8 @@ PanelWindow {
     WlrLayershell.namespace: "bingux-dock"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     Component.onCompleted: {
+        root.observedGroupOrder = dockState.observedOrder.slice();
+        startupDeadline.start();
         root.rememberFocusedWindow();
         root.refreshAppGroups();
     }
@@ -769,13 +903,6 @@ PanelWindow {
         interval: Theme.dockLaunchTimeout
         repeat: false
         onTriggered: {
-            const group = root.appGroups.find(item => item.id === root.pendingLaunchGroupId);
-            if (group && group.desktopEntry && group.windows.length === 0) {
-                const helper = Quickshell.env("BINGUX_APP_LAUNCHER_HELPER");
-                const command = helper ? [helper] : ["python3", decodeURIComponent(Qt.resolvedUrl("launch-application.py").toString().replace(/^file:\/\//, ""))];
-                command.push("--report-timeout", "--", group.desktopEntry.id);
-                Quickshell.execDetached(command);
-            }
             if (root.pendingLaunchToplevel) {
                 root.removeToplevelAssociation(root.pendingLaunchToplevel);
                 root.pendingLaunchToplevel = null;
@@ -943,7 +1070,7 @@ PanelWindow {
                     readonly property bool playingAudio: dockIcon.playingAudio
                     readonly property var appNotifications: dockIcon.appNotifications
                     readonly property int notificationCount: dockIcon.notificationCount
-                    readonly property string tooltipText: dockIcon.tooltipText
+                    readonly property string tooltipText: dockIcon.tooltipText + (root.launchFailures[currentGroup.id] ? " - Could not open; click to retry" : "")
                     property bool active: {
                         for (let index = 0; index < currentGroup.windows.length; index++) {
                             if (currentGroup.windows[index] && currentGroup.windows[index].activated)
@@ -978,7 +1105,11 @@ PanelWindow {
                             easing.type: Easing.OutCubic
                         }
                     }
-                    opacity: dockButton.transitionProgress * (root.draggedId.length > 0 && root.draggedId !== modelData.id ? 0.65 : 1)
+                    // Finish fading during the first third of the slide, before
+                    // the departing icon reaches its neighbour.
+                    readonly property real presenceOpacity: exiting
+                        ? Math.max(0, (transitionProgress - 0.7) / 0.3) : transitionProgress
+                    opacity: presenceOpacity * (root.draggedId.length > 0 && root.draggedId !== modelData.id ? 0.65 : 1)
                     Behavior on opacity {
                         enabled: !dockButton.entering && !dockButton.exiting
                         NumberAnimation {
@@ -1001,7 +1132,7 @@ PanelWindow {
                         from: 0
                         to: 1
                         duration: Theme.reducedMotion ? 0 : Theme.motion * 3
-                        easing.type: Easing.OutCubic
+                        easing.type: dockButton.exiting ? Easing.InOutCubic : Easing.OutCubic
                         onFinished: {
                             dockButton.entering = false;
                             if (dockButton.exiting)
@@ -1047,8 +1178,13 @@ PanelWindow {
 
                         AppIcon {
                             id: dockIcon
+                            objectName: "dockApplicationIcon"
+                            additionalBadges: [failureBadge, pinBadge]
                             presentation: DesktopLayout.presentation(root.preferences, "app:" + root.pinIdentity(dockButton.currentGroup.desktopEntry?.id || dockButton.currentGroup.id), "dock", dockButton.currentGroup.desktopEntry?.name || dockButton.currentGroup.id, dockButton.currentGroup.desktopEntry?.icon || "application-x-executable", true, false)
                             implicitSize: root.iconSize
+                            opacity: root.launchFailures[dockButton.currentGroup.id] ? 0.5 : 1
+                            layer.enabled: !!root.launchFailures[dockButton.currentGroup.id]
+                            layer.effect: MultiEffect { saturation: -1 }
                             group: dockButton.currentGroup
                             activeStreams: root.activity.activeStreams
                             notifications: root.notifications
@@ -1060,6 +1196,17 @@ PanelWindow {
                         }
 
                         DockBadge {
+                            id: failureBadge
+                            anchors.left: dockIcon.left
+                            anchors.bottom: dockIcon.bottom
+                            shown: !!root.launchFailures[dockButton.currentGroup.id]
+                            iconName: "dialog-warning-symbolic"
+                            color: Theme.danger
+                            foreground: "#161616"
+                        }
+
+                        DockBadge {
+                            id: pinBadge
                             objectName: "dockPinPreview"
                             anchors.left: dockIcon.left
                             anchors.top: dockIcon.top
@@ -1073,7 +1220,7 @@ PanelWindow {
 
                         DockWindowIndicators {
                             id: windowIndicators
-                            launching: root.pendingLaunchGroupId === dockButton.currentGroup.id
+                            launching: !!root.launchAttempts[dockButton.currentGroup.id]
                             windows: dockButton.currentGroup.windows
                             anchors.bottom: parent.bottom
                             anchors.bottomMargin: -3
@@ -1092,7 +1239,10 @@ PanelWindow {
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                         cursorShape: Qt.ArrowCursor
                         hoverEnabled: true
-                        onEntered: root.tooltipEntered(dockButton)
+                        onEntered: {
+                            root.tooltipEntered(dockButton);
+                            notificationPreview.prepare();
+                        }
                         onExited: {
                             tooltipDelay.stop();
                             root.leaveTooltip(dockButton);
@@ -1133,8 +1283,15 @@ PanelWindow {
                                 if (action === "launch") root.launch(dockButton.currentGroup, true);
                                 else if (action === "close") for (const window of dockButton.currentGroup.windows) window.close();
                             }
-                            else if (mouse.button === Qt.RightButton)
-                                dockButton.menuOpen = !dockButton.menuOpen;
+                            else if (mouse.button === Qt.RightButton) {
+                                if (dockButton.menuOpen || menuPrepare.running) {
+                                    menuPrepare.stop();
+                                    dockButton.menuOpen = false;
+                                } else {
+                                    notificationPreview.prepare();
+                                    menuPrepare.restart();
+                                }
+                            }
                         }
                         onWheel: function(wheel) {
                             if (root.preferences.dockScroll === "none") { wheel.accepted = false; return; }
@@ -1147,9 +1304,25 @@ PanelWindow {
                         }
                     }
 
+                    // Let card creation, text layout and the parent layout settle
+                    // while the surface is hidden, before starting its reveal.
+                    Timer {
+                        id: menuPrepare
+                        interval: 32
+                        onTriggered: if (!dockButton.exiting && !root.draggedId) {
+                            notificationPreview.layoutCards();
+                            dockButton.menuOpen = true;
+                        }
+                    }
+
                     ShellPopup {
                         id: appMenu
                         objectName: "dockAppMenu"
+                        Timer {
+                            id: closeClickGuard
+                            interval: 350
+                            onTriggered: appMenu.dismissOnOutsideClick = true
+                        }
                         readonly property var mediaPlayers: Mpris.players.values.filter(player => MediaMatch.matches(player, dockButton.currentGroup))
                         revealOriginY: popupHeight
                         popupWidth: mediaPlayers.length > 0 || dockButton.notificationCount > 0 || notificationPreview.renderedNotificationCount > 0 ? 320 : 280
@@ -1267,7 +1440,7 @@ PanelWindow {
                                 MenuAction {
                                     cornerRadius: appMenu.contentRadius
                                     navigation: menuNavigation
-                                    label: "Open new window"
+                                    label: "Launch new..."
                                     visible: dockButton.currentGroup.desktopEntry !== null
                                     onTriggered: {
                                         root.launch(dockButton.currentGroup, true);
@@ -1281,14 +1454,15 @@ PanelWindow {
                                 }
 
                                 MenuSection {
-                                    label: "Application"
+                                    label: dockButton.currentGroup.desktopEntry?.name || dockButton.currentGroup.id
                                     visible: desktopActions.count > 0
                                 }
 
                                 Repeater {
                                     id: desktopActions
 
-                                    model: dockButton.currentGroup.desktopEntry ? dockButton.currentGroup.desktopEntry.actions : []
+                                    model: dockButton.currentGroup.windows.length > 0 && dockButton.currentGroup.desktopEntry
+                                        ? dockButton.currentGroup.desktopEntry.actions : []
 
                                     delegate: MenuAction {
                                     cornerRadius: appMenu.contentRadius
@@ -1314,7 +1488,7 @@ PanelWindow {
                                 }
 
                                 Repeater {
-                                    model: dockButton.currentGroup.windows
+                                    model: ScriptModel { values: dockButton.currentGroup.windows }
 
                                     delegate: MenuAction {
                                     cornerRadius: appMenu.contentRadius
@@ -1327,8 +1501,12 @@ PanelWindow {
                                         selectedWindow: !!modelData && (modelData.activated
                                             || (appMenu.visible && !ToplevelManager.activeToplevel && root.lastActiveWindow === modelData))
                                         onCloseRequested: {
-                                            if (modelData)
-                                                modelData.close();
+                                            if (modelData) {
+                                                appMenu.dismissOnOutsideClick = false;
+                                                closeClickGuard.restart();
+                                                const window = modelData;
+                                                Qt.callLater(() => { if (window) window.close(); });
+                                            }
                                         }
                                         onTriggered: {
                                             if (modelData)
@@ -1404,6 +1582,8 @@ PanelWindow {
         readonly property bool menuEntry: true
         property url iconSource: ""
         property bool closable: false
+        property bool closing: false
+        Timer { id: closeRetry; interval: 10000; onTriggered: action.closing = false }
         property bool selectedWindow: false
         signal closeRequested()
         property var navigation: null
@@ -1471,8 +1651,25 @@ PanelWindow {
                     Layout.alignment: Qt.AlignVCenter
                     flat: true
                     hoverEnabled: true
-                    text: "×"
-                    Accessible.name: "Close " + action.label
+                    enabled: !action.closing
+                    contentItem: Item {
+                        Text {
+                            anchors.centerIn: parent
+                            visible: !action.closing
+                            text: "\u00d7"
+                            color: Theme.text
+                            font.pixelSize: 22
+                        }
+                        PreviewSpinner {
+                            anchors.centerIn: parent
+                            implicitWidth: 22
+                            implicitHeight: 22
+                            loading: action.closing
+                            colour: Theme.text
+                            Accessible.name: "Closing " + action.label
+                        }
+                    }
+                    Accessible.name: (action.closing ? "Closing " : "Close ") + action.label
                     showFocusRing: action.navigation !== null && action.navigation.keyboardNavigation
                     background: Rectangle {
                         radius: closeWindow.cornerRadius
@@ -1486,6 +1683,8 @@ PanelWindow {
                     onClicked: {
                         if (action.navigation)
                             action.navigation.pointerActivate();
+                        action.closing = true;
+                        closeRetry.restart();
                         action.closeRequested();
                     }
                 }

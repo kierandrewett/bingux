@@ -17,6 +17,33 @@ class CapturePolicy(unittest.TestCase):
         worker.encoder_works = Mock(side_effect=lambda name: name in usable)
         return worker
 
+    def test_window_crop_fallback_removes_monitor_padding(self):
+        capture.Gst.init(None)
+        buffer = capture.Gst.Buffer.new()
+        bounds = capture.window_crop(buffer, 3440, 1440, {"bufferWidth": 1280, "bufferHeight": 786})
+        self.assertEqual(bounds, {"left": 0, "top": 0, "right": 2160, "bottom": 654})
+        with self.assertRaises(ValueError):
+            capture.window_crop(buffer, 3440, 1440)
+
+    def test_window_id_validation(self):
+        self.assertEqual(capture.settings({"target": "window", "windowId": "1447104021"})["windowId"], "1447104021")
+        for identity in ("wrong", "-1", "0", str(2**64)):
+            with self.assertRaises(ValueError):
+                capture.settings({"target": "window", "windowId": identity})
+
+    def test_native_window_uses_selected_identity(self):
+        worker = capture.Capture.__new__(capture.Capture)
+        worker.job = {"target": "window", "windowId": "1447104021", "cursor": False, "kind": "screenshot"}
+        worker.call = Mock(side_effect=[("/session",), ("/stream",), ()])
+        worker.bus = Mock()
+        worker.refresh_window_bounds = Mock()
+        worker.subscriptions = []
+        worker.native_stream()
+        request = worker.call.call_args_list[1].args
+        self.assertEqual(request[3], "RecordWindow")
+        self.assertEqual(request[4], "(a{sv})")
+        self.assertEqual(request[5][0]["window-id"].unpack(), 1447104021)
+
     def test_shutter_respects_event_sound_preference(self):
         for enabled in (False, True):
             with self.subTest(enabled=enabled), patch.object(capture.shutil, "which", return_value="/usr/bin/canberra-gtk-play"), \

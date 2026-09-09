@@ -6,9 +6,18 @@ NotificationStack {
     objectName: "dockNotifications"
     property var entries: []
     property bool menuActive: false
-    // Hidden app menus must not rebuild notification cards on every model update.
-    presentedEntries: menuActive ? entries : []
-    onMenuActiveChanged: if (!menuActive) Qt.callLater(root.resetPresentation)
+    // Keep a prepared snapshot while closed. Incoming notifications must not
+    // rebuild hidden cards; refresh them only on hover or an open request.
+    property var preparedEntries: []
+    function prepare() {
+        if (preparedEntries.length !== entries.length || entries.some((entry, index) => entry !== preparedEntries[index]))
+            preparedEntries = entries.slice();
+    }
+    presentedEntries: menuActive ? entries : preparedEntries
+    onMenuActiveChanged: {
+        if (menuActive) prepare();
+        else preparedEntries = entries.slice();
+    }
     historyMode: true
     groupNotifications: false
     animationsEnabled: false

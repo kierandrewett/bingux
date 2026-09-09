@@ -11,7 +11,7 @@ Scope {
     required property var notificationState
     required property var dockView
     property var inputSelector: null
-    property var applications: DesktopEntries.applications.values
+    property var applications: ApplicationCatalog.entries
     property var windowIds: new Map()
     property int nextWindowId: 0
     readonly property string instance: Date.now().toString(36)

@@ -1,5 +1,8 @@
 # Quickshell desktop
 
+For other desktops, see [portable testing](../../docs/portable-testing.md).
+Use `scripts/test-desktop` for an isolated nested Sway session.
+
 Run this directory with `qs --path shell/bingux`. Use a Quickshell package built
 against its runtime Qt version. Mixing distro Qt updates with an older
 Quickshell binary can cause crashes.

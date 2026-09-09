@@ -32,6 +32,7 @@ Flickable {
     flickableDirection: Flickable.HorizontalFlick
     boundsBehavior: Flickable.StopAtBounds
     clip: true
+    HorizontalWheelScroll { viewport: horizontal }
     ScrollBar.horizontal: ScrollBar { policy: horizontal.contentWidth > horizontal.width ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff }
     WheelHandler {
         target: null
@@ -43,10 +44,11 @@ Flickable {
             // Four rows per notch; fractional high-resolution input accumulates
             // into whole rows. Assign directly, without flicking or animation.
             const sideways = (event.modifiers & Qt.ShiftModifier) !== 0;
-            const dx = sideways ? event.angleDelta.y : event.angleDelta.x;
+            const dx = sideways ? event.angleDelta.y : 0;
             const dy = sideways ? 0 : event.angleDelta.y;
-            const px = sideways ? event.pixelDelta.y : event.pixelDelta.x;
+            const px = sideways ? event.pixelDelta.y : 0;
             const py = sideways ? 0 : event.pixelDelta.y;
+            if (!dx && !dy && !px && !py) { event.accepted = false; return; }
             remainderX += px ? px / 34 : dx / 30;
             remainderY += py ? py / horizontal.rowHeight : dy / 30;
             const xSteps = Math.trunc(remainderX);

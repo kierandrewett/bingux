@@ -58,6 +58,18 @@ let
         cp -R ${shellFiles}/. "$out/"
         cp ${profileSettings} "$out/ProfileSettings.qml"
     '';
+    settingsPlatform = pkgs.callPackage ../../packages/bingux-settings/platform { };
+    settingsApp = pkgs.writeShellApplication {
+        name = "bingux-settings";
+        runtimeInputs = [ cfg.package ];
+        text = ''
+            export QML_IMPORT_PATH=${settingsPlatform}/lib/qt-6/qml
+            export BINGUX_SETTINGS_QML=${shellSource}/settings.qml
+            export BINGUX_QUICKSHELL=${lib.getExe cfg.package}
+            export BINGUX_SETTINGS_HELPER=${lib.getExe settingsBackend}
+            ${builtins.readFile ../../packages/bingux-settings/bingux-settings}
+        '';
+    };
     statusdPackage = pkgs.callPackage ../../packages/bingux-statusd { };
     searchdPackage = pkgs.callPackage ../../packages/bingux-searchd { };
     terminalWidget = pkgs.callPackage ../../packages/bingux-qmltermwidget { };
@@ -294,19 +306,50 @@ in
         bingux.desktop.gnoblin.settings = {
             shell.osd = false;
             window-rules = lib.mkAfter [ {
-                match.layer = "^bingux-osd$";
+                # Clip the client and draw both borders with the same shape.
+                match.type = "window";
+                corners = { radius = 14; smoothing = 0.0; mode = "force"; shadow-animation = { duration = 180; easing = "ease-out-cubic"; }; shadow = false; };
+                # Applications and the X11 frame already provide their outline.
+                # Keep this compositor border disabled to avoid stacked rings.
+                borders = {
+                    inner-width = 0;
+                    inner-color = "#505050bf";
+                    # Both compositor outline modes stay disabled here.
+                    outer-width = 0;
+                    outer-color = "#00000000";
+                    radius = 14;
+                    smoothing = 0.0;
+                };
+            } {
+                match.type = "window";
+                match.focused = true;
+                corners.shadow = false;
+            } {
+                match.layer = "^(bingux-osd|bingux-snap-preview)$";
                 animation = "none";
                 opacity = 1.0;
                 blur = 0;
+            } {
+                # Bingux keeps popup entry motion; the compositor owns the exit.
+                match.layer = "^gnoblin-shell-popup$";
+                animation = { "in" = "none"; out = "fade"; duration = 120; easing = "ease-out-cubic"; };
+            } {
+                match.layer = "^bingux-search$";
+                animation = { "in" = "none"; out = "fade"; duration = 65; easing = "ease-out-cubic"; };
             } {
                 # These surfaces are positioned or animated by Bingux itself.
-                match.layer = "^(bingux-bar-tooltip|gnoblin-dock-tooltip|gnoblin-shell-popup|bingux-popup-dismiss|gnoblin-dock-launch|bingux-notifications)$";
+                match.layer = "^(bingux-bar-tooltip|gnoblin-dock-tooltip|bingux-popup-dismiss|gnoblin-dock-launch|bingux-notifications)$";
                 animation = "none";
             } {
-                # Let QML own panel and popup colours, including translucent outlines.
+                # Handles must map at the sidebar boundary, not slide in from the monitor edge.
+                match.layer = "^bingux-sidebar-(edge|button|grip|corner)$";
+                animation = "none";
+            } {
+                # QML owns panel colours; the compositor still blurs the backdrop.
                 match.layer = "^(bingux-top-bar|bingux-terminal-sidebar|bingux-sidebar-corner|bingux-panel-outline|bingux-dock|bingux-search|gnoblin-shell-popup|bingux-bar-tooltip|gnoblin-dock-tooltip|bingux-notifications|bingux-capture-feedback)$";
+                blur-ignore-shadows = true;
                 opacity = 1.0;
-                blur = 0;
+                blur = 24;
             } ];
             shell.input-source-switcher = false;
             keybindings.wm.switch-input-source = [ ];
@@ -320,11 +363,11 @@ in
         };
 
         home-manager.users.${config.bingux.user.name} = {
-            home.packages = [ binguxctl ];
+            home.packages = [ binguxctl settingsApp ];
             xdg.desktopEntries.bingux-settings = {
                 name = "Bingux Settings";
                 comment = "Search, AI, previews and desktop preferences";
-                exec = "${binguxctl}/bin/binguxctl settings open";
+                exec = "${settingsApp}/bin/bingux-settings";
                 icon = "preferences-system";
                 categories = [ "Settings" "DesktopSettings" ];
                 terminal = false;

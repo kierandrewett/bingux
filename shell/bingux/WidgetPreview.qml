@@ -24,6 +24,11 @@ FocusScope {
         spec.icon || "", !["clock", "keyboard"].includes(widgetId), ["clock", "keyboard", "metrics"].includes(widgetId))
     readonly property Item visualItem: frame
     readonly property Item previewControl: component.item
+    // Palette cards render the real widget components with sample data, but
+    // they are never live controls. Keep the whole preview tree disabled so
+    // a child MouseArea, slider or keyboard handler cannot leak through the
+    // drag handle while customising.
+    enabled: false
     clip: true
     function controlPresentation(label, icon, nativeIcon, nativeText) {
         return DesktopLayout.presentation(DesktopEditing.desktop, widgetId, ownContainer || nativeGroup || container,

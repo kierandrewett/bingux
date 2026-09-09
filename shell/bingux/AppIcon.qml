@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import "MediaMatch.js" as MediaMatch
 
@@ -9,6 +10,9 @@ Item {
     property var presentation: null
     property var activeStreams: []
     property var notifications: []
+    property var additionalBadges: []
+    readonly property var badges: [audioBadge, notificationBadge].concat(additionalBadges)
+    readonly property bool hasBadges: badges.some(badge => badge.visible && badge.opacity > 0)
     property int implicitSize: Theme.dockIconSize
     property alias source: image.source
     readonly property string normalizedSource: image.normalizedSource
@@ -29,8 +33,46 @@ Item {
         anchors.fill: parent
         anchors.bottomMargin: root.presentation?.showText && root.presentation?.showIcon ? 16 : 0
         implicitSize: root.implicitSize
+        layer.enabled: root.hasBadges
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: badgeMaskTexture
+            maskInverted: true
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
+        }
         source: Quickshell.iconPath(root.presentation?.icon || (root.group && root.group.desktopEntry && root.group.desktopEntry.icon
             ? root.group.desktopEntry.icon : "application-x-executable"), "application-x-executable")
+    }
+    // The mask removes icon pixels, so hover, selection and wallpaper show
+    // through the clearance around each badge. Track the animated badge shape.
+    Item {
+        id: badgeMask
+        width: image.width
+        height: image.height
+        visible: root.hasBadges
+        Repeater {
+            model: root.badges
+            Rectangle {
+                required property var modelData
+                readonly property point position: image.mapFromItem(modelData.parent, modelData.x, modelData.y)
+                x: position.x - modelData.cutoutMargin
+                y: position.y - modelData.cutoutMargin
+                width: modelData.width + modelData.cutoutMargin * 2
+                height: modelData.height + modelData.cutoutMargin * 2
+                radius: modelData.radius + modelData.cutoutMargin
+                color: "white"
+                opacity: modelData.visible ? modelData.opacity : 0
+                antialiasing: true
+            }
+        }
+    }
+    ShaderEffectSource {
+        id: badgeMaskTexture
+        sourceItem: badgeMask
+        hideSource: true
+        live: root.hasBadges
+        visible: false
     }
     Text {
         visible: !!root.presentation?.showText
@@ -43,6 +85,7 @@ Item {
     }
     IconAccent { id: accent; source: image.normalizedSource }
     DockBadge {
+        id: audioBadge
         objectName: "dockAudioBadge"
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -54,6 +97,7 @@ Item {
         foreground: root.accentForeground
     }
     DockBadge {
+        id: notificationBadge
         objectName: "dockNotificationBadge"
         anchors.right: parent.right
         anchors.top: parent.top

@@ -18,6 +18,26 @@ Scope {
     property bool regionDragging: false
     property Item previewItem: null
     property var capabilities: ({})
+    property var captureWindows: []
+    property var selectedWindow: null
+    readonly property bool directWindowPicker: !!capabilities.windowPicker && preferences.backend === "auto"
+    function windowAt(x, y) {
+        return captureWindows.find(window => x >= window.x && y >= window.y
+            && x < window.x + window.width && y < window.y + window.height) || null;
+    }
+    function hoverWindow(screen, x, y) {
+        if (preferences.target !== "window" || !directWindowPicker) return;
+        activeScreen = screen;
+        selectedWindow = windowAt(screen.x + x, screen.y + y);
+    }
+    function cycleWindow(direction) {
+        if (!captureWindows.length) return;
+        const index = captureWindows.indexOf(selectedWindow);
+        selectedWindow = captureWindows[(index + direction + captureWindows.length) % captureWindows.length];
+        activeScreen = Quickshell.screens.find(screen => selectedWindow.x < screen.x + screen.width
+            && selectedWindow.x + selectedWindow.width > screen.x && selectedWindow.y < screen.y + screen.height
+            && selectedWindow.y + selectedWindow.height > screen.y) || activeScreen;
+    }
     property var activeScreen: screen || Quickshell.screens[0]
     property alias region: captureSession.region
     property alias hasRegion: captureSession.hasRegion
@@ -90,12 +110,15 @@ Scope {
 
     function send(record) { worker.write(JSON.stringify(record) + "\n"); }
     function open() {
+        if (!worker.running) worker.running = true;
         if (recording) { stop(); return; }
         if (busy) { send({command: "cancel"}); return; }
         if (opened || state === "preparing") { close(); return; }
         feedback.visible = false;
         captureSession.requested = true;
         message = "";
+        selectedWindow = null;
+        captureWindows = [];
         state = "preparing";
         const nextScreen = screen || Quickshell.screens[0];
         const changedScreen = activeScreen !== nextScreen;
@@ -121,14 +144,16 @@ Scope {
     function stop() { send({command: "stop"}); }
     function take() {
         if (!ready || busy) return;
-        if (preferences.target === "window" && !capabilities.window) return;
+        if (preferences.target === "window" && (!capabilities.window || (directWindowPicker && !selectedWindow))) return;
         const s = activeScreen;
+        const windowId = preferences.target === "window" && directWindowPicker ? selectedWindow.id : undefined;
         captureSession.requested = false;
         opened = false;
         state = "countdown";
         optionsOpen = false;
         send({command: "capture", kind: preferences.kind, target: preferences.target, screen: s.name,
             previewToken: root.previewToken,
+            windowId: windowId,
             region: {x: Math.round(s.x + region.x), y: Math.round(s.y + region.y), width: Math.round(region.width), height: Math.round(region.height)},
             cursor: preferences.cursor, copy: preferences.copy, delay: preferences.delay, fps: preferences.fps,
             maxHeight: preferences.maxHeight, quality: preferences.quality, audio: preferences.audio,
@@ -140,6 +165,7 @@ Scope {
             if (state === "preparing") preparePreview();
         } else if (event.event === "preview") {
             if (state !== "preparing" || event.request !== previewRequest) return;
+            captureWindows = event.windows || [];
             previews = event.images;
             previewToken = event.token;
             state = "selecting";
@@ -152,6 +178,7 @@ Scope {
         } else if (event.event === "starting") {
             state = "starting";
         } else if (event.event === "recording") {
+            feedback.visible = false;
             state = "recording"; startedAt = Number.isFinite(event.started) ? event.started * 1000 : Date.now();
             elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
         } else if (event.event === "finalizing") {
@@ -170,7 +197,7 @@ Scope {
     Process {
         id: worker
         command: Quickshell.env("BINGUX_CAPTURE_HELPER") ? [Quickshell.env("BINGUX_CAPTURE_HELPER")]
-            : ["python3", "-u", decodeURIComponent(Qt.resolvedUrl("capture_backend.py").toString().replace(/^file:\/\//, ""))]
+            : ["python3", "-u", decodeURIComponent(Qt.resolvedUrl("capture_service.py").toString().replace(/^file:\/\//, ""))]
         running: true
         stdinEnabled: true
         stdout: SplitParser {
@@ -182,8 +209,10 @@ Scope {
         onExited: {
             const wasActive = root.opened || root.busy;
             root.ready = false;
-            root.state = "error";
-            root.message = "Capture helper stopped. Check Python, GStreamer and PipeWire dependencies.";
+            if (root.state !== "error") {
+                root.state = "error";
+                root.message = "Capture connection stopped. Open Capture to reconnect to the recorder.";
+            }
             if (wasActive) feedback.visible = true;
         }
     }
@@ -216,12 +245,14 @@ Scope {
                 return JSON.stringify({ok: false, error: "Open the capture selector before taking a capture"});
             if (preferences.target === "window" && !root.capabilities.window)
                 return JSON.stringify({ok: false, error: "Window capture is unavailable"});
+            if (preferences.target === "window" && root.directWindowPicker && !root.selectedWindow)
+                return JSON.stringify({ok: false, error: "Select a window first"});
             root.take();
             return JSON.stringify({ok: true});
         }
         function stop(): void { root.stop(); }
         function cancel(): void { if (root.busy) root.send({command: "cancel"}); else root.close(); }
-        function status(): string { return JSON.stringify({state: root.state, ready: root.ready, opened: root.opened, mode: preferences.kind, target: preferences.target, elapsed: root.elapsed, savedPath: root.savedPath, message: root.message, requested: captureSession.requested, region: root.region, dragging: root.regionDragging, screen: root.activeScreen ? {width: root.activeScreen.width, height: root.activeScreen.height} : null, capabilities: root.capabilities}); }
+        function status(): string { return JSON.stringify({state: root.state, ready: root.ready, opened: root.opened, mode: preferences.kind, target: preferences.target, elapsed: root.elapsed, savedPath: root.savedPath, message: root.message, requested: captureSession.requested, selectedWindow: root.selectedWindow, windows: root.captureWindows, region: root.region, dragging: root.regionDragging, screen: root.activeScreen ? {width: root.activeScreen.width, height: root.activeScreen.height} : null, capabilities: root.capabilities}); }
     }
     Timer {
         interval: 1000; running: root.busy; repeat: true
@@ -239,6 +270,7 @@ Scope {
             screen: modelData
             visible: root.opened
             onVisibleChanged: if (visible && active) root.previewItem = overlay.contentItem
+            onActiveChanged: if (visible && active) root.previewItem = overlay.contentItem
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.layer: WlrLayer.Overlay
@@ -261,6 +293,18 @@ Scope {
                 enabled: root.opened && overlay.active && !root.optionsOpen && !root.regionDragging
                 onActivated: root.take()
             }
+            Shortcut {
+                sequence: "Tab"
+                context: Qt.ApplicationShortcut
+                enabled: root.opened && overlay.active && preferences.target === "window" && root.directWindowPicker && !root.optionsOpen
+                onActivated: root.cycleWindow(1)
+            }
+            Shortcut {
+                sequence: "Shift+Tab"
+                context: Qt.ApplicationShortcut
+                enabled: root.opened && overlay.active && preferences.target === "window" && root.directWindowPicker && !root.optionsOpen
+                onActivated: root.cycleWindow(-1)
+            }
             Rectangle { anchors.fill: parent; color: "#99000000"; visible: !overlay.active || preferences.target === "window" }
             Rectangle { x: 0; y: 0; width: parent.width; height: overlay.selection.y; color: "#88000000"; visible: overlay.active && preferences.target === "region" }
             Rectangle { x: 0; y: overlay.selection.y; width: overlay.selection.x; height: overlay.selection.height; color: "#88000000"; visible: overlay.active && preferences.target === "region" }
@@ -272,6 +316,13 @@ Scope {
                 objectName: "captureRegionDraw"
                 anchors.fill: parent
                 preventStealing: true
+                hoverEnabled: preferences.target === "window" && root.directWindowPicker
+                onEntered: root.hoverWindow(overlay.modelData, mouseX, mouseY)
+                onClicked: mouse => {
+                    if (preferences.target !== "window" || !root.directWindowPicker) return;
+                    root.hoverWindow(overlay.modelData, mouse.x, mouse.y);
+                    if (root.selectedWindow) root.take();
+                }
                 cursorShape: preferences.target === "region" ? Qt.CrossCursor : Qt.ArrowCursor
                 property point origin
                 onPressed: mouse => {
@@ -283,10 +334,51 @@ Scope {
                 onReleased: root.regionDragging = false
                 onCanceled: root.regionDragging = false
                 onPositionChanged: mouse => {
+                    root.hoverWindow(overlay.modelData, mouse.x, mouse.y);
                     if (!pressed || preferences.target !== "region") return;
                     const x = overlay.edgeCoordinate(mouse.x, overlay.width);
                     const y = overlay.edgeCoordinate(mouse.y, overlay.height);
                     root.region = Qt.rect(Math.min(origin.x, x, overlay.width - 2), Math.min(origin.y, y, overlay.height - 2), Math.max(2, Math.abs(x - origin.x)), Math.max(2, Math.abs(y - origin.y)));
+                }
+            }
+            Rectangle {
+                objectName: "captureWindowHighlight"
+                readonly property var window: root.selectedWindow
+                visible: preferences.target === "window" && root.directWindowPicker && window !== null
+                x: window ? Math.max(0, window.x - overlay.modelData.x) : 0
+                y: window ? Math.max(0, window.y - overlay.modelData.y) : 0
+                width: window ? Math.max(0, Math.min(overlay.width, window.x + window.width - overlay.modelData.x) - x) : 0
+                height: window ? Math.max(0, Math.min(overlay.height, window.y + window.height - overlay.modelData.y) - y) : 0
+                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.3)
+                border.color: Theme.accent
+                border.width: 3
+                radius: 8
+                Column {
+                    anchors.centerIn: parent
+                    width: Math.max(0, Math.min(360, parent.width - 32))
+                    spacing: 12
+                    OsIconImage {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        implicitSize: 64
+                        readonly property var entry: root.selectedWindow ? (DesktopEntries.byId(root.selectedWindow.appId)
+                            || DesktopEntries.byId(root.selectedWindow.appId.replace(/\.desktop$/, ""))) : null
+                        source: Quickshell.iconPath(entry?.icon || "application-x-executable", "application-x-executable")
+                    }
+                    Text {
+                        width: parent.width
+                        text: root.selectedWindow?.title || root.selectedWindow?.appName || ""
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                        maximumLineCount: 2
+                        elide: Text.ElideRight
+                        horizontalAlignment: Text.AlignHCenter
+                        color: "white"
+                        style: Text.Outline
+                        styleColor: "#80000000"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 18
+                        font.weight: Font.Medium
+                    }
                 }
             }
             Rectangle {
@@ -359,12 +451,6 @@ Scope {
                     width: sizeLabel.implicitWidth + Theme.padding * 2; height: 28; radius: Theme.radius; color: Theme.popupSurface
                     Text { id: sizeLabel; anchors.centerIn: parent; text: Math.round(root.region.width) + " × " + Math.round(root.region.height); color: "white"; font.family: Theme.fontFamily; font.pixelSize: 12 }
                 }
-            }
-            Text {
-                visible: overlay.active && preferences.target === "window"
-                anchors.centerIn: parent
-                text: capabilities.window ? "Choose a window in the desktop picker\nOnly that window will be captured, even if it moves." : "Window capture is not supported by this desktop portal."
-                color: "white"; font.family: Theme.fontFamily; font.pixelSize: 20; horizontalAlignment: Text.AlignHCenter; lineHeight: 1.5
             }
             Text {
                 visible: overlay.active && root.message !== ""
@@ -487,9 +573,9 @@ Scope {
                     CaptureButton {
                         text: preferences.kind === "recording" ? "Record" : "Capture"
                         iconName: preferences.kind === "recording" ? "media-record-symbolic" : ""
-                        description: !root.ready ? "Preparing capture…" : preferences.target === "window" ? "Choose window and capture" : "Capture (Enter)"
+                        description: !root.ready ? "Preparing capture…" : preferences.target === "window" ? (root.directWindowPicker ? "Capture selected window (Enter)" : "Choose window and capture") : "Capture (Enter)"
                         primary: true
-                        enabled: root.ready && (preferences.target !== "window" || !!root.capabilities.window)
+                        enabled: root.ready && (preferences.target !== "window" || (!!root.capabilities.window && (!root.directWindowPicker || root.selectedWindow !== null)))
                         onClicked: root.take()
                     }
                     CaptureButton { iconName: "window-close-symbolic"; description: "Cancel (Esc)"; onClicked: root.close() }

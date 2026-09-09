@@ -14,10 +14,12 @@ function restore(text, current, session) {
     try { data = JSON.parse(text || "{}"); } catch (_) { return current; }
     if (data.version !== 1 || !Array.isArray(data.entries)) return current;
     const entries = current.slice();
-    let nextId = Math.min(0, ...entries.map(entry => entry.notification.id)) - 1;
+    const knownKeys = new Set(entries.map(entry => entry.historyKey));
+    let nextId = entries.reduce((minimum, entry) => Math.min(minimum, entry.notification.id), 0) - 1;
     for (const record of data.entries) {
         if (!record || typeof record.key !== "string" || typeof record.summary !== "string"
-                || entries.some(entry => entry.historyKey === record.key)) continue;
+                || knownKeys.has(record.key)) continue;
+        knownKeys.add(record.key);
         const id = record.session === session && record.sourceId > 0 ? record.sourceId : nextId--;
         const notification = {id: id, appName: record.appName || "", desktopEntry: record.desktopEntry || "",
             appIcon: record.appIcon || "", summary: record.summary, body: record.body || "", actions: [],

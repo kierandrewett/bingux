@@ -58,6 +58,12 @@ ShellRoot {
                 mouseWheel(list, 80, 60, 0, -120, Qt.NoButton, Qt.ShiftModifier);
                 equal(viewport.contentX > 0, true, "Horizontal scroll retained");
                 viewport.contentX = 0;
+                const verticalBefore = list.contentY;
+                mouseWheel(viewport, 80, 60, -120, 0);
+                equal(viewport.contentX, 136, "Native horizontal wheel scrolls horizontally");
+                equal(list.contentY, verticalBefore, "Horizontal wheel preserves vertical offset");
+                mouseWheel(viewport, 80, 60, 120, 0);
+                equal(viewport.contentX, 0, "Horizontal wheel reverses to left edge");
                 table.mode = "services";
                 table.records = [{key: "a", name: "alpha.service", description: "First service", state: "active"}, {key: "b", name: "beta.service", description: "Second service", state: "failed"}];
                 wait(50);

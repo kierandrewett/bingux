@@ -224,6 +224,7 @@ Item {
                         spacing: 12
                         cacheBuffer: Math.max(0, height)
                         ScrollBar.vertical: ScrollBar {}
+                        HorizontalWheelScroll { viewport: pages }
                         ScrollBar.horizontal: ScrollBar {}
                         delegate: Item {
                             id: page

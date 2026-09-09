@@ -11,13 +11,14 @@ stdenvNoCC.mkDerivation {
     buildInputs = [ gst_all_1.gstreamer pipewire gdk-pixbuf ] ++ plugins;
     installPhase = ''
         mkdir -p "$out/bin" "$out/libexec"
+        cp ${../../shell/bingux/capture_service.py} "$out/libexec/capture_service.py"
         cp ${../../shell/bingux/capture_backend.py} "$out/libexec/capture_backend.py"
         cp ${../../shell/bingux/capture-notify.py} "$out/libexec/capture-notify.py"
         cp ${../../shell/bingux/capture-launch.py} "$out/libexec/capture-launch.py"
         makeWrapper ${python}/bin/python3 "$out/bin/bingux-capture-open" \
             --add-flags "$out/libexec/capture-launch.py"
         makeWrapper ${python}/bin/python3 "$out/bin/bingux-capture-backend" \
-            --add-flags "-u $out/libexec/capture_backend.py" \
+            --add-flags "-u $out/libexec/capture_service.py" \
             --prefix PATH : ${lib.makeBinPath [ grim wl-clipboard xdg-utils pulseaudio libcanberra-gtk3 ]} \
             --prefix XDG_DATA_DIRS : ${sound-theme-freedesktop}/share \
             --prefix GST_PLUGIN_SYSTEM_PATH_1_0 : ${lib.makeSearchPath "lib/gstreamer-1.0" (plugins ++ [ pipewire ])}

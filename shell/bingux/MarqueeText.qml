@@ -15,7 +15,7 @@ Item {
     readonly property real textWidth: measure.implicitWidth
     readonly property real overflow: Math.max(0, textWidth - width)
     readonly property real travel: textWidth + 32
-    property var layoutInputs: [text, restText, width, active, Theme.reducedMotion, pixelSize, fontWeight]
+    property var layoutInputs: [text, restText, width, active, visible, Theme.reducedMotion, pixelSize, fontWeight]
     onLayoutInputsChanged: reset()
     implicitHeight: measure.implicitHeight
     clip: true
@@ -25,7 +25,7 @@ Item {
         scroll.stop();
         offset = 0;
         revealed = false;
-        if (active && !Theme.reducedMotion) dwell.restart();
+        if (active && visible && !Theme.reducedMotion) dwell.restart();
     }
     function scrollBy(delta) {
         dwell.stop();
@@ -37,7 +37,7 @@ Item {
         id: dwell
         interval: 500
         onTriggered: {
-            if (root.active && root.overflow > 0) {
+            if (root.active && root.visible && root.overflow > 0) {
                 root.revealed = true;
                 scroll.restart();
             }

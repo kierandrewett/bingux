@@ -10,10 +10,15 @@ QtObject {
     property int boundCount: 0
     property int sessionSerial: 0
     property var capabilities: []
-    signal uiState(string name, var state)
-    signal uiCommand(string name, var command)
     property bool trackWindows: false
     property bool trackPrivacy: false
+    property bool trackWindowDrag: false
+    signal uiState(string name, var state)
+    signal uiCommand(string name, var command)
+    signal windowDrag(var state)
+    signal layerAnimationPolicy(var state)
+    signal snapContext(var state)
+    signal snapCompleted(var state)
     signal privacySnapshot(var state)
     readonly property bool ready: socket.connected && boundCount === bindings.length
     readonly property bool connected: socket.connected
@@ -41,6 +46,7 @@ QtObject {
         boundCount = 0;
         send({op: "clear"});
         if (trackWindows) send({op: "windows"});
+        if (trackWindowDrag) send({op: "window-drag"});
         if (trackPrivacy) send({op: "privacy"});
         if (enabled) for (const binding of bindings) send(Object.assign({op: "bind"}, binding));
     }
@@ -62,6 +68,7 @@ QtObject {
                     if (record.event === "hello") { root.capabilities = record.features || []; root.registerBindings(); }
                     else if (record.event === "ui-state") root.uiState(record.name, record.state);
                     else if (record.event === "ui-command") root.uiCommand(record.name, record.command);
+                    else if (record.event === "layer-animation-policy") root.layerAnimationPolicy(record);
                     else if (record.event === "bound") root.boundCount++;
                     else if (record.event === "activated") { root.sessionSerial = record.session || 0; root.activated(record.id, record.first, record.modifiers); }
                     else if (record.event === "key") root.keyPressed(record.key, record.modifiers);
@@ -69,6 +76,9 @@ QtObject {
                     else if (record.event === "typed") root.textInserted(record.window);
                     else if (record.event === "input-anchor") root.inputAnchor(record);
                     else if (record.event === "cancelled") root.cancelled();
+                    else if (record.event === "window-drag") root.windowDrag(record);
+                    else if (record.event === "snap-completed") root.snapCompleted(record);
+                    else if (record.event === "snap-context") root.snapContext(record);
                     else if (record.event === "privacy") root.privacySnapshot(record);
                     else if (record.event === "windows") root.windowSnapshot(record.windows);
                     else if (record.event === "pointer") root.pointerPressed(record.x, record.y, record.button);
