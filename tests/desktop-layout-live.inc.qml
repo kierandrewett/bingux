@@ -9,20 +9,6 @@
     SignalSpy { id: movedNetworkRequests; target: DesktopEditing.sources["control-network"] || null; signalName: "navigationRequested" }
     Component { id: externalSettingsComponent; BinguxSettings {} }
     Component { id: samplePreviewComponent; WidgetPreview { width: 240; height: 160 } }
-    Connections {
-        target: desktopCustomiser
-        function onDraggedIdChanged() { console.log('DRAG_STATE', desktopCustomiser.draggedId); }
-        function onHoverZoneChanged() { console.log('DROP_STATE', desktopCustomiser.hoverZone); }
-    }
-    Connections {
-        target: terminalSidebar.contentSelector
-        function onVisibleChanged() { console.log('SELECTOR_VISIBLE', terminalSidebar.contentSelector.visible); }
-    }
-    Connections {
-        target: layoutTest.findChild(terminalSidebar.contentItem, 'sidebarContentPicker')
-        function onClicked() { console.log('SELECTOR_CLICKED'); }
-        function onPressedChanged() { console.log('SELECTOR_PRESSED', target.pressed); }
-    }
     TestCase {
         id: layoutTest
         // Start on a mapped surface; the editor window is created by this test.
