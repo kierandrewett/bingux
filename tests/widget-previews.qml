@@ -90,6 +90,74 @@ ShellRoot {
                     editor.desktop = {}; editor.layout = {};
                 }
             }
+            function test_utility_contexts_data() {
+                const rows = [];
+                for (const id of ["control-divider", "control-header-space", "control-customise"]) {
+                    for (const container of ["dock", "sidebar", "control-centre"])
+                        rows.push({tag: id + "-" + container, id, container});
+                }
+                return rows;
+            }
+            function test_status_presentation_data() {
+                return ["search", "clock", "controls", "metrics", "keyboard", "notifications", "overflow", "capture", "privacy"]
+                    .map(id => ({tag: id, id}));
+            }
+            function test_status_presentation(data) {
+                editor.desktop = {controlLayout: ControlLayout.defaults(), containers: {}, widgetOptions: {}};
+                editor.layout = DesktopLayout.defaults();
+                const preview = previewComponent.createObject(previewHost, {widgetId: data.id});
+                try {
+                    tryVerify(() => !!preview.previewControl, 1500);
+                    const item = preview.previewControl;
+                    for (const container of ["dock", "control-centre", "sidebar"]) {
+                        editor.layout = {[container]: container === "control-centre" ? [] : [data.id]};
+                        editor.desktop = {controlLayout: ControlLayout.move(ControlLayout.defaults(), "control-centre", data.id, container === "control-centre" ? 0 : -1),
+                            containers: {[container]: {display: "text"}}, widgetOptions: {}};
+                        compare(preview.container, container);
+                        verify(item.presentation.showText && !item.presentation.showIcon);
+                        editor.desktop = Object.assign({}, editor.desktop, {widgetOptions: {[data.id]: {display: "both", label: "My status", icon: "starred-symbolic"}}});
+                        compare(item.presentation.label, "My status"); compare(item.presentation.icon, "starred-symbolic");
+                        verify(item.presentation.showText && item.presentation.showIcon);
+                    }
+                    compare(item.implicitHeight, Theme.barHeight, "The preview retains its full pointer target");
+                    if (data.id === "notifications") {
+                        compare(item.count, 3);
+                        verify(!!findChild(item, "notificationCountBadge"), "Custom appearance retains the notification count");
+                    }
+                    verify(waitForRendering(preview, 2000)); capture("status-" + data.id);
+                } finally {
+                    preview.destroy(); wait(50);
+                    editor.desktop = {}; editor.layout = {};
+                }
+            }
+            function test_utility_contexts(data) {
+                editor.desktop = {controlLayout: ControlLayout.defaults(), containers: {}, widgetOptions: {}};
+                editor.layout = DesktopLayout.defaults();
+                if (data.container !== "control-centre") editor.layout = Object.assign({}, editor.layout, {[data.container]: [data.id]});
+                const preview = previewComponent.createObject(previewHost, {widgetId: data.id});
+                try {
+                    tryVerify(() => !!preview.previewControl, 1500);
+                    const item = preview.previewControl;
+                    const compact = data.container === "dock";
+                    if (data.id === "control-divider") {
+                        compare(item.implicitHeight, compact ? Theme.barHeight - 12 : 1);
+                        verify(compact ? item.width === 1 : item.width > item.height,
+                            "Panel dividers remain horizontal");
+                    } else if (data.id === "control-header-space") {
+                        compare(item.flexible, !compact);
+                        editor.desktop = Object.assign({}, editor.desktop, {widgetOptions: {[data.id]: {width: 41}}});
+                        compare(item.flexible, false); compare(item.implicitWidth, 41);
+                    } else {
+                        compare(item.implicitHeight, compact ? Theme.barHeight : 28);
+                        compare(item.presentation.showIcon, compact);
+                        compare(item.presentation.showText, !compact);
+                    }
+                    verify(waitForRendering(preview, 2000));
+                } finally {
+                    preview.destroy(); wait(50);
+                    editor.desktop = {}; editor.layout = {};
+                }
+            }
             function test_shared_group_previews() {
                 const originalSources = Object.assign({}, DesktopEditing.sources);
                 editor.desktop = {controlLayout: ControlLayout.defaults(),

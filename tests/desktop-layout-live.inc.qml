@@ -390,6 +390,9 @@
             tryVerify(() => topBar.overflowItems.length > 0, 2000);
             tryVerify(() => overflowButton.visible, 2000);
             verify(topBar.overflowItems.every(item => item.parent === overflowColumn));
+            clickNative(overflowButton, topBar.windowFor(overflowButton), overflowButton.width / 2, overflowButton.height / 2, false);
+            tryCompare(barOverflow, 'visible', true, 3000);
+            barOverflow.visible = false;
             console.log('DESKTOP_LAYOUT_LIVE_PASS');
             layoutReport.setText('PASS');
             } catch (error) { console.error("CUSTOMISE_TEST_FAILED", error.message, error.stack); layoutReport.setText("FAIL " + error.stack); }

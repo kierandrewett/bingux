@@ -33,7 +33,7 @@ layout tests does not prove that every existing desktop widget is editable.
 
 ## Next implementation boundary
 
-Audit the remaining status, utility and sidebar-panel previews and their
+Audit the remaining tray and sidebar-panel previews and their
 context-specific presentation. Individual control-centre actions, audio, battery,
 media and quick controls now inherit the same container, group and widget display
 settings as their native components. The three native control groups use the same overview view
@@ -186,6 +186,17 @@ their native background. The presentation fixture covers all fifteen individual
 controls in the dock, sidebar and control centre, both independently and within
 their groups. The previous implementation fails these assertions. Rendered samples
 verify compact audio, media and action controls and the full sidebar quick tile.
+
+The notification and overflow buttons now share their complete visual components
+between the live shell and palette. Notifications retain the count beside custom
+labels and icons. Recording and privacy samples inherit presentation settings;
+clock and keyboard samples use their displayed values. Dividers stay horizontal
+in panel containers, header spaces retain flexible or fixed sizing, and the
+Customise button uses its full panel appearance in the sidebar. Standalone checks
+cover these utility contexts and nine status widgets with container and per-widget
+overrides, with normal and reduced motion. Native notification-button clicks work
+after moving into the dock and control centre, and closing history retains the
+count. The shared buttons keep the original live geometry, backgrounds and actions.
 
 The disabled-control click failure also reproduced with native dock input.
 The shared edit handler was destroyed when created before its window existed,

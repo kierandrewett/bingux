@@ -10,6 +10,21 @@
     }
     Component { id: sampleComponent; WidgetPreview { width: 280; height: 160 } }
     SignalSpy { id: searchClicks; target: searchPill; signalName: "clicked" }
+    QtObject {
+        id: sampleNotification
+        property int id: 101
+        property real expireTimeout: 0
+        property string appName: "Files"
+        property string desktopEntry: ""
+        property string appIcon: "system-file-manager"
+        property string summary: "Download complete"
+        property string body: "A retained notification for the moved button."
+        property var actions: []
+        property bool tracked: false
+        signal closed(int reason)
+        function dismiss() {}
+        function expire() {}
+    }
     TestCase {
         parent: topBar.contentItem
         when: topBar.visible && BinguxPreferences.loaded && ControlCentreServices.preferencesReady && dock.appGroupsInitialised
@@ -87,6 +102,19 @@
                 }
                 verify(Number.isFinite(controlCentre.preferredX) && Number.isFinite(controlCentre.preferredY));
                 editor.cancel(); wait(200); compare(JSON.stringify(BinguxPreferences.data.desktop), original);
+                notificationState.accept(sampleNotification);
+                tryCompare(notificationButton, "count", 1, 3000);
+                for (const container of ["dock", "control-centre"]) {
+                    editor.open(); editor.put("notifications", container, 0); save();
+                    if (container === "control-centre") {
+                        controlCentre.visible = true; tryCompare(controlCentre, "revealScale", 1, 3000);
+                    }
+                    gesture(notificationButton, topBar.windowFor(notificationButton), notificationButton.width / 2, notificationButton.height / 2, ["--click-only"]);
+                    tryCompare(notificationCentre, "visible", true, 3000);
+                    notificationCentre.visible = false; wait(350);
+                    compare(notificationButton.count, 1, "Closing history keeps its notification badge");
+                }
+                editor.open(); editor.put("notifications", "top-right", 7); save();
                 editor.open(); editor.put("controls", "control-centre", 0); save();
                 controlCentre.visible = true; tryCompare(controlCentre, "revealScale", 1, 3000); wait(150);
                 gesture(systemPill, controlCentre.nativeWindow, systemPill.width / 2, 16, ["--click-only"]);

@@ -19,7 +19,9 @@ FocusScope {
     readonly property string groupContainer: DesktopLayout.zone(DesktopEditing.desktop.layout || {}, nativeGroup)
     readonly property string container: ownContainer || groupContainer || (nativeGroup ? "control-centre" : "top-right")
     readonly property bool barLayout: !["control-centre", "sidebar"].includes(container)
-    readonly property var face: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, container, spec.label || "", spec.icon || "", !["clock", "keyboard"].includes(widgetId), ["clock", "keyboard"].includes(widgetId))
+    readonly property string sampleLabel: ({clock: "Tue 8 Sep 12:30", keyboard: "en", overflow: "More", privacy: "Microphone in use"})[widgetId] || spec.label || ""
+    readonly property var face: DesktopLayout.presentation(DesktopEditing.desktop, widgetId, container, sampleLabel,
+        spec.icon || "", !["clock", "keyboard"].includes(widgetId), ["clock", "keyboard", "metrics"].includes(widgetId))
     readonly property Item visualItem: frame
     readonly property Item previewControl: component.item
     clip: true
@@ -83,7 +85,7 @@ FocusScope {
         barLayout: root.barLayout; barWindow: DesktopEditing.editor?.nativeWindow
         presentation: root.controlPresentation(player.trackTitle, "applications-multimedia-symbolic", true, true)
     } }
-    Component { id: divider; Rectangle { implicitWidth: root.container === "control-centre" ? 300 : 1; implicitHeight: root.container === "control-centre" ? 1 : Theme.barHeight - 12; color: Theme.outline; opacity: 0.5 } }
+    Component { id: divider; Rectangle { implicitWidth: root.barLayout ? 1 : 300; implicitHeight: root.barLayout ? Theme.barHeight - 12 : 1; color: Theme.outline; opacity: 0.5 } }
     Component { id: battery; BatteryStatus {
         available: true; summary: "Battery 84 percent, charging"
         barLayout: root.barLayout; barWindow: DesktopEditing.editor?.nativeWindow
@@ -91,8 +93,8 @@ FocusScope {
     } }
     Component { id: customiseButton; ActionButton {
         text: "Customise controls..."; iconName: "document-edit-symbolic"; flat: true
-        implicitHeight: root.container === "control-centre" ? 28 : Theme.barHeight
-        presentation: DesktopLayout.presentation(DesktopEditing.desktop, root.widgetId, root.container, text, iconName, root.container !== "control-centre", root.container === "control-centre")
+        implicitHeight: root.barLayout ? Theme.barHeight : 28
+        presentation: root.controlPresentation(text, iconName, root.barLayout, !root.barLayout)
     } }
     QtObject { id: sampleAudioNode; property bool ready: true; property var audio: QtObject { property real volume: 0.6; property bool muted: false } }
     Component {
@@ -116,7 +118,7 @@ FocusScope {
     }
     Component { id: decoration; DesktopDecoration { widgetId: root.widgetId } }
     Component { id: space; BarSpace {
-        flexible: root.widgetId.startsWith("spring") || (root.widgetId === "control-header-space" && root.container === "control-centre" && DesktopEditing.desktop.widgetOptions?.[root.widgetId]?.width === undefined)
+        flexible: root.widgetId.startsWith("spring") || (root.widgetId === "control-header-space" && !root.barLayout && DesktopEditing.desktop.widgetOptions?.[root.widgetId]?.width === undefined)
         gapSize: DesktopEditing.desktop.widgetOptions?.[root.widgetId]?.width || (root.widgetId === "control-header-space" ? 16 : 20)
         editing: true; implicitWidth: flexible ? 120 : gapSize
     } }
@@ -143,10 +145,17 @@ FocusScope {
             }
         }
     }
-    Component { id: notifications; NotificationIndicator { count: 3 } }
-    Component { id: capture; ActivityIndicator { barWindow: DesktopEditing.editor?.nativeWindow; filled: true; label: "00:24"; activityColor: Theme.recordingIndicator; trailingIcon: "screencast-stop-symbolic" } }
-    Component { id: privacy; ActivityIndicator { barWindow: DesktopEditing.editor?.nativeWindow; iconName: "microphone-sensitivity-high-symbolic" } }
-    Component { id: overflow; IconButton { iconName: "view-more-symbolic"; label: "More"; background: BarControlSurface {} } }
+    Component { id: notifications; BarNotificationButton { count: 3; presentation: root.face; barWindow: DesktopEditing.editor?.nativeWindow } }
+    Component { id: capture; ActivityIndicator {
+        barWindow: DesktopEditing.editor?.nativeWindow; filled: true; label: "00:24"
+        activityColor: Theme.recordingIndicator; trailingIcon: "screencast-stop-symbolic"
+        presentation: DesktopLayout.presentation(DesktopEditing.desktop, root.widgetId, root.container, label, "media-record-symbolic", false, true)
+    } }
+    Component { id: privacy; ActivityIndicator {
+        barWindow: DesktopEditing.editor?.nativeWindow; iconName: "microphone-sensitivity-high-symbolic"
+        presentation: root.face
+    } }
+    Component { id: overflow; BarOverflowButton { presentation: root.face; barWindow: DesktopEditing.editor?.nativeWindow } }
     Component {
         id: tray
         Row {

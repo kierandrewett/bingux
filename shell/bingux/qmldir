@@ -150,3 +150,5 @@ BatteryStatus 1.0 BatteryStatus.qml
 SidebarPanelWidget 1.0 SidebarPanelWidget.qml
 ControlCentreOverview 1.0 ControlCentreOverview.qml
 ControlGroupPreview 1.0 ControlGroupPreview.qml
+BarOverflowButton 1.0 BarOverflowButton.qml
+BarNotificationButton 1.0 BarNotificationButton.qml

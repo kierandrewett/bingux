@@ -732,58 +732,29 @@ ShellRoot {
                         BarTooltip { reorderable: true; anchorItem: systemPill; barWindow: topBar.windowFor(systemPill); requested: systemMouse.containsMouse; text: "Control Centre" + (systemIndicators.extraStatusDescription ? "\n" + systemIndicators.extraStatusDescription : "") }
                         MouseArea { id: systemMouse; parent: systemPill; anchors.fill: parent; hoverEnabled: true; onClicked: controlCentre.visible = !controlCentre.visible }
                     }
-                    AbstractButton {
+                    BarOverflowButton {
                         id: overflowButton
                         parent: topBar.hostFor(overflowButton)
-                        readonly property var presentation: topBar.appearance("overflow", "More", "view-more-symbolic", true, false)
+                        presentation: topBar.appearance("overflow", "More", "view-more-symbolic", true, false)
                         Layout.column: topBar.controlColumn(overflowButton)
                         Layout.row: topBar.controlRow(overflowButton)
                         visible: topBar.overflowItems.length > 0
-                        implicitWidth: presentation.custom ? overflowFace.implicitWidth + Theme.barPrimaryPadding * 2 : Theme.barEdgeHitWidth
-                        implicitHeight: Theme.barHeight
-                        hoverEnabled: true
-                        activeFocusOnTab: true
-                        Accessible.name: "More status controls"
+                        selected: barOverflow.visible
+                        barWindow: topBar.windowFor(overflowButton)
                         onClicked: barOverflow.visible = !barOverflow.visible
-                        Keys.onReturnPressed: clicked()
-                        background: BarControlSurface { hovered: overflowButton.hovered; pressed: overflowButton.down; selected: barOverflow.visible; focused: overflowButton.visualFocus }
-                        contentItem: Item {
-                            WidgetFace { id: overflowFace; anchors.centerIn: parent; visible: overflowButton.presentation.custom; presentation: overflowButton.presentation }
-                            SymbolicIcon { anchors.centerIn: parent; visible: !overflowButton.presentation.custom; implicitSize: Theme.iconSize; source: Quickshell.iconPath("view-more-symbolic") }
-                        }
-                        BarTooltip { reorderable: true; anchorItem: overflowButton; barWindow: topBar.windowFor(overflowButton); requested: overflowButton.hovered; text: "More status controls" }
                     }
-                    AbstractButton {
+                    BarNotificationButton {
                         id: notificationButton
-                        readonly property var presentation: topBar.appearance("notifications", "Notifications", "preferences-system-notifications-symbolic", true, false)
+                        presentation: topBar.appearance("notifications", "Notifications", "preferences-system-notifications-symbolic", true, false)
                         parent: topBar.hostFor(notificationButton); Layout.column: topBar.controlColumn(notificationButton); Layout.row: topBar.controlRow(notificationButton)
-                        visible: topBar.chosen(notificationButton) && notificationState.allEntries.length > 0
-                        implicitWidth: notificationFace.implicitWidth + Theme.barEdgeHitWidth - Theme.iconSize
-                        hoverEnabled: true
-                        implicitHeight: Theme.barHeight
-                        Accessible.name: "Notifications"
-                        Accessible.description: notificationState.allEntries.length + " notifications"
-                        onClicked: if (notificationState.allEntries.length > 0) notificationCentre.visible = !notificationCentre.visible
-                        contentItem: Item {
-                            RowLayout {
-                                id: notificationFace; anchors.centerIn: parent; spacing: Theme.gap
-                                WidgetFace { visible: notificationButton.presentation.custom; presentation: notificationButton.presentation }
-                                NotificationIndicator {
-                                    id: notificationCount
-                                    Connections {
-                                        target: notificationSurface.viewport
-                                        function onToastArchived() { notificationCount.playArchive(); }
-                                    }
-                                    count: notificationState.allEntries.length
-                                }
-                            }
-                        }
-                        BarTooltip { reorderable: true; anchorItem: notificationButton; barWindow: topBar.windowFor(notificationButton); requested: notificationButton.hovered; text: notificationState.allEntries.length > 0 ? "Notifications · " + notificationState.allEntries.length : "No notifications" }
-                        background: BarControlSurface {
-                            hovered: notificationButton.hovered
-                            pressed: notificationButton.down
-                            focused: notificationButton.activeFocus
-                            selected: notificationCentre.visible
+                        visible: topBar.chosen(notificationButton) && count > 0
+                        count: notificationState.allEntries.length
+                        selected: notificationCentre.visible
+                        barWindow: topBar.windowFor(notificationButton)
+                        onClicked: if (count > 0) notificationCentre.visible = !notificationCentre.visible
+                        Connections {
+                            target: notificationSurface.viewport
+                            function onToastArchived() { notificationButton.playArchive(); }
                         }
                     }
                 }
