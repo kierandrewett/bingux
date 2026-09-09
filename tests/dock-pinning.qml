@@ -112,6 +112,10 @@ ShellRoot {
             dock.refreshAppGroups();
             tryVerify(() => dock.appGroups[0].windows.length === 0);
             check(dock.testItems.count === 1 && !dock.appGroups[0].exiting, "Pinned app remains after its last window closes");
+            const idlePointer = dock.testItems.itemAt(0).testMouse;
+            mouseWheel(idlePointer, 20, 20, 0, -120);
+            check(dock.pendingLaunchGroupId === "" && Object.keys(dock.launchAttempts).length === 0,
+                  "Scrolling an idle dock app does not launch it");
             loader.active = false;
             wait(50);
             loader.active = true;

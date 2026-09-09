@@ -835,10 +835,10 @@ PanelWindow {
     }
 
     function cycleGroup(group, delta) {
-        if (group.windows.length === 0) {
-            root.launch(group);
+        // Scrolling cycles windows that already exist. It must never turn a
+        // wheel gesture into an application launch for an idle dock item.
+        if (!group || !group.windows || group.windows.length === 0)
             return ;
-        }
         const activeIndex = group.windows.indexOf(root.preferredWindow(group));
         const startIndex = activeIndex >= 0 ? activeIndex : 0;
         const direction = delta > 0 ? -1 : 1;
