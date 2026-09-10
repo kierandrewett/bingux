@@ -1,4 +1,4 @@
-"""Opt-in live test: Super release and config-owned popup command shortcuts."""
+"""Opt-in live test: Super release and direct popup shortcuts."""
 import json
 import subprocess
 import time
@@ -57,12 +57,10 @@ try:
     key(65515, True)
     time.sleep(.4)
     key(65515, False)
-    # Let Mutter process the release; do not wait for the popup or its IPC.
-    time.sleep(.015)
+    # Type immediately after release, without waiting for the popup or its IPC.
     for symbol in [97, 98, 65288, 99, 100]:  # ab, Backspace, cd
         key(symbol, True)
         key(symbol, False)
-        time.sleep(.01)
     wait_for(lambda: ctl("ipc", "search", "status")["acceptingKeyboard"])
     wait_for(lambda: ctl("ipc", "search", "status")["query"] == "acd")
     ctl("search", "close")
@@ -82,7 +80,7 @@ try:
     key(65513, False)
     wait_for(lambda: ctl("capture", "status")["opened"])
     ctl("capture", "cancel")
-    print("PASS: immediate typing survives opening; Super toggles only on release; Emoji and Capture use config commands; Super chords do not open Search")
+    print("PASS: immediate typing survives opening; Super toggles only on release; Emoji and Capture use persistent shortcuts; Super chords do not open Search")
 finally:
     for symbol in list(held):
         key(symbol, False)

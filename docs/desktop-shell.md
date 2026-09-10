@@ -22,7 +22,7 @@ binguxctl -> Quickshell IPC -> Bingux popup
                           bingux-searchd
 ```
 
-`gnoblin.toml` owns popup shortcuts and runs `binguxctl`; a bare `Super` binding toggles search on release without another key or pointer action. Search and Emoji no longer register popup shortcuts through daemon events or the shortcut-session socket. `bingux-statusd` owns the Gnoblin OSD and desktop-state signal subscription. The QML process does not parse Gnoblin D-Bus output or start long-lived daemon monitors. It connects to local Unix sockets and renders typed records from the daemons. `SystemIndicators` also runs a bounded `nmcli` probe to identify the current NetworkManager connection type; the probe is killed after two seconds and is retried every five seconds.
+Search, emoji, capture and the window switcher receive shortcuts over persistent compositor connections. Bare Super toggles search on release without another key or pointer action. Keep duplicate command bindings out of `gnoblin.toml`. `bingux-statusd` owns the Gnoblin OSD and desktop-state signal subscription. The QML process does not parse Gnoblin D-Bus output or start long-lived daemon monitors. It connects to local Unix sockets and renders typed records from the daemons. `SystemIndicators` also runs a bounded `nmcli` probe to identify the current NetworkManager connection type; the probe is killed after two seconds and is retried every five seconds.
 
 The shell and daemon run as the profile user. The socket directory has mode `0700`. The socket has mode `0600`. The service does not listen on TCP or another network transport.
 

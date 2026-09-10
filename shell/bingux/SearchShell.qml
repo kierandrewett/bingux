@@ -8,7 +8,9 @@ ShellRoot {
     UiSession {
         id: session
         sessionName: "search"
-        state: ({visible: search.visible, revealCompanions: search.chromeRevealed,
+        bindings: [{id: "search", accelerator: "Super", hold: 0, captureInput: true}]
+        onActivated: () => search.toggleSearch()
+        state: ({visible: search.visible, acceptingKeyboard: search.acceptingKeyboard, revealCompanions: search.chromeRevealed,
             surface: search.visible ? "bingux-search" : "bingux-search-chrome", companionsAbove: true,
             companions: ["bingux-top-bar", "bingux-dock", "bingux-panel-outline"]})
         onCommandReceived: command => {

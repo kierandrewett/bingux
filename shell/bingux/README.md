@@ -342,19 +342,18 @@ from `/proc/stat` every two seconds. Each graph has its own CPU ID and fixed
 0-100% scale, with shared 1m/5m history. New cores and counter resets start
 with an unavailable reading; removed cores leave gaps in history.
 
-Popup shortcuts are configured in `gnoblin.toml`: bare `Super` runs
-`binguxctl search toggle` on release. Emoji and capture use persistent shortcut
-connections in `EmojiShell.qml` and `CaptureShell.qml`, without launching commands. The search daemon no
-longer opens UI from D-Bus signals. Held window/input switchers retain their
-shortcut sessions. Run `python3 tests/popup-shortcuts-live.py` in an idle desktop
+Bare Super release, emoji, capture and Alt+Tab use persistent compositor
+connections. They do not launch a command or a UI process on each key press.
+The search daemon no longer opens UI from D-Bus signals. Held window/input
+switchers retain their shortcut sessions. Run `python3 tests/popup-shortcuts-live.py` in an idle desktop
 session to check release timing and chord suppression.
 
 Use a direct Quickshell executable for `BINGUX_QUICKSHELL`; the IPC client does
 not need the shell's QML/Mesa runtime launcher. `binguxctl --any-display` (or
 `BINGUX_ANY_DISPLAY=1`) supports a selected shell whose display identifier differs
-between runtimes. Search starts mostly opaque and completes its reveal in 90 ms.
+between runtimes. Search appears at full opacity in its final position.
 
-Search uses Gnoblin's `capture-input = true` shortcut option to buffer typing
+Search registers its shortcut with `captureInput: true` to buffer typing
 between Super release and keyboard focus. Its persistent compositor connection
 acknowledges the mapped surface and focused text input before native events are
 replayed, including editing keys. This is independent of the reveal animation.

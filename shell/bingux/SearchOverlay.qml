@@ -10,12 +10,13 @@ import "SearchGroups.js" as SearchGroups
 PanelWindow {
     id: root
 
+    // Keep the compositor buffer until the actual layer and input field have focus.
     readonly property bool acceptingKeyboard: visible && !closing && searchInput.activeFocus && searchInput.Window.active
     onAcceptingKeyboardChanged: if (acceptingKeyboard) inputHandoff.send({op: "shortcut-input", name: "search", state: "ready"})
     ShortcutSession {
         id: inputHandoff
         onReadyChanged: if (ready) {
-            send({op: "shortcut-input", name: "search", state: root.visible ? "prepared" : "closed"});
+            if (!root.visible) send({op: "shortcut-input", name: "search", state: "closed"});
             if (root.acceptingKeyboard) send({op: "shortcut-input", name: "search", state: "ready"});
         }
     }
@@ -273,7 +274,6 @@ PanelWindow {
             searchInput.text = "";
             visible = true;
         }
-        inputHandoff.send({op: "shortcut-input", name: "search", state: "prepared"});
         focusSearchInput();
         Qt.callLater(() => { if (root.acceptingKeyboard) inputHandoff.send({op: "shortcut-input", name: "search", state: "ready"}); });
     }

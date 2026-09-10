@@ -30,7 +30,8 @@ The fallback runs in the compositor, outside every Bingux process. It requires
 a responsive compositor. It does not provide a visual chooser while the
 switcher UI is unavailable.
 
-Super invokes `SearchShell.qml` directly through `binguxctl`. While search is
+Super release invokes `SearchShell.qml` through the persistent compositor connection.
+The compositor buffers typing until the search field acknowledges keyboard focus. While search is
 open, the compositor raises the existing top bar and dock buffers above
 fullscreen windows. It restores their order when the reveal ends or the search
 process disconnects.

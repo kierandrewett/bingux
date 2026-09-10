@@ -30,7 +30,7 @@ ctl = [str(repo / 'packages/binguxctl/binguxctl.py'), '--quickshell', qs, '--pat
 compat = os.environ.get('GNOBLIN_SHORTCUT_COMPAT')
 if compat:
     shutil.copy2(compat, scripts / 'config-shortcuts.js')
-(config / 'gnoblin/gnoblin.toml').write_text('[shell]\nwindow-switcher = false\n[[shortcuts]]\nname = "search"\nbinding = "Super"\ncapture-input = true\ncommand = ' + json.dumps(ctl + ['search', 'toggle']) + '\n')
+(config / 'gnoblin/gnoblin.toml').write_text('[shell]\nwindow-switcher = false\n')
 (scripts / 'popout-test.js').write_text('''
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -96,7 +96,7 @@ def wait(predicate, message, timeout=5):
             pass
         time.sleep(.04)
     run(['grim', '/tmp/popout-failure.png'])
-    raise AssertionError((message, state(), last, native('Pointer')))
+    raise AssertionError((message, ipc('search'), state(), last, native('Pointer')))
 
 def key(code, down): native('Key', code, 'true' if down else 'false')
 def tap(code): key(code, True); key(code, False)
@@ -147,6 +147,17 @@ try:
     wait(lambda: 'bingux-dock' in state()['order'] and 'bingux-top-bar' in state()['order'], 'desktop chrome mapped')
     native('Focus', 'Popout Other')
     native('Focus', 'Popout Fullscreen')
+    for hold in (0.4, 0.8, 0.1, 0.2, 0.1, 0.2):
+        key(125, True)
+        time.sleep(hold)
+        assert not ipc('search').get('visible'), 'Super must wait for release'
+        key(125, False)
+        # Type immediately, before waiting for the layer to map or take focus.
+        for code in (30, 48, 14, 46, 32):
+            key(code, True); key(code, False)
+        wait(lambda: ipc('search').get('query') == 'acd', 'direct Super preserves immediate editing input')
+        tap(1)
+        wait(lambda: not ipc('search').get('visible'), 'close after immediate typing')
     native('Fullscreen', 'Popout Fullscreen')
     wait(lambda: any(w['title'] == 'Popout Fullscreen' and w['fullscreen'] for w in state()['windows']), 'fullscreen')
     time.sleep(.5)
