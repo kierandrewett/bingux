@@ -3,14 +3,32 @@ import QtQuick
 // Shared tooltip surface for layer windows and anchored controls.
 Rectangle {
     id: root
+    SurfaceFade { target: root }
     // Layer windows must remain mapped until the shared exit finishes.
     property bool animated: false
     property bool shown: false
     property bool presented: false
     property bool motionReady: false
+    property bool compositorFade: false
     function updatePresentation() {
         if (!animated || !motionReady) return;
         motion.stop();
+        if (compositorFade) {
+            opacity = 1;
+            if (shown) {
+                Theme.beginTooltip(root);
+                if (!presented) scale = Theme.tooltipHiddenScale;
+                presented = true;
+                fade.to = 1;
+                zoom.to = 1;
+                fade.duration = zoom.duration = Theme.tooltipMotion;
+                motion.start();
+            } else {
+                presented = false;
+                Theme.endTooltip(root);
+            }
+            return;
+        }
         if (shown) {
             Theme.beginTooltip(root);
             const duration = Theme.tooltipMotion;
@@ -33,7 +51,7 @@ Rectangle {
     onTextChanged: {
         if (!animated || !shown || !motionReady) return;
         motion.stop();
-        opacity = 0;
+        opacity = compositorFade ? 1 : 0;
         scale = Theme.tooltipHiddenScale;
         updatePresentation();
     }

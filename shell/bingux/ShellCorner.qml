@@ -4,6 +4,7 @@ import QtQuick.Shapes
 // Fill the outside of a rounded desktop corner with the shell surface.
 Item {
     id: root
+    SurfaceFade { target: root }
     property color color: Theme.barBackground
     property color borderColor: Theme.barDivider
     property bool mirrored: false

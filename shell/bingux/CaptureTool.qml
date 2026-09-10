@@ -514,6 +514,7 @@ Scope {
                     visible: overlay.active && root.opened
                     property real interactionOpacity: root.regionDragging ? .25 : 1
                     opacity: interactionOpacity
+                    SurfaceFade { target: toolbar }
                     Behavior on interactionOpacity { NumberAnimation { duration: Theme.reducedMotion ? 0 : 100; easing.type: Easing.OutCubic } }
                     property real movedX: -1
                     property real movedY: -1

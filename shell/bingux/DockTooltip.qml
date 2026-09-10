@@ -50,6 +50,8 @@ PanelWindow {
         height: implicitHeight
         text: root.presentedText
         animated: true
+        compositorFade: PopupTransitions.fadesIn("gnoblin-dock-tooltip")
+            && PopupTransitions.matches(Theme.tooltipMotion, Easing.OutCubic, "gnoblin-dock-tooltip")
         shown: root.shown
         transformOrigin: Item.Bottom
 

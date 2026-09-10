@@ -73,6 +73,8 @@ Scope {
             parent: root.hostItem || popup.contentItem
             z: 100
             animated: true
+            compositorFade: !root.hostItem && PopupTransitions.fadesIn("bingux-bar-tooltip")
+                && PopupTransitions.matches(Theme.tooltipMotion, Easing.OutCubic, "bingux-bar-tooltip")
             shown: root.shown
             transformOrigin: Item.Top
             x: root.hostItem ? Math.max(Theme.gap, Math.min(root.centreX - width / 2, parent.width - width - Theme.gap)) : 0

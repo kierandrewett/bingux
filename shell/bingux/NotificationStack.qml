@@ -382,6 +382,7 @@ Flickable {
             delegate: Rectangle {
                 // Group-owned, so removing the head card never replaces this surface.
                 id: groupSurface
+                SurfaceFade { target: groupSurface }
                 objectName: "notificationGroupBackground"
                 required property string groupKey
                 required property real topY
@@ -417,6 +418,7 @@ Flickable {
 
             delegate: Rectangle {
                 id: notificationCard
+                SurfaceFade { target: notificationCard }
                 objectName: "notificationCard"
                 readonly property int contentPadding: Theme.notificationPadding
 
