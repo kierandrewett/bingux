@@ -424,7 +424,7 @@ PanelWindow {
             serial: serial, name: name || entry.name || groupId, windows: windows,
             deadline: Date.now() + Theme.launchTimeout, reportFailure: false
         }});
-        animateLaunchFor(groupId);
+        // The initiating surface owns the growing icon animation.
         return true;
     }
 
