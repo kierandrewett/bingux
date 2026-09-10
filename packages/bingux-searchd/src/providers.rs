@@ -1258,7 +1258,7 @@ mod tests {
 
         let indexed = index_applications(
             std::slice::from_ref(&application_directory),
-            &["/nix/store/example/bin/gtk-launch".to_owned()],
+            &["/usr/bin/gtk-launch".to_owned()],
         );
 
         remove_dir_all(&root).expect("remove test directory");
@@ -1394,14 +1394,14 @@ mod tests {
         assert_eq!(
             sqlite_activation(
                 &[
-                    "/nix/store/example/bin/open-record".to_owned(),
+                    "/usr/libexec/bingux/open-record".to_owned(),
                     "--id".to_owned(),
                     "{id}".to_owned(),
                 ],
                 "record_7",
             ),
             Activation::Spawn {
-                program: "/nix/store/example/bin/open-record".to_owned(),
+                program: "/usr/libexec/bingux/open-record".to_owned(),
                 arguments: vec!["--id".to_owned(), "record_7".to_owned()],
             }
         );
@@ -1412,13 +1412,13 @@ mod tests {
         assert_eq!(
             append_activation(
                 &[
-                    "/nix/store/example/bin/gtk-launch".to_owned(),
+                    "/usr/bin/gtk-launch".to_owned(),
                     "--verbose".to_owned()
                 ],
                 "org.example.Editor.desktop",
             ),
             Activation::Spawn {
-                program: "/nix/store/example/bin/gtk-launch".to_owned(),
+                program: "/usr/bin/gtk-launch".to_owned(),
                 arguments: vec![
                     "--verbose".to_owned(),
                     "org.example.Editor.desktop".to_owned()

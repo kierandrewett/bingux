@@ -1168,7 +1168,7 @@ mod tests {
     use super::*;
     use crate::protocol::{ProviderResponse, ProviderResult, ResultKind, parse_provider_manifest};
     fn manifest() -> ProviderManifest {
-        parse_provider_manifest(br#"{"kind":"bingux.search-provider","protocolVersion":1,"id":"notes","displayName":"Notes","command":["/nix/store/provider/bin/notes","--serve"],"startup":"lazy","priority":100,"timeoutMs":250}"#).expect("valid manifest")
+        parse_provider_manifest(br#"{"kind":"bingux.search-provider","protocolVersion":1,"id":"notes","displayName":"Notes","command":["/usr/libexec/bingux/notes","--serve"],"startup":"lazy","priority":100,"timeoutMs":250}"#).expect("valid manifest")
     }
     fn result() -> ProviderResult {
         ProviderResult {
@@ -1193,7 +1193,7 @@ mod tests {
     fn command_uses_argv_without_shell() {
         let manifest = manifest();
         let (program, args) = provider_argv(&manifest);
-        assert_eq!(program, "/nix/store/provider/bin/notes");
+        assert_eq!(program, "/usr/libexec/bingux/notes");
         assert_eq!(args, ["--serve"])
     }
     #[test]

@@ -4,7 +4,7 @@ PartOf=bingux.target
 After=bingux.service
 
 [Service]
-ExecStart=/usr/bin/bingux --surface switcher
+ExecStart=/usr/bin/bingux-switcher-ui
 Restart=on-failure
 RestartSec=3
 LimitCORE=0

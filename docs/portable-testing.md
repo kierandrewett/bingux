@@ -65,7 +65,7 @@ global cursor requests without delaying app launch.
 | Privacy events, keyboard source changes, native OSD events | Gnoblin integration; unavailable events are not equivalent to no activity |
 | Screenshot and recording | Existing portal/grim fallbacks; needs matching portal backend and PipeWire |
 | Blur, custom shaders, compositor slide effects | Gnoblin rules; configure effects in the host compositor separately |
-| Nix desktop installation | Still explicitly requires Gnoblin; this launcher does not change production session wiring |
+| Native desktop installation | Still explicitly requires Gnoblin; this launcher does not change production session wiring |
 
 The dependence is concentrated in compositor integration and production session
 packaging, rather than the general UI. Portable mode is for UI testing, not full

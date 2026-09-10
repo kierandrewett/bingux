@@ -11,7 +11,7 @@ Raster images pass through unchanged, including legitimate opaque black pixels.
 Theme changes refresh the resolver. This avoids QtSvg's black-background rendering
 of icons such as GNOME Web without changing OS assets or recolouring application
 artwork. Symbolic icons keep their existing tinting path. The helper needs Python
-with PyGObject, GTK 3, and GdkPixbuf's librsvg loader; the Nix shell module supplies
+with PyGObject, GTK 3, and GdkPixbuf's librsvg loader; the native package supplies
 these through `BINGUX_ICON_HELPER`. A failed helper falls back to native Qt icons.
 
 File and folder results use GIO's full-colour file icons, including custom folder
@@ -35,7 +35,7 @@ PDFs, common images and text/code files have previews. Scroll through PDF pages,
 drag to pan at larger zoom levels, use Ctrl+wheel or the zoom controls, and use
 Fit to return to the viewport width. Pages render on demand in separate helper
 processes. Changing files or closing the pane cancels pending work. Text input is capped at 256 KiB; Markdown and HTML use sanitised rich text. Files over 20 MB are refused before rendering, including cache hits. Encrypted,
-damaged and unsupported files keep their normal open action. The Nix module
+damaged and unsupported files keep their normal open action. The native package
 supplies Poppler, Pillow and the Python helper through `BINGUX_PREVIEW_HELPER`.
 
 The preview is 480 pixels tall and centres images at their fitted size. The

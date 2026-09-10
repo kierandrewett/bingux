@@ -1284,14 +1284,14 @@ mod tests {
     #[test]
     fn parses_a_valid_provider_manifest() {
         let manifest = parse_provider_manifest(
-            br#"{"kind":"bingux.search-provider","protocolVersion":1,"id":"apps","displayName":"Applications","command":["/nix/store/example/bin/bingux-provider-apps"],"startup":"eager","priority":100,"timeoutMs":20}"#,
+            br#"{"kind":"bingux.search-provider","protocolVersion":1,"id":"apps","displayName":"Applications","command":["/usr/libexec/bingux/bingux-provider-apps"],"startup":"eager","priority":100,"timeoutMs":20}"#,
         )
         .expect("valid provider manifest");
 
         assert_eq!(manifest.id, "apps");
         assert_eq!(
             manifest.command,
-            ["/nix/store/example/bin/bingux-provider-apps"]
+            ["/usr/libexec/bingux/bingux-provider-apps"]
         );
         assert_eq!(manifest.timeout_ms, 20);
     }

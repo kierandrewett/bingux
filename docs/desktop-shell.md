@@ -352,7 +352,7 @@ version policy. Bingux discovers manifests only from configured profile paths. I
   "protocolVersion": 1,
   "id": "apps",
   "displayName": "Applications",
-  "command": ["/nix/store/example/bin/bingux-provider-apps"],
+  "command": ["/usr/libexec/bingux/bingux-provider-apps"],
   "startup": "eager",
   "priority": 100,
   "timeoutMs": 20
@@ -453,13 +453,13 @@ SQLite reads accept only regular files and stop after the built-in query deadlin
 
 Provider code and manifests are trusted profile software. They run with the profile user
 permissions. A manifest must not contain a secret. A provider that needs a credential receives a
-profile-declared runtime secret path or environment variable from SOPS-Nix configuration.
+profile-declared runtime secret path or environment variable from the user's secret manager.
 
 ## Performance rule
 
 Focused protocol and unit checks cover the search daemon and status/OSD paths; the
-Nix desktop-shell module check also asserts that the notification and OSD surfaces are configured.
-The QML client repeats record and field-boundary validation in `SearchSocket.qml`, but the Nix checks
+standalone packaging checks also assert that the notification and OSD surfaces are configured.
+The QML client repeats record and field-boundary validation in `SearchSocket.qml`, but these checks
 do not execute QML functions. These checks do not establish runtime or VM behaviour.
 
 Run the local socket regression benchmark from the repository root:

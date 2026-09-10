@@ -36,7 +36,7 @@ Press Apply to save search changes. The settings helper restarts the user search
 
 ## Persistence and validation
 
-User overrides are stored atomically in `$XDG_CONFIG_HOME/bingux/settings.json`. They remain separate from managed Nix configuration. The settings backend validates engine URLs, unique shortcuts, enabled defaults, desktop ranges, widget destinations and duplicate widgets before replacing the file. The search daemon validates engine configuration again when loading it.
+User overrides are stored atomically in `$XDG_CONFIG_HOME/bingux/settings.json`. They remain separate from package-managed files. The settings backend validates engine URLs, unique shortcuts, enabled defaults, desktop ranges, widget destinations and duplicate widgets before replacing the file. The search daemon validates engine configuration again when loading it.
 
 The shell imports the effective runtime layout once into version 1 of the desktop settings. This includes top-bar and overflow order, dock pins and app order, sidebar edge, and control-centre choices. The source state is retained in `layout-before-import.json`. Spacing instances use unique IDs such as `spring:1` and `spacer:1`; fixed widths are stored in `desktop.widgetOptions["spacer:1"].width`. Existing imported arrangements do not gain spacing items automatically. Later launches and the editor load the saved layout. Unsupported versions are rejected. JPEG XL and other wallpapers that Qt cannot read directly are converted to a cached PNG by the settings helper.
 

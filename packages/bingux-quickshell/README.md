@@ -8,7 +8,8 @@ so a mouse press takes focus from the editor and the return of focus cancels
 the button click.
 
 `layer-initial-state.patch` records the initial settings in the existing
-committed-state snapshot. The NixOS desktop module uses this package by default.
+committed-state snapshot. Downstream package builders can apply it when they
+build the matching Quickshell release.
 
 `clipping-window.patch` gives the rounded clipping texture source a visual
 parent. It then releases its old window reference when the widget moves. Without

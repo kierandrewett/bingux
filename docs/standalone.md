@@ -56,8 +56,9 @@ available and the sidebar shows a retry message.
 ## Configuration
 
 User state lives below `$XDG_CONFIG_HOME/bingux`. The shell does not require a
-Nix profile or generated machine configuration. Search, status and extension
-settings are ordinary files and can be copied between machines.
+distribution-specific profile or generated machine configuration. Search,
+status and extension settings are ordinary files and can be copied between
+machines.
 
 For extension development, read [Extensions](extensions.md). For isolated
 testing, use [portable testing](portable-testing.md).

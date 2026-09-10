@@ -13,10 +13,10 @@ case "$version" in
 esac
 
 mkdir -p "$(dirname "$root/$output")"
-git -C "$root" diff --quiet || {
+if [[ -n "$(git -C "$root" status --porcelain)" ]]; then
     echo "working tree has changes; commit the release source first" >&2
     exit 1
-}
+fi
 git -C "$root" archive --format=tar --prefix="bingux-${version}/" HEAD \
     | xz -T0 -9 > "$root/$output"
 echo "$root/$output"

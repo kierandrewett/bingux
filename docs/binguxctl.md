@@ -49,7 +49,7 @@ JSON. Failures print a diagnostic to stderr and return nonzero. Only an explicit
 "not ready" response is retried during reload; an uncertain timeout is never
 repeated because the command may already have executed.
 
-The Nix desktop module installs the command and uses `capture toggle` for the
+The native package installs the command and uses `capture toggle` for the
 capture shortcut. It selects the configured Quickshell package and configuration
 name. For a development instance:
 

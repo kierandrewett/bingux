@@ -57,13 +57,11 @@ BUN_COMMANDS: tuple[Command, ...] = (
     ("bun", "pm", "ls", "--global"),
     ("bun", "pm", "ls", "-g"),
 )
-NIX_COMMAND: Command = ("nix", "profile", "list", "--json", "--offline")
 
 CARGO_HEADER = re.compile(r"^\s*(?P<name>\S+)\s+v?(?P<version>\S+):\s*$")
 BUN_PACKAGE = re.compile(
     r"^\s*(?:[├└]──\s+)?(?P<name>@[^@\s/]+/[^@\s]+|[^@\s]+)@(?P<version>\S+)\s*$"
 )
-NIX_VERSION = re.compile(r"-(?P<version>\d[0-9A-Za-z+._~:-]*)$")
 
 
 def _safe_text(value: object) -> str | None:
@@ -344,74 +342,6 @@ def _collect_bun() -> list[PackageRecord] | None:
     return None
 
 
-def _nix_name(element_name: object, element: dict[str, object]) -> object:
-    explicit_name = element.get("name")
-    if explicit_name is not None:
-        return explicit_name
-    if element_name:
-        return element_name
-    attr_path = element.get("attrPath")
-    if isinstance(attr_path, str):
-        return attr_path.rsplit(".", 1)[-1]
-    return None
-
-
-def _nix_version(name: str, store_path: object) -> str | None:
-    if not isinstance(store_path, str):
-        return None
-    basename = store_path.rsplit("/", 1)[-1]
-    if not basename or basename == store_path:
-        return None
-    if "-" not in basename:
-        return None
-    store_name = basename.split("-", 1)[1]
-    prefix = f"{name}-"
-    if store_name.startswith(prefix):
-        return _safe_text(store_name[len(prefix) :])
-    match = NIX_VERSION.search(store_name)
-    if match is None:
-        return None
-    return _safe_text(match.group("version"))
-
-
-def _parse_nix_json(payload: object) -> list[PackageRecord] | None:
-    if not isinstance(payload, dict):
-        return None
-    elements = payload.get("elements")
-    if not isinstance(elements, dict):
-        return None
-
-    records: list[PackageRecord] = []
-    for element_name, raw_element in elements.items():
-        if not isinstance(raw_element, dict):
-            continue
-        if raw_element.get("active") is False:
-            continue
-        name = _safe_text(_nix_name(element_name, raw_element))
-        if name is None:
-            continue
-        store_paths = raw_element.get("storePaths")
-        if not isinstance(store_paths, list):
-            continue
-        for store_path in store_paths:
-            version = _nix_version(name, store_path)
-            package = _record(name, version)
-            if package is not None:
-                records.append(package)
-    return _sorted_records(records)
-
-
-def _collect_nix() -> list[PackageRecord] | None:
-    output = _run_command(NIX_COMMAND)
-    if output is None:
-        return None
-    try:
-        payload: Any = json.loads(output)
-    except json.JSONDecodeError:
-        return None
-    return _parse_nix_json(payload)
-
-
 def _collect_sources() -> dict[str, list[PackageRecord]]:
     sources: dict[str, list[PackageRecord]] = {}
 
@@ -426,7 +356,6 @@ def _collect_sources() -> dict[str, list[PackageRecord]]:
         ("pipx", _collect_pipx),
         ("npm", _collect_npm),
         ("bun", _collect_bun),
-        ("nix", _collect_nix),
     )
     for source_name, collector in collectors:
         records = collector()

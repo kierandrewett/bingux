@@ -555,9 +555,9 @@ mod tests {
             default_engine: crate::search_engines::default_id(),
             protocol_version: 1,
             commands: SearchCommands {
-                application_launcher: vec!["/nix/store/test/bin/gtk-launch".to_owned()],
-                file_opener: vec!["/nix/store/test/bin/xdg-open".to_owned()],
-                clipboard: vec!["/nix/store/test/bin/wl-copy".to_owned()],
+                application_launcher: vec!["/usr/bin/gtk-launch".to_owned()],
+                file_opener: vec!["/usr/bin/xdg-open".to_owned()],
+                clipboard: vec!["/usr/bin/wl-copy".to_owned()],
             },
             file_roots: vec![PathBuf::from("/home/test")],
             provider_manifest_paths: vec![],
@@ -567,7 +567,7 @@ mod tests {
                 database_path: PathBuf::from("/home/test/notes.db"),
                 query: "SELECT id, title, body FROM note WHERE title LIKE ?1 LIMIT ?2".to_owned(),
                 activation_command: vec![
-                    "/nix/store/test/bin/note-open".to_owned(),
+                    "/usr/bin/note-open".to_owned(),
                     "{id}".to_owned(),
                 ],
             }],

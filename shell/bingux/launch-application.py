@@ -72,7 +72,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     global FEEDBACK_PATH
     FEEDBACK_PATH = args.feedback_file
-    # The development Nix runtime has a private user namespace. Flatpak must
+    # A development runtime may use a private user namespace. Flatpak must
     # start from the host user manager, not inherit that nested namespace.
     if not args.host_launch and (args.notify_errors or args.dock_feedback):
         command = ["systemd-run", "--user", "--collect", "--quiet",

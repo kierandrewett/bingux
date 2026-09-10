@@ -44,12 +44,9 @@ that provide the layer-shell protocols.
 %install
 %make_install PREFIX=%{_prefix} DESTDIR=%{buildroot} BUILD_DIR=build QMLDIR=%{_libdir}/bingux/qml
 
-install -Dm644 packaging/systemd/bingux.target %{buildroot}%{_userunitdir}/bingux.target
-install -Dm644 packaging/systemd/bingux.service %{buildroot}%{_userunitdir}/bingux.service
-install -Dm644 packaging/systemd/bingux-searchd.service %{buildroot}%{_userunitdir}/bingux-searchd.service
-install -Dm644 packaging/systemd/bingux-statusd.service %{buildroot}%{_userunitdir}/bingux-statusd.service
-install -Dm644 packaging/systemd/bingux-search-ui.service %{buildroot}%{_userunitdir}/bingux-search-ui.service
-install -Dm644 packaging/systemd/bingux-switcher-ui.service %{buildroot}%{_userunitdir}/bingux-switcher-ui.service
+for unit in bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service; do
+    sed -e 's|/usr/lib64|%{_libdir}|g' packaging/systemd/$unit > %{buildroot}%{_userunitdir}/$unit
+done
 
 %files
 %license COPYING

@@ -57,7 +57,7 @@ Recordings are compressed H.264 MP4, defaulting to balanced quality, 30 fps and
 a 1080-pixel height limit without upscaling. Automatic encoding tries an actual
 synthetic encode before trusting hardware: an installed GPU plugin is not proof
 that a compatible device or driver exists. It falls back to x264/OpenH264 on the
-CPU. Software only never probes hardware. Nix packaging includes CPU encoders;
+CPU. Software only never probes hardware. Native packaging includes CPU encoders;
 a GPU is not required. Slower machines can choose 720p/15 fps. A device failure
 during an ongoing recording is reported rather than silently dropping frames or
 overwriting the original recording.
@@ -81,10 +81,8 @@ toggle the selector closed. The launcher retries explicit "not ready" replies
 during a shell reload, but never retries an uncertain result that might already
 have executed. Selector visibility and region survive shell configuration reloads.
 
-Nix shortcut: `bingux.desktopShell.capture.shortcut` (default `<Alt>s`), emitted
-into `bingux.desktop.gnoblin.settings`. Put other declarative TOML settings there
-too; Home Manager owns the generated config file and will not silently overwrite
-an existing unmanaged file. Other
+Configuration shortcut: `bingux.desktopShell.capture.shortcut` (default `<Alt>s`).
+Set the equivalent binding in Gnoblin's TOML configuration. Other
 compositors can bind their shortcut to:
 
 ```sh

@@ -90,11 +90,11 @@ Create `~/.config/bingux/switcher.json` before starting Bingux:
 ```
 
 Changes reload automatically. `showDelay` accepts integer milliseconds from 0
-to 500. Invalid settings retain the last valid configuration. The Nix desktop
-module installs this file with these defaults; override its Home Manager
-`xdg.configFile."bingux/switcher.json".text` value to change them declaratively.
+to 500. Invalid settings retain the last valid configuration. The native
+package installs this file with these defaults; copy it to
+`$XDG_CONFIG_HOME/bingux/switcher.json` to change them.
 
-The Nix module also installs Gnoblin's `compositor-bridge.js` script and clears
+The Gnoblin package also installs the compositor's `compositor-bridge.js` script and clears
 the four GNOME `switch-applications` / `switch-windows` forward and backward
 bindings. For a manual installation, link the bridge into
 `~/.config/gnoblin/scripts/`, run `gnoblinctl reload-scripts`, and clear these
