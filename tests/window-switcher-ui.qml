@@ -87,7 +87,7 @@ ShellRoot {
                 chooser.step(false);
             } else if (test.phase === 1) {
                 test.check(chooser.revealProgress === 1, "Opening reaches full opacity");
-                test.check(Theme.reducedMotion || test.openingFrames.some(value => value > 0 && value < 1), "Opening renders intermediate frames");
+                test.check(test.openingFrames.every(value => value === 1), "Opening does not delay the first fully visible frame");
                 const before = chooser.selectedIcon;
                 chooser.refresh(chooser.liveWindows.map(window => Object.assign({}, window, {title: window.title + " updated"})));
                 test.check(chooser.selectedIcon === before, "Metadata updates preserve the selected icon and badge instances");

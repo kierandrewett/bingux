@@ -7,7 +7,7 @@ ShellRoot {
     UiSession {
         id: session
         sessionName: "switcher"
-        state: ({visible: switcher.active})
+        state: ({visible: switcher.active, shown: switcher.shown})
         onCommandReceived: command => { if (command.action === "close") switcher.close(); }
     }
     WindowSwitcher {
