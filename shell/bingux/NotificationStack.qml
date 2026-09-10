@@ -12,6 +12,7 @@ Flickable {
     signal toastArchived()
     required property var state
     property var presentedEntries: []
+    readonly property int instantiatedCardCount: cardRepeater.count
     property bool collapseOnDismiss: false
     property bool swipeEnabled: true
     property int activeCollapses: 0
@@ -28,7 +29,7 @@ Flickable {
     property bool rowSeparators: false
     property bool cardShadow: true
     property bool historyMode: false
-    // Keep history delegates alive; only live toasts take space outside history.
+    // The owner retains history data and supplies cards only while needed.
     property bool filterToasts: false
     property var lastSyncedEntries: new Map()
     property bool groupNotifications: true
@@ -917,8 +918,17 @@ Flickable {
                         readonly property string normalizedImage: !imageSource || imageSource.startsWith("/") || /^[a-z][a-z0-9+.-]*:/i.test(imageSource)
                             ? imageSource : Quickshell.iconPath(imageSource)
                         readonly property bool nativePixels: normalizedImage.startsWith("data:") || (normalizedImage.startsWith("image://") && !normalizedImage.startsWith("image://icon/"))
-                        onNormalizedImageChanged: if (!nativePixels) OsIcons.resolve(normalizedImage)
-                        Component.onCompleted: if (!nativePixels) OsIcons.resolve(normalizedImage)
+                        property string retainedImage: ""
+                        function retainImage() {
+                            const next = nativePixels ? "" : normalizedImage;
+                            if (next === retainedImage) return;
+                            if (next) OsIcons.retain(next);
+                            if (retainedImage) OsIcons.release(retainedImage);
+                            retainedImage = next;
+                        }
+                        onNormalizedImageChanged: retainImage()
+                        Component.onCompleted: retainImage()
+                        Component.onDestruction: if (retainedImage) OsIcons.release(retainedImage)
                         source: nativePixels ? normalizedImage : OsIcons.sources[normalizedImage] || ""
                         // Decode for the available column width, not the card's
                         // animated inset. Changing sourceSize reloads the image.

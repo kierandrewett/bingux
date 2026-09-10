@@ -25,6 +25,7 @@ PanelWindow {
     readonly property int iconSize: preferences.dockSize || 56
     required property var settings
     property var notifications: []
+    readonly property var notificationIndex: MediaMatch.notificationIndex(notifications)
     property var notificationStore: null
     property var activity: DockActivity {}
     property var appGroups: []
@@ -120,7 +121,9 @@ PanelWindow {
                 root.refreshAppGroups();
             }
             function onParentChanged() { root.refreshAppGroups() }
-            function onTitleChanged() { root.refreshAppGroups() }
+            // Titles are read directly by menus/tooltips. Only unidentified
+            // windows use title presence to decide whether they form a group.
+            function onTitleChanged() { if (!modelData.appId) root.refreshAppGroups() }
             function onScreensChanged() { root.refreshAppGroups() }
             function onMinimizedChanged() {
                 const remaining = root.minimisedWindowHistory.filter(window => window && window !== modelData);
@@ -499,16 +502,15 @@ PanelWindow {
         return appId.endsWith(".desktop") ? appId.slice(0, -8) : appId;
     }
 
+    property var desktopEntryCache: new Map()
     function desktopEntryFor(appId) {
-        const exactEntry = DesktopEntries.byId(appId);
-        if (exactEntry)
-            return exactEntry;
-
-        const suffixedEntry = DesktopEntries.byId(appId + ".desktop");
-        if (suffixedEntry)
-            return suffixedEntry;
-
-        return DesktopEntries.heuristicLookup(appId);
+        if (!appId) return null;
+        const cache = desktopEntryCache;
+        if (cache.has(appId)) return cache.get(appId);
+        const entry = DesktopEntries.byId(appId) || DesktopEntries.byId(appId + ".desktop")
+            || DesktopEntries.heuristicLookup(appId) || null;
+        cache.set(appId, entry);
+        return entry;
     }
     function menuLabel(value, fallback) {
         const text = typeof value === "string" && value.length > 0 ? value : fallback;
@@ -650,13 +652,20 @@ PanelWindow {
                 groups[groupIndex].windows.push(toplevel);
         }
         const order = appOrder;
+        const orderIdentities = order.map(id => pinIdentity(id));
+        const ranks = new Map();
+        for (const group of groups) {
+            const identity = pinIdentity(group.desktopEntry ? group.desktopEntry.id : group.id);
+            const index = order.findIndex((id, i) => id === group.id || orderIdentities[i] === identity);
+            ranks.set(group, {pinned: pinnedApps.indexOf(identity) >= 0,
+                order: index < 0 ? order.length : index});
+        }
         groups.sort((a, b) => {
-            const sectionDifference = Number(root.isPinned(b)) - Number(root.isPinned(a));
+            const aRank = ranks.get(a), bRank = ranks.get(b);
+            const sectionDifference = Number(bRank.pinned) - Number(aRank.pinned);
             if (sectionDifference !== 0)
                 return sectionDifference;
-            const ai = order.findIndex(id => id === a.id || pinIdentity(id) === pinIdentity(a.desktopEntry ? a.desktopEntry.id : a.id));
-            const bi = order.findIndex(id => id === b.id || pinIdentity(id) === pinIdentity(b.desktopEntry ? b.desktopEntry.id : b.id));
-            const configuredDifference = (ai < 0 ? order.length : ai) - (bi < 0 ? order.length : bi);
+            const configuredDifference = aRank.order - bRank.order;
             if (configuredDifference !== 0)
                 return configuredDifference;
 
@@ -1232,7 +1241,7 @@ PanelWindow {
                             layer.effect: MultiEffect { saturation: -1 }
                             group: dockButton.currentGroup
                             activeStreams: root.activity.activeStreams
-                            notifications: root.notifications
+                            notificationIndex: root.notificationIndex
 
                             anchors {
                                 centerIn: parent
@@ -1619,6 +1628,7 @@ PanelWindow {
 
     Connections {
         function onApplicationsChanged() {
+            root.desktopEntryCache = new Map();
             root.refreshAppGroups();
         }
 

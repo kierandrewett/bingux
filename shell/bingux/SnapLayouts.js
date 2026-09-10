@@ -26,3 +26,32 @@ function target(tile, area, inner, outer) {
 }
 
 function contains(rect, x, y) { return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height; }
+
+// Physical monitor edges remain reachable beyond panel/dock exclusive zones;
+// destinations use the work area. Publish every edge at drag start so a fast
+// drop does not depend on a last-moment UI round trip.
+function edgeRegions(monitor, area, inner, outer) {
+    const band = Math.min(28, monitor.width / 8, monitor.height / 8);
+    const corner = Math.min(120, monitor.width / 4, monitor.height / 4);
+    const list = [];
+    for (const right of [false, true]) for (const bottom of [false, true]) {
+        const tile = {x: right ? .5 : 0, y: bottom ? .5 : 0, width: .5, height: .5};
+        const region = {id: 'edge:' + (bottom ? 'bottom' : 'top') + '-' + (right ? 'right' : 'left'),
+            layout: -1, control: false, target: target(tile, area, inner, outer)};
+        list.push(Object.assign({}, region, {hit: {
+            x: monitor.x + (right ? monitor.width - band : 0), y: monitor.y + (bottom ? monitor.height - corner : 0),
+            width: band, height: corner}}));
+        list.push(Object.assign({}, region, {hit: {
+            x: monitor.x + (right ? monitor.width - corner : 0), y: monitor.y + (bottom ? monitor.height - band : 0),
+            width: corner, height: band}}));
+    }
+    for (const right of [false, true]) list.push({id: 'edge:' + (right ? 'right' : 'left'), layout: -1, control: false,
+        hit: {x: monitor.x + (right ? monitor.width - band : 0), y: monitor.y + corner,
+            width: band, height: monitor.height - corner * 2},
+        target: target({x: right ? .5 : 0, y: 0, width: .5, height: 1}, area, inner, outer)});
+    list.push({id: 'edge:top', layout: -1, control: false, maximize: true,
+        hit: {x: monitor.x + corner, y: monitor.y,
+            width: monitor.width - corner * 2, height: band},
+        target: {x: area.x, y: area.y, width: area.width, height: area.height}});
+    return list;
+}

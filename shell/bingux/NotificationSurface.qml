@@ -17,12 +17,21 @@ PanelWindow {
     readonly property int notificationCount: state.allEntries.length
     readonly property int renderedNotificationCount: stack.renderedNotificationCount
     readonly property alias viewport: stack
-    function prepareForHistory() { if (!inHistory) stack.prepareHistory(); }
+    property bool preparingHistory: false
+    function prepareForHistory() {
+        if (!inHistory) {
+            preparingHistory = true;
+            stack.prepareHistory();
+        }
+    }
     function dismissAll() { state.dismissAll(); }
     function toggleGroup(key) { stack.toggleGroup(key); }
-    onInHistoryChanged: if (!inHistory) {
-        state.archiveToasts();
-        stack.resetPresentation();
+    onInHistoryChanged: {
+        preparingHistory = false;
+        if (!inHistory) {
+            state.archiveToasts();
+            stack.resetPresentation();
+        }
     }
     color: "transparent"
     focusable: inHistory && notificationCentre.visible
@@ -65,7 +74,7 @@ PanelWindow {
             id: stack
             state: root.state
             onNotificationActivated: if (root.notificationCentre) root.notificationCentre.visible = false;
-            presentedEntries: root.state.allEntries
+            presentedEntries: root.inHistory || root.preparingHistory ? root.state.allEntries : root.state.visibleEntries
             filterToasts: true
             historyMode: root.inHistory
             groupNotifications: root.inHistory

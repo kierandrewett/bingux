@@ -13,8 +13,10 @@ Scope {
     property bool expanded: false
     property int keyboardSelection: 0
     property string error: ""
-    readonly property var monitor: state ? state.monitor : null
-    readonly property var area: state ? state.area : null
+    // Pointer samples must not rebuild the regions and their delegates every frame.
+    property var geometryContext: null
+    readonly property var monitor: geometryContext ? geometryContext.monitor : null
+    readonly property var area: geometryContext ? geometryContext.area : null
     readonly property var output: monitor ? Quickshell.screens.find(s => s.x === monitor.x && s.y === monitor.y) || null : null
     readonly property bool control: dragging && state && Boolean(state.modifiers & 4)
     readonly property var layouts: {
@@ -29,8 +31,10 @@ Scope {
     readonly property real pickerX: centerX - pickerWidth / 2
     readonly property real pickerY: monitor && area ? Math.max(monitor.y + Theme.barHeight + 8, area.y + 8) : 0
     readonly property var regions: {
-        if (!state || !area || !monitor || !(expanded || control || keyboardMode)) return [];
-        const list = [];
+        if (!area || !monitor) return [];
+        const list = dragging && !control && !keyboardMode
+            ? Layouts.edgeRegions(monitor, area, preferences.innerGap, preferences.outerGap) : [];
+        if (!(expanded || control || keyboardMode)) return list;
         layouts.forEach((layout, li) => layout.tiles.forEach((tile, ti) => {
             if (control && li !== Math.min(preferences.activeLayout, layouts.length - 1)) return;
             const hit = control ? {x: area.x + tile.x * area.width, y: area.y + tile.y * area.height,
@@ -44,7 +48,7 @@ Scope {
         return list;
     }
     readonly property var selected: keyboardMode ? regions[keyboardSelection] || null
-        : state ? regions.find(region => Layouts.contains(region.hit, state.x, state.y)) || null : null
+        : dragging && state ? regions.find(region => Layouts.contains(region.hit, state.x, state.y)) || null : null
     onRegionsChanged: if (dragging && state) connection.send({op: "snap-offer", serial: state.serial, regions})
 
     Settings {
@@ -74,10 +78,15 @@ Scope {
             }
         }
     }
+    function updateGeometry(record) {
+        const next = {monitor: record.monitor, area: record.area};
+        if (JSON.stringify(next) !== JSON.stringify(geometryContext)) geometryContext = next;
+    }
     function update(record) {
         if (!record.active) { dragging = false; expanded = false; return; }
         if (!state || record.serial !== state.serial || record.monitor.id !== state.monitor.id) expanded = false;
         state = record;
+        updateGeometry(record);
         dragging = true;
         keyboardMode = false;
         const reach = {x: pickerX - 48, y: monitor.y, width: pickerWidth + 96,
@@ -88,7 +97,7 @@ Scope {
     function commit(region) {
         if (!region || !state) return;
         connection.send({op: "snap-window", window: state.window, monitor: monitor.id, target: region.target});
-        preferences.activeLayout = region.layout;
+        if (region.layout >= 0) preferences.activeLayout = region.layout;
         close();
     }
     ShortcutSession {
@@ -103,6 +112,7 @@ Scope {
         onActivated: connection.send({op: "snap-context"})
         onSnapContext: record => {
             root.state = record;
+            root.updateGeometry(record);
             root.dragging = false;
             root.keyboardSelection = 0;
             root.keyboardMode = true;
@@ -194,7 +204,10 @@ Scope {
     PanelWindow {
         id: preview
         screen: root.output
-        visible: !!root.output && (root.dragging || root.keyboardMode)
+        // Keep the surface mapped until its last visual has faded away.
+        visible: !!root.output && (root.dragging || root.keyboardMode || highlight.opacity > 0 || snapPill.opacity > 0 || guideOpacity > 0)
+        property real guideOpacity: root.dragging && !root.control ? (root.selected ? .25 : .65) : 0
+        Behavior on guideOpacity { NumberAnimation { duration: Theme.reducedMotion ? 0 : 160; easing.type: Easing.OutCubic } }
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Top
@@ -202,6 +215,20 @@ Scope {
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
         anchors { top: true; bottom: true; left: true; right: true }
         mask: Region { width: 0; height: 0 }
+        Repeater {
+            model: root.area ? [0, 1, 2, 3] : []
+            Item {
+                required property int modelData
+                readonly property bool rightSide: modelData % 2 === 1
+                readonly property bool bottomSide: modelData >= 2
+                x: root.area && root.monitor ? root.area.x - root.monitor.x + (rightSide ? root.area.width - width - 8 : 8) : 0
+                y: root.area && root.monitor ? root.area.y - root.monitor.y + (bottomSide ? root.area.height - height - 8 : 8) : 0
+                width: 28; height: 28
+                opacity: preview.guideOpacity
+                Rectangle { width: parent.width; height: 3; radius: 1.5; y: parent.bottomSide ? parent.height - height : 0; color: Theme.accent }
+                Rectangle { width: 3; height: parent.height; radius: 1.5; x: parent.rightSide ? parent.width - width : 0; color: Theme.accent }
+            }
+        }
         Repeater {
             model: root.control ? root.regions : []
             Rectangle {
@@ -224,30 +251,41 @@ Scope {
                 target: root
                 function onSelectedChanged() {
                     if (root.selected) {
-                        highlight.animateGeometry = highlight.retained !== null;
+                        highlight.animateGeometry = highlight.retained !== null && highlight.opacity > 0;
                         highlight.retained = root.selected.target;
-                    } else highlight.animateGeometry = false;
-                }
-                function onDraggingChanged() {
-                    if (!root.dragging && !root.keyboardMode) highlight.retained = null;
+                    }
                 }
             }
-            x: retained && root.monitor ? retained.x - root.monitor.x : 0
-            y: retained && root.monitor ? retained.y - root.monitor.y : 0
-            width: retained ? retained.width : 0
-            height: retained ? retained.height : 0
+            // One interpolation keeps all four edges on the same animation clock.
+            property rect bounds: retained && root.monitor
+                ? Qt.rect(retained.x - root.monitor.x, retained.y - root.monitor.y, retained.width, retained.height)
+                : Qt.rect(0, 0, 0, 0)
+            x: bounds.x
+            y: bounds.y
+            width: bounds.width
+            height: bounds.height
             opacity: root.selected ? 1 : 0
+            onOpacityChanged: if (opacity === 0 && !root.dragging && !root.keyboardMode) {
+                animateGeometry = false;
+                retained = null;
+            }
+            antialiasing: true
             color: Qt.alpha(Theme.accent, .18)
             border.color: Qt.alpha(Theme.accent, .8)
             border.width: 2
             radius: Theme.cardRadius
-            Behavior on x { enabled: highlight.animateGeometry; NumberAnimation { duration: Theme.reducedMotion ? 0 : 100; easing.type: Easing.OutCubic } }
-            Behavior on y { enabled: highlight.animateGeometry; NumberAnimation { duration: Theme.reducedMotion ? 0 : 100; easing.type: Easing.OutCubic } }
-            Behavior on width { enabled: highlight.animateGeometry; NumberAnimation { duration: Theme.reducedMotion ? 0 : 100; easing.type: Easing.OutCubic } }
-            Behavior on height { enabled: highlight.animateGeometry; NumberAnimation { duration: Theme.reducedMotion ? 0 : 100; easing.type: Easing.OutCubic } }
+            Behavior on bounds { enabled: highlight.animateGeometry && !Theme.reducedMotion; PropertyAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: Theme.reducedMotion ? 0 : (root.selected ? 160 : 120); easing.type: Easing.OutCubic } }
         }
         Rectangle {
-            visible: root.dragging && !root.expanded && !root.control
+            id: snapPill
+            visible: opacity > 0
+            property real reveal: root.dragging && !root.expanded && !root.control ? 1 : 0
+            opacity: reveal
+            transform: Translate { y: -10 * (1 - snapPill.reveal) }
+            Behavior on reveal {
+                NumberAnimation { duration: Theme.reducedMotion ? 0 : 180; easing.type: Easing.OutCubic }
+            }
             x: root.centerX - (root.monitor ? root.monitor.x : 0) - width / 2
             y: root.area && root.monitor ? Math.max(Theme.barHeight + 8, root.area.y - root.monitor.y + 8) : 0
             width: 56

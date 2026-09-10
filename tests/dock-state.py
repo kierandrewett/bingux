@@ -9,7 +9,7 @@ import tempfile
 
 root = Path(__file__).resolve().parent.parent
 test_name = os.environ.get("BINGUX_SHELL_TEST", "dock-state")
-if test_name not in ("dock-state", "dock-pinning", "dock-behaviour", "search-launch-cursor", "dock-launch-timeout", "dock-startup"):
+if test_name not in ("dock-state", "dock-pinning", "dock-behaviour", "dock-refresh", "search-launch-cursor", "dock-launch-timeout", "dock-startup"):
     raise SystemExit("Unknown shell test")
 if not os.environ.get("WAYLAND_DISPLAY", "").startswith("gnoblin-gs-"):
     raise SystemExit("Run through Gnoblin scripts/run-gnome-shell.sh with GNOBLIN_TEST_DBUS_CLIENT.")

@@ -10,6 +10,7 @@ Item {
     property var presentation: null
     property var activeStreams: []
     property var notifications: []
+    property var notificationIndex: MediaMatch.notificationIndex(notifications)
     property var additionalBadges: []
     readonly property var badges: [audioBadge, notificationBadge].concat(additionalBadges)
     readonly property bool hasBadges: badges.some(badge => badge.visible && badge.opacity > 0)
@@ -19,7 +20,7 @@ Item {
     readonly property color accentColor: accent.color
     readonly property color accentForeground: accent.foreground
     readonly property bool playingAudio: activeStreams.some(node => MediaMatch.matchesAudio(node.properties, group))
-    readonly property var appNotifications: notifications.filter(entry => MediaMatch.matchesNotification(entry, group))
+    readonly property var appNotifications: MediaMatch.notificationsForGroup(notificationIndex, group)
     readonly property int notificationCount: appNotifications.length
     readonly property string appName: presentation?.label || (group && group.desktopEntry ? group.desktopEntry.name : group ? group.displayName || group.id : "")
     readonly property string tooltipText: appName + (playingAudio ? " · Playing audio" : "")

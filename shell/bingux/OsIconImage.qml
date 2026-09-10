@@ -15,8 +15,17 @@ Item {
         ? source : Quickshell.iconPath(source, "application-x-executable")
     readonly property bool liveImage: normalizedSource.startsWith("data:") || (normalizedSource.startsWith("image://") && !normalizedSource.startsWith("image://icon/"))
     readonly property string resolvedSource: liveImage ? normalizedSource : OsIcons.sources[normalizedSource] || ""
-    onNormalizedSourceChanged: if (!liveImage) OsIcons.resolve(normalizedSource)
-    Component.onCompleted: if (!liveImage) OsIcons.resolve(normalizedSource)
+    property string retainedSource: ""
+    function retainSource() {
+        const next = liveImage ? "" : normalizedSource;
+        if (next === retainedSource) return;
+        if (next) OsIcons.retain(next);
+        if (retainedSource) OsIcons.release(retainedSource);
+        retainedSource = next;
+    }
+    onNormalizedSourceChanged: retainSource()
+    Component.onCompleted: retainSource()
+    Component.onDestruction: if (retainedSource) OsIcons.release(retainedSource)
     IconImage {
         anchors.fill: parent
         source: root.resolvedSource

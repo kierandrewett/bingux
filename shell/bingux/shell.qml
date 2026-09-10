@@ -14,6 +14,9 @@ import "DesktopLayout.js" as DesktopLayout
 
 ShellRoot {
     id: root
+    // Recreating the whole shell on every source write interrupts active drags
+    // and animations. Development sessions can explicitly enable file watching.
+    Component.onCompleted: Quickshell.watchFiles = Quickshell.env("BINGUX_LIVE_RELOAD") === "1"
 
     ExtensionServices { shellObjects: ({root, topBar, dock, controlCentre, sidebar: terminalSidebar}) }
 
@@ -264,7 +267,8 @@ ShellRoot {
                 controls: controlCentre.visible, notifications: notificationCentre.visible,
                 metrics: metricsPopup.visible, keyboard: inputSourceSelector.menuOpen,
                 capture: captureTool.state, sidebar: terminalSidebar.opened,
-                doNotDisturb: ControlCentreServices.doNotDisturb});
+                doNotDisturb: ControlCentreServices.doNotDisturb, liveReload: Quickshell.watchFiles,
+                iconCache: OsIcons.cacheStats});
         }
         function reload(): void { Qt.callLater(() => Quickshell.reload(false)); }
         function layoutSnapshot(): string {

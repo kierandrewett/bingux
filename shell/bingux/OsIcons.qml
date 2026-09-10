@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "IconCache.js" as IconCache
 
 Singleton {
     id: root
@@ -10,12 +11,33 @@ Singleton {
     property var requested: ({})
     property bool ready: false
     property bool unavailable: false
+    property var cache: IconCache.create()
+    property var cacheStats: IconCache.stats(cache)
+
+    function retain(source) { IconCache.retain(cache, source); resolve(source); trim(); }
+    function release(source) { IconCache.release(cache, source); trim(); }
+    function trim() {
+        const removed = IconCache.trim(cache);
+        if (removed.length) {
+            const nextSources = Object.assign({}, sources);
+            const nextPalettes = Object.assign({}, palettes);
+            const nextRequested = Object.assign({}, requested);
+            for (const source of removed) {
+                delete nextSources[source]; delete nextPalettes[source]; delete nextRequested[source];
+            }
+            sources = nextSources; palettes = nextPalettes; requested = nextRequested;
+        }
+        cacheStats = IconCache.stats(cache);
+    }
 
     function resolve(source) {
-        if (!source || requested[source]) return;
+        if (!source) return;
+        IconCache.touch(cache, source);
+        if (requested[source]) return;
         requested = Object.assign({}, requested, { [source]: true });
         if (unavailable) sources = Object.assign({}, sources, { [source]: source });
         else if (ready) worker.write(JSON.stringify({source: source}) + "\n");
+        trim();
     }
     Process {
         id: worker
@@ -33,8 +55,12 @@ Singleton {
                     if (response.reset) { root.sources = ({}); root.palettes = ({}); }
                     for (const source of Object.keys(root.requested)) worker.write(JSON.stringify({source: source}) + "\n");
                 } else if (typeof response.source === "string" && typeof response.resolved === "string") {
+                    if (!root.requested[response.source]) return;
                     root.sources = Object.assign({}, root.sources, { [response.source]: response.resolved });
                     if (response.palette) root.palettes = Object.assign({}, root.palettes, { [response.source]: response.palette });
+                    IconCache.touch(root.cache, response.source,
+                        2 * (response.source.length + response.resolved.length + JSON.stringify(response.palette || []).length));
+                    root.trim();
                     if (response.error) console.warn("OS icon fallback:", response.source, response.error);
                 }
             }

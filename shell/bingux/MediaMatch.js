@@ -20,7 +20,44 @@ function playerDesktopEntry(player, provider) {
 }
 
 function matchesIdentity(value, group) {
-    return matches({ desktopEntry: value }, group);
+    const identity = normalize(value);
+    if (!identity || !group) return false;
+    const entry = group.desktopEntry || {};
+    return identity === normalize(group.id) || identity === normalize(entry.id)
+        || identity === normalize(entry.startupClass)
+        || (group.windows || []).some(window => identity === normalize(window.appId));
+}
+
+// Build once per notification snapshot. Keep positions so alias matches retain
+// notification order without duplicating entries matched by several identities.
+function notificationIndex(notifications) {
+    const index = { entries: notifications, desktop: new Map(), names: new Map() };
+    notifications.forEach((entry, position) => {
+        if (!entry) return;
+        const buckets = entry.desktopEntry ? index.desktop : index.names;
+        const identity = normalize(entry.desktopEntry || entry.appName);
+        if (!entry.desktopEntry && !entry.appName) return;
+        if (!buckets.has(identity)) buckets.set(identity, []);
+        buckets.get(identity).push(position);
+    });
+    return index;
+}
+
+function notificationsForGroup(index, group) {
+    if (!group) return [];
+    const entry = group.desktopEntry || {};
+    const identities = new Set([group.id, entry.id, entry.startupClass]
+        .concat((group.windows || []).map(window => window.appId)).map(normalize).filter(Boolean));
+    const positions = new Set();
+    function include(bucket) {
+        if (bucket) for (const position of bucket) positions.add(position);
+    }
+    for (const identity of identities) {
+        include(index.desktop.get(identity));
+        include(index.names.get(identity));
+    }
+    include(index.names.get(normalize(entry.name)));
+    return [...positions].sort((a, b) => a - b).map(position => index.entries[position]);
 }
 
 function matchesAudio(properties, group) {

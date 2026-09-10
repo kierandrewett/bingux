@@ -5,6 +5,32 @@ import test from 'node:test';
 const api = vm.createContext({});
 vm.runInContext(readFileSync(new URL('../shell/bingux/MediaMatch.js', import.meta.url), 'utf8'), api);
 const group = { id: 'Spotify', desktopEntry: { id: 'spotify.desktop' }, windows: [] };
+test('indexed notifications preserve exact matching, order and repeated entries', () => {
+    const shared = {appName: 'Spotify'};
+    const entries = [null, shared, {desktopEntry: 'other', appName: 'Spotify'},
+        {desktopEntry: 'spotify.desktop'}, {appName: 'Music Player'}, shared,
+        {appName: 'window-alias'}, {desktopEntry: 'startup'}, {appName: '.desktop'},
+        {desktopEntry: '.desktop', appName: 'Spotify'}, {}, {appName: 'spotify-advert'}];
+    const groups = [null, {}, group, {id: 'other'}, {id: 'spotify',
+        desktopEntry: {id: 'spotify.desktop', name: 'Music Player', startupClass: 'startup'},
+        windows: [{appId: 'window-alias'}, {appId: 'spotify'}]}];
+    const index = api.notificationIndex(entries);
+    for (const candidate of groups) {
+        const expected = entries.filter(entry => api.matchesNotification(entry, candidate));
+        assert.deepEqual(Array.from(api.notificationsForGroup(index, candidate)), expected);
+    }
+    assert.deepEqual(Array.from(api.notificationsForGroup(api.notificationIndex([]), group)), []);
+});
+test('group lookups do not re-read unrelated notification identities', () => {
+    let reads = 0;
+    const entries = Array.from({length: 1000}, (_, i) => ({get desktopEntry() { reads++; return 'app' + i; }}));
+    const index = api.notificationIndex(entries);
+    reads = 0;
+    for (let i = 0; i < 100; i++) {
+        assert.equal(api.notificationsForGroup(index, {id: 'app' + i})[0], entries[i]);
+    }
+    assert.equal(reads, 0);
+});
 test('player icons resolve through the OS provider, including browser identities and packaged IDs', () => {
     const spotify = {id: 'com.spotify.Client', icon: 'com.spotify.Client'};
     const helium = {id: 'helium', icon: 'helium'};

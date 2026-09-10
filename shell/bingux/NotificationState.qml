@@ -56,15 +56,39 @@ Scope {
     function saveHistory() {
         if (historyReady) historyFile.setText(History.encode(allEntries, retainedState.sessionToken));
     }
-    function cacheImage(entry, item) {
-        if (!historyReady || item.opacity < 1 || !entry.image || String(entry.image).includes(historyDirectory)) return;
-        const key = entry.historyKey || String(entry.notification.id);
-        const path = historyDirectory + "/" + key.replace(/[^a-zA-Z0-9_-]/g, "_") + ".png";
-        item.grabToImage(result => {
-            if (!result.saveToFile(path)) return;
-            allEntries = allEntries.map(current => current.historyKey === key
-                ? Object.assign({}, current, {image: "file://" + path}) : current);
+    property var imageCaptures: new Set()
+    property var capturedImages: new Map()
+    Timer {
+        id: imageCaptureCommit
+        interval: 100
+        onTriggered: root.commitCapturedImages()
+    }
+    function commitCapturedImages() {
+        const updates = capturedImages;
+        capturedImages = new Map();
+        allEntries = allEntries.map(entry => {
+            const update = updates.get(entry.historyKey || String(entry.notification.id));
+            return update && entry.image === update.source
+                ? Object.assign({}, entry, {image: update.path}) : entry;
         });
+        for (const key of updates.keys()) imageCaptures.delete(key);
+    }
+    function cacheImage(entry, item) {
+        if (!historyReady || !item.visible || item.width <= 0 || item.height <= 0 || item.opacity < 1
+            || !entry.image || String(entry.image).includes(historyDirectory)) return;
+        const key = entry.historyKey || String(entry.notification.id);
+        // Toasts, history and app menus may all display the same image.
+        if (imageCaptures.has(key)) return;
+        imageCaptures.add(key);
+        const source = entry.image;
+        const path = historyDirectory + "/" + key.replace(/[^a-zA-Z0-9_-]/g, "_") + ".png";
+        const started = item.grabToImage(result => {
+            if (!result.saveToFile(path)) { root.imageCaptures.delete(key); return; }
+            root.capturedImages.set(key, {source: source, path: "file://" + path});
+            // Batch completed captures into one history/delegate update.
+            if (!imageCaptureCommit.running) imageCaptureCommit.start();
+        });
+        if (!started) imageCaptures.delete(key);
     }
     property var applicationAliases: new Map()
 

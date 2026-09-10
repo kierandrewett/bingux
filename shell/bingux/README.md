@@ -244,7 +244,10 @@ Gnoblin compositor effects are configured in `~/.config/gnoblin/gnoblin.toml`.
 The rebuilt compositor supports alpha-masked layer blur and per-window rules.
 Dock icon rectangles are published through foreign-toplevel management so
 minimise animations can target each icon. Those native changes need one new
-login after installation. QML edits reload in the running Quickshell process.
+login after installation. Apply QML edits with `qs -p shell/bingux ipc call shell reload`.
+Automatic file watching is off during normal use because rebuilding the shell
+interrupts active drags and animations. Set `BINGUX_LIVE_RELOAD=1` before starting
+Quickshell to enable automatic reloads in a development session.
 
 ## Verification
 

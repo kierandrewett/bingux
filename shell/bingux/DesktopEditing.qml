@@ -21,9 +21,11 @@ Singleton {
         // mapToItem does not observe geometry changes. Containers with custom
         // transforms expose geometryRevision for their animation timeline.
         for (let current = item; current; current = current.parent) {
-            const geometry = [current.x, current.y, current.width, current.height,
-                current.scale, current.rotation, current.transformOrigin];
-            if ("geometryRevision" in current) geometry.push(current.geometryRevision);
+            // Read the properties to establish QML dependencies without an
+            // array allocation for each ancestor on each animation frame.
+            current.x; current.y; current.width; current.height;
+            current.scale; current.rotation; current.transformOrigin;
+            if ("geometryRevision" in current) current.geometryRevision;
         }
     }
     function point(item, window, x, y) {
