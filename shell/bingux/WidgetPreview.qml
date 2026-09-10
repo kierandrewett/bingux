@@ -9,7 +9,7 @@ FocusScope {
     id: root
     required property string widgetId
     property var metrics: null
-    readonly property var spec: ControlLayout.widget(widgetId) || DesktopLayout.widget(widgetId) || {}
+    readonly property var spec: ExtensionRegistry.widget(widgetId) || ControlLayout.widget(widgetId) || DesktopLayout.widget(widgetId) || {}
     readonly property bool groupedWidget: !!ControlLayout.groupFor(widgetId)
     readonly property bool nativeGroupPreview: ["controls-header", "controls-audio", "controls-tiles"].includes(widgetId)
     readonly property bool utilityWidget: ["control-divider", "control-header-space", "control-customise"].includes(widgetId)
@@ -60,7 +60,7 @@ FocusScope {
             height: item ? item.implicitHeight : 0
             scale: Math.min(1, root.width / Math.max(1, width), root.height / Math.max(1, height))
             transformOrigin: Item.TopLeft
-            sourceComponent: root.groupedWidget ? ({
+            sourceComponent: ControlLayout.isExtension(root.widgetId) ? extensionPreview : root.groupedWidget ? ({
                     "controls-header": groupPreview, "controls-audio": groupPreview, "controls-tiles": groupPreview,
                     "control-volume": audioControl, "control-microphone": audioControl, "control-media": mediaControl,
                     "control-divider": divider, "control-header-space": space, "control-battery": battery,
@@ -70,6 +70,7 @@ FocusScope {
                     overflow, tray})[root.widgetId] || empty
         }
     }
+    Component { id: extensionPreview; ExtensionWidget { widgetId: root.widgetId; preview: true } }
     Component { id: headerButton; IconButton {
         iconName: root.spec.icon || ""; label: root.spec.label || ""
         barStyle: root.barLayout; barWindow: DesktopEditing.editor?.nativeWindow

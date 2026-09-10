@@ -224,7 +224,7 @@ Scope {
     function appId(value) { return value.endsWith(".desktop") ? value.slice(0, -8) : value; }
     function appEntry(value) { return DesktopEntries.byId(value) || DesktopEntries.byId(value + ".desktop") || DesktopEntries.heuristicLookup(value); }
     function baseInfo(id) {
-        if (!id.startsWith("app:")) return ControlLayout.widget(id) || DesktopLayout.widget(id);
+        if (!id.startsWith("app:")) return ExtensionRegistry.widget(id) || ControlLayout.widget(id) || DesktopLayout.widget(id);
         const entry = appEntry(id.slice(4));
         return {id, label: entry?.name || id.slice(4), icon: entry?.icon || "application-x-executable", app: true};
     }
@@ -508,7 +508,7 @@ Scope {
                     objectName: "customiseWidgetGrid"
                     Layout.fillWidth: true; Layout.fillHeight: true
                     cellWidth: width / Math.max(1, Math.floor(width / 190)); cellHeight: 144; clip: true; cacheBuffer: 100; reuseItems: true
-                    model: !root.visible ? [] : root.tab === "Apps" ? root.applications.map(entry => "app:" + root.appId(entry.id)) : DesktopLayout.layoutWidgets.concat(DesktopLayout.decorationWidgets, DesktopLayout.widgets, DesktopLayout.controlWidgets, ControlLayout.widgets).filter(widget => !root.appFilter || widget.label.toLowerCase().includes(root.appFilter.toLowerCase())).map(widget => widget.id)
+                    model: !root.visible ? [] : root.tab === "Apps" ? root.applications.map(entry => "app:" + root.appId(entry.id)) : DesktopLayout.layoutWidgets.concat(DesktopLayout.decorationWidgets, DesktopLayout.widgets, DesktopLayout.controlWidgets, ControlLayout.widgets, ExtensionRegistry.widgets).filter(widget => !root.appFilter || widget.label.toLowerCase().includes(root.appFilter.toLowerCase())).map(widget => widget.id)
                     delegate: Chip { required property string modelData; widgetId: modelData }
                     boundsBehavior: Flickable.StopAtBounds
                     ScrollBar.vertical: ScrollBar {}

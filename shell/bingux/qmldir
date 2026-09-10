@@ -173,3 +173,10 @@ BarOverflowButton 1.0 BarOverflowButton.qml
 BarNotificationButton 1.0 BarNotificationButton.qml
 SidebarPanelFace 1.0 SidebarPanelFace.qml
 DesktopLayoutSettings 1.0 DesktopLayoutSettings.qml
+
+singleton ExtensionRegistry 1.0 ExtensionRegistry.qml
+ExtensionContext 1.0 ExtensionContext.qml
+ExtensionWidget 1.0 ExtensionWidget.qml
+ExtensionServices 1.0 ExtensionServices.qml
+
+ExtensionSettings 1.0 ExtensionSettings.qml

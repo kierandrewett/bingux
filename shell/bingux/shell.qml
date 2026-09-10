@@ -15,6 +15,8 @@ import "DesktopLayout.js" as DesktopLayout
 ShellRoot {
     id: root
 
+    ExtensionServices { shellObjects: ({root, topBar, dock, controlCentre, sidebar: terminalSidebar}) }
+
     Connections {
         target: Quickshell
         // The success banner owns another QML engine and blocks IPC until it
@@ -411,6 +413,7 @@ ShellRoot {
         readonly property string spacingKey: customLayout ? ["top-left", "top-center", "top-right"].reduce((items, zone) => items.concat(customLayout[zone]), []).filter(DesktopLayout.isSpacing).join(";") : ""
         readonly property var spacingIds: spacingKey ? spacingKey.split(";") : []
         property var spacingWidgets: []
+        ListModel { id: extensionInstances }
         ListModel { id: spacingInstances }
         ListModel { id: decorationInstances }
         function reconcileInstances(model, ids) {
@@ -422,9 +425,11 @@ ShellRoot {
         }
         function syncWidgetInstances() {
             reconcileInstances(spacingInstances, spacingIds);
+            reconcileInstances(extensionInstances, extensionKey ? extensionKey.split(";") : []);
             reconcileInstances(decorationInstances, decorationKey ? decorationKey.split(";") : []);
         }
         // A cross-container move updates two lists. Reconcile after both changes.
+        onExtensionKeyChanged: Qt.callLater(syncWidgetInstances)
         onSpacingKeyChanged: Qt.callLater(syncWidgetInstances)
         onDecorationKeyChanged: Qt.callLater(syncWidgetInstances)
         Component.onCompleted: syncWidgetInstances()
@@ -460,6 +465,25 @@ ShellRoot {
             onObjectAdded: (index, object) => topBar.decorationWidgets = topBar.decorationWidgets.concat([object])
             onObjectRemoved: (index, object) => { object.parent = null; topBar.decorationWidgets = topBar.decorationWidgets.filter(item => item !== object); }
         }
+        readonly property string extensionKey: customLayout ? Object.values(customLayout).reduce((items, values) => items.concat(values), []).concat(DesktopEditing.desktop.controlLayout?.groups["control-centre"] || []).filter(id => id.startsWith("extension:")).join(";") : ""
+        property var extensionWidgets: []
+        Instantiator {
+            model: extensionInstances
+            delegate: ExtensionWidget {
+                id: extensionWidget
+                required property string instanceId
+                widgetId: instanceId
+                anchorWindow: topBar.windowFor(extensionWidget)
+                visible: topBar.extensionWidgets.includes(extensionWidget) && topBar.chosen(extensionWidget)
+                property bool attached: false
+                Component.onCompleted: Qt.callLater(() => attached = true)
+                parent: attached ? topBar.hostFor(extensionWidget) : null
+                Layout.column: topBar.controlColumn(extensionWidget)
+                Layout.row: topBar.controlRow(extensionWidget)
+            }
+            onObjectAdded: (index, object) => topBar.extensionWidgets = topBar.extensionWidgets.concat([object])
+            onObjectRemoved: (index, object) => { object.parent = null; topBar.extensionWidgets = topBar.extensionWidgets.filter(item => item !== object); }
+        }
         function hasSpring(zone) { return customLayout?.[zone]?.some(id => id.startsWith("spring:")) || false; }
         function zoneBudget(zone) {
             const centre = availableControls.filter(item => zoneFor(item) === "top-center");
@@ -474,7 +498,7 @@ ShellRoot {
             JSON.stringify(customLayout["top-left"]) === '["search"]' &&
             JSON.stringify(customLayout["top-center"]) === '["clock"]' &&
             customLayout.dock.length === 0 &&
-            !["top-left", "top-center", "top-right"].some(zone => customLayout[zone].some(id => id.startsWith("control-") || id.startsWith("controls-") || DesktopLayout.isSpacing(id) || DesktopLayout.isDecoration(id))) &&
+            !["top-left", "top-center", "top-right"].some(zone => customLayout[zone].some(id => id.startsWith("control-") || id.startsWith("controls-") || id.startsWith("extension:") || DesktopLayout.isSpacing(id) || DesktopLayout.isDecoration(id))) &&
             ["top-left", "top-center", "top-right"].every(zone => !DesktopEditing.desktop.containers?.[zone]?.display || DesktopEditing.desktop.containers[zone].display === "native") &&
             Object.keys(DesktopEditing.desktop.widgetOptions || {}).every(id => !DesktopLayout.zone(customLayout, id).startsWith("top-") || !appearance(id, "", "", false, false).custom) &&
             ["capture", "tray", "privacy", "metrics", "keyboard", "controls", "notifications"].every(id => customLayout["top-right"].includes(id)))
@@ -507,8 +531,8 @@ ShellRoot {
         readonly property real controlsBudget: Math.max(0, (width - clockPill.implicitWidth) / 2 - Theme.gap)
         // Display order is independent of overflow priority and reparenting order.
         readonly property var defaultControls: [captureStatus, trayContainer, privacyContainer,
-            metricsPill, inputSourceSelector, overflowButton, systemPill, notificationButton, searchPill, clockPill].concat(controlCentre.movableWidgets, spacingWidgets, decorationWidgets, terminalSidebar.panelWidgets)
-        readonly property var controlNames: ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "search", "clock"].concat(controlCentre.movableWidgets.map(item => item.widgetId), spacingWidgets.map(item => item.widgetId), decorationWidgets.map(item => item.widgetId), terminalSidebar.panelWidgets.map(item => item.widgetId))
+            metricsPill, inputSourceSelector, overflowButton, systemPill, notificationButton, searchPill, clockPill].concat(controlCentre.movableWidgets, spacingWidgets, decorationWidgets, terminalSidebar.panelWidgets, extensionWidgets)
+        readonly property var controlNames: ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "search", "clock"].concat(controlCentre.movableWidgets.map(item => item.widgetId), spacingWidgets.map(item => item.widgetId), decorationWidgets.map(item => item.widgetId), terminalSidebar.panelWidgets.map(item => item.widgetId), extensionWidgets.map(item => item.widgetId))
         Settings {
             id: barPreferences
             location: "file://" + (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/bingux/top-bar.ini"
@@ -614,7 +638,7 @@ ShellRoot {
             [privacyContainer, privacyContainer.active], [metricsPill, profileSettings.metricsEnabled],
             [inputSourceSelector, metrics.desktopStateAvailable], [systemPill, true],
             [notificationButton, notificationState.allEntries.length > 0], [searchPill, true], [clockPill, true]
-        ].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat(controlCentre.movableWidgets.filter(item => chosen(item)), spacingWidgets.filter(item => chosen(item)), decorationWidgets.filter(item => chosen(item)), terminalSidebar.panelWidgets.filter(item => item.placed))
+        ].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat(controlCentre.movableWidgets.filter(item => chosen(item)), spacingWidgets.filter(item => chosen(item)), decorationWidgets.filter(item => chosen(item)), terminalSidebar.panelWidgets.filter(item => item.placed), extensionWidgets.filter(item => chosen(item)))
         readonly property var overflowItems: {
             if (customLayout && !nativeTopBarLayout) {
                 const hidden = [];

@@ -34,10 +34,11 @@ Window {
     function toggleSearch() { searchOpen = !searchOpen; if (searchOpen) { navigationOpen = true; Qt.callLater(() => globalSearch.forceActiveFocus()); } else { globalSearch.clear(); } }
     property string settingsQuery: ""
     readonly property bool searching: settingsQuery.trim().length > 0
-    readonly property string category: page === "Controls" ? "Controls" : ["Desktop", "TopBar", "Dock", "Sidebar"].includes(page) ? "Desktop" : "Search"
+    readonly property string category: page === "Extensions" ? "Extensions" : page === "Controls" ? "Controls" : ["Desktop", "TopBar", "Dock", "Sidebar"].includes(page) ? "Desktop" : "Search"
     readonly property bool canGoBack: searchSubpage || !["Desktop", "Search", "Controls"].includes(page)
     function goBack() { if (searchSubpage) searchSettings.goBack(); else page = category; }
     readonly property var destinations: [
+        {title: "Extensions", description: "Extensions", page: "Extensions", words: "plugins widgets addons enable disable reload"},
         {title: "Control Centre", description: "Control Centre", page: "Controls", words: "vpn tailscale bluetooth night light power awake notifications do not disturb"},
         {title: "Top Bar", description: "Desktop", page: "TopBar", words: "widgets icons labels status cpu memory"},
         {title: "Dock", description: "Desktop", page: "Dock", words: "applications pinned running icons alignment click scroll"},
@@ -421,6 +422,7 @@ Window {
                     color: Theme.surface; radius: Theme.radius
                     Text { id: notice; anchors.fill: parent; anchors.margins: Theme.padding; text: root.status; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: Theme.warning; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
                 }
+                ExtensionSettings { Layout.fillWidth: true; visible: root.page === "Extensions" }
                 ColumnLayout {
                     visible: root.page === "Search"
                     Layout.fillWidth: true; spacing: 24
@@ -640,7 +642,7 @@ Window {
                     }
             Repeater {
                 id: navItems
-                model: [{name: "Desktop", label: "Desktop", icon: "preferences-desktop-display-symbolic"}, {name: "Controls", label: "Control Centre", icon: "preferences-system-symbolic"}, {name: "Search", label: "Search", icon: "system-search-symbolic"}]
+                model: [{name: "Desktop", label: "Desktop", icon: "preferences-desktop-display-symbolic"}, {name: "Controls", label: "Control Centre", icon: "preferences-system-symbolic"}, {name: "Search", label: "Search", icon: "system-search-symbolic"}, {name: "Extensions", label: "Extensions", icon: "application-x-addon-symbolic"}]
                 SettingsNavigationRow {
                     id: navButton
                     required property int index
