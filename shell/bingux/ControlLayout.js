@@ -1,5 +1,6 @@
 const externalIds = ["search", "clock", "capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "terminal", "notes", "monitor", "calendar", "media", "tasks"];
-function isExternal(id) { return externalIds.includes(id) || /^(label|icon):[1-9][0-9]{0,3}$/.test(id); }
+function isExtension(id) { return /^extension:[a-z0-9][a-z0-9._-]{0,127}\/[a-z0-9][a-z0-9._-]{0,127}$/.test(id); }
+function isExternal(id) { return isExtension(id) || externalIds.includes(id) || /^(label|icon):[1-9][0-9]{0,3}$/.test(id); }
 function acceptsMember(group, id) { return items(defaults(), group).includes(id) || (group === "control-centre" && isExternal(id)); }
 
 // Native groups remain distinct so importing a layout does not flatten its UI.

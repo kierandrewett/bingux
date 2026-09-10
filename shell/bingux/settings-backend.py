@@ -26,8 +26,12 @@ PROVIDERS = {'applications', 'files', 'calculation', 'conversions', 'web', 'web-
 EXTERNAL_CONTROL_IDS = {"search", "clock", "capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "terminal", "notes", "monitor", "calendar", "media", "tasks"}
 
 
+def is_extension_widget(item):
+    return isinstance(item, str) and bool(re.fullmatch(r"extension:[a-z0-9][a-z0-9._-]{0,127}/[a-z0-9][a-z0-9._-]{0,127}", item))
+
+
 def is_external_control(item):
-    return isinstance(item, str) and (item in EXTERNAL_CONTROL_IDS or bool(re.fullmatch(r'(label|icon):[1-9][0-9]{0,3}', item)))
+    return isinstance(item, str) and (is_extension_widget(item) or item in EXTERNAL_CONTROL_IDS or bool(re.fullmatch(r'(label|icon):[1-9][0-9]{0,3}', item)))
 
 
 CONTROL_ACTIONS = {"control-account", "control-settings", "control-session", "control-lock"}
@@ -148,7 +152,7 @@ def validate_desktop(desktop, previous=None):
                 if not isinstance(item, str):
                     raise ValueError('Invalid widget identifier.')
                 instance = instance_kinds and re.fullmatch(rf'({instance_kinds}):[1-9][0-9]{{0,3}}', item)
-                if (item not in allowed and not instance) or item in seen:
+                if (item not in allowed and not instance and not is_extension_widget(item)) or item in seen:
                     raise ValueError('A widget can only be placed once in a compatible area.')
             if len(items) != len(set(items)): raise ValueError('A widget can only be placed once.')
             seen.update(items)

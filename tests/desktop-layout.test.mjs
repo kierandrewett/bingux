@@ -138,3 +138,18 @@ test('status, decoration and panel widgets accept the control centre', () => {
     for (const id of ['spacer:1', 'spring:1', 'unknown'])
         assert.equal(layout.accepts(id, 'control-centre'), false);
 });
+
+test("extension widgets use all existing containers and preserve missing placements", () => {
+    const id = "extension:org.example.home/status";
+    for (const target of ["top-left", "top-center", "top-right", "dock", "sidebar", "control-centre", "palette"])
+        assert.equal(layout.accepts(id, target), true);
+    let current = layout.move(layout.defaults(), id, "top-right", 0);
+    current = layout.move(current, id, "dock", 0);
+    assert.equal(current.dock[0], id);
+    assert.equal(current["top-right"].includes(id), false);
+    assert.equal(controls.isExternal(id), true);
+    const centre = controls.move(controls.defaults(), "control-centre", id, 0);
+    assert.equal(controls.valid(centre), true);
+    for (const bad of ["extension:/status", "extension:bad/../widget", "extension:bad/widget space"])
+        assert.equal(layout.accepts(bad, "dock"), false);
+});
