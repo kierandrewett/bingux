@@ -16,9 +16,10 @@ ROOT := $(abspath .)
 all: native daemons
 
 native:
-	mkdir -p $(BUILD_DIR)/text $(BUILD_DIR)/settings
+	mkdir -p $(BUILD_DIR)/text $(BUILD_DIR)/settings $(BUILD_DIR)/effects
 	cd $(BUILD_DIR)/text && $(QMAKE) $(ROOT)/packages/bingux-text-layout/text-layout.pro && $(MAKE)
 	cd $(BUILD_DIR)/settings && $(QMAKE) $(ROOT)/packages/bingux-settings/platform/platform.pro && $(MAKE)
+	cd $(BUILD_DIR)/effects && $(QMAKE) $(ROOT)/packages/bingux-effects/effects.pro && $(MAKE)
 	$(CC) -std=c11 -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra -Werror packages/bingux-audio-meter/main.c -o $(BUILD_DIR)/bingux-audio-meter $$($(PKG_CONFIG) --cflags --libs libpulse)
 
 daemons:

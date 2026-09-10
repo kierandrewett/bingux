@@ -29,6 +29,8 @@ def main():
     source = Path(__file__).resolve().parents[1]
     build = Path(args.build_dir).resolve()
     payload = {
+        build / "effects/libbinguxeffects.so": qml / "Bingux/Effects/libbinguxeffects.so",
+        source / "packages/bingux-effects/qmldir": qml / "Bingux/Effects/qmldir",
         build / "text/libbinguxtext.so": qml / "Bingux/Text/libbinguxtext.so",
         source / "packages/bingux-text-layout/qmldir": qml / "Bingux/Text/qmldir",
         build / "settings/libbinguxsettings.so": qml / "Bingux/Settings/libbinguxsettings.so",

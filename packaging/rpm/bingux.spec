@@ -10,6 +10,8 @@ BuildRequires:  cargo
 BuildRequires:  gcc
 BuildRequires:  make
 BuildRequires:  pkgconfig(libpulse)
+BuildRequires:  pkgconfig(wayland-client)
+BuildRequires:  wayland-devel
 BuildRequires:  qt6-qtbase-devel
 BuildRequires:  qt6-qtdeclarative-devel
 BuildRequires:  qt6-qtbase-private-devel

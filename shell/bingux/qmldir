@@ -154,6 +154,8 @@ BarSpace 1.0 BarSpace.qml
 DesktopDecoration 1.0 DesktopDecoration.qml
 
 singleton BlurRegions 1.0 BlurRegions.qml
+singleton SurfaceFades 1.0 SurfaceFades.qml
+SurfaceFade 1.0 SurfaceFade.qml
 BlurRegion 1.0 BlurRegion.qml
 
 HorizontalWheelScroll 1.0 HorizontalWheelScroll.qml

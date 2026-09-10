@@ -1,0 +1,19 @@
+QT += quick gui-private qml
+CONFIG += plugin c++17 link_pkgconfig
+TEMPLATE = lib
+TARGET = binguxeffects
+PKGCONFIG += wayland-client
+SOURCES = plugin.cpp blur-fade-protocol.c
+HEADERS = blur-fade-client.h
+INCLUDEPATH += $$OUT_PWD
+
+protocol_header.input = PROTOCOL
+protocol_header.output = blur-fade-client.h
+protocol_header.commands = wayland-scanner client-header ${QMAKE_FILE_IN} ${QMAKE_FILE_OUT}
+protocol_header.CONFIG += no_link target_predeps
+protocol_code.input = PROTOCOL
+protocol_code.output = blur-fade-protocol.c
+protocol_code.commands = wayland-scanner private-code ${QMAKE_FILE_IN} ${QMAKE_FILE_OUT}
+protocol_code.CONFIG += no_link target_predeps
+PROTOCOL = $$PWD/gnoblin-blur-fade-v1.xml
+QMAKE_EXTRA_COMPILERS += protocol_header protocol_code

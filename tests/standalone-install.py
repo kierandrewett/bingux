@@ -14,7 +14,7 @@ class InstallTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as name:
             base = Path(name)
             build, stage = base / "build", base / "stage"
-            for filename in ("text/libbinguxtext.so", "settings/libbinguxsettings.so",
+            for filename in ("text/libbinguxtext.so", "settings/libbinguxsettings.so", "effects/libbinguxeffects.so",
                              "bingux-audio-meter", "cargo/release/bingux-searchd", "cargo/release/bingux-statusd"):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -31,6 +31,7 @@ class InstallTest(unittest.TestCase):
                              "/usr/share/bingux/shell/launch-application.py")
             self.assertTrue((stage / "usr/share/bingux/shell/ProfileSettings.qml").is_file())
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Text/qmldir").is_file())
+            self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Effects/libbinguxeffects.so").is_file())
             self.assertFalse((stage / "home").exists())
             self.assertFalse((stage / "usr/share/bingux/shell/__pycache__").exists())
             unit = (stage / "usr/lib/systemd/user/bingux.service").read_text()
