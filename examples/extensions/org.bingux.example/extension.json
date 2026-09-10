@@ -1,0 +1,11 @@
+{
+  "id": "org.bingux.example",
+  "name": "Example widget",
+  "description": "A counter that shows widget placement, popups, settings and actions.",
+  "apiVersion": 1,
+  "entry": "Service.qml",
+  "settings": "Settings.qml",
+  "widgets": [
+    {"id": "counter", "name": "Counter", "icon": "list-add-symbolic", "component": "Counter.qml"}
+  ]
+}

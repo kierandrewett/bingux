@@ -8,7 +8,6 @@ import re
 import tempfile
 
 ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
-WIDGET_ID = re.compile(r"extension:[a-z0-9][a-z0-9._-]{0,127}/[a-z0-9][a-z0-9._-]{0,127}")
 
 
 def config_path():
