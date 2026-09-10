@@ -10,6 +10,17 @@ features.
 Install a matching Qt 6 development environment, Quickshell, a C compiler,
 Cargo and the system libraries used by the optional helpers. Then run:
 
+On Fedora, use the spec as the dependency source instead of maintaining a
+second package list:
+
+```sh
+sudo dnf install rpmdevtools
+sudo dnf builddep packaging/rpm/bingux.spec
+```
+
+Install Quickshell from the package source that matches the Qt version on the
+host. The shell does not bundle or replace Quickshell.
+
 ```sh
 make
 make check
