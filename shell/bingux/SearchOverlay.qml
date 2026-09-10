@@ -698,8 +698,8 @@ PanelWindow {
 
     ParallelAnimation {
         id: openAnimation
-        NumberAnimation { target: surface; property: "opacity"; from: 0.8; to: 1; duration: Theme.searchMotion }
-        NumberAnimation { target: surface; property: "scale"; from: 0.99; to: 1; duration: Theme.searchMotion; easing.type: Easing.OutCubic }
+        NumberAnimation { target: surface; property: "opacity"; from: 1; to: 1; duration: 0 }
+        NumberAnimation { target: surface; property: "scale"; from: 1; to: 1; duration: 0; easing.type: Easing.OutCubic }
     }
 
     ParallelAnimation {
@@ -743,11 +743,11 @@ PanelWindow {
         clip: true
         y: Math.max(16, Math.min(root.height * 0.38 - (Theme.searchInputHeight + 16) / 2, root.height - height - 24))
         Behavior on height {
-            enabled: root.visible && !openAnimation.running && !root.closing
+            enabled: root.acceptingKeyboard && !root.closing
             NumberAnimation { id: surfaceHeightAnimation; duration: Theme.searchMotion; easing.type: Easing.OutCubic }
         }
         Behavior on y {
-            enabled: root.visible && !openAnimation.running && !root.closing
+            enabled: root.acceptingKeyboard && !root.closing
             NumberAnimation { id: surfaceYAnimation; duration: Theme.searchMotion; easing.type: Easing.OutCubic }
         }
 
