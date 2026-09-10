@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import Quickshell.Widgets
 
 // An independent icon copy: neither list clipping nor the closing card's
@@ -37,6 +38,8 @@ Item {
         width: root.width * root.maximumScale
         height: root.height * root.maximumScale
         scale: 1 / root.maximumScale
+        rasterSize: Math.ceil(width * Screen.devicePixelRatio)
+        mipmap: true
         visible: !root.symbolic
         source: root.symbolic ? "" : root.source
     }

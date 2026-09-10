@@ -164,6 +164,13 @@ class RenderCache:
         self.bytes += len(value)
 
 
+def requested_size(source):
+    try:
+        return max(64, min(1024, int(parse_qs(urlparse(source).query).get("bingux-size", [SIZE])[0])))
+    except (TypeError, ValueError):
+        return SIZE
+
+
 def icon_path(source, theme):
     if source.startswith(FILE_PREVIEW_PREFIX):
         return file_preview(source, theme)[0]
@@ -181,13 +188,13 @@ def icon_path(source, theme):
                 candidate = Path(directory) / (name + suffix)
                 if candidate.is_file():
                     return candidate
-        info = theme.lookup_icon(name, SIZE, Gtk.IconLookupFlags.FORCE_SIZE)
+        info = theme.lookup_icon(name, requested_size(source), Gtk.IconLookupFlags.FORCE_SIZE)
         # Quickshell.iconPath leaves missing names in the URL and supplies the
         # replacement as a query parameter. Render that replacement here too,
         # so SVG fallbacks keep their alpha instead of going back through QtSvg.
         if info is None:
             fallback = options.get("fallback", ["application-x-executable"])[0]
-            info = theme.lookup_icon(fallback, SIZE, Gtk.IconLookupFlags.FORCE_SIZE)
+            info = theme.lookup_icon(fallback, requested_size(source), Gtk.IconLookupFlags.FORCE_SIZE)
         if info is None:
             raise ValueError("icon not found")
         return Path(info.get_filename())
@@ -204,11 +211,12 @@ def resolve(source, theme, cache):
     if path.suffix.lower() not in (".svg", ".svgz"):
         return path.as_uri()
     stat = path.stat()
-    identity = (str(path), stat.st_mtime_ns, stat.st_size, SIZE)
+    size = requested_size(source)
+    identity = (str(path), stat.st_mtime_ns, stat.st_size, size)
     cached = cache.get(identity)
     if cached is not None:
         return cached
-    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(path), SIZE, SIZE, True)
+    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(str(path), size, size, True)
     # PNG is only the lossless in-memory transport to Qt, never a file.
     image = pixbuf_uri(pixbuf)
     cache.put(identity, image)

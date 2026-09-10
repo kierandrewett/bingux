@@ -42,6 +42,18 @@ class IconRenderingTests(unittest.TestCase):
         self.assertEqual(list(self.directory.iterdir()), [], "rendering must not create PNG files")
         self.assertEqual(len(self.cache.entries), 1)
 
+    def test_animation_raster_size_has_a_separate_cache_entry(self):
+        path = self.directory / "gear.svg"
+        path.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><circle cx="64" cy="64" r="50" fill="white"/></svg>')
+        for size in [192, 224, 448]:
+            uri = icons.resolve(path.as_uri() + "?bingux-size=" + str(size), self.theme, self.cache)
+            loader = icons.GdkPixbuf.PixbufLoader.new_with_type("png")
+            loader.write(base64.b64decode(uri.split(",", 1)[1]))
+            loader.close()
+            self.assertEqual(loader.get_pixbuf().get_width(), size)
+        self.assertEqual(len(self.cache.entries), 3)
+        self.assertEqual(icons.requested_size("file:///a.svg?bingux-size=999999"), 1024)
+
     def test_missing_icon_fallback_keeps_transparent_corners(self):
         for fallback in ["application-x-executable", "image-missing"]:
             source = "image://icon/bingux-definitely-missing-icon?fallback=" + fallback
