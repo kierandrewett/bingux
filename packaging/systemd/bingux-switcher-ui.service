@@ -1,0 +1,10 @@
+[Unit]
+Description=Bingux window switcher surface
+PartOf=bingux.target
+After=bingux.service
+
+[Service]
+ExecStart=/usr/bin/bingux --surface switcher
+Restart=on-failure
+RestartSec=3
+LimitCORE=0

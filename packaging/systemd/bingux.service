@@ -1,0 +1,14 @@
+[Unit]
+Description=Bingux desktop shell
+PartOf=bingux.target
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/bingux --no-color
+Restart=on-failure
+RestartSec=3
+LimitCORE=0
+Environment=QT_QPA_PLATFORM=wayland
+Environment=QML_IMPORT_PATH=/usr/lib64/bingux/qml
+Type=dbus
+BusName=org.freedesktop.Notifications

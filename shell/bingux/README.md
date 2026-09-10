@@ -149,8 +149,9 @@ A stream must exceed -50 dBFS for 250ms to activate; an active badge holds above
 -60 dBFS and through 1.2 seconds of silence, then fades out over two seconds.
 Muted, paused and silent streams do not activate it. Process or desktop identity
 outranks generic runtime names, avoiding Chromium/Electron misattribution.
-The Nix module supplies `BINGUX_AUDIO_METER`; source sessions can place the
-compiled helper on PATH. The helper reconnects after an audio-server restart.
+The standalone install supplies `BINGUX_AUDIO_METER` through the compiled helper
+on PATH. Source sessions can set the variable to an explicit helper path. The
+helper reconnects after an audio-server restart.
 
 Validation:
 
@@ -233,9 +234,8 @@ toggle` (also `open`, `hide`, `select terminal|notes|monitor`, and `edge top|lef
 use `qs -p shell/bingux ipc call sidebar toggle` instead.
 
 The terminal renders inside Quickshell through the Qt 6 QMLTermWidget plugin.
-Its controls use Bingux's shared theme and ActionButton component. The Nix module
-adds the pinned plugin to the shell service's QML import path. Set
-`bingux.desktopShell.sidebar.enable = false` to disable the sidebar.
+Its controls use Bingux's shared theme and ActionButton component. The terminal
+plugin is optional; without it, the rest of the sidebar remains available.
 Source-path runs need QMLTermWidget 2.0 built for Qt 6 on `QML_IMPORT_PATH`.
 The terminal component loads only after a valid opening drag is released (or an explicit open command). Aborted drags never start a shell. Existing sessions resize and rewrap their text during subsequent drags. The terminal uses a custom Bingux palette and the same background as its panel; sidebar, dock, and top bar share their surface, outline, and corner treatment. A missing plugin shows a retry
 message inside the panel and does not prevent the rest of the shell from loading.
@@ -278,10 +278,9 @@ The Qt integration window resizes correctly. A separate GTK 4 test window kept
 its previous size after the work area changed on the tested Gnoblin installs;
 that client/compositor interaction remains unresolved.
 
-For source-based desktop launches, the Qt 6 QMLTermWidget plugin must match the
-Quickshell runtime. Add its parent QML directory to `QML_IMPORT_PATH` inside the
-launcher, after any environment cleanup. The NixOS module sets this path for the
-packaged service automatically. A running service needs restarting after changing
+For desktop launches, the Qt 6 QMLTermWidget plugin must match the Quickshell
+runtime. Add its parent QML directory to `QML_IMPORT_PATH` inside the launcher,
+after any environment cleanup. A running service needs restarting after changing
 its import path; reloading QML alone does not update the process environment.
 
 The top-bar system widget shows single-line, fixed-width rolling readings with one-minute sparklines.

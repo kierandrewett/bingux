@@ -17,3 +17,7 @@
 /core.*
 __pycache__/
 *.pyc
+
+# Standalone build and release output
+/build/
+/dist/

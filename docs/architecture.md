@@ -1,141 +1,82 @@
 # Bingux architecture
 
-Bingux is a NixOS configuration framework. It provides reusable system modules and a profile boundary. It does not select a desktop environment, window manager, shell, user name, application set, or hardware target.
+Bingux is a desktop shell. It owns the user-facing surfaces and their local
+state. It does not own the compositor, login manager, system package profile or
+machine hardware configuration.
 
-## Configuration layers
+The shell is a normal Quickshell configuration. Native helpers and daemons are
+small packages with typed sockets or QML interfaces. Extensions add trusted QML
+without changing the shell's built-in layout model.
+
+## Runtime layers
 
 | Layer | Location | Responsibility |
 | --- | --- | --- |
-| Flake | `flake.nix` | Pins shared dependencies and exposes configurations. |
-| Host | `hosts/<name>/` | Describes machine or virtual-machine facts. |
-| Generic modules | `modules/` | Defines reusable NixOS options and safe system defaults. |
-| Profile | `profiles/<name>/` | Selects personal software, user data, secrets, and optional desktop integration. |
+| Shell | `shell/bingux/` | Draws the top bar, dock, sidebar, popouts and settings surfaces. |
+| Native helpers | `packages/` | Builds the search, status, audio and QML plugin helpers. |
+| User state | `$XDG_CONFIG_HOME/bingux/` | Stores layout, settings, search, notes and extension enable state. |
+| Extension registry | `shell/bingux/extensions.py` | Discovers trusted extension manifests and preserves disabled placements. |
+| Packaging | `packaging/` | Builds Fedora packages and user-systemd units. |
 
-`lib/mk-host.nix` imports the generic modules, then one selected profile, then host-specific modules. The selected profile is the user-specific NixOS module boundary: it can set the supported `bingux.*` options and supported NixOS or Home Manager options needed by that profile. Host modules must not contain personal configuration.
-`mkHost` also passes the target system to generic modules as the `hostSystem` special argument. This keeps hardware-specific performance defaults evaluable for cross-architecture checks without deriving the target from an overlay-dependent package set. Direct `nixosSystem` users that import `nixosModules.default` must pass the same `hostSystem` value in `specialArgs`.
+The shell reads state from the user's XDG configuration directory. Packagers
+set the install prefix and QML import path. The shell does not generate or
+require a machine-specific configuration.
 
-## Selection rules
+## Process boundaries
 
-The generic configuration can set safe shared operating-system defaults, such as firewall and network behaviour. It must not enable profile-specific desktop UI, application sets, user-specific services, system identity, or an unsafe performance setting.
+Bingux does not replace compositor or system services. It calls system APIs and
+uses user-systemd for long-running helper processes. Gnoblin's D-Bus and
+Wayland interfaces are optional integrations; the shell can still render its
+general UI when those interfaces are absent.
 
-The flake can pin sources that only one profile uses. Pinning a source makes it reproducible. A flake may import an optional module globally to expose its options; the selected profile must still enable and configure the source it uses.
+Tailscale, NetworkManager, MPRIS, PipeWire and notification services are
+detected at runtime. Missing integrations remove only their controls. They do
+not prevent the shell from starting.
 
-The parent flake uses the NixOS 25.11 and Home Manager `release-25.11`
-branches. Gnoblin builds the GNOME 49 stack and does not support mixing it with
-a different GNOME major version. Keep these inputs aligned when updating the
-desktop base.
+Secrets belong to the integration that uses them. Extension tokens must stay in
+an extension-owned private file or a secret service. The shell layout never
+stores credentials.
 
-## Kernel and performance policy
+## Gnoblin integration
 
-The alternative kernel choices and AMD active P-state setting are restricted to x86_64 hosts. Generic aarch64 evaluation keeps the Nixpkgs kernel and does not add AMD microcode or P-state settings.
-`modules/system/performance.nix` supports Nixpkgs Zen and XanMod package sets plus pinned CachyOS BORE variants. The default remains the Nixpkgs kernel. The user must select another package set in a profile or host.
+Gnoblin supplies the compositor and session. The stable integration points are:
 
-CPU vulnerability mitigations remain enabled by default. `bingux.performance.disableCpuMitigations` is opt-in and must only be set after a local threat-model decision.
+* `zwlr_layer_shell_v1` for top bar, dock, sidebar and popup surfaces.
+* `zwlr_foreign_toplevel_manager_v1` for dock window listing and actions.
+* `org.gnoblin.Shell` for shell commands, OSD forwarding and session state.
+* The local search, status and OSD sockets for long-running helper data.
 
-## Optional network clients
+The shell owns its own layer-shell surfaces. It does not patch or depend on
+GNOME Shell UI. Another compositor can use the general shell surfaces when it
+provides the required protocols.
 
-`bingux.networking.tailscale.enable` starts the system `tailscaled` service and
-starts `tailscale systray` as the profile user in graphical sessions. The
-normal-user client publishes a StatusNotifierItem. The Bingux tray renders it
-and delegates its application menu, including right-click actions.
+## Extension model
 
-Tailscale login state remains system state. Do not put an auth key in the Nix
-configuration. If unattended enrolment is needed, provide the key as a
-runtime-only SOPS secret and use it outside the Nix store.
+Extensions are discovered from XDG data directories and enabled explicitly in
+`$XDG_CONFIG_HOME/bingux/extensions.json`. A manifest declares QML widgets,
+optional settings and an optional background entry point. Widget IDs are stored
+in the existing layout file, so disabling an extension does not discard the
+user's placement.
 
-## Profile secrets
+The public context provides theme, presentation, actions, events, shared
+buttons and anchored popups. Extensions can use their own QML and Quickshell
+types. Trusted extensions also receive an `unstable` escape hatch for direct
+shell access. This keeps the supported interface useful without repeating the
+rigid extension restrictions found in other desktop shells.
 
-The secrets module supports encrypted profile data in `profiles/<name>/secrets/`, with
-`bingux.secrets.defaultSopsFile` pointing at the encrypted file and
-`bingux.secrets.entries` declaring each decrypted file. The age key defaults to
-`/var/lib/sops-nix/key.txt`. `bingux-secrets-init` is installed only when
-`bingux.secrets.enable = true`. The committed Kieran profile is currently
-bootstrap-only: it enables `bingux.secrets`, but has no committed `.sops.yaml`,
-`defaultSopsFile`, entries, or encrypted secret file. No working profile secret is
-present in this repository.
+Read [Extensions](extensions.md) for the manifest and lifecycle contract.
 
-The first host bootstrap has two stages:
+## Native helpers
 
-1. Enable `bingux.secrets` with no entries, then run `sudo bingux-secrets-init` on the host. The command creates the root-owned age private key outside the Nix store at the default `/var/lib/sops-nix/key.txt` path and prints only its public recipient.
-2. Add that public recipient to `profiles/<name>/secrets/.sops.yaml`, encrypt the profile secret file locally, declare its entries, and deploy the profile again.
+The Rust search daemon owns provider lifecycle, search indexes and the search
+socket. The Rust status daemon owns metric and OSD socket data. The C audio
+meter reports per-stream peaks. The Qt plugins provide text layout and settings
+platform support. Each helper has a bounded protocol and can restart without
+restarting the shell.
 
-Commit the encrypted file and public recipients. Do not commit an age private key, a plaintext secret file, or a copied `/run/secrets/` file. Keep `bingux.secrets.age.generateKey` disabled after bootstrap. If the private key is lost, a replacement key cannot decrypt existing profile secrets.
+## Testing
 
-## Gnoblin profile contract
-
-Gnoblin is an optional profile desktop choice. It is not part of the Bingux generic system contract.
-
-A profile that selects Gnoblin needs these stable integration points:
-
-- Gnoblin implements `zwlr_layer_shell_v1` for externally owned layer-shell surfaces.
-- Gnoblin implements `zwlr_foreign_toplevel_manager_v1` so an external dock can list and control application windows.
-- Gnoblin must not own the notification or on-screen-display user interface for this session. Bingux provides those surfaces when the profile selects its desktop shell.
-- Gnoblin sets `hasNotifications` to `false` for the Bingux session mode. This
-  removes native MessageTray banners but leaves the notification backend and
-  portal support available to an external notification service.
-- Gnoblin emits `org.gnoblin.Shell.OsdRequested` on
-  `/org/gnoblin/Shell` when its master OSD feature or a matching `osd-*`
-  feature suppresses a native OSD request. Its `(uissddas)` payload is
-  `[protocolVersion, monitorIndex, icon, label, level, maxLevel, outputNames]`.
-  Bingux supports protocol version `2` only. `outputNames` identifies the
-  physical Mutter connectors in the target logical monitor. Gnoblin logs and
-  drops a suppressed OSD that has no usable handoff. It does not restore native
-  OSD ownership after a failed handoff. When Gnoblin renders an OSD itself, it
-  emits no handoff signal.
-  `bingux-statusd` validates the signal and forwards it through the local OSD
-  socket. The QML process does not subscribe to the D-Bus interface directly.
-- Gnoblin executes configured `binguxctl` popup commands from `gnoblin.toml`; bare `Super` fires only on an unchorded release.
-- The Bingux desktop-shell process owns its own layer-shell surfaces. It does not patch or depend on GNOME Shell UI.
-
-`docs/desktop-shell.md` defines the Bingux desktop-shell, socket, and
-search-provider contracts. It is the source of truth for the interface between
-the shell and its provider host.
-
-The consumed D-Bus method and signal names are explicit in this contract. Another profile can use a different desktop choice without a compatibility layer.
-
-## Output and profile matrix
-
-The current flake exposes these outputs:
-
-| Output | Profile or host | System | Purpose |
-| --- | --- | --- | --- |
-| `nixosConfigurations.bingux-vm` | `generic` | `x86_64-linux` | NixOS-generated VM test host. |
-| `nixosConfigurations.bingux-pve-vm` | `generic` | `x86_64-linux` | Proxmox-installed generic validation host. |
-| `nixosConfigurations.bingux-kieran-vm` | `kieran` | `x86_64-linux` | NixOS-generated Kieran-profile VM test host. |
-| `nixosConfigurations.bingux-kieran-pve-vm` | `kieran` | `x86_64-linux` | Proxmox-installed Kieran-profile validation host. |
-| `packages.<system>.bingux-statusd` | — | `x86_64-linux`, `aarch64-linux` | Status daemon package. |
-| `packages.<system>.bingux-searchd` | — | `x86_64-linux`, `aarch64-linux` | Search daemon package. |
-| `packages.<system>.bingux-inventory` | — | `x86_64-linux`, `aarch64-linux` | Inventory package. |
-| `packages.x86_64-linux.bingux-generic-install-iso` | `generic` | `x86_64-linux` | Generic NixOS installation image for VM or hardware installation. |
-| `packages.x86_64-linux.bingux-kieran-install-iso` | `kieran` | `x86_64-linux` | Kieran-profile NixOS installation image for VM or hardware installation. |
-
-The repository does not expose a Proxmox API client. Use an operator-owned
-runner or the Proxmox API directly for disposable VM validation. This keeps
-credentials and destructive infrastructure operations outside the system
-configuration repository.
-
-The repository currently exposes no real hardware host. The installer image
-outputs are x86_64-only. Each installer derivation exposes the same
-`passthru.config.image.filePath` and `passthru.filePath`: `iso/bingux-generic.iso`
-for generic and `iso/bingux-kieran.iso` for Kieran. `nix build --no-link
---print-out-paths` returns the output directory; append that `filePath` before
-passing an ISO to a validation runner. `hosts/iso/default.nix` disables ZFS only
-when the selected kernel name starts with `cachyos-`; Kieran selects CachyOS,
-while the generic profile keeps the default Nixpkgs kernel.
-
-## Installation images and Proxmox
-
-`hosts/iso/` adds the `bingux-installer` image variant through the current
-`image.modules` interface. It does not import an image-building module into a
-host configuration. This keeps the normal system configuration separate from
-the installer image derivation.
-
-Proxmox validation uses the installer ISO and an external operator-owned
-runner. The runner must upload the ISO, create a disposable VM with an
-ownership name and tag, boot it, retain redacted task evidence, and delete the
-VM only after validation. `docs/proxmox.md` defines the required secret
-boundary and API sequence. The final owned VM run is destroyed after validation
-and left no live VM result in this repository. It produced runtime evidence for
-search, dock, tray, and notifications; the headless guest could not produce a
-Gnoblin `OsdRequested` event, so OSD producer behaviour still needs a
-hardware-backed session.
+Use `scripts/test-desktop --check` for static checks and `scripts/test-desktop`
+for an isolated nested desktop. Gnoblin integration tests run from the Gnoblin
+repository against a private session. The standalone installer test stages
+files in a temporary directory and verifies that no user path is written.

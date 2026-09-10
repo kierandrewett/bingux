@@ -1,147 +1,41 @@
-# Package management
+# Packaging
 
-Bingux keeps permanent software choices in a profile. A profile is the source
-of truth for its packages, Flatpaks, user applications, and desktop choices.
+Bingux is distributed as a shell package. It does not define a system profile,
+kernel, host, Flatpak policy or secret store.
 
-## Inventory is audit input
+## Fedora
 
-`bingux-inventory` is a read-only audit tool. Its canonical JSON reports
-observed package-manager state; it does not establish why a package is
-installed, which profile should own it, or which Flatpak remote supplied it.
-Treat inventory output as review input only. Do not generate
-`bingux.packages.*` or Flatpak declarations from it: doing so could turn
-unmanaged or transient software into permanent profile state. Safe declaration
-generation requires provenance, such as explicit ownership and source/origin
-metadata, in addition to package name and version.
+The supported repository target is the [Bingux COPR](https://copr.fedorainfracloud.org/coprs/kierandrewett/bingux/).
+The project is public, but builds are not advertised as ready until the first
+clean package and install check passes.
 
-Run the inventory command from the repository root:
+After a build is published, install it with:
 
 ```sh
-nix run .#bingux-inventory -- --pretty --output "$HOME/.local/state/bingux/inventory.json"
+sudo dnf copr enable kierandrewett/bingux
+sudo dnf install bingux
+systemctl --user daemon-reload
+systemctl --user enable --now bingux.target
 ```
 
-The command does not use the network. It writes a JSON document atomically when
-`--output` is used. The document has `schemaVersion` and a `sources` object.
-Sources include the available RPM or DNF, Flatpak, Cargo, pipx, npm, Bun, and Nix
-profile collectors. A missing package manager is omitted from `sources`. A
-write failure returns a non-zero status.
+The package does not change the selected login session. Use Gnoblin for the
+compositor/session, or start Bingux from another compatible Wayland session.
 
-## Permanent packages
+## Source installation
 
-Use `bingux.packages.system` when a program is needed by system services,
-administrators, or every user. Use `bingux.packages.user` for a profile user's
-desktop and command-line applications.
+Build and stage the shell with `make` and `make install`; see
+[standalone shell](standalone.md). The installer is deterministic and writes
+only below `DESTDIR`. This is the path used by package builders.
 
-The Kieran profile currently places Rust, C++, TypeScript, container, source-control,
-terminal, and related workstation tooling in `bingux.packages.system`. Its graphical
-workstation applications are in `bingux.packages.user`. Both options are list options;
-a package declaration in a profile is merged with existing list definitions rather
-than replacing the list.
+## Other distributions
 
-For example, append a user package in `profiles/kieran/default.nix`:
+APT and pacman packages are not published yet. Keep their packaging work
+outside the shell source tree until the native install layout and runtime
+dependencies are stable. Do not add distribution-specific host configuration
+to Bingux.
 
-```nix
-bingux.packages.user = with pkgs; [
-    helix
-];
-```
+## Runtime state
 
-Then apply the selected host configuration:
-
-```sh
-sudo nixos-rebuild switch --flake .#<host>
-```
-
-Remove the declaration and run the same command to remove the package from the
-next generation. The current repository exposes installer and VM test hosts.
-Add a real hardware host before you use `nixos-rebuild switch` on a workstation.
-
-## Declarative Flatpaks
-
-Flatpak remotes and applications belong in the selected profile. The Kieran
-profile keeps them in `profiles/kieran/flatpaks.nix` and imports that file into
-`bingux.packages.flatpaks`.
-
-Add a standard Flathub application:
-
-```nix
-apps = [
-    { appId = "org.example.Application"; }
-];
-```
-
-Add an application from a declared non-default remote:
-
-```nix
-apps = [
-    {
-        appId = "org.example.Application";
-        origin = "example-remote";
-    }
-];
-```
-
-For applications distributed as a signed Flatpak reference, declare the
-reference URL and its SRI hash. The reference supplies the repository metadata
-and signing key:
-
-```nix
-apps = [
-    {
-        appId = "plus.silverbullet.desktop";
-        flatpakref = "https://example.invalid/app.flatpakref";
-        sha256 = "sha256-...";
-    }
-];
-```
-
-Use a `.flatpakrepo` URL for a signed remote when the publisher provides one.
-Only set a remote's `args = "--no-gpg-verify"` when the publisher documents an
-unsigned repository. This disables repository signature verification and must
-not be used as a general workaround for a missing key.
-
-
-Do not use an undeclared remote. If a profile declares any remotes, it must also
-include every remote that its application declarations need. Bingux does not
-remove Flatpaks that are not declared by the profile.
-
-## Temporary packages
-
-Use a temporary shell for a one-off command:
-
-```sh
-nix shell nixpkgs#jq
-jq --version
-exit
-```
-
-Run one command without changing the user environment:
-
-```sh
-nix run nixpkgs#hello
-```
-
-Use an imperative user profile only when a temporary experiment must survive a
-logout or restart:
-
-```sh
-nix profile install nixpkgs#jq
-nix profile list
-nix profile remove <index>
-```
-
-An imperative Nix profile is not tracked by Bingux. Move a package into the
-profile declaration when it becomes part of the workstation configuration.
-
-## Package lookup
-
-Search the pinned Nixpkgs input before you add a package:
-
-```sh
-nix search --inputs-from . nixpkgs <name>
-```
-
-Use the exact package attribute in a profile. Do not add shell download scripts,
-manual `curl | sh` installers, or copied binaries when the package exists in
-Nixpkgs. Keep software that must remain outside Nixpkgs in an explicit Flatpak
-declaration or a documented profile-local integration.
+User configuration belongs under `$XDG_CONFIG_HOME/bingux`. The package owns
+only its installed files and user-systemd units. Uninstalling it does not delete
+notes, layouts, search indexes, extension settings or notification history.
