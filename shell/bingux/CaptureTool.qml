@@ -269,13 +269,11 @@ Scope {
             required property var modelData
             screen: modelData
             visible: root.opened
-            onVisibleChanged: if (visible && active) root.previewItem = overlay.contentItem
-            onActiveChanged: if (visible && active) root.previewItem = overlay.contentItem
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.namespace: "bingux-capture"
-            WlrLayershell.keyboardFocus: visible && active ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
             anchors { top: true; bottom: true; left: true; right: true }
             readonly property bool active: root.activeScreen === modelData
             // Pointer coordinates end at extent - 1; selection bounds are exclusive.
@@ -465,178 +463,203 @@ Scope {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSmall
             }
-            Item {
-                anchors.fill: parent
-                focus: overlay.visible && overlay.active
-                Keys.onEscapePressed: root.close()
-                Keys.onPressed: event => {
-                    const delta = event.modifiers & Qt.ShiftModifier ? 10 : 1;
-                    if (preferences.target === "region" && [Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down].includes(event.key)) {
-                        const dx = event.key === Qt.Key_Left ? -delta : event.key === Qt.Key_Right ? delta : 0;
-                        const dy = event.key === Qt.Key_Up ? -delta : event.key === Qt.Key_Down ? delta : 0;
-                        root.region = Qt.rect(Math.max(0, Math.min(overlay.width - root.region.width, root.region.x + dx)), Math.max(0, Math.min(overlay.height - root.region.height, root.region.y + dy)), root.region.width, root.region.height);
-                        event.accepted = true;
+            PanelWindow {
+                id: controls
+                screen: overlay.screen
+                visible: overlay.visible && overlay.active
+                onVisibleChanged: if (visible) root.previewItem = controls.contentItem
+                color: "transparent"
+                exclusionMode: ExclusionMode.Ignore
+                anchors { top: true; bottom: true; left: true; right: true }
+                WlrLayershell.layer: WlrLayer.Overlay
+                WlrLayershell.namespace: "bingux-capture-controls"
+                WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+                mask: Region {
+                    item: toolbar
+                    Region {
+                        x: optionsPanel.x; y: optionsPanel.y
+                        width: optionsPanel.visible ? optionsPanel.width : 0
+                        height: optionsPanel.visible ? optionsPanel.height : 0
                     }
                 }
-            }
+                // The preview is a separate buffer below this surface, so the
+                // compositor can blur it behind the translucent controls.
+                BlurRegion {
+                    window: controls
+                    surfaceNamespace: "bingux-capture-controls"
+                    region: optionsPanel.visible
+                        ? Qt.rect(Math.min(toolbar.x, optionsPanel.x), Math.min(toolbar.y, optionsPanel.y),
+                            Math.max(toolbar.x + toolbar.width, optionsPanel.x + optionsPanel.width) - Math.min(toolbar.x, optionsPanel.x),
+                            Math.max(toolbar.y + toolbar.height, optionsPanel.y + optionsPanel.height) - Math.min(toolbar.y, optionsPanel.y))
+                        : Qt.rect(toolbar.x, toolbar.y, toolbar.width, toolbar.height)
+                }
+                Item {
+                    anchors.fill: parent
+                    focus: overlay.visible && overlay.active
+                    Keys.onEscapePressed: root.close()
+                    Keys.onPressed: event => {
+                        const delta = event.modifiers & Qt.ShiftModifier ? 10 : 1;
+                        if (preferences.target === "region" && [Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down].includes(event.key)) {
+                            const dx = event.key === Qt.Key_Left ? -delta : event.key === Qt.Key_Right ? delta : 0;
+                            const dy = event.key === Qt.Key_Up ? -delta : event.key === Qt.Key_Down ? delta : 0;
+                            root.region = Qt.rect(Math.max(0, Math.min(overlay.width - root.region.width, root.region.x + dx)), Math.max(0, Math.min(overlay.height - root.region.height, root.region.y + dy)), root.region.width, root.region.height);
+                            event.accepted = true;
+                        }
+                    }
+                }
 
-            Rectangle {
-                id: toolbar
-                objectName: "captureToolbar"
-                visible: overlay.active && root.opened
-                property real entranceOpacity: 0
-                property real interactionOpacity: root.regionDragging ? .25 : 1
-                opacity: entranceOpacity * interactionOpacity
-                Behavior on interactionOpacity { NumberAnimation { duration: Theme.reducedMotion ? 0 : 100; easing.type: Easing.OutCubic } }
-                onVisibleChanged: {
-                    toolbarEntrance.stop(); entranceOpacity = 0;
-                    if (visible) toolbarEntrance.start();
-                }
-                NumberAnimation { id: toolbarEntrance; target: toolbar; property: "entranceOpacity"; from: 0; to: 1; duration: Theme.reducedMotion ? 0 : 120; easing.type: Easing.OutCubic }
-                property real movedX: -1
-                property real movedY: -1
-                x: movedX < 0 ? (overlay.width - width) / 2 : Math.max(8, Math.min(overlay.width - width - 8, movedX))
-                y: movedY < 0 ? overlay.height - height - Theme.padding * 2 : Math.max(8, Math.min(overlay.height - height - 8, movedY))
-                width: toolbarRow.implicitWidth + 16
-                height: 56
-                radius: Theme.cardRadius
-                color: Theme.popupSurface
-                border.color: Theme.outline
-                MouseArea { anchors.fill: parent } // Controls must not start a region drag.
-                RowLayout {
-                    id: toolbarRow
-                    anchors.centerIn: parent
-                    spacing: Theme.gap
-                    Item {
-                        Layout.preferredWidth: 20
-                        Layout.preferredHeight: 40
-                        Grid {
-                            anchors.centerIn: parent
-                            columns: 2; spacing: 4
-                            Repeater { model: 6; Rectangle { width: 3; height: 3; radius: 1.5; color: dragHandle.containsMouse ? Theme.text : Theme.muted } }
-                        }
-                        MouseArea {
-                            id: dragHandle
-                            objectName: "captureToolbarHandle"
-                            anchors.fill: parent
-                            preventStealing: true
-                            hoverEnabled: true
-                            cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-                            property point origin
-                            property point start
-                            onPressed: mouse => { origin = mapToItem(overlay.contentItem, mouse.x, mouse.y); start = Qt.point(toolbar.x, toolbar.y); }
-                            onPositionChanged: mouse => {
-                                if (!pressed) return;
-                                const point = mapToItem(overlay.contentItem, mouse.x, mouse.y);
-                                toolbar.movedX = start.x + point.x - origin.x;
-                                toolbar.movedY = start.y + point.y - origin.y;
+                Rectangle {
+                    id: toolbar
+                    objectName: "captureToolbar"
+                    visible: overlay.active && root.opened
+                    property real interactionOpacity: root.regionDragging ? .25 : 1
+                    opacity: interactionOpacity
+                    Behavior on interactionOpacity { NumberAnimation { duration: Theme.reducedMotion ? 0 : 100; easing.type: Easing.OutCubic } }
+                    property real movedX: -1
+                    property real movedY: -1
+                    x: movedX < 0 ? (overlay.width - width) / 2 : Math.max(8, Math.min(overlay.width - width - 8, movedX))
+                    y: movedY < 0 ? overlay.height - height - Theme.padding * 2 : Math.max(8, Math.min(overlay.height - height - 8, movedY))
+                    width: toolbarRow.implicitWidth + 16
+                    height: 56
+                    radius: Theme.cardRadius
+                    color: Theme.popupSurface
+                    border.color: Theme.outline
+                    MouseArea { anchors.fill: parent } // Controls must not start a region drag.
+                    RowLayout {
+                        id: toolbarRow
+                        anchors.centerIn: parent
+                        spacing: Theme.gap
+                        Item {
+                            Layout.preferredWidth: 20
+                            Layout.preferredHeight: 40
+                            Grid {
+                                anchors.centerIn: parent
+                                columns: 2; spacing: 4
+                                Repeater { model: 6; Rectangle { width: 3; height: 3; radius: 1.5; color: dragHandle.containsMouse ? Theme.text : Theme.muted } }
                             }
-                        }
-                        ShellTooltip { visible: dragHandle.containsMouse && !dragHandle.pressed; text: "Drag to move toolbar" }
-                    }
-                    SegmentedControl {
-                        implicitWidth: 84
-                        implicitHeight: 44
-                        options: ["screenshot", "recording"]
-                        currentValue: preferences.kind
-                        accessiblePrefix: "Capture mode: "
-                        onSelected: value => preferences.kind = value
-                        segmentContent: Component {
-                            Item {
-                                SymbolicIcon { anchors.centerIn: parent; implicitSize: 18; source: Quickshell.iconPath(parent.parent.segmentValue === "screenshot" ? "camera-photo-symbolic" : "camera-video-symbolic"); color: parent.parent.segmentSelected ? Theme.text : Theme.muted }
+                            MouseArea {
+                                id: dragHandle
+                                objectName: "captureToolbarHandle"
+                                anchors.fill: parent
+                                preventStealing: true
+                                hoverEnabled: true
+                                cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                                property point origin
+                                property point start
+                                onPressed: mouse => { origin = mapToItem(controls.contentItem, mouse.x, mouse.y); start = Qt.point(toolbar.x, toolbar.y); }
+                                onPositionChanged: mouse => {
+                                    if (!pressed) return;
+                                    const point = mapToItem(controls.contentItem, mouse.x, mouse.y);
+                                    toolbar.movedX = start.x + point.x - origin.x;
+                                    toolbar.movedY = start.y + point.y - origin.y;
+                                }
                             }
+                            ShellTooltip { visible: dragHandle.containsMouse && !dragHandle.pressed; text: "Drag to move toolbar" }
                         }
-                    }
-                    SegmentedControl {
-                        implicitWidth: overlay.width < 720 ? 128 : 320
-                        implicitHeight: 44
-                        options: ["region", "window", "screen"]
-                        currentValue: preferences.target
-                        disabledOptions: root.ready && !root.capabilities.window ? ["window"] : []
-                        accessiblePrefix: "Capture "
-                        onSelected: value => preferences.target = value
-                        segmentContent: Component {
-                            Item {
-                                id: targetContent
-                                readonly property string value: parent.segmentValue
-                                RowLayout {
-                                    anchors.centerIn: parent
-                                    spacing: Theme.gap
-                                    SymbolicIcon { implicitSize: 18; source: Quickshell.iconPath(targetContent.value === "region" ? "screenshot-selection-symbolic" : targetContent.value === "window" ? "screenshot-window-symbolic" : "video-display-symbolic", "video-display-symbolic"); color: targetContent.parent.segmentSelected ? Theme.text : Theme.muted }
-                                    Text { visible: overlay.width >= 720; text: targetContent.value.charAt(0).toUpperCase() + targetContent.value.slice(1); color: targetContent.parent.segmentSelected ? Theme.text : Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+                        SegmentedControl {
+                            implicitWidth: 84
+                            implicitHeight: 44
+                            options: ["screenshot", "recording"]
+                            currentValue: preferences.kind
+                            accessiblePrefix: "Capture mode: "
+                            onSelected: value => preferences.kind = value
+                            segmentContent: Component {
+                                Item {
+                                    SymbolicIcon { anchors.centerIn: parent; implicitSize: 18; source: Quickshell.iconPath(parent.parent.segmentValue === "screenshot" ? "camera-photo-symbolic" : "camera-video-symbolic"); color: parent.parent.segmentSelected ? Theme.text : Theme.muted }
                                 }
                             }
                         }
-                    }
-                    CaptureButton { objectName: "captureCursorToggle"; iconName: "input-mouse-symbolic"; chosen: preferences.cursor; description: preferences.cursor ? "Mouse cursor included" : "Mouse cursor hidden"; onClicked: preferences.cursor = !preferences.cursor }
-                    CaptureButton { objectName: "captureSettingsToggle"; iconName: "preferences-system-symbolic"; description: "Capture settings"; chosen: root.optionsOpen; onClicked: root.optionsOpen = !root.optionsOpen }
-                    CaptureButton {
-                        text: preferences.kind === "recording" ? "Record" : "Capture"
-                        iconName: preferences.kind === "recording" ? "media-record-symbolic" : ""
-                        description: !root.ready ? "Preparing capture…" : preferences.target === "window" ? (root.directWindowPicker ? "Capture selected window (Enter)" : "Choose window and capture") : "Capture (Enter)"
-                        primary: true
-                        enabled: root.ready && (preferences.target !== "window" || (!!root.capabilities.window && (!root.directWindowPicker || root.selectedWindow !== null)))
-                        onClicked: root.take()
-                    }
-                    CaptureButton { iconName: "window-close-symbolic"; description: "Cancel (Esc)"; onClicked: root.close() }
-                }
-            }
-            Rectangle {
-                id: optionsPanel
-                visible: overlay.active && root.optionsOpen
-                width: Math.min(440, overlay.width - 32)
-                height: Math.min(optionsColumn.implicitHeight + 32, overlay.height - toolbar.height - 48)
-                x: Math.min(overlay.width - width - 16, toolbar.x + toolbar.width - width)
-                y: toolbar.y > height + 20 ? toolbar.y - height - 12 : Math.min(overlay.height - height - 8, toolbar.y + toolbar.height + 12)
-                radius: Theme.cardRadius
-                color: Theme.popupSurface
-                border.color: Theme.outline
-                MouseArea { anchors.fill: parent }
-                Flickable {
-                    anchors.fill: parent
-                    anchors.margins: 16
-                    contentHeight: optionsColumn.implicitHeight
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
-                    ScrollBar.vertical: ScrollBar {}
-                ColumnLayout {
-                    id: optionsColumn
-                    width: parent.width
-                    spacing: 12
-                    RowLayout {
-                        Layout.fillWidth: true; spacing: 8
-                        Text { text: "Capture settings"; font.family: Theme.fontFamily; font.pixelSize: 14; font.weight: Font.DemiBold; color: Theme.text }
-                        Item { Layout.fillWidth: true }
-                        CaptureButton { iconName: "window-close-symbolic"; compact: true; description: "Close settings"; onClicked: root.optionsOpen = false }
-                    }
-                    GridLayout {
-                        Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 12
-                        CaptureChoice { label: "Quality"; choices: ["Compact", "Balanced", "High"]; values: ["compact", "balanced", "high"]; value: preferences.quality; onChosen: value => preferences.quality = value }
-                        CaptureChoice { label: "Delay"; choices: ["None", "3 seconds", "5 seconds", "10 seconds"]; values: [0, 3, 5, 10]; value: preferences.delay; onChosen: value => preferences.delay = value }
-                        CaptureChoice { visible: preferences.kind === "recording"; label: "Frame rate"; choices: ["15 fps", "30 fps", "60 fps"]; values: [15, 30, 60]; value: preferences.fps; onChosen: value => preferences.fps = value }
-                        CaptureChoice { visible: preferences.kind === "recording"; label: "Resolution limit"; choices: ["720p", "1080p", "1440p", "2160p", "Original"]; values: [720, 1080, 1440, 2160, 0]; value: preferences.maxHeight; onChosen: value => preferences.maxHeight = value }
-                        CaptureChoice { visible: preferences.kind === "recording"; label: "Audio"; choices: ["None", "System audio", "Microphone", "Both"]; values: ["none", "system", "microphone", "both"]; value: preferences.audio; enabled: !!root.capabilities.audio; onChosen: value => preferences.audio = value }
-                        CaptureChoice { visible: preferences.kind === "recording"; label: "Encoding"; choices: ["Automatic (CPU fallback)", "Software / CPU"]; values: ["auto", "cpu"]; value: preferences.encoder; onChosen: value => preferences.encoder = value }
-                        CaptureChoice { visible: preferences.kind === "screenshot"; label: "Image format"; choices: ["PNG · lossless", "JPEG · smaller"]; values: ["png", "jpeg"]; value: preferences.format; onChosen: value => preferences.format = value }
-                        CaptureChoice { label: "Capture backend"; choices: ["Automatic", "Desktop portal"]; values: ["auto", "portal"]; value: preferences.backend; onChosen: value => preferences.backend = value }
-                        ColumnLayout {
-                            Layout.columnSpan: 2; Layout.fillWidth: true
-                            Text { text: "Save folder"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 12 }
-                            TextField {
-                                selectionColor: Theme.textSelection
-                                selectedTextColor: Theme.text
-                                Layout.fillWidth: true
-                                text: preferences.directory
-                                placeholderText: "Default: Pictures/Screenshots or Videos/Recordings"
-                                color: Theme.text; placeholderTextColor: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 13
-                                onEditingFinished: preferences.directory = text.trim()
-                                padding: Theme.gap
-                                background: Rectangle { color: Theme.elevated; radius: Theme.radius; border.color: parent.activeFocus ? Theme.accent : "transparent" }
+                        SegmentedControl {
+                            implicitWidth: overlay.width < 720 ? 128 : 320
+                            implicitHeight: 44
+                            options: ["region", "window", "screen"]
+                            currentValue: preferences.target
+                            disabledOptions: root.ready && !root.capabilities.window ? ["window"] : []
+                            accessiblePrefix: "Capture "
+                            onSelected: value => preferences.target = value
+                            segmentContent: Component {
+                                Item {
+                                    id: targetContent
+                                    readonly property string value: parent.segmentValue
+                                    RowLayout {
+                                        anchors.centerIn: parent
+                                        spacing: Theme.gap
+                                        SymbolicIcon { implicitSize: 18; source: Quickshell.iconPath(targetContent.value === "region" ? "screenshot-selection-symbolic" : targetContent.value === "window" ? "screenshot-window-symbolic" : "video-display-symbolic", "video-display-symbolic"); color: targetContent.parent.segmentSelected ? Theme.text : Theme.muted }
+                                        Text { visible: overlay.width >= 720; text: targetContent.value.charAt(0).toUpperCase() + targetContent.value.slice(1); color: targetContent.parent.segmentSelected ? Theme.text : Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+                                    }
+                                }
                             }
                         }
+                        CaptureButton { objectName: "captureCursorToggle"; iconName: "input-mouse-symbolic"; chosen: preferences.cursor; description: preferences.cursor ? "Mouse cursor included" : "Mouse cursor hidden"; onClicked: preferences.cursor = !preferences.cursor }
+                        CaptureButton { objectName: "captureSettingsToggle"; iconName: "preferences-system-symbolic"; description: "Capture settings"; chosen: root.optionsOpen; onClicked: root.optionsOpen = !root.optionsOpen }
+                        CaptureButton {
+                            text: preferences.kind === "recording" ? "Record" : "Capture"
+                            iconName: preferences.kind === "recording" ? "media-record-symbolic" : ""
+                            description: !root.ready ? "Preparing capture…" : preferences.target === "window" ? (root.directWindowPicker ? "Capture selected window (Enter)" : "Choose window and capture") : "Capture (Enter)"
+                            primary: true
+                            enabled: root.ready && (preferences.target !== "window" || (!!root.capabilities.window && (!root.directWindowPicker || root.selectedWindow !== null)))
+                            onClicked: root.take()
+                        }
+                        CaptureButton { iconName: "window-close-symbolic"; description: "Cancel (Esc)"; onClicked: root.close() }
                     }
-                    CaptureButton { visible: preferences.kind === "screenshot"; text: "Copy to clipboard"; iconName: "edit-copy-symbolic"; chosen: preferences.copy; onClicked: preferences.copy = !preferences.copy }
                 }
+                Rectangle {
+                    id: optionsPanel
+                    visible: overlay.active && root.optionsOpen
+                    width: Math.min(440, overlay.width - 32)
+                    height: Math.min(optionsColumn.implicitHeight + 32, overlay.height - toolbar.height - 48)
+                    x: Math.min(overlay.width - width - 16, toolbar.x + toolbar.width - width)
+                    y: toolbar.y > height + 20 ? toolbar.y - height - 12 : Math.min(overlay.height - height - 8, toolbar.y + toolbar.height + 12)
+                    radius: Theme.cardRadius
+                    color: Theme.popupSurface
+                    border.color: Theme.outline
+                    MouseArea { anchors.fill: parent }
+                    Flickable {
+                        anchors.fill: parent
+                        anchors.margins: 16
+                        contentHeight: optionsColumn.implicitHeight
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+                        ScrollBar.vertical: ScrollBar {}
+                    ColumnLayout {
+                        id: optionsColumn
+                        width: parent.width
+                        spacing: 12
+                        RowLayout {
+                            Layout.fillWidth: true; spacing: 8
+                            Text { text: "Capture settings"; font.family: Theme.fontFamily; font.pixelSize: 14; font.weight: Font.DemiBold; color: Theme.text }
+                            Item { Layout.fillWidth: true }
+                            CaptureButton { iconName: "window-close-symbolic"; compact: true; description: "Close settings"; onClicked: root.optionsOpen = false }
+                        }
+                        GridLayout {
+                            Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 12
+                            CaptureChoice { label: "Quality"; choices: ["Compact", "Balanced", "High"]; values: ["compact", "balanced", "high"]; value: preferences.quality; onChosen: value => preferences.quality = value }
+                            CaptureChoice { label: "Delay"; choices: ["None", "3 seconds", "5 seconds", "10 seconds"]; values: [0, 3, 5, 10]; value: preferences.delay; onChosen: value => preferences.delay = value }
+                            CaptureChoice { visible: preferences.kind === "recording"; label: "Frame rate"; choices: ["15 fps", "30 fps", "60 fps"]; values: [15, 30, 60]; value: preferences.fps; onChosen: value => preferences.fps = value }
+                            CaptureChoice { visible: preferences.kind === "recording"; label: "Resolution limit"; choices: ["720p", "1080p", "1440p", "2160p", "Original"]; values: [720, 1080, 1440, 2160, 0]; value: preferences.maxHeight; onChosen: value => preferences.maxHeight = value }
+                            CaptureChoice { visible: preferences.kind === "recording"; label: "Audio"; choices: ["None", "System audio", "Microphone", "Both"]; values: ["none", "system", "microphone", "both"]; value: preferences.audio; enabled: !!root.capabilities.audio; onChosen: value => preferences.audio = value }
+                            CaptureChoice { visible: preferences.kind === "recording"; label: "Encoding"; choices: ["Automatic (CPU fallback)", "Software / CPU"]; values: ["auto", "cpu"]; value: preferences.encoder; onChosen: value => preferences.encoder = value }
+                            CaptureChoice { visible: preferences.kind === "screenshot"; label: "Image format"; choices: ["PNG · lossless", "JPEG · smaller"]; values: ["png", "jpeg"]; value: preferences.format; onChosen: value => preferences.format = value }
+                            CaptureChoice { label: "Capture backend"; choices: ["Automatic", "Desktop portal"]; values: ["auto", "portal"]; value: preferences.backend; onChosen: value => preferences.backend = value }
+                            ColumnLayout {
+                                Layout.columnSpan: 2; Layout.fillWidth: true
+                                Text { text: "Save folder"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 12 }
+                                TextField {
+                                    selectionColor: Theme.textSelection
+                                    selectedTextColor: Theme.text
+                                    Layout.fillWidth: true
+                                    text: preferences.directory
+                                    placeholderText: "Default: Pictures/Screenshots or Videos/Recordings"
+                                    color: Theme.text; placeholderTextColor: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 13
+                                    onEditingFinished: preferences.directory = text.trim()
+                                    padding: Theme.gap
+                                    background: Rectangle { color: Theme.elevated; radius: Theme.radius; border.color: parent.activeFocus ? Theme.accent : "transparent" }
+                                }
+                            }
+                        }
+                        CaptureButton { visible: preferences.kind === "screenshot"; text: "Copy to clipboard"; iconName: "edit-copy-symbolic"; chosen: preferences.copy; onClicked: preferences.copy = !preferences.copy }
+                    }
+                    }
                 }
             }
         }

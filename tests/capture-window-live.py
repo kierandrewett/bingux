@@ -2,7 +2,7 @@
 import json, subprocess, time, tempfile
 from pathlib import Path
 from gi.repository import Gio,GLib
-base=['qs','ipc','--any-display','-p',str(Path(__file__).resolve().parents[1] / 'shell/bingux'),'call','capture']
+base=['qs','ipc','--any-display','-p',str(Path(__file__).resolve().parents[1] / 'shell/bingux/CaptureShell.qml'),'call','capture']
 def ipc(method,*args):
  for attempt in range(30):
   output=subprocess.check_output(base+[method,'--',*args],text=True,timeout=4)

@@ -40,6 +40,10 @@ class InstallTest(unittest.TestCase):
             switcher_unit = (stage / "usr/lib/systemd/user/bingux-switcher-ui.service").read_text()
             self.assertIn("ExecStart=/usr/bin/bingux-search-ui", search_unit)
             self.assertIn("ExecStart=/usr/bin/bingux-switcher-ui", switcher_unit)
+            for name in ("capture", "emoji"):
+                unit = (stage / f"usr/lib/systemd/user/bingux-{name}-ui.service").read_text()
+                self.assertIn(f"ExecStart=/usr/bin/bingux-{name}-ui", unit)
+                self.assertTrue((stage / f"usr/bin/bingux-{name}-ui").is_file())
             searchd_unit = (stage / "usr/lib/systemd/user/bingux-searchd.service").read_text()
             self.assertIn("ExecStart=/usr/libexec/bingux/search-service", searchd_unit)
 

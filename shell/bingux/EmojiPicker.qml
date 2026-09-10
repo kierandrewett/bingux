@@ -26,6 +26,7 @@ ShellPopup {
     property string targetWindow: ""
     property string pendingText: ""
     property bool inserting: false
+    property string stateDirectory: Quickshell.statePath("emoji")
     property bool persistRecent: true
     property var catalogue: []
     property var recent: []
@@ -73,7 +74,8 @@ ShellPopup {
         } else showPicker();
     }
     function finishPlacement() {
-        if (!locating) return;
+        if (!locating && !visible) return;
+        const firstPlacement = locating;
         locating = false;
         anchorDeadline.stop();
         if (inputAnchor) {
@@ -94,8 +96,9 @@ ShellPopup {
                 popupPosition = PopupPlacement.place(anchor, output, popupWidth, popupHeight, Theme.gap, 12);
             }
         }
-        showPicker();
+        if (firstPlacement) showPicker();
     }
+    function close() { locating = false; anchorDeadline.stop(); visible = false; }
     function showPicker() {
         query = "";
         category = "";
@@ -206,9 +209,11 @@ ShellPopup {
             if (!root.locating) return;
             root.inputAnchor = anchor;
             if (anchor.window) root.targetWindow = anchor.window;
-            if (anchor.caret && anchor.caret.height > 0) root.finishPlacement();
-            else if (anchor.pid > 0 && !caretProbe.running) caretProbe.running = true;
-            else root.finishPlacement();
+            // Accept input at the compositor anchor immediately. AT-SPI can
+            // refine placement later without delaying or resetting the query.
+            if (!(anchor.caret && anchor.caret.height > 0) && anchor.pid > 0 && !caretProbe.running)
+                caretProbe.running = true;
+            root.finishPlacement();
         }
         enabled: root.shortcutEnabled
         trackWindows: root.insertOnSelect
@@ -227,7 +232,7 @@ ShellPopup {
     IpcHandler {
         target: "emoji"
         function open(): void { if (!root.visible && !root.locating) { root.activationCount++; root.open(); } }
-        function close(): void { root.locating = false; anchorDeadline.stop(); root.visible = false }
+        function close(): void { root.close(); }
         function status(): string { return JSON.stringify({visible: root.visible, ready: root.shortcutReady, count: root.catalogue.length, activations: root.activationCount, instance: root.instanceToken, query: root.query, selected: root.selectedEmoji ? root.selectedEmoji.emoji : "", error: root.error, anchor: root.anchorSource, x: root.panelX, y: root.panelY, screenX: root.screen ? root.screen.x : 0, screenY: root.screen ? root.screen.y : 0}) }
     }
     FileView {
@@ -239,9 +244,9 @@ ShellPopup {
         onLoadFailed: root.error = "Could not load emoji."
     }
     Process {
-        command: ["mkdir", "-p", "-m", "700", Quickshell.statePath("emoji")]
+        command: ["mkdir", "-p", "-m", "700", root.stateDirectory]
         running: root.persistRecent
-        onExited: code => { if (code === 0) { history.path = Quickshell.statePath("emoji/recent.json"); tonePreference.path = Quickshell.statePath("emoji/skin-tone.json"); } }
+        onExited: code => { if (code === 0) { history.path = root.stateDirectory + "/recent.json"; tonePreference.path = root.stateDirectory + "/skin-tone.json"; } }
     }
     FileView {
         id: history

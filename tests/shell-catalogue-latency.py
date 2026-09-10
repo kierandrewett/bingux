@@ -17,7 +17,7 @@ import time
 def main():
     shell = Path(__file__).resolve().parents[1] / "shell/bingux"
     command = [os.environ.get("QS_BIN", "qs"), "ipc", "--any-display", "-p",
-               str(shell), "call", "capture", "status"]
+               str(shell / "CaptureShell.qml"), "call", "capture", "status"]
     applications = Path.home() / ".local/share/applications"
     applications.mkdir(parents=True, exist_ok=True)
     # Reserve a unique name; never replace an existing user launcher.

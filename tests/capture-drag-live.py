@@ -6,7 +6,7 @@ import time
 from gi.repository import Gio, GLib
 
 shell = Path(__file__).resolve().parents[1] / "shell/bingux"
-command = ["qs", "ipc", "--any-display", "-p", str(shell), "call", "capture"]
+command = ["qs", "ipc", "--any-display", "-p", str(shell / "CaptureShell.qml"), "call", "capture"]
 def ipc(method):
     return subprocess.check_output(command + [method], text=True, timeout=2)
 def status():

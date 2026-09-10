@@ -4,6 +4,20 @@ Bingux runs the chooser in `bingux-switcher-ui.service`, separate from the
 main desktop and `bingux-search-ui.service`. Neither shortcut waits for the
 main UI process. Both services restart independently when they exit.
 
+Capture and emoji also run in separate services: `bingux-capture-ui.service`
+and `bingux-emoji-ui.service`. `binguxctl capture` and `binguxctl emoji` address
+`CaptureShell.qml` and `EmojiShell.qml` directly. Their processes stay available
+while their layer surfaces are hidden, as Search and the switcher do.
+The desktop subscribes to capture state for the recording indicator and sends
+Stop through `UiSession`. Opening a companion closes the other companions. Capture and emoji register
+Alt+S and Super+Period through the persistent compositor connection, so keyboard
+activation does not start `binguxctl` or Quickshell. Set `BINGUX_CAPTURE_SHORTCUT`
+or `BINGUX_EMOJI_SHORTCUT` in the corresponding service to change those bindings.
+Do not also register those keys as command shortcuts in `gnoblin.toml`.
+Emoji accepts input at the compositor anchor while accessibility caret lookup
+runs separately. The capture toolbar has no entrance fade; its fresh frozen
+preview still requires compositor readback before it can open.
+
 Gnoblin's `src/scripts/lib/window-switcher-fallback.js` keeps Alt+Tab and
 Super+Tab registered when no UI client is connected. It keeps a window list
 and selection for each gesture. On modifier release, a working UI can commit

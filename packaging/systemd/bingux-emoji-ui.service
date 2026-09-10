@@ -1,0 +1,10 @@
+[Unit]
+Description=Bingux emoji surface
+PartOf=bingux.target
+After=bingux.service
+
+[Service]
+ExecStart=/usr/bin/bingux-emoji-ui
+Restart=on-failure
+RestartSec=3
+LimitCORE=0

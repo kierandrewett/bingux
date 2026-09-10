@@ -62,6 +62,8 @@ def main():
         "bingux": 'exec "${BINGUX_QUICKSHELL:-qs}" -p "$BINGUX_CONFIG_PATH" "$@"\n',
         "bingux-search-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "SearchShell.qml")) + ' "$@"\n',
         "bingux-switcher-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "SwitcherShell.qml")) + ' "$@"\n',
+        "bingux-emoji-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "EmojiShell.qml")) + ' "$@"\n',
+        "bingux-capture-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "CaptureShell.qml")) + ' "$@"\n',
         "bingux-settings": "exec " + shlex.quote(str(prefix / "libexec/bingux/bingux-settings")) + ' "$@"\n',
         "binguxctl": "exec python3 " + shlex.quote(str(prefix / "libexec/bingux/binguxctl.py")) + ' "$@"\n',
     }
@@ -80,6 +82,8 @@ def main():
         "bingux": str(prefix / "bin/bingux") + " --no-color",
         "bingux-search-ui": str(prefix / "bin/bingux-search-ui"),
         "bingux-switcher-ui": str(prefix / "bin/bingux-switcher-ui"),
+        "bingux-emoji-ui": str(prefix / "bin/bingux-emoji-ui"),
+        "bingux-capture-ui": str(prefix / "bin/bingux-capture-ui"),
         "bingux-statusd": str(prefix / "bin/bingux-statusd"),
         "bingux-searchd": str(prefix / "libexec/bingux/search-service"),
     }

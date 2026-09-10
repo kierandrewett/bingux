@@ -2,7 +2,7 @@
 Description=Bingux desktop shell
 PartOf=graphical-session.target
 After=graphical-session.target
-Wants=bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service
+Wants=bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service
 
 [Install]
 WantedBy=graphical-session.target

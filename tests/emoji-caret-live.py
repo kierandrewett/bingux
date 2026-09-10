@@ -9,7 +9,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib
 
 command = ["qs", "ipc", "--any-display", "-p",
-           str(Path(__file__).resolve().parents[1] / "shell/bingux"), "call", "emoji"]
+           str(Path(__file__).resolve().parents[1] / "shell/bingux/EmojiShell.qml"), "call", "emoji"]
 
 
 def status():

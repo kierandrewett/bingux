@@ -17,8 +17,7 @@ output = config / "captures"
 output.mkdir()
 settings = config / "capture.ini"
 settings.write_text("[capture]\nkind=screenshot\ncopy=false\ndirectory=" + str(output) + "\n")
-fixture = config / "CaptureControlTest.qml"
-fixture.write_text('import Quickshell\nShellRoot { CaptureTool { screen: Quickshell.screens[0] } }\n')
+fixture = config / "CaptureShell.qml"
 player = shutil.which("canberra-gtk-play")
 assert player, "Install the GNOME event sound player for the audio integration test"
 probe = config / "bin"

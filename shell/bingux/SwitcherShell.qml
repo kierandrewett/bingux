@@ -12,7 +12,11 @@ ShellRoot {
     }
     WindowSwitcher {
         id: switcher
-        onOpening: session.command("search", {action: "close"})
+        onOpening: {
+            session.command("search", {action: "close"});
+            session.command("capture", {action: "close"});
+            session.command("emoji", {action: "close"});
+        }
         activeStreams: session.states.desktop?.activeStreams || []
         notifications: {
             const entries = [];

@@ -11,7 +11,7 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gio, GLib
 
 shell = Path(__file__).resolve().parents[1] / 'shell/bingux'
-command = ['qs', 'ipc', '--any-display', '-p', str(shell), 'call', 'emoji']
+command = ['qs', 'ipc', '--any-display', '-p', str(shell / "EmojiShell.qml"), 'call', 'emoji']
 
 
 def status():

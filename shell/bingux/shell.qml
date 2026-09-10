@@ -62,7 +62,7 @@ ShellRoot {
         }
         if (panel !== windowSwitcher && windowSwitcher.active) windowSwitcher.close();
         if (panel !== searchOverlay && searchOverlay.visible) searchOverlay.closeSearch();
-        if (panel !== emojiPicker) emojiPicker.visible = false;
+        if (panel !== emojiPicker && emojiPicker.visible) emojiPicker.close();
         if (panel !== calendarPopup) calendarPopup.visible = false;
         if (!editingContainers && panel !== controlCentre && !anchoredInPopup(panel, controlCentre)) controlCentre.visible = false;
         if (panel !== metricsPopup) metricsPopup.visible = false;
@@ -191,16 +191,27 @@ ShellRoot {
 
     PrivacyState { id: privacySession }
 
-    CaptureTool {
+    QtObject {
         id: captureTool
-        screen: topBar.screen
-        onOpening: { root.closePanelsExcept(captureTool); dock.closeMenus(); }
+        readonly property var status: popouts.states.capture || ({})
+        readonly property bool opened: status.visible || false
+        readonly property string state: status.state || "idle"
+        readonly property bool busy: status.busy || false
+        readonly property bool recording: status.recording || false
+        readonly property string elapsedText: status.elapsedText || "0:00"
+        readonly property int countdown: status.countdown || 0
+        onOpenedChanged: if (opened) { root.closePanelsExcept(captureTool); dock.closeMenus(); }
+        function open() { popouts.command("capture", {action: "open"}); }
+        function close() { popouts.command("capture", {action: "close"}); }
+        function stop() { popouts.command("capture", {action: "stop"}); }
     }
 
-    EmojiPicker {
+    QtObject {
         id: emojiPicker
-        screen: topBar.screen
-        onOpening: { root.closePanelsExcept(emojiPicker); dock.closeMenus(); }
+        readonly property bool visible: popouts.states.emoji?.visible || false
+        onVisibleChanged: if (visible) { root.closePanelsExcept(emojiPicker); dock.closeMenus(); }
+        function open() { popouts.command("emoji", {action: "open"}); }
+        function close() { popouts.command("emoji", {action: "close"}); }
     }
 
     NotificationState {

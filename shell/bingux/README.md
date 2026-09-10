@@ -343,8 +343,8 @@ from `/proc/stat` every two seconds. Each graph has its own CPU ID and fixed
 with an unavailable reading; removed cores leave gaps in history.
 
 Popup shortcuts are configured in `gnoblin.toml`: bare `Super` runs
-`binguxctl search toggle` on release, `<Super>period` runs `binguxctl emoji open`,
-and the capture shortcut runs `binguxctl capture toggle`. The search daemon no
+`binguxctl search toggle` on release. Emoji and capture use persistent shortcut
+connections in `EmojiShell.qml` and `CaptureShell.qml`, without launching commands. The search daemon no
 longer opens UI from D-Bus signals. Held window/input switchers retain their
 shortcut sessions. Run `python3 tests/popup-shortcuts-live.py` in an idle desktop
 session to check release timing and chord suppression.

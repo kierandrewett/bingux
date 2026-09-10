@@ -76,18 +76,14 @@ the destination folder, then renamed after muxer finalisation. No full recording
 is buffered in memory. Non-empty failed recordings are preserved and their path
 is shown for recovery. Screen sharing follows desktop portal permissions.
 
-Alt+S is registered without auto-repeat, so holding the keys cannot immediately
-toggle the selector closed. The launcher retries explicit "not ready" replies
-during a shell reload, but never retries an uncertain result that might already
-have executed. Selector visibility and region survive shell configuration reloads.
+Alt+S is delivered through the running capture process's `ShortcutSession`.
+It does not start a command or a UI process. Modifier holds ignore repeat
+activations, so holding the keys cannot immediately toggle the selector closed.
+Selector visibility and region survive shell configuration reloads.
 
-Configuration shortcut: `bingux.desktopShell.capture.shortcut` (default `<Alt>s`).
-Set the equivalent binding in Gnoblin's TOML configuration. Other
-compositors can bind their shortcut to:
-
-```sh
-qs ipc --any-display -c bingux call capture open
-```
+Set `BINGUX_CAPTURE_SHORTCUT` on `bingux-capture-ui.service` to change the default
+`<Alt>s` binding. Remove any duplicate capture command from Gnoblin's
+`[[shortcuts]]` configuration. On other compositors, bind `binguxctl capture toggle`.
 
 For compositor layer rules, disable motion, opacity reduction and blur on the
 `bingux-capture` surface so selection remains aligned with the captured screen.
@@ -120,3 +116,9 @@ HiDPI crop arithmetic and unavailable hardware fallback.
 Successful screenshots play the GNOME `screen-capture` shutter event through
 libcanberra. The current sound theme and event-sound preference apply. Preview,
 cancellation, failure and recording completion do not play the shutter.
+
+The selector runs in `bingux-capture-ui.service`. Its frozen preview uses the
+`bingux-capture` layer. The toolbar and settings use a separate transparent
+`bingux-capture-controls` layer above it, so compositor blur samples the preview.
+Keep blur disabled for `bingux-capture` and enable it for `bingux-capture-controls`.
+`CaptureShell.qml` publishes their stacking relationship through `UiSession`.

@@ -53,7 +53,11 @@ ShellRoot {
     }
     SearchOverlay {
         id: search
-        onVisibleChanged: if (visible) session.command("switcher", {action: "close"})
+        onVisibleChanged: if (visible) {
+            session.command("switcher", {action: "close"});
+            session.command("capture", {action: "close"});
+            session.command("emoji", {action: "close"});
+        }
         dockView: dockProxy
         onSettingsRequested: session.command("desktop", {action: "settings"})
     }

@@ -14,7 +14,8 @@ spec.loader.exec_module(ctl)
 
 class ControlCommands(unittest.TestCase):
     def test_popouts_use_independent_configs(self):
-        for target, filename in (("search", "SearchShell.qml"), ("switcher", "SwitcherShell.qml")):
+        for target, filename in (("search", "SearchShell.qml"), ("switcher", "SwitcherShell.qml"),
+                                 ("capture", "CaptureShell.qml"), ("emoji", "EmojiShell.qml")):
             for words, path in ((["--path", "/desktop/shell.qml"], "/desktop/" + filename),
                                 (["--config", "custom"], "/configs/quickshell/custom/" + filename)):
                 with patch.dict(ctl.os.environ, {"XDG_CONFIG_HOME": "/configs"}, clear=True), patch.object(ctl, "execute", return_value=0) as execute:

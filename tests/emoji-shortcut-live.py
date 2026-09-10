@@ -6,7 +6,7 @@ import time
 from gi.repository import Gio, GLib
 
 shell = Path(__file__).resolve().parents[1] / 'shell/bingux'
-command = ['qs', 'ipc', '--any-display', '-p', str(shell), 'call', 'emoji']
+command = ['qs', 'ipc', '--any-display', '-p', str(shell / "EmojiShell.qml"), 'call', 'emoji']
 
 
 def status():
@@ -80,7 +80,7 @@ try:
                 subprocess.run(command + ['close'], check=True, timeout=3)
                 print('Retrying after a concurrent shell reload')
     for panel in ['search', 'controls', 'calendar']:
-        subprocess.run(command[:-1] + ['shell', panel], check=True, timeout=3)
+        subprocess.run(['qs', 'ipc', '--any-display', '-p', str(shell), 'call', 'shell', panel], check=True, timeout=3)
         time.sleep(.2)
         press(.06)
         wait_visible(True)

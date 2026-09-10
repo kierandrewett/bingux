@@ -6,7 +6,7 @@ import time
 from gi.repository import Gio, GLib
 
 shell = Path(__file__).resolve().parents[1] / "shell/bingux"
-command = ["qs", "ipc", "--any-display", "-p", str(shell), "call", "capture"]
+command = ["qs", "ipc", "--any-display", "-p", str(shell / "CaptureShell.qml"), "call", "capture"]
 
 
 def status():
@@ -46,7 +46,7 @@ def press(hold):
 try:
     call(session, destination + ".Session", "Start")
     for panel in ["search", "calendar", "controls"] * 3:
-        subprocess.run(command[:-1] + ["shell", panel], check=True, timeout=3)
+        subprocess.run(["qs", "ipc", "--any-display", "-p", str(shell), "call", "shell", panel], check=True, timeout=3)
         time.sleep(.25)
         press(.08)
         deadline = time.monotonic() + 2
