@@ -8,6 +8,7 @@ Item {
     objectName: "searchLaunchEffect"
     property string source: ""
     property bool symbolic: false
+    readonly property real maximumScale: 4
     readonly property bool running: launch.running
     signal finished
     visible: running
@@ -31,19 +32,27 @@ Item {
     function cancel() { launch.stop(); }
 
     OsIconImage {
-        anchors.fill: parent
+        // Rasterise at the largest displayed size, then shrink for the start.
+        anchors.centerIn: parent
+        width: root.width * root.maximumScale
+        height: root.height * root.maximumScale
+        scale: 1 / root.maximumScale
         visible: !root.symbolic
         source: root.symbolic ? "" : root.source
     }
     SymbolicIcon {
-        anchors.fill: parent
+        // Rasterise at the largest displayed size, then shrink for the start.
+        anchors.centerIn: parent
+        width: root.width * root.maximumScale
+        height: root.height * root.maximumScale
+        scale: 1 / root.maximumScale
         visible: root.symbolic
         source: root.source
         color: Theme.muted
     }
     ParallelAnimation {
         id: launch
-        NumberAnimation { target: root; property: "scale"; from: 1; to: 4; duration: 260; easing.type: Easing.OutCubic }
+        NumberAnimation { target: root; property: "scale"; from: 1; to: root.maximumScale; duration: 260; easing.type: Easing.OutCubic }
         NumberAnimation { target: root; property: "opacity"; from: 1; to: 0; duration: 260; easing.type: Easing.OutCubic }
         onFinished: root.finished()
     }
