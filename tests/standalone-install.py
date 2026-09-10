@@ -36,6 +36,12 @@ class InstallTest(unittest.TestCase):
             unit = (stage / "usr/lib/systemd/user/bingux.service").read_text()
             self.assertIn("LimitCORE=0", unit)
             self.assertIn("ExecStart=/usr/bin/bingux --no-color", unit)
+            search_unit = (stage / "usr/lib/systemd/user/bingux-search-ui.service").read_text()
+            switcher_unit = (stage / "usr/lib/systemd/user/bingux-switcher-ui.service").read_text()
+            self.assertIn("ExecStart=/usr/bin/bingux-search-ui", search_unit)
+            self.assertIn("ExecStart=/usr/bin/bingux-switcher-ui", switcher_unit)
+            searchd_unit = (stage / "usr/lib/systemd/user/bingux-searchd.service").read_text()
+            self.assertIn("ExecStart=/usr/libexec/bingux/search-service", searchd_unit)
 
     def test_missing_build_fails_before_install(self):
         with tempfile.TemporaryDirectory() as name:

@@ -19,6 +19,9 @@ make
 make check
 ```
 
+`make check` builds both Rust daemons, runs their library tests, checks the
+native text layout test and verifies a staged install.
+
 When the full Qt development set is unavailable, run the checks that do not
 need it and state that limitation in the change description. Useful focused
 checks include:

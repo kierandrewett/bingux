@@ -25,9 +25,11 @@ daemons:
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-searchd/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-statusd/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 
-check: native
+check: native daemons
 	cd $(BUILD_DIR)/text && $(QMAKE) $(ROOT)/packages/bingux-text-layout/spacing-test.pro -o Makefile.tests && $(MAKE) -f Makefile.tests
 	QT_QPA_PLATFORM=offscreen $(BUILD_DIR)/text/spacing-test
+	$(CARGO) test --locked --manifest-path packages/bingux-searchd/Cargo.toml --lib
+	$(CARGO) test --locked --manifest-path packages/bingux-statusd/Cargo.toml --lib
 	python3 tests/standalone-install.py
 
 install:
