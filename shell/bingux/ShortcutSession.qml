@@ -7,6 +7,7 @@ QtObject {
     id: root
     property var bindings: []
     property bool enabled: true
+    property int bindingRetries: 0
     property int boundCount: 0
     property int sessionSerial: 0
     property var capabilities: []
@@ -50,6 +51,19 @@ QtObject {
         if (trackPrivacy) send({op: "privacy"});
         if (enabled) for (const binding of bindings) send(Object.assign({op: "bind"}, binding));
     }
+    onReadyChanged: if (ready) {
+        bindingRetries = 0;
+        bindingRetry.stop();
+    }
+    // During QML reload the old connection can still own the keys when the
+    // replacement registers. Retry that transient conflict after it disconnects.
+    property var bindingRetry: Timer {
+        interval: Math.min(2000, 250 * Math.pow(2, root.bindingRetries))
+        onTriggered: {
+            root.bindingRetries++;
+            root.registerBindings();
+        }
+    }
     onEnabledChanged: registerBindings()
     onBindingsChanged: registerBindings()
     property var socket: Socket {
@@ -58,6 +72,8 @@ QtObject {
         onConnectedChanged: {
             root.boundCount = 0;
             root.capabilities = [];
+            root.bindingRetries = 0;
+            bindingRetry.stop();
             if (!connected) { root.cancelled(); retry.restart(); }
         }
         onError: { root.cancelled(); retry.restart(); }
@@ -83,7 +99,11 @@ QtObject {
                     else if (record.event === "windows") root.windowSnapshot(record.windows);
                     else if (record.event === "pointer") root.pointerPressed(record.x, record.y, record.button);
                     else if (record.event === "preview") root.previewReceived(record.window, record.source, record.message || "");
-                    else if (record.event === "error") root.failed(record.message);
+                    else if (record.event === "error") {
+                        root.failed(record.message);
+                        if (String(record.message).startsWith("shortcut already claimed:") && root.bindingRetries < 8)
+                            bindingRetry.restart();
+                    }
                 } catch (error) { root.failed(String(error)); }
             }
         }
