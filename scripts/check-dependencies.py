@@ -29,6 +29,13 @@ def check_qt_modules(qmake, source):
     return f"Qt Quick/QML modules are unavailable ({detail})"
 
 
+def print_platform_hint():
+    if Path("/etc/fedora-release").is_file() and available("dnf"):
+        print("\nOn Fedora, install the project dependencies with:")
+        print("  sudo dnf install rpmdevtools")
+        print("  sudo dnf builddep packaging/rpm/bingux.spec")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--install-user", action="store_true", help="also check user-service runtime requirements")
@@ -69,6 +76,7 @@ def main():
         print("Bingux prerequisites are not ready:")
         for failure in failures:
             print(f"  - {failure}")
+        print_platform_hint()
         print("\nInstall the matching build dependencies, then rerun: make doctor")
         return 1
     print("Bingux prerequisites are ready.")

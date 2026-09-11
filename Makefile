@@ -13,7 +13,7 @@ OUTPUT ?= dist/bingux-$(VERSION).tar.xz
 SHELL := /bin/bash
 ROOT := $(abspath .)
 
-.PHONY: all native daemons doctor doctor-build check install install-user uninstall-user source-archive
+.PHONY: all native daemons doctor doctor-build check install install-user uninstall-user rpm-package source-archive
 all: native daemons
 
 native:
@@ -33,12 +33,16 @@ doctor-build:
 doctor:
 	python3 scripts/check-dependencies.py --install-user --qmake '$(QMAKE)' --cargo '$(CARGO)' --cc '$(CC)' --pkg-config '$(PKG_CONFIG)'
 
+rpm-package:
+	python3 tests/rpm-package.py
+
 check: doctor-build native daemons
 	cd $(BUILD_DIR)/text && $(QMAKE) $(ROOT)/packages/bingux-text-layout/spacing-test.pro -o Makefile.tests && $(MAKE) -f Makefile.tests
 	QT_QPA_PLATFORM=offscreen $(BUILD_DIR)/text/spacing-test
 	$(CARGO) test --locked --manifest-path packages/bingux-searchd/Cargo.toml --lib
 	$(CARGO) test --locked --manifest-path packages/bingux-statusd/Cargo.toml --lib
 	python3 tests/install-dependencies.py
+	$(MAKE) rpm-package
 	python3 tests/standalone-install.py
 
 install:
