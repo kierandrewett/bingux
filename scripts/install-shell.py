@@ -52,19 +52,22 @@ def resolve_quickshell(no_systemd):
 
 
 def systemctl_user(arguments, check=True):
+    command = ["systemctl", "--user", *arguments]
     try:
         result = subprocess.run(
-            ["systemctl", "--user", *arguments],
+            command,
             capture_output=True,
             text=True,
             check=False,
         )
     except OSError as error:
+        if not check:
+            return subprocess.CompletedProcess(command, 127, "", str(error))
         raise ValueError(f"could not run systemctl --user: {error}") from error
     if check and result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
-        command = "systemctl --user " + " ".join(arguments)
-        raise ValueError(f"{command} failed ({result.returncode}): {detail or 'no diagnostic'}")
+        command_text = "systemctl --user " + " ".join(arguments)
+        raise ValueError(f"{command_text} failed ({result.returncode}): {detail or 'no diagnostic'}")
     return result
 
 

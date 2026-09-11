@@ -4,6 +4,7 @@ from pathlib import Path
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -142,6 +143,24 @@ class InstallTest(unittest.TestCase):
             calls = log.read_text()
             self.assertIn("disable --now bingux.target", calls)
             self.assertFalse(enabled_target.exists())
+
+    def test_installed_uninstaller_survives_missing_systemctl(self):
+        with tempfile.TemporaryDirectory() as name:
+            base = Path(name)
+            build, prefix = base / "build", base / "install"
+            home, bin_dir = base / "home", base / "bin"
+            for filename in ("text/libbinguxtext.so", "settings/libbinguxsettings.so", "effects/libbinguxeffects.so",
+                             "bingux-audio-meter", "cargo/release/bingux-searchd", "cargo/release/bingux-statusd"):
+                path = build / filename
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("test fixture\n")
+            bin_dir.mkdir()
+            (bin_dir / "python3").symlink_to(sys.executable)
+            environment = {**os.environ, "HOME": str(home), "PATH": str(bin_dir)}
+            subprocess.run(["python3", str(ROOT / "scripts/install-shell.py"), "--user", "--no-systemd",
+                            "--prefix", str(prefix), "--build-dir", str(build)], env=environment, check=True)
+            subprocess.run([str(home / ".local/bin/bingux-uninstall")], env=environment, check=True)
+            self.assertFalse(prefix.exists())
 
 
 if __name__ == "__main__":
