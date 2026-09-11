@@ -30,7 +30,7 @@ daemons:
 doctor-build:
 	python3 scripts/check-dependencies.py --qmake '$(QMAKE)' --cargo '$(CARGO)' --cc '$(CC)' --pkg-config '$(PKG_CONFIG)'
 
-doctor: doctor-build
+doctor:
 	python3 scripts/check-dependencies.py --install-user --qmake '$(QMAKE)' --cargo '$(CARGO)' --cc '$(CC)' --pkg-config '$(PKG_CONFIG)'
 
 check: doctor-build native daemons
