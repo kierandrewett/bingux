@@ -265,6 +265,15 @@ def uninstall_user(prefix, no_systemd):
     if not no_systemd:
         systemctl_user(["disable", "--now", "bingux.target"], check=False)
         systemctl_user(["daemon-reload"], check=False)
+    fragment = prefix / "share/bingux/gnoblin.toml"
+    try:
+        result = subprocess.run(["gnoblinctl", "unload-config", str(fragment)], capture_output=True, text=True, check=False)
+        if result.returncode == 0:
+            print(result.stdout.strip())
+        else:
+            print("  warning: could not detach Gnoblin integration: " + (result.stderr or result.stdout).strip())
+    except OSError as error:
+        print("  warning: gnoblinctl unavailable; detach " + str(fragment) + " before the next Gnoblin reload (" + str(error) + ")")
     target_path = prefix / "lib/systemd/user/bingux.target"
     unit_dirs = {
         Path(link["path"]).parent

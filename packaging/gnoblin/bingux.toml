@@ -18,5 +18,5 @@ ext-data-control = true
 # Bingux owns the entry/exit motion for these surfaces. Keeping compositor
 # animation off prevents two independent animations from fighting each other.
 [[window-rules]]
-match.layer = "^(bingux-[a-z0-9-]+|gnoblin-shell-popup)$"
+match.layer = "^(bingux-[a-z0-9-]+|gnoblin-(shell-popup|dock-tooltip))$"
 animation = "none"
