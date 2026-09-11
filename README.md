@@ -11,10 +11,31 @@ but some window controls and shortcuts require Gnoblin.
 
 ## Install
 
-The native build and install path is the supported path: [standalone shell](docs/standalone.md).
-For a personal install, `make install-user` keeps the payload in one managed
-directory and `make uninstall-user` removes it without deleting user settings.
-Run `make doctor` to diagnose build or runtime prerequisites first.
+The supported source-install path is a managed per-user install:
+
+```sh
+make doctor
+make install-user
+```
+
+Everything is kept under `$XDG_DATA_HOME/bingux` (normally
+`~/.local/share/bingux`). Only convenience symlinks in `~/.local/bin` and
+`~/.config/systemd/user` point into that directory. Set `USER_PREFIX` to use a
+different absolute location, or set `BINGUX_QUICKSHELL` when the matching
+Quickshell executable is not on `PATH`.
+
+Remove the complete managed payload with:
+
+```sh
+make uninstall-user
+# or, when ~/.local/bin is on PATH:
+bingux-uninstall
+```
+
+Removal stops Bingux and deletes the install root while preserving
+`$XDG_CONFIG_HOME/bingux` user settings. For package builds, use the separate
+staging flow documented in [package management](docs/package-management.md).
+
 A Fedora package is being prepared in the [Bingux COPR](https://copr.fedorainfracloud.org/coprs/kierandrewett/bingux/).
 The repository does not publish a ready package until a clean Fedora build and
 a fresh install test pass.
