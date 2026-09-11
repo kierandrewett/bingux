@@ -375,6 +375,7 @@ PanelWindow {
     property var launchAttempts: ({})
     property var launchFailures: ({})
     property int launchSequence: 0
+    readonly property int launchFailureTimeout: 5 * 60 * 1000
 
     function clearLaunchFailure(id) {
         const failures = Object.assign({}, launchFailures);
@@ -390,7 +391,10 @@ PanelWindow {
         const group = appGroups.find(item => item.id === id);
         if (group && group.windows.some(window => !attempt.windows.includes(window)))
             return;
-        launchFailures = Object.assign({}, launchFailures, { [id]: {message: message, windows: attempt.windows} });
+        launchFailures = Object.assign({}, launchFailures, { [id]: {
+            message: message, windows: attempt.windows,
+            expiresAt: Date.now() + root.launchFailureTimeout
+        } });
         const attempts = Object.assign({}, launchAttempts);
         delete attempts[id];
         launchAttempts = attempts;
@@ -478,8 +482,13 @@ PanelWindow {
                 }
             }
             for (const id of Object.keys(root.launchFailures)) {
+                const failure = root.launchFailures[id];
+                if (failure.expiresAt && Date.now() >= failure.expiresAt) {
+                    root.clearLaunchFailure(id);
+                    continue;
+                }
                 const group = root.appGroups.find(item => item.id === id);
-                if (group && group.windows.some(window => !root.launchFailures[id].windows.includes(window))) root.clearLaunchFailure(id);
+                if (group && group.windows.some(window => !failure.windows.includes(window))) root.clearLaunchFailure(id);
             }
         }
     }

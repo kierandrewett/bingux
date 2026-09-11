@@ -54,6 +54,11 @@ ShellRoot {
             verify(dialog.visible);
             verify(dialog.message.includes("may still be starting"));
             dialog.dismissCurrent();
+            dock.launchFailures = Object.assign({}, dock.launchFailures, {
+                timeout: Object.assign({}, dock.launchFailures.timeout, {expiresAt: Date.now() - 1})
+            });
+            tryVerify(() => !dock.launchFailures.timeout, 1000);
+            verify(!dialog.visible);
             report.setText("FAILURES 0\nMissing entry, visible error, grey icon, late recovery, timeout and concurrent launches verified\n");
             finish.start();
         }
