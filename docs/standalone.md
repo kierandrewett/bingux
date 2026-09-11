@@ -26,6 +26,11 @@ make
 make check
 ```
 
+Before a source install, `make doctor` checks the compiler, Cargo, native
+libraries, Qt Quick/QML, Quickshell and user-systemd prerequisites. The managed
+install target runs this check automatically and explains missing dependencies
+before starting the build.
+
 The build produces the two QML plugins, the audio meter and the Rust search and
 status daemons. Quickshell is a runtime dependency because its Qt build must
 match the shell process.

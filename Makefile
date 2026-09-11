@@ -13,7 +13,7 @@ OUTPUT ?= dist/bingux-$(VERSION).tar.xz
 SHELL := /bin/bash
 ROOT := $(abspath .)
 
-.PHONY: all native daemons check install install-user uninstall-user source-archive
+.PHONY: all native daemons doctor doctor-build check install install-user uninstall-user source-archive
 all: native daemons
 
 native:
@@ -27,17 +27,24 @@ daemons:
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-searchd/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-statusd/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 
-check: native daemons
+doctor-build:
+	python3 scripts/check-dependencies.py --qmake '$(QMAKE)' --cargo '$(CARGO)' --cc '$(CC)' --pkg-config '$(PKG_CONFIG)'
+
+doctor: doctor-build
+	python3 scripts/check-dependencies.py --install-user --qmake '$(QMAKE)' --cargo '$(CARGO)' --cc '$(CC)' --pkg-config '$(PKG_CONFIG)'
+
+check: doctor-build native daemons
 	cd $(BUILD_DIR)/text && $(QMAKE) $(ROOT)/packages/bingux-text-layout/spacing-test.pro -o Makefile.tests && $(MAKE) -f Makefile.tests
 	QT_QPA_PLATFORM=offscreen $(BUILD_DIR)/text/spacing-test
 	$(CARGO) test --locked --manifest-path packages/bingux-searchd/Cargo.toml --lib
 	$(CARGO) test --locked --manifest-path packages/bingux-statusd/Cargo.toml --lib
+	python3 tests/install-dependencies.py
 	python3 tests/standalone-install.py
 
 install:
 	python3 scripts/install-shell.py --prefix '$(PREFIX)' --destdir '$(DESTDIR)' --build-dir '$(BUILD_DIR)' --qml-dir '$(QMLDIR)'
 
-install-user: all
+install-user: doctor all
 	python3 scripts/install-shell.py --user --prefix '$(USER_PREFIX)' --build-dir '$(BUILD_DIR)' --qml-dir '$(USER_PREFIX)/lib/bingux/qml'
 
 uninstall-user:
