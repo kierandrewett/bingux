@@ -34,7 +34,24 @@ def write_launcher(path, contents):
     path.chmod(0o755)
 
 
-def build_payload(source, build, prefix, qml, target):
+def resolve_quickshell(no_systemd):
+    configured = os.environ.get("BINGUX_QUICKSHELL")
+    if configured:
+        if shutil.which(configured):
+            return configured
+        if not no_systemd:
+            raise ValueError(f"BINGUX_QUICKSHELL is not executable: {configured}")
+        return configured
+    for candidate in ("qs", "quickshell"):
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    if not no_systemd:
+        raise ValueError("Quickshell was not found; install it or set BINGUX_QUICKSHELL")
+    return "qs"
+
+
+def build_payload(source, build, prefix, qml, target, quickshell="qs"):
     """Install payload files and return their paths relative to prefix."""
     payload = {
         build / "effects/libbinguxeffects.so": qml / "Bingux/Effects/libbinguxeffects.so",
@@ -74,6 +91,7 @@ def build_payload(source, build, prefix, qml, target):
     copy(source / "packages/bingux-settings/bingux-settings", prefix / "libexec/bingux/bingux-settings", True)
 
     common = "#!/bin/sh\nset -eu\nulimit -c 0\n"
+    common += "export BINGUX_QUICKSHELL=${BINGUX_QUICKSHELL:-" + shlex.quote(quickshell) + "}\n"
     common += "export QML_IMPORT_PATH=" + shlex.quote(str(qml)) + '${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}\n'
     common += "export BINGUX_CONFIG_PATH=" + shlex.quote(str(shell)) + "\n"
     common += "export BINGUX_SETTINGS_QML=" + shlex.quote(str(shell / "settings.qml")) + "\n"
@@ -145,13 +163,15 @@ def install_user(source, build, prefix, qml, no_systemd):
     prefix.parent.mkdir(parents=True, exist_ok=True)
     links = integration_paths(prefix)
     ensure_integration_is_safe(links)
+    quickshell = resolve_quickshell(no_systemd)
     staging = Path(tempfile.mkdtemp(prefix=f".{prefix.name}.install-", dir=prefix.parent))
     backup = None
     committed = False
+    was_active = False
     try:
         installed = build_payload(
             source, build, prefix, qml,
-            lambda path: staging / path.relative_to(prefix),
+            lambda path: staging / path.relative_to(prefix), quickshell,
         )
         manifest = {
             "format": 1,
@@ -162,6 +182,10 @@ def install_user(source, build, prefix, qml, no_systemd):
         (staging / ".bingux-install.json").write_text(json.dumps(manifest, indent=2) + "\n")
         if prefix.exists():
             if not no_systemd:
+                was_active = subprocess.run(
+                    ["systemctl", "--user", "is-active", "--quiet", "bingux.target"],
+                    check=False,
+                ).returncode == 0
                 subprocess.run(["systemctl", "--user", "stop", "bingux.target"], check=False)
             backup = Path(tempfile.mkdtemp(prefix=f".{prefix.name}.old-", dir=prefix.parent))
             backup.rmdir()
@@ -185,6 +209,12 @@ def install_user(source, build, prefix, qml, no_systemd):
                 shutil.rmtree(prefix)
             if backup is not None and backup.exists():
                 backup.rename(prefix)
+            if was_active and not no_systemd:
+                subprocess.run(["systemctl", "--user", "enable", "--now", "bingux.target"], check=False)
+        elif not no_systemd:
+            # The payload is complete, but recover the desktop if systemd
+            # rejected the reload/start operation after the swap.
+            subprocess.run(["systemctl", "--user", "enable", "--now", "bingux.target"], check=False)
         raise
     finally:
         if backup is not None and backup.exists():

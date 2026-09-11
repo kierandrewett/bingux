@@ -45,7 +45,9 @@ under `$XDG_DATA_HOME/bingux` (normally `~/.local/share/bingux`), and starts
 they are recorded in
 `.bingux-install.json` and are removed safely by the matching uninstall command.
 Make sure `~/.local/bin` is on `PATH` if you want to run `binguxctl` and the
-other convenience commands directly.
+other convenience commands directly. The installer detects `qs` or
+`quickshell`; set `BINGUX_QUICKSHELL=/path/to/qs` when the matching Quickshell
+build is not on `PATH`.
 
 Remove the managed install with:
 

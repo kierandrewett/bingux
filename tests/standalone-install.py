@@ -100,6 +100,33 @@ class InstallTest(unittest.TestCase):
             self.assertIn("unmanaged directory", result.stderr)
             self.assertEqual(marker.read_text(), "unmanaged\n")
 
+    def test_user_install_manages_systemd_target(self):
+        with tempfile.TemporaryDirectory() as name:
+            base = Path(name)
+            build, prefix = base / "build", base / "install"
+            home, config, bin_dir = base / "home", base / "config", base / "bin"
+            for filename in ("text/libbinguxtext.so", "settings/libbinguxsettings.so", "effects/libbinguxeffects.so",
+                             "bingux-audio-meter", "cargo/release/bingux-searchd", "cargo/release/bingux-statusd"):
+                path = build / filename
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("test fixture\n")
+            bin_dir.mkdir()
+            log = base / "systemctl.log"
+            fake_systemctl = bin_dir / "systemctl"
+            fake_systemctl.write_text("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$BINGUX_SYSTEMCTL_LOG\"\n")
+            fake_systemctl.chmod(0o755)
+            environment = {**os.environ, "HOME": str(home), "XDG_CONFIG_HOME": str(config),
+                           "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
+                           "BINGUX_SYSTEMCTL_LOG": str(log)}
+            subprocess.run(["python3", str(ROOT / "scripts/install-shell.py"), "--user",
+                            "--prefix", str(prefix), "--build-dir", str(build)], env=environment, check=True)
+            self.assertIn("daemon-reload", log.read_text())
+            self.assertIn("enable --now bingux.target", log.read_text())
+            subprocess.run(["python3", str(ROOT / "scripts/install-shell.py"), "--user", "--uninstall",
+                            "--prefix", str(prefix)], env=environment, check=True)
+            calls = log.read_text()
+            self.assertIn("disable --now bingux.target", calls)
+
 
 if __name__ == "__main__":
     unittest.main()
