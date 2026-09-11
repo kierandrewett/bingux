@@ -124,9 +124,14 @@ class InstallTest(unittest.TestCase):
                             "--prefix", str(prefix), "--build-dir", str(build)], env=environment, check=True)
             self.assertIn("daemon-reload", log.read_text())
             self.assertIn("enable --now bingux.target", log.read_text())
+            wants = config / "systemd/user/graphical-session.target.wants"
+            wants.mkdir(parents=True)
+            enabled_target = wants / "bingux.target"
+            enabled_target.symlink_to(prefix / "lib/systemd/user/bingux.target")
             subprocess.run([str(home / ".local/bin/bingux-uninstall")], env=environment, check=True)
             calls = log.read_text()
             self.assertIn("disable --now bingux.target", calls)
+            self.assertFalse(enabled_target.exists())
 
 
 if __name__ == "__main__":

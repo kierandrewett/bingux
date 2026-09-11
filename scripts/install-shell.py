@@ -258,6 +258,16 @@ def uninstall_user(prefix, no_systemd):
     if not no_systemd:
         systemctl_user(["disable", "--now", "bingux.target"], check=False)
         systemctl_user(["daemon-reload"], check=False)
+    target_path = prefix / "lib/systemd/user/bingux.target"
+    unit_dirs = {
+        Path(link["path"]).parent
+        for link in manifest.get("links", [])
+        if Path(link["path"]).name == "bingux.target"
+    }
+    for unit_dir in unit_dirs:
+        for enabled in unit_dir.glob("*.wants/bingux.target"):
+            if enabled.is_symlink() and enabled.resolve() == target_path.resolve():
+                enabled.unlink()
     for link in manifest.get("links", []):
         path = Path(link["path"])
         target_path = Path(link["target"])
