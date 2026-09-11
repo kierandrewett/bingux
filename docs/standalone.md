@@ -47,12 +47,19 @@ they are recorded in
 Make sure `~/.local/bin` is on `PATH` if you want to run `binguxctl` and the
 other convenience commands directly. The installer detects `qs` or
 `quickshell`; set `BINGUX_QUICKSHELL=/path/to/qs` when the matching Quickshell
-build is not on `PATH`.
+build is not on `PATH`. It also installs `bingux-uninstall`, so the source
+checkout is not needed later to remove the managed installation.
 
 Remove the managed install with:
 
 ```sh
 make uninstall-user
+```
+
+Once `~/.local/bin` is on `PATH`, the equivalent standalone command is:
+
+```sh
+bingux-uninstall
 ```
 
 This stops Bingux, removes its integration symlinks, and deletes only the

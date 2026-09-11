@@ -75,6 +75,7 @@ class InstallTest(unittest.TestCase):
             launcher = home / ".local/bin/bingux"
             self.assertTrue(launcher.is_symlink())
             self.assertEqual(launcher.resolve(), (prefix / "bin/bingux").resolve())
+            self.assertTrue((home / ".local/bin/bingux-uninstall").is_symlink())
             unit = config / "systemd/user/bingux.service"
             self.assertTrue(unit.is_symlink())
             self.assertIn(f"ExecStart={prefix}/bin/bingux --no-color", unit.read_text())
@@ -83,6 +84,7 @@ class InstallTest(unittest.TestCase):
                             "--no-systemd", "--prefix", str(prefix)], env=environment, check=True)
             self.assertFalse(prefix.exists())
             self.assertFalse(launcher.exists())
+            self.assertFalse((home / ".local/bin/bingux-uninstall").exists())
             self.assertFalse(unit.exists())
             self.assertFalse((config / "bingux").exists())
 
@@ -122,8 +124,7 @@ class InstallTest(unittest.TestCase):
                             "--prefix", str(prefix), "--build-dir", str(build)], env=environment, check=True)
             self.assertIn("daemon-reload", log.read_text())
             self.assertIn("enable --now bingux.target", log.read_text())
-            subprocess.run(["python3", str(ROOT / "scripts/install-shell.py"), "--user", "--uninstall",
-                            "--prefix", str(prefix)], env=environment, check=True)
+            subprocess.run([str(home / ".local/bin/bingux-uninstall")], env=environment, check=True)
             calls = log.read_text()
             self.assertIn("disable --now bingux.target", calls)
 

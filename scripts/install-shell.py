@@ -68,7 +68,7 @@ def systemctl_user(arguments, check=True):
     return result
 
 
-def build_payload(source, build, prefix, qml, target, quickshell="qs"):
+def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=False):
     """Install payload files and return their paths relative to prefix."""
     payload = {
         build / "effects/libbinguxeffects.so": qml / "Bingux/Effects/libbinguxeffects.so",
@@ -106,6 +106,8 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs"):
         copy(path, destination, destination.parent == prefix / "bin")
     copy(source / "packages/binguxctl/binguxctl.py", prefix / "libexec/bingux/binguxctl.py")
     copy(source / "packages/bingux-settings/bingux-settings", prefix / "libexec/bingux/bingux-settings", True)
+    if managed:
+        copy(source / "scripts/install-shell.py", prefix / "libexec/bingux/install-shell.py", True)
 
     common = "#!/bin/sh\nset -eu\nulimit -c 0\n"
     common += "export BINGUX_QUICKSHELL=${BINGUX_QUICKSHELL:-" + shlex.quote(quickshell) + "}\n"
@@ -121,6 +123,11 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs"):
         "bingux-settings": "exec " + shlex.quote(str(prefix / "libexec/bingux/bingux-settings")) + ' "$@"\n',
         "binguxctl": "exec python3 " + shlex.quote(str(prefix / "libexec/bingux/binguxctl.py")) + ' "$@"\n',
     }
+    if managed:
+        wrappers["bingux-uninstall"] = (
+            "exec python3 " + shlex.quote(str(prefix / "libexec/bingux/install-shell.py")) +
+            " --user --uninstall --prefix " + shlex.quote(str(prefix)) + "\n"
+        )
     for name, command in wrappers.items():
         copy_text = target(prefix / "bin" / name)
         write_launcher(copy_text, common + command)
@@ -153,9 +160,11 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs"):
     return installed
 
 
-def integration_paths(prefix):
+def integration_paths(prefix, managed=False):
     names = ("bingux", "bingux-search-ui", "bingux-switcher-ui", "bingux-emoji-ui",
              "bingux-capture-ui", "bingux-settings", "binguxctl")
+    if managed:
+        names += ("bingux-uninstall",)
     units = ("bingux.target", "bingux.service", "bingux-searchd.service", "bingux-statusd.service",
              "bingux-search-ui.service", "bingux-switcher-ui.service", "bingux-capture-ui.service",
              "bingux-emoji-ui.service")
@@ -178,7 +187,7 @@ def install_user(source, build, prefix, qml, no_systemd):
     if prefix.exists() and any(prefix.iterdir()) and not manifest_path.is_file():
         raise ValueError(f"refusing to use existing unmanaged directory: {prefix}")
     prefix.parent.mkdir(parents=True, exist_ok=True)
-    links = integration_paths(prefix)
+    links = integration_paths(prefix, managed=True)
     ensure_integration_is_safe(links)
     quickshell = resolve_quickshell(no_systemd)
     staging = Path(tempfile.mkdtemp(prefix=f".{prefix.name}.install-", dir=prefix.parent))
@@ -188,7 +197,7 @@ def install_user(source, build, prefix, qml, no_systemd):
     try:
         installed = build_payload(
             source, build, prefix, qml,
-            lambda path: staging / path.relative_to(prefix), quickshell,
+            lambda path: staging / path.relative_to(prefix), quickshell, managed=True,
         )
         manifest = {
             "format": 1,
