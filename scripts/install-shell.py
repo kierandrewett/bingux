@@ -51,6 +51,23 @@ def resolve_quickshell(no_systemd):
     return "qs"
 
 
+def systemctl_user(arguments, check=True):
+    try:
+        result = subprocess.run(
+            ["systemctl", "--user", *arguments],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as error:
+        raise ValueError(f"could not run systemctl --user: {error}") from error
+    if check and result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        command = "systemctl --user " + " ".join(arguments)
+        raise ValueError(f"{command} failed ({result.returncode}): {detail or 'no diagnostic'}")
+    return result
+
+
 def build_payload(source, build, prefix, qml, target, quickshell="qs"):
     """Install payload files and return their paths relative to prefix."""
     payload = {
@@ -182,11 +199,8 @@ def install_user(source, build, prefix, qml, no_systemd):
         (staging / ".bingux-install.json").write_text(json.dumps(manifest, indent=2) + "\n")
         if prefix.exists():
             if not no_systemd:
-                was_active = subprocess.run(
-                    ["systemctl", "--user", "is-active", "--quiet", "bingux.target"],
-                    check=False,
-                ).returncode == 0
-                subprocess.run(["systemctl", "--user", "stop", "bingux.target"], check=False)
+                was_active = systemctl_user(["is-active", "--quiet", "bingux.target"], check=False).returncode == 0
+                systemctl_user(["stop", "bingux.target"], check=False)
             backup = Path(tempfile.mkdtemp(prefix=f".{prefix.name}.old-", dir=prefix.parent))
             backup.rmdir()
             prefix.rename(backup)
@@ -199,8 +213,8 @@ def install_user(source, build, prefix, qml, no_systemd):
             link.symlink_to(target_path)
         committed = True
         if not no_systemd:
-            subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
-            subprocess.run(["systemctl", "--user", "enable", "--now", "bingux.target"], check=True)
+            systemctl_user(["daemon-reload"])
+            systemctl_user(["enable", "--now", "bingux.target"])
     except Exception:
         if staging is not None and staging.exists():
             shutil.rmtree(staging)
@@ -210,11 +224,11 @@ def install_user(source, build, prefix, qml, no_systemd):
             if backup is not None and backup.exists():
                 backup.rename(prefix)
             if was_active and not no_systemd:
-                subprocess.run(["systemctl", "--user", "enable", "--now", "bingux.target"], check=False)
+                systemctl_user(["enable", "--now", "bingux.target"], check=False)
         elif not no_systemd:
             # The payload is complete, but recover the desktop if systemd
             # rejected the reload/start operation after the swap.
-            subprocess.run(["systemctl", "--user", "enable", "--now", "bingux.target"], check=False)
+            systemctl_user(["enable", "--now", "bingux.target"], check=False)
         raise
     finally:
         if backup is not None and backup.exists():
@@ -233,8 +247,8 @@ def uninstall_user(prefix, no_systemd):
     if manifest.get("format") != 1 or Path(manifest.get("prefix", "")).resolve() != prefix.resolve():
         raise ValueError(f"invalid Bingux install manifest: {manifest_path}")
     if not no_systemd:
-        subprocess.run(["systemctl", "--user", "disable", "--now", "bingux.target"], check=False)
-        subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+        systemctl_user(["disable", "--now", "bingux.target"], check=False)
+        systemctl_user(["daemon-reload"], check=False)
     for link in manifest.get("links", []):
         path = Path(link["path"])
         target_path = Path(link["target"])
