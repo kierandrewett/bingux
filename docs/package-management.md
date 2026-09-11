@@ -20,6 +20,14 @@ systemctl --user enable --now bingux.target
 
 The package does not change the selected login session. Use Gnoblin for the
 compositor/session, or start Bingux from another compatible Wayland session.
+Remove the package with:
+
+```sh
+sudo dnf remove bingux
+```
+
+The RPM owns the user-systemd lifecycle: removal stops and unregisters Bingux's
+units, while upgrades request a restart after the new files are installed.
 
 ## Source installation
 

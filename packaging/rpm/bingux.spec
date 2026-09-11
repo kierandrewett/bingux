@@ -17,6 +17,7 @@ BuildRequires:  qt6-qtdeclarative-devel
 BuildRequires:  qt6-qtbase-private-devel
 BuildRequires:  qt6-qttools
 BuildRequires:  rust
+BuildRequires:  systemd-rpm-macros
 
 Requires:       gnome-control-center
 Requires:       gnome-session
@@ -30,6 +31,8 @@ Requires:       quickshell
 Requires:       systemd
 Requires:       wl-clipboard
 Requires:       xdg-utils
+
+%systemd_requires
 
 %description
 Bingux is a Wayland desktop shell. It provides a top bar, dock, search,
@@ -49,6 +52,15 @@ that provide the layer-shell protocols.
 for unit in bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service; do
     sed -e 's|/usr/lib64|%{_libdir}|g' packaging/systemd/$unit > %{buildroot}%{_userunitdir}/$unit
 done
+
+%post
+%systemd_user_post bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service
+
+%preun
+%systemd_user_preun bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service
+
+%postun
+%systemd_user_postun_with_restart bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service
 
 %files
 %license COPYING
