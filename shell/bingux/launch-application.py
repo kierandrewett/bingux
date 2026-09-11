@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 import sys
 import os
+import signal
 import time
 import subprocess
 import gi
@@ -17,6 +18,30 @@ from gi.repository import Gio, GioUnix, GLib
 
 FEEDBACK_PATH = None
 LAST_ERROR = None
+LAUNCH_ACCEPT_TIMEOUT = 5.0
+HOST_MANAGER_TIMEOUT = 5.0
+
+
+class LaunchTimeout(RuntimeError):
+    pass
+
+
+def call_with_timeout(callback):
+    """Bound a synchronous desktop launch so one broken app cannot wedge launchers."""
+    def alarm(_signum, _frame):
+        raise LaunchTimeout("The desktop entry did not respond while starting. It may be blocked by a full filesystem.")
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    signal.signal(signal.SIGALRM, alarm)
+    previous_timer = signal.setitimer(signal.ITIMER_REAL, LAUNCH_ACCEPT_TIMEOUT)
+    try:
+        return callback()
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+        if previous_timer[0] > 0:
+            signal.setitimer(signal.ITIMER_REAL, previous_timer[0], previous_timer[1])
+
 
 def report_failure(name, message, notify):
     global LAST_ERROR
@@ -38,9 +63,9 @@ def report_failure(name, message, notify):
 
 def launch_and_watch(entry, context):
     children = []
-    accepted = entry.launch_uris_as_manager_with_fds([], context,
+    accepted = call_with_timeout(lambda: entry.launch_uris_as_manager_with_fds([], context,
         GLib.SpawnFlags.SEARCH_PATH | GLib.SpawnFlags.DO_NOT_REAP_CHILD,
-        None, None, lambda _app, pid, _data: children.append(pid), None, -1, -1, -1)
+        None, None, lambda _app, pid, _data: children.append(pid), None, -1, -1, -1))
     if not accepted:
         raise RuntimeError("Application launch was rejected")
     # Some launchers hand off to an existing instance and exit successfully.
@@ -58,6 +83,43 @@ def launch_and_watch(entry, context):
                 raise RuntimeError(reason + " Diagnostic output is in the user journal (bingux-app-launch).")
         if children:
             time.sleep(.05)
+
+
+def launch_local(args):
+    identity = args.desktop_id
+    if "/" in identity or not identity:
+        raise ValueError("Expected a desktop entry ID")
+    # Quickshell removes the file extension, including when the application
+    # ID itself ends in .desktop (for example org.telegram.desktop).
+    candidates = [identity + ".desktop"]
+    if identity.endswith(".desktop"):
+        candidates.insert(0, identity)
+    entry = None
+    for candidate in candidates:
+        try:
+            entry = GioUnix.DesktopAppInfo.new(candidate)
+        except TypeError:
+            continue
+        if entry is not None:
+            break
+    if entry is None:
+        directories = [GLib.get_user_data_dir(), *GLib.get_system_data_dirs()]
+        exists = any((Path(directory) / "applications" / candidate).is_file()
+            for directory in directories for candidate in candidates)
+        message = ("The desktop entry exists, but it is invalid or its executable is unavailable."
+            if exists else "The installed desktop entry could not be found.")
+        return report_failure(identity, message, args.notify_errors)
+    if args.report_timeout:
+        return report_failure(entry.get_display_name(), "No application window appeared before the launch timeout. The application may still be starting or running in the background.", True)
+    try:
+        context = Gio.AppLaunchContext()
+        if args.new_window and "new-window" in entry.list_actions():
+            call_with_timeout(lambda: entry.launch_action("new-window", context))
+        else:
+            launch_and_watch(entry, context)
+    except (GLib.Error, RuntimeError) as error:
+        return report_failure(entry.get_display_name(), str(error), args.notify_errors)
+    return 0
 
 
 def main(argv=None):
@@ -84,9 +146,15 @@ def main(argv=None):
             with tempfile.TemporaryDirectory(prefix="bingux-launch-", dir=os.environ.get("XDG_RUNTIME_DIR")) as directory:
                 feedback = Path(directory) / "result.json"
                 command[command.index("--host-launch") + 1:command.index("--host-launch") + 1] = ["--feedback-file", str(feedback)]
-                result = subprocess.run(command, capture_output=True, text=True)
+                try:
+                    result = subprocess.run(command, capture_output=True, text=True, timeout=HOST_MANAGER_TIMEOUT)
+                except subprocess.TimeoutExpired:
+                    return report_failure(args.desktop_id, "The host application launcher did not respond. It may be blocked by a full filesystem.", False)
                 if result.returncode:
-                    return report_failure(args.desktop_id, result.stderr.strip() or "The host launch service could not start.", False)
+                    # If the user manager is still refusing transient units after
+                    # space was reclaimed, launch in the current session. This
+                    # keeps ordinary native apps usable without requiring logout.
+                    return launch_local(args)
                 deadline = time.monotonic() + 8
                 while time.monotonic() < deadline:
                     if feedback.exists():
@@ -96,44 +164,17 @@ def main(argv=None):
                         return outcome["code"]
                     time.sleep(.05)
                 return report_failure(args.desktop_id, "The application launcher did not respond. The app may still be starting.", False)
-        result = subprocess.run(command, capture_output=True, text=True)
-        if result.returncode:
-            return report_failure(args.desktop_id, result.stderr.strip() or "The host launch service could not start.", args.notify_errors)
-        return 0
-    identity = args.desktop_id
-    if "/" in identity or not identity:
-        parser.error("Expected a desktop entry ID")
-    # Quickshell removes the file extension, including when the application
-    # ID itself ends in .desktop (for example org.telegram.desktop).
-    candidates = [identity + ".desktop"]
-    if identity.endswith(".desktop"):
-        candidates.insert(0, identity)
-    entry = None
-    for candidate in candidates:
         try:
-            entry = GioUnix.DesktopAppInfo.new(candidate)
-        except TypeError:
-            continue
-        if entry is not None:
-            break
-    if entry is None:
-        directories = [GLib.get_user_data_dir(), *GLib.get_system_data_dirs()]
-        exists = any((Path(directory) / "applications" / candidate).is_file()
-            for directory in directories for candidate in candidates)
-        message = ("The desktop entry exists, but it is invalid or its executable is unavailable."
-            if exists else "The installed desktop entry could not be found.")
-        return report_failure(identity, message, args.notify_errors)
-    if args.report_timeout:
-        return report_failure(entry.get_display_name(), "No application window appeared before the launch timeout. The application may still be starting or running in the background.", True)
+            result = subprocess.run(command, capture_output=True, text=True, timeout=HOST_MANAGER_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            return report_failure(args.desktop_id, "The host application launcher did not respond. It may be blocked by a full filesystem.", args.notify_errors)
+        if result.returncode:
+            return launch_local(args)
+        return 0
     try:
-        context = Gio.AppLaunchContext()
-        if args.new_window and "new-window" in entry.list_actions():
-            entry.launch_action("new-window", context)
-        else:
-            launch_and_watch(entry, context)
-    except (GLib.Error, RuntimeError) as error:
-        return report_failure(entry.get_display_name(), str(error), args.notify_errors)
-    return 0
+        return launch_local(args)
+    except ValueError as error:
+        parser.error(str(error))
 
 
 if __name__ == "__main__":

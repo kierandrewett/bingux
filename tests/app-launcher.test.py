@@ -1,7 +1,8 @@
 """Exercise GIO desktop launch semantics without altering installed applications."""
 import json
+import io
 import importlib.util
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import os
 from pathlib import Path
 import subprocess
@@ -47,6 +48,30 @@ class ApplicationLaunch(unittest.TestCase):
         self.assertIn("--host-launch", command)
         self.assertEqual(command[-1], "com.spotify.Client")
 
+    def test_host_manager_timeout_is_reported(self):
+        spec = importlib.util.spec_from_file_location("launcher_host_timeout", launcher)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with patch.object(module.subprocess, "run", side_effect=subprocess.TimeoutExpired("systemd-run", 5)), \
+                patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            result = module.main(["--dock-feedback", "com.spotify.Client"])
+        self.assertEqual(result, 1)
+        self.assertIn("host application launcher did not respond", stderr.getvalue())
+
+    def test_dock_launch_falls_back_when_host_manager_rejects_unit(self):
+        spec = importlib.util.spec_from_file_location("launcher_host_fallback", launcher)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        entry = Mock()
+        entry.get_display_name.return_value = "Fallback app"
+        entry.list_actions.return_value = []
+        entry.launch_uris_as_manager_with_fds.return_value = True
+        with patch.object(module.subprocess, "run",
+                          return_value=subprocess.CompletedProcess([], 1, "No space left on device", "")), \
+                patch.object(module.GioUnix.DesktopAppInfo, "new", return_value=entry):
+            self.assertEqual(module.main(["--dock-feedback", "com.example.Fallback"]), 0)
+        entry.launch_uris_as_manager_with_fds.assert_called_once()
+
     def test_host_feedback_reports_missing_entry(self):
         if not os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
             self.skipTest("Requires a running user manager")
@@ -68,6 +93,26 @@ class ApplicationLaunch(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn("exited with code 42", result.stderr)
             self.assertIn("Failing app", result.stderr)
+
+    def test_blocked_gio_activation_is_reported_and_does_not_stick(self):
+        spec = importlib.util.spec_from_file_location("launcher_timeout", launcher)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        entry = Mock()
+        entry.get_display_name.return_value = "Hanging app"
+        entry.list_actions.return_value = []
+
+        def blocked_activation(*_args):
+            time.sleep(.25)
+            return True
+
+        entry.launch_uris_as_manager_with_fds.side_effect = blocked_activation
+        module.LAUNCH_ACCEPT_TIMEOUT = .05
+        with patch.object(module.GioUnix.DesktopAppInfo, "new", return_value=entry), \
+                patch("sys.stderr", new_callable=io.StringIO) as stderr:
+            result = module.main(["bingux-hanging-test"])
+        self.assertEqual(result, 1)
+        self.assertIn("did not respond", stderr.getvalue())
 
     def test_missing_executable_and_crash_are_reported(self):
         for command, expected in (("/bingux-no-such-executable", "executable is unavailable"),
