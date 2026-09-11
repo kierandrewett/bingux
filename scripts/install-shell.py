@@ -301,6 +301,11 @@ def main():
     qml = Path(args.qml_dir or prefix / "lib/bingux/qml")
     if not qml.is_absolute():
         parser.error("prefix and QML directory must be absolute")
+    if args.user:
+        try:
+            qml.relative_to(prefix)
+        except ValueError:
+            parser.error("--qml-dir must be inside --prefix for a managed user install")
     if args.uninstall:
         try:
             uninstall_user(prefix, args.no_systemd)

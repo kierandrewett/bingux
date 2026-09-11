@@ -102,6 +102,16 @@ class InstallTest(unittest.TestCase):
             self.assertIn("unmanaged directory", result.stderr)
             self.assertEqual(marker.read_text(), "unmanaged\n")
 
+    def test_user_install_rejects_external_qml_directory(self):
+        with tempfile.TemporaryDirectory() as name:
+            base = Path(name)
+            result = subprocess.run(["python3", str(ROOT / "scripts/install-shell.py"), "--user",
+                                     "--no-systemd", "--prefix", str(base / "install"),
+                                     "--qml-dir", str(base / "outside-qml"), "--build-dir", str(base / "build")],
+                                    env={**os.environ, "HOME": str(base / "home")}, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("inside --prefix", result.stderr)
+
     def test_user_install_manages_systemd_target(self):
         with tempfile.TemporaryDirectory() as name:
             base = Path(name)
