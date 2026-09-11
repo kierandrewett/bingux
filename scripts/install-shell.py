@@ -249,6 +249,9 @@ def install_user(source, build, prefix, qml, no_systemd):
     print(f"Installed Bingux under {prefix}")
     print("  command links: " + str(Path(os.environ.get("XDG_BIN_HOME") or Path.home() / ".local/bin")))
     print("  service links: " + str(Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd/user"))
+    fragment = prefix / "share/bingux/gnoblin.toml"
+    print("  enable Gnoblin integration: gnoblinctl load-config " + str(fragment))
+    print("  remove integration before uninstall: gnoblinctl unload-config " + str(fragment))
     print("  remove with: make uninstall-user USER_PREFIX=" + str(prefix))
 
 

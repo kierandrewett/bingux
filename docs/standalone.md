@@ -53,7 +53,9 @@ Make sure `~/.local/bin` is on `PATH` if you want to run `binguxctl` and the
 other convenience commands directly. The installer detects `qs` or
 `quickshell`; set `BINGUX_QUICKSHELL=/path/to/qs` when the matching Quickshell
 build is not on `PATH`. It also installs `bingux-uninstall`, so the source
-checkout is not needed later to remove the managed installation.
+checkout is not needed later to remove the managed installation. If Gnoblin is
+installed, the installer prints the command to load its bundled integration
+fragment from the managed install root.
 
 Remove the managed install with:
 
@@ -67,7 +69,9 @@ Once `~/.local/bin` is on `PATH`, the equivalent standalone command is:
 bingux-uninstall
 ```
 
-This stops Bingux, removes its integration symlinks, and deletes only the
+If you loaded the Gnoblin fragment, remove it first with the printed
+`gnoblinctl unload-config ...` command. The uninstall then stops Bingux,
+removes its integration symlinks, and deletes only the
 managed installation root. It deliberately keeps `$XDG_CONFIG_HOME/bingux`,
 so layouts, search settings, extensions and notification history survive a
 reinstall. Use `USER_PREFIX=/some/other/root` with both commands when a
