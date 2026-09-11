@@ -27,7 +27,10 @@ Requires:       python3-cairo
 Requires:       python3-gobject
 Requires:       python3-pillow
 Requires:       python3-pyyaml
-Requires:       quickshell
+# Fedora's Quickshell package is named differently across repositories.  The
+# shell requires the stable executable interface, while the provider supplies
+# the matching Qt/QML runtime and modules.
+Requires:       /usr/bin/qs
 Requires:       systemd
 Requires:       wl-clipboard
 Requires:       xdg-utils
@@ -64,9 +67,13 @@ done
 
 %files
 %license COPYING
-%doc README.md docs/extensions.md shell/bingux/README.md
+%doc README.md docs/extensions.md
 %{_bindir}/bingux
+%{_bindir}/bingux-capture-ui
+%{_bindir}/bingux-emoji-ui
+%{_bindir}/bingux-search-ui
 %{_bindir}/bingux-settings
+%{_bindir}/bingux-switcher-ui
 %{_bindir}/binguxctl
 %{_bindir}/bingux-audio-meter
 %{_bindir}/bingux-searchd

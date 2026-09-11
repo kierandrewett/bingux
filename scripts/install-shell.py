@@ -83,6 +83,7 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         build / "bingux-audio-meter": prefix / "bin/bingux-audio-meter",
         build / "cargo/release/bingux-searchd": prefix / "bin/bingux-searchd",
         build / "cargo/release/bingux-statusd": prefix / "bin/bingux-statusd",
+        source / "packaging/gnoblin/bingux.toml": prefix / "share/bingux/gnoblin.toml",
     }
     missing = [str(path) for path in payload if not path.is_file()]
     if missing:

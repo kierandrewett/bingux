@@ -32,6 +32,8 @@ class InstallTest(unittest.TestCase):
             self.assertEqual(config["commands"]["applicationLauncher"][1],
                              "/usr/share/bingux/shell/launch-application.py")
             self.assertTrue((stage / "usr/share/bingux/shell/ProfileSettings.qml").is_file())
+            self.assertTrue((stage / "usr/share/bingux/gnoblin.toml").is_file())
+            self.assertIn("wlr-layer-shell = true", (stage / "usr/share/bingux/gnoblin.toml").read_text())
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Text/qmldir").is_file())
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Effects/libbinguxeffects.so").is_file())
             self.assertFalse((stage / "home").exists())

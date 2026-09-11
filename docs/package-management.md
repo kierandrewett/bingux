@@ -12,14 +12,34 @@ clean package and install check passes.
 After a build is published, install it with:
 
 ```sh
+# Install a Quickshell 0.2.1 package that provides /usr/bin/qs first.
+# It must be built against the same Qt 6 ABI as the host.
 sudo dnf copr enable kierandrewett/bingux
 sudo dnf install bingux
 systemctl --user daemon-reload
 systemctl --user enable --now bingux.target
 ```
 
+If Gnoblin is installed, add the shipped integration fragment to the user's
+Gnoblin TOML file. This enables the protocols Bingux uses, hands OSD rendering
+to Bingux, and disables duplicate compositor motion for Bingux surfaces:
+
+```toml
+include = ["/usr/share/bingux/gnoblin.toml"]
+```
+
+The fragment is installed as package data and is never written over the user's
+configuration. Source installs use the corresponding
+`$USER_PREFIX/share/bingux/gnoblin.toml` path. Gnoblin watches the main file and
+the included fragment, so shell/effect changes take effect through the same
+hot-reload path. Protocol advertisement is fixed when the compositor session
+starts; log out and back in after first enabling the fragment.
+
 The package does not change the selected login session. Use Gnoblin for the
 compositor/session, or start Bingux from another compatible Wayland session.
+Quickshell is intentionally not bundled; the RPM depends on its executable
+file so repositories can use names such as `quickshell-git` without making
+Bingux depend on one repository's package name.
 Remove the package with:
 
 ```sh

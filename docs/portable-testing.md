@@ -23,8 +23,10 @@ terminal and helper features need their corresponding Bingux packages too.
 The dependency check checks executables; it does not validate QML plugins.
 
 Super+Space opens search. Super+Shift+E exits the nested desktop. The smoke
-check loads the real shell, queries its status, opens and closes search through
-IPC, and exits. It does not prove physical keyboard or pointer handling.
+check loads the real shell, queries its status, routes search open/close through
+the shell IPC controller, and exits. Because portable mode has no Gnoblin
+compositor socket, it does not prove compositor-mediated companion visibility,
+physical keyboard or pointer handling.
 
 The launcher uses temporary home/config/state/cache/runtime directories and a
 private D-Bus session. It starts private bingux-searchd and bingux-statusd when
@@ -49,6 +51,15 @@ the nested launcher is preferable for isolated testing. Bind compositor keys to
 `qs ipc -p /absolute/path/to/shell/bingux call -- search open` or other binguxctl
 commands. Portable mode disables Gnoblin socket connection attempts and skips
 global cursor requests without delaying app launch.
+
+To exercise an installed or staged payload, point the same test at its shell
+directory and QML plugin path:
+
+```sh
+QML_IMPORT_PATH=/path/to/root/usr/lib64/bingux/qml \
+PATH=/path/to/root/usr/bin:$PATH \
+scripts/test-desktop --shell /path/to/root/usr/share/bingux/shell --smoke
+```
 
 ## Dependency map
 

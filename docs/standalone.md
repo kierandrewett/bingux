@@ -83,7 +83,8 @@ make install PREFIX=/usr DESTDIR="$PWD/dist/root"
 
 The package-oriented installer writes only below `DESTDIR`. It installs shell files under
 `share/bingux/shell`, native QML plugins under `lib/bingux/qml`, helper programs
-under `bin` and `libexec/bingux`, and user-systemd units under
+under `bin` and `libexec/bingux`, the optional Gnoblin integration fragment under
+`share/bingux/gnoblin.toml`, and user-systemd units under
 `lib/systemd/user`. It does not enable a service or change an existing user
 configuration. This layout is for RPM and other package builders; source users
 should prefer the managed `make install-user` flow above.

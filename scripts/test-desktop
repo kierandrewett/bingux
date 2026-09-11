@@ -15,6 +15,7 @@ import sys
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--quickshell", default=os.environ.get("QUICKSHELL_BIN", "qs"))
+    parser.add_argument("--shell", help="shell directory to run (default: checkout shell)")
     parser.add_argument("--size", default="1280x800", help="nested output size (default: 1280x800)")
     parser.add_argument("--check", action="store_true", help="check dependencies without opening a desktop")
     parser.add_argument("--smoke", action="store_true", help="verify shell IPC and search open/close, then exit")
@@ -34,7 +35,9 @@ def main():
         return
     if not os.environ.get("WAYLAND_DISPLAY") and not os.environ.get("DISPLAY"):
         parser.error("a graphical desktop is required for the nested compositor")
-    source = Path(__file__).resolve().parents[1] / "shell" / "bingux"
+    source = Path(args.shell).resolve() if args.shell else Path(__file__).resolve().parents[1] / "shell" / "bingux"
+    if not source.is_dir():
+        parser.error(f"shell directory does not exist: {source}")
     with tempfile.TemporaryDirectory(prefix="bingux-desktop-") as directory:
         root = Path(directory)
         env = os.environ.copy()
@@ -68,6 +71,10 @@ def main():
         status = shutil.which("bingux-statusd")
         if status:
             services.append("exec " + shlex.quote(status))
+        for ui in ("SearchShell.qml", "SwitcherShell.qml", "CaptureShell.qml", "EmojiShell.qml"):
+            ui_path = source / ui
+            if ui_path.is_file():
+                services.append("exec " + shlex.join([shutil.which(args.quickshell), "-p", str(ui_path)]))
         proof = root / "smoke-ok"
         if args.smoke:
             probe = root / "probe.py"
@@ -76,7 +83,7 @@ from pathlib import Path
 qs = QS
 source = SOURCE
 try:
-    for attempt in range(40):
+    for attempt in range(120):
         result = subprocess.run([qs, 'ipc', '-p', source, 'call', '--', 'shell', 'status'], capture_output=True, text=True, timeout=5)
         if result.returncode == 0:
             try:
@@ -88,10 +95,8 @@ try:
     else:
         raise RuntimeError('Shell IPC did not become ready')
     for action, expected in [('open', True), ('close', False)]:
-        subprocess.run([qs, 'ipc', '-p', source, 'call', '--', 'search', action], check=True, timeout=5)
-        time.sleep(0.3)
-        result = subprocess.check_output([qs, 'ipc', '-p', source, 'call', '--', 'shell', 'status'], text=True, timeout=5)
-        assert json.loads(result)['search'] == expected, result
+        result = subprocess.check_output([qs, 'ipc', '-p', source, 'call', '--', 'shell', 'panel', 'search', action], text=True, timeout=5)
+        assert json.loads(result)['open'] == expected, result
     Path(PROOF).write_text('Shell IPC and search open/close passed')
 finally:
     subprocess.run(['swaymsg', 'exit'])
@@ -102,7 +107,7 @@ finally:
 output * bg #202124 solid_color
 seat * hide_cursor when-typing disable
 bindsym Mod4+Shift+e exit
-bindsym Mod4+space exec {qs} ipc -p {shell_path} call -- search open
+bindsym Mod4+space exec {qs} ipc -p {shell_path} call -- shell panel search open
 {chr(10).join(services)}
 exec {qs} -p {shell_path}
 ''')
