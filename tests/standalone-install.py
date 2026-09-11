@@ -2,6 +2,7 @@
 """Check staged installation paths without installing into the host."""
 from pathlib import Path
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -55,6 +56,49 @@ class InstallTest(unittest.TestCase):
                                      "--destdir", str(stage), "--build-dir", name], capture_output=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse(stage.exists())
+
+    def test_user_install_is_central_and_removable(self):
+        with tempfile.TemporaryDirectory() as name:
+            base = Path(name)
+            build, prefix = base / "build", base / "install"
+            home, config = base / "home", base / "config"
+            for filename in ("text/libbinguxtext.so", "settings/libbinguxsettings.so", "effects/libbinguxeffects.so",
+                             "bingux-audio-meter", "cargo/release/bingux-searchd", "cargo/release/bingux-statusd"):
+                path = build / filename
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("test fixture\n")
+            environment = {**os.environ, "HOME": str(home), "XDG_CONFIG_HOME": str(config)}
+            subprocess.run(["python3", str(ROOT / "scripts/install-shell.py"), "--user", "--no-systemd",
+                            "--prefix", str(prefix), "--build-dir", str(build)], env=environment, check=True)
+            self.assertTrue((prefix / ".bingux-install.json").is_file())
+            self.assertTrue((prefix / "share/bingux/shell/ProfileSettings.qml").is_file())
+            launcher = home / ".local/bin/bingux"
+            self.assertTrue(launcher.is_symlink())
+            self.assertEqual(launcher.resolve(), (prefix / "bin/bingux").resolve())
+            unit = config / "systemd/user/bingux.service"
+            self.assertTrue(unit.is_symlink())
+            self.assertIn(f"ExecStart={prefix}/bin/bingux --no-color", unit.read_text())
+
+            subprocess.run(["python3", str(ROOT / "scripts/install-shell.py"), "--user", "--uninstall",
+                            "--no-systemd", "--prefix", str(prefix)], env=environment, check=True)
+            self.assertFalse(prefix.exists())
+            self.assertFalse(launcher.exists())
+            self.assertFalse(unit.exists())
+            self.assertFalse((config / "bingux").exists())
+
+    def test_user_install_does_not_take_over_unmanaged_directory(self):
+        with tempfile.TemporaryDirectory() as name:
+            base = Path(name)
+            build, prefix = base / "build", base / "install"
+            prefix.mkdir(parents=True)
+            marker = prefix / "keep-me"
+            marker.write_text("unmanaged\n")
+            result = subprocess.run(["python3", str(ROOT / "scripts/install-shell.py"), "--user",
+                                     "--no-systemd", "--prefix", str(prefix), "--build-dir", str(build)],
+                                    env={**os.environ, "HOME": str(base / "home")}, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unmanaged directory", result.stderr)
+            self.assertEqual(marker.read_text(), "unmanaged\n")
 
 
 if __name__ == "__main__":

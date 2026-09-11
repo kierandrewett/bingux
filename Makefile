@@ -6,13 +6,14 @@ QMAKE ?= qmake6
 CARGO ?= cargo
 PKG_CONFIG ?= pkg-config
 QMLDIR ?= $(PREFIX)/lib/bingux/qml
+USER_PREFIX ?= $(if $(XDG_DATA_HOME),$(XDG_DATA_HOME),$(HOME)/.local/share)/bingux
 JOBS ?= 2
 VERSION ?= 0.1.0
 OUTPUT ?= dist/bingux-$(VERSION).tar.xz
 SHELL := /bin/bash
 ROOT := $(abspath .)
 
-.PHONY: all native daemons check install source-archive
+.PHONY: all native daemons check install install-user uninstall-user source-archive
 all: native daemons
 
 native:
@@ -35,6 +36,12 @@ check: native daemons
 
 install:
 	python3 scripts/install-shell.py --prefix '$(PREFIX)' --destdir '$(DESTDIR)' --build-dir '$(BUILD_DIR)' --qml-dir '$(QMLDIR)'
+
+install-user: all
+	python3 scripts/install-shell.py --user --prefix '$(USER_PREFIX)' --build-dir '$(BUILD_DIR)' --qml-dir '$(USER_PREFIX)/lib/bingux/qml'
+
+uninstall-user:
+	python3 scripts/install-shell.py --user --uninstall --prefix '$(USER_PREFIX)'
 
 source-archive:
 	bash scripts/make-source-archive.sh '$(VERSION)' '$(OUTPUT)'

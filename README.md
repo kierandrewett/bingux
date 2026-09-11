@@ -12,6 +12,8 @@ but some window controls and shortcuts require Gnoblin.
 ## Install
 
 The native build and install path is the supported path: [standalone shell](docs/standalone.md).
+For a personal install, `make install-user` keeps the payload in one managed
+directory and `make uninstall-user` removes it without deleting user settings.
 A Fedora package is being prepared in the [Bingux COPR](https://copr.fedorainfracloud.org/coprs/kierandrewett/bingux/).
 The repository does not publish a ready package until a clean Fedora build and
 a fresh install test pass.

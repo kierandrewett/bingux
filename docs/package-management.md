@@ -23,9 +23,14 @@ compositor/session, or start Bingux from another compatible Wayland session.
 
 ## Source installation
 
-Build and stage the shell with `make` and `make install`; see
-[standalone shell](standalone.md). The installer is deterministic and writes
-only below `DESTDIR`. This is the path used by package builders.
+For a personal source install, use `make install-user`; see the
+[standalone shell](standalone.md) guide. It keeps the payload in one managed
+root and provides `make uninstall-user` for a complete, configuration-preserving
+removal.
+
+`make install PREFIX=/usr DESTDIR=...` remains available for package builders.
+That deterministic staging path writes only below `DESTDIR` and is intentionally
+separate from the managed user install.
 
 ## Other distributions
 
