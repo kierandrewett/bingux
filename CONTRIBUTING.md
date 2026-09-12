@@ -40,3 +40,8 @@ install before it is published to COPR.
 
 Use small commits with a conventional subject and a body that explains the
 user-visible result. Keep unrelated working-tree changes out of a commit.
+
+## Lint and format
+
+See [Code quality](docs/code-quality.md) for tool setup, language coverage,
+whole-repository checks and formatting selected files.

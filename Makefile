@@ -56,3 +56,11 @@ uninstall-user:
 
 source-archive:
 	bash scripts/make-source-archive.sh '$(VERSION)' '$(OUTPUT)'
+
+.PHONY: lint format
+# ARGS="--files path ..." limits the check or format operation.
+lint:
+	./scripts/quality.sh lint $(ARGS)
+
+format:
+	./scripts/quality.sh format $(ARGS)
