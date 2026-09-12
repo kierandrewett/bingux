@@ -23,14 +23,19 @@ Item {
         GridLayout {
             Layout.fillWidth: true
             columns: root.width < 210 ? 2 : 3
-            columnSpacing: 0; rowSpacing: 0
+            columnSpacing: 0
+            rowSpacing: 0
             Repeater {
                 model: ["usage", "processes", "services"]
                 AbstractButton {
                     id: pageButton
                     required property string modelData
                     objectName: "performancePage_" + modelData
-                    text: ({usage: "Overview", processes: "Processes", services: "Services"})[modelData]
+                    text: ({
+                            usage: "Overview",
+                            processes: "Processes",
+                            services: "Services"
+                        })[modelData]
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
                     Layout.preferredWidth: 1
@@ -54,7 +59,11 @@ Item {
                             radius: 1
                             color: Theme.text
                             opacity: pageButton.checked ? 1 : 0
-                            Behavior on opacity { NumberAnimation { duration: Theme.reducedMotion ? 0 : 120 } }
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: Theme.reducedMotion ? 0 : 120
+                                }
+                            }
                         }
                     }
                     contentItem: Text {
@@ -70,23 +79,22 @@ Item {
                 }
             }
         }
-
     }
     SegmentedControl {
         parent: processorDetails.headerRow
-            visible: root.page === "usage"
-            Layout.alignment: Qt.AlignRight
-            Layout.minimumWidth: 88
-            Layout.maximumWidth: 88
-            options: ["1m", "5m"]
-            currentValue: root.range
-            accessiblePrefix: "History range "
-            objectNamePrefix: "monitorRange_"
-            implicitWidth: 88
-            implicitHeight: 28
-            buttonRadius: 4
-            onSelected: value => root.range = value
-        }
+        visible: root.page === "usage"
+        Layout.alignment: Qt.AlignRight
+        Layout.minimumWidth: 88
+        Layout.maximumWidth: 88
+        options: ["1m", "5m"]
+        currentValue: root.range
+        accessiblePrefix: "History range "
+        objectNamePrefix: "monitorRange_"
+        implicitWidth: 88
+        implicitHeight: 28
+        buttonRadius: 4
+        onSelected: value => root.range = value
+    }
     ScrollView {
         id: pageScroll
         objectName: "monitorPageScroll"
@@ -99,66 +107,120 @@ Item {
         contentWidth: availableWidth
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
         ScrollBar.vertical.policy: root.page !== "usage" ? ScrollBar.AlwaysOff : ScrollBar.AsNeeded
-        Binding { target: pageScroll.contentItem; property: "boundsBehavior"; value: Flickable.StopAtBounds }
-        Binding { target: pageScroll.contentItem; property: "boundsMovement"; value: Flickable.StopAtBounds }
+        Binding {
+            target: pageScroll.contentItem
+            property: "boundsBehavior"
+            value: Flickable.StopAtBounds
+        }
+        Binding {
+            target: pageScroll.contentItem
+            property: "boundsMovement"
+            value: Flickable.StopAtBounds
+        }
         ColumnLayout {
             id: pageContent
             width: pageScroll.availableWidth
             height: root.page !== "usage" ? pageScroll.availableHeight : implicitHeight
             spacing: root.spacing
-    Text {
-        visible: !root.monitorWidget.available
-        Layout.fillWidth: true; wrapMode: Text.Wrap
-        text: "Waiting for live readings…"
-        color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
-    }
-    ProcessorDetails {
-        id: processorDetails
-        objectName: "processorDetails"
-        visible: root.page === "usage"
-        Layout.fillWidth: true
-        monitorWidget: root.monitorWidget
-        duration: root.duration
-    }
-    GridLayout {
-        id: overviewGrid
-        visible: root.page === "usage"
-        Layout.fillWidth: true
-        columns: root.width >= 500 ? 2 : 1
-        columnSpacing: 24; rowSpacing: 24
-        ColumnLayout {
-            Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop
-            spacing: 12
-            UsageGraph { metric: "memory"; title: "Memory" }
-            UsageGraph { metric: "swap"; title: "Swap"; Layout.topMargin: 8 }
             Text {
-                visible: typeof root.monitorWidget.sample?.extra?.swapTotalBytes === "number"
-                Layout.fillWidth: true; wrapMode: Text.Wrap
-                text: root.monitorWidget.systemMetrics.formatBytes(root.monitorWidget.sample?.extra?.swapTotalBytes ?? 0) + " swap capacity"
-                color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
+                visible: !root.monitorWidget.available
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                text: "Waiting for live readings…"
+                color: Theme.muted
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSmall
+            }
+            ProcessorDetails {
+                id: processorDetails
+                objectName: "processorDetails"
+                visible: root.page === "usage"
+                Layout.fillWidth: true
+                monitorWidget: root.monitorWidget
+                duration: root.duration
+            }
+            GridLayout {
+                id: overviewGrid
+                visible: root.page === "usage"
+                Layout.fillWidth: true
+                columns: root.width >= 500 ? 2 : 1
+                columnSpacing: 24
+                rowSpacing: 24
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    Layout.alignment: Qt.AlignTop
+                    spacing: 12
+                    UsageGraph {
+                        metric: "memory"
+                        title: "Memory"
+                    }
+                    UsageGraph {
+                        metric: "swap"
+                        title: "Swap"
+                        Layout.topMargin: 8
+                    }
+                    Text {
+                        visible: typeof root.monitorWidget.sample?.extra?.swapTotalBytes === "number"
+                        Layout.fillWidth: true
+                        wrapMode: Text.Wrap
+                        text: root.monitorWidget.systemMetrics.formatBytes(root.monitorWidget.sample?.extra?.swapTotalBytes ?? 0) + " swap capacity"
+                        color: Theme.muted
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSmall
+                    }
+                }
+                HardwareDetails {
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    Layout.alignment: Qt.AlignTop
+                    page: "gpu"
+                    monitorWidget: root.monitorWidget
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.columnSpan: overviewGrid.columns
+                    spacing: 20
+                    HardwareDetails {
+                        Layout.fillWidth: true
+                        page: "storage"
+                        monitorWidget: root.monitorWidget
+                    }
+                    TrafficGraph {
+                        id: diskTraffic
+                        title: "Disk activity"
+                        readMetric: "diskRead"
+                        writeMetric: "diskWrite"
+                    }
+                }
+            }
+            HardwareDetails {
+                objectName: "hardwareDetails"
+                visible: root.page === "processes"
+                page: "processes"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: 120
+                monitorWidget: root.monitorWidget
+            }
+            ServicesPanel {
+                objectName: "servicesPanel"
+                visible: root.page === "services"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.minimumHeight: 160
+            }
+            TrafficGraph {
+                id: networkTraffic
+                visible: root.page === "usage"
+                title: "Network"
+                readMetric: "receive"
+                writeMetric: "send"
             }
         }
-        HardwareDetails { Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignTop; page: "gpu"; monitorWidget: root.monitorWidget }
-        ColumnLayout {
-            Layout.fillWidth: true; Layout.columnSpan: overviewGrid.columns
-            spacing: 20
-            HardwareDetails { Layout.fillWidth: true; page: "storage"; monitorWidget: root.monitorWidget }
-            TrafficGraph { id: diskTraffic; title: "Disk activity"; readMetric: "diskRead"; writeMetric: "diskWrite" }
-        }
     }
-    HardwareDetails {
-        objectName: "hardwareDetails"
-        visible: root.page === "processes"
-        page: "processes"
-        Layout.fillWidth: true; Layout.fillHeight: true
-        Layout.minimumHeight: 120
-        monitorWidget: root.monitorWidget
-    }
-    ServicesPanel { objectName: "servicesPanel"; visible: root.page === "services"; Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 160 }
-    TrafficGraph { id: networkTraffic; visible: root.page === "usage"; title: "Network"; readMetric: "receive"; writeMetric: "send" }
-        }
-    }
-    onPageChanged: if (pageScroll.contentItem) pageScroll.contentItem.contentY = 0
+    onPageChanged: if (pageScroll.contentItem)
+        pageScroll.contentItem.contentY = 0
     component TrafficGraph: ColumnLayout {
         id: traffic
         required property string title
@@ -170,8 +232,22 @@ Item {
         RowLayout {
             id: trafficHeader
             Layout.fillWidth: true
-            Text { Layout.fillWidth: true; wrapMode: Text.Wrap; text: traffic.title; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize; font.weight: Font.Medium }
-            Text { visible: !root.compact && traffic.readMetric !== "diskRead"; text: root.monitorWidget.systemMetrics.formatRate(network.maximum) + " max"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                text: traffic.title
+                color: Theme.text
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSize
+                font.weight: Font.Medium
+            }
+            Text {
+                visible: !root.compact && traffic.readMetric !== "diskRead"
+                text: root.monitorWidget.systemMetrics.formatRate(network.maximum) + " max"
+                color: Theme.muted
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSmall
+            }
         }
         GridLayout {
             Layout.fillWidth: true
@@ -208,8 +284,19 @@ Item {
         }
         RowLayout {
             Layout.fillWidth: true
-            Text { Layout.fillWidth: true; text: root.range === "5m" ? "5 minutes ago" : "1 minute ago"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 10 }
-            Text { text: network.inspectedPoint ? Math.max(0, Math.round((root.monitorWidget.chartTime - network.inspectedPoint.at) / 1000)) + "s ago" : "Now"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 10 }
+            Text {
+                Layout.fillWidth: true
+                text: root.range === "5m" ? "5 minutes ago" : "1 minute ago"
+                color: Theme.muted
+                font.family: Theme.fontFamily
+                font.pixelSize: 10
+            }
+            Text {
+                text: network.inspectedPoint ? Math.max(0, Math.round((root.monitorWidget.chartTime - network.inspectedPoint.at) / 1000)) + "s ago" : "Now"
+                color: Theme.muted
+                font.family: Theme.fontFamily
+                font.pixelSize: 10
+            }
         }
     }
     component UsageGraph: ColumnLayout {
@@ -221,11 +308,15 @@ Item {
         spacing: 6
         readonly property var point: chart.inspectedPoint
         readonly property var utilisation: {
-            if (point) return point[metric];
+            if (point)
+                return point[metric];
             const sample = root.monitorWidget.sample;
-            if (!root.monitorWidget.available || !sample) return null;
-            if (metric === "memory") return sample.memoryTotalBytes > 0 ? sample.memoryUsedBytes / sample.memoryTotalBytes * 100 : null;
-            if (metric === "swap") return sample.extra?.swapTotalBytes > 0 ? sample.extra.swapUsedBytes / sample.extra.swapTotalBytes * 100 : null;
+            if (!root.monitorWidget.available || !sample)
+                return null;
+            if (metric === "memory")
+                return sample.memoryTotalBytes > 0 ? sample.memoryUsedBytes / sample.memoryTotalBytes * 100 : null;
+            if (metric === "swap")
+                return sample.extra?.swapTotalBytes > 0 ? sample.extra.swapUsedBytes / sample.extra.swapTotalBytes * 100 : null;
             return null;
         }
         property alias headerRow: usageHeader
@@ -234,7 +325,15 @@ Item {
             Layout.fillWidth: true
             Layout.minimumHeight: 28
             spacing: 6
-            Text { Layout.fillWidth: true; Layout.minimumWidth: 0; wrapMode: Text.Wrap; text: usage.title; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+            Text {
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                wrapMode: Text.Wrap
+                text: usage.title
+                color: Theme.muted
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSmall
+            }
         }
         RollingNumber {
             objectName: usage.metric + "HistoryValue"
@@ -248,10 +347,7 @@ Item {
             visible: root.compact && usage.metric === "memory"
             Layout.fillWidth: true
             wrapMode: Text.Wrap
-            text: usage.metric === "memory" && root.monitorWidget.sample
-                ? root.monitorWidget.systemMetrics.formatBytes(root.monitorWidget.sample.memoryTotalBytes) + " total · "
-                    + root.monitorWidget.systemMetrics.formatBytes(root.monitorWidget.sample.memoryTotalBytes - root.monitorWidget.sample.memoryUsedBytes) + " available"
-                : "Usage over the last " + (root.range === "5m" ? "5 minutes" : "minute")
+            text: usage.metric === "memory" && root.monitorWidget.sample ? root.monitorWidget.systemMetrics.formatBytes(root.monitorWidget.sample.memoryTotalBytes) + " total · " + root.monitorWidget.systemMetrics.formatBytes(root.monitorWidget.sample.memoryTotalBytes - root.monitorWidget.sample.memoryUsedBytes) + " available" : "Usage over the last " + (root.range === "5m" ? "5 minutes" : "minute")
             color: Theme.muted
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSmall
@@ -271,8 +367,19 @@ Item {
         }
         RowLayout {
             Layout.fillWidth: true
-            Text { Layout.fillWidth: true; text: usage.metric === "temperature" ? "0–120°C" : usage.metric === "load" ? "0–" + Math.ceil(chart.maximum) + " tasks" : "0–100%"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 10 }
-            Text { text: "Peak " + (usage.metric === "load" ? chart.peak.toFixed(2) : Math.round(chart.peak)) + (usage.metric === "temperature" ? "°C" : usage.metric === "load" ? "" : "%"); color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 10 }
+            Text {
+                Layout.fillWidth: true
+                text: usage.metric === "temperature" ? "0–120°C" : usage.metric === "load" ? "0–" + Math.ceil(chart.maximum) + " tasks" : "0–100%"
+                color: Theme.muted
+                font.family: Theme.fontFamily
+                font.pixelSize: 10
+            }
+            Text {
+                text: "Peak " + (usage.metric === "load" ? chart.peak.toFixed(2) : Math.round(chart.peak)) + (usage.metric === "temperature" ? "°C" : usage.metric === "load" ? "" : "%")
+                color: Theme.muted
+                font.family: Theme.fontFamily
+                font.pixelSize: 10
+            }
         }
     }
 }

@@ -21,15 +21,23 @@ GridLayout {
     property url accountImageSource: "file:///var/lib/AccountsService/icons/" + Quickshell.env("USER")
     signal settingsRequested(string panel)
     signal detailRequested(string page, var trigger, string audioTab)
-    signal lockRequested()
+    signal lockRequested
     signal widgetEditRequested(string widgetId, var control)
-    signal customiseRequested()
+    signal customiseRequested
     signal playerSelected(var player)
-    function settings(panel) { settingsRequested(panel); }
-    function openDetail(page, trigger, audioTab = "") { detailRequested(page, trigger, audioTab); }
+    function settings(panel) {
+        settingsRequested(panel);
+    }
+    function openDetail(page, trigger, audioTab = "") {
+        detailRequested(page, trigger, audioTab);
+    }
     readonly property var groupedLayout: desktop.controlLayout || ControlLayout.defaults()
-    function sectionRow(id) { return ControlLayout.position(groupedLayout, "control-centre", id); }
-    function groupPosition(group, id) { return ControlLayout.position(groupedLayout, group, id); }
+    function sectionRow(id) {
+        return ControlLayout.position(groupedLayout, "control-centre", id);
+    }
+    function groupPosition(group, id) {
+        return ControlLayout.position(groupedLayout, group, id);
+    }
     readonly property var connectedVpns: services.vpns.filter(vpn => vpn.connected)
     readonly property bool showVpn: services.showControl("vpn") && services.vpns.length > 0
     readonly property var microphone: indicators.audioSource || null
@@ -51,20 +59,29 @@ GridLayout {
         readonly property bool placed: !!root.widgetLayout && container !== ""
         readonly property bool barLayout: placed && container !== "sidebar"
         readonly property var barWindow: placed ? root.widgetLayout.windowFor(group) : root.barWindow
-        readonly property var memberEntries: root.movableWidgets.filter(item => item.nativeGroup === widgetId && !item.placed).map(item => ({id: item.widgetId, item}))
+        readonly property var memberEntries: root.movableWidgets.filter(item => item.nativeGroup === widgetId && !item.placed).map(item => ({
+                    id: item.widgetId,
+                    item
+                }))
         readonly property int sidebarColumns: {
-            if (container !== "sidebar" || nativeRows !== 1 || !parent) return 0;
+            if (container !== "sidebar" || nativeRows !== 1 || !parent)
+                return 0;
             const widths = memberEntries.filter(entry => entry.item.visible).map(entry => entry.item.implicitWidth);
             const total = widths.reduce((sum, width) => sum + width, 0) + Math.max(0, widths.length - 1) * columnSpacing;
-            if (total <= parent.width) return 0;
+            if (total <= parent.width)
+                return 0;
             return Math.max(1, Math.floor((parent.width + columnSpacing) / (Math.max(32, ...widths) + columnSpacing)));
         }
         function memberIndex(id) {
             const order = ControlLayout.items(root.groupedLayout, widgetId);
             return sidebarColumns ? order.filter(value => memberEntries.some(entry => entry.id === value && entry.item.visible)).indexOf(id) : order.indexOf(id);
         }
-        function memberRow(id) { return sidebarColumns ? Math.floor(memberIndex(id) / sidebarColumns) : 0; }
-        function memberColumn(id) { return sidebarColumns ? memberIndex(id) % sidebarColumns : memberIndex(id); }
+        function memberRow(id) {
+            return sidebarColumns ? Math.floor(memberIndex(id) / sidebarColumns) : 0;
+        }
+        function memberColumn(id) {
+            return sidebarColumns ? memberIndex(id) % sidebarColumns : memberIndex(id);
+        }
         parent: placed ? root.widgetLayout.hostFor(group) : root
         visible: placed || root.sectionRow(widgetId) >= 0
         Layout.fillWidth: !barLayout
@@ -74,7 +91,8 @@ GridLayout {
         Layout.column: placed ? root.widgetLayout.controlColumn(group) : 0
         rows: barLayout ? 1 : sidebarColumns ? -1 : nativeRows
         columns: sidebarColumns || (barLayout ? -1 : nativeColumns)
-        Component.onCompleted: if (root.editingEnabled) DesktopEditing.registerSource(widgetId, group)
+        Component.onCompleted: if (root.editingEnabled)
+            DesktopEditing.registerSource(widgetId, group)
         Component.onDestruction: DesktopEditing.unregisterSource(widgetId, group)
         TapHandler {
             id: groupEdit
@@ -82,7 +100,8 @@ GridLayout {
             acceptedButtons: Qt.RightButton
             acceptedModifiers: Qt.ShiftModifier
             onTapped: {
-                if (group.memberEntries.some(entry => entry.item.visible && entry.item.contains(entry.item.mapFromItem(group, groupEdit.point.position)))) return;
+                if (group.memberEntries.some(entry => entry.item.visible && entry.item.contains(entry.item.mapFromItem(group, groupEdit.point.position))))
+                    return;
                 root.widgetEditRequested(group.widgetId, group);
             }
         }
@@ -102,7 +121,13 @@ GridLayout {
         barWindow: placed && root.widgetLayout ? root.widgetLayout.windowFor(action) : headerControls.barWindow
         implicitHeight: barLayout ? Theme.barHeight : 32
         presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "controls-header", label, iconName, true, false, placed ? "" : headerControls.container || "control-centre")
-        WidgetEditHandle { previewSource: root.editingEnabled; visible: root.editingEnabled; control: action; widgetId: action.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
+        WidgetEditHandle {
+            previewSource: root.editingEnabled
+            visible: root.editingEnabled
+            control: action
+            widgetId: action.widgetId
+            onRequested: (id, item) => root.widgetEditRequested(id, item)
+        }
         Component.onCompleted: root.actionWidgets = root.actionWidgets.concat([action])
         Component.onDestruction: root.actionWidgets = root.actionWidgets.filter(item => item !== action)
     }
@@ -121,7 +146,13 @@ GridLayout {
         Layout.row: placed ? root.widgetLayout.controlRow(audio) : (barLayout ? 0 : root.groupPosition("controls-audio", widgetId))
         Layout.column: placed ? root.widgetLayout.controlColumn(audio) : (barLayout ? root.groupPosition("controls-audio", widgetId) : 0)
         presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "controls-audio", label, muteIconName, true, false, placed ? "" : audioRows.container || "control-centre")
-        WidgetEditHandle { previewSource: root.editingEnabled; visible: root.editingEnabled; control: audio; widgetId: audio.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
+        WidgetEditHandle {
+            previewSource: root.editingEnabled
+            visible: root.editingEnabled
+            control: audio
+            widgetId: audio.widgetId
+            onRequested: (id, item) => root.widgetEditRequested(id, item)
+        }
     }
     component QuickWidget: ControlRow {
         id: quick
@@ -139,33 +170,63 @@ GridLayout {
         Layout.column: placed ? root.widgetLayout.controlColumn(quick) : (barLayout ? root.widgetOrder.indexOf(controlName) : root.controlCell(controlName).column)
         Layout.columnSpan: placed || barLayout ? 1 : root.controlSpan(controlName)
         presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "controls-tiles", title, iconName, true, !barLayout, placed ? "" : quickRows.container || "control-centre")
-        WidgetEditHandle { previewSource: root.editingEnabled; visible: root.editingEnabled; control: quick; widgetId: quick.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
-        BarTooltip { anchorItem: quick; barWindow: placed && root.widgetLayout ? root.widgetLayout.windowFor(quick) : quickRows.barWindow; requested: root.editingEnabled && quick.barLayout && quick.hovered; text: quick.displayedTitle + (quick.subtitle ? "\n" + quick.subtitle : "") }
+        WidgetEditHandle {
+            previewSource: root.editingEnabled
+            visible: root.editingEnabled
+            control: quick
+            widgetId: quick.widgetId
+            onRequested: (id, item) => root.widgetEditRequested(id, item)
+        }
+        BarTooltip {
+            anchorItem: quick
+            barWindow: placed && root.widgetLayout ? root.widgetLayout.windowFor(quick) : quickRows.barWindow
+            requested: root.editingEnabled && quick.barLayout && quick.hovered
+            text: quick.displayedTitle + (quick.subtitle ? "\n" + quick.subtitle : "")
+        }
     }
     readonly property var widgetOrder: root.desktop.controlOrder || DesktopLayout.controlOrder()
     function controlVisible(name) {
-        if (DesktopLayout.zone(root.desktop.layout || {}, "control-" + name)) return false;
-        if (name === "awake" && services.keepAwake) return true;
-        if (!widgetOrder.includes(name)) return false;
+        if (DesktopLayout.zone(root.desktop.layout || {}, "control-" + name))
+            return false;
+        if (name === "awake" && services.keepAwake)
+            return true;
+        if (!widgetOrder.includes(name))
+            return false;
         return name === "network" || name === "bluetooth" ? true : name === "vpn" ? showVpn : services.showControl(name);
     }
     function controlSpan(name) {
-        if (["vpn", "power", "awake"].includes(name)) return 2;
-        if (["dnd", "nightLight"].includes(name)) return controlVisible("dnd") && controlVisible("nightLight") ? 1 : 2;
+        if (["vpn", "power", "awake"].includes(name))
+            return 2;
+        if (["dnd", "nightLight"].includes(name))
+            return controlVisible("dnd") && controlVisible("nightLight") ? 1 : 2;
         return 1;
     }
     function controlCell(name) {
         let row = 0, column = 0;
         const order = widgetOrder.includes("awake") ? widgetOrder : widgetOrder.concat(["awake"]);
         for (const id of order) {
-            if (!controlVisible(id)) continue;
+            if (!controlVisible(id))
+                continue;
             const span = controlSpan(id);
-            if (column + span > 2) { row++; column = 0; }
-            if (id === name) return {row, column};
+            if (column + span > 2) {
+                row++;
+                column = 0;
+            }
+            if (id === name)
+                return {
+                    row,
+                    column
+                };
             column += span;
-            if (column === 2) { row++; column = 0; }
+            if (column === 2) {
+                row++;
+                column = 0;
+            }
         }
-        return {row: -1, column: -1};
+        return {
+            row: -1,
+            column: -1
+        };
     }
     NativeGroup {
         id: headerControls
@@ -175,8 +236,8 @@ GridLayout {
         rowSpacing: 0
         columnSpacing: 8
         ActionWidget {
-            widgetId: "control-account"
             id: accountControl
+            widgetId: "control-account"
             objectName: "controlUserAccount"
             iconName: "avatar-default-symbolic"
             imageSource: root.accountImageSource
@@ -205,7 +266,13 @@ GridLayout {
             implicitHeight: Theme.barHeight
             Layout.fillWidth: !barLayout && !fixedWidth
             Layout.preferredWidth: barLayout || fixedWidth ? gapSize : -1
-            WidgetEditHandle { previewSource: root.editingEnabled; visible: root.editingEnabled; control: headerSpace; widgetId: headerSpace.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
+            WidgetEditHandle {
+                previewSource: root.editingEnabled
+                visible: root.editingEnabled
+                control: headerSpace
+                widgetId: headerSpace.widgetId
+                onRequested: (id, item) => root.widgetEditRequested(id, item)
+            }
         }
         BatteryStatus {
             id: batteryControl
@@ -223,27 +290,33 @@ GridLayout {
             available: root.indicators.laptopBatteryAvailable
             summary: root.indicators.batteryAccessibleName()
             presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "controls-header", label, "battery-good-symbolic", true, true, placed ? "" : headerControls.container || "control-centre")
-            WidgetEditHandle { previewSource: root.editingEnabled; visible: root.editingEnabled; control: batteryControl; widgetId: batteryControl.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
+            WidgetEditHandle {
+                previewSource: root.editingEnabled
+                visible: root.editingEnabled
+                control: batteryControl
+                widgetId: batteryControl.widgetId
+                onRequested: (id, item) => root.widgetEditRequested(id, item)
+            }
         }
         ActionWidget {
-            widgetId: "control-settings"
             id: settingsControl
+            widgetId: "control-settings"
             objectName: "controlSettings"
             iconName: "org.gnome.Settings-symbolic"
             label: "Settings"
             onClicked: root.settings("")
         }
         ActionWidget {
-            widgetId: "control-session"
             id: sessionPowerButton
+            widgetId: "control-session"
             objectName: "controlSessionPower"
             iconName: "system-shutdown-symbolic"
             label: "Power options"
             onClicked: root.openDetail("session", sessionPowerButton)
         }
         ActionWidget {
-            widgetId: "control-lock"
             id: lockControl
+            widgetId: "control-lock"
             objectName: "controlLock"
             iconName: "system-lock-screen-symbolic"
             label: "Lock"
@@ -258,8 +331,8 @@ GridLayout {
         rowSpacing: 12
         columnSpacing: barLayout ? Theme.gap : 0
         AudioWidget {
-            widgetId: "control-volume"
             id: outputControl
+            widgetId: "control-volume"
             objectName: "controlOutputRow"
             node: root.indicators.audioSink || null
             label: "Volume"
@@ -272,8 +345,8 @@ GridLayout {
             onDevicesRequested: trigger => root.openDetail("audio", outputControl.barLayout ? outputControl : trigger, "output")
         }
         AudioWidget {
-            widgetId: "control-microphone"
             id: inputControl
+            widgetId: "control-microphone"
             objectName: "controlInputRow"
             node: root.microphone
             label: "Microphone"
@@ -304,8 +377,16 @@ GridLayout {
         Layout.preferredWidth: barLayout ? 1 : -1
         implicitWidth: barLayout ? 1 : 0
         implicitHeight: barLayout ? Theme.barHeight - 12 : 1
-        color: Theme.outline; opacity: 0.5
-        WidgetEditHandle { previewSource: root.editingEnabled; visible: root.editingEnabled; control: dividerControl; anchors.margins: -5; widgetId: dividerControl.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
+        color: Theme.outline
+        opacity: 0.5
+        WidgetEditHandle {
+            previewSource: root.editingEnabled
+            visible: root.editingEnabled
+            control: dividerControl
+            anchors.margins: -5
+            widgetId: dividerControl.widgetId
+            onRequested: (id, item) => root.widgetEditRequested(id, item)
+        }
     }
     NativeGroup {
         id: quickRows
@@ -316,10 +397,10 @@ GridLayout {
         rowSpacing: 8
         columnSpacing: 8
         QuickWidget {
+            id: networkWidget
             tileLayout: true
             navigation: true
             rowInteractive: false
-            id: networkWidget
             controlName: "network"
             objectName: "controlNetwork"
             iconName: root.indicators.networkIconName()
@@ -330,10 +411,10 @@ GridLayout {
             onNavigationRequested: trigger => root.openDetail("network", trigger)
         }
         QuickWidget {
+            id: bluetoothWidget
             tileLayout: true
             navigation: true
             rowInteractive: false
-            id: bluetoothWidget
             controlName: "bluetooth"
             objectName: "controlBluetooth"
             iconName: "bluetooth-active-symbolic"
@@ -343,12 +424,13 @@ GridLayout {
             selected: root.bluetoothAdapter !== null && root.bluetoothAdapter.enabled
             subtitle: root.bluetoothAdapter ? (root.bluetoothAdapter.enabled ? "On" : "Off") : "Unavailable"
             onNavigationRequested: trigger => root.openDetail("bluetooth", trigger)
-            onToggleRequested: if (root.bluetoothAdapter) root.bluetoothAdapter.enabled = !root.bluetoothAdapter.enabled
+            onToggleRequested: if (root.bluetoothAdapter)
+                root.bluetoothAdapter.enabled = !root.bluetoothAdapter.enabled
         }
         QuickWidget {
+            id: vpnWidget
             tileLayout: false
             tileSurface: true
-            id: vpnWidget
             controlName: "vpn"
             objectName: "controlVpn"
             rowInteractive: false
@@ -360,9 +442,9 @@ GridLayout {
             onNavigationRequested: trigger => root.openDetail("vpn", trigger)
         }
         QuickWidget {
+            id: dndWidget
             tileLayout: true
             compactTile: true
-            id: dndWidget
             controlName: "dnd"
             objectName: "controlDnd"
             title: "Do Not Disturb"
@@ -372,12 +454,15 @@ GridLayout {
             toggleVisible: true
             toggleEnabled: !!root.services.state.dndAvailable && !root.services.busy
             selected: root.services.doNotDisturb
-            onToggleRequested: root.services.action({kind: "dnd", enabled: !root.services.doNotDisturb})
+            onToggleRequested: root.services.action({
+                kind: "dnd",
+                enabled: !root.services.doNotDisturb
+            })
         }
         QuickWidget {
+            id: nightLightWidget
             tileLayout: true
             compactTile: true
-            id: nightLightWidget
             controlName: "nightLight"
             objectName: "controlNightLight"
             title: "Night Light"
@@ -387,12 +472,15 @@ GridLayout {
             toggleVisible: true
             toggleEnabled: !!root.services.state.nightLightAvailable && !root.services.busy
             selected: !!root.services.state.nightLight
-            onToggleRequested: root.services.action({kind: "nightLight", enabled: !root.services.state.nightLight})
+            onToggleRequested: root.services.action({
+                kind: "nightLight",
+                enabled: !root.services.state.nightLight
+            })
         }
         QuickWidget {
+            id: powerWidget
             tileLayout: false
             tileSurface: true
-            id: powerWidget
             controlName: "power"
             objectName: "controlPower"
             title: "Power mode"
@@ -404,9 +492,9 @@ GridLayout {
             onNavigationRequested: trigger => root.openDetail("power", trigger)
         }
         QuickWidget {
+            id: awakeWidget
             tileLayout: false
             tileSurface: true
-            id: awakeWidget
             controlName: "awake"
             objectName: "controlKeepAwake"
             title: "Keep Awake"
@@ -435,13 +523,18 @@ GridLayout {
         visible: placed || root.sectionRow(widgetId) >= 0
         Layout.fillWidth: !barLayout
         presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "control-centre", player ? player.trackTitle || player.identity : "Media playback", "applications-multimedia-symbolic", true, true)
-        WidgetEditHandle { previewSource: root.editingEnabled; visible: root.editingEnabled; control: mediaControl; widgetId: mediaControl.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
+        WidgetEditHandle {
+            previewSource: root.editingEnabled
+            visible: root.editingEnabled
+            control: mediaControl
+            widgetId: mediaControl.widgetId
+            onRequested: (id, item) => root.widgetEditRequested(id, item)
+        }
         player: root.mediaPlayer
         playerOptions: root.mediaPlayers
         onPlayerSelected: selectedPlayer => root.playerSelected(selectedPlayer)
         active: root.active || placed
     }
-
 
     ActionButton {
         id: customiseControl
@@ -461,9 +554,28 @@ GridLayout {
         text: "Customise controls..."
         iconName: "document-edit-symbolic"
         presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "control-centre", text, iconName, barLayout, !barLayout)
-        WidgetEditHandle { previewSource: root.editingEnabled; visible: root.editingEnabled; control: customiseControl; widgetId: customiseControl.widgetId; onRequested: (id, item) => root.widgetEditRequested(id, item) }
-        BarTooltip { anchorItem: customiseControl; barWindow: customiseControl.barWindow; requested: root.editingEnabled && customiseControl.barLayout && customiseControl.hovered; text: customiseControl.displayedText }
+        WidgetEditHandle {
+            previewSource: root.editingEnabled
+            visible: root.editingEnabled
+            control: customiseControl
+            widgetId: customiseControl.widgetId
+            onRequested: (id, item) => root.widgetEditRequested(id, item)
+        }
+        BarTooltip {
+            anchorItem: customiseControl
+            barWindow: customiseControl.barWindow
+            requested: root.editingEnabled && customiseControl.barLayout && customiseControl.hovered
+            text: customiseControl.displayedText
+        }
         onClicked: root.customiseRequested()
     }
-    Text { Layout.row: ControlLayout.items(root.groupedLayout, "control-centre").length; Layout.fillWidth: true; visible: root.services.error !== ""; text: root.services.error; wrapMode: Text.Wrap; color: Theme.muted; font.pixelSize: Theme.fontSmall }
+    Text {
+        Layout.row: ControlLayout.items(root.groupedLayout, "control-centre").length
+        Layout.fillWidth: true
+        visible: root.services.error !== ""
+        text: root.services.error
+        wrapMode: Text.Wrap
+        color: Theme.muted
+        font.pixelSize: Theme.fontSmall
+    }
 }

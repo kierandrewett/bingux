@@ -4,8 +4,15 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_METRICS_RESULTS") }
-    Timer { id: finish; interval: 200; onTriggered: Qt.quit() }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_METRICS_RESULTS")
+    }
+    Timer {
+        id: finish
+        interval: 200
+        onTriggered: Qt.quit()
+    }
     FloatingWindow {
         id: window
         implicitWidth: 400
@@ -17,15 +24,16 @@ ShellRoot {
         }
         TestCase {
             when: window.visible
-            function cleanupTestCase() { finish.start(); }
+            function cleanupTestCase() {
+                finish.start();
+            }
             function test_padding() {
                 report.setText("FAIL: tooltip sizing checks incomplete\n");
                 waitForRendering(bubble);
                 const column = bubble.children.find(item => item.children?.some(child => child.text === bubble.text));
                 const label = column.children.find(child => child.text === bubble.text);
                 verify(label.lineCount > 1);
-                verify(bubble.width - label.contentWidth - bubble.horizontalPadding * 2 < 1,
-                    "Wrapped tooltip has equal padding instead of unused width on the right");
+                verify(bubble.width - label.contentWidth - bubble.horizontalPadding * 2 < 1, "Wrapped tooltip has equal padding instead of unused width on the right");
                 bubble.text = "Helium";
                 wait(30);
                 verify(Math.abs(bubble.width - label.contentWidth - bubble.horizontalPadding * 2) < 1);

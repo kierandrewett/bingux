@@ -15,7 +15,8 @@ Item {
     property var trayItems: []
 
     function refreshItems() {
-        if (serviceEnabled) root.trayItems = SystemTray.items.values;
+        if (serviceEnabled)
+            root.trayItems = SystemTray.items.values;
     }
 
     Component.onCompleted: root.refreshItems()
@@ -69,21 +70,28 @@ Item {
                     required property var modelData
                     objectName: "trayItem-" + modelData.id
                     function revealFocus() {
-                        if (!activeFocus || root.panelLayout) return;
-                        trayRow.contentX = Math.max(0, Math.min(trayRow.contentWidth - trayRow.width,
-                            Math.max(x + width - trayRow.width, Math.min(trayRow.contentX, x))));
+                        if (!activeFocus || root.panelLayout)
+                            return;
+                        trayRow.contentX = Math.max(0, Math.min(trayRow.contentWidth - trayRow.width, Math.max(x + width - trayRow.width, Math.min(trayRow.contentX, x))));
                     }
                     onActiveFocusChanged: revealFocus()
-                    onXChanged: if (activeFocus) Qt.callLater(revealFocus)
+                    onXChanged: if (activeFocus)
+                        Qt.callLater(revealFocus)
                     ParallelAnimation {
                         running: true
                         NumberAnimation {
-                            target: trayButton; property: "opacity"; from: 0; to: 1
+                            target: trayButton
+                            property: "opacity"
+                            from: 0
+                            to: 1
                             duration: Theme.reducedMotion || !root.enabled ? 0 : Theme.motion * 2
                             easing.type: Easing.OutCubic
                         }
                         NumberAnimation {
-                            target: trayButton; property: "scale"; from: 0; to: 1
+                            target: trayButton
+                            property: "scale"
+                            from: 0
+                            to: 1
                             duration: Theme.reducedMotion || !root.enabled ? 0 : Theme.motion * 2
                             easing.type: Easing.OutCubic
                         }
@@ -91,7 +99,7 @@ Item {
                     activeFocusOnTab: true
                     Accessible.role: Accessible.Button
                     Accessible.name: typeof modelData.tooltipTitle === "string" && modelData.tooltipTitle.length > 0 ? modelData.tooltipTitle : modelData.title
-                    Keys.onPressed: function(event) {
+                    Keys.onPressed: function (event) {
                         if (event.key === Qt.Key_Return || event.key === Qt.Key_Space) {
                             if (modelData.onlyMenu && modelData.hasMenu)
                                 trayMenu.open();
@@ -142,9 +150,13 @@ Item {
                     }
 
                     WidgetFace {
-                        id: customFace; anchors.centerIn: parent; visible: !!root.presentation?.custom
+                        id: customFace
+                        anchors.centerIn: parent
+                        visible: !!root.presentation?.custom
                         width: root.panelLayout ? Math.min(implicitWidth, Math.max(0, trayButton.width - Theme.barPrimaryPadding * 2)) : implicitWidth
-                        presentation: Object.assign({}, root.presentation || {}, {label: root.presentation?.labelOverridden ? root.presentation.label : trayButton.Accessible.name})
+                        presentation: Object.assign({}, root.presentation || {}, {
+                            label: root.presentation?.labelOverridden ? root.presentation.label : trayButton.Accessible.name
+                        })
                         iconSource: root.presentation?.iconOverridden ? Quickshell.iconPath(root.presentation.icon) : trayButton.iconSource(trayButton.modelData.icon)
                         colouredIcon: !root.presentation?.iconOverridden
                     }
@@ -223,7 +235,7 @@ Item {
                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                         cursorShape: Qt.ArrowCursor
 
-                        onClicked: function(mouse) {
+                        onClicked: function (mouse) {
                             if (mouse.button === Qt.LeftButton) {
                                 if (trayButton.modelData.onlyMenu && trayButton.modelData.hasMenu) {
                                     trayMenu.open();
@@ -237,7 +249,7 @@ Item {
                             }
                         }
 
-                        onWheel: function(wheel) {
+                        onWheel: function (wheel) {
                             if (!root.panelLayout && trayRow.contentWidth > trayRow.width) {
                                 const delta = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y : wheel.angleDelta.x;
                                 trayRow.contentX = Math.max(0, Math.min(trayRow.contentWidth - trayRow.width, trayRow.contentX - delta));

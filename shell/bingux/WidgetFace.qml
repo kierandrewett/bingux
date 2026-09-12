@@ -17,8 +17,11 @@ RowLayout {
     }
     Image {
         visible: !!root.presentation?.showIcon && root.colouredIcon
-        Layout.preferredWidth: Theme.iconSize; Layout.preferredHeight: Theme.iconSize
-        source: root.iconSource; sourceSize: Qt.size(64, 64); fillMode: Image.PreserveAspectFit
+        Layout.preferredWidth: Theme.iconSize
+        Layout.preferredHeight: Theme.iconSize
+        source: root.iconSource
+        sourceSize: Qt.size(64, 64)
+        fillMode: Image.PreserveAspectFit
     }
     Text {
         objectName: "widgetFaceLabel"

@@ -4,8 +4,8 @@ import Quickshell
 import Quickshell.Wayland
 
 SearchOverlay {
-    quickChatEnabled: true
     id: overlay
+    quickChatEnabled: true
     visible: true
     WlrLayershell.namespace: "bingux-ai-test"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
@@ -14,13 +14,18 @@ SearchOverlay {
         parent: overlay.contentItem
         name: "StreamingAI"
         when: overlay.visible
-        function equal(actual, expected, label) { console.warn(label + ': ' + actual + ' expected ' + expected); compare(actual, expected, label); }
+        function equal(actual, expected, label) {
+            console.warn(label + ': ' + actual + ' expected ' + expected);
+            compare(actual, expected, label);
+        }
         function test_stream() {
             const input = findChild(overlay.contentItem, 'searchInput');
             const socket = findChild(overlay, 'searchSocket');
             input.text = '! Explain streaming';
             equal(overlay.chatPrompt(), 'Explain streaming', 'Prefix removed');
-            overlay.activateChatResult({resultId: 'ai-1'});
+            overlay.activateChatResult({
+                resultId: 'ai-1'
+            });
             equal(overlay.chatPending, true, 'Activation waits for streamed answer');
             const request = overlay.activeActivationRequestId;
             socket.chatProgress('stale', 'Wrong response');
@@ -36,12 +41,17 @@ SearchOverlay {
             equal(overlay.chatPending, false, 'Completion clears busy state');
             input.text = 'Follow-up';
             equal(overlay.queryForSearch(), '!Follow-up', 'Follow-ups stay in AI mode');
-            overlay.activateChatResult({resultId: 'ai-2'});
+            overlay.activateChatResult({
+                resultId: 'ai-2'
+            });
             const cancelled = overlay.activeActivationRequestId;
             overlay.closeSearch();
             verify(socket.cancelled.includes(cancelled));
             console.warn('SEARCH_AI_PASS');
         }
-        function cleanupTestCase() { wait(200); Qt.quit(); }
+        function cleanupTestCase() {
+            wait(200);
+            Qt.quit();
+        }
     }
 }

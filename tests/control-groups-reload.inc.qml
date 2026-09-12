@@ -1,15 +1,32 @@
-    FileView { id: groupReloadReport; path: Quickshell.env("BINGUX_LAYOUT_REPORT") }
+    FileView {
+        id: groupReloadReport
+        path: Quickshell.env("BINGUX_LAYOUT_REPORT")
+    }
     TestCase {
         parent: topBar.contentItem
         when: topBar.visible && BinguxPreferences.loaded && ControlCentreServices.preferencesReady && dock.appGroupsInitialised
         function test_saved_groups() {
             try {
-                binguxSettings.read(); tryCompare(binguxSettings, "ready", true, 4000); tryCompare(binguxSettings, "busy", false, 4000);
+                binguxSettings.read();
+                tryCompare(binguxSettings, "ready", true, 4000);
+                tryCompare(binguxSettings, "busy", false, 4000);
                 compare(BinguxPreferences.data.desktop.layoutVersion, 1);
                 const cases = [
-                    {id: "controls-header", zone: "top-left", child: "control-settings"},
-                    {id: "controls-audio", zone: "dock", child: "control-volume"},
-                    {id: "controls-tiles", zone: "top-center", child: "control-network"}
+                    {
+                        id: "controls-header",
+                        zone: "top-left",
+                        child: "control-settings"
+                    },
+                    {
+                        id: "controls-audio",
+                        zone: "dock",
+                        child: "control-volume"
+                    },
+                    {
+                        id: "controls-tiles",
+                        zone: "top-center",
+                        child: "control-network"
+                    }
                 ];
                 for (const entry of cases) {
                     const group = controlCentre.movableWidgets.find(item => item.widgetId === entry.id);
@@ -17,7 +34,8 @@
                     verify(BinguxPreferences.data.desktop.layout[entry.zone].includes(entry.id));
                     verify(!BinguxPreferences.data.desktop.controlLayout.groups["control-centre"].includes(entry.id));
                     tryCompare(group, "parent", topBar.hostFor(group), 2000);
-                    compare(child.parent, group); verify(group.barLayout && child.barLayout && !child.placed);
+                    compare(child.parent, group);
+                    verify(group.barLayout && child.barLayout && !child.placed);
                     compare(child.barWindow, group.barWindow);
                 }
                 const settings = controlCentre.movableWidgets.find(item => item.widgetId === "control-settings");

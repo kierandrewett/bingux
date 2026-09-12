@@ -559,6 +559,7 @@ keeps an active recording in the layout model. These checks verify capture UI
 dispatch and state events; they do not verify recording output or an encoder.
 The next review maps the seven compatibility gates to the existing evidence and
 identifies specific remaining gaps.
+
 ### Saved layout validation and recovery
 
 The shell now uses the settings backend's desktop validator when loading files,

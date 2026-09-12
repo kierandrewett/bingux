@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Optional DuckDuckGo autocomplete provider; stdout is protocol JSON only."""
+
 import hashlib
 import json
 import subprocess
@@ -32,8 +33,11 @@ def suggestions(payload, query, limit=4):
 
 def eligible(query):
     # Don't send explicit local paths, assistant prompts or local filters.
-    return (2 <= len(query) <= 200 and not query.startswith(("/", "~", "?"))
-            and not any(term.lower().startswith(("ext:", "filetype:", "path:")) for term in query.split()))
+    return (
+        2 <= len(query) <= 200
+        and not query.startswith(("/", "~", "?"))
+        and not any(term.lower().startswith(("ext:", "filetype:", "path:")) for term in query.split())
+    )
 
 
 def fetch(query):
@@ -96,11 +100,19 @@ class Provider:
                 if generation != self.generation:
                     continue
                 results = []
-                for index, value in enumerate(values[:min(4, request.get("limit", 4))]):
+                for index, value in enumerate(values[: min(4, request.get("limit", 4))]):
                     result_id = hashlib.sha256(value.encode()).hexdigest()[:24]
                     self.targets[result_id] = value
-                    results.append(dict(resultId=result_id, kind="action", title=value,
-                                        subtitle="DuckDuckGo", icon="duckduckgo", score=0.09-index*0.005))
+                    results.append(
+                        dict(
+                            resultId=result_id,
+                            kind="action",
+                            title=value,
+                            subtitle="DuckDuckGo",
+                            icon="duckduckgo",
+                            score=0.09 - index * 0.005,
+                        )
+                    )
                 while len(self.targets) > 128:
                     self.targets.pop(next(iter(self.targets)))
                 self.emit(dict(type="results", queryId=request["queryId"], complete=True, results=results))
@@ -109,13 +121,31 @@ class Provider:
         with self.condition:
             value = self.targets.get(request.get("resultId"))
         if value is None:
-            self.emit(dict(type="error", activationId=request["activationId"], code="invalid-request", message="Suggestion expired"))
+            self.emit(
+                dict(
+                    type="error",
+                    activationId=request["activationId"],
+                    code="invalid-request",
+                    message="Suggestion expired",
+                )
+            )
             return
         try:
-            subprocess.Popen([self.opener, "https://duckduckgo.com/?" + urllib.parse.urlencode({"q": value})],
-                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.Popen(
+                [self.opener, "https://duckduckgo.com/?" + urllib.parse.urlencode({"q": value})],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         except OSError:
-            self.emit(dict(type="error", activationId=request["activationId"], code="unavailable", message="Could not open browser"))
+            self.emit(
+                dict(
+                    type="error",
+                    activationId=request["activationId"],
+                    code="unavailable",
+                    message="Could not open browser",
+                )
+            )
             return
         self.emit(dict(type="activated", activationId=request["activationId"]))
 

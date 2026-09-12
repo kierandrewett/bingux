@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Install or stage the standalone shell and helpers."""
+
 import argparse
 import json
 import os
@@ -24,7 +25,7 @@ def default_user_prefix():
 def validate_prefix(parser, prefix):
     if not prefix.is_absolute():
         parser.error("prefix must be absolute")
-    if any(c.isspace() or c in "%\"\\" for c in str(prefix)):
+    if any(c.isspace() or c in '%"\\' for c in str(prefix)):
         parser.error("prefix must not contain whitespace, percent signs, quotes or backslashes")
 
 
@@ -35,8 +36,7 @@ def write_launcher(path, contents):
 
 
 def lua_quote(value):
-    escaped = (str(value).replace("\\", "\\\\").replace('"', '\\"')
-               .replace("\n", "\\n").replace("\r", "\\r"))
+    escaped = str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
     return '"' + escaped + '"'
 
 
@@ -121,22 +121,33 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
 
     common = "#!/bin/sh\nset -eu\nulimit -c 0\n"
     common += "export BINGUX_QUICKSHELL=${BINGUX_QUICKSHELL:-" + shlex.quote(quickshell) + "}\n"
-    common += "export QML_IMPORT_PATH=" + shlex.quote(str(qml)) + '${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}\n'
+    common += "export QML_IMPORT_PATH=" + shlex.quote(str(qml)) + "${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}\n"
     common += "export BINGUX_CONFIG_PATH=" + shlex.quote(str(shell)) + "\n"
     common += "export BINGUX_SETTINGS_QML=" + shlex.quote(str(shell / "settings.qml")) + "\n"
     wrappers = {
         "bingux": 'exec "${BINGUX_QUICKSHELL:-qs}" -p "$BINGUX_CONFIG_PATH" "$@"\n',
-        "bingux-search-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "SearchShell.qml")) + ' "$@"\n',
-        "bingux-switcher-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "SwitcherShell.qml")) + ' "$@"\n',
-        "bingux-emoji-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "EmojiShell.qml")) + ' "$@"\n',
-        "bingux-capture-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "CaptureShell.qml")) + ' "$@"\n',
+        "bingux-search-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
+        + shlex.quote(str(shell / "SearchShell.qml"))
+        + ' "$@"\n',
+        "bingux-switcher-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
+        + shlex.quote(str(shell / "SwitcherShell.qml"))
+        + ' "$@"\n',
+        "bingux-emoji-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
+        + shlex.quote(str(shell / "EmojiShell.qml"))
+        + ' "$@"\n',
+        "bingux-capture-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
+        + shlex.quote(str(shell / "CaptureShell.qml"))
+        + ' "$@"\n',
         "bingux-settings": "exec " + shlex.quote(str(prefix / "libexec/bingux/bingux-settings")) + ' "$@"\n',
         "binguxctl": "exec python3 " + shlex.quote(str(prefix / "libexec/bingux/binguxctl.py")) + ' "$@"\n',
     }
     if managed:
         wrappers["bingux-uninstall"] = (
-            "exec python3 " + shlex.quote(str(prefix / "libexec/bingux/install-shell.py")) +
-            " --user --uninstall --prefix " + shlex.quote(str(prefix)) + "\n"
+            "exec python3 "
+            + shlex.quote(str(prefix / "libexec/bingux/install-shell.py"))
+            + " --user --uninstall --prefix "
+            + shlex.quote(str(prefix))
+            + "\n"
         )
     for name, command in wrappers.items():
         copy_text = target(prefix / "bin" / name)
@@ -145,16 +156,34 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
 
     config = target(prefix / "share/bingux/search.json")
     config.parent.mkdir(parents=True, exist_ok=True)
-    config.write_text(json.dumps({"protocolVersion": 1, "commands": {
-        "applicationLauncher": ["python3", str(shell / "launch-application.py")],
-        "fileOpener": ["xdg-open"], "clipboard": ["wl-copy"]}}, indent=2) + "\n")
+    config.write_text(
+        json.dumps(
+            {
+                "protocolVersion": 1,
+                "commands": {
+                    "applicationLauncher": ["python3", str(shell / "launch-application.py")],
+                    "fileOpener": ["xdg-open"],
+                    "clipboard": ["wl-copy"],
+                },
+            },
+            indent=2,
+        )
+        + "\n"
+    )
     installed.append(Path("share/bingux/search.json"))
 
     search_service = target(prefix / "libexec/bingux/search-service")
-    write_launcher(search_service, "#!/bin/sh\nset -eu\n" +
-        'config="${XDG_CONFIG_HOME:-$HOME/.config}/bingux/search.json"\n' +
-        '[ -f "$config" ] || config=' + shlex.quote(str(prefix / "share/bingux/search.json")) + "\n" +
-        "exec " + shlex.quote(str(prefix / "bin/bingux-searchd")) + ' --config "$config"\n')
+    write_launcher(
+        search_service,
+        "#!/bin/sh\nset -eu\n"
+        + 'config="${XDG_CONFIG_HOME:-$HOME/.config}/bingux/search.json"\n'
+        + '[ -f "$config" ] || config='
+        + shlex.quote(str(prefix / "share/bingux/search.json"))
+        + "\n"
+        + "exec "
+        + shlex.quote(str(prefix / "bin/bingux-searchd"))
+        + ' --config "$config"\n',
+    )
     installed.append(Path("libexec/bingux/search-service"))
     unit_sources = sorted((source / "packaging/systemd").glob("bingux*.service"))
     unit_sources.append(source / "packaging/systemd/bingux.target")
@@ -171,17 +200,32 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
 
 
 def integration_paths(prefix, managed=False):
-    names = ("bingux", "bingux-search-ui", "bingux-switcher-ui", "bingux-emoji-ui",
-             "bingux-capture-ui", "bingux-settings", "binguxctl")
+    names = (
+        "bingux",
+        "bingux-search-ui",
+        "bingux-switcher-ui",
+        "bingux-emoji-ui",
+        "bingux-capture-ui",
+        "bingux-settings",
+        "binguxctl",
+    )
     if managed:
         names += ("bingux-uninstall",)
-    units = ("bingux.target", "bingux.service", "bingux-searchd.service", "bingux-statusd.service",
-             "bingux-search-ui.service", "bingux-switcher-ui.service", "bingux-capture-ui.service",
-             "bingux-emoji-ui.service")
+    units = (
+        "bingux.target",
+        "bingux.service",
+        "bingux-searchd.service",
+        "bingux-statusd.service",
+        "bingux-search-ui.service",
+        "bingux-switcher-ui.service",
+        "bingux-capture-ui.service",
+        "bingux-emoji-ui.service",
+    )
     bin_dir = Path(os.environ.get("XDG_BIN_HOME") or Path.home() / ".local/bin")
     unit_dir = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd/user"
-    return [(bin_dir / name, prefix / "bin" / name) for name in names] + \
-        [(unit_dir / name, prefix / "lib/systemd/user" / name) for name in units]
+    return [(bin_dir / name, prefix / "bin" / name) for name in names] + [
+        (unit_dir / name, prefix / "lib/systemd/user" / name) for name in units
+    ]
 
 
 def ensure_integration_is_safe(paths):
@@ -206,8 +250,13 @@ def install_user(source, build, prefix, qml, no_systemd):
     was_active = False
     try:
         installed = build_payload(
-            source, build, prefix, qml,
-            lambda path: staging / path.relative_to(prefix), quickshell, managed=True,
+            source,
+            build,
+            prefix,
+            qml,
+            lambda path: staging / path.relative_to(prefix),
+            quickshell,
+            managed=True,
         )
         manifest = {
             "format": 1,
@@ -254,11 +303,13 @@ def install_user(source, build, prefix, qml, no_systemd):
             shutil.rmtree(backup)
     print(f"Installed Bingux under {prefix}")
     print("  command links: " + str(Path(os.environ.get("XDG_BIN_HOME") or Path.home() / ".local/bin")))
-    print("  service links: " + str(Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd/user"))
+    print(
+        "  service links: " + str(Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd/user")
+    )
     module_directory = prefix / "share/gnoblin/conf.d"
     load_expression = 'local g = require("gnoblin"); g.load(' + lua_quote(module_directory / "*.lua") + ")"
     print("  enable Gnoblin integration: add " + load_expression + " to init.lua")
-    print("  add a separate g.load(\"~/.config/gnoblin/conf.d/*.lua\") for user drop-ins")
+    print('  add a separate g.load("~/.config/gnoblin/conf.d/*.lua") for user drop-ins')
     print("  remove with: make uninstall-user USER_PREFIX=" + str(prefix))
 
 
@@ -274,9 +325,7 @@ def uninstall_user(prefix, no_systemd):
         systemctl_user(["daemon-reload"], check=False)
     target_path = prefix / "lib/systemd/user/bingux.target"
     unit_dirs = {
-        Path(link["path"]).parent
-        for link in manifest.get("links", [])
-        if Path(link["path"]).name == "bingux.target"
+        Path(link["path"]).parent for link in manifest.get("links", []) if Path(link["path"]).name == "bingux.target"
     }
     for unit_dir in unit_dirs:
         for enabled in unit_dir.glob("*.wants/bingux.target"):
@@ -335,8 +384,10 @@ def main():
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         parser.error(str(error))
     stage = Path(args.destdir or "/").resolve()
+
     def target(path):
         return stage / path.relative_to("/")
+
     try:
         build_payload(source, build, prefix, qml, target)
     except (OSError, ValueError) as error:

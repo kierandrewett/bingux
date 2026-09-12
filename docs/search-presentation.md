@@ -292,7 +292,6 @@ For example: `qs ipc --pid <shell-pid> call search query firefox`.
 Check an empty query, several app/file matches, a fuzzy query, a calculation,
 no matches, selection movement, closing and immediate reopening.
 
-
 ## Settings and explicit AI search
 
 Open **Bingux Settings** from application search, or run `binguxctl settings open`.

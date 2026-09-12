@@ -2,13 +2,21 @@ import QtQuick
 import QtTest
 import Quickshell
 import Quickshell.Io
+
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS")
+    }
     FloatingWindow {
         id: window
-        implicitWidth: 500; implicitHeight: 520
+        implicitWidth: 500
+        implicitHeight: 520
         color: Theme.background
-        Item { id: host; anchors.fill: parent }
+        Item {
+            id: host
+            anchors.fill: parent
+        }
         EmojiPicker {
             id: picker
             hostItem: host
@@ -22,7 +30,12 @@ ShellRoot {
             property bool saved: false
             property string chosen: ""
             when: window.visible
-            Connections { target: picker; function onChosen(emoji) { test.chosen = emoji; } }
+            Connections {
+                target: picker
+                function onChosen(emoji) {
+                    test.chosen = emoji;
+                }
+            }
             function test_picker() {
                 report.setText("load\nFAILURES 1\n");
                 tryVerify(() => picker.catalogue.length === 1914, 2000);
@@ -105,7 +118,9 @@ ShellRoot {
                 tryVerify(() => Math.abs(grid.contentY - targetScroll) < 1, 400);
                 picker.moveSelection(-56);
                 wait(200);
-                host.grabToImage(result => { test.saved = result.saveToFile("/tmp/bingux-emoji-picker.png"); });
+                host.grabToImage(result => {
+                    test.saved = result.saveToFile("/tmp/bingux-emoji-picker.png");
+                });
                 tryCompare(test, "saved", true, 2000);
                 keyClick(Qt.Key_Escape);
                 compare(picker.visible, false);

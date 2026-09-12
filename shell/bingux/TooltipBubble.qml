@@ -3,7 +3,9 @@ import QtQuick
 // Shared tooltip surface for layer windows and anchored controls.
 Rectangle {
     id: root
-    SurfaceFade { target: root }
+    SurfaceFade {
+        target: root
+    }
     // Layer windows must remain mapped until the shared exit finishes.
     property bool animated: false
     property bool shown: false
@@ -11,13 +13,15 @@ Rectangle {
     property bool motionReady: false
     property bool compositorFade: false
     function updatePresentation() {
-        if (!animated || !motionReady) return;
+        if (!animated || !motionReady)
+            return;
         motion.stop();
         if (compositorFade) {
             opacity = 1;
             if (shown) {
                 Theme.beginTooltip(root);
-                if (!presented) scale = Theme.tooltipHiddenScale;
+                if (!presented)
+                    scale = Theme.tooltipHiddenScale;
                 presented = true;
                 fade.to = 1;
                 zoom.to = 1;
@@ -40,7 +44,8 @@ Rectangle {
             fade.duration = zoom.duration = duration;
             fade.to = zoom.to = 1;
         } else {
-            if (!presented) return;
+            if (!presented)
+                return;
             fade.duration = zoom.duration = Theme.tooltipMotion;
             fade.to = 0;
             zoom.to = Theme.tooltipHiddenScale;
@@ -49,7 +54,8 @@ Rectangle {
     }
     onShownChanged: updatePresentation()
     onTextChanged: {
-        if (!animated || !shown || !motionReady) return;
+        if (!animated || !shown || !motionReady)
+            return;
         motion.stop();
         opacity = compositorFade ? 1 : 0;
         scale = Theme.tooltipHiddenScale;
@@ -57,14 +63,28 @@ Rectangle {
     }
     Component.onCompleted: {
         motionReady = true;
-        if (animated) { opacity = 0; scale = Theme.tooltipHiddenScale; }
+        if (animated) {
+            opacity = 0;
+            scale = Theme.tooltipHiddenScale;
+        }
         updatePresentation();
     }
-    Component.onDestruction: if (animated) Theme.endTooltip(root)
+    Component.onDestruction: if (animated)
+        Theme.endTooltip(root)
     ParallelAnimation {
         id: motion
-        NumberAnimation { id: fade; target: root; property: "opacity"; easing.type: Easing.OutCubic }
-        NumberAnimation { id: zoom; target: root; property: "scale"; easing.type: Easing.OutCubic }
+        NumberAnimation {
+            id: fade
+            target: root
+            property: "opacity"
+            easing.type: Easing.OutCubic
+        }
+        NumberAnimation {
+            id: zoom
+            target: root
+            property: "scale"
+            easing.type: Easing.OutCubic
+        }
         onFinished: if (!root.shown) {
             root.presented = false;
             Theme.endTooltip(root);
@@ -76,8 +96,7 @@ Rectangle {
     property bool wrapText: true
     readonly property int horizontalPadding: 12
     readonly property int verticalPadding: 9
-    implicitWidth: Math.min(maximumWidth,
-        Math.ceil(Math.max(textMeasure.contentWidth, hintMeasure.contentWidth)) + horizontalPadding * 2)
+    implicitWidth: Math.min(maximumWidth, Math.ceil(Math.max(textMeasure.contentWidth, hintMeasure.contentWidth)) + horizontalPadding * 2)
     implicitHeight: Math.ceil(content.implicitHeight) + verticalPadding * 2
     color: Theme.popupSurface
     border.color: Theme.outline

@@ -22,21 +22,20 @@ Scope {
     property var selectedWindow: null
     readonly property bool directWindowPicker: !!capabilities.windowPicker && preferences.backend === "auto"
     function windowAt(x, y) {
-        return captureWindows.find(window => x >= window.x && y >= window.y
-            && x < window.x + window.width && y < window.y + window.height) || null;
+        return captureWindows.find(window => x >= window.x && y >= window.y && x < window.x + window.width && y < window.y + window.height) || null;
     }
     function hoverWindow(screen, x, y) {
-        if (preferences.target !== "window" || !directWindowPicker) return;
+        if (preferences.target !== "window" || !directWindowPicker)
+            return;
         activeScreen = screen;
         selectedWindow = windowAt(screen.x + x, screen.y + y);
     }
     function cycleWindow(direction) {
-        if (!captureWindows.length) return;
+        if (!captureWindows.length)
+            return;
         const index = captureWindows.indexOf(selectedWindow);
         selectedWindow = captureWindows[(index + direction + captureWindows.length) % captureWindows.length];
-        activeScreen = Quickshell.screens.find(screen => selectedWindow.x < screen.x + screen.width
-            && selectedWindow.x + selectedWindow.width > screen.x && selectedWindow.y < screen.y + screen.height
-            && selectedWindow.y + selectedWindow.height > screen.y) || activeScreen;
+        activeScreen = Quickshell.screens.find(screen => selectedWindow.x < screen.x + screen.width && selectedWindow.x + selectedWindow.width > screen.x && selectedWindow.y < screen.y + screen.height && selectedWindow.y + selectedWindow.height > screen.y) || activeScreen;
     }
     property var activeScreen: screen || Quickshell.screens[0]
     property alias region: captureSession.region
@@ -60,7 +59,8 @@ Scope {
         property bool requested: false
         property rect region: Qt.rect(200, 200, 800, 500)
         property bool hasRegion: false
-        onLoaded: if (requested) Qt.callLater(() => root.open())
+        onLoaded: if (requested)
+            Qt.callLater(() => root.open())
     }
 
     Settings {
@@ -83,37 +83,83 @@ Scope {
     }
 
     function optionsSnapshot() {
-        return {kind: preferences.kind, target: preferences.target, cursor: preferences.cursor,
-            copy: preferences.copy, delay: preferences.delay, fps: preferences.fps,
-            maxHeight: preferences.maxHeight, quality: preferences.quality, audio: preferences.audio,
-            format: preferences.format, directory: preferences.directory, encoder: preferences.encoder,
-            backend: preferences.backend, region: {x: Math.round(region.x), y: Math.round(region.y),
-                width: Math.round(region.width), height: Math.round(region.height)}};
+        return {
+            kind: preferences.kind,
+            target: preferences.target,
+            cursor: preferences.cursor,
+            copy: preferences.copy,
+            delay: preferences.delay,
+            fps: preferences.fps,
+            maxHeight: preferences.maxHeight,
+            quality: preferences.quality,
+            audio: preferences.audio,
+            format: preferences.format,
+            directory: preferences.directory,
+            encoder: preferences.encoder,
+            backend: preferences.backend,
+            region: {
+                x: Math.round(region.x),
+                y: Math.round(region.y),
+                width: Math.round(region.width),
+                height: Math.round(region.height)
+            }
+        };
     }
     function configureOptions(raw) {
-        if (busy) return {ok: false, error: "Cannot change options during capture"};
+        if (busy)
+            return {
+                ok: false,
+                error: "Cannot change options during capture"
+            };
         let options;
-        try { options = CaptureOptions.validate(JSON.parse(raw), activeScreen); }
-        catch (error) { return {ok: false, error: String(error.message || error)}; }
+        try {
+            options = CaptureOptions.validate(JSON.parse(raw), activeScreen);
+        } catch (error) {
+            return {
+                ok: false,
+                error: String(error.message || error)
+            };
+        }
         if (options.target === "window" && ready && !capabilities.window)
-            return {ok: false, error: "Window capture is unavailable"};
+            return {
+                ok: false,
+                error: "Window capture is unavailable"
+            };
         for (const key of Object.keys(options)) {
             if (key === "region") {
                 const area = options.region;
                 region = Qt.rect(area.x, area.y, area.width, area.height);
                 hasRegion = true;
-            } else preferences[key] = options[key];
+            } else
+                preferences[key] = options[key];
         }
         preferences.sync();
-        return {ok: true, options: optionsSnapshot()};
+        return {
+            ok: true,
+            options: optionsSnapshot()
+        };
     }
 
-    function send(record) { worker.write(JSON.stringify(record) + "\n"); }
+    function send(record) {
+        worker.write(JSON.stringify(record) + "\n");
+    }
     function open() {
-        if (!worker.running) worker.running = true;
-        if (recording) { stop(); return; }
-        if (busy) { send({command: "cancel"}); return; }
-        if (opened || state === "preparing") { close(); return; }
+        if (!worker.running)
+            worker.running = true;
+        if (recording) {
+            stop();
+            return;
+        }
+        if (busy) {
+            send({
+                command: "cancel"
+            });
+            return;
+        }
+        if (opened || state === "preparing") {
+            close();
+            return;
+        }
         feedback.visible = false;
         captureSession.requested = true;
         message = "";
@@ -123,48 +169,95 @@ Scope {
         const nextScreen = screen || Quickshell.screens[0];
         const changedScreen = activeScreen !== nextScreen;
         activeScreen = nextScreen;
-        if (!hasRegion || changedScreen) resetRegion();
-        if (ready) preparePreview();
+        if (!hasRegion || changedScreen)
+            resetRegion();
+        if (ready)
+            preparePreview();
     }
     function preparePreview() {
         previewRequest++;
-        send({command: "preview", request: previewRequest, screens: Quickshell.screens.map(s => ({name: s.name, x: s.x, y: s.y, width: s.width, height: s.height}))});
+        send({
+            command: "preview",
+            request: previewRequest,
+            screens: Quickshell.screens.map(s => ({
+                        name: s.name,
+                        x: s.x,
+                        y: s.y,
+                        width: s.width,
+                        height: s.height
+                    }))
+        });
     }
     function resetRegion() {
-        if (!activeScreen) return;
+        if (!activeScreen)
+            return;
         hasRegion = true;
         region = Qt.rect(Math.round(activeScreen.width * .2), Math.round(activeScreen.height * .2), Math.round(activeScreen.width * .6), Math.round(activeScreen.height * .5));
     }
     function close() {
         captureSession.requested = false;
-        opened = false; optionsOpen = false; regionDragging = false;
+        opened = false;
+        optionsOpen = false;
+        regionDragging = false;
         previewRequest++;
-        if (!busy) { state = "idle"; send({command: "cancel"}); }
+        if (!busy) {
+            state = "idle";
+            send({
+                command: "cancel"
+            });
+        }
     }
-    function stop() { send({command: "stop"}); }
+    function stop() {
+        send({
+            command: "stop"
+        });
+    }
     function take() {
-        if (!ready || busy) return;
-        if (preferences.target === "window" && (!capabilities.window || (directWindowPicker && !selectedWindow))) return;
+        if (!ready || busy)
+            return;
+        if (preferences.target === "window" && (!capabilities.window || (directWindowPicker && !selectedWindow)))
+            return;
         const s = activeScreen;
         const windowId = preferences.target === "window" && directWindowPicker ? selectedWindow.id : undefined;
         captureSession.requested = false;
         opened = false;
         state = "countdown";
         optionsOpen = false;
-        send({command: "capture", kind: preferences.kind, target: preferences.target, screen: s.name,
+        send({
+            command: "capture",
+            kind: preferences.kind,
+            target: preferences.target,
+            screen: s.name,
             previewToken: root.previewToken,
             windowId: windowId,
-            region: {x: Math.round(s.x + region.x), y: Math.round(s.y + region.y), width: Math.round(region.width), height: Math.round(region.height)},
-            cursor: preferences.cursor, copy: preferences.copy, delay: preferences.delay, fps: preferences.fps,
-            maxHeight: preferences.maxHeight, quality: preferences.quality, audio: preferences.audio,
-            format: preferences.format, directory: preferences.directory, encoder: preferences.encoder, backend: preferences.backend});
+            region: {
+                x: Math.round(s.x + region.x),
+                y: Math.round(s.y + region.y),
+                width: Math.round(region.width),
+                height: Math.round(region.height)
+            },
+            cursor: preferences.cursor,
+            copy: preferences.copy,
+            delay: preferences.delay,
+            fps: preferences.fps,
+            maxHeight: preferences.maxHeight,
+            quality: preferences.quality,
+            audio: preferences.audio,
+            format: preferences.format,
+            directory: preferences.directory,
+            encoder: preferences.encoder,
+            backend: preferences.backend
+        });
     }
     function handle(event) {
         if (event.event === "ready") {
-            capabilities = event; ready = true;
-            if (state === "preparing") preparePreview();
+            capabilities = event;
+            ready = true;
+            if (state === "preparing")
+                preparePreview();
         } else if (event.event === "preview") {
-            if (state !== "preparing" || event.request !== previewRequest) return;
+            if (state !== "preparing" || event.request !== previewRequest)
+                return;
             captureWindows = event.windows || [];
             previews = event.images;
             previewToken = event.token;
@@ -172,38 +265,50 @@ Scope {
             // Dismiss/focus other shell surfaces only AFTER their pixels are frozen.
             opening();
             opened = true;
-            if (event.warning) message = "Live preview · " + event.warning;
+            if (event.warning)
+                message = "Live preview · " + event.warning;
         } else if (event.event === "countdown") {
-            state = "countdown"; countdown = event.seconds;
+            state = "countdown";
+            countdown = event.seconds;
         } else if (event.event === "starting") {
             state = "starting";
         } else if (event.event === "recording") {
             feedback.visible = false;
-            state = "recording"; startedAt = Number.isFinite(event.started) ? event.started * 1000 : Date.now();
+            state = "recording";
+            startedAt = Number.isFinite(event.started) ? event.started * 1000 : Date.now();
             elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
         } else if (event.event === "finalizing") {
             state = "finalizing";
         } else if (event.event === "saved") {
-            state = "saved"; savedPath = event.path; partialPath = "";
+            state = "saved";
+            savedPath = event.path;
+            partialPath = "";
             message = (event.kind === "recording" ? "Recording saved" : "Screenshot saved") + (event.copied ? " · Copied to clipboard" : "");
             feedback.visible = false;
-            if (!event.notified) console.warn("Capture saved; desktop notification acknowledgement pending or unavailable");
+            if (!event.notified)
+                console.warn("Capture saved; desktop notification acknowledgement pending or unavailable");
         } else if (event.event === "error") {
             captureSession.requested = false;
-            state = "error"; message = event.message; partialPath = event.partial || "";
+            state = "error";
+            message = event.message;
+            partialPath = event.partial || "";
             feedback.visible = true;
-        } else if (event.event === "cancelled" && state !== "preparing") { state = "idle"; }
+        } else if (event.event === "cancelled" && state !== "preparing") {
+            state = "idle";
+        }
     }
     Process {
         id: worker
-        command: Quickshell.env("BINGUX_CAPTURE_HELPER") ? [Quickshell.env("BINGUX_CAPTURE_HELPER")]
-            : ["python3", "-u", decodeURIComponent(Qt.resolvedUrl("capture_service.py").toString().replace(/^file:\/\//, ""))]
+        command: Quickshell.env("BINGUX_CAPTURE_HELPER") ? [Quickshell.env("BINGUX_CAPTURE_HELPER")] : ["python3", "-u", decodeURIComponent(Qt.resolvedUrl("capture_service.py").toString().replace(/^file:\/\//, ""))]
         running: true
         stdinEnabled: true
         stdout: SplitParser {
             onRead: data => {
-                try { root.handle(JSON.parse(data)); }
-                catch (error) { console.warn("Capture response:", error); }
+                try {
+                    root.handle(JSON.parse(data));
+                } catch (error) {
+                    console.warn("Capture response:", error);
+                }
             }
         }
         onExited: {
@@ -213,52 +318,124 @@ Scope {
                 root.state = "error";
                 root.message = "Capture connection stopped. Open Capture to reconnect to the recorder.";
             }
-            if (wasActive) feedback.visible = true;
+            if (wasActive)
+                feedback.visible = true;
         }
     }
     IpcHandler {
         target: "capture"
-        function options(): string { return JSON.stringify(root.optionsSnapshot()); }
-        function configure(raw: string): string { return JSON.stringify(root.configureOptions(raw)); }
+        function options(): string {
+            return JSON.stringify(root.optionsSnapshot());
+        }
+        function configure(raw: string): string {
+            return JSON.stringify(root.configureOptions(raw));
+        }
         function openOptions(raw: string): string {
             const result = root.configureOptions(raw);
-            if (!result.ok) return JSON.stringify(result);
-            if (!root.opened && root.state !== "preparing") root.open();
+            if (!result.ok)
+                return JSON.stringify(result);
+            if (!root.opened && root.state !== "preparing")
+                root.open();
             return JSON.stringify(result);
         }
-        function open(): void { root.open(); }
+        function open(): void {
+            root.open();
+        }
         function show(kind: string, target: string): string {
             if (kind && !["screenshot", "recording"].includes(kind))
-                return JSON.stringify({ok: false, error: "Unknown capture mode"});
+                return JSON.stringify({
+                    ok: false,
+                    error: "Unknown capture mode"
+                });
             if (target && !["region", "screen", "window"].includes(target))
-                return JSON.stringify({ok: false, error: "Unknown capture target"});
-            if (root.busy) return JSON.stringify({ok: false, error: "A capture is already in progress"});
+                return JSON.stringify({
+                    ok: false,
+                    error: "Unknown capture target"
+                });
+            if (root.busy)
+                return JSON.stringify({
+                    ok: false,
+                    error: "A capture is already in progress"
+                });
             if (target === "window" && root.ready && !root.capabilities.window)
-                return JSON.stringify({ok: false, error: "Window capture is unavailable"});
-            if (kind) preferences.kind = kind;
-            if (target) preferences.target = target;
-            if (!root.opened && root.state !== "preparing") root.open();
-            return JSON.stringify({ok: true});
+                return JSON.stringify({
+                    ok: false,
+                    error: "Window capture is unavailable"
+                });
+            if (kind)
+                preferences.kind = kind;
+            if (target)
+                preferences.target = target;
+            if (!root.opened && root.state !== "preparing")
+                root.open();
+            return JSON.stringify({
+                ok: true
+            });
         }
         function take(): string {
             if (!root.opened || !root.ready || root.busy)
-                return JSON.stringify({ok: false, error: "Open the capture selector before taking a capture"});
+                return JSON.stringify({
+                    ok: false,
+                    error: "Open the capture selector before taking a capture"
+                });
             if (preferences.target === "window" && !root.capabilities.window)
-                return JSON.stringify({ok: false, error: "Window capture is unavailable"});
+                return JSON.stringify({
+                    ok: false,
+                    error: "Window capture is unavailable"
+                });
             if (preferences.target === "window" && root.directWindowPicker && !root.selectedWindow)
-                return JSON.stringify({ok: false, error: "Select a window first"});
+                return JSON.stringify({
+                    ok: false,
+                    error: "Select a window first"
+                });
             root.take();
-            return JSON.stringify({ok: true});
+            return JSON.stringify({
+                ok: true
+            });
         }
-        function stop(): void { root.stop(); }
-        function cancel(): void { if (root.busy) root.send({command: "cancel"}); else root.close(); }
-        function status(): string { return JSON.stringify({state: root.state, ready: root.ready, opened: root.opened, mode: preferences.kind, target: preferences.target, elapsed: root.elapsed, savedPath: root.savedPath, message: root.message, requested: captureSession.requested, selectedWindow: root.selectedWindow, windows: root.captureWindows, region: root.region, dragging: root.regionDragging, screen: root.activeScreen ? {width: root.activeScreen.width, height: root.activeScreen.height} : null, capabilities: root.capabilities}); }
+        function stop(): void {
+            root.stop();
+        }
+        function cancel(): void {
+            if (root.busy)
+                root.send({
+                    command: "cancel"
+                });
+            else
+                root.close();
+        }
+        function status(): string {
+            return JSON.stringify({
+                state: root.state,
+                ready: root.ready,
+                opened: root.opened,
+                mode: preferences.kind,
+                target: preferences.target,
+                elapsed: root.elapsed,
+                savedPath: root.savedPath,
+                message: root.message,
+                requested: captureSession.requested,
+                selectedWindow: root.selectedWindow,
+                windows: root.captureWindows,
+                region: root.region,
+                dragging: root.regionDragging,
+                screen: root.activeScreen ? {
+                    width: root.activeScreen.width,
+                    height: root.activeScreen.height
+                } : null,
+                capabilities: root.capabilities
+            });
+        }
     }
     Timer {
-        interval: 1000; running: root.busy; repeat: true
+        interval: 1000
+        running: root.busy
+        repeat: true
         onTriggered: {
-            if (root.recording) root.elapsed = Math.floor((Date.now() - root.startedAt) / 1000);
-            else if (root.countdown > 0) root.countdown--;
+            if (root.recording)
+                root.elapsed = Math.floor((Date.now() - root.startedAt) / 1000);
+            else if (root.countdown > 0)
+                root.countdown--;
         }
     }
 
@@ -274,16 +451,37 @@ Scope {
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.namespace: "bingux-capture"
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-            anchors { top: true; bottom: true; left: true; right: true }
+            anchors {
+                top: true
+                bottom: true
+                left: true
+                right: true
+            }
             readonly property bool active: root.activeScreen === modelData
             // Pointer coordinates end at extent - 1; selection bounds are exclusive.
             function edgeCoordinate(value, extent) {
                 return value <= 1 ? 0 : value >= extent - 1 ? extent : value;
             }
             readonly property rect selection: active && preferences.target === "region" ? root.region : Qt.rect(0, 0, width, height)
-            Image { anchors.fill: parent; source: root.previews[overlay.modelData.name]?.plain || ""; fillMode: Image.Stretch; cache: false }
-            Image { anchors.fill: parent; source: root.previews[overlay.modelData.name]?.cursor || ""; fillMode: Image.Stretch; cache: false; visible: preferences.cursor }
-            Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut; enabled: root.opened && overlay.active; onActivated: root.close() }
+            Image {
+                anchors.fill: parent
+                source: root.previews[overlay.modelData.name]?.plain || ""
+                fillMode: Image.Stretch
+                cache: false
+            }
+            Image {
+                anchors.fill: parent
+                source: root.previews[overlay.modelData.name]?.cursor || ""
+                fillMode: Image.Stretch
+                cache: false
+                visible: preferences.cursor
+            }
+            Shortcut {
+                sequence: "Escape"
+                context: Qt.ApplicationShortcut
+                enabled: root.opened && overlay.active
+                onActivated: root.close()
+            }
             Shortcut {
                 sequences: ["Return", "Enter"]
                 context: Qt.ApplicationShortcut
@@ -303,11 +501,43 @@ Scope {
                 enabled: root.opened && overlay.active && preferences.target === "window" && root.directWindowPicker && !root.optionsOpen
                 onActivated: root.cycleWindow(-1)
             }
-            Rectangle { anchors.fill: parent; color: "#99000000"; visible: !overlay.active || preferences.target === "window" }
-            Rectangle { x: 0; y: 0; width: parent.width; height: overlay.selection.y; color: "#88000000"; visible: overlay.active && preferences.target === "region" }
-            Rectangle { x: 0; y: overlay.selection.y; width: overlay.selection.x; height: overlay.selection.height; color: "#88000000"; visible: overlay.active && preferences.target === "region" }
-            Rectangle { x: overlay.selection.x + overlay.selection.width; y: overlay.selection.y; width: parent.width - x; height: overlay.selection.height; color: "#88000000"; visible: overlay.active && preferences.target === "region" }
-            Rectangle { x: 0; y: overlay.selection.y + overlay.selection.height; width: parent.width; height: parent.height - y; color: "#88000000"; visible: overlay.active && preferences.target === "region" }
+            Rectangle {
+                anchors.fill: parent
+                color: "#99000000"
+                visible: !overlay.active || preferences.target === "window"
+            }
+            Rectangle {
+                x: 0
+                y: 0
+                width: parent.width
+                height: overlay.selection.y
+                color: "#88000000"
+                visible: overlay.active && preferences.target === "region"
+            }
+            Rectangle {
+                x: 0
+                y: overlay.selection.y
+                width: overlay.selection.x
+                height: overlay.selection.height
+                color: "#88000000"
+                visible: overlay.active && preferences.target === "region"
+            }
+            Rectangle {
+                x: overlay.selection.x + overlay.selection.width
+                y: overlay.selection.y
+                width: parent.width - x
+                height: overlay.selection.height
+                color: "#88000000"
+                visible: overlay.active && preferences.target === "region"
+            }
+            Rectangle {
+                x: 0
+                y: overlay.selection.y + overlay.selection.height
+                width: parent.width
+                height: parent.height - y
+                color: "#88000000"
+                visible: overlay.active && preferences.target === "region"
+            }
 
             MouseArea {
                 id: selectionDrag
@@ -317,9 +547,11 @@ Scope {
                 hoverEnabled: preferences.target === "window" && root.directWindowPicker
                 onEntered: root.hoverWindow(overlay.modelData, mouseX, mouseY)
                 onClicked: mouse => {
-                    if (preferences.target !== "window" || !root.directWindowPicker) return;
+                    if (preferences.target !== "window" || !root.directWindowPicker)
+                        return;
                     root.hoverWindow(overlay.modelData, mouse.x, mouse.y);
-                    if (root.selectedWindow) root.take();
+                    if (root.selectedWindow)
+                        root.take();
                 }
                 cursorShape: preferences.target === "region" ? Qt.CrossCursor : Qt.ArrowCursor
                 property point origin
@@ -327,13 +559,15 @@ Scope {
                     root.regionDragging = preferences.target === "region";
                     root.activeScreen = overlay.modelData;
                     origin = Qt.point(overlay.edgeCoordinate(mouse.x, overlay.width), overlay.edgeCoordinate(mouse.y, overlay.height));
-                    if (preferences.target === "region") root.region = Qt.rect(Math.min(origin.x, overlay.width - 2), Math.min(origin.y, overlay.height - 2), 2, 2);
+                    if (preferences.target === "region")
+                        root.region = Qt.rect(Math.min(origin.x, overlay.width - 2), Math.min(origin.y, overlay.height - 2), 2, 2);
                 }
                 onReleased: root.regionDragging = false
                 onCanceled: root.regionDragging = false
                 onPositionChanged: mouse => {
                     root.hoverWindow(overlay.modelData, mouse.x, mouse.y);
-                    if (!pressed || preferences.target !== "region") return;
+                    if (!pressed || preferences.target !== "region")
+                        return;
                     const x = overlay.edgeCoordinate(mouse.x, overlay.width);
                     const y = overlay.edgeCoordinate(mouse.y, overlay.height);
                     root.region = Qt.rect(Math.min(origin.x, x, overlay.width - 2), Math.min(origin.y, y, overlay.height - 2), Math.max(2, Math.abs(x - origin.x)), Math.max(2, Math.abs(y - origin.y)));
@@ -358,8 +592,7 @@ Scope {
                     OsIconImage {
                         anchors.horizontalCenter: parent.horizontalCenter
                         implicitSize: 64
-                        readonly property var entry: root.selectedWindow ? (DesktopEntries.byId(root.selectedWindow.appId)
-                            || DesktopEntries.byId(root.selectedWindow.appId.replace(/\.desktop$/, ""))) : null
+                        readonly property var entry: root.selectedWindow ? (DesktopEntries.byId(root.selectedWindow.appId) || DesktopEntries.byId(root.selectedWindow.appId.replace(/\.desktop$/, ""))) : null
                         source: Quickshell.iconPath(entry?.icon || "application-x-executable", "application-x-executable")
                     }
                     Text {
@@ -398,11 +631,16 @@ Scope {
                     cursorShape: Qt.SizeAllCursor
                     property point origin
                     property rect initial
-                    onPressed: mouse => { root.regionDragging = true; origin = mapToItem(overlay.contentItem, mouse.x, mouse.y); initial = root.region; }
+                    onPressed: mouse => {
+                        root.regionDragging = true;
+                        origin = mapToItem(overlay.contentItem, mouse.x, mouse.y);
+                        initial = root.region;
+                    }
                     onReleased: root.regionDragging = false
                     onCanceled: root.regionDragging = false
                     onPositionChanged: mouse => {
-                        if (!pressed) return;
+                        if (!pressed)
+                            return;
                         const p = mapToItem(overlay.contentItem, mouse.x, mouse.y);
                         const x = p.x <= 1 ? 0 : p.x >= overlay.width - 1 ? overlay.width - initial.width : initial.x + p.x - origin.x;
                         const y = p.y <= 1 ? 0 : p.y >= overlay.height - 1 ? overlay.height - initial.height : initial.y + p.y - origin.y;
@@ -411,27 +649,63 @@ Scope {
                 }
                 Repeater {
                     model: preferences.target === "region" ? [
-                        {x: 0, y: 0}, {x: 1, y: 0}, {x: 0, y: 1}, {x: 1, y: 1},
-                        {x: .5, y: 0}, {x: .5, y: 1}, {x: 0, y: .5}, {x: 1, y: .5}
+                        {
+                            x: 0,
+                            y: 0
+                        },
+                        {
+                            x: 1,
+                            y: 0
+                        },
+                        {
+                            x: 0,
+                            y: 1
+                        },
+                        {
+                            x: 1,
+                            y: 1
+                        },
+                        {
+                            x: .5,
+                            y: 0
+                        },
+                        {
+                            x: .5,
+                            y: 1
+                        },
+                        {
+                            x: 0,
+                            y: .5
+                        },
+                        {
+                            x: 1,
+                            y: .5
+                        }
                     ] : []
                     Rectangle {
                         required property var modelData
                         width: modelData.x === .5 ? 24 : modelData.y === .5 ? 4 : 8
                         height: modelData.y === .5 ? 24 : modelData.x === .5 ? 4 : 8
-                        radius: 4; color: "white"
+                        radius: 4
+                        color: "white"
                         x: modelData.x * selectionBorder.width - width / 2
                         y: modelData.y * selectionBorder.height - height / 2
                         MouseArea {
                             objectName: "captureRegionResize" + modelData.x + "_" + modelData.y
-                            anchors.fill: parent; anchors.margins: -8
+                            anchors.fill: parent
+                            anchors.margins: -8
                             preventStealing: true
                             cursorShape: modelData.x === .5 ? Qt.SizeVerCursor : modelData.y === .5 ? Qt.SizeHorCursor : modelData.x === modelData.y ? Qt.SizeFDiagCursor : Qt.SizeBDiagCursor
                             property rect initial
-                            onPressed: { initial = root.region; root.regionDragging = true; }
+                            onPressed: {
+                                initial = root.region;
+                                root.regionDragging = true;
+                            }
                             onReleased: root.regionDragging = false
                             onCanceled: root.regionDragging = false
                             onPositionChanged: mouse => {
-                                if (!pressed) return;
+                                if (!pressed)
+                                    return;
                                 const position = mapToItem(overlay.contentItem, mouse.x, mouse.y);
                                 const p = Qt.point(overlay.edgeCoordinate(position.x, overlay.width), overlay.edgeCoordinate(position.y, overlay.height));
                                 const right = initial.x + initial.width, bottom = initial.y + initial.height;
@@ -446,8 +720,18 @@ Scope {
                     visible: preferences.target === "region"
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: parent.y < 40 ? 12 : -36
-                    width: sizeLabel.implicitWidth + Theme.padding * 2; height: 28; radius: Theme.radius; color: Theme.popupSurface
-                    Text { id: sizeLabel; anchors.centerIn: parent; text: Math.round(root.region.width) + " × " + Math.round(root.region.height); color: "white"; font.family: Theme.fontFamily; font.pixelSize: 12 }
+                    width: sizeLabel.implicitWidth + Theme.padding * 2
+                    height: 28
+                    radius: Theme.radius
+                    color: Theme.popupSurface
+                    Text {
+                        id: sizeLabel
+                        anchors.centerIn: parent
+                        text: Math.round(root.region.width) + " × " + Math.round(root.region.height)
+                        color: "white"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                    }
                 }
             }
             Text {
@@ -467,17 +751,24 @@ Scope {
                 id: controls
                 screen: overlay.screen
                 visible: overlay.visible && overlay.active
-                onVisibleChanged: if (visible) root.previewItem = controls.contentItem
+                onVisibleChanged: if (visible)
+                    root.previewItem = controls.contentItem
                 color: "transparent"
                 exclusionMode: ExclusionMode.Ignore
-                anchors { top: true; bottom: true; left: true; right: true }
+                anchors {
+                    top: true
+                    bottom: true
+                    left: true
+                    right: true
+                }
                 WlrLayershell.layer: WlrLayer.Overlay
                 WlrLayershell.namespace: "bingux-capture-controls"
                 WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
                 mask: Region {
                     item: toolbar
                     Region {
-                        x: optionsPanel.x; y: optionsPanel.y
+                        x: optionsPanel.x
+                        y: optionsPanel.y
                         width: optionsPanel.visible ? optionsPanel.width : 0
                         height: optionsPanel.visible ? optionsPanel.height : 0
                     }
@@ -487,11 +778,7 @@ Scope {
                 BlurRegion {
                     window: controls
                     surfaceNamespace: "bingux-capture-controls"
-                    region: optionsPanel.visible
-                        ? Qt.rect(Math.min(toolbar.x, optionsPanel.x), Math.min(toolbar.y, optionsPanel.y),
-                            Math.max(toolbar.x + toolbar.width, optionsPanel.x + optionsPanel.width) - Math.min(toolbar.x, optionsPanel.x),
-                            Math.max(toolbar.y + toolbar.height, optionsPanel.y + optionsPanel.height) - Math.min(toolbar.y, optionsPanel.y))
-                        : Qt.rect(toolbar.x, toolbar.y, toolbar.width, toolbar.height)
+                    region: optionsPanel.visible ? Qt.rect(Math.min(toolbar.x, optionsPanel.x), Math.min(toolbar.y, optionsPanel.y), Math.max(toolbar.x + toolbar.width, optionsPanel.x + optionsPanel.width) - Math.min(toolbar.x, optionsPanel.x), Math.max(toolbar.y + toolbar.height, optionsPanel.y + optionsPanel.height) - Math.min(toolbar.y, optionsPanel.y)) : Qt.rect(toolbar.x, toolbar.y, toolbar.width, toolbar.height)
                 }
                 Item {
                     anchors.fill: parent
@@ -514,8 +801,15 @@ Scope {
                     visible: overlay.active && root.opened
                     property real interactionOpacity: root.regionDragging ? .25 : 1
                     opacity: interactionOpacity
-                    SurfaceFade { target: toolbar }
-                    Behavior on interactionOpacity { NumberAnimation { duration: Theme.reducedMotion ? 0 : 100; easing.type: Easing.OutCubic } }
+                    SurfaceFade {
+                        target: toolbar
+                    }
+                    Behavior on interactionOpacity {
+                        NumberAnimation {
+                            duration: Theme.reducedMotion ? 0 : 100
+                            easing.type: Easing.OutCubic
+                        }
+                    }
                     property real movedX: -1
                     property real movedY: -1
                     x: movedX < 0 ? (overlay.width - width) / 2 : Math.max(8, Math.min(overlay.width - width - 8, movedX))
@@ -525,7 +819,9 @@ Scope {
                     radius: Theme.cardRadius
                     color: Theme.popupSurface
                     border.color: Theme.outline
-                    MouseArea { anchors.fill: parent } // Controls must not start a region drag.
+                    MouseArea {
+                        anchors.fill: parent
+                    } // Controls must not start a region drag.
                     RowLayout {
                         id: toolbarRow
                         anchors.centerIn: parent
@@ -535,8 +831,17 @@ Scope {
                             Layout.preferredHeight: 40
                             Grid {
                                 anchors.centerIn: parent
-                                columns: 2; spacing: 4
-                                Repeater { model: 6; Rectangle { width: 3; height: 3; radius: 1.5; color: dragHandle.containsMouse ? Theme.text : Theme.muted } }
+                                columns: 2
+                                spacing: 4
+                                Repeater {
+                                    model: 6
+                                    Rectangle {
+                                        width: 3
+                                        height: 3
+                                        radius: 1.5
+                                        color: dragHandle.containsMouse ? Theme.text : Theme.muted
+                                    }
+                                }
                             }
                             MouseArea {
                                 id: dragHandle
@@ -547,15 +852,22 @@ Scope {
                                 cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                                 property point origin
                                 property point start
-                                onPressed: mouse => { origin = mapToItem(controls.contentItem, mouse.x, mouse.y); start = Qt.point(toolbar.x, toolbar.y); }
+                                onPressed: mouse => {
+                                    origin = mapToItem(controls.contentItem, mouse.x, mouse.y);
+                                    start = Qt.point(toolbar.x, toolbar.y);
+                                }
                                 onPositionChanged: mouse => {
-                                    if (!pressed) return;
+                                    if (!pressed)
+                                        return;
                                     const point = mapToItem(controls.contentItem, mouse.x, mouse.y);
                                     toolbar.movedX = start.x + point.x - origin.x;
                                     toolbar.movedY = start.y + point.y - origin.y;
                                 }
                             }
-                            ShellTooltip { visible: dragHandle.containsMouse && !dragHandle.pressed; text: "Drag to move toolbar" }
+                            ShellTooltip {
+                                visible: dragHandle.containsMouse && !dragHandle.pressed
+                                text: "Drag to move toolbar"
+                            }
                         }
                         SegmentedControl {
                             implicitWidth: 84
@@ -566,7 +878,12 @@ Scope {
                             onSelected: value => preferences.kind = value
                             segmentContent: Component {
                                 Item {
-                                    SymbolicIcon { anchors.centerIn: parent; implicitSize: 18; source: Quickshell.iconPath(parent.parent.segmentValue === "screenshot" ? "camera-photo-symbolic" : "camera-video-symbolic"); color: parent.parent.segmentSelected ? Theme.text : Theme.muted }
+                                    SymbolicIcon {
+                                        anchors.centerIn: parent
+                                        implicitSize: 18
+                                        source: Quickshell.iconPath(parent.parent.segmentValue === "screenshot" ? "camera-photo-symbolic" : "camera-video-symbolic")
+                                        color: parent.parent.segmentSelected ? Theme.text : Theme.muted
+                                    }
                                 }
                             }
                         }
@@ -585,14 +902,36 @@ Scope {
                                     RowLayout {
                                         anchors.centerIn: parent
                                         spacing: Theme.gap
-                                        SymbolicIcon { implicitSize: 18; source: Quickshell.iconPath(targetContent.value === "region" ? "screenshot-selection-symbolic" : targetContent.value === "window" ? "screenshot-window-symbolic" : "video-display-symbolic", "video-display-symbolic"); color: targetContent.parent.segmentSelected ? Theme.text : Theme.muted }
-                                        Text { visible: overlay.width >= 720; text: targetContent.value.charAt(0).toUpperCase() + targetContent.value.slice(1); color: targetContent.parent.segmentSelected ? Theme.text : Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+                                        SymbolicIcon {
+                                            implicitSize: 18
+                                            source: Quickshell.iconPath(targetContent.value === "region" ? "screenshot-selection-symbolic" : targetContent.value === "window" ? "screenshot-window-symbolic" : "video-display-symbolic", "video-display-symbolic")
+                                            color: targetContent.parent.segmentSelected ? Theme.text : Theme.muted
+                                        }
+                                        Text {
+                                            visible: overlay.width >= 720
+                                            text: targetContent.value.charAt(0).toUpperCase() + targetContent.value.slice(1)
+                                            color: targetContent.parent.segmentSelected ? Theme.text : Theme.muted
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: Theme.fontSmall
+                                        }
                                     }
                                 }
                             }
                         }
-                        CaptureButton { objectName: "captureCursorToggle"; iconName: "input-mouse-symbolic"; chosen: preferences.cursor; description: preferences.cursor ? "Mouse cursor included" : "Mouse cursor hidden"; onClicked: preferences.cursor = !preferences.cursor }
-                        CaptureButton { objectName: "captureSettingsToggle"; iconName: "preferences-system-symbolic"; description: "Capture settings"; chosen: root.optionsOpen; onClicked: root.optionsOpen = !root.optionsOpen }
+                        CaptureButton {
+                            objectName: "captureCursorToggle"
+                            iconName: "input-mouse-symbolic"
+                            chosen: preferences.cursor
+                            description: preferences.cursor ? "Mouse cursor included" : "Mouse cursor hidden"
+                            onClicked: preferences.cursor = !preferences.cursor
+                        }
+                        CaptureButton {
+                            objectName: "captureSettingsToggle"
+                            iconName: "preferences-system-symbolic"
+                            description: "Capture settings"
+                            chosen: root.optionsOpen
+                            onClicked: root.optionsOpen = !root.optionsOpen
+                        }
                         CaptureButton {
                             text: preferences.kind === "recording" ? "Record" : "Capture"
                             iconName: preferences.kind === "recording" ? "media-record-symbolic" : ""
@@ -601,7 +940,11 @@ Scope {
                             enabled: root.ready && (preferences.target !== "window" || (!!root.capabilities.window && (!root.directWindowPicker || root.selectedWindow !== null)))
                             onClicked: root.take()
                         }
-                        CaptureButton { iconName: "window-close-symbolic"; description: "Cancel (Esc)"; onClicked: root.close() }
+                        CaptureButton {
+                            iconName: "window-close-symbolic"
+                            description: "Cancel (Esc)"
+                            onClicked: root.close()
+                        }
                     }
                 }
                 Rectangle {
@@ -614,7 +957,9 @@ Scope {
                     radius: Theme.cardRadius
                     color: Theme.popupSurface
                     border.color: Theme.outline
-                    MouseArea { anchors.fill: parent }
+                    MouseArea {
+                        anchors.fill: parent
+                    }
                     Flickable {
                         anchors.fill: parent
                         anchors.margins: 16
@@ -622,44 +967,134 @@ Scope {
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
                         ScrollBar.vertical: ScrollBar {}
-                    ColumnLayout {
-                        id: optionsColumn
-                        width: parent.width
-                        spacing: 12
-                        RowLayout {
-                            Layout.fillWidth: true; spacing: 8
-                            Text { text: "Capture settings"; font.family: Theme.fontFamily; font.pixelSize: 14; font.weight: Font.DemiBold; color: Theme.text }
-                            Item { Layout.fillWidth: true }
-                            CaptureButton { iconName: "window-close-symbolic"; compact: true; description: "Close settings"; onClicked: root.optionsOpen = false }
-                        }
-                        GridLayout {
-                            Layout.fillWidth: true; columns: 2; columnSpacing: 12; rowSpacing: 12
-                            CaptureChoice { label: "Quality"; choices: ["Compact", "Balanced", "High"]; values: ["compact", "balanced", "high"]; value: preferences.quality; onChosen: value => preferences.quality = value }
-                            CaptureChoice { label: "Delay"; choices: ["None", "3 seconds", "5 seconds", "10 seconds"]; values: [0, 3, 5, 10]; value: preferences.delay; onChosen: value => preferences.delay = value }
-                            CaptureChoice { visible: preferences.kind === "recording"; label: "Frame rate"; choices: ["15 fps", "30 fps", "60 fps"]; values: [15, 30, 60]; value: preferences.fps; onChosen: value => preferences.fps = value }
-                            CaptureChoice { visible: preferences.kind === "recording"; label: "Resolution limit"; choices: ["720p", "1080p", "1440p", "2160p", "Original"]; values: [720, 1080, 1440, 2160, 0]; value: preferences.maxHeight; onChosen: value => preferences.maxHeight = value }
-                            CaptureChoice { visible: preferences.kind === "recording"; label: "Audio"; choices: ["None", "System audio", "Microphone", "Both"]; values: ["none", "system", "microphone", "both"]; value: preferences.audio; enabled: !!root.capabilities.audio; onChosen: value => preferences.audio = value }
-                            CaptureChoice { visible: preferences.kind === "recording"; label: "Encoding"; choices: ["Automatic (CPU fallback)", "Software / CPU"]; values: ["auto", "cpu"]; value: preferences.encoder; onChosen: value => preferences.encoder = value }
-                            CaptureChoice { visible: preferences.kind === "screenshot"; label: "Image format"; choices: ["PNG · lossless", "JPEG · smaller"]; values: ["png", "jpeg"]; value: preferences.format; onChosen: value => preferences.format = value }
-                            CaptureChoice { label: "Capture backend"; choices: ["Automatic", "Desktop portal"]; values: ["auto", "portal"]; value: preferences.backend; onChosen: value => preferences.backend = value }
-                            ColumnLayout {
-                                Layout.columnSpan: 2; Layout.fillWidth: true
-                                Text { text: "Save folder"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 12 }
-                                TextField {
-                                    selectionColor: Theme.textSelection
-                                    selectedTextColor: Theme.text
+                        ColumnLayout {
+                            id: optionsColumn
+                            width: parent.width
+                            spacing: 12
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 8
+                                Text {
+                                    text: "Capture settings"
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 14
+                                    font.weight: Font.DemiBold
+                                    color: Theme.text
+                                }
+                                Item {
                                     Layout.fillWidth: true
-                                    text: preferences.directory
-                                    placeholderText: "Default: Pictures/Screenshots or Videos/Recordings"
-                                    color: Theme.text; placeholderTextColor: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 13
-                                    onEditingFinished: preferences.directory = text.trim()
-                                    padding: Theme.gap
-                                    background: Rectangle { color: Theme.elevated; radius: Theme.radius; border.color: parent.activeFocus ? Theme.accent : "transparent" }
+                                }
+                                CaptureButton {
+                                    iconName: "window-close-symbolic"
+                                    compact: true
+                                    description: "Close settings"
+                                    onClicked: root.optionsOpen = false
                                 }
                             }
+                            GridLayout {
+                                Layout.fillWidth: true
+                                columns: 2
+                                columnSpacing: 12
+                                rowSpacing: 12
+                                CaptureChoice {
+                                    label: "Quality"
+                                    choices: ["Compact", "Balanced", "High"]
+                                    values: ["compact", "balanced", "high"]
+                                    value: preferences.quality
+                                    onChosen: value => preferences.quality = value
+                                }
+                                CaptureChoice {
+                                    label: "Delay"
+                                    choices: ["None", "3 seconds", "5 seconds", "10 seconds"]
+                                    values: [0, 3, 5, 10]
+                                    value: preferences.delay
+                                    onChosen: value => preferences.delay = value
+                                }
+                                CaptureChoice {
+                                    visible: preferences.kind === "recording"
+                                    label: "Frame rate"
+                                    choices: ["15 fps", "30 fps", "60 fps"]
+                                    values: [15, 30, 60]
+                                    value: preferences.fps
+                                    onChosen: value => preferences.fps = value
+                                }
+                                CaptureChoice {
+                                    visible: preferences.kind === "recording"
+                                    label: "Resolution limit"
+                                    choices: ["720p", "1080p", "1440p", "2160p", "Original"]
+                                    values: [720, 1080, 1440, 2160, 0]
+                                    value: preferences.maxHeight
+                                    onChosen: value => preferences.maxHeight = value
+                                }
+                                CaptureChoice {
+                                    visible: preferences.kind === "recording"
+                                    label: "Audio"
+                                    choices: ["None", "System audio", "Microphone", "Both"]
+                                    values: ["none", "system", "microphone", "both"]
+                                    value: preferences.audio
+                                    enabled: !!root.capabilities.audio
+                                    onChosen: value => preferences.audio = value
+                                }
+                                CaptureChoice {
+                                    visible: preferences.kind === "recording"
+                                    label: "Encoding"
+                                    choices: ["Automatic (CPU fallback)", "Software / CPU"]
+                                    values: ["auto", "cpu"]
+                                    value: preferences.encoder
+                                    onChosen: value => preferences.encoder = value
+                                }
+                                CaptureChoice {
+                                    visible: preferences.kind === "screenshot"
+                                    label: "Image format"
+                                    choices: ["PNG · lossless", "JPEG · smaller"]
+                                    values: ["png", "jpeg"]
+                                    value: preferences.format
+                                    onChosen: value => preferences.format = value
+                                }
+                                CaptureChoice {
+                                    label: "Capture backend"
+                                    choices: ["Automatic", "Desktop portal"]
+                                    values: ["auto", "portal"]
+                                    value: preferences.backend
+                                    onChosen: value => preferences.backend = value
+                                }
+                                ColumnLayout {
+                                    Layout.columnSpan: 2
+                                    Layout.fillWidth: true
+                                    Text {
+                                        text: "Save folder"
+                                        color: Theme.muted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 12
+                                    }
+                                    TextField {
+                                        selectionColor: Theme.textSelection
+                                        selectedTextColor: Theme.text
+                                        Layout.fillWidth: true
+                                        text: preferences.directory
+                                        placeholderText: "Default: Pictures/Screenshots or Videos/Recordings"
+                                        color: Theme.text
+                                        placeholderTextColor: Theme.muted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 13
+                                        onEditingFinished: preferences.directory = text.trim()
+                                        padding: Theme.gap
+                                        background: Rectangle {
+                                            color: Theme.elevated
+                                            radius: Theme.radius
+                                            border.color: parent.activeFocus ? Theme.accent : "transparent"
+                                        }
+                                    }
+                                }
+                            }
+                            CaptureButton {
+                                visible: preferences.kind === "screenshot"
+                                text: "Copy to clipboard"
+                                iconName: "edit-copy-symbolic"
+                                chosen: preferences.copy
+                                onClicked: preferences.copy = !preferences.copy
+                            }
                         }
-                        CaptureButton { visible: preferences.kind === "screenshot"; text: "Copy to clipboard"; iconName: "edit-copy-symbolic"; chosen: preferences.copy; onClicked: preferences.copy = !preferences.copy }
-                    }
                     }
                 }
             }
@@ -670,8 +1105,14 @@ Scope {
         id: feedback
         visible: false
         screen: root.screen
-        anchors { bottom: true; right: true }
-        margins { bottom: 112; right: 24 }
+        anchors {
+            bottom: true
+            right: true
+        }
+        margins {
+            bottom: 112
+            right: 24
+        }
         implicitWidth: 420
         implicitHeight: feedbackContents.implicitHeight + 32
         color: "transparent"
@@ -679,16 +1120,49 @@ Scope {
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "bingux-capture-feedback"
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        Rectangle { anchors.fill: parent; color: Theme.popupSurface; radius: 20; border.color: Theme.outline }
+        Rectangle {
+            anchors.fill: parent
+            color: Theme.popupSurface
+            radius: 20
+            border.color: Theme.outline
+        }
         ColumnLayout {
             id: feedbackContents
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 16 }
+            anchors {
+                left: parent.left
+                right: parent.right
+                top: parent.top
+                margins: 16
+            }
             spacing: 10
-            Text { Layout.fillWidth: true; text: root.message; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: 14; font.weight: Font.DemiBold }
-            Text { visible: root.partialPath !== ""; Layout.fillWidth: true; text: "Partial recording preserved: " + root.partialPath; wrapMode: Text.Wrap; textFormat: Text.PlainText; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 12 }
+            Text {
+                Layout.fillWidth: true
+                text: root.message
+                wrapMode: Text.Wrap
+                textFormat: Text.PlainText
+                color: Theme.text
+                font.family: Theme.fontFamily
+                font.pixelSize: 14
+                font.weight: Font.DemiBold
+            }
+            Text {
+                visible: root.partialPath !== ""
+                Layout.fillWidth: true
+                text: "Partial recording preserved: " + root.partialPath
+                wrapMode: Text.Wrap
+                textFormat: Text.PlainText
+                color: Theme.muted
+                font.family: Theme.fontFamily
+                font.pixelSize: 12
+            }
             RowLayout {
-                Item { Layout.fillWidth: true }
-                CaptureButton { text: "Dismiss"; onClicked: feedback.visible = false }
+                Item {
+                    Layout.fillWidth: true
+                }
+                CaptureButton {
+                    text: "Dismiss"
+                    onClicked: feedback.visible = false
+                }
             }
         }
     }
@@ -715,12 +1189,31 @@ Scope {
         contentItem: RowLayout {
             id: contents
             spacing: 8
-            Item { Layout.fillWidth: true }
-            SymbolicIcon { visible: button.iconName !== ""; implicitSize: button.compact ? 14 : 18; source: Quickshell.iconPath(button.iconName, "application-x-executable-symbolic"); color: button.primary ? "#17212c" : button.enabled ? Theme.text : Theme.muted }
-            Text { visible: button.text !== ""; text: button.text; color: button.primary ? "#17212c" : button.enabled ? Theme.text : Theme.muted; font.family: Theme.fontFamily; font.pixelSize: button.compact ? 12 : 13; font.weight: button.primary || button.chosen ? Font.DemiBold : Font.Normal }
-            Item { Layout.fillWidth: true }
+            Item {
+                Layout.fillWidth: true
+            }
+            SymbolicIcon {
+                visible: button.iconName !== ""
+                implicitSize: button.compact ? 14 : 18
+                source: Quickshell.iconPath(button.iconName, "application-x-executable-symbolic")
+                color: button.primary ? "#17212c" : button.enabled ? Theme.text : Theme.muted
+            }
+            Text {
+                visible: button.text !== ""
+                text: button.text
+                color: button.primary ? "#17212c" : button.enabled ? Theme.text : Theme.muted
+                font.family: Theme.fontFamily
+                font.pixelSize: button.compact ? 12 : 13
+                font.weight: button.primary || button.chosen ? Font.DemiBold : Font.Normal
+            }
+            Item {
+                Layout.fillWidth: true
+            }
         }
-        ShellTooltip { visible: (button.hovered || button.visualFocus) && button.description !== ""; text: button.description }
+        ShellTooltip {
+            visible: (button.hovered || button.visualFocus) && button.description !== ""
+            text: button.description
+        }
     }
     component CaptureChoice: ColumnLayout {
         id: choice
@@ -732,7 +1225,12 @@ Scope {
         signal chosen(var value)
         Layout.fillWidth: true
         spacing: 5
-        Text { text: choice.label; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 12 }
+        Text {
+            text: choice.label
+            color: Theme.muted
+            font.family: Theme.fontFamily
+            font.pixelSize: 12
+        }
         ActionButton {
             id: choiceButton
             objectName: "captureChoice" + choice.label
@@ -742,8 +1240,21 @@ Scope {
             onClicked: choiceMenu.visible = !choiceMenu.visible
             contentItem: RowLayout {
                 spacing: Theme.gap
-                Text { Layout.fillWidth: true; Layout.leftMargin: Theme.gap; text: choiceButton.text; textFormat: Text.PlainText; elide: Text.ElideRight; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
-                SymbolicIcon { Layout.rightMargin: Theme.gap; implicitSize: 14; source: Quickshell.iconPath("pan-down-symbolic") }
+                Text {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Theme.gap
+                    text: choiceButton.text
+                    textFormat: Text.PlainText
+                    elide: Text.ElideRight
+                    color: Theme.text
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSmall
+                }
+                SymbolicIcon {
+                    Layout.rightMargin: Theme.gap
+                    implicitSize: 14
+                    source: Quickshell.iconPath("pan-down-symbolic")
+                }
             }
         }
         ShellPopup {
@@ -753,26 +1264,41 @@ Scope {
             popupHeight: choiceEntries.contentHeight + contentPadding * 2
             contentPadding: Theme.gap
             onAboutToOpen: {
-                if (!hostItem) return;
+                if (!hostItem)
+                    return;
                 const anchor = choiceButton.mapToItem(hostItem, 0, 0);
                 preferredX = anchor.x;
                 const below = anchor.y + choiceButton.height + Theme.spaceSmall;
-                preferredY = below + popupHeight <= hostItem.height - Theme.gap
-                    ? below : anchor.y - popupHeight - Theme.spaceSmall;
+                preferredY = below + popupHeight <= hostItem.height - Theme.gap ? below : anchor.y - popupHeight - Theme.spaceSmall;
             }
-            onVisibleChanged: if (visible) Qt.callLater(() => choiceNavigation.focusMenu())
+            onVisibleChanged: if (visible)
+                Qt.callLater(() => choiceNavigation.focusMenu())
             Connections {
                 target: root
-                function onOptionsOpenChanged() { if (!root.optionsOpen) choiceMenu.visible = false; }
-                function onOpenedChanged() { if (!root.opened) choiceMenu.visible = false; }
+                function onOptionsOpenChanged() {
+                    if (!root.optionsOpen)
+                        choiceMenu.visible = false;
+                }
+                function onOpenedChanged() {
+                    if (!root.opened)
+                        choiceMenu.visible = false;
+                }
             }
             MenuNavigator {
                 id: choiceNavigation
-                entries: choice.choices.map((text, index) => ({text, index, enabled: true}))
+                entries: choice.choices.map((text, index) => ({
+                            text,
+                            index,
+                            enabled: true
+                        }))
                 view: choiceEntries
                 focusTarget: choiceEntries
                 onEscapeRequested: choiceMenu.visible = false
-                onActivateRequested: entry => { choice.chosen(choice.values[entry.index]); choiceMenu.visible = false; choiceButton.forceActiveFocus(); }
+                onActivateRequested: entry => {
+                    choice.chosen(choice.values[entry.index]);
+                    choiceMenu.visible = false;
+                    choiceButton.forceActiveFocus();
+                }
             }
             ListView {
                 id: choiceEntries
@@ -796,12 +1322,32 @@ Scope {
                     text: modelData
                     flat: true
                     cornerRadius: choiceMenu.contentRadius
-                    onClicked: { choice.chosen(choice.values[index]); choiceMenu.visible = false; choiceButton.forceActiveFocus(); }
-                    background: Rectangle { radius: optionButton.cornerRadius; color: optionButton.down ? Theme.pressed : optionButton.hovered || (choiceNavigation.keyboardNavigation && choiceEntries.currentIndex === optionButton.index) ? Theme.hover : "transparent" }
+                    onClicked: {
+                        choice.chosen(choice.values[index]);
+                        choiceMenu.visible = false;
+                        choiceButton.forceActiveFocus();
+                    }
+                    background: Rectangle {
+                        radius: optionButton.cornerRadius
+                        color: optionButton.down ? Theme.pressed : optionButton.hovered || (choiceNavigation.keyboardNavigation && choiceEntries.currentIndex === optionButton.index) ? Theme.hover : "transparent"
+                    }
                     contentItem: RowLayout {
                         spacing: Theme.gap
-                        SymbolicIcon { Layout.leftMargin: Theme.gap; implicitSize: 16; opacity: choice.values[optionButton.index] === choice.value ? 1 : 0; source: Quickshell.iconPath("object-select-symbolic"); color: Theme.accent }
-                        Text { Layout.fillWidth: true; text: optionButton.text; textFormat: Text.PlainText; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize }
+                        SymbolicIcon {
+                            Layout.leftMargin: Theme.gap
+                            implicitSize: 16
+                            opacity: choice.values[optionButton.index] === choice.value ? 1 : 0
+                            source: Quickshell.iconPath("object-select-symbolic")
+                            color: Theme.accent
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: optionButton.text
+                            textFormat: Text.PlainText
+                            color: Theme.text
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSize
+                        }
                     }
                 }
             }

@@ -4,22 +4,47 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS")
+    }
     BinguxSettings {
         id: settings
         visible: true
         property string requestedContainer: ""
-        function requestShellCustomise(container = "") { requestedContainer = container; }
+        function requestShellCustomise(container = "") {
+            requestedContainer = container;
+        }
     }
     TestCase {
         parent: settings.contentItem
         when: settings.visible && settings.ready && !settings.busy
-        function initTestCase() { report.setText("RUNNING\n"); }
-        function cleanupTestCase() { report.setText("FAILURES " + qtest_results.failCount); }
+        function initTestCase() {
+            report.setText("RUNNING\n");
+        }
+        function cleanupTestCase() {
+            report.setText("FAILURES " + qtest_results.failCount);
+        }
         function test_container_links() {
             const original = JSON.stringify(settings.draft);
-            for (const entry of [{page: "TopBar", id: "top-right"}, {page: "Dock", id: "dock"},
-                {page: "Sidebar", id: "sidebar"}, {page: "Controls", id: "control-centre"}]) {
+            for (const entry of [
+                {
+                    page: "TopBar",
+                    id: "top-right"
+                },
+                {
+                    page: "Dock",
+                    id: "dock"
+                },
+                {
+                    page: "Sidebar",
+                    id: "sidebar"
+                },
+                {
+                    page: "Controls",
+                    id: "control-centre"
+                }
+            ]) {
                 settings.page = entry.page;
                 settings.requestedContainer = "";
                 tryVerify(() => !!findChild(settings.contentItem, "customise-container-" + entry.id), 1500);

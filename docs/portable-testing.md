@@ -63,20 +63,20 @@ scripts/test-desktop --shell /path/to/root/usr/share/bingux/shell --smoke
 
 ## Dependency map
 
-| Area | Dependency outside Gnoblin |
-| --- | --- |
-| Bar, dock layout, menus, calendar, notes, animations | Quickshell, Qt, layer-shell; notes require Bingux.Text |
-| Dock windows and activation | Standard foreign-toplevel protocol; availability depends on compositor |
-| Notifications and app actions | freedesktop notifications D-Bus service and desktop entries |
-| Tray, media, audio, network, Bluetooth | StatusNotifier, MPRIS, PipeWire, NetworkManager, BlueZ |
-| Search and metrics | Bingux helper daemons; useful without Gnoblin |
-| App launching | Desktop entries and GIO helper; global loading cursor is Gnoblin-only |
-| Alt+Tab, live previews, modifier-release handling | Gnoblin private compositor socket; no portable replacement yet |
-| Global shortcut grabs, input forwarding, emoji caret insertion | Gnoblin private compositor socket; bind panel commands externally |
-| Privacy events, keyboard source changes, native OSD events | Gnoblin integration; unavailable events are not equivalent to no activity |
-| Screenshot and recording | Existing portal/grim fallbacks; needs matching portal backend and PipeWire |
-| Blur, custom shaders, compositor slide effects | Gnoblin rules; configure effects in the host compositor separately |
-| Native desktop installation | Still explicitly requires Gnoblin; this launcher does not change production session wiring |
+| Area                                                           | Dependency outside Gnoblin                                                                 |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Bar, dock layout, menus, calendar, notes, animations           | Quickshell, Qt, layer-shell; notes require Bingux.Text                                     |
+| Dock windows and activation                                    | Standard foreign-toplevel protocol; availability depends on compositor                     |
+| Notifications and app actions                                  | freedesktop notifications D-Bus service and desktop entries                                |
+| Tray, media, audio, network, Bluetooth                         | StatusNotifier, MPRIS, PipeWire, NetworkManager, BlueZ                                     |
+| Search and metrics                                             | Bingux helper daemons; useful without Gnoblin                                              |
+| App launching                                                  | Desktop entries and GIO helper; global loading cursor is Gnoblin-only                      |
+| Alt+Tab, live previews, modifier-release handling              | Gnoblin private compositor socket; no portable replacement yet                             |
+| Global shortcut grabs, input forwarding, emoji caret insertion | Gnoblin private compositor socket; bind panel commands externally                          |
+| Privacy events, keyboard source changes, native OSD events     | Gnoblin integration; unavailable events are not equivalent to no activity                  |
+| Screenshot and recording                                       | Existing portal/grim fallbacks; needs matching portal backend and PipeWire                 |
+| Blur, custom shaders, compositor slide effects                 | Gnoblin rules; configure effects in the host compositor separately                         |
+| Native desktop installation                                    | Still explicitly requires Gnoblin; this launcher does not change production session wiring |
 
 The dependence is concentrated in compositor integration and production session
 packaging, rather than the general UI. Portable mode is for UI testing, not full

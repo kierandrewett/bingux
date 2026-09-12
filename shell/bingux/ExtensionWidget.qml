@@ -19,14 +19,18 @@ Item {
     function load() {
         context.dispose();
         content.source = "";
-        if (spec) content.setSource(preview ? spec.previewSource : spec.source, {context: context});
+        if (spec)
+            content.setSource(preview ? spec.previewSource : spec.source, {
+                context: context
+            });
     }
     onSpecChanged: load()
     onPreviewChanged: load()
     Loader {
         id: content
         anchors.fill: parent
-        onStatusChanged: if (status === Loader.Error) root.context.reportError("Could not load widget component");
+        onStatusChanged: if (status === Loader.Error)
+            root.context.reportError("Could not load widget component")
     }
     Text {
         anchors.centerIn: parent

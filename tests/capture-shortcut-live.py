@@ -1,4 +1,5 @@
 """Opt-in: exercise real Alt+S press/hold/release in an idle desktop session."""
+
 import json
 from pathlib import Path
 import subprocess
@@ -13,13 +14,17 @@ def status():
     deadline = time.monotonic() + 3
     while time.monotonic() < deadline:
         result = subprocess.check_output(command + ["status"], text=True, timeout=2)
-        try: return json.loads(result)
-        except ValueError: time.sleep(.05)
+        try:
+            return json.loads(result)
+        except ValueError:
+            time.sleep(0.05)
     raise RuntimeError("Capture IPC unavailable")
 
 
 initial = status()
-assert not initial["opened"] and initial["state"] in ("idle", "saved", "error"), "Leave the user's active capture untouched"
+assert not initial["opened"] and initial["state"] in ("idle", "saved", "error"), (
+    "Leave the user's active capture untouched"
+)
 bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
 destination = "org.gnome.Mutter.RemoteDesktop"
 
@@ -47,25 +52,28 @@ try:
     call(session, destination + ".Session", "Start")
     for panel in ["search", "calendar", "controls"] * 3:
         subprocess.run(["qs", "ipc", "--any-display", "-p", str(shell), "call", "shell", panel], check=True, timeout=3)
-        time.sleep(.25)
-        press(.08)
+        time.sleep(0.25)
+        press(0.08)
         deadline = time.monotonic() + 2
-        while time.monotonic() < deadline and not status()["opened"]: time.sleep(.03)
+        while time.monotonic() < deadline and not status()["opened"]:
+            time.sleep(0.03)
         assert status()["opened"], f"Alt+S failed with {panel} focused"
         subprocess.run(command + ["cancel"], check=True, timeout=3)
         print(f"PASS: Alt+S over {panel}", flush=True)
-        time.sleep(.2)
-    for hold in [.04, .5, .8, 1.2] * 3:
+        time.sleep(0.2)
+    for hold in [0.04, 0.5, 0.8, 1.2] * 3:
         press(hold)
         deadline = time.monotonic() + 2
-        while time.monotonic() < deadline and not status()["opened"]: time.sleep(.03)
+        while time.monotonic() < deadline and not status()["opened"]:
+            time.sleep(0.03)
         assert status()["opened"], f"Alt+S held for {hold}s did not open capture"
-        press(.04)
+        press(0.04)
         deadline = time.monotonic() + 1
-        while time.monotonic() < deadline and status()["opened"]: time.sleep(.03)
+        while time.monotonic() < deadline and status()["opened"]:
+            time.sleep(0.03)
         assert not status()["opened"], "Second physical press did not close capture"
         print(f"PASS: hold={hold}s; one press opens, next press closes", flush=True)
-        time.sleep(.08)
+        time.sleep(0.08)
 finally:
     key(31, False)
     key(56, False)

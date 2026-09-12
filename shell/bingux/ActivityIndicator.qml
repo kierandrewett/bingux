@@ -17,15 +17,18 @@ Item {
     property var barWindow: null
     readonly property bool hovered: mouse.containsMouse
     readonly property bool pressed: mouse.pressed
-    signal clicked()
+    signal clicked
     implicitHeight: Theme.barHeight
     implicitWidth: (presentation?.custom ? customFace.implicitWidth : row.implicitWidth) + Theme.activityIndicatorPadding * 2
     activeFocusOnTab: interactive
     Accessible.role: interactive ? Accessible.Button : Accessible.StaticText
     Accessible.name: tooltip
-    Accessible.onPressAction: if (interactive) clicked()
-    Keys.onReturnPressed: if (interactive) clicked()
-    Keys.onSpacePressed: if (interactive) clicked()
+    Accessible.onPressAction: if (interactive)
+        clicked()
+    Keys.onReturnPressed: if (interactive)
+        clicked()
+    Keys.onSpacePressed: if (interactive)
+        clicked()
 
     Rectangle {
         anchors.fill: parent
@@ -58,7 +61,9 @@ Item {
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSmall
             font.weight: Font.DemiBold
-            font.features: {"tnum": 1}
+            font.features: {
+                "tnum": 1
+            }
             textFormat: Text.PlainText
         }
         Item {

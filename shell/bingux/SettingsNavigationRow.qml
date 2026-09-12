@@ -30,21 +30,31 @@ AbstractButton {
         }
         Text {
             id: titleLabel
-            anchors.left: icon.right; anchors.leftMargin: 12
-            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.left: icon.right
+            anchors.leftMargin: 12
+            anchors.right: parent.right
+            anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             anchors.verticalCenterOffset: root.description ? -9 : 0
-            text: root.text; textFormat: Text.PlainText
-            font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
-            color: Theme.text; elide: Text.ElideRight
+            text: root.text
+            textFormat: Text.PlainText
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSize
+            color: Theme.text
+            elide: Text.ElideRight
         }
         Text {
-            anchors.left: titleLabel.left; anchors.right: titleLabel.right
-            anchors.top: titleLabel.bottom; anchors.topMargin: 2
+            anchors.left: titleLabel.left
+            anchors.right: titleLabel.right
+            anchors.top: titleLabel.bottom
+            anchors.topMargin: 2
             visible: root.description !== ""
-            text: root.description; textFormat: Text.PlainText
-            font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
-            color: Theme.muted; elide: Text.ElideRight
+            text: root.description
+            textFormat: Text.PlainText
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSmall
+            color: Theme.muted
+            elide: Text.ElideRight
         }
     }
 }

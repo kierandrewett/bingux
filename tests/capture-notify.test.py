@@ -1,11 +1,14 @@
 """Notification action policy, without touching the desktop or user clipboard."""
+
 import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-spec = importlib.util.spec_from_file_location("capture_notify", Path(__file__).resolve().parents[1] / "shell/bingux/capture-notify.py")
+spec = importlib.util.spec_from_file_location(
+    "capture_notify", Path(__file__).resolve().parents[1] / "shell/bingux/capture-notify.py"
+)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
@@ -28,7 +31,9 @@ class NotificationActions(unittest.TestCase):
         self.notice.bus = Mock()
 
     def invoke(self, action, identifier=42):
-        self.notice.on_signal(None, None, None, None, "ActionInvoked", module.GLib.Variant("(us)", (identifier, action)))
+        self.notice.on_signal(
+            None, None, None, None, "ActionInvoked", module.GLib.Variant("(us)", (identifier, action))
+        )
 
     def test_preview_and_actions_are_standard_notification_fields(self):
         self.notice.call.return_value = (42,)
@@ -89,8 +94,14 @@ class NotificationActions(unittest.TestCase):
     def test_save_copies_to_selected_destination(self):
         destination = Path(self.folder.name) / "chosen.png"
         self.notice.chooser_subscription = 12
-        self.notice.on_save_response(None, None, None, None, None,
-            module.GLib.Variant("(ua{sv})", (0, {"uris": module.GLib.Variant("as", [destination.as_uri()])})))
+        self.notice.on_save_response(
+            None,
+            None,
+            None,
+            None,
+            None,
+            module.GLib.Variant("(ua{sv})", (0, {"uris": module.GLib.Variant("as", [destination.as_uri()])})),
+        )
         self.assertEqual(destination.read_bytes(), self.path.read_bytes())
 
 

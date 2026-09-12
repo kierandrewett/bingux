@@ -10,13 +10,13 @@ without changing the shell's built-in layout model.
 
 ## Runtime layers
 
-| Layer | Location | Responsibility |
-| --- | --- | --- |
-| Shell | `shell/bingux/` | Draws the top bar, dock, sidebar, popouts and settings surfaces. |
-| Native helpers | `packages/` | Builds the search, status, audio and QML plugin helpers. |
-| User state | `$XDG_CONFIG_HOME/bingux/` | Stores layout, settings, search, notes and extension enable state. |
+| Layer              | Location                     | Responsibility                                                           |
+| ------------------ | ---------------------------- | ------------------------------------------------------------------------ |
+| Shell              | `shell/bingux/`              | Draws the top bar, dock, sidebar, popouts and settings surfaces.         |
+| Native helpers     | `packages/`                  | Builds the search, status, audio and QML plugin helpers.                 |
+| User state         | `$XDG_CONFIG_HOME/bingux/`   | Stores layout, settings, search, notes and extension enable state.       |
 | Extension registry | `shell/bingux/extensions.py` | Discovers trusted extension manifests and preserves disabled placements. |
-| Packaging | `packaging/` | Builds Fedora packages and user-systemd units. |
+| Packaging          | `packaging/`                 | Builds Fedora packages and user-systemd units.                           |
 
 The shell reads state from the user's XDG configuration directory. Packagers
 set the install prefix and QML import path. The shell does not generate or
@@ -41,10 +41,10 @@ stores credentials.
 
 Gnoblin supplies the compositor and session. The stable integration points are:
 
-* `zwlr_layer_shell_v1` for top bar, dock, sidebar and popup surfaces.
-* `zwlr_foreign_toplevel_manager_v1` for dock window listing and actions.
-* `org.gnoblin.Shell` for shell commands, OSD forwarding and session state.
-* The local search, status and OSD sockets for long-running helper data.
+- `zwlr_layer_shell_v1` for top bar, dock, sidebar and popup surfaces.
+- `zwlr_foreign_toplevel_manager_v1` for dock window listing and actions.
+- `org.gnoblin.Shell` for shell commands, OSD forwarding and session state.
+- The local search, status and OSD sockets for long-running helper data.
 
 The shell owns its own layer-shell surfaces. It does not patch or depend on
 GNOME Shell UI. Another compositor can use the general shell surfaces when it

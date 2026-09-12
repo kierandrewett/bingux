@@ -10,7 +10,7 @@ import "DesktopLayout.js" as DesktopLayout
 Scope {
     id: root
     signal widgetEditRequested(string widgetId, var control, var window)
-    signal customiseRequested()
+    signal customiseRequested
     signal panelOpening(var popup)
     required property var settings
     property var systemMetrics: null
@@ -18,25 +18,48 @@ Scope {
     readonly property alias widgetHost: widgetGrid
     readonly property alias panelHost: nativePanelHost
     readonly property var panelWidgets: [terminalWidget, notesWidget, monitorWidget, calendarWidget, mediaWidget, tasksWidget]
-    function panelWidget(id) { return panelWidgets.find(item => item.widgetId === id); }
+    function panelWidget(id) {
+        return panelWidgets.find(item => item.widgetId === id);
+    }
     component PanelWidget: SidebarPanelWidget {
         sidebar: root
         widgetLayout: root.widgetLayout
         onEditRequested: (id, item, window) => root.widgetEditRequested(id, item, window)
         onOpening: popup => root.panelOpening(popup)
     }
-    PanelWidget { id: terminalWidget; widgetId: "terminal" }
-    PanelWidget { id: notesWidget; widgetId: "notes" }
-    PanelWidget { id: monitorWidget; widgetId: "monitor" }
-    PanelWidget { id: calendarWidget; widgetId: "calendar" }
-    PanelWidget { id: mediaWidget; widgetId: "media" }
-    PanelWidget { id: tasksWidget; widgetId: "tasks" }
+    PanelWidget {
+        id: terminalWidget
+        widgetId: "terminal"
+    }
+    PanelWidget {
+        id: notesWidget
+        widgetId: "notes"
+    }
+    PanelWidget {
+        id: monitorWidget
+        widgetId: "monitor"
+    }
+    PanelWidget {
+        id: calendarWidget
+        widgetId: "calendar"
+    }
+    PanelWidget {
+        id: mediaWidget
+        widgetId: "media"
+    }
+    PanelWidget {
+        id: tasksWidget
+        widgetId: "tasks"
+    }
     readonly property alias widgetViewport: widgetViewport
     readonly property var widgetWindow: floating ? detachedWindow : panel
-    readonly property var externalEntries: widgetLayout ? widgetLayout.defaultControls
-        .filter(item => !panelWidgets.includes(item) && widgetLayout.zoneFor(item) === "sidebar")
-        .map(item => ({id: widgetLayout.nameFor(item), item})) : []
-    function widgetRow(id) { return (DesktopEditing.desktop.layout?.sidebar || allContentTypes.map(type => type.id)).indexOf(id); }
+    readonly property var externalEntries: widgetLayout ? widgetLayout.defaultControls.filter(item => !panelWidgets.includes(item) && widgetLayout.zoneFor(item) === "sidebar").map(item => ({
+                id: widgetLayout.nameFor(item),
+                item
+            })) : []
+    function widgetRow(id) {
+        return (DesktopEditing.desktop.layout?.sidebar || allContentTypes.map(type => type.id)).indexOf(id);
+    }
     readonly property alias editWindow: panel
     readonly property alias editSurface: panelSurface
     readonly property alias contentItem: sidebarContents
@@ -44,19 +67,44 @@ Scope {
     readonly property alias detachedSurface: detachedWindow
     readonly property alias edgeSurface: sensor
     readonly property var allContentTypes: [
-        {id: "terminal", label: "Terminal", icon: "utilities-terminal-symbolic"},
-        {id: "notes", label: "Notes", icon: "accessories-text-editor-symbolic"},
-        {id: "monitor", label: "System", icon: "computer-symbolic"},
-        {id: "calendar", label: "Calendar", icon: "x-office-calendar-symbolic"},
-        {id: "media", label: "Media", icon: "applications-multimedia-symbolic"},
-        {id: "tasks", label: "Tasks", icon: "view-list-symbolic"}
+        {
+            id: "terminal",
+            label: "Terminal",
+            icon: "utilities-terminal-symbolic"
+        },
+        {
+            id: "notes",
+            label: "Notes",
+            icon: "accessories-text-editor-symbolic"
+        },
+        {
+            id: "monitor",
+            label: "System",
+            icon: "computer-symbolic"
+        },
+        {
+            id: "calendar",
+            label: "Calendar",
+            icon: "x-office-calendar-symbolic"
+        },
+        {
+            id: "media",
+            label: "Media",
+            icon: "applications-multimedia-symbolic"
+        },
+        {
+            id: "tasks",
+            label: "Tasks",
+            icon: "view-list-symbolic"
+        }
     ]
     readonly property var contentTypes: DesktopEditing.desktop.layout ? DesktopEditing.desktop.layout.sidebar.map(id => allContentTypes.find(type => type.id === id)).filter(type => type) : allContentTypes
     Connections {
         target: BinguxPreferences
         function onDataChanged() {
             const edge = BinguxPreferences.data.desktop.sidebarEdge;
-            if (edge && edge !== saved.edge) root.syncEdge(edge);
+            if (edge && edge !== saved.edge)
+                root.syncEdge(edge);
         }
     }
     property string previewContentType: ""
@@ -64,19 +112,34 @@ Scope {
         const selected = DesktopEditing.active && previewContentType ? previewContentType : saved.contentType;
         return contentTypes.some(type => type.id === selected) ? selected : (contentTypes[0]?.id || "");
     }
-    readonly property var currentContent: contentTypes.find(type => type.id === contentType) || {id: "", label: "Sidebar", icon: "sidebar-show-symbolic"}
+    readonly property var currentContent: contentTypes.find(type => type.id === contentType) || {
+        id: "",
+        label: "Sidebar",
+        icon: "sidebar-show-symbolic"
+    }
     readonly property Item activePanel: panelFor(contentType)
     function panelFor(id) {
-        return ({terminal: terminalLoader.item, notes, monitor,
-            calendar: calendarPanel.item, media: mediaPanel.item, tasks: tasksPanel.item})[id] || null;
+        return ({
+                terminal: terminalLoader.item,
+                notes,
+                monitor,
+                calendar: calendarPanel.item,
+                media: mediaPanel.item,
+                tasks: tasksPanel.item
+            })[id] || null;
     }
     function focusPanel(id) {
         const item = panelFor(id);
-        if (!item) return;
-        if (id === "terminal") item.focusTerminal();
-        else item.focusContent();
+        if (!item)
+            return;
+        if (id === "terminal")
+            item.focusTerminal();
+        else
+            item.focusContent();
     }
-    function focusContent() { focusPanel(contentType); }
+    function focusContent() {
+        focusPanel(contentType);
+    }
     component RetainedPanel: Loader {
         required property string panelId
         readonly property var hostWidget: root.panelWidget(panelId)
@@ -85,11 +148,14 @@ Scope {
         anchors.fill: parent
         visible: selected
         active: false
-        onSelectedChanged: if (selected) active = true
-        Component.onCompleted: if (selected) active = true
+        onSelectedChanged: if (selected)
+            active = true
+        Component.onCompleted: if (selected)
+            active = true
         onLoaded: {
             DesktopEditing.registerSource(panelId, item);
-            if (root.opened && root.contentType === panelId) item.focusContent();
+            if (root.opened && root.contentType === panelId)
+                item.focusContent();
         }
         Component.onDestruction: DesktopEditing.unregisterSource(panelId, item)
     }
@@ -98,7 +164,8 @@ Scope {
             return;
         if (DesktopEditing.active) {
             previewContentType = value;
-            if (value === "terminal") terminalCreated = true;
+            if (value === "terminal")
+                terminalCreated = true;
             return;
         }
         saved.contentType = value;
@@ -121,10 +188,9 @@ Scope {
                 root.lastActiveWindow = ToplevelManager.activeToplevel;
         }
     }
-    readonly property var fullscreenWindow: lastActiveWindow && lastActiveWindow.fullscreen
-        && !lastActiveWindow.minimized
-        // Some compositors publish state without output enter/leave events.
-        && (lastActiveWindow.screens.length === 0 || lastActiveWindow.screens.includes(screen)) ? lastActiveWindow : null
+    readonly property var fullscreenWindow: lastActiveWindow && lastActiveWindow.fullscreen && !lastActiveWindow.minimized &&
+    // Some compositors publish state without output enter/leave events.
+    (lastActiveWindow.screens.length === 0 || lastActiveWindow.screens.includes(screen)) ? lastActiveWindow : null
     readonly property bool fullscreenApp: fullscreenWindow !== null
     onFullscreenWindowChanged: {
         if (!fullscreenWindow || detached)
@@ -372,7 +438,8 @@ Scope {
     Connections {
         target: terminalWidget
         function onContentVisibleChanged() {
-            if (terminalWidget.contentVisible && (!terminalWidget.sidebarMode || root.opened || DesktopEditing.active)) root.terminalCreated = true;
+            if (terminalWidget.contentVisible && (!terminalWidget.sidebarMode || root.opened || DesktopEditing.active))
+                root.terminalCreated = true;
         }
     }
     readonly property bool terminalReady: terminalLoader.status === Loader.Ready && terminalLoader.item !== null
@@ -380,7 +447,10 @@ Scope {
     Connections {
         target: root.settings
         ignoreUnknownSignals: true
-        function onSidebarEnabledChanged() { if (!root.settings.sidebarEnabled) root.hide(); }
+        function onSidebarEnabledChanged() {
+            if (!root.settings.sidebarEnabled)
+                root.hide();
+        }
     }
 
     Connections {
@@ -388,8 +458,10 @@ Scope {
         function onActiveChanged() {
             root.previewContentType = "";
             contentMenu.visible = false;
-            if (DesktopEditing.active && root.contentType === "terminal") root.terminalCreated = true;
-            if (!root.floating) root.animateTo(DesktopEditing.active || root.opened ? 1 : 0);
+            if (DesktopEditing.active && root.contentType === "terminal")
+                root.terminalCreated = true;
+            if (!root.floating)
+                root.animateTo(DesktopEditing.active || root.opened ? 1 : 0);
         }
     }
     function open() {
@@ -414,7 +486,8 @@ Scope {
         saved.detached = true;
         saved.setValue("detached", true);
         saved.sync();
-        if (!opened) open();
+        if (!opened)
+            open();
         slide.stop();
         panel.reveal = 1;
         focusRequested = false;
@@ -446,10 +519,16 @@ Scope {
     }
 
     function setEdge(value) {
-        if (!["left", "top", "right"].includes(value)) return;
-        if (DesktopEditing.active) DesktopEditing.editor.change("sidebarEdge", value);
-        else if (BinguxPreferences.data.desktop.layoutVersion === 1) BinguxPreferences.saveDesktop({sidebarEdge: value});
-        else syncEdge(value);
+        if (!["left", "top", "right"].includes(value))
+            return;
+        if (DesktopEditing.active)
+            DesktopEditing.editor.change("sidebarEdge", value);
+        else if (BinguxPreferences.data.desktop.layoutVersion === 1)
+            BinguxPreferences.saveDesktop({
+                sidebarEdge: value
+            });
+        else
+            syncEdge(value);
     }
     function syncEdge(value) {
         if (!["left", "top", "right"].includes(value))
@@ -465,7 +544,10 @@ Scope {
         slide.stop();
         panel.reveal = 0;
         opened = false;
-        if (root.detached) { saved.detached = false; saved.setValue("detached", false); }
+        if (root.detached) {
+            saved.detached = false;
+            saved.setValue("detached", false);
+        }
         saved.edge = value;
         saved.setValue("edge", value);
         saved.sync();
@@ -497,9 +579,15 @@ Scope {
 
     IpcHandler {
         target: "sidebar"
-        function select(value: string): void { root.selectContent(value); }
-        function popout(): void { root.popOut(); }
-        function dock(): void { root.dockBack(); }
+        function select(value: string): void {
+            root.selectContent(value);
+        }
+        function popout(): void {
+            root.popOut();
+        }
+        function dock(): void {
+            root.dockBack();
+        }
         function open(): void {
             root.open();
         }
@@ -563,9 +651,7 @@ Scope {
         contentItem.clip: true
         // Keep the Wayland buffer geometry fixed. Resize only QML content so
         // right-edge anchoring never races compositor configure/commit cycles.
-        readonly property real extent: root.edge === "top"
-            ? (root.useDragSize ? Math.max(1, root.dragExtent) : Math.round((root.screen ? root.screen.height : 800) * saved.heightFraction))
-            : Math.max(root.minimumSideWidth, root.useDragSize ? root.dragExtent : Math.min(root.maxSideWidth, Math.round((root.screen ? root.screen.width : 1280) * saved.widthFraction)))
+        readonly property real extent: root.edge === "top" ? (root.useDragSize ? Math.max(1, root.dragExtent) : Math.round((root.screen ? root.screen.height : 800) * saved.heightFraction)) : Math.max(root.minimumSideWidth, root.useDragSize ? root.dragExtent : Math.min(root.maxSideWidth, Math.round((root.screen ? root.screen.width : 1280) * saved.widthFraction)))
         implicitWidth: root.screen ? root.screen.width : 1280
         implicitHeight: (root.screen ? root.screen.height : 800) - (root.edge === "top" ? Theme.barHeight : 0)
         exclusiveZone: visible && !root.fullscreenApp ? Math.round(extent * reveal) : 0
@@ -580,10 +666,7 @@ Scope {
         BlurRegion {
             window: panel
             surfaceNamespace: "bingux-terminal-sidebar"
-            region: root.edge === "top"
-                ? Qt.rect(0, 0, panel.width, panel.extent)
-                : Qt.rect(root.edge === "right" ? panel.width - panel.extent : 0,
-                    0, panel.extent, panel.height)
+            region: root.edge === "top" ? Qt.rect(0, 0, panel.width, panel.extent) : Qt.rect(root.edge === "right" ? panel.width - panel.extent : 0, 0, panel.extent, panel.height)
         }
         WlrLayershell.keyboardFocus: root.inputSuspended || DesktopEditing.active ? WlrKeyboardFocus.None : root.focusRequested ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
         anchors {
@@ -598,9 +681,18 @@ Scope {
             id: panelSurface
             readonly property real geometryRevision: panel.reveal
             NativeEditSurface {
-                anchors.fill: parent; anchors.topMargin: sidebarHeader.height; geometryItem: panelSurface
-                window: panel; zoneName: "sidebar"; vertical: true
-                entries: (root.activePanel ? [{id: root.contentType, item: root.activePanel}] : []).concat(root.externalEntries)
+                anchors.fill: parent
+                anchors.topMargin: sidebarHeader.height
+                geometryItem: panelSurface
+                window: panel
+                zoneName: "sidebar"
+                vertical: true
+                entries: (root.activePanel ? [
+                        {
+                            id: root.contentType,
+                            item: root.activePanel
+                        }
+                    ] : []).concat(root.externalEntries)
             }
             width: root.edge === "top" ? panel.width : panel.extent
             height: root.edge === "top" ? panel.extent : panel.height
@@ -651,7 +743,12 @@ Scope {
                         ActionButton {
                             id: contentPicker
                             objectName: "sidebarContentPicker"
-                            WidgetEditHandle { control: contentPicker; widgetId: root.contentType; previewSource: false; onRequested: (id, item) => root.widgetEditRequested(id, item, root.widgetWindow) }
+                            WidgetEditHandle {
+                                control: contentPicker
+                                widgetId: root.contentType
+                                previewSource: false
+                                onRequested: (id, item) => root.widgetEditRequested(id, item, root.widgetWindow)
+                            }
                             text: root.currentContent.label
                             presentation: DesktopLayout.presentation(DesktopEditing.desktop, root.contentType, "sidebar", root.currentContent.label, root.currentContent.icon, true, true)
                             alignLeft: true
@@ -672,10 +769,10 @@ Scope {
                             Accessible.name: "Sidebar content: " + root.currentContent.label
                             onClicked: contentMenu.visible = !contentMenu.visible
                         }
-                        Item { Layout.fillWidth: true }
+                        Item {
+                            Layout.fillWidth: true
+                        }
                     }
-
-
                 }
                 Flickable {
                     id: widgetViewport
@@ -748,7 +845,11 @@ Scope {
                                     Layout.minimumHeight: 1
                                     active: root.terminalCreated
                                     source: "SidebarTerminal.qml"
-                                    onLoaded: { DesktopEditing.registerSource("terminal", item); if (root.opened && visible) item.focusTerminal(); }
+                                    onLoaded: {
+                                        DesktopEditing.registerSource("terminal", item);
+                                        if (root.opened && visible)
+                                            item.focusTerminal();
+                                    }
                                     onActiveFocusChanged: if (activeFocus && visible && root.terminalReady)
                                         item.focusTerminal()
                                 }
@@ -785,9 +886,21 @@ Scope {
                                 visible: monitorWidget.contentVisible
                                 metrics: root.systemMetrics
                             }
-                            RetainedPanel { id: calendarPanel; panelId: "calendar"; source: "SidebarCalendar.qml" }
-                            RetainedPanel { id: mediaPanel; panelId: "media"; source: "SidebarMedia.qml" }
-                            RetainedPanel { id: tasksPanel; panelId: "tasks"; source: "SidebarTasks.qml" }
+                            RetainedPanel {
+                                id: calendarPanel
+                                panelId: "calendar"
+                                source: "SidebarCalendar.qml"
+                            }
+                            RetainedPanel {
+                                id: mediaPanel
+                                panelId: "media"
+                                source: "SidebarMedia.qml"
+                            }
+                            RetainedPanel {
+                                id: tasksPanel
+                                panelId: "tasks"
+                                source: "SidebarTasks.qml"
+                            }
                         }
                     }
                 }
@@ -829,8 +942,8 @@ Scope {
     Variants {
         model: [false, true]
         PanelWindow {
-            required property var modelData
             id: cornerWindow
+            required property var modelData
             readonly property bool rightCorner: modelData
             screen: root.screen
             visible: panel.visible && root.desktopCornerSize > 0 && (root.edge === "top" || root.edge === (rightCorner ? "right" : "left"))
@@ -842,7 +955,11 @@ Scope {
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.namespace: "bingux-sidebar-corner"
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-            anchors { top: true; left: !rightCorner; right: rightCorner }
+            anchors {
+                top: true
+                left: !rightCorner
+                right: rightCorner
+            }
             margins.top: Theme.barHeight + root.topInset - 1
             margins.left: Math.max(0, root.leftInset - 1)
             margins.right: Math.max(0, root.rightInset - 1)
@@ -867,9 +984,7 @@ Scope {
         preferredX: anchorPoint.x
         preferredY: anchorPoint.y + Theme.spaceSmall
         onVisibleChanged: if (visible) {
-            anchorPoint = root.floating
-                ? contentPicker.mapToItem(detachedWindow.contentItem, 0, contentPicker.height)
-                : contentPicker.mapToGlobal(0, contentPicker.height);
+            anchorPoint = root.floating ? contentPicker.mapToItem(detachedWindow.contentItem, 0, contentPicker.height) : contentPicker.mapToGlobal(0, contentPicker.height);
             Qt.callLater(contentNavigation.focusMenu);
         }
         MenuNavigator {
@@ -879,8 +994,10 @@ Scope {
             onEscapeRequested: contentMenu.visible = false
             onActivateRequested: entry => entry.triggered()
             onCurrentEntryChanged: {
-                if (!keyboardNavigation || !currentEntry) return;
-                if (currentEntry.y < contentMenuScroll.contentY) contentMenuScroll.contentY = currentEntry.y;
+                if (!keyboardNavigation || !currentEntry)
+                    return;
+                if (currentEntry.y < contentMenuScroll.contentY)
+                    contentMenuScroll.contentY = currentEntry.y;
                 else if (currentEntry.y + currentEntry.height > contentMenuScroll.contentY + contentMenuScroll.height)
                     contentMenuScroll.contentY = currentEntry.y + currentEntry.height - contentMenuScroll.height;
             }
@@ -904,9 +1021,14 @@ Scope {
                         id: sidebarWidget
                         required property var modelData
                         objectName: "sidebar-select-" + modelData.id
-                        WidgetEditHandle { control: sidebarWidget; widgetId: sidebarWidget.modelData.id; previewSource: false; onRequested: (id, item) => root.widgetEditRequested(id, item, contentMenu) }
+                        WidgetEditHandle {
+                            control: sidebarWidget
+                            widgetId: sidebarWidget.modelData.id
+                            previewSource: false
+                            onRequested: (id, item) => root.widgetEditRequested(id, item, contentMenu)
+                        }
                         readonly property bool menuEntry: true
-                        signal triggered()
+                        signal triggered
                         text: modelData.label
                         presentation: DesktopLayout.presentation(DesktopEditing.desktop, modelData.id, "sidebar", modelData.label, modelData.icon, true, true)
                         alignLeft: true
@@ -914,7 +1036,8 @@ Scope {
                         iconName: modelData.icon
                         flat: root.contentType !== modelData.id
                         hoverEnabled: true
-                        onHoveredChanged: if (hovered) contentNavigation.pointerActivate()
+                        onHoveredChanged: if (hovered)
+                            contentNavigation.pointerActivate()
                         Layout.fillWidth: true
                         implicitHeight: 32
                         Keys.forwardTo: [contentNavigation]
@@ -925,10 +1048,16 @@ Scope {
                         }
                     }
                 }
-                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.barDivider; Layout.topMargin: 4; Layout.bottomMargin: 4 }
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 1
+                    color: Theme.barDivider
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 4
+                }
                 ActionButton {
                     readonly property bool menuEntry: true
-                    signal triggered()
+                    signal triggered
                     visible: !DesktopEditing.active
                     Layout.fillWidth: true
                     implicitHeight: 32
@@ -941,11 +1070,18 @@ Scope {
                     onClicked: triggered()
                     onTriggered: root.detached ? root.dockBack() : root.popOut()
                 }
-                Rectangle { visible: !DesktopEditing.active; Layout.fillWidth: true; implicitHeight: 1; color: Theme.barDivider; Layout.topMargin: 4; Layout.bottomMargin: 4 }
+                Rectangle {
+                    visible: !DesktopEditing.active
+                    Layout.fillWidth: true
+                    implicitHeight: 1
+                    color: Theme.barDivider
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 4
+                }
                 ActionButton {
                     id: sidebarCustomise
                     readonly property bool menuEntry: true
-                    signal triggered()
+                    signal triggered
                     text: "Customise sidebar…"
                     iconName: "preferences-system-symbolic"
                     Layout.fillWidth: true
@@ -955,7 +1091,10 @@ Scope {
                     cornerRadius: contentMenu.contentRadius
                     Keys.forwardTo: [contentNavigation]
                     onClicked: triggered()
-                    onTriggered: { contentMenu.visible = false; root.customiseRequested(); }
+                    onTriggered: {
+                        contentMenu.visible = false;
+                        root.customiseRequested();
+                    }
                 }
             }
         }
@@ -965,15 +1104,15 @@ Scope {
         id: revealDelay
         interval: 300
         onTriggered: if (root.handleHovered && !root.inputSuspended && !root.detached)
-            root.handleVisible = true;
+            root.handleVisible = true
     }
 
     Timer {
         id: dismiss
         interval: 2000
         onTriggered: if (!root.gestureActive && !root.handleHovered) {
-            root.handleVisible = false
-            root.followingPointer = false
+            root.handleVisible = false;
+            root.followingPointer = false;
         }
     }
 

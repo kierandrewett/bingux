@@ -30,7 +30,8 @@ Item {
         stdout: StdioCollector {
             onStreamFinished: {
                 root.desktopId = text.trim();
-                if (root.desktopId) retry.restart();
+                if (root.desktopId)
+                    retry.restart();
             }
         }
     }

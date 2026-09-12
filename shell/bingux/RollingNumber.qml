@@ -19,18 +19,25 @@ Item {
     property bool motionEnabled: true
     onMotionEnabledChanged: if (!motionEnabled) {
         roll.stop();
-        displayedText = text; incomingText = text;
-        displayedValue = value; incomingValue = value; progress = 0;
+        displayedText = text;
+        incomingText = text;
+        displayedValue = value;
+        incomingValue = value;
+        progress = 0;
     }
     readonly property bool animating: roll.running
     implicitWidth: prefixMeasure.advanceWidth + glyphRow.implicitWidth
     implicitHeight: Math.ceil(pixelSize * 1.3)
     clip: true
     function advance() {
-        if (!ready || roll.running || displayedText === text) return;
+        if (!ready || roll.running || displayedText === text)
+            return;
         if (Theme.reducedMotion || !motionEnabled) {
-            displayedText = text; incomingText = text;
-            displayedValue = value; incomingValue = value; progress = 0;
+            displayedText = text;
+            incomingText = text;
+            displayedValue = value;
+            incomingValue = value;
+            progress = 0;
             return;
         }
         incomingText = text;
@@ -40,8 +47,18 @@ Item {
         roll.start();
     }
     onTextChanged: Qt.callLater(advance)
-    Component.onCompleted: { displayedText = text; incomingText = text; displayedValue = value; incomingValue = value; ready = true; }
-    TextMetrics { id: prefixMeasure; text: root.prefix; font: prefixText.font }
+    Component.onCompleted: {
+        displayedText = text;
+        incomingText = text;
+        displayedValue = value;
+        incomingValue = value;
+        ready = true;
+    }
+    TextMetrics {
+        id: prefixMeasure
+        text: root.prefix
+        font: prefixText.font
+    }
     Text {
         id: prefixText
         text: root.prefix
@@ -50,7 +67,9 @@ Item {
         font.family: Theme.fontFamily
         font.pixelSize: root.pixelSize
         font.weight: root.fontWeight
-        font.features: ({"tnum": 1})
+        font.features: ({
+                "tnum": 1
+            })
     }
     Row {
         id: glyphRow
@@ -69,8 +88,16 @@ Item {
                 readonly property bool rolling: changed && digit
                 width: Math.max(oldGlyph.advanceWidth, newGlyph.advanceWidth)
                 height: root.height
-                TextMetrics { id: oldGlyph; text: glyph.oldChar; font: prefixText.font }
-                TextMetrics { id: newGlyph; text: glyph.newChar; font: prefixText.font }
+                TextMetrics {
+                    id: oldGlyph
+                    text: glyph.oldChar
+                    font: prefixText.font
+                }
+                TextMetrics {
+                    id: newGlyph
+                    text: glyph.newChar
+                    font: prefixText.font
+                }
                 Text {
                     objectName: "oldRollingDigit"
                     text: glyph.oldChar
@@ -93,7 +120,10 @@ Item {
     }
     NumberAnimation {
         id: roll
-        target: root; property: "progress"; from: 0; to: 1
+        target: root
+        property: "progress"
+        from: 0
+        to: 1
         duration: root.duration
         easing.type: Easing.OutCubic
         onFinished: {

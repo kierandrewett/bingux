@@ -10,18 +10,22 @@ Item {
     readonly property var back: firstFront ? second : first
     readonly property int status: front.status
     onSourceChanged: load()
-    onActiveChanged: if (active) load()
+    onActiveChanged: if (active)
+        load()
     Component.onCompleted: load()
 
     function load() {
-        if (fade.running || front.source.toString() === source) return;
+        if (fade.running || front.source.toString() === source)
+            return;
         AlbumArtCache.retain(source);
         back.source = source;
         ready(back);
     }
     function ready(image) {
-        if (image !== back || image.source.toString() !== source || fade.running) return;
-        if (image.status !== Image.Ready && image.status !== Image.Error && source) return;
+        if (image !== back || image.source.toString() !== source || fade.running)
+            return;
+        if (image.status !== Image.Ready && image.status !== Image.Error && source)
+            return;
         firstFront = !firstFront;
         if (active) {
             fade.restart();
@@ -40,8 +44,12 @@ Item {
         opacity: 0
         onStatusChanged: root.ready(this)
     }
-    Cover { id: first }
-    Cover { id: second }
+    Cover {
+        id: first
+    }
+    Cover {
+        id: second
+    }
     SymbolicIcon {
         anchors.centerIn: parent
         visible: root.status !== Image.Ready && !fade.running
@@ -49,8 +57,18 @@ Item {
     }
     ParallelAnimation {
         id: fade
-        NumberAnimation { target: first; property: "opacity"; to: root.firstFront ? 1 : 0; duration: Theme.reducedMotion ? 0 : Theme.mediaArtMotion }
-        NumberAnimation { target: second; property: "opacity"; to: root.firstFront ? 0 : 1; duration: Theme.reducedMotion ? 0 : Theme.mediaArtMotion }
+        NumberAnimation {
+            target: first
+            property: "opacity"
+            to: root.firstFront ? 1 : 0
+            duration: Theme.reducedMotion ? 0 : Theme.mediaArtMotion
+        }
+        NumberAnimation {
+            target: second
+            property: "opacity"
+            to: root.firstFront ? 0 : 1
+            duration: Theme.reducedMotion ? 0 : Theme.mediaArtMotion
+        }
         onFinished: root.load()
     }
 }

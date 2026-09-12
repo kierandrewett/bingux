@@ -9,16 +9,28 @@ SearchOverlay {
     WlrLayershell.namespace: "bingux-search-app-menu-test"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     mask: Region {}
-    SearchSocket { id: protocolCheck }
+    SearchSocket {
+        id: protocolCheck
+    }
     dockView: testDock
-    Dock { id: testDock; visible: false; settings: ({pinnedApps: []}) }
+    Dock {
+        id: testDock
+        visible: false
+        settings: ({
+                pinnedApps: []
+            })
+    }
     property int activationCount: 0
-    function activateResult(result, position) { activationCount++; }
+    function activateResult(result, position) {
+        activationCount++;
+    }
     function find(item, name) {
-        if (item.objectName === name) return item;
+        if (item.objectName === name)
+            return item;
         for (const child of item.children || []) {
             const found = find(child, name);
-            if (found) return found;
+            if (found)
+                return found;
         }
         return null;
     }
@@ -32,9 +44,21 @@ SearchOverlay {
         }
         function test_menu() {
             wait(300);
-            const result = {resultId: 'r300', desktopId: 'bingux-menu-test.desktop', providerId: 'applications', kind: 'application', title: 'Menu test app', subtitle: '', icon: 'application-x-executable', score: 1};
+            const result = {
+                resultId: 'r300',
+                desktopId: 'bingux-menu-test.desktop',
+                providerId: 'applications',
+                kind: 'application',
+                title: 'Menu test app',
+                subtitle: '',
+                icon: 'application-x-executable',
+                score: 1
+            };
             verify(protocolCheck.isValidResult(result), 'Accept daemon app identity');
-            preview.displayedResults = [result, Object.assign({}, result, {resultId: "r301", title: "Another app"})];
+            preview.displayedResults = [result, Object.assign({}, result, {
+                    resultId: "r301",
+                    title: "Another app"
+                })];
             preview.selectedIndex = 0;
             wait(300);
             const list = preview.find(preview.contentItem, 'searchResultsList');
@@ -71,7 +95,9 @@ SearchOverlay {
             if (Quickshell.env('BINGUX_MENU_SCREENSHOT'))
                 grabImage(pin.parent.parent.parent).save(Quickshell.env('BINGUX_MENU_SCREENSHOT') + (unpin ? '-unpin.png' : '-pin.png'));
             mouseClick(pin, pin.width / 2, pin.height / 2);
-            tryVerify(() => testDock.isPinned({id: result.desktopId}) === !unpin);
+            tryVerify(() => testDock.isPinned({
+                    id: result.desktopId
+                }) === !unpin);
             equal(preview.visible, true, 'Pin action keeps search open');
             equal(preview.activationCount, 0, 'Pin action must not launch the app');
             wait(300);
@@ -92,7 +118,10 @@ SearchOverlay {
             preview.displayedResults = [];
             wait(250);
             equal(pin.visible, false, 'Changing results dismisses stale menu');
-            preview.openAppMenu({providerId: 'files', kind: 'file'}, point);
+            preview.openAppMenu({
+                providerId: 'files',
+                kind: 'file'
+            }, point);
             equal(pin.visible, false, 'Non-app results have no app menu');
             preview.displayedResults = [result];
             preview.selectedIndex = 0;

@@ -10,20 +10,27 @@ Item {
     implicitHeight: context.theme.barHeight
     Component.onCompleted: {
         button = context.createButton(root, {
-            label: "Counter", iconName: "list-add-symbolic",
-            width: Qt.binding(() => root.width), height: Qt.binding(() => root.height)
+            label: "Counter",
+            iconName: "list-add-symbolic",
+            width: Qt.binding(() => root.width),
+            height: Qt.binding(() => root.height)
         });
         button.clicked.connect(() => {
             count = context.invokeAction("org.bingux.example/increment");
-            if (!popup) popup = context.createPopup(details, {popupWidth: 240});
-            if (popup) popup.visible = !popup.visible;
+            if (!popup)
+                popup = context.createPopup(details, {
+                    popupWidth: 240
+                });
+            if (popup)
+                popup.visible = !popup.visible;
         });
     }
     Component {
         id: details
         Text {
             required property var context
-            width: 216; height: 60
+            width: 216
+            height: 60
             text: "Clicked " + root.count + " times"
             color: context.theme.text
             font.family: context.theme.fontFamily

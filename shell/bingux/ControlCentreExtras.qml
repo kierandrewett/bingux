@@ -8,21 +8,54 @@ Item {
     property string page: "vpn"
     property bool tailscaleOpen: false
     onPageChanged: tailscaleOpen = false
-    onVisibleChanged: if (!visible) tailscaleOpen = false
-    function goBack() { if (tailscaleOpen) tailscaleOpen = false; else backRequested(); }
+    onVisibleChanged: if (!visible)
+        tailscaleOpen = false
+    function goBack() {
+        if (tailscaleOpen)
+            tailscaleOpen = false;
+        else
+            backRequested();
+    }
     implicitHeight: layout.implicitHeight
     readonly property bool keyboardNavigation: back.visualFocus
-    function focusBack(reason) { back.forceActiveFocus(reason); }
-    signal backRequested()
+    function focusBack(reason) {
+        back.forceActiveFocus(reason);
+    }
+    signal backRequested
     signal settingsRequested(string panel)
     Keys.onEscapePressed: goBack()
     Keys.onLeftPressed: goBack()
     readonly property var choices: [
-        {id: "vpn", title: "VPN", icon: "network-vpn-symbolic", available: true},
-        {id: "dnd", title: "Do Not Disturb", icon: "notifications-disabled-symbolic", available: !!services.state.dndAvailable},
-        {id: "nightLight", title: "Night Light", icon: "night-light-symbolic", available: !!services.state.nightLightAvailable},
-        {id: "power", title: "Power mode", icon: "power-profile-balanced-symbolic", available: !!services.state.power && services.state.power.available},
-        {id: "awake", title: "Keep Awake", icon: "display-brightness-symbolic", available: !!services.state.awakeAvailable}
+        {
+            id: "vpn",
+            title: "VPN",
+            icon: "network-vpn-symbolic",
+            available: true
+        },
+        {
+            id: "dnd",
+            title: "Do Not Disturb",
+            icon: "notifications-disabled-symbolic",
+            available: !!services.state.dndAvailable
+        },
+        {
+            id: "nightLight",
+            title: "Night Light",
+            icon: "night-light-symbolic",
+            available: !!services.state.nightLightAvailable
+        },
+        {
+            id: "power",
+            title: "Power mode",
+            icon: "power-profile-balanced-symbolic",
+            available: !!services.state.power && services.state.power.available
+        },
+        {
+            id: "awake",
+            title: "Keep Awake",
+            icon: "display-brightness-symbolic",
+            available: !!services.state.awakeAvailable
+        }
     ]
     ColumnLayout {
         id: layout
@@ -30,8 +63,21 @@ Item {
         spacing: 12
         RowLayout {
             Layout.fillWidth: true
-            IconButton { id: back; objectName: "controlExtrasBack"; iconName: "go-previous-symbolic"; label: root.tailscaleOpen ? "Back to VPN" : "Back to Control Centre"; onClicked: root.goBack() }
-            Text { Layout.fillWidth: true; text: root.tailscaleOpen ? "Tailscale" : root.page === "vpn" ? "VPN" : root.page === "power" ? "Power mode" : root.page === "session" ? "Power options" : "Customise controls"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontHeading; font.weight: Font.Medium }
+            IconButton {
+                id: back
+                objectName: "controlExtrasBack"
+                iconName: "go-previous-symbolic"
+                label: root.tailscaleOpen ? "Back to VPN" : "Back to Control Centre"
+                onClicked: root.goBack()
+            }
+            Text {
+                Layout.fillWidth: true
+                text: root.tailscaleOpen ? "Tailscale" : root.page === "vpn" ? "VPN" : root.page === "power" ? "Power mode" : root.page === "session" ? "Power options" : "Customise controls"
+                color: Theme.text
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontHeading
+                font.weight: Font.Medium
+            }
         }
         Text {
             visible: root.page === "customise"
@@ -63,7 +109,10 @@ Item {
             ColumnLayout {
                 id: rows
                 width: list.width
-                SessionPower { Layout.fillWidth: true; visible: root.page === "session" }
+                SessionPower {
+                    Layout.fillWidth: true
+                    visible: root.page === "session"
+                }
                 spacing: 4
                 Repeater {
                     model: root.page === "vpn" ? root.services.vpns : []
@@ -79,7 +128,11 @@ Item {
                         navigation: modelData.id === "tailscale"
                         onNavigationRequested: root.tailscaleOpen = true
                         toggleEnabled: modelData.canToggle && root.services.ready && !root.services.busy
-                        onToggleRequested: root.services.action({kind: "vpn", id: modelData.id, enabled: !modelData.connected})
+                        onToggleRequested: root.services.action({
+                            kind: "vpn",
+                            id: modelData.id,
+                            enabled: !modelData.connected
+                        })
                     }
                 }
                 Text {
@@ -100,7 +153,10 @@ Item {
                         iconName: "power-profile-" + modelData + "-symbolic"
                         selected: modelData === root.services.state.power.profile
                         enabled: !root.services.busy
-                        onClicked: root.services.action({kind: "power", profile: modelData})
+                        onClicked: root.services.action({
+                            kind: "power",
+                            profile: modelData
+                        })
                     }
                 }
                 Repeater {
@@ -126,9 +182,20 @@ Item {
             Layout.preferredHeight: item ? item.implicitHeight : 560
             visible: root.tailscaleOpen
             active: root.tailscaleOpen
-            sourceComponent: Component { TailscalePage { services: root.services } }
+            sourceComponent: Component {
+                TailscalePage {
+                    services: root.services
+                }
+            }
         }
-        Text { Layout.fillWidth: true; visible: root.services.error !== ""; text: root.services.error; wrapMode: Text.Wrap; color: Theme.muted; font.pixelSize: Theme.fontSmall }
+        Text {
+            Layout.fillWidth: true
+            visible: root.services.error !== ""
+            text: root.services.error
+            wrapMode: Text.Wrap
+            color: Theme.muted
+            font.pixelSize: Theme.fontSmall
+        }
         Rectangle {
             visible: !root.tailscaleOpen && (root.page === "vpn" || root.page === "power")
             Layout.fillWidth: true

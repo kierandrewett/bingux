@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check staged installation paths without installing into the host."""
+
 from pathlib import Path
 import json
 import os
@@ -16,21 +17,39 @@ class InstallTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as name:
             base = Path(name)
             build, stage = base / "build", base / "stage"
-            for filename in ("text/libbinguxtext.so", "settings/libbinguxsettings.so", "effects/libbinguxeffects.so",
-                             "bingux-audio-meter", "cargo/release/bingux-searchd", "cargo/release/bingux-statusd"):
+            for filename in (
+                "text/libbinguxtext.so",
+                "settings/libbinguxsettings.so",
+                "effects/libbinguxeffects.so",
+                "bingux-audio-meter",
+                "cargo/release/bingux-searchd",
+                "cargo/release/bingux-statusd",
+            ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("test fixture\n")
-            subprocess.run(["python3", str(ROOT / "scripts/install-shell.py"), "--prefix", "/usr",
-                            "--destdir", str(stage), "--build-dir", str(build)], check=True)
+            subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "scripts/install-shell.py"),
+                    "--prefix",
+                    "/usr",
+                    "--destdir",
+                    str(stage),
+                    "--build-dir",
+                    str(build),
+                ],
+                check=True,
+            )
             for name in ("bingux", "binguxctl", "bingux-settings"):
                 launcher = stage / "usr/bin" / name
                 self.assertTrue(launcher.stat().st_mode & 0o111)
                 subprocess.run(["sh", "-n", str(launcher)], check=True)
                 self.assertNotIn(str(stage), launcher.read_text())
             config = json.loads((stage / "usr/share/bingux/search.json").read_text())
-            self.assertEqual(config["commands"]["applicationLauncher"][1],
-                             "/usr/share/bingux/shell/launch-application.py")
+            self.assertEqual(
+                config["commands"]["applicationLauncher"][1], "/usr/share/bingux/shell/launch-application.py"
+            )
             self.assertTrue((stage / "usr/share/bingux/shell/ProfileSettings.qml").is_file())
             self.assertTrue((stage / "usr/share/gnoblin/conf.d/bingux.lua").is_file())
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Text/qmldir").is_file())
@@ -54,8 +73,10 @@ class InstallTest(unittest.TestCase):
     def test_missing_build_fails_before_install(self):
         with tempfile.TemporaryDirectory() as name:
             stage = Path(name) / "stage"
-            result = subprocess.run(["python3", str(ROOT / "scripts/install-shell.py"),
-                                     "--destdir", str(stage), "--build-dir", name], capture_output=True)
+            result = subprocess.run(
+                ["python3", str(ROOT / "scripts/install-shell.py"), "--destdir", str(stage), "--build-dir", name],
+                capture_output=True,
+            )
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse(stage.exists())
 
@@ -64,14 +85,32 @@ class InstallTest(unittest.TestCase):
             base = Path(name)
             build, prefix = base / "build", base / "install"
             home, config = base / "home", base / "config"
-            for filename in ("text/libbinguxtext.so", "settings/libbinguxsettings.so", "effects/libbinguxeffects.so",
-                             "bingux-audio-meter", "cargo/release/bingux-searchd", "cargo/release/bingux-statusd"):
+            for filename in (
+                "text/libbinguxtext.so",
+                "settings/libbinguxsettings.so",
+                "effects/libbinguxeffects.so",
+                "bingux-audio-meter",
+                "cargo/release/bingux-searchd",
+                "cargo/release/bingux-statusd",
+            ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("test fixture\n")
             environment = {**os.environ, "HOME": str(home), "XDG_CONFIG_HOME": str(config)}
-            subprocess.run(["python3", str(ROOT / "scripts/install-shell.py"), "--user", "--no-systemd",
-                            "--prefix", str(prefix), "--build-dir", str(build)], env=environment, check=True)
+            subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "scripts/install-shell.py"),
+                    "--user",
+                    "--no-systemd",
+                    "--prefix",
+                    str(prefix),
+                    "--build-dir",
+                    str(build),
+                ],
+                env=environment,
+                check=True,
+            )
             self.assertTrue((prefix / ".bingux-install.json").is_file())
             self.assertTrue((prefix / "share/bingux/shell/ProfileSettings.qml").is_file())
             self.assertTrue((prefix / "share/gnoblin/conf.d/bingux.lua").is_file())
@@ -83,8 +122,19 @@ class InstallTest(unittest.TestCase):
             self.assertTrue(unit.is_symlink())
             self.assertIn(f"ExecStart={prefix}/bin/bingux --no-color", unit.read_text())
 
-            subprocess.run(["python3", str(ROOT / "scripts/install-shell.py"), "--user", "--uninstall",
-                            "--no-systemd", "--prefix", str(prefix)], env=environment, check=True)
+            subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "scripts/install-shell.py"),
+                    "--user",
+                    "--uninstall",
+                    "--no-systemd",
+                    "--prefix",
+                    str(prefix),
+                ],
+                env=environment,
+                check=True,
+            )
             self.assertFalse(prefix.exists())
             self.assertFalse(launcher.exists())
             self.assertFalse((home / ".local/bin/bingux-uninstall").exists())
@@ -98,9 +148,21 @@ class InstallTest(unittest.TestCase):
             prefix.mkdir(parents=True)
             marker = prefix / "keep-me"
             marker.write_text("unmanaged\n")
-            result = subprocess.run(["python3", str(ROOT / "scripts/install-shell.py"), "--user",
-                                     "--no-systemd", "--prefix", str(prefix), "--build-dir", str(build)],
-                                    env={**os.environ, "HOME": str(base / "home")}, capture_output=True, text=True)
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "scripts/install-shell.py"),
+                    "--user",
+                    "--no-systemd",
+                    "--prefix",
+                    str(prefix),
+                    "--build-dir",
+                    str(build),
+                ],
+                env={**os.environ, "HOME": str(base / "home")},
+                capture_output=True,
+                text=True,
+            )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("unmanaged directory", result.stderr)
             self.assertEqual(marker.read_text(), "unmanaged\n")
@@ -108,10 +170,23 @@ class InstallTest(unittest.TestCase):
     def test_user_install_rejects_external_qml_directory(self):
         with tempfile.TemporaryDirectory() as name:
             base = Path(name)
-            result = subprocess.run(["python3", str(ROOT / "scripts/install-shell.py"), "--user",
-                                     "--no-systemd", "--prefix", str(base / "install"),
-                                     "--qml-dir", str(base / "outside-qml"), "--build-dir", str(base / "build")],
-                                    env={**os.environ, "HOME": str(base / "home")}, capture_output=True, text=True)
+            result = subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "scripts/install-shell.py"),
+                    "--user",
+                    "--no-systemd",
+                    "--prefix",
+                    str(base / "install"),
+                    "--qml-dir",
+                    str(base / "outside-qml"),
+                    "--build-dir",
+                    str(base / "build"),
+                ],
+                env={**os.environ, "HOME": str(base / "home")},
+                capture_output=True,
+                text=True,
+            )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("inside --prefix", result.stderr)
 
@@ -120,21 +195,42 @@ class InstallTest(unittest.TestCase):
             base = Path(name)
             build, prefix = base / "build", base / "install"
             home, config, bin_dir = base / "home", base / "config", base / "bin"
-            for filename in ("text/libbinguxtext.so", "settings/libbinguxsettings.so", "effects/libbinguxeffects.so",
-                             "bingux-audio-meter", "cargo/release/bingux-searchd", "cargo/release/bingux-statusd"):
+            for filename in (
+                "text/libbinguxtext.so",
+                "settings/libbinguxsettings.so",
+                "effects/libbinguxeffects.so",
+                "bingux-audio-meter",
+                "cargo/release/bingux-searchd",
+                "cargo/release/bingux-statusd",
+            ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("test fixture\n")
             bin_dir.mkdir()
             log = base / "systemctl.log"
             fake_systemctl = bin_dir / "systemctl"
-            fake_systemctl.write_text("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$BINGUX_SYSTEMCTL_LOG\"\n")
+            fake_systemctl.write_text('#!/bin/sh\nprintf \'%s\\n\' "$*" >> "$BINGUX_SYSTEMCTL_LOG"\n')
             fake_systemctl.chmod(0o755)
-            environment = {**os.environ, "HOME": str(home), "XDG_CONFIG_HOME": str(config),
-                           "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
-                           "BINGUX_SYSTEMCTL_LOG": str(log)}
-            subprocess.run(["python3", str(ROOT / "scripts/install-shell.py"), "--user",
-                            "--prefix", str(prefix), "--build-dir", str(build)], env=environment, check=True)
+            environment = {
+                **os.environ,
+                "HOME": str(home),
+                "XDG_CONFIG_HOME": str(config),
+                "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
+                "BINGUX_SYSTEMCTL_LOG": str(log),
+            }
+            subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "scripts/install-shell.py"),
+                    "--user",
+                    "--prefix",
+                    str(prefix),
+                    "--build-dir",
+                    str(build),
+                ],
+                env=environment,
+                check=True,
+            )
             self.assertIn("daemon-reload", log.read_text())
             self.assertIn("enable --now bingux.target", log.read_text())
             wants = config / "systemd/user/graphical-session.target.wants"
@@ -151,18 +247,37 @@ class InstallTest(unittest.TestCase):
             base = Path(name)
             build, prefix = base / "build", base / "install"
             home, bin_dir = base / "home", base / "bin"
-            for filename in ("text/libbinguxtext.so", "settings/libbinguxsettings.so", "effects/libbinguxeffects.so",
-                             "bingux-audio-meter", "cargo/release/bingux-searchd", "cargo/release/bingux-statusd"):
+            for filename in (
+                "text/libbinguxtext.so",
+                "settings/libbinguxsettings.so",
+                "effects/libbinguxeffects.so",
+                "bingux-audio-meter",
+                "cargo/release/bingux-searchd",
+                "cargo/release/bingux-statusd",
+            ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("test fixture\n")
             bin_dir.mkdir()
             (bin_dir / "python3").symlink_to(sys.executable)
             environment = {**os.environ, "HOME": str(home), "PATH": str(bin_dir)}
-            subprocess.run(["python3", str(ROOT / "scripts/install-shell.py"), "--user", "--no-systemd",
-                            "--prefix", str(prefix), "--build-dir", str(build)], env=environment, check=True)
+            subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "scripts/install-shell.py"),
+                    "--user",
+                    "--no-systemd",
+                    "--prefix",
+                    str(prefix),
+                    "--build-dir",
+                    str(build),
+                ],
+                env=environment,
+                check=True,
+            )
             subprocess.run([str(home / ".local/bin/bingux-uninstall")], env=environment, check=True)
             self.assertFalse(prefix.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

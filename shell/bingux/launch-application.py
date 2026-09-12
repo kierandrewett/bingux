@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Launch a desktop entry through GIO, including its optional new-window action."""
+
 import argparse
 import json
 import tempfile
@@ -13,7 +14,7 @@ import gi
 
 gi.require_version("Gio", "2.0")
 gi.require_version("GioUnix", "2.0")
-from gi.repository import Gio, GioUnix, GLib
+from gi.repository import Gio, GioUnix, GLib  # noqa: E402 - Select GI versions before importing their modules.
 
 
 FEEDBACK_PATH = None
@@ -28,6 +29,7 @@ class LaunchTimeout(RuntimeError):
 
 def call_with_timeout(callback):
     """Bound a synchronous desktop launch so one broken app cannot wedge launchers."""
+
     def alarm(_signum, _frame):
         raise LaunchTimeout("The desktop entry did not respond while starting. It may be blocked by a full filesystem.")
 
@@ -51,11 +53,20 @@ def report_failure(name, message, notify):
     if notify:
         try:
             bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-            bus.call_sync("org.freedesktop.Notifications", "/org/freedesktop/Notifications",
-                "org.freedesktop.Notifications", "Notify",
-                GLib.Variant("(susssasa{sv}i)", ("Bingux", 0, "dialog-error",
-                    f"Could not open {name}", message[:1000], [], {}, -1)),
-                None, Gio.DBusCallFlags.NONE, 3000, None)
+            bus.call_sync(
+                "org.freedesktop.Notifications",
+                "/org/freedesktop/Notifications",
+                "org.freedesktop.Notifications",
+                "Notify",
+                GLib.Variant(
+                    "(susssasa{sv}i)",
+                    ("Bingux", 0, "dialog-error", f"Could not open {name}", message[:1000], [], {}, -1),
+                ),
+                None,
+                Gio.DBusCallFlags.NONE,
+                3000,
+                None,
+            )
         except GLib.Error as error:
             print(f"Launch error notification failed: {error.message}", file=sys.stderr)
     return 1
@@ -63,9 +74,20 @@ def report_failure(name, message, notify):
 
 def launch_and_watch(entry, context):
     children = []
-    accepted = call_with_timeout(lambda: entry.launch_uris_as_manager_with_fds([], context,
-        GLib.SpawnFlags.SEARCH_PATH | GLib.SpawnFlags.DO_NOT_REAP_CHILD,
-        None, None, lambda _app, pid, _data: children.append(pid), None, -1, -1, -1))
+    accepted = call_with_timeout(
+        lambda: entry.launch_uris_as_manager_with_fds(
+            [],
+            context,
+            GLib.SpawnFlags.SEARCH_PATH | GLib.SpawnFlags.DO_NOT_REAP_CHILD,
+            None,
+            None,
+            lambda _app, pid, _data: children.append(pid),
+            None,
+            -1,
+            -1,
+            -1,
+        )
+    )
     if not accepted:
         raise RuntimeError("Application launch was rejected")
     # Some launchers hand off to an existing instance and exit successfully.
@@ -79,10 +101,14 @@ def launch_and_watch(entry, context):
             children.remove(pid)
             code = os.waitstatus_to_exitcode(status)
             if code:
-                reason = f"The application exited with code {code}." if code > 0 else f"The application stopped with signal {-code}."
+                reason = (
+                    f"The application exited with code {code}."
+                    if code > 0
+                    else f"The application stopped with signal {-code}."
+                )
                 raise RuntimeError(reason + " Diagnostic output is in the user journal (bingux-app-launch).")
         if children:
-            time.sleep(.05)
+            time.sleep(0.05)
 
 
 def launch_local(args):
@@ -104,13 +130,23 @@ def launch_local(args):
             break
     if entry is None:
         directories = [GLib.get_user_data_dir(), *GLib.get_system_data_dirs()]
-        exists = any((Path(directory) / "applications" / candidate).is_file()
-            for directory in directories for candidate in candidates)
-        message = ("The desktop entry exists, but it is invalid or its executable is unavailable."
-            if exists else "The installed desktop entry could not be found.")
+        exists = any(
+            (Path(directory) / "applications" / candidate).is_file()
+            for directory in directories
+            for candidate in candidates
+        )
+        message = (
+            "The desktop entry exists, but it is invalid or its executable is unavailable."
+            if exists
+            else "The installed desktop entry could not be found."
+        )
         return report_failure(identity, message, args.notify_errors)
     if args.report_timeout:
-        return report_failure(entry.get_display_name(), "No application window appeared before the launch timeout. The application may still be starting or running in the background.", True)
+        return report_failure(
+            entry.get_display_name(),
+            "No application window appeared before the launch timeout. The application may still be starting or running in the background.",
+            True,
+        )
     try:
         context = Gio.AppLaunchContext()
         if args.new_window and "new-window" in entry.list_actions():
@@ -137,19 +173,38 @@ def main(argv=None):
     # A development runtime may use a private user namespace. Flatpak must
     # start from the host user manager, not inherit that nested namespace.
     if not args.host_launch and (args.notify_errors or args.dock_feedback):
-        command = ["systemd-run", "--user", "--collect", "--quiet",
-            "--property=ExitType=cgroup", "--property=SyslogIdentifier=bingux-app-launch",
-            "--", sys.executable, os.path.realpath(__file__), "--host-launch", *(argv if argv is not None else sys.argv[1:])]
+        command = [
+            "systemd-run",
+            "--user",
+            "--collect",
+            "--quiet",
+            "--property=ExitType=cgroup",
+            "--property=SyslogIdentifier=bingux-app-launch",
+            "--",
+            sys.executable,
+            os.path.realpath(__file__),
+            "--host-launch",
+            *(argv if argv is not None else sys.argv[1:]),
+        ]
         if args.dock_feedback:
             # A private result file survives the host namespace boundary without
             # tying application stdout or lifetime to the shell's process pipes.
-            with tempfile.TemporaryDirectory(prefix="bingux-launch-", dir=os.environ.get("XDG_RUNTIME_DIR")) as directory:
+            with tempfile.TemporaryDirectory(
+                prefix="bingux-launch-", dir=os.environ.get("XDG_RUNTIME_DIR")
+            ) as directory:
                 feedback = Path(directory) / "result.json"
-                command[command.index("--host-launch") + 1:command.index("--host-launch") + 1] = ["--feedback-file", str(feedback)]
+                command[command.index("--host-launch") + 1 : command.index("--host-launch") + 1] = [
+                    "--feedback-file",
+                    str(feedback),
+                ]
                 try:
                     result = subprocess.run(command, capture_output=True, text=True, timeout=HOST_MANAGER_TIMEOUT)
                 except subprocess.TimeoutExpired:
-                    return report_failure(args.desktop_id, "The host application launcher did not respond. It may be blocked by a full filesystem.", False)
+                    return report_failure(
+                        args.desktop_id,
+                        "The host application launcher did not respond. It may be blocked by a full filesystem.",
+                        False,
+                    )
                 if result.returncode:
                     # If the user manager is still refusing transient units after
                     # space was reclaimed, launch in the current session. This
@@ -162,12 +217,18 @@ def main(argv=None):
                         if outcome["error"]:
                             print("BINGUX_LAUNCH_ERROR " + json.dumps(outcome["error"]), flush=True)
                         return outcome["code"]
-                    time.sleep(.05)
-                return report_failure(args.desktop_id, "The application launcher did not respond. The app may still be starting.", False)
+                    time.sleep(0.05)
+                return report_failure(
+                    args.desktop_id, "The application launcher did not respond. The app may still be starting.", False
+                )
         try:
             result = subprocess.run(command, capture_output=True, text=True, timeout=HOST_MANAGER_TIMEOUT)
         except subprocess.TimeoutExpired:
-            return report_failure(args.desktop_id, "The host application launcher did not respond. It may be blocked by a full filesystem.", args.notify_errors)
+            return report_failure(
+                args.desktop_id,
+                "The host application launcher did not respond. It may be blocked by a full filesystem.",
+                args.notify_errors,
+            )
         if result.returncode:
             return launch_local(args)
         return 0

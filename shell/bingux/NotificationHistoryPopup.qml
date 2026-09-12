@@ -13,9 +13,11 @@ ShellPopup {
     closeEasing: Easing.InCubic
     property real slideOffset: 0
     onAboutToOpen: {
-        if (notificationSurface) notificationSurface.prepareForHistory();
+        if (notificationSurface)
+            notificationSurface.prepareForHistory();
         slide.stop();
-        if (!retained) slideOffset = Theme.reducedMotion ? 0 : width - panelX;
+        if (!retained)
+            slideOffset = Theme.reducedMotion ? 0 : width - panelX;
         slide.to = 0;
         slide.start();
     }
@@ -35,7 +37,8 @@ ShellPopup {
     Connections {
         target: root.notificationSurface
         function onRenderedNotificationCountChanged() {
-            if (root.notificationSurface.renderedNotificationCount === 0 && root.notificationSurface.notificationCount === 0) root.visible = false;
+            if (root.notificationSurface.renderedNotificationCount === 0 && root.notificationSurface.notificationCount === 0)
+                root.visible = false;
         }
     }
     popupWidth: Theme.notificationWidth
@@ -44,8 +47,7 @@ ShellPopup {
     property real dockSafeInset: Theme.dockExclusiveHeight
     preferredX: width - popupWidth - Theme.padding
     preferredY: Theme.barHeight + Theme.gap
-    readonly property real listHeight: Math.min(notificationSurface ? notificationSurface.stackHeight : 0,
-        Math.max(0, Math.min(height * 0.8 - 40, height - dockSafeInset - Theme.gap - preferredY - 40)))
+    readonly property real listHeight: Math.min(notificationSurface ? notificationSurface.stackHeight : 0, Math.max(0, Math.min(height * 0.8 - 40, height - dockSafeInset - Theme.gap - preferredY - 40)))
     readonly property real listX: panelX + slideOffset
     readonly property real listY: panelY
     popupHeight: listHeight + 40

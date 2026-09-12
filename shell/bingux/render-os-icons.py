@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Resolve OS icons and render SVGs in memory with librsvg, not QtSvg."""
+
 import base64
 from collections import OrderedDict, deque
 import json
@@ -9,9 +10,10 @@ import sys
 from urllib.parse import parse_qs, unquote, urlparse
 
 import gi
+
 gi.require_version("Gtk", "3.0")
 gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import GdkPixbuf, Gio, GLib, Gtk
+from gi.repository import GdkPixbuf, Gio, GLib, Gtk  # noqa: E402 - Select GI versions before importing their modules.
 
 try:
     gi.require_version("GnomeDesktop", "3.0")
@@ -28,7 +30,7 @@ FILE_ATTRIBUTES = (
 
 
 def file_preview(source, theme):
-    path = Path(unquote(source[len(FILE_PREVIEW_PREFIX):]))
+    path = Path(unquote(source[len(FILE_PREVIEW_PREFIX) :]))
     if not path.is_absolute():
         raise ValueError("file preview requires an absolute path")
     file = Gio.File.new_for_path(str(path))
@@ -50,8 +52,11 @@ def file_preview(source, theme):
 
 class FileThumbnails:
     """Use GNOME's thumbnailers off the UI thread, with two bounded jobs."""
+
     def __init__(self):
-        self.factory = GnomeDesktop.DesktopThumbnailFactory.new(GnomeDesktop.DesktopThumbnailSize.LARGE) if GnomeDesktop else None
+        self.factory = (
+            GnomeDesktop.DesktopThumbnailFactory.new(GnomeDesktop.DesktopThumbnailSize.LARGE) if GnomeDesktop else None
+        )
         self.pending = set()
         self.queue = deque()
         self.active = 0
@@ -129,19 +134,22 @@ def sample_palette(source, theme, cache):
             offset = y * stride + x * channels
             if channels == 4 and pixels[offset + 3] < 128:
                 continue
-            rgb = pixels[offset:offset + 3]
+            rgb = pixels[offset : offset + 3]
             bucket = buckets.setdefault(tuple(value // 32 for value in rgb), [0, 0, 0, 0])
             for channel in range(3):
                 bucket[channel] += rgb[channel]
             bucket[3] += 1
-    palette = ["#%02x%02x%02x" % tuple(round(value / bucket[3]) for value in bucket[:3])
-               for bucket in sorted(buckets.values(), key=lambda item: item[3], reverse=True)[:8]]
+    palette = [
+        "#%02x%02x%02x" % tuple(round(value / bucket[3]) for value in bucket[:3])
+        for bucket in sorted(buckets.values(), key=lambda item: item[3], reverse=True)[:8]
+    ]
     cache.put(key, json.dumps(palette))
     return palette
 
 
 class RenderCache:
     """Bounded in-process LRU; no PNG files or disk cache."""
+
     def __init__(self, limit=8 * 1024 * 1024):
         self.limit = limit
         self.bytes = 0
@@ -175,7 +183,7 @@ def icon_path(source, theme):
     if source.startswith(FILE_PREVIEW_PREFIX):
         return file_preview(source, theme)[0]
     if source.startswith("image://icon/"):
-        name = unquote(source[len("image://icon/"):].split("?", 1)[0])
+        name = unquote(source[len("image://icon/") :].split("?", 1)[0])
         if os.path.isabs(name):
             return Path(name)
         # StatusNotifierItem icons may live in an app's private IconThemePath.
@@ -264,10 +272,20 @@ def main():
                 emit({"source": source, "resolved": resolve(path.as_uri(), theme, cache)})
                 thumbnails.request(source, file, info)
             else:
-                emit({"source": source, "resolved": resolve(source, theme, cache), "palette": sample_palette(source, theme, cache)})
+                emit(
+                    {
+                        "source": source,
+                        "resolved": resolve(source, theme, cache),
+                        "palette": sample_palette(source, theme, cache),
+                    }
+                )
         except (ValueError, KeyError, TypeError, OSError, GLib.Error) as error:
             # Keep missing/broken optional icons from breaking the result list.
-            fallback = resolve("image://icon/text-x-generic", theme, cache) if source.startswith(FILE_PREVIEW_PREFIX) else source
+            fallback = (
+                resolve("image://icon/text-x-generic", theme, cache)
+                if source.startswith(FILE_PREVIEW_PREFIX)
+                else source
+            )
             emit({"source": source, "resolved": fallback, "error": str(error)})
 
     GLib.io_add_watch(sys.stdin, GLib.IO_IN | GLib.IO_HUP, read_request)

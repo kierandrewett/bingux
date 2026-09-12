@@ -8,7 +8,10 @@ Item {
     property real launchCompletion: launching ? 0 : 1
     Behavior on launchCompletion {
         enabled: !root.launching
-        NumberAnimation { duration: Theme.reducedMotion ? 0 : 260; easing.type: Easing.OutCubic }
+        NumberAnimation {
+            duration: Theme.reducedMotion ? 0 : 260
+            easing.type: Easing.OutCubic
+        }
     }
     readonly property int windowCount: windows.length
     readonly property int visibleCount: Math.min(4, windowCount)
@@ -26,7 +29,12 @@ Item {
     implicitWidth: launching ? 28 : visibleCount > 0 ? visibleCount * 8 + 10 + (activeIndex >= firstVisibleIndex && activeIndex < firstVisibleIndex + visibleCount ? 10 : 0) : 0
     implicitHeight: 8
     visible: width > 0
-    Behavior on implicitWidth { NumberAnimation { duration: Theme.reducedMotion ? 0 : 220; easing.type: Easing.OutCubic } }
+    Behavior on implicitWidth {
+        NumberAnimation {
+            duration: Theme.reducedMotion ? 0 : 220
+            easing.type: Easing.OutCubic
+        }
+    }
     Accessible.role: Accessible.StaticText
     Accessible.name: launching ? "Opening window" : windowCount + " windows" + (activeIndex >= 0 ? ", window " + (activeIndex + 1) + " active" : "")
 
@@ -92,11 +100,20 @@ Item {
         // ListView can shift its origin when windows are inserted or removed.
         contentX: originX + root.firstVisibleIndex * 8 + (root.activeIndex >= 0 && root.activeIndex < root.firstVisibleIndex ? 10 : 0)
         Behavior on contentX {
-            NumberAnimation { duration: Theme.reducedMotion ? 0 : 240; easing.type: Easing.OutQuart }
+            NumberAnimation {
+                duration: Theme.reducedMotion ? 0 : 240
+                easing.type: Easing.OutQuart
+            }
         }
-        model: ScriptModel { values: root.windows }
+        model: ScriptModel {
+            values: root.windows
+        }
         displaced: Transition {
-            NumberAnimation { property: "x"; duration: Theme.reducedMotion ? 0 : 220; easing.type: Easing.OutCubic }
+            NumberAnimation {
+                property: "x"
+                duration: Theme.reducedMotion ? 0 : 220
+                easing.type: Easing.OutCubic
+            }
         }
         delegate: Item {
             id: dot
@@ -110,20 +127,54 @@ Item {
             }
             ParallelAnimation {
                 id: appear
-                NumberAnimation { target: dot; property: "opacity"; to: 1; duration: Theme.reducedMotion ? 0 : 180; easing.type: Easing.OutQuad }
-                NumberAnimation { target: dot; property: "scale"; to: 1; duration: Theme.reducedMotion ? 0 : 240; easing.type: Easing.OutBack; easing.overshoot: 0.6 }
+                NumberAnimation {
+                    target: dot
+                    property: "opacity"
+                    to: 1
+                    duration: Theme.reducedMotion ? 0 : 180
+                    easing.type: Easing.OutQuad
+                }
+                NumberAnimation {
+                    target: dot
+                    property: "scale"
+                    to: 1
+                    duration: Theme.reducedMotion ? 0 : 240
+                    easing.type: Easing.OutBack
+                    easing.overshoot: 0.6
+                }
             }
             SequentialAnimation {
                 id: disappear
                 ParallelAnimation {
-                    NumberAnimation { target: dot; property: "opacity"; to: 0; duration: Theme.reducedMotion ? 0 : 140; easing.type: Easing.InQuad }
-                    NumberAnimation { target: dot; property: "scale"; to: 0.5; duration: Theme.reducedMotion ? 0 : 140; easing.type: Easing.InCubic }
+                    NumberAnimation {
+                        target: dot
+                        property: "opacity"
+                        to: 0
+                        duration: Theme.reducedMotion ? 0 : 140
+                        easing.type: Easing.InQuad
+                    }
+                    NumberAnimation {
+                        target: dot
+                        property: "scale"
+                        to: 0.5
+                        duration: Theme.reducedMotion ? 0 : 140
+                        easing.type: Easing.InCubic
+                    }
                 }
-                PropertyAction { target: dot; property: "ListView.delayRemove"; value: false }
+                PropertyAction {
+                    target: dot
+                    property: "ListView.delayRemove"
+                    value: false
+                }
             }
             required property var modelData
             width: modelData?.activated ? 18 : 8
-            Behavior on width { NumberAnimation { duration: Theme.reducedMotion ? 0 : 220; easing.type: Easing.OutCubic } }
+            Behavior on width {
+                NumberAnimation {
+                    duration: Theme.reducedMotion ? 0 : 220
+                    easing.type: Easing.OutCubic
+                }
+            }
             height: 8
             Rectangle {
                 anchors.centerIn: parent
@@ -131,21 +182,49 @@ Item {
                 height: 6
                 radius: 3
                 color: modelData?.activated ? Theme.accent : Theme.muted
-                Behavior on width { NumberAnimation { duration: Theme.reducedMotion ? 0 : 220; easing.type: Easing.OutCubic } }
-                Behavior on color { ColorAnimation { duration: Theme.reducedMotion ? 0 : 180; easing.type: Easing.InOutSine } }
+                Behavior on width {
+                    NumberAnimation {
+                        duration: Theme.reducedMotion ? 0 : 220
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on color {
+                    ColorAnimation {
+                        duration: Theme.reducedMotion ? 0 : 180
+                        easing.type: Easing.InOutSine
+                    }
+                }
             }
         }
     }
     Rectangle {
-        x: 0; y: 3; width: 2; height: 2; radius: 1
+        x: 0
+        y: 3
+        width: 2
+        height: 2
+        radius: 1
         color: Theme.muted
         opacity: !root.launching && root.moreBefore ? 0.5 : 0
-        Behavior on opacity { NumberAnimation { duration: Theme.reducedMotion ? 0 : 140; easing.type: Easing.InOutSine } }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Theme.reducedMotion ? 0 : 140
+                easing.type: Easing.InOutSine
+            }
+        }
     }
     Rectangle {
-        x: parent.width - width; y: 3; width: 2; height: 2; radius: 1
+        x: parent.width - width
+        y: 3
+        width: 2
+        height: 2
+        radius: 1
         color: Theme.muted
         opacity: !root.launching && root.moreAfter ? 0.5 : 0
-        Behavior on opacity { NumberAnimation { duration: Theme.reducedMotion ? 0 : 140; easing.type: Easing.InOutSine } }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Theme.reducedMotion ? 0 : 140
+                easing.type: Easing.InOutSine
+            }
+        }
     }
 }

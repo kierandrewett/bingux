@@ -4,20 +4,29 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS")
+    }
     QtObject {
         id: sampleEvents
         property bool loading: false
         property bool available: true
         property string error: ""
         property var events: []
-        function forDay(day) { return sampleEvents.events; }
+        function forDay(day) {
+            return sampleEvents.events;
+        }
     }
     FloatingWindow {
         id: window
         implicitWidth: 440
         implicitHeight: 740
-        Item { id: canvas; width: 420; height: 720 }
+        Item {
+            id: canvas
+            width: 420
+            height: 720
+        }
         CalendarPopup {
             id: calendar
             hostItem: canvas
@@ -27,8 +36,12 @@ ShellRoot {
         }
         TestCase {
             when: window.visible
-            function initTestCase() { report.setText("RUNNING"); }
-            function cleanupTestCase() { report.setText("FAILURES " + qtest_results.failCount); }
+            function initTestCase() {
+                report.setText("RUNNING");
+            }
+            function cleanupTestCase() {
+                report.setText("FAILURES " + qtest_results.failCount);
+            }
             function test_short_popup() {
                 try {
                     calendar.visible = true;
@@ -52,19 +65,28 @@ ShellRoot {
                     heading.forceActiveFocus();
                     tryVerify(() => heading.mapToItem(viewport, 0, 0).y >= 0, 1000, "Keyboard focus reveals the heading");
                     const start = calendar.today.getTime() / 1000;
-                    sampleEvents.events = Array.from({length: 10}, (_, index) => ({id: String(index), title: "Event " + index, start, end: start + 3600}));
+                    sampleEvents.events = Array.from({
+                        length: 10
+                    }, (_, index) => ({
+                                id: String(index),
+                                title: "Event " + index,
+                                start,
+                                end: start + 3600
+                            }));
                     const list = findChild(calendar.body, "calendarAgenda");
                     tryCompare(list, "count", 10);
                     list.forceActiveFocus();
-                    tryVerify(() => list.mapToItem(viewport, 0, list.height).y <= viewport.height + 0.01, 1000,
-                        "Keyboard focus reveals the agenda on a very short screen");
+                    tryVerify(() => list.mapToItem(viewport, 0, list.height).y <= viewport.height + 0.01, 1000, "Keyboard focus reveals the agenda on a very short screen");
                     keyClick(Qt.Key_Down);
                     tryVerify(() => list.contentY > 0, 1000, "The compact agenda retains keyboard scrolling");
                     canvas.height = 720;
                     tryCompare(viewport, "interactive", false);
                     tryCompare(viewport, "contentY", 0);
                     tryCompare(agenda, "height", Theme.calendarAgendaHeight);
-                } catch (error) { console.error("CALENDAR_FIT_FAILED", error.message, error.stack); throw error; }
+                } catch (error) {
+                    console.error("CALENDAR_FIT_FAILED", error.message, error.stack);
+                    throw error;
+                }
             }
         }
     }

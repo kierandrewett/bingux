@@ -2,9 +2,17 @@ import QtQuick
 import QtTest
 import Quickshell
 import Quickshell.Io
+
 ShellRoot {
-    Timer { id: finish; interval: 200; onTriggered: Qt.quit() }
-    FileView { id: results; path: Quickshell.env("BINGUX_METRICS_RESULTS") }
+    Timer {
+        id: finish
+        interval: 200
+        onTriggered: Qt.quit()
+    }
+    FileView {
+        id: results
+        path: Quickshell.env("BINGUX_METRICS_RESULTS")
+    }
     FloatingWindow {
         id: window
         implicitWidth: 800
@@ -12,7 +20,13 @@ ShellRoot {
         ProcessTable {
             id: table
             anchors.fill: parent
-            records: [{pid: 42, name: "example", argv: ["/usr/bin/example", "two words", "", "it's literal", "<b>plain</b>", "x".repeat(500)]}]
+            records: [
+                {
+                    pid: 42,
+                    name: "example",
+                    argv: ["/usr/bin/example", "two words", "", "it's literal", "<b>plain</b>", "x".repeat(500)]
+                }
+            ]
             applicationFor: () => null
             formatBytes: bytes => String(bytes)
         }
@@ -31,7 +45,12 @@ ShellRoot {
                 compare(tooltip.timeout, -1);
                 mouseMove(table, 5, 5);
                 tryCompare(tooltip, "visible", false);
-                table.records = [{pid: 42, name: "example"}];
+                table.records = [
+                    {
+                        pid: 42,
+                        name: "example"
+                    }
+                ];
                 table.refresh();
                 verify(tooltip.text.includes("Command line unavailable"));
                 results.setText("PASS: hover displays full argv, quotes arguments, wraps long values and closes on leave\n");

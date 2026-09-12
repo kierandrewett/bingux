@@ -2,24 +2,30 @@ import QtQuick
 import QtTest
 import Quickshell
 import Quickshell.Io
+
 ShellRoot {
-    FileView { id: results; path: Quickshell.env("BINGUX_NOTIFICATION_TEST_RESULTS") }
+    FileView {
+        id: results
+        path: Quickshell.env("BINGUX_NOTIFICATION_TEST_RESULTS")
+    }
     property string checks: ""
     Component {
         id: notificationFactory
         QtObject {
-        property int id: 1
-        property real expireTimeout: 0
-        property string appName: "Sender"
-        property string desktopEntry: "org.bingux.NotificationTest"
-        property string appIcon: ""
-        property string summary: "Download complete"
-        property string body: "Drag right to dismiss this notification."
-        property var actions: []
-        property bool tracked: false
-        signal closed(int reason)
-        function dismiss() {}
-        function expire() {}
+            property int id: 1
+            property real expireTimeout: 0
+            property string appName: "Sender"
+            property string desktopEntry: "org.bingux.NotificationTest"
+            property string appIcon: ""
+            property string summary: "Download complete"
+            property string body: "Drag right to dismiss this notification."
+            property var actions: []
+            property bool tracked: false
+            signal closed(int reason)
+            function dismiss() {
+            }
+            function expire() {
+            }
         }
     }
     PanelWindow {
@@ -28,18 +34,33 @@ ShellRoot {
         anchors.right: true
         implicitWidth: 180
         implicitHeight: 40
-        NotificationTestButton { id: spawnButton; anchors.fill: parent }
+        NotificationTestButton {
+            id: spawnButton
+            anchors.fill: parent
+        }
     }
-    NotificationState { id: state }
+    NotificationState {
+        id: state
+    }
     NotificationSurface {
         id: surface
         state: state
         TestCase {
             name: "NotificationGestures"
             when: true
-            function check(value, message) { checks += "CHECK " + value + " " + (message || "") + "\n"; results.setText(checks); verify(value, message); }
-            function equal(actual, expected, message) { checks += "EQUAL " + actual + " " + expected + " " + (message || "") + "\n"; results.setText(checks); compare(actual, expected, message); }
-            function card() { return findChild(surface.contentItem, "notificationCard"); }
+            function check(value, message) {
+                checks += "CHECK " + value + " " + (message || "") + "\n";
+                results.setText(checks);
+                verify(value, message);
+            }
+            function equal(actual, expected, message) {
+                checks += "EQUAL " + actual + " " + expected + " " + (message || "") + "\n";
+                results.setText(checks);
+                compare(actual, expected, message);
+            }
+            function card() {
+                return findChild(surface.contentItem, "notificationCard");
+            }
             function test_gestures() {
                 // This suite exercises shared grouped-card gestures. Separate
                 // incoming toasts and centre transitions are covered by the
@@ -73,7 +94,10 @@ ShellRoot {
                     wait(300);
                 }
                 const firstCard = card();
-                const overlay = notificationFactory.createObject(surface, {id: 900, summary: "Covering notification"});
+                const overlay = notificationFactory.createObject(surface, {
+                    id: 900,
+                    summary: "Covering notification"
+                });
                 state.accept(overlay);
                 wait(100);
                 equal(firstCard.contentsOpacity, 1, "previous contents remain visible while the new card slides over them");
@@ -91,7 +115,12 @@ ShellRoot {
                 wait(150);
                 equal(closeControl.opacity, 0, "close button is hidden without hover");
                 equal(timeLabel.opacity, 1, "received time is visible without hover");
-                const newer = notificationFactory.createObject(surface, {id: 2, desktopEntry: "", appName: "Other app", summary: "A newer notification"});
+                const newer = notificationFactory.createObject(surface, {
+                    id: 2,
+                    desktopEntry: "",
+                    appName: "Other app",
+                    summary: "A newer notification"
+                });
                 state.accept(newer);
                 wait(60);
                 equal(state.visibleEntries[0].notification, newer, "newest notification is at the top");
@@ -177,7 +206,10 @@ ShellRoot {
                 tryVerify(() => state.visibleEntries.length === 0, 1000);
                 equal(state.visibleEntries.length, 0);
                 tryVerify(() => card() === null, 1000);
-                const timed = notificationFactory.createObject(surface, {id: 3, expireTimeout: 0.8});
+                const timed = notificationFactory.createObject(surface, {
+                    id: 3,
+                    expireTimeout: 0.8
+                });
                 state.accept(timed);
                 tryCompare(card(), "slideOffset", 0, 1000);
                 mouseMove(surface.contentItem, 0, 0);
@@ -206,7 +238,10 @@ ShellRoot {
                 state.dismiss(state.visibleEntries[0].notification);
                 tryVerify(() => card() === null, 1000);
                 for (let index = 0; index < 20; index += 1)
-                    state.accept(notificationFactory.createObject(surface, {id: 100 + index, summary: "Stack item " + index}));
+                    state.accept(notificationFactory.createObject(surface, {
+                        id: 100 + index,
+                        summary: "Stack item " + index
+                    }));
                 wait(500);
                 equal(state.visibleEntries.length, 20, "more than three notifications remain open");
                 const stack = card();
@@ -314,7 +349,8 @@ ShellRoot {
                 equal(background.opacity, 0.55, "background does not fade during dismissal");
                 wait(500);
                 equal(findChild(surface.contentItem, "notificationGroupBackground"), background, "background survives destruction of the old head");
-                while (state.visibleEntries.length > 1) state.dismiss(state.visibleEntries[0].notification);
+                while (state.visibleEntries.length > 1)
+                    state.dismiss(state.visibleEntries[0].notification);
                 wait(600);
                 equal(background.opacity, 0, "background fades away when only one notification remains");
                 const lastCard = card();
@@ -323,12 +359,17 @@ ShellRoot {
                 state.dismiss(state.visibleEntries[0].notification);
                 wait(700);
                 check(findChild(surface.contentItem, "notificationGroupBackground") === null, "background is removed after the group empties");
-                state.accept(notificationFactory.createObject(surface, {id: 901}));
-                state.accept(notificationFactory.createObject(surface, {id: 902}));
+                state.accept(notificationFactory.createObject(surface, {
+                    id: 901
+                }));
+                state.accept(notificationFactory.createObject(surface, {
+                    id: 902
+                }));
                 wait(800);
                 const outgoing = Array.from(card().parent.children).find(item => item.objectName === "notificationCard" && item.notificationId === 902);
                 const promoted = Array.from(outgoing.parent.children).find(item => item.objectName === "notificationCard" && item.notificationId === 901);
-                if (outgoing.groupExpanded) surface.toggleGroup(outgoing.groupKey);
+                if (outgoing.groupExpanded)
+                    surface.toggleGroup(outgoing.groupKey);
                 wait(400);
                 outgoing.dismissAnimated();
                 wait(200);
@@ -348,7 +389,10 @@ ShellRoot {
                 state.dismiss(promoted.notification);
                 wait(500);
                 for (let index = 0; index < 4; index++)
-                    state.accept(notificationFactory.createObject(surface, {id: 950 + index, summary: "Four-card stack " + index}));
+                    state.accept(notificationFactory.createObject(surface, {
+                        id: 950 + index,
+                        summary: "Four-card stack " + index
+                    }));
                 wait(800);
                 const fourCards = Array.from(card().parent.children).filter(item => item.objectName === "notificationCard");
                 const topOfFour = fourCards.find(item => item.groupHead);
@@ -376,7 +420,10 @@ ShellRoot {
                 equal(state.visibleEntries.length, 3, "dismissal removes exactly one notification");
                 equal(nextOfFour.displayedGroupCount, 3, "count settles at three after dismissal completes");
             }
-            function cleanupTestCase() { results.setText(checks + "FAILURES " + qtest_results.failCount); Qt.quit(); }
+            function cleanupTestCase() {
+                results.setText(checks + "FAILURES " + qtest_results.failCount);
+                Qt.quit();
+            }
         }
     }
 }

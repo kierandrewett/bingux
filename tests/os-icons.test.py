@@ -44,7 +44,9 @@ class IconRenderingTests(unittest.TestCase):
 
     def test_animation_raster_size_has_a_separate_cache_entry(self):
         path = self.directory / "gear.svg"
-        path.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><circle cx="64" cy="64" r="50" fill="white"/></svg>')
+        path.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><circle cx="64" cy="64" r="50" fill="white"/></svg>'
+        )
         for size in [192, 224, 448]:
             uri = icons.resolve(path.as_uri() + "?bingux-size=" + str(size), self.theme, self.cache)
             loader = icons.GdkPixbuf.PixbufLoader.new_with_type("png")
@@ -66,8 +68,10 @@ class IconRenderingTests(unittest.TestCase):
             image = loader.get_pixbuf()
             self.assertTrue(image.get_has_alpha())
             self.assertEqual(image.get_pixels()[3], 0, "fallback corner must remain transparent")
-        self.assertEqual(icons.resolve("image://icon/bingux-definitely-missing-icon", self.theme, self.cache),
-                         icons.resolve("image://icon/application-x-executable", self.theme, self.cache))
+        self.assertEqual(
+            icons.resolve("image://icon/bingux-definitely-missing-icon", self.theme, self.cache),
+            icons.resolve("image://icon/application-x-executable", self.theme, self.cache),
+        )
 
     def test_raster_black_pixels_are_not_removed(self):
         path = self.directory / "black.png"
@@ -76,14 +80,21 @@ class IconRenderingTests(unittest.TestCase):
         image.savev(str(path), "png", [], [])
         self.assertEqual(icons.resolve(path.as_uri(), self.theme, self.cache), path.as_uri())
         self.assertEqual(icons.resolve("image://icon/" + str(path), self.theme, self.cache), path.as_uri())
-        self.assertEqual(icons.resolve("image://icon/black?path=" + quote(str(self.directory)), self.theme, self.cache), path.as_uri())
+        self.assertEqual(
+            icons.resolve("image://icon/black?path=" + quote(str(self.directory)), self.theme, self.cache),
+            path.as_uri(),
+        )
         self.assertEqual(icons.GdkPixbuf.Pixbuf.new_from_file(str(path)).get_pixels()[3], 255)
 
     def test_changed_asset_gets_a_new_cache_entry(self):
         path = self.directory / "icon.svg"
-        path.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="4" fill="black"/></svg>')
+        path.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="4" fill="black"/></svg>'
+        )
         first = icons.resolve(path.as_uri(), self.theme, self.cache)
-        path.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="5" fill="red"/></svg>')
+        path.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="5" fill="red"/></svg>'
+        )
         self.assertNotEqual(icons.resolve(path.as_uri(), self.theme, self.cache), first)
 
     def test_files_and_folders_use_gio_full_colour_icons(self):
@@ -101,6 +112,7 @@ class IconRenderingTests(unittest.TestCase):
         if icons.GnomeDesktop is None:
             self.skipTest("GNOME thumbnail service is not installed")
         import cairo
+
         image_path = self.directory / "image with spaces.png"
         pixbuf = icons.GdkPixbuf.Pixbuf.new(icons.GdkPixbuf.Colorspace.RGB, False, 8, 160, 80)
         pixbuf.fill(0xE05030FF)
@@ -112,8 +124,13 @@ class IconRenderingTests(unittest.TestCase):
         context.paint()
         surface.finish()
         env = dict(os.environ, XDG_CACHE_HOME=str(self.directory / "cache"))
-        process = subprocess.Popen([sys.executable, str(HELPER)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE, env=env)
+        process = subprocess.Popen(
+            [sys.executable, str(HELPER)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+        )
         self.addCleanup(lambda: process.poll() is None and process.kill())
         selector = selectors.DefaultSelector()
         self.addCleanup(selector.close)
@@ -154,7 +171,9 @@ class IconRenderingTests(unittest.TestCase):
 
     def test_palette_ignores_transparency_and_is_cached(self):
         path = self.directory / "palette.svg"
-        path.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect x="8" y="8" width="16" height="16" fill="#1ed760"/></svg>')
+        path.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect x="8" y="8" width="16" height="16" fill="#1ed760"/></svg>'
+        )
         palette = icons.sample_palette(path.as_uri(), self.theme, self.cache)
         self.assertIn("#1ed760", palette)
         self.assertNotIn("#000000", palette)
@@ -173,8 +192,19 @@ class IconRenderingTests(unittest.TestCase):
         self.assertIsNone(cache.get("large"))
 
     def test_persistent_worker_handles_batched_requests_and_invalid_sources(self):
-        sources = ["image://icon/system-file-manager", "image://icon/org.gnome.Epiphany", "https://example.com/icon.svg"]
-        result = subprocess.run([sys.executable, str(HELPER)], input="".join(json.dumps({"source": source}) + "\n" for source in sources), text=True, capture_output=True, timeout=5, check=True)
+        sources = [
+            "image://icon/system-file-manager",
+            "image://icon/org.gnome.Epiphany",
+            "https://example.com/icon.svg",
+        ]
+        result = subprocess.run(
+            [sys.executable, str(HELPER)],
+            input="".join(json.dumps({"source": source}) + "\n" for source in sources),
+            text=True,
+            capture_output=True,
+            timeout=5,
+            check=True,
+        )
         responses = [json.loads(line) for line in result.stdout.splitlines()]
         rendered = {record["source"]: record for record in responses if "source" in record}
         self.assertEqual(set(rendered), set(sources))

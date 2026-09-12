@@ -15,16 +15,33 @@ TextField {
     selectByMouse: true
     selectionColor: Theme.textSelection
     selectedTextColor: Theme.text
-    function clearFilter() { clear(); textEdited(); forceActiveFocus(); }
+    function clearFilter() {
+        clear();
+        textEdited();
+        forceActiveFocus();
+    }
     Keys.onEscapePressed: clearFilter()
-    SymbolicIcon { x: 10; anchors.verticalCenter: parent.verticalCenter; implicitSize: 14; source: Quickshell.iconPath("system-search-symbolic"); color: Theme.muted }
+    SymbolicIcon {
+        x: 10
+        anchors.verticalCenter: parent.verticalCenter
+        implicitSize: 14
+        source: Quickshell.iconPath("system-search-symbolic")
+        color: Theme.muted
+    }
     IconButton {
-        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-        implicitWidth: 28; implicitHeight: 28
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        implicitWidth: 28
+        implicitHeight: 28
         visible: root.text.length > 0
         iconName: "edit-clear-symbolic"
         label: "Clear search"
         onClicked: root.clearFilter()
     }
-    background: Rectangle { radius: 7; color: Theme.surface; border.width: root.activeFocus ? 1 : 0; border.color: Theme.accent }
+    background: Rectangle {
+        radius: 7
+        color: Theme.surface
+        border.width: root.activeFocus ? 1 : 0
+        border.color: Theme.accent
+    }
 }

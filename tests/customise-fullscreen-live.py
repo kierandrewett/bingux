@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check editor stacking and real input above a fullscreen app in a private session."""
+
 import ast
 import json
 import os
@@ -13,11 +14,11 @@ import time
 from private_shell import stage_compositor_bridge
 
 repo = Path(__file__).resolve().parents[1]
-config = Path(os.environ['XDG_CONFIG_HOME'])
-assert str(config).startswith('/tmp/gnoblin-gs.')
-assert os.environ.get('WAYLAND_DISPLAY', '').startswith('gnoblin-gs-')
+config = Path(os.environ["XDG_CONFIG_HOME"])
+assert str(config).startswith("/tmp/gnoblin-gs.")
+assert os.environ.get("WAYLAND_DISPLAY", "").startswith("gnoblin-gs-")
 resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-qs = os.environ.get('QS_TEST_BIN', 'qs')
+qs = os.environ.get("QS_TEST_BIN", "qs")
 
 
 def run(args, **kwargs):
@@ -25,7 +26,7 @@ def run(args, **kwargs):
 
 
 scripts = stage_compositor_bridge(repo, config)
-(scripts / 'customise-stacking-test.js').write_text('''
+(scripts / "customise-stacking-test.js").write_text("""
 import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';
 export default function (api) {
@@ -46,16 +47,22 @@ export default function (api) {
     const name = Gio.bus_own_name(Gio.BusType.SESSION, 'org.gnoblin.CustomiseStack', Gio.BusNameOwnerFlags.NONE, null, null, null);
     api._disposers.push(() => { service.unexport(); Gio.bus_unown_name(name); });
 }
-''')
-with tempfile.TemporaryDirectory(prefix='bingux-editor-fullscreen-') as directory:
+""")
+with tempfile.TemporaryDirectory(prefix="bingux-editor-fullscreen-") as directory:
     fixture = Path(directory)
-    qml = fixture / 'qml'
-    shutil.copytree(repo / 'shell/bingux', qml)
-    customiser = qml / 'DesktopCustomise.qml'
-    customiser.write_text(customiser.read_text().replace('id: root', 'id: root\n    readonly property var testStacking: stackingSession', 1))
-    shell = qml / 'shell.qml'
-    source = shell.read_text().replace('import QtQuick\n', 'import QtQuick\nimport QtQuick.Window\n', 1)
-    shell.write_text(source.rstrip()[:-1] + '''
+    qml = fixture / "qml"
+    shutil.copytree(repo / "shell/bingux", qml)
+    customiser = qml / "DesktopCustomise.qml"
+    customiser.write_text(
+        customiser.read_text().replace(
+            "id: root", "id: root\n    readonly property var testStacking: stackingSession", 1
+        )
+    )
+    shell = qml / "shell.qml"
+    source = shell.read_text().replace("import QtQuick\n", "import QtQuick\nimport QtQuick.Window\n", 1)
+    shell.write_text(
+        source.rstrip()[:-1]
+        + """
     Window { id: fullscreenFixture; visible: true; width: 640; height: 400; title: "Customise fullscreen fixture"; color: "#e50045" }
     IpcHandler {
         target: "editor-stack-test"
@@ -79,65 +86,110 @@ with tempfile.TemporaryDirectory(prefix='bingux-editor-fullscreen-') as director
         }
     }
 }
-''')
-    environment = os.environ | {'BINGUX_TEST_COMPOSITOR_CONFIG': str(config),
-        'XDG_CONFIG_HOME': str(fixture / 'config'), 'XDG_STATE_HOME': str(fixture / 'state'), 'BINGUX_LAYOUT_IMPORT': '0'}
-    environment.pop('BINGUX_SETTINGS_HELPER', None)
-    native = repo / 'tests/customise-native-input.py'
-    run(['python3', str(native), '--prepare'], env=environment)
-    log = (fixture / 'runtime.log').open('w+')
-    process = subprocess.Popen([qs, '-p', str(qml), '--no-color'], env=environment,
-        stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+"""
+    )
+    environment = os.environ | {
+        "BINGUX_TEST_COMPOSITOR_CONFIG": str(config),
+        "XDG_CONFIG_HOME": str(fixture / "config"),
+        "XDG_STATE_HOME": str(fixture / "state"),
+        "BINGUX_LAYOUT_IMPORT": "0",
+    }
+    environment.pop("BINGUX_SETTINGS_HELPER", None)
+    native = repo / "tests/customise-native-input.py"
+    run(["python3", str(native), "--prepare"], env=environment)
+    log = (fixture / "runtime.log").open("w+")
+    process = subprocess.Popen(
+        [qs, "-p", str(qml), "--no-color"],
+        env=environment,
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+
     def call(method):
-        value = run([qs, '-p', str(qml), 'ipc', 'call', 'editor-stack-test', method], env=environment)
+        value = run([qs, "-p", str(qml), "ipc", "call", "editor-stack-test", method], env=environment)
         return json.loads(value) if value else None
+
     def order():
-        value = run(['gdbus', 'call', '--session', '--dest', 'org.gnoblin.CustomiseStack', '--object-path', '/org/gnoblin/CustomiseStack', '--method', 'org.gnoblin.CustomiseStack.State'])
+        value = run(
+            [
+                "gdbus",
+                "call",
+                "--session",
+                "--dest",
+                "org.gnoblin.CustomiseStack",
+                "--object-path",
+                "/org/gnoblin/CustomiseStack",
+                "--method",
+                "org.gnoblin.CustomiseStack.State",
+            ]
+        )
         return json.loads(ast.literal_eval(value)[0])
+
     def wait(predicate, label):
         deadline = time.monotonic() + 8
         last = None
         while time.monotonic() < deadline:
-            if process.poll() is not None: raise AssertionError(('Shell exited', process.returncode))
+            if process.poll() is not None:
+                raise AssertionError(("Shell exited", process.returncode))
             try:
                 last = predicate()
-                if last: return last
-            except (ValueError, subprocess.SubprocessError): pass
-            time.sleep(.08)
-        raise AssertionError((label, last, call('status'), order()))
+                if last:
+                    return last
+            except (ValueError, subprocess.SubprocessError):
+                pass
+            time.sleep(0.08)
+        raise AssertionError((label, last, call("status"), order()))
+
     try:
-        wait(lambda: call('status')['loaded'], 'preferences loaded')
-        call('open')
-        wait(lambda: call('status')['ready'] and not call('status')['busy'], 'settings loaded')
-        wait(lambda: 'Customise fullscreen fixture' in order(), 'fixture mapped before entering fullscreen')
-        call('fullscreen')
-        wait(lambda: call('status')['fullscreen'], 'fixture fullscreen')
-        time.sleep(.3)
-        call('edit')
-        wait(lambda: call('status')['visible'], 'editor open')
-        containers = ['bingux-top-bar', 'bingux-dock', 'bingux-terminal-sidebar', 'gnoblin-shell-popup']
+        wait(lambda: call("status")["loaded"], "preferences loaded")
+        call("open")
+        wait(lambda: call("status")["ready"] and not call("status")["busy"], "settings loaded")
+        wait(lambda: "Customise fullscreen fixture" in order(), "fixture mapped before entering fullscreen")
+        call("fullscreen")
+        wait(lambda: call("status")["fullscreen"], "fixture fullscreen")
+        time.sleep(0.3)
+        call("edit")
+        wait(lambda: call("status")["visible"], "editor open")
+        containers = ["bingux-top-bar", "bingux-dock", "bingux-terminal-sidebar", "gnoblin-shell-popup"]
+
         def correctly_stacked():
             stack = order()
-            return all(name in stack for name in ['Customise fullscreen fixture', 'bingux-customise', *containers]) and all(
-                stack.index('Customise fullscreen fixture') < stack.index('bingux-customise') < stack.index(name) for name in containers)
-        wait(correctly_stacked, 'actual containers above editor above fullscreen app')
-        state = call('status')
-        run(['python3', str(native), str(state['input']['x']), str(state['input']['y'])], env=environment)
-        wait(lambda: call('status')['filter'] == 'Find', 'native click and typing reach the palette')
-        wait(correctly_stacked, 'clicking the palette preserves container order')
-        capture = os.environ.get('BINGUX_EDITOR_FULLSCREEN_CAPTURE')
-        if capture: run(['grim', capture])
-        call('cancel')
-        wait(lambda: not call('status')['visible'], 'editor cancelled')
-        assert call('status')['fullscreen'], 'Editing must not change the app fullscreen state'
-        log.flush(); log.seek(0)
+            return all(
+                name in stack for name in ["Customise fullscreen fixture", "bingux-customise", *containers]
+            ) and all(
+                stack.index("Customise fullscreen fixture") < stack.index("bingux-customise") < stack.index(name)
+                for name in containers
+            )
+
+        wait(correctly_stacked, "actual containers above editor above fullscreen app")
+        state = call("status")
+        run(["python3", str(native), str(state["input"]["x"]), str(state["input"]["y"])], env=environment)
+        wait(lambda: call("status")["filter"] == "Find", "native click and typing reach the palette")
+        wait(correctly_stacked, "clicking the palette preserves container order")
+        capture = os.environ.get("BINGUX_EDITOR_FULLSCREEN_CAPTURE")
+        if capture:
+            run(["grim", capture])
+        call("cancel")
+        wait(lambda: not call("status")["visible"], "editor cancelled")
+        assert call("status")["fullscreen"], "Editing must not change the app fullscreen state"
+        log.flush()
+        log.seek(0)
         output = log.read()
-        assert not any(error in output for error in ('TypeError', 'ReferenceError', 'has crashed', 'Cannot use same item on different windows')), output
-        print('PASS: fullscreen app preserved, actual containers above editor, native palette typing and cancellation')
+        assert not any(
+            error in output
+            for error in ("TypeError", "ReferenceError", "has crashed", "Cannot use same item on different windows")
+        ), output
+        print("PASS: fullscreen app preserved, actual containers above editor, native palette typing and cancellation")
     except BaseException:
-        log.flush(); log.seek(0); print(log.read()); raise
+        log.flush()
+        log.seek(0)
+        print(log.read())
+        raise
     finally:
-        try: os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError: pass
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         process.wait(timeout=5)
         log.close()

@@ -13,7 +13,13 @@ PanelWindow {
     signal retryRequested(string id)
     function show(id, name, detail) {
         if (visible && applicationId !== id) {
-            pending = pending.filter(item => item.id !== id).concat([{id: id, name: name, detail: detail}]);
+            pending = pending.filter(item => item.id !== id).concat([
+                {
+                    id: id,
+                    name: name,
+                    detail: detail
+                }
+            ]);
             return;
         }
         applicationId = id;
@@ -32,7 +38,8 @@ PanelWindow {
     }
     function resolve(id) {
         pending = pending.filter(item => item.id !== id);
-        if (visible && applicationId === id) dismissCurrent();
+        if (visible && applicationId === id)
+            dismissCurrent();
     }
     visible: false
     implicitWidth: 440
@@ -48,7 +55,12 @@ PanelWindow {
         color: Theme.popupSurface
         ColumnLayout {
             id: contents
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 20 }
+            anchors {
+                left: parent.left
+                right: parent.right
+                top: parent.top
+                margins: 20
+            }
             spacing: 12
             Keys.onEscapePressed: root.dismissCurrent()
             Text {
@@ -57,7 +69,11 @@ PanelWindow {
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
                 color: Theme.text
-                font { family: Theme.fontFamily; pixelSize: Theme.fontSize + 3; weight: Font.DemiBold }
+                font {
+                    family: Theme.fontFamily
+                    pixelSize: Theme.fontSize + 3
+                    weight: Font.DemiBold
+                }
                 Accessible.role: Accessible.AlertMessage
                 Accessible.name: text
             }
@@ -67,14 +83,21 @@ PanelWindow {
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
                 color: Theme.text
-                font { family: Theme.fontFamily; pixelSize: Theme.fontSize }
+                font {
+                    family: Theme.fontFamily
+                    pixelSize: Theme.fontSize
+                }
             }
             RowLayout {
                 Layout.alignment: Qt.AlignRight
                 spacing: 8
                 ActionButton {
                     text: "Retry"
-                    onClicked: { const id = root.applicationId; root.dismissCurrent(); root.retryRequested(id); }
+                    onClicked: {
+                        const id = root.applicationId;
+                        root.dismissCurrent();
+                        root.retryRequested(id);
+                    }
                 }
                 ActionButton {
                     id: dismiss

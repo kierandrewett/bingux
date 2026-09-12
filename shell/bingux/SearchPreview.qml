@@ -7,9 +7,7 @@ Item {
     id: root
     property string path: ""
     property string title: ""
-    readonly property var helperCommand: Quickshell.env("BINGUX_PREVIEW_HELPER")
-        ? [Quickshell.env("BINGUX_PREVIEW_HELPER")]
-        : ["python3", decodeURIComponent(Qt.resolvedUrl("preview-document.py").toString().replace(/^file:\/\//, ""))]
+    readonly property var helperCommand: Quickshell.env("BINGUX_PREVIEW_HELPER") ? [Quickshell.env("BINGUX_PREVIEW_HELPER")] : ["python3", decodeURIComponent(Qt.resolvedUrl("preview-document.py").toString().replace(/^file:\/\//, ""))]
     function zoomBy(steps) {
         if (document.item && document.item.details && !switching)
             document.item.setZoom(document.item.targetZoom * Math.pow(1.1, steps));
@@ -20,10 +18,17 @@ Item {
     property string displayedTitle: ""
     property bool switching: false
     function resetZoom() {
-        if (document.item && !switching) document.item.setZoom(1);
+        if (document.item && !switching)
+            document.item.setZoom(1);
     }
     onPathChanged: {
-        if (!path) { reload.stop(); document.active = false; displayedPath = ""; switching = false; return; }
+        if (!path) {
+            reload.stop();
+            document.active = false;
+            displayedPath = "";
+            switching = false;
+            return;
+        }
         switching = document.active;
         reload.restart();
     }
@@ -43,7 +48,12 @@ Item {
         anchors.fill: parent
         active: false
         opacity: root.switching ? 0 : 1
-        Behavior on opacity { NumberAnimation { duration: Theme.previewCloseMotion; easing.type: Easing.OutCubic } }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Theme.previewCloseMotion
+                easing.type: Easing.OutCubic
+            }
+        }
         enabled: !root.switching
         sourceComponent: Item {
             id: body
@@ -55,7 +65,10 @@ Item {
             property real zoomFocusX: 0
             property real zoomFocusY: 0
             Behavior on zoom {
-                NumberAnimation { duration: Theme.previewMotion; easing.type: Easing.OutCubic }
+                NumberAnimation {
+                    duration: Theme.previewMotion
+                    easing.type: Easing.OutCubic
+                }
             }
             onZoomChanged: Qt.callLater(() => {
                 const view = body.textDocument ? textView : pages;
@@ -67,8 +80,15 @@ Item {
             property real entrance: 0
             Component.onCompleted: entrance = 1
             opacity: entrance
-            transform: Translate { x: (1 - body.entrance) * 10 }
-            Behavior on entrance { NumberAnimation { duration: Theme.previewMotion; easing.type: Easing.OutCubic } }
+            transform: Translate {
+                x: (1 - body.entrance) * 10
+            }
+            Behavior on entrance {
+                NumberAnimation {
+                    duration: Theme.previewMotion
+                    easing.type: Easing.OutCubic
+                }
+            }
             readonly property bool textDocument: details !== null && details.kind === "text"
             readonly property bool imageDocument: details !== null && (details.kind === "image" || details.kind === "animation")
             readonly property bool mediaDocument: details !== null && ["video", "audio", "animation"].includes(details.kind)
@@ -77,37 +97,99 @@ Item {
             onLightBackgroundChanged: root.lightBackground = lightBackground
             readonly property real pageWidth: {
                 const available = Math.max(64, pages.width - 32);
-                if (!imageDocument) return available * zoom;
+                if (!imageDocument)
+                    return available * zoom;
                 const size = details.pages[0];
                 return Math.min(available, Math.max(32, pages.height - 32) * size.width / size.height) * zoom;
             }
             function fileSize(bytes) {
-                if (bytes < 1024) return bytes + " B";
-                if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KiB";
+                if (bytes < 1024)
+                    return bytes + " B";
+                if (bytes < 1024 * 1024)
+                    return (bytes / 1024).toFixed(1) + " KiB";
                 return (bytes / (1024 * 1024)).toFixed(1) + " MiB";
             }
             readonly property var metadataRows: {
-                if (!details || !details.file) return [];
+                if (!details || !details.file)
+                    return [];
                 const rows = [];
-                if (details.file.created) rows.push({label: "Created", value: Qt.formatDateTime(new Date(details.file.created), "dd MMM yyyy, HH:mm")});
-                rows.push({label: "Modified", value: Qt.formatDateTime(new Date(details.file.modified), "dd MMM yyyy, HH:mm")});
-                if (details.image && details.image.contentCreated) rows.push({label: "Content created", value: Qt.formatDateTime(new Date(details.image.contentCreated), "dd MMM yyyy, HH:mm")});
-                if (imageDocument) rows.push({label: "Dimensions", value: details.pages[0].width + " × " + details.pages[0].height});
-                else if (details.kind === "pdf") rows.push({label: "Pages", value: String(details.pages.length)});
-                if (details.duration !== undefined) rows.push({label: "Duration", value: Math.floor(details.duration / 60) + ":" + String(Math.floor(details.duration % 60)).padStart(2, "0")});
-                if (details.width) rows.push({label: "Dimensions", value: details.width + " × " + details.height});
-                if (details.codec) rows.push({label: "Codec", value: details.codec});
-                if (details.tables) rows.push({label: "Tables", value: String(details.tables.length)});
+                if (details.file.created)
+                    rows.push({
+                        label: "Created",
+                        value: Qt.formatDateTime(new Date(details.file.created), "dd MMM yyyy, HH:mm")
+                    });
+                rows.push({
+                    label: "Modified",
+                    value: Qt.formatDateTime(new Date(details.file.modified), "dd MMM yyyy, HH:mm")
+                });
+                if (details.image && details.image.contentCreated)
+                    rows.push({
+                        label: "Content created",
+                        value: Qt.formatDateTime(new Date(details.image.contentCreated), "dd MMM yyyy, HH:mm")
+                    });
+                if (imageDocument)
+                    rows.push({
+                        label: "Dimensions",
+                        value: details.pages[0].width + " × " + details.pages[0].height
+                    });
+                else if (details.kind === "pdf")
+                    rows.push({
+                        label: "Pages",
+                        value: String(details.pages.length)
+                    });
+                if (details.duration !== undefined)
+                    rows.push({
+                        label: "Duration",
+                        value: Math.floor(details.duration / 60) + ":" + String(Math.floor(details.duration % 60)).padStart(2, "0")
+                    });
+                if (details.width)
+                    rows.push({
+                        label: "Dimensions",
+                        value: details.width + " × " + details.height
+                    });
+                if (details.codec)
+                    rows.push({
+                        label: "Codec",
+                        value: details.codec
+                    });
+                if (details.tables)
+                    rows.push({
+                        label: "Tables",
+                        value: String(details.tables.length)
+                    });
                 if (details.image) {
-                    if (details.image.resolution) rows.push({label: "Resolution", value: details.image.resolution});
-                    if (details.image.colourSpace) rows.push({label: "Colour space", value: details.image.colourSpace});
-                    if (details.image.colourProfile) rows.push({label: "Colour profile", value: details.image.colourProfile});
+                    if (details.image.resolution)
+                        rows.push({
+                            label: "Resolution",
+                            value: details.image.resolution
+                        });
+                    if (details.image.colourSpace)
+                        rows.push({
+                            label: "Colour space",
+                            value: details.image.colourSpace
+                        });
+                    if (details.image.colourProfile)
+                        rows.push({
+                            label: "Colour profile",
+                            value: details.image.colourProfile
+                        });
                 }
                 if (details.frontmatter) {
-                    for (const key of Object.keys(details.frontmatter)) rows.push({label: key, value: String(details.frontmatter[key])});
+                    for (const key of Object.keys(details.frontmatter))
+                        rows.push({
+                            label: key,
+                            value: String(details.frontmatter[key])
+                        });
                 }
-                if (details.frontmatterWarning) rows.push({label: "Frontmatter", value: details.frontmatterWarning});
-                rows.push({label: "Where", value: root.displayedPath.substring(0, root.displayedPath.lastIndexOf("/")) || "/"});
+                if (details.frontmatterWarning)
+                    rows.push({
+                        label: "Frontmatter",
+                        value: details.frontmatterWarning
+                    });
+                rows.push({
+                    label: "Where",
+                    value: root.displayedPath.substring(0, root.displayedPath.lastIndexOf("/")) || "/"
+                });
                 return rows;
             }
             function setZoom(value) {
@@ -123,32 +205,6 @@ Item {
                 onResponse: data => {
                     body.error = data.error || "";
                     body.details = data.error ? null : data;
-                }
-            }
-            component PreviewButton: ActionButton {
-                id: previewControl
-                property real iconRotation: 0
-                implicitWidth: 28
-                implicitHeight: 28
-                focusPolicy: Qt.TabFocus
-                flat: true
-                horizontalPadding: 4
-                verticalPadding: 4
-                scale: down ? 0.9 : 1
-                Behavior on scale { NumberAnimation { duration: Theme.previewMotion; easing.type: Easing.OutCubic } }
-                ShellTooltip { visible: previewControl.hovered; text: previewControl.Accessible.name }
-                contentItem: Item {
-                    SymbolicIcon {
-                        objectName: "previewControlIcon"
-                        anchors.centerIn: parent
-                        width: Theme.iconSize
-                        height: Theme.iconSize
-                        rotation: previewControl.iconRotation
-                        Behavior on rotation { NumberAnimation { duration: Theme.previewMotion; easing.type: Easing.OutCubic } }
-                        source: Quickshell.iconPath(previewControl.iconName)
-                        color: Theme.muted
-                        opacity: previewControl.enabled ? 1 : 0.4
-                    }
                 }
             }
             ColumnLayout {
@@ -189,7 +245,11 @@ Item {
                         }
                     }
                 }
-                Rectangle { Layout.fillWidth: true; height: 1; color: Theme.outline }
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Theme.outline
+                }
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
@@ -202,14 +262,22 @@ Item {
                         source: Qt.resolvedUrl("preview-assets/imagedoc-darknoise.png")
                         fillMode: Image.Tile
                         opacity: body.lightBackground ? 0 : 1
-                        Behavior on opacity { NumberAnimation { duration: Theme.previewMotion } }
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Theme.previewMotion
+                            }
+                        }
                     }
                     Image {
                         anchors.fill: parent
                         source: Qt.resolvedUrl("preview-assets/imagedoc-lightnoise.png")
                         fillMode: Image.Tile
                         opacity: body.lightBackground ? 1 : 0
-                        Behavior on opacity { NumberAnimation { duration: Theme.previewMotion } }
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Theme.previewMotion
+                            }
+                        }
                     }
                     ListView {
                         id: pages
@@ -224,7 +292,9 @@ Item {
                         spacing: 12
                         cacheBuffer: Math.max(0, height)
                         ScrollBar.vertical: ScrollBar {}
-                        HorizontalWheelScroll { viewport: pages }
+                        HorizontalWheelScroll {
+                            viewport: pages
+                        }
                         ScrollBar.horizontal: ScrollBar {}
                         delegate: Item {
                             id: page
@@ -238,7 +308,10 @@ Item {
                             DocumentPreviewRequest {
                                 command: root.helperCommand.concat(["page", root.displayedPath, String(page.index), String(Math.ceil(body.pageWidth * 2))])
                                 active: page.y + page.height >= pages.contentY - pages.height && page.y <= pages.contentY + pages.height * 2
-                                onResponse: data => { page.imageSource = data.image || ""; page.error = data.error || ""; }
+                                onResponse: data => {
+                                    page.imageSource = data.image || "";
+                                    page.error = data.error || "";
+                                }
                             }
                             Rectangle {
                                 id: pageSurface
@@ -252,9 +325,15 @@ Item {
                                     anchors.fill: parent
                                     source: page.imageSource
                                     property bool revealed: false
-                                    onStatusChanged: if (status === Image.Ready) revealed = true
+                                    onStatusChanged: if (status === Image.Ready)
+                                        revealed = true
                                     opacity: revealed ? 1 : 0
-                                    Behavior on opacity { NumberAnimation { duration: Theme.previewMotion; easing.type: Easing.OutCubic } }
+                                    Behavior on opacity {
+                                        NumberAnimation {
+                                            duration: Theme.previewMotion
+                                            easing.type: Easing.OutCubic
+                                        }
+                                    }
                                     asynchronous: true
                                     fillMode: Image.PreserveAspectFit
                                     cache: false
@@ -284,7 +363,12 @@ Item {
                         anchors.margins: 16
                         visible: body.textDocument
                         opacity: visible ? 1 : 0
-                        Behavior on opacity { NumberAnimation { duration: Theme.previewMotion; easing.type: Easing.OutCubic } }
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Theme.previewMotion
+                                easing.type: Easing.OutCubic
+                            }
+                        }
                         contentWidth: width
                         contentHeight: textContent.implicitHeight
                         boundsBehavior: Flickable.StopAtBounds
@@ -305,7 +389,10 @@ Item {
                         anchors.fill: parent
                         active: body.mediaDocument
                         source: active ? Qt.resolvedUrl("PreviewMedia.qml") : ""
-                        onLoaded: { item.details = body.details; item.zoom = Qt.binding(() => body.zoom); }
+                        onLoaded: {
+                            item.details = body.details;
+                            item.zoom = Qt.binding(() => body.zoom);
+                        }
                     }
                     Loader {
                         anchors.fill: parent
@@ -336,7 +423,11 @@ Item {
                         font.pixelSize: Theme.fontSize
                     }
                 }
-                Rectangle { Layout.fillWidth: true; height: 1; color: Theme.outline }
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: Theme.outline
+                }
                 RowLayout {
                     Layout.fillWidth: true
                     objectName: "previewToolbar"
@@ -346,15 +437,23 @@ Item {
                     spacing: 4
                     Text {
                         Layout.fillWidth: true
-                        text: body.details && body.details.kind === "pdf"
-                            ? (Math.max(0, pages.indexAt(pages.contentX + pages.width / 2, pages.contentY + pages.height / 2)) + 1) + " / " + body.details.pages.length
-                            : body.textDocument && body.details.truncated ? "First 256 KiB" : "Preview"
+                        text: body.details && body.details.kind === "pdf" ? (Math.max(0, pages.indexAt(pages.contentX + pages.width / 2, pages.contentY + pages.height / 2)) + 1) + " / " + body.details.pages.length : body.textDocument && body.details.truncated ? "First 256 KiB" : "Preview"
                         color: Theme.muted
                         font.family: Theme.fontFamily
                         font.pixelSize: 11
                     }
-                    PreviewButton { objectName: "previewBackgroundToggle"; iconName: body.lightBackground ? "weather-clear-night-symbolic" : "weather-clear-symbolic"; Accessible.name: body.lightBackground ? "Use dark background" : "Use light background"; onClicked: body.lightBackground = !body.lightBackground; }
-                    PreviewButton { iconName: "zoom-out-symbolic"; Accessible.name: "Zoom out"; enabled: body.details !== null && body.zoom > 0.5; onClicked: body.setZoom(body.targetZoom / 1.25); }
+                    PreviewButton {
+                        objectName: "previewBackgroundToggle"
+                        iconName: body.lightBackground ? "weather-clear-night-symbolic" : "weather-clear-symbolic"
+                        Accessible.name: body.lightBackground ? "Use dark background" : "Use light background"
+                        onClicked: body.lightBackground = !body.lightBackground
+                    }
+                    PreviewButton {
+                        iconName: "zoom-out-symbolic"
+                        Accessible.name: "Zoom out"
+                        enabled: body.details !== null && body.zoom > 0.5
+                        onClicked: body.setZoom(body.targetZoom / 1.25)
+                    }
                     PreviewButton {
                         objectName: "previewZoomReset"
                         implicitWidth: 48
@@ -372,8 +471,20 @@ Item {
                             verticalAlignment: Text.AlignVCenter
                         }
                     }
-                    PreviewButton { objectName: "previewZoomIn"; iconName: "zoom-in-symbolic"; Accessible.name: "Zoom in"; enabled: body.details !== null && body.zoom < 4; onClicked: body.setZoom(body.targetZoom * 1.25); }
-                    PreviewButton { objectName: "previewFit"; iconName: "zoom-fit-best-symbolic"; Accessible.name: "Reset zoom (Ctrl+0)"; enabled: body.details !== null; onClicked: body.setZoom(1); }
+                    PreviewButton {
+                        objectName: "previewZoomIn"
+                        iconName: "zoom-in-symbolic"
+                        Accessible.name: "Zoom in"
+                        enabled: body.details !== null && body.zoom < 4
+                        onClicked: body.setZoom(body.targetZoom * 1.25)
+                    }
+                    PreviewButton {
+                        objectName: "previewFit"
+                        iconName: "zoom-fit-best-symbolic"
+                        Accessible.name: "Reset zoom (Ctrl+0)"
+                        enabled: body.details !== null
+                        onClicked: body.setZoom(1)
+                    }
                 }
                 Item {
                     id: facts
@@ -381,9 +492,20 @@ Item {
                     property real reveal: 0
                     property real expansion: body.showInformation ? 1 : 0
                     property int rowCount: body.metadataRows.length
-                    onRowCountChanged: if (rowCount > 0) reveal = 1
-                    Behavior on reveal { NumberAnimation { duration: Theme.reducedMotion ? 0 : 260; easing.type: Easing.OutCubic } }
-                    Behavior on expansion { NumberAnimation { duration: Theme.previewMotion; easing.type: Easing.OutCubic } }
+                    onRowCountChanged: if (rowCount > 0)
+                        reveal = 1
+                    Behavior on reveal {
+                        NumberAnimation {
+                            duration: Theme.reducedMotion ? 0 : 260
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                    Behavior on expansion {
+                        NumberAnimation {
+                            duration: Theme.previewMotion
+                            easing.type: Easing.OutCubic
+                        }
+                    }
                     Layout.fillWidth: true
                     Layout.leftMargin: 14
                     Layout.rightMargin: 14
@@ -421,63 +543,115 @@ Item {
                             contentHeight: facts.rowCount * 21
                             clip: true
                             boundsBehavior: Flickable.StopAtBounds
-                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                            ScrollBar.vertical: ScrollBar {
+                                policy: ScrollBar.AsNeeded
+                            }
                             ColumnLayout {
                                 width: parent.width
                                 spacing: 0
-                        Repeater {
-                            model: body.metadataRows
-                            Item {
-                                id: factRow
-                                required property var modelData
-                                required property int index
-                                property bool entered: false
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 21
-                                opacity: entered && body.showInformation ? 1 : 0
-                                transform: Translate { y: (1 - factRow.opacity) * 5 }
-                                Behavior on opacity { NumberAnimation { duration: Theme.previewMotion; easing.type: Easing.OutCubic } }
-                                Timer { interval: Theme.reducedMotion ? 0 : Math.min(parent.index, 5) * 22; running: true; onTriggered: parent.entered = true }
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.bottomMargin: 1
-                                    spacing: 10
-                                    Text {
-                                        Layout.preferredWidth: 98
-                                        text: modelData.label
-                                        textFormat: Text.PlainText
-                                        elide: Text.ElideRight
-                                        color: Theme.muted
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 11
-                                    }
-                                    Text {
+                                Repeater {
+                                    model: body.metadataRows
+                                    Item {
+                                        id: factRow
+                                        required property var modelData
+                                        required property int index
+                                        property bool entered: false
                                         Layout.fillWidth: true
-                                        horizontalAlignment: Text.AlignRight
-                                        text: modelData.value
-                                        textFormat: Text.PlainText
-                                        color: Theme.text
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 11
-                                        font.weight: Font.Medium
-                                        elide: modelData.label === "Where" ? Text.ElideMiddle : Text.ElideRight
-                                        Accessible.name: modelData.label + ": " + modelData.value
+                                        Layout.preferredHeight: 21
+                                        opacity: entered && body.showInformation ? 1 : 0
+                                        transform: Translate {
+                                            y: (1 - factRow.opacity) * 5
+                                        }
+                                        Behavior on opacity {
+                                            NumberAnimation {
+                                                duration: Theme.previewMotion
+                                                easing.type: Easing.OutCubic
+                                            }
+                                        }
+                                        Timer {
+                                            interval: Theme.reducedMotion ? 0 : Math.min(parent.index, 5) * 22
+                                            running: true
+                                            onTriggered: parent.entered = true
+                                        }
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.bottomMargin: 1
+                                            spacing: 10
+                                            Text {
+                                                Layout.preferredWidth: 98
+                                                text: modelData.label
+                                                textFormat: Text.PlainText
+                                                elide: Text.ElideRight
+                                                color: Theme.muted
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 11
+                                            }
+                                            Text {
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: Text.AlignRight
+                                                text: modelData.value
+                                                textFormat: Text.PlainText
+                                                color: Theme.text
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: 11
+                                                font.weight: Font.Medium
+                                                elide: modelData.label === "Where" ? Text.ElideMiddle : Text.ElideRight
+                                                Accessible.name: modelData.label + ": " + modelData.value
+                                            }
+                                        }
+                                        Rectangle {
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.bottom: parent.bottom
+                                            visible: factRow.index < body.metadataRows.length - 1
+                                            height: 1
+                                            color: Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, 0.08)
+                                        }
                                     }
                                 }
-                                Rectangle {
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.bottom: parent.bottom
-                                    visible: factRow.index < body.metadataRows.length - 1
-                                    height: 1
-                                    color: Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, 0.08)
-                                }
-                            }
-                        }
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+    component PreviewButton: ActionButton {
+        id: previewControl
+        property real iconRotation: 0
+        implicitWidth: 28
+        implicitHeight: 28
+        focusPolicy: Qt.TabFocus
+        flat: true
+        horizontalPadding: 4
+        verticalPadding: 4
+        scale: down ? 0.9 : 1
+        Behavior on scale {
+            NumberAnimation {
+                duration: Theme.previewMotion
+                easing.type: Easing.OutCubic
+            }
+        }
+        ShellTooltip {
+            visible: previewControl.hovered
+            text: previewControl.Accessible.name
+        }
+        contentItem: Item {
+            SymbolicIcon {
+                objectName: "previewControlIcon"
+                anchors.centerIn: parent
+                width: Theme.iconSize
+                height: Theme.iconSize
+                rotation: previewControl.iconRotation
+                Behavior on rotation {
+                    NumberAnimation {
+                        duration: Theme.previewMotion
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                source: Quickshell.iconPath(previewControl.iconName)
+                color: Theme.muted
+                opacity: previewControl.enabled ? 1 : 0.4
             }
         }
     }

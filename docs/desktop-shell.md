@@ -48,13 +48,13 @@ directory has mode `0700`, and the socket has mode `0600`.
 
 ```json
 {
-  "protocolVersion": 1,
-  "type": "metrics",
-  "cpuPercent": 17.25,
-  "memoryTotalBytes": 67331813376,
-  "memoryUsedBytes": 34184560640,
-  "networkReceiveBytesPerSecond": 306151.62,
-  "networkTransmitBytesPerSecond": 62684.49
+    "protocolVersion": 1,
+    "type": "metrics",
+    "cpuPercent": 17.25,
+    "memoryTotalBytes": 67331813376,
+    "memoryUsedBytes": 34184560640,
+    "networkReceiveBytesPerSecond": 306151.62,
+    "networkTransmitBytesPerSecond": 62684.49
 }
 ```
 
@@ -83,14 +83,14 @@ has mode `0700`, and the socket has mode `0600`.
 
 ```json
 {
-  "protocolVersion": 2,
-  "type": "osd",
-  "monitorIndex": 0,
-  "outputNames": ["DP-1"],
-  "icon": "audio-volume-high-symbolic",
-  "label": "Volume",
-  "level": 0.75,
-  "maxLevel": 1
+    "protocolVersion": 2,
+    "type": "osd",
+    "monitorIndex": 0,
+    "outputNames": ["DP-1"],
+    "icon": "audio-volume-high-symbolic",
+    "label": "Volume",
+    "level": 0.75,
+    "maxLevel": 1
 }
 ```
 
@@ -213,9 +213,9 @@ Every request contains these fields:
 
 ```json
 {
-  "protocolVersion": 1,
-  "type": "query",
-  "requestId": "opaque-client-request-id"
+    "protocolVersion": 1,
+    "type": "query",
+    "requestId": "opaque-client-request-id"
 }
 ```
 
@@ -225,9 +225,9 @@ Every request contains these fields:
 
 ```json
 {
-  "protocolVersion": 1,
-  "type": "show-search",
-  "monotonicUsec": "123456789"
+    "protocolVersion": 1,
+    "type": "show-search",
+    "monotonicUsec": "123456789"
 }
 ```
 
@@ -235,10 +235,10 @@ Every request contains these fields:
 
 ```json
 {
-  "protocolVersion": 1,
-  "type": "integration-state",
-  "name": "gnoblin-super-release",
-  "state": "ready"
+    "protocolVersion": 1,
+    "type": "integration-state",
+    "name": "gnoblin-super-release",
+    "state": "ready"
 }
 ```
 
@@ -250,11 +250,11 @@ A query request is:
 
 ```json
 {
-  "protocolVersion": 1,
-  "type": "query",
-  "requestId": "q-01",
-  "query": "firefox",
-  "limit": 20
+    "protocolVersion": 1,
+    "type": "query",
+    "requestId": "q-01",
+    "query": "firefox",
+    "limit": 20
 }
 ```
 
@@ -262,22 +262,22 @@ A query request is:
 
 ```json
 {
-  "protocolVersion": 1,
-  "type": "results",
-  "requestId": "q-01",
-  "complete": false,
-  "elapsedUsec": 820,
-  "results": [
-    {
-      "resultId": "app:firefox.desktop",
-      "providerId": "apps",
-      "kind": "application",
-      "title": "Firefox",
-      "subtitle": "Web browser",
-      "icon": "firefox",
-      "score": 0.98
-    }
-  ]
+    "protocolVersion": 1,
+    "type": "results",
+    "requestId": "q-01",
+    "complete": false,
+    "elapsedUsec": 820,
+    "results": [
+        {
+            "resultId": "app:firefox.desktop",
+            "providerId": "apps",
+            "kind": "application",
+            "title": "Firefox",
+            "subtitle": "Web browser",
+            "icon": "firefox",
+            "score": 0.98
+        }
+    ]
 }
 ```
 
@@ -290,9 +290,9 @@ surface:
 
 ```json
 {
-  "protocolVersion": 1,
-  "type": "cancel",
-  "requestId": "q-01"
+    "protocolVersion": 1,
+    "type": "cancel",
+    "requestId": "q-01"
 }
 ```
 
@@ -309,10 +309,10 @@ Activation is separate from a query:
 
 ```json
 {
-  "protocolVersion": 1,
-  "type": "activate",
-  "requestId": "a-01",
-  "resultId": "app:firefox.desktop"
+    "protocolVersion": 1,
+    "type": "activate",
+    "requestId": "a-01",
+    "resultId": "app:firefox.desktop"
 }
 ```
 
@@ -324,11 +324,11 @@ An error record is:
 
 ```json
 {
-  "protocolVersion": 1,
-  "type": "error",
-  "requestId": "q-01",
-  "code": "invalid-request",
-  "message": "request is invalid"
+    "protocolVersion": 1,
+    "type": "error",
+    "requestId": "q-01",
+    "code": "invalid-request",
+    "message": "request is invalid"
 }
 ```
 
@@ -348,14 +348,14 @@ version policy. Bingux discovers manifests only from configured profile paths. I
 
 ```json
 {
-  "kind": "bingux.search-provider",
-  "protocolVersion": 1,
-  "id": "apps",
-  "displayName": "Applications",
-  "command": ["/usr/libexec/bingux/bingux-provider-apps"],
-  "startup": "eager",
-  "priority": 100,
-  "timeoutMs": 20
+    "kind": "bingux.search-provider",
+    "protocolVersion": 1,
+    "id": "apps",
+    "displayName": "Applications",
+    "command": ["/usr/libexec/bingux/bingux-provider-apps"],
+    "startup": "eager",
+    "priority": 100,
+    "timeoutMs": 20
 }
 ```
 
@@ -369,9 +369,9 @@ Each record is at most 64 KiB. The host sends this record after it starts a prov
 
 ```json
 {
-  "protocolVersion": 1,
-  "type": "hello",
-  "hostId": "bingux-searchd"
+    "protocolVersion": 1,
+    "type": "hello",
+    "hostId": "bingux-searchd"
 }
 ```
 
@@ -379,9 +379,9 @@ The provider must return this record before the manifest timeout:
 
 ```json
 {
-  "protocolVersion": 1,
-  "type": "hello",
-  "accepted": true
+    "protocolVersion": 1,
+    "type": "hello",
+    "accepted": true
 }
 ```
 
@@ -390,30 +390,30 @@ The host gives each provider query a provider-local `queryId` that matches the s
 
 ```json
 {
-  "protocolVersion": 1,
-  "type": "query",
-  "queryId": "provider-query-01",
-  "query": "firefox",
-  "limit": 20
+    "protocolVersion": 1,
+    "type": "query",
+    "queryId": "provider-query-01",
+    "query": "firefox",
+    "limit": 20
 }
 ```
 
 ```json
 {
-  "protocolVersion": 1,
-  "type": "results",
-  "queryId": "provider-query-01",
-  "complete": false,
-  "results": [
-    {
-      "resultId": "firefox.desktop",
-      "kind": "application",
-      "title": "Firefox",
-      "subtitle": "Web browser",
-      "icon": "firefox",
-      "score": 0.98
-    }
-  ]
+    "protocolVersion": 1,
+    "type": "results",
+    "queryId": "provider-query-01",
+    "complete": false,
+    "results": [
+        {
+            "resultId": "firefox.desktop",
+            "kind": "application",
+            "title": "Firefox",
+            "subtitle": "Web browser",
+            "icon": "firefox",
+            "score": 0.98
+        }
+    ]
 }
 ```
 
@@ -430,10 +430,10 @@ Activation is a separate provider record:
 
 ```json
 {
-  "protocolVersion": 1,
-  "type": "activate",
-  "activationId": "provider-activation-01",
-  "resultId": "firefox.desktop"
+    "protocolVersion": 1,
+    "type": "activate",
+    "activationId": "provider-activation-01",
+    "resultId": "firefox.desktop"
 }
 ```
 
@@ -526,7 +526,6 @@ rows, selection checkmarks and one settings footer. Sound uses Output/Input tabs
 Network keeps saved profiles and VPNs behind Other connections; Bluetooth reveals
 nearby devices only after Add a device. The overview omits the title and close button, and
 Display opens system settings directly.
-
 
 ## Keyboard layout switcher
 

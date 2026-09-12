@@ -14,7 +14,8 @@ SettingsRow {
     onClicked: choices.open()
     Popup {
         id: choices
-        x: 8; y: root.height - 4
+        x: 8
+        y: root.height - 4
         width: root.width - 16
         padding: 4
         focus: true
@@ -23,7 +24,12 @@ SettingsRow {
             optionItems.itemAt(index)?.forceActiveFocus(Qt.PopupFocusReason);
         }
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-        background: Rectangle { radius: 10; color: Theme.settingsSurface; border.width: 1; border.color: Theme.outline }
+        background: Rectangle {
+            radius: 10
+            color: Theme.settingsSurface
+            border.width: 1
+            border.color: Theme.outline
+        }
         contentItem: ColumnLayout {
             spacing: 0
             Repeater {
@@ -36,11 +42,16 @@ SettingsRow {
                     subtitle: modelData.description || ""
                     selected: modelData.value === root.value
                     Keys.onPressed: event => {
-                        if (event.key !== Qt.Key_Up && event.key !== Qt.Key_Down) return;
+                        if (event.key !== Qt.Key_Up && event.key !== Qt.Key_Down)
+                            return;
                         optionItems.itemAt(Math.max(0, Math.min(optionItems.count - 1, index + (event.key === Qt.Key_Down ? 1 : -1)))).forceActiveFocus(Qt.TabFocusReason);
                         event.accepted = true;
                     }
-                    onClicked: { root.chosen(modelData.value); choices.close(); root.forceActiveFocus(); }
+                    onClicked: {
+                        root.chosen(modelData.value);
+                        choices.close();
+                        root.forceActiveFocus();
+                    }
                 }
             }
         }

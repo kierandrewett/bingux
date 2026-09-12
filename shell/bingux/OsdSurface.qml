@@ -17,14 +17,18 @@ QtObject {
     function labelFor(request) {
         if (request.icon.startsWith("microphone-") || request.icon.startsWith("audio-input-"))
             return "Microphone";
-        if (request.icon.startsWith("audio-")) return "Volume";
-        if (request.icon.startsWith("display-brightness")) return "Brightness";
-        if (request.icon.startsWith("keyboard-brightness")) return "Keyboard brightness";
+        if (request.icon.startsWith("audio-"))
+            return "Volume";
+        if (request.icon.startsWith("display-brightness"))
+            return "Brightness";
+        if (request.icon.startsWith("keyboard-brightness"))
+            return "Keyboard brightness";
         return request.label || "System control";
     }
 
     function detailFor(request) {
-        if (request.icon.includes("muted")) return "Muted";
+        if (request.icon.includes("muted"))
+            return "Muted";
         return request.label !== labelFor(request) ? request.label : "";
     }
 
@@ -43,8 +47,7 @@ QtObject {
             // Retain the content until the close fade has finished.
             property var presentedRequest: null
             readonly property bool hasLevel: presentedRequest !== null && presentedRequest.maxLevel >= 0 && presentedRequest.level >= 0
-            readonly property bool iconOnly: presentedRequest !== null && (presentedRequest.icon === "action-unavailable-symbolic"
-                || (!hasLevel && !presentedRequest.label && root.labelFor(presentedRequest) === "System control"))
+            readonly property bool iconOnly: presentedRequest !== null && (presentedRequest.icon === "action-unavailable-symbolic" || (!hasLevel && !presentedRequest.label && root.labelFor(presentedRequest) === "System control"))
             readonly property real maximum: presentedRequest && presentedRequest.maxLevel > 0 ? presentedRequest.maxLevel : 1
             readonly property real levelFraction: hasLevel ? Math.min(1, presentedRequest.level / maximum) : 0
             readonly property string percentLabel: hasLevel ? Math.round(Math.max(0, presentedRequest.level) * 100) + "%" : ""
@@ -89,8 +92,7 @@ QtObject {
                 id: osdCard
                 objectName: "osdCard"
 
-                width: Math.max(0, Math.min(osdWindow.iconOnly ? Theme.osdIconTileSize + Theme.osdPadding * 2 : Theme.osdWidth,
-                    osdWindow.availableWidth - Theme.osdPadding * 2))
+                width: Math.max(0, Math.min(osdWindow.iconOnly ? Theme.osdIconTileSize + Theme.osdPadding * 2 : Theme.osdWidth, osdWindow.availableWidth - Theme.osdPadding * 2))
                 height: content.implicitHeight + Theme.osdPadding * 2
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.horizontalCenterOffset: (osdWindow.leftInset - osdWindow.rightInset) / 2
@@ -100,7 +102,9 @@ QtObject {
                 color: Theme.popupSurface
                 border.width: 1
                 border.color: Theme.outline
-                PanelOutline { surface: osdCard }
+                PanelOutline {
+                    surface: osdCard
+                }
                 opacity: osdWindow.request !== null ? 1 : 0
                 Behavior on opacity {
                     NumberAnimation {
@@ -117,8 +121,7 @@ QtObject {
                     easing.type: Easing.OutCubic
                 }
                 Accessible.role: Accessible.Indicator
-                Accessible.name: osdWindow.iconOnly ? "Action unavailable"
-                    : (osdWindow.presentedRequest ? root.labelFor(osdWindow.presentedRequest) : "") + " " + osdWindow.percentLabel
+                Accessible.name: osdWindow.iconOnly ? "Action unavailable" : (osdWindow.presentedRequest ? root.labelFor(osdWindow.presentedRequest) : "") + " " + osdWindow.percentLabel
 
                 ColumnLayout {
                     id: content
@@ -178,7 +181,9 @@ QtObject {
                             font.family: Theme.fontFamily
                             font.pixelSize: Theme.osdPercentSize
                             font.weight: Font.DemiBold
-                            font.features: ({"tnum": 1})
+                            font.features: ({
+                                    "tnum": 1
+                                })
                             visible: osdWindow.hasLevel && !osdWindow.iconOnly
                         }
                     }
@@ -198,7 +203,10 @@ QtObject {
                             color: Theme.accent
                             Behavior on width {
                                 enabled: osdCard.opacity > 0 && osdWindow.request !== null
-                                NumberAnimation { duration: Theme.osdLevelMotion; easing.type: Easing.OutCubic }
+                                NumberAnimation {
+                                    duration: Theme.osdLevelMotion
+                                    easing.type: Easing.OutCubic
+                                }
                             }
                         }
                         Rectangle {
@@ -215,9 +223,6 @@ QtObject {
             mask: Region {
                 item: clickThroughTarget
             }
-
         }
-
     }
-
 }

@@ -5,7 +5,5 @@
   "apiVersion": 1,
   "entry": "Service.qml",
   "settings": "Settings.qml",
-  "widgets": [
-    {"id": "counter", "name": "Counter", "icon": "list-add-symbolic", "component": "Counter.qml"}
-  ]
+  "widgets": [{ "id": "counter", "name": "Counter", "icon": "list-add-symbolic", "component": "Counter.qml" }]
 }

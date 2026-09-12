@@ -5,19 +5,44 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
-    Timer { id: finish; interval: 200; onTriggered: Qt.quit() }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS")
+    }
+    Timer {
+        id: finish
+        interval: 200
+        onTriggered: Qt.quit()
+    }
     QtObject {
         id: source
-        property var allEntries: Array.from({length: 100}, (_, i) => ({notification: {id: i + 1}, appName: "Downloads", desktopEntry: "", appIcon: "", summary: (i % 3 === 0 ? "Screenshot " : "Download ") + (i + 1), body: i % 2 ? "Short message" : "A completed download with enough text to exercise the card layout.", actions: [], receivedAt: Date.now(), timeoutMs: 0, image: i % 3 === 0 ? "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='150'%3E%3Crect width='300' height='150' fill='%233a658b'/%3E%3C/svg%3E" : ""}))
-        function setPaused(notification, paused) {}
+        property var allEntries: Array.from({
+            length: 100
+        }, (_, i) => ({
+                    notification: {
+                        id: i + 1
+                    },
+                    appName: "Downloads",
+                    desktopEntry: "",
+                    appIcon: "",
+                    summary: (i % 3 === 0 ? "Screenshot " : "Download ") + (i + 1),
+                    body: i % 2 ? "Short message" : "A completed download with enough text to exercise the card layout.",
+                    actions: [],
+                    receivedAt: Date.now(),
+                    timeoutMs: 0,
+                    image: i % 3 === 0 ? "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='150'%3E%3Crect width='300' height='150' fill='%233a658b'/%3E%3C/svg%3E" : ""
+                }))
+        function setPaused(notification, paused) {
+        }
     }
     QtObject {
         id: briefSource
         property var allEntries: source.allEntries.slice(0, 3)
         property var visibleEntries: allEntries
-        function setPaused(notification, paused) {}
-        function archiveToasts() {}
+        function setPaused(notification, paused) {
+        }
+        function archiveToasts() {
+        }
     }
     QtObject {
         id: centre
@@ -28,8 +53,16 @@ ShellRoot {
         property int listY: 0
         property var body: historyBody
     }
-    Item { id: historyBody; parent: window.contentItem }
-    NotificationSurface { id: surface; state: briefSource; notificationCentre: centre; inputSuspended: true }
+    Item {
+        id: historyBody
+        parent: window.contentItem
+    }
+    NotificationSurface {
+        id: surface
+        state: briefSource
+        notificationCentre: centre
+        inputSuspended: true
+    }
     Window {
         id: window
         visible: true
@@ -37,17 +70,31 @@ ShellRoot {
         width: 420
         height: 640
         color: Theme.barBackground
-        NotificationStack { id: stack; anchors.fill: parent; anchors.margins: 16; state: source; presentedEntries: source.allEntries; historyMode: true }
+        NotificationStack {
+            id: stack
+            anchors.fill: parent
+            anchors.margins: 16
+            state: source
+            presentedEntries: source.allEntries
+            historyMode: true
+        }
         TestCase {
             when: window.visible
             property string checks: ""
             property int failures: 0
-            function check(value, message) { checks += "CHECK " + value + " " + message + "\n"; if (!value) failures++; report.setText(checks + "FAILURES " + failures + "\n"); }
+            function check(value, message) {
+                checks += "CHECK " + value + " " + message + "\n";
+                if (!value)
+                    failures++;
+                report.setText(checks + "FAILURES " + failures + "\n");
+            }
             function cards(item) {
                 let result = [];
                 for (const child of item.children || []) {
-                    if (child.objectName === "notificationCard") result.push(child);
-                    else result = result.concat(cards(child));
+                    if (child.objectName === "notificationCard")
+                        result.push(child);
+                    else
+                        result = result.concat(cards(child));
                 }
                 return result;
             }
@@ -78,7 +125,8 @@ ShellRoot {
                 for (let frame = 0; frame < 20; frame++) {
                     wait(16);
                     decodeChanged = decodeChanged || preview.sourceSize.width !== decodeWidth;
-                    if (preview.status !== Image.Ready) loadingFrames++;
+                    if (preview.status !== Image.Ready)
+                        loadingFrames++;
                 }
                 check(!decodeChanged, "Expansion keeps the decoded image size stable");
                 check(loadingFrames === 0, "Preview stays ready throughout expansion: " + loadingFrames + " loading frames");
@@ -95,20 +143,19 @@ ShellRoot {
                     mouseWheel(stack, points[i].x, points[i].y, 0, -120);
                     const immediate = stack.contentY;
                     wait(180);
-                    check((Theme.reducedMotion || immediate < 660) && Math.abs(stack.contentY - 660) < 1,
-                        "Consistent eased wheel step at " + points[i] + ": " + immediate + " then " + stack.contentY);
+                    check((Theme.reducedMotion || immediate < 660) && Math.abs(stack.contentY - 660) < 1, "Consistent eased wheel step at " + points[i] + ": " + immediate + " then " + stack.contentY);
                 }
                 stack.historyMode = false;
                 stack.contentY = 500;
                 mouseWheel(stack, 120, 180, 0, -120);
                 const toastImmediate = stack.contentY;
                 wait(180);
-                check((Theme.reducedMotion || toastImmediate < 660) && Math.abs(stack.contentY - 660) < 1,
-                    "Toast and history views use the same scroll motion: " + toastImmediate + " then " + stack.contentY);
+                check((Theme.reducedMotion || toastImmediate < 660) && Math.abs(stack.contentY - 660) < 1, "Toast and history views use the same scroll motion: " + toastImmediate + " then " + stack.contentY);
                 stack.historyMode = true;
                 wait(250);
                 stack.contentY = 500;
-                for (let notch = 0; notch < 3; notch++) mouseWheel(stack, 120, 180, 0, -120);
+                for (let notch = 0; notch < 3; notch++)
+                    mouseWheel(stack, 120, 180, 0, -120);
                 wait(180);
                 check(Math.abs(stack.contentY - 980) < 1, "Rapid notches retain their full scroll distance");
                 mouseWheel(stack, 120, 180, 0, -120);
@@ -128,13 +175,19 @@ ShellRoot {
                 wait(320);
                 check(rows.filter(row => row.visible).length <= 14, "Interrupted expansion keeps rendering bounded");
                 for (let i = 1; i < rows.length; i++) {
-                    if (rows[i].y + 1 < rows[i-1].y + rows[i-1].height) { check(false, "Expanded cards overlap at " + i); break; }
+                    if (rows[i].y + 1 < rows[i - 1].y + rows[i - 1].height) {
+                        check(false, "Expanded cards overlap at " + i);
+                        break;
+                    }
                 }
                 check(stack.expandedApps.Downloads, "Rapid toggles settle expanded");
                 grabImage(stack).save("/tmp/bingux-notification-performance.png");
                 report.setText(checks + "FAILURES " + failures + "\n");
             }
-            function cleanupTestCase() { window.visible = false; finish.start(); }
+            function cleanupTestCase() {
+                window.visible = false;
+                finish.start();
+            }
         }
     }
 }

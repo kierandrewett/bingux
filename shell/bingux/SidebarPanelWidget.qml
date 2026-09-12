@@ -29,15 +29,22 @@ SidebarPanelFace {
     Layout.column: widgetLayout ? widgetLayout.controlColumn(root) : 0
     Layout.row: widgetLayout ? widgetLayout.controlRow(root) : 0
     onContainerChanged: panelPopup.visible = false
-    WidgetEditHandle { control: root; widgetId: root.widgetId; previewSource: false; onRequested: (id, item) => root.editRequested(id, item, root.barWindow) }
+    WidgetEditHandle {
+        control: root
+        widgetId: root.widgetId
+        previewSource: false
+        onRequested: (id, item) => root.editRequested(id, item, root.barWindow)
+    }
     ShellPopup {
         id: panelPopup
         screen: root.barWindow ? root.barWindow.screen : root.sidebar.screen
         anchorWindow: root.barWindow
         anchorItem: root
         popupWidth: 400
-        popupHeight: Math.min(root.widgetId === "media" ? root.panelHeight + contentPadding * 2 : 480,
-            Math.max(160, height - Theme.barHeight - Theme.dockExclusiveHeight - Theme.gap * 4))
-        onVisibleChanged: if (visible) { root.opening(panelPopup); Qt.callLater(() => root.sidebar.focusPanel(root.widgetId)); }
+        popupHeight: Math.min(root.widgetId === "media" ? root.panelHeight + contentPadding * 2 : 480, Math.max(160, height - Theme.barHeight - Theme.dockExclusiveHeight - Theme.gap * 4))
+        onVisibleChanged: if (visible) {
+            root.opening(panelPopup);
+            Qt.callLater(() => root.sidebar.focusPanel(root.widgetId));
+        }
     }
 }

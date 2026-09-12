@@ -22,8 +22,17 @@ Rectangle {
     }
     Component.onCompleted: opacity = shown ? 1 : 0
     visible: opacity > 0
-    NumberAnimation { id: fade; target: root; property: "opacity" }
-    Behavior on width { NumberAnimation { duration: Theme.reducedMotion ? 0 : 180; easing.type: Easing.OutCubic } }
+    NumberAnimation {
+        id: fade
+        target: root
+        property: "opacity"
+    }
+    Behavior on width {
+        NumberAnimation {
+            duration: Theme.reducedMotion ? 0 : 180
+            easing.type: Easing.OutCubic
+        }
+    }
     AnimatedCount {
         id: number
         objectName: "dockBadgeCount"

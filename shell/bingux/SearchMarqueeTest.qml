@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+
 // Native QML timing regression: qs -p shell/bingux/SearchMarqueeTest.qml
 
 PanelWindow {
@@ -8,7 +9,10 @@ PanelWindow {
     visible: true
     implicitWidth: 440
     implicitHeight: 70
-    anchors { top: true; left: true }
+    anchors {
+        top: true
+        left: true
+    }
     margins.top: 100
     margins.left: 100
     color: Theme.searchSurface
@@ -17,15 +21,20 @@ PanelWindow {
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     mask: Region {}
     function find(item, name) {
-        if (item.objectName === name) return item;
+        if (item.objectName === name)
+            return item;
         for (const child of item.children || []) {
             const found = find(child, name);
-            if (found) return found;
+            if (found)
+                return found;
         }
         return null;
     }
     function check(condition, message) {
-        if (!condition) { console.error("FAIL: " + message); Qt.exit(1); }
+        if (!condition) {
+            console.error("FAIL: " + message);
+            Qt.exit(1);
+        }
         console.log("PASS: " + message);
     }
     SearchResult {
@@ -34,16 +43,28 @@ PanelWindow {
         y: 10
         selected: true
         query: "report"
-        result: ({ providerId: "files", kind: "file", title: "A very long report title with enough words to overflow the entire result row.pdf", subtitle: "/home/example/Documents/research/long-project-name/archive/analysis/final-report-with-all-supporting-material.pdf", icon: "application-pdf" })
+        result: ({
+                providerId: "files",
+                kind: "file",
+                title: "A very long report title with enough words to overflow the entire result row.pdf",
+                subtitle: "/home/example/Documents/research/long-project-name/archive/analysis/final-report-with-all-supporting-material.pdf",
+                icon: "application-pdf"
+            })
     }
-    SearchLaunchEffect { id: burst }
+    SearchLaunchEffect {
+        id: burst
+    }
     Timer {
-        interval: 300; running: true
+        interval: 300
+        running: true
         onTriggered: {
             preview.check(preview.find(row, "searchPathMarquee").offset === 0, "no scrolling before 500ms");
             preview.check(preview.find(row, "searchSelectionChevron").opacity === 1, "chevron finishes revealing");
             const replacement = Qt.createComponent("SearchResult.qml").createObject(preview.contentItem, {
-                result: row.result, query: row.query, selected: true, visible: false,
+                result: row.result,
+                query: row.query,
+                selected: true,
+                visible: false,
                 claimChevronAnimation: () => false
             });
             preview.check(replacement !== null, "replacement delegate created");
@@ -54,18 +75,21 @@ PanelWindow {
         }
     }
     Timer {
-        interval: 400; running: true
+        interval: 400
+        running: true
         onTriggered: {
             preview.check(row.activationIcon.scale === 1 && row.activationIcon.opacity === 1, "launch does not change original icon");
             preview.check(Theme.reducedMotion || (burst.scale > 1 && burst.scale < 4 && burst.opacity > 0 && burst.opacity < 1), "independent icon grows and fades");
         }
     }
     Timer {
-        interval: 650; running: true
+        interval: 650
+        running: true
         onTriggered: preview.check(!burst.running && (Theme.reducedMotion || (burst.scale === 4 && burst.opacity === 0)), "launch completes at four times size and zero opacity")
     }
     Timer {
-        interval: 1200; running: true
+        interval: 1200
+        running: true
         onTriggered: {
             const path = preview.find(row, "searchPathMarquee");
             const title = preview.find(row, "searchTitleMarquee");
@@ -75,7 +99,8 @@ PanelWindow {
         }
     }
     Timer {
-        interval: 1500; running: true
+        interval: 1500
+        running: true
         onTriggered: {
             preview.check(preview.find(row, "searchPathMarquee").offset === 0, "deselect resets path");
             preview.check(preview.find(row, "searchTitleMarquee").offset === 0, "deselect resets title");

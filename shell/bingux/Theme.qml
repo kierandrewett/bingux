@@ -36,7 +36,8 @@ QtObject {
     readonly property color warning: "#f9f06b"
     readonly property color danger: "#ff7b63"
     function usageColor(percent, normal = text) {
-        if (typeof percent !== "number" || !isFinite(percent)) return normal;
+        if (typeof percent !== "number" || !isFinite(percent))
+            return normal;
         return percent >= 95 ? danger : percent >= 80 ? warning : normal;
     }
     readonly property int spaceSmall: 4
@@ -70,15 +71,20 @@ QtObject {
     readonly property int tooltipDelay: tooltipsWarm ? 0 : 500
     readonly property bool tooltipsWarm: tooltipOwners.length > 0 || tooltipCooldown.running
     property var tooltipOwners: []
-    property Timer tooltipCooldown: Timer { interval: 1000 }
+    property Timer tooltipCooldown: Timer {
+        interval: 1000
+    }
     function beginTooltip(owner) {
         tooltipCooldown.stop();
-        if (!tooltipOwners.includes(owner)) tooltipOwners = tooltipOwners.concat([owner]);
+        if (!tooltipOwners.includes(owner))
+            tooltipOwners = tooltipOwners.concat([owner]);
     }
     function endTooltip(owner) {
-        if (!tooltipOwners.includes(owner)) return;
+        if (!tooltipOwners.includes(owner))
+            return;
         tooltipOwners = tooltipOwners.filter(item => item !== owner);
-        if (tooltipOwners.length === 0) tooltipCooldown.restart();
+        if (tooltipOwners.length === 0)
+            tooltipCooldown.restart();
     }
     readonly property int tooltipMotion: reducedMotion ? 0 : 160
     readonly property real tooltipHiddenScale: 0.96

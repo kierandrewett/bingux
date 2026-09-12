@@ -82,15 +82,24 @@ impl SearchConfig {
         let contents = fs::read_to_string(path)
             .with_context(|| format!("could not read search configuration {}", path.display()))?;
         let mut value: serde_json::Value = serde_json::from_str(&contents)?;
-        let preferences = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from)
+        let preferences = std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
             .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
             .map(|dir| dir.join("bingux/settings.json"));
         if let Some(path) = preferences.filter(|p| p.is_file()) {
             let data: serde_json::Value = serde_json::from_str(&fs::read_to_string(path)?)?;
             if let Some(search) = data.get("search").and_then(|v| v.as_object()) {
-                for key in ["ai", "disabledProviders", "engines", "defaultEngine", "fileRoots"] {
+                for key in [
+                    "ai",
+                    "disabledProviders",
+                    "engines",
+                    "defaultEngine",
+                    "fileRoots",
+                ] {
                     if let Some(setting) = search.get(key) {
-                        if key != "fileRoots" || !setting.is_null() { value[key] = setting.clone(); }
+                        if key != "fileRoots" || !setting.is_null() {
+                            value[key] = setting.clone();
+                        }
                     }
                 }
             }
@@ -201,9 +210,15 @@ impl WeatherConfig {
 impl AiConfig {
     fn validate(&self) -> Result<()> {
         if let Some(harness) = &self.harness {
-            if !matches!(harness.as_str(), "pi" | "claude") { bail!("Unsupported AI harness"); }
-            if let Some(path) = &self.executable { require_absolute_path(path, "AI executable")?; }
-            if self.model.len() > 256 || self.model.chars().any(char::is_control) { bail!("AI model is invalid"); }
+            if !matches!(harness.as_str(), "pi" | "claude") {
+                bail!("Unsupported AI harness");
+            }
+            if let Some(path) = &self.executable {
+                require_absolute_path(path, "AI executable")?;
+            }
+            if self.model.len() > 256 || self.model.chars().any(char::is_control) {
+                bail!("AI model is invalid");
+            }
             return Ok(());
         }
         validate_endpoint(&self.endpoint)?;
@@ -566,10 +581,7 @@ mod tests {
                 display_name: "Notes".to_owned(),
                 database_path: PathBuf::from("/home/test/notes.db"),
                 query: "SELECT id, title, body FROM note WHERE title LIKE ?1 LIMIT ?2".to_owned(),
-                activation_command: vec![
-                    "/usr/bin/note-open".to_owned(),
-                    "{id}".to_owned(),
-                ],
+                activation_command: vec!["/usr/bin/note-open".to_owned(), "{id}".to_owned()],
             }],
             weather: Some(WeatherConfig {
                 latitude: 51.5,

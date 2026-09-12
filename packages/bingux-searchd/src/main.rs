@@ -4,8 +4,8 @@ use bingux_searchd::{
     config::{SearchCommands, SearchConfig},
     external::{ExternalEvent, ExternalProviders},
     protocol::{
-        ActivateRequest, DaemonErrorCode, DaemonEvent, DaemonResult,
-        ProtocolError, ProtocolErrorKind, QueryRequest, ShellRequest, encode_daemon_event_lines,
+        ActivateRequest, DaemonErrorCode, DaemonEvent, DaemonResult, ProtocolError,
+        ProtocolErrorKind, QueryRequest, ShellRequest, encode_daemon_event_lines,
         parse_shell_request, shell_request_id,
     },
     providers::{Activation, Candidate, LocalProviders},
@@ -69,7 +69,11 @@ fn run() -> Result<()> {
     let weather = WeatherProvider::start(config.weather.clone());
     let (external_sender, external_receiver) = mpsc::sync_channel(EXTERNAL_EVENT_QUEUE_CAPACITY);
     let external = Arc::new(ExternalProviders::start(
-        if config.disabled_providers.iter().any(|p| p == "external") { &[] } else { &config.provider_manifest_paths },
+        if config.disabled_providers.iter().any(|p| p == "external") {
+            &[]
+        } else {
+            &config.provider_manifest_paths
+        },
         external_sender,
     )?);
     let runtime = Arc::new(Runtime::new(local, weather, external, config.commands, ai)?);
@@ -221,12 +225,22 @@ impl Runtime {
                             continue;
                         }
                         let completion = work.ai.stream(&work.history, &work.prompt, |message| {
-                            let Ok(routes) = work.runtime.chat_activations.lock() else { return false; };
-                            let Some(route) = routes.get(&work.activation_id) else { return false; };
-                            if message.is_empty() { return true; }
-                            route.sender.try_send(DaemonEvent::ChatProgress {
-                                request_id: route.request_id.clone(), message: Arc::from(message),
-                            }).is_ok()
+                            let Ok(routes) = work.runtime.chat_activations.lock() else {
+                                return false;
+                            };
+                            let Some(route) = routes.get(&work.activation_id) else {
+                                return false;
+                            };
+                            if message.is_empty() {
+                                return true;
+                            }
+                            route
+                                .sender
+                                .try_send(DaemonEvent::ChatProgress {
+                                    request_id: route.request_id.clone(),
+                                    message: Arc::from(message),
+                                })
+                                .is_ok()
                         });
                         work.runtime.finish_chat_activation(
                             &work.activation_id,
@@ -487,11 +501,15 @@ impl Runtime {
             return;
         }
 
-        let dispatch = if request.query.trim().starts_with(['!', '?']) { Default::default() } else { self.external.query(
-            provider_query_id.clone(),
-            request.query.clone(),
-            request.limit,
-        ) };
+        let dispatch = if request.query.trim().starts_with(['!', '?']) {
+            Default::default()
+        } else {
+            self.external.query(
+                provider_query_id.clone(),
+                request.query.clone(),
+                request.limit,
+            )
+        };
         tracker.configure_providers(dispatch.accepted.clone());
 
         if !self.query_is_active(client_id, &provider_query_id)
@@ -2291,14 +2309,25 @@ mod tests {
         let runtime = test_runtime();
         let (sender, _receiver) = mpsc::sync_channel(1);
         let tracker = Arc::new(QueryTracker::new(1, "q-app".into(), 2, sender));
-        runtime.queries.lock().unwrap().insert("q-app".into(), tracker);
-        runtime.client_queries.lock().unwrap().insert(1, "q-app".into());
+        runtime
+            .queries
+            .lock()
+            .unwrap()
+            .insert("q-app".into(), tracker);
+        runtime
+            .client_queries
+            .lock()
+            .unwrap()
+            .insert(1, "q-app".into());
         let candidates = vec![Candidate {
             provider_id: "applications".into(),
             result: bingux_searchd::protocol::ProviderResult {
                 result_id: "org.example.App.desktop".into(),
                 kind: bingux_searchd::protocol::ResultKind::Application,
-                title: "Example".into(), subtitle: String::new(), icon: String::new(), score: 1.0,
+                title: "Example".into(),
+                subtitle: String::new(),
+                icon: String::new(),
+                score: 1.0,
             },
             activation: Activation::None,
         }];
@@ -2307,7 +2336,14 @@ mod tests {
         let wire = serde_json::to_value(&results[0]).unwrap();
         assert_eq!(wire["desktopId"], "org.example.App.desktop");
         assert_ne!(wire["resultId"], wire["desktopId"]);
-        assert!(runtime.activations.lock().unwrap().take(&results[0].result_id, 1).is_some());
+        assert!(
+            runtime
+                .activations
+                .lock()
+                .unwrap()
+                .take(&results[0].result_id, 1)
+                .is_some()
+        );
     }
 
     #[test]

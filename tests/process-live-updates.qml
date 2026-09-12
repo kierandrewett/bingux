@@ -2,13 +2,29 @@ import QtQuick
 import QtTest
 import Quickshell
 import Quickshell.Io
+
 ShellRoot {
-    Timer { id: finish; interval: 200; onTriggered: Qt.quit() }
-    FileView { id: report; blockWrites: true; path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS") }
-    Metrics { id: liveMetrics }
+    Timer {
+        id: finish
+        interval: 200
+        onTriggered: Qt.quit()
+    }
+    FileView {
+        id: report
+        blockWrites: true
+        path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS")
+    }
+    Metrics {
+        id: liveMetrics
+    }
     FloatingWindow {
-        implicitWidth: 230; implicitHeight: 900
-        SidebarMonitor { id: sidebar; anchors.fill: parent; metrics: liveMetrics }
+        implicitWidth: 230
+        implicitHeight: 900
+        SidebarMonitor {
+            id: sidebar
+            anchors.fill: parent
+            metrics: liveMetrics
+        }
         TestCase {
             when: true
             function test_updates() {

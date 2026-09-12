@@ -5,7 +5,7 @@ test_dir="$(mktemp -d)"
 trap 'rm -rf "$test_dir"' EXIT
 cp "$repo_dir"/shell/bingux/*.qml "$repo_dir"/shell/bingux/*.js "$repo_dir/shell/bingux/qmldir" "$test_dir/"
 cp "$repo_dir/tests/notification-open.qml" "$test_dir/shell.qml"
-if ! timeout 20s "${BINGUX_QUICKSHELL:-quickshell}" -p "$test_dir" --no-color > "$test_dir/log" 2>&1; then
+if ! timeout 20s "${BINGUX_QUICKSHELL:-quickshell}" -p "$test_dir" --no-color >"$test_dir/log" 2>&1; then
     cat "$test_dir/log"
     exit 1
 fi

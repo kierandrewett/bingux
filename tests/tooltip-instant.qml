@@ -3,22 +3,39 @@ import QtTest
 import Quickshell
 
 ShellRoot {
-    DockTooltip { id: dockTip; text: "Dock tooltip" }
+    DockTooltip {
+        id: dockTip
+        text: "Dock tooltip"
+    }
     FloatingWindow {
         id: window
         implicitWidth: 240
         implicitHeight: 100
         Item {
             id: anchor
-            width: 80; height: 40
-            MouseArea { id: hover; anchors.fill: parent; hoverEnabled: true }
-
+            width: 80
+            height: 40
+            MouseArea {
+                id: hover
+                anchors.fill: parent
+                hoverEnabled: true
+            }
         }
         Item {
             id: controlAnchor
-            x: 100; width: 80; height: 40
-            MouseArea { id: controlHover; anchors.fill: parent; hoverEnabled: true }
-            ShellTooltip { id: controlTip; visible: controlHover.containsMouse; text: "Control tooltip" }
+            x: 100
+            width: 80
+            height: 40
+            MouseArea {
+                id: controlHover
+                anchors.fill: parent
+                hoverEnabled: true
+            }
+            ShellTooltip {
+                id: controlTip
+                visible: controlHover.containsMouse
+                text: "Control tooltip"
+            }
         }
         BarTooltip {
             id: barTip
@@ -31,11 +48,13 @@ ShellRoot {
             name: "InstantTooltips"
             when: window.visible
             function equal(actual, expected, message) {
-                if (actual !== expected) console.error("FAIL: " + message + " actual=" + actual + " expected=" + expected);
+                if (actual !== expected)
+                    console.error("FAIL: " + message + " actual=" + actual + " expected=" + expected);
                 compare(actual, expected, message);
             }
             function check(condition, message) {
-                if (!condition) console.error("FAIL: " + message);
+                if (!condition)
+                    console.error("FAIL: " + message);
                 verify(condition, message);
             }
             function test_session() {

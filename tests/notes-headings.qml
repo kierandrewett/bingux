@@ -2,19 +2,38 @@ import QtQuick
 import QtTest
 import Quickshell
 import Quickshell.Io
+
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS") }
-    Timer { id: finish; interval: 200; onTriggered: Qt.quit() }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS")
+    }
+    Timer {
+        id: finish
+        interval: 200
+        onTriggered: Qt.quit()
+    }
     FloatingWindow {
         id: window
-        implicitWidth: 420; implicitHeight: 700
+        implicitWidth: 420
+        implicitHeight: 700
         color: Theme.barBackground
-        SidebarNotes { id: notes; anchors.fill: parent }
+        SidebarNotes {
+            id: notes
+            anchors.fill: parent
+        }
         TestCase {
             property string checks: ""
-            function check(value, message) { checks += "Check " + value + " " + (message || "") + "\n"; verify(value,message); }
+            function check(value, message) {
+                checks += "Check " + value + " " + (message || "") + "\n";
+                verify(value, message);
+            }
             when: window.visible
-            function type(editor, text) { editor.forceActiveFocus(); for (const c of text) keyClick(c); }
+            function type(editor, text) {
+                editor.forceActiveFocus();
+                for (const c of text)
+                    keyClick(c);
+            }
             function test_consecutive_headings() {
                 const editor = findChild(notes, "notesEditor");
                 editor.clear();
@@ -34,7 +53,8 @@ ShellRoot {
                 type(editor, "A normal paragraph.");
                 check(!editor.getText(0, editor.length).includes("#"), "no literal markers left in rendered headings");
                 check(sizes[0] > sizes[1] && sizes[1] > sizes[2], "heading hierarchy is distinct");
-                if (Quickshell.env("BINGUX_NOTES_SCREENSHOT")) grabImage(window.contentItem).save(Quickshell.env("BINGUX_NOTES_SCREENSHOT") + ".levels.png");
+                if (Quickshell.env("BINGUX_NOTES_SCREENSHOT"))
+                    grabImage(window.contentItem).save(Quickshell.env("BINGUX_NOTES_SCREENSHOT") + ".levels.png");
                 editor.text = "# Earlier\n\n**Bold** paragraph\n\n## Change me\n\nAfter";
                 editor.cursorPosition = editor.getText(0, editor.length).indexOf("Change me");
                 type(editor, "#### ");
@@ -48,9 +68,13 @@ ShellRoot {
                 check(editor.text === before, "one undo restores the complete formatting action");
                 keyClick(Qt.Key_Z, Qt.ControlModifier | Qt.ShiftModifier);
                 check(editor.text === after, "one redo restores the formatting action");
-                if (Quickshell.env("BINGUX_NOTES_SCREENSHOT")) grabImage(window.contentItem).save(Quickshell.env("BINGUX_NOTES_SCREENSHOT"));
+                if (Quickshell.env("BINGUX_NOTES_SCREENSHOT"))
+                    grabImage(window.contentItem).save(Quickshell.env("BINGUX_NOTES_SCREENSHOT"));
             }
-            function cleanupTestCase() { report.setText("FAILURES " + qtest_results.failCount + "\n" + checks); finish.start(); }
+            function cleanupTestCase() {
+                report.setText("FAILURES " + qtest_results.failCount + "\n" + checks);
+                finish.start();
+            }
         }
     }
 }

@@ -13,38 +13,64 @@ ShellRoot {
     property real selectionStart: 0
     property var viewport: null
     function findChild(parent, name) {
-        if (parent.objectName === name) return parent;
+        if (parent.objectName === name)
+            return parent;
         for (const child of parent.children || []) {
             const found = findChild(child, name);
-            if (found) return found;
+            if (found)
+                return found;
         }
         return null;
     }
     function check(condition, message) {
-        if (!condition) { failures.push(message); console.error("FAIL: " + message); }
+        if (!condition) {
+            failures.push(message);
+            console.error("FAIL: " + message);
+        }
     }
     WindowSwitcher {
         id: chooser
         enabled: false
         showDelay: 0
         function appFor(window) {
-            return window ? {id: window.appId.replace(/\.desktop$/, ""), name: "Test app",
-                icon: "/usr/share/icons/hicolor/scalable/apps/org.gnome.Calculator.svg"} : null;
+            return window ? {
+                id: window.appId.replace(/\.desktop$/, ""),
+                name: "Test app",
+                icon: "/usr/share/icons/hicolor/scalable/apps/org.gnome.Calculator.svg"
+            } : null;
         }
-        notifications: [{desktopEntry: "test-second"}, {desktopEntry: "test-second"}, {desktopEntry: "unrelated"}]
-        activeStreams: [{properties: {"application.id": "test-second"}}]
+        notifications: [
+            {
+                desktopEntry: "test-second"
+            },
+            {
+                desktopEntry: "test-second"
+            },
+            {
+                desktopEntry: "unrelated"
+            }
+        ]
+        activeStreams: [
+            {
+                properties: {
+                    "application.id": "test-second"
+                }
+            }
+        ]
     }
     FrameAnimation {
         running: chooser.active || chooser.revealProgress > 0
         onTriggered: {
-            if (test.phase === 1) test.openingFrames.push(chooser.revealProgress);
-            if (test.phase === 2 && test.selection) test.selectionFrames.push(test.selection.x);
+            if (test.phase === 1)
+                test.openingFrames.push(chooser.revealProgress);
+            if (test.phase === 2 && test.selection)
+                test.selectionFrames.push(test.selection.x);
             if (test.phase === 3 && test.selection && test.viewport) {
                 const x = test.selection.x - test.viewport.contentX;
-                test.check(x >= -1 && x + chooser.tileWidth <= test.viewport.width + 1,
-                    "Highlight stays inside the viewport during scrolling and wraparound");
+                test.check(x >= -1 && x + chooser.tileWidth <= test.viewport.width + 1, "Highlight stays inside the viewport during scrolling and wraparound");
             }
-            if (test.phase === 4) test.closingFrames.push(chooser.revealProgress);
+            if (test.phase === 4)
+                test.closingFrames.push(chooser.revealProgress);
         }
     }
     Timer {
@@ -58,9 +84,9 @@ ShellRoot {
             test.check(chooser.selectedIcon === before, "Window snapshots preserve icon delegates during key repeat");
             chooser.step(presses >= 20);
             test.check(chooser.selectedIcon !== null, "Key repeat always has a rendered selected card");
-            test.check(chooser.visibleWindows.length === chooser.displayCount && chooser.visibleWindows.every(window => !!window),
-                "Every viewport slot remains populated across boundaries");
-            if (++presses === 40) stop();
+            test.check(chooser.visibleWindows.length === chooser.displayCount && chooser.visibleWindows.every(window => !!window), "Every viewport slot remains populated across boundaries");
+            if (++presses === 40)
+                stop();
         }
     }
     Timer {
@@ -69,15 +95,50 @@ ShellRoot {
         running: true
         onTriggered: {
             if (test.phase === 0) {
-                chooser.refresh([{id: "1", appId: "test-first.desktop", title: "First window", lastUserTime: 5, focused: true},
-                    {id: "2", appId: "test-second.desktop", title: "Second window", lastUserTime: 4},
-                    {id: "3", appId: "test-third.desktop", title: "Third window", lastUserTime: 3},
-                    {id: "4", appId: "test-first.desktop", title: "Another window from the same app", parent: "1", lastUserTime: 2},
-                    {id: "5", appId: "test-fifth.desktop", title: "", lastUserTime: 1}]);
+                chooser.refresh([
+                    {
+                        id: "1",
+                        appId: "test-first.desktop",
+                        title: "First window",
+                        lastUserTime: 5,
+                        focused: true
+                    },
+                    {
+                        id: "2",
+                        appId: "test-second.desktop",
+                        title: "Second window",
+                        lastUserTime: 4
+                    },
+                    {
+                        id: "3",
+                        appId: "test-third.desktop",
+                        title: "Third window",
+                        lastUserTime: 3
+                    },
+                    {
+                        id: "4",
+                        appId: "test-first.desktop",
+                        title: "Another window from the same app",
+                        parent: "1",
+                        lastUserTime: 2
+                    },
+                    {
+                        id: "5",
+                        appId: "test-fifth.desktop",
+                        title: "",
+                        lastUserTime: 1
+                    }
+                ]);
                 test.check(chooser.history.length === 5, "Each window is retained, including transients and untitled windows");
                 const now = Date.now();
-                chooser.previews = {"1": "cached", "2": "cached"};
-                chooser.previewTimes = {"1": now - 3000, "2": now - 3000};
+                chooser.previews = {
+                    "1": "cached",
+                    "2": "cached"
+                };
+                chooser.previewTimes = {
+                    "1": now - 3000,
+                    "2": now - 3000
+                };
                 test.check(chooser.needsPreview(chooser.liveWindows[0], now), "Refresh content from the focused window");
                 test.check(!chooser.needsPreview(chooser.liveWindows[1], now), "Reuse background previews beyond two seconds");
                 test.check(chooser.needsPreview(chooser.liveWindows[1], now + 30000), "Refresh old background snapshots");
@@ -89,7 +150,9 @@ ShellRoot {
                 test.check(chooser.revealProgress === 1, "Opening reaches full opacity");
                 test.check(test.openingFrames.every(value => value === 1), "Opening does not delay the first fully visible frame");
                 const before = chooser.selectedIcon;
-                chooser.refresh(chooser.liveWindows.map(window => Object.assign({}, window, {title: window.title + " updated"})));
+                chooser.refresh(chooser.liveWindows.map(window => Object.assign({}, window, {
+                        title: window.title + " updated"
+                    })));
                 test.check(chooser.selectedIcon === before, "Metadata updates preserve the selected icon and badge instances");
                 test.check(chooser.selectedIcon.notificationCount === 2, "Shared icon excludes unrelated notifications");
                 test.check(chooser.selectedIcon.playingAudio, "Shared icon matches audio activity");
@@ -98,7 +161,8 @@ ShellRoot {
                 test.check(audio && audio.visible && audio.opacity === 1, "Audio badge is rendered");
                 test.check(notifications && notifications.visible && notifications.count === 2, "Notification count is rendered");
                 let presentation = chooser.selectedIcon;
-                while (presentation && !test.findChild(presentation, "switcherViewport")) presentation = presentation.parent;
+                while (presentation && !test.findChild(presentation, "switcherViewport"))
+                    presentation = presentation.parent;
                 test.selection = test.findChild(presentation, "switcherSelection");
                 test.viewport = test.findChild(presentation, "switcherViewport");
                 test.selectionStart = test.selection.x;
@@ -110,7 +174,8 @@ ShellRoot {
                 test.check(!chooser.selectedIcon.playingAudio && chooser.selectedIcon.notificationCount === 0, "Badges do not transfer to another app");
                 keyRepeat.start();
             } else if (test.phase === 3) {
-                if (keyRepeat.running) return;
+                if (keyRepeat.running)
+                    return;
                 test.check(chooser.selected === 2, "Forward and backward wrapping returns to the same window");
                 chooser.close();
                 test.check(!chooser.active, "Closing releases selection immediately");

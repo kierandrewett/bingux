@@ -6,7 +6,7 @@ trap 'rm -rf "$test_dir"' EXIT
 cp "$repo_dir"/shell/bingux/{*.qml,*.js,*.py,*.json,qmldir} "$test_dir/"
 cp -r "$repo_dir/shell/bingux/icons" "$test_dir/"
 cp "${BINGUX_CONTROL_TEST_QML:-$repo_dir/tests/control-centre.qml}" "$test_dir/shell.qml"
-printf '%s' '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><circle cx="40" cy="40" r="40" fill="#7caaf0"/></svg>' > "$test_dir/avatar.svg"
+printf '%s' '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><circle cx="40" cy="40" r="40" fill="#7caaf0"/></svg>' >"$test_dir/avatar.svg"
 export XDG_CONFIG_HOME="$test_dir/config"
 export XDG_STATE_HOME="$test_dir/state"
 export BINGUX_CONTROL_TEST_RESULTS="$test_dir/results.txt"

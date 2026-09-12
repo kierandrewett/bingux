@@ -20,22 +20,70 @@ AbstractButton {
     hoverEnabled: true
     Accessible.name: displayedLabel
     background: Item {
-        ControlCentreButtonSurface { anchors.fill: parent; visible: !root.barStyle; control: root; selected: root.highlighted }
-        BarControlSurface { visible: root.barStyle; hovered: root.hovered; pressed: root.down; selected: root.highlighted; focused: root.visualFocus }
+        ControlCentreButtonSurface {
+            anchors.fill: parent
+            visible: !root.barStyle
+            control: root
+            selected: root.highlighted
+        }
+        BarControlSurface {
+            visible: root.barStyle
+            hovered: root.hovered
+            pressed: root.down
+            selected: root.highlighted
+            focused: root.visualFocus
+        }
     }
     contentItem: Item {
         scale: root.down ? 0.88 : 1
-        Behavior on scale { NumberAnimation { duration: Theme.reducedMotion ? 0 : 80; easing.type: Easing.OutCubic } }
-        SymbolicIcon { visible: !root.customPresentation && avatar.status !== Image.Ready; anchors.centerIn: parent; implicitSize: 16; source: Quickshell.iconPath(root.iconName); color: root.enabled ? Theme.text : Theme.muted }
-        WidgetFace { id: face; anchors.centerIn: parent; visible: root.customPresentation; presentation: root.presentation; iconColor: root.enabled ? Theme.text : Theme.muted }
+        Behavior on scale {
+            NumberAnimation {
+                duration: Theme.reducedMotion ? 0 : 80
+                easing.type: Easing.OutCubic
+            }
+        }
+        SymbolicIcon {
+            visible: !root.customPresentation && avatar.status !== Image.Ready
+            anchors.centerIn: parent
+            implicitSize: 16
+            source: Quickshell.iconPath(root.iconName)
+            color: root.enabled ? Theme.text : Theme.muted
+        }
+        WidgetFace {
+            id: face
+            anchors.centerIn: parent
+            visible: root.customPresentation
+            presentation: root.presentation
+            iconColor: root.enabled ? Theme.text : Theme.muted
+        }
         ClippingRectangle {
             anchors.centerIn: parent
-            width: 24; height: 24; radius: 12
+            width: 24
+            height: 24
+            radius: 12
             visible: !root.customPresentation && avatar.status === Image.Ready
             color: "transparent"
-            Image { id: avatar; objectName: "iconButtonImage"; anchors.fill: parent; source: root.imageSource; fillMode: Image.PreserveAspectCrop; sourceSize.width: 48; sourceSize.height: 48 }
+            Image {
+                id: avatar
+                objectName: "iconButtonImage"
+                anchors.fill: parent
+                source: root.imageSource
+                fillMode: Image.PreserveAspectCrop
+                sourceSize.width: 48
+                sourceSize.height: 48
+            }
         }
     }
-    BarTooltip { objectName: "iconButtonBarTooltip"; anchorItem: root; barWindow: root.barWindow; requested: root.barStyle && root.visible && root.enabled && (root.hovered || root.visualFocus); text: root.tooltipText }
-    ShellTooltip { parent: root; visible: !root.barStyle && root.visible && root.enabled && (root.hovered || root.visualFocus); text: root.tooltipText }
+    BarTooltip {
+        objectName: "iconButtonBarTooltip"
+        anchorItem: root
+        barWindow: root.barWindow
+        requested: root.barStyle && root.visible && root.enabled && (root.hovered || root.visualFocus)
+        text: root.tooltipText
+    }
+    ShellTooltip {
+        parent: root
+        visible: !root.barStyle && root.visible && root.enabled && (root.hovered || root.visualFocus)
+        text: root.tooltipText
+    }
 }

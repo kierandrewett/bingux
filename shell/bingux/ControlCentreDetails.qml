@@ -39,23 +39,54 @@ Item {
     readonly property bool networkBusy: networkQuery.running || wifiQuery.running || connectNetwork.running || wifiRadioBusy
     function scanForCommand(enabled) {
         commandDiscovery = enabled;
-        if (enabled) scanTimeout.restart(); else { scanTimeout.stop(); syncDiscovery(); }
+        if (enabled)
+            scanTimeout.restart();
+        else {
+            scanTimeout.stop();
+            syncDiscovery();
+        }
     }
-    Timer { id: scanTimeout; interval: 30000; onTriggered: root.commandDiscovery = false }
+    Timer {
+        id: scanTimeout
+        interval: 30000
+        onTriggered: root.commandDiscovery = false
+    }
     function connectionForCommand(identity, action) {
-        if (!["up", "down"].includes(action)) return {ok: false, error: "Unknown connection action"};
-        if (connectNetwork.running) return {ok: false, error: "A connection change is in progress"};
+        if (!["up", "down"].includes(action))
+            return {
+                ok: false,
+                error: "Unknown connection action"
+            };
+        if (connectNetwork.running)
+            return {
+                ok: false,
+                error: "A connection change is in progress"
+            };
         const connection = connections.find(item => item.uuid === identity);
-        if (!connection) return {ok: false, error: "Saved connection not found; refresh the network list"};
+        if (!connection)
+            return {
+                ok: false,
+                error: "Saved connection not found; refresh the network list"
+            };
         if (action === "up" && connection.type === "802-11-wireless" && wifiDisabled)
-            return {ok: false, error: "Wi-Fi is off. Turn it on before connecting."};
-        if (connection.connected === (action === "up")) return {ok: true, changed: false};
+            return {
+                ok: false,
+                error: "Wi-Fi is off. Turn it on before connecting."
+            };
+        if (connection.connected === (action === "up"))
+            return {
+                ok: true,
+                changed: false
+            };
         networkAction = action;
         connectionError = "";
         errorText = "";
         pendingConnection = identity;
         connectNetwork.running = true;
-        return {ok: true, pending: true};
+        return {
+            ok: true,
+            pending: true
+        };
     }
     property var discoveryAdapter: null
     readonly property bool discoveryEligible: (commandDiscovery || active && page === "bluetooth") && !!bluetoothAdapter && bluetoothAdapter.enabled
@@ -63,11 +94,14 @@ Item {
     onDiscoveryEligibleChanged: syncDiscovery()
     onBluetoothAdapterChanged: syncDiscovery()
     function syncDiscovery() {
-        if (discoveryAdapter && (!discoveryEligible || discoveryAdapter !== bluetoothAdapter)) stopDiscovery();
-        if (discoveryEligible) startDiscovery();
+        if (discoveryAdapter && (!discoveryEligible || discoveryAdapter !== bluetoothAdapter))
+            stopDiscovery();
+        if (discoveryEligible)
+            startDiscovery();
     }
     function startDiscovery() {
-        if (!discoveryEligible || discoveryAdapter || bluetoothAdapter.discovering) return;
+        if (!discoveryEligible || discoveryAdapter || bluetoothAdapter.discovering)
+            return;
         discoveryAdapter = bluetoothAdapter;
         discoveryAdapter.discovering = true;
     }
@@ -79,39 +113,71 @@ Item {
     onInputSelected: node => Pipewire.preferredDefaultAudioSource = node
     onOutputSelected: node => Pipewire.preferredDefaultAudioSink = node
     function stopDiscovery() {
-        if (discoveryAdapter) discoveryAdapter.discovering = false;
+        if (discoveryAdapter)
+            discoveryAdapter.discovering = false;
         discoveryAdapter = null;
     }
     function toggleDiscovery() {
-        if (!discoveryEligible) return;
-        if (discoveryAdapter) stopDiscovery();
-        else startDiscovery();
+        if (!discoveryEligible)
+            return;
+        if (discoveryAdapter)
+            stopDiscovery();
+        else
+            startDiscovery();
     }
     Component.onDestruction: stopDiscovery()
     function splitNetworkLine(line) {
-        const fields = []; let field = ""; let escaped = false;
+        const fields = [];
+        let field = "";
+        let escaped = false;
         for (const character of line) {
-            if (escaped) { field += character; escaped = false; }
-            else if (character === "\\") escaped = true;
-            else if (character === ":") { fields.push(field); field = ""; }
-            else field += character;
+            if (escaped) {
+                field += character;
+                escaped = false;
+            } else if (character === "\\")
+                escaped = true;
+            else if (character === ":") {
+                fields.push(field);
+                field = "";
+            } else
+                field += character;
         }
-        fields.push(field); return fields;
+        fields.push(field);
+        return fields;
     }
     property var audioOutputs: Pipewire.nodes.values.filter(node => node.isSink && !node.isStream)
     readonly property var bluetoothDevices: bluetoothAdapter && bluetoothAdapter.devices ? bluetoothAdapter.devices.values.filter(device => device.paired || device.connected).sort((a, b) => Number(b.connected) - Number(a.connected)) : []
     readonly property var nearbyDevices: bluetoothAdapter && bluetoothAdapter.devices ? bluetoothAdapter.devices.values.filter(device => !device.paired && !device.connected) : []
     readonly property bool keyboardNavigation: back.visualFocus
-    function focusBack(reason) { back.forceActiveFocus(reason); }
+    function focusBack(reason) {
+        back.forceActiveFocus(reason);
+    }
     Keys.onLeftPressed: root.backRequested()
     Keys.onEscapePressed: root.backRequested()
-    signal backRequested()
+    signal backRequested
     signal settingsRequested(string panel)
-    onActiveChanged: { if (active && page === "network") refreshNetwork(); if (!active && !commandDiscovery) stopDiscovery(); }
-    onAudioTabChanged: { deviceList.cancelFlick(); deviceList.contentY = 0; }
-    onPageChanged: { deviceList.cancelFlick(); deviceList.contentY = 0; if (page !== "bluetooth" && !commandDiscovery) stopDiscovery(); errorText = ""; if (active && page === "network") refreshNetwork(); }
+    onActiveChanged: {
+        if (active && page === "network")
+            refreshNetwork();
+        if (!active && !commandDiscovery)
+            stopDiscovery();
+    }
+    onAudioTabChanged: {
+        deviceList.cancelFlick();
+        deviceList.contentY = 0;
+    }
+    onPageChanged: {
+        deviceList.cancelFlick();
+        deviceList.contentY = 0;
+        if (page !== "bluetooth" && !commandDiscovery)
+            stopDiscovery();
+        errorText = "";
+        if (active && page === "network")
+            refreshNetwork();
+    }
     function setWifiEnabled(enabled) {
-        if (wifiRadioToggle.running || wifiRadioState === (enabled ? "enabled" : "disabled")) return;
+        if (wifiRadioToggle.running || wifiRadioState === (enabled ? "enabled" : "disabled"))
+            return;
         wifiRadioTarget = enabled;
         wifiRadioError = "";
         errorText = "";
@@ -123,10 +189,17 @@ Item {
             networkError = "";
             networkQuery.running = true;
         }
-        if (!wifiQuery.running && !wifiRadioToggle.running) wifiQuery.running = true;
-        if (!wifiRadioQuery.running && !wifiRadioToggle.running) wifiRadioQuery.running = true;
+        if (!wifiQuery.running && !wifiRadioToggle.running)
+            wifiQuery.running = true;
+        if (!wifiRadioQuery.running && !wifiRadioToggle.running)
+            wifiRadioQuery.running = true;
     }
-    Timer { interval: 10000; repeat: true; running: root.active && root.page === "network"; onTriggered: root.refreshNetwork() }
+    Timer {
+        interval: 10000
+        repeat: true
+        running: root.active && root.page === "network"
+        onTriggered: root.refreshNetwork()
+    }
     Process {
         id: networkQuery
         command: ["nmcli", "--terse", "--escape", "no", "--fields", "UUID,TYPE,NAME,DEVICE", "connection", "show"]
@@ -135,17 +208,25 @@ Item {
                 const rows = [];
                 for (const line of text.trim().split("\n")) {
                     const fields = line.split(":");
-                    if (fields.length < 4 || !["802-11-wireless", "802-3-ethernet", "vpn", "wireguard", "tun", "gsm", "cdma", "bluetooth"].includes(fields[1])) continue;
-                    rows.push({uuid: fields[0], type: fields[1], name: fields.slice(2, -1).join(":"), connected: fields[fields.length - 1] !== "" && fields[fields.length - 1] !== "--"});
+                    if (fields.length < 4 || !["802-11-wireless", "802-3-ethernet", "vpn", "wireguard", "tun", "gsm", "cdma", "bluetooth"].includes(fields[1]))
+                        continue;
+                    rows.push({
+                        uuid: fields[0],
+                        type: fields[1],
+                        name: fields.slice(2, -1).join(":"),
+                        connected: fields[fields.length - 1] !== "" && fields[fields.length - 1] !== "--"
+                    });
                 }
                 const sorted = rows.sort((a, b) => Number(b.connected) - Number(a.connected) || a.name.localeCompare(b.name));
-                if (JSON.stringify(sorted) !== JSON.stringify(root.connections)) root.connections = sorted;
+                if (JSON.stringify(sorted) !== JSON.stringify(root.connections))
+                    root.connections = sorted;
             }
         }
         onExited: exitCode => {
             root.networkUpdatedAt = Date.now();
             root.networkError = exitCode === 0 ? "" : "Could not load connections. Open Network settings to manage them.";
-            if (root.networkError) root.errorText = root.networkError;
+            if (root.networkError)
+                root.errorText = root.networkError;
         }
     }
     Process {
@@ -165,8 +246,10 @@ Item {
             onStreamFinished: {
                 const state = text.trim().toLowerCase();
                 root.wifiRadioState = state === "enabled" || state === "disabled" ? state : "unknown";
-                if (root.wifiRadioState === "disabled") root.wirelessNetworks = [];
-                if (root.wifiRadioState !== "disabled") root.wifiRadioError = "";
+                if (root.wifiRadioState === "disabled")
+                    root.wirelessNetworks = [];
+                if (root.wifiRadioState !== "disabled")
+                    root.wifiRadioError = "";
             }
         }
         onExited: exitCode => {
@@ -197,15 +280,23 @@ Item {
         command: ["nmcli", "--terse", "--escape", "yes", "--fields", "IN-USE,SSID,SIGNAL,SECURITY", "device", "wifi", "list", "--rescan", "auto"]
         stdout: StdioCollector {
             onStreamFinished: {
-                const rows = []; const names = new Set();
+                const rows = [];
+                const names = new Set();
                 for (const line of text.trim().split("\n")) {
                     const fields = root.splitNetworkLine(line);
-                    if (fields.length !== 4 || !fields[1] || names.has(fields[1])) continue;
+                    if (fields.length !== 4 || !fields[1] || names.has(fields[1]))
+                        continue;
                     names.add(fields[1]);
-                    rows.push({name: fields[1], connected: fields[0] === "*", signal: Number(fields[2]), security: fields[3] || "Open"});
+                    rows.push({
+                        name: fields[1],
+                        connected: fields[0] === "*",
+                        signal: Number(fields[2]),
+                        security: fields[3] || "Open"
+                    });
                 }
                 const sorted = rows.sort((a, b) => Number(b.connected) - Number(a.connected) || b.signal - a.signal);
-                if (JSON.stringify(sorted) !== JSON.stringify(root.wirelessNetworks)) root.wirelessNetworks = sorted;
+                if (JSON.stringify(sorted) !== JSON.stringify(root.wirelessNetworks))
+                    root.wirelessNetworks = sorted;
             }
         }
     }
@@ -218,13 +309,27 @@ Item {
         visible: false
         layer.enabled: true
         gradient: Gradient {
-            GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 1 - deviceList.topFade) }
-            GradientStop { position: Math.min(0.5, 16 / Math.max(1, deviceList.height)); color: "white" }
-            GradientStop { position: Math.max(0.5, 1 - 20 / Math.max(1, deviceList.height)); color: "white" }
-            GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 1 - deviceList.bottomFade) }
+            GradientStop {
+                position: 0
+                color: Qt.rgba(1, 1, 1, 1 - deviceList.topFade)
+            }
+            GradientStop {
+                position: Math.min(0.5, 16 / Math.max(1, deviceList.height))
+                color: "white"
+            }
+            GradientStop {
+                position: Math.max(0.5, 1 - 20 / Math.max(1, deviceList.height))
+                color: "white"
+            }
+            GradientStop {
+                position: 1
+                color: Qt.rgba(1, 1, 1, 1 - deviceList.bottomFade)
+            }
         }
     }
-    PwObjectTracker { objects: root.active && root.page === "audio" ? root.audioOutputs.concat(root.audioInputs) : [] }
+    PwObjectTracker {
+        objects: root.active && root.page === "audio" ? root.audioOutputs.concat(root.audioInputs) : []
+    }
     ColumnLayout {
         id: detailLayout
         anchors.fill: parent
@@ -241,14 +346,22 @@ Item {
                 label: "Back to Control Centre"
                 onClicked: root.backRequested()
             }
-            Text { Layout.fillWidth: true; text: root.page === "network" ? "Network" : root.page === "bluetooth" ? "Bluetooth" : root.page === "audio" ? "Sound" : "Display"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontHeading; font.weight: Font.DemiBold }
+            Text {
+                Layout.fillWidth: true
+                text: root.page === "network" ? "Network" : root.page === "bluetooth" ? "Bluetooth" : root.page === "audio" ? "Sound" : "Display"
+                color: Theme.text
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontHeading
+                font.weight: Font.DemiBold
+            }
             ControlSwitch {
                 objectName: "controlBluetoothPower"
                 visible: root.page === "bluetooth"
                 enabled: !!root.bluetoothAdapter
                 checked: !!root.bluetoothAdapter && root.bluetoothAdapter.enabled
                 Accessible.name: "Bluetooth"
-                onToggled: if (root.bluetoothAdapter) root.bluetoothAdapter.enabled = checked
+                onToggled: if (root.bluetoothAdapter)
+                    root.bluetoothAdapter.enabled = checked
             }
             ControlSwitch {
                 id: wifiPower
@@ -268,8 +381,20 @@ Item {
             objectNamePrefix: "controlAudioTab_"
             onSelected: value => root.audioTab = value
         }
-        AudioLevel { visible: root.page === "audio" && root.audioTab === "output"; node: root.outputNode; maximum: 1.5; label: "Output"; iconName: "audio-volume-high-symbolic" }
-        AudioLevel { objectName: "controlMicrophone"; visible: root.page === "audio" && root.audioTab === "input"; node: root.inputNode; label: "Microphone"; iconName: "audio-input-microphone-symbolic" }
+        AudioLevel {
+            visible: root.page === "audio" && root.audioTab === "output"
+            node: root.outputNode
+            maximum: 1.5
+            label: "Output"
+            iconName: "audio-volume-high-symbolic"
+        }
+        AudioLevel {
+            objectName: "controlMicrophone"
+            visible: root.page === "audio" && root.audioTab === "input"
+            node: root.inputNode
+            label: "Microphone"
+            iconName: "audio-input-microphone-symbolic"
+        }
         Flickable {
             id: deviceList
             objectName: "controlDeviceList"
@@ -318,7 +443,10 @@ Item {
                     title: "Connected"
                     Repeater {
                         model: root.networkSections.current
-                        ConnectionEntry { required property var modelData; connection: modelData }
+                        ConnectionEntry {
+                            required property var modelData
+                            connection: modelData
+                        }
                     }
                 }
                 ControlRow {
@@ -345,15 +473,30 @@ Item {
                             onClicked: root.settingsRequested("network")
                         }
                     }
-                    EmptyMessage { visible: root.networkSections.nearby.length === 0; text: wifiQuery.running ? "Looking for networks…" : "No other networks nearby" }
+                    EmptyMessage {
+                        visible: root.networkSections.nearby.length === 0
+                        text: wifiQuery.running ? "Looking for networks…" : "No other networks nearby"
+                    }
                 }
                 DetailSection {
                     visible: root.page === "network" && root.networkSections.other.length > 0
                     title: "Saved networks"
-                    Repeater { model: root.networkSections.other; ConnectionEntry { required property var modelData; connection: modelData } }
+                    Repeater {
+                        model: root.networkSections.other
+                        ConnectionEntry {
+                            required property var modelData
+                            connection: modelData
+                        }
+                    }
                 }
-                EmptyMessage { visible: root.page === "network" && networkQuery.running && root.connections.length === 0; text: "Loading connections…" }
-                EmptyMessage { visible: root.page === "network" && !networkQuery.running && root.networkSections.current.length === 0; text: "No active network connection" }
+                EmptyMessage {
+                    visible: root.page === "network" && networkQuery.running && root.connections.length === 0
+                    text: "Loading connections…"
+                }
+                EmptyMessage {
+                    visible: root.page === "network" && !networkQuery.running && root.networkSections.current.length === 0
+                    text: "No active network connection"
+                }
                 EmptyMessage {
                     visible: root.page === "bluetooth" && (!root.bluetoothAdapter || !root.bluetoothAdapter.enabled)
                     text: root.bluetoothAdapter ? "Bluetooth is off" : "Bluetooth is unavailable"
@@ -371,10 +514,16 @@ Item {
                             enabled: modelData.state !== BluetoothDeviceState.Connecting && modelData.state !== BluetoothDeviceState.Disconnecting
                             iconName: DetailModel.bluetoothIcon(modelData.icon)
                             Accessible.description: modelData.connected ? "Disconnect device" : "Connect device"
-                            onClicked: if (modelData.connected) modelData.disconnect(); else modelData.connect()
+                            onClicked: if (modelData.connected)
+                                modelData.disconnect()
+                            else
+                                modelData.connect()
                         }
                     }
-                    EmptyMessage { visible: root.bluetoothDevices.length === 0; text: "No paired devices" }
+                    EmptyMessage {
+                        visible: root.bluetoothDevices.length === 0
+                        text: "No paired devices"
+                    }
                 }
                 DetailSection {
                     objectName: "controlBluetoothNearby"
@@ -398,7 +547,10 @@ Item {
                             onActionTriggered: root.settingsRequested("bluetooth")
                         }
                     }
-                    EmptyMessage { visible: root.nearbyDevices.length === 0; text: root.discoveryRunning ? "Searching for devices…" : "No nearby devices found" }
+                    EmptyMessage {
+                        visible: root.nearbyDevices.length === 0
+                        text: root.discoveryRunning ? "Searching for devices…" : "No nearby devices found"
+                    }
                 }
                 DetailSection {
                     visible: root.page === "audio"
@@ -410,16 +562,33 @@ Item {
                             title: modelData.description || modelData.name
                             selected: modelData === (root.audioTab === "output" ? root.outputNode : root.inputNode)
                             iconName: root.audioTab === "output" ? "audio-speakers-symbolic" : "audio-input-microphone-symbolic"
-                            onClicked: if (root.audioTab === "output") root.outputSelected(modelData); else root.inputSelected(modelData)
+                            onClicked: if (root.audioTab === "output")
+                                root.outputSelected(modelData)
+                            else
+                                root.inputSelected(modelData)
                         }
                     }
-                    EmptyMessage { visible: (root.audioTab === "output" ? root.audioOutputs : root.audioInputs).length === 0; text: root.audioTab === "output" ? "No output devices" : "No microphones" }
+                    EmptyMessage {
+                        visible: (root.audioTab === "output" ? root.audioOutputs : root.audioInputs).length === 0
+                        text: root.audioTab === "output" ? "No output devices" : "No microphones"
+                    }
                 }
-                EmptyMessage { visible: root.page === "display"; text: "Adjust brightness, resolution and connected screens in Display settings." }
-                EmptyMessage { visible: root.errorText.length > 0; text: root.errorText }
+                EmptyMessage {
+                    visible: root.page === "display"
+                    text: "Adjust brightness, resolution and connected screens in Display settings."
+                }
+                EmptyMessage {
+                    visible: root.errorText.length > 0
+                    text: root.errorText
+                }
             }
         }
-        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.outline; opacity: 0.4 }
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 1
+            color: Theme.outline
+            opacity: 0.4
+        }
         ControlRow {
             objectName: "controlDetailSettings"
             title: root.page === "network" ? "Network settings…" : root.page === "bluetooth" ? "Bluetooth settings…" : root.page === "audio" ? "Sound settings…" : "Display settings…"
@@ -442,27 +611,29 @@ Item {
         property string title: ""
         Layout.fillWidth: true
         spacing: 4
-        data: [Text {
-            visible: section.title.length > 0
-            Layout.leftMargin: 4
-            Layout.topMargin: 2
-            text: section.title
-            color: Theme.muted
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSmall
-            font.weight: Font.Medium
-        }, ColumnLayout {
-            id: rowLayout
-            Layout.fillWidth: true
-            spacing: 2
-        }]
+        data: [
+            Text {
+                visible: section.title.length > 0
+                Layout.leftMargin: 4
+                Layout.topMargin: 2
+                text: section.title
+                color: Theme.muted
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSmall
+                font.weight: Font.Medium
+            },
+            ColumnLayout {
+                id: rowLayout
+                Layout.fillWidth: true
+                spacing: 2
+            }
+        ]
     }
     component ConnectionEntry: ControlRow {
         required property var connection
         readonly property bool wifiConnection: connection.type === "802-11-wireless"
         title: DetailModel.connectionName(connection)
-        subtitle: root.pendingConnection === connection.uuid ? (root.networkAction === "up" ? "Connecting…" : "Disconnecting…")
-            : connection.connected ? (connection.type === "802-3-ethernet" ? connection.name + " · Connected" : "Connected") : ""
+        subtitle: root.pendingConnection === connection.uuid ? (root.networkAction === "up" ? "Connecting…" : "Disconnecting…") : connection.connected ? (connection.type === "802-3-ethernet" ? connection.name + " · Connected" : "Connected") : ""
         navigation: !connection.connected
         leadingBadge: connection.connected
         tileSurface: connection.connected
@@ -472,11 +643,13 @@ Item {
         enabled: !connectNetwork.running && (!wifiConnection || !root.wifiDisabled)
         focusPolicy: connection.connected ? Qt.NoFocus : Qt.StrongFocus
         Accessible.description: connection.connected ? "Current connection" : "Connect network"
-        onClicked: if (!connection.connected) changeConnection()
+        onClicked: if (!connection.connected)
+            changeConnection()
         onActionTriggered: changeConnection()
         function changeConnection() {
             const result = root.connectionForCommand(connection.uuid, connection.connected ? "down" : "up");
-            if (!result.ok) root.errorText = result.error;
+            if (!result.ok)
+                root.errorText = result.error;
         }
     }
 }

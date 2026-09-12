@@ -10,8 +10,12 @@ QtObject {
     onRegionChanged: Qt.callLater(BlurRegions.flush)
     property var windowSignals: Connections {
         target: root.window
-        function onVisibleChanged() { Qt.callLater(BlurRegions.flush); }
-        function onScreenChanged() { Qt.callLater(BlurRegions.flush); }
+        function onVisibleChanged() {
+            Qt.callLater(BlurRegions.flush);
+        }
+        function onScreenChanged() {
+            Qt.callLater(BlurRegions.flush);
+        }
     }
     Component.onCompleted: BlurRegions.add(root)
     Component.onDestruction: BlurRegions.remove(root)

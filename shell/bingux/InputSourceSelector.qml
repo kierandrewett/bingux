@@ -12,7 +12,7 @@ Item {
     property alias menuOpen: inputMenu.visible
     property bool shortcutsEnabled: true
     property var presentation: null
-    signal opening()
+    signal opening
     property bool cycling: false
     property var pendingSource: null
     property bool keepOpenAfterSelection: false
@@ -39,7 +39,6 @@ Item {
             const source = sources[index];
             if (source.type === current.type && source.id === current.id)
                 return index;
-
         }
         return 0;
     }
@@ -56,21 +55,21 @@ Item {
 
     function reconcileSelection() {
         if (!menuOpen)
-            return ;
+            return;
 
         if (sources.length === 0) {
             setSelectedIndex(-1, false);
             menuOpen = false;
-            return ;
+            return;
         }
         if (!selectionExplicit) {
             setSelectedIndex(currentSourceIndex(), false);
-            return ;
+            return;
         }
         for (let index = 0; index < sources.length; index += 1) {
             if (sourceKey(sources[index]) === selectedSourceKey) {
                 selectedIndex = index;
-                return ;
+                return;
             }
         }
         setSelectedIndex(currentSourceIndex(), false);
@@ -78,7 +77,7 @@ Item {
 
     function openMenu() {
         if (!canSelect)
-            return ;
+            return;
 
         cycling = false;
         setSelectedIndex(currentSourceIndex(), false);
@@ -94,15 +93,18 @@ Item {
     }
 
     function dispatchSelection() {
-        if (inputProcess.running || !pendingSource) return;
+        if (inputProcess.running || !pendingSource)
+            return;
         const source = pendingSource;
         pendingSource = null;
-        if (!sources.some(item => sourceKey(item) === sourceKey(source))) return;
+        if (!sources.some(item => sourceKey(item) === sourceKey(source)))
+            return;
         inputProcess.exec([root.gnoblinCtlPath, "input", "select", source.type, source.id]);
     }
 
     function cycleSource(backward) {
-        if (sources.length === 0) return;
+        if (sources.length === 0)
+            return;
         const index = menuOpen && selectedIndex >= 0 ? selectedIndex : currentSourceIndex();
         cycling = true;
         setSelectedIndex((index + (backward ? sources.length - 1 : 1)) % sources.length, true);
@@ -111,15 +113,30 @@ Item {
         selectSource(sources[selectedIndex], true);
     }
 
-    function finishCycle() { if (cycling) menuOpen = false; }
+    function finishCycle() {
+        if (cycling)
+            menuOpen = false;
+    }
 
     ShortcutSession {
         enabled: root.shortcutsEnabled
         bindings: [
-            {id: "keyboard-forward", accelerator: "<Super>space", hold: 67108864, modal: false},
-            {id: "keyboard-backward", accelerator: "<Super><Shift>space", hold: 67108864, modal: false}
+            {
+                id: "keyboard-forward",
+                accelerator: "<Super>space",
+                hold: 67108864,
+                modal: false
+            },
+            {
+                id: "keyboard-backward",
+                accelerator: "<Super><Shift>space",
+                hold: 67108864,
+                modal: false
+            }
         ]
-        onActivated: function(id) { root.cycleSource(id === "keyboard-backward"); }
+        onActivated: function (id) {
+            root.cycleSource(id === "keyboard-backward");
+        }
         onReleased: root.finishCycle()
         onCancelled: root.finishCycle()
         onFailed: message => console.warn("keyboard switcher: " + message)
@@ -127,14 +144,17 @@ Item {
 
     function selectCurrentSource() {
         if (selectedIndex < 0 || selectedIndex >= sources.length)
-            return ;
+            return;
 
         selectSource(sources[selectedIndex]);
     }
 
     implicitWidth: Math.max(Theme.barIconTarget, (presentation?.custom ? customFace.implicitWidth : labelWidth) + Theme.barPrimaryPadding * 2)
     readonly property real labelWidth: sources.reduce((width, source) => Math.max(width, Math.ceil(labelMetrics.boundingRect(source.shortName || source.id).width)), Math.ceil(labelMetrics.boundingRect("--").width))
-    FontMetrics { id: labelMetrics; font: inputLabel.font }
+    FontMetrics {
+        id: labelMetrics
+        font: inputLabel.font
+    }
     implicitHeight: Theme.barHeight
     width: implicitWidth
     height: implicitHeight
@@ -142,7 +162,7 @@ Item {
     Accessible.name: metrics.desktopStateAvailable ? "Keyboard layout " + (metrics.currentInputSource === null ? "unavailable" : metrics.currentInputSource.displayName) : "Keyboard layout unavailable"
     Accessible.role: Accessible.Button
     onSourcesChanged: reconcileSelection()
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (event.key === Qt.Key_Return || event.key === Qt.Key_Space) {
             root.openMenu();
             event.accepted = true;
@@ -177,7 +197,12 @@ Item {
         font.pixelSize: Theme.fontSize
         font.weight: Font.DemiBold
     }
-    WidgetFace { id: customFace; anchors.centerIn: parent; visible: !!root.presentation?.custom; presentation: root.presentation }
+    WidgetFace {
+        id: customFace
+        anchors.centerIn: parent
+        visible: !!root.presentation?.custom
+        presentation: root.presentation
+    }
 
     MouseArea {
         id: selectorMouse
@@ -189,19 +214,29 @@ Item {
         cursorShape: Qt.ArrowCursor
         onClicked: {
             root.forceActiveFocus();
-            if (root.menuOpen) root.menuOpen = false; else root.openMenu();
+            if (root.menuOpen)
+                root.menuOpen = false;
+            else
+                root.openMenu();
         }
     }
 
-    BarTooltip { anchorItem: root; barWindow: root.parentWindow; requested: selectorMouse.containsMouse; text: root.Accessible.name + " · Super+Space" }
+    BarTooltip {
+        anchorItem: root
+        barWindow: root.parentWindow
+        requested: selectorMouse.containsMouse
+        text: root.Accessible.name + " · Super+Space"
+    }
 
     Process {
         id: inputProcess
 
-        onExited: function(exitCode) {
+        onExited: function (exitCode) {
             if (exitCode === 0) {
-                if (root.pendingSource) Qt.callLater(root.dispatchSelection);
-                else if (!root.keepOpenAfterSelection) root.menuOpen = false;
+                if (root.pendingSource)
+                    Qt.callLater(root.dispatchSelection);
+                else if (!root.keepOpenAfterSelection)
+                    root.menuOpen = false;
             } else {
                 root.pendingSource = null;
                 root.lastError = "Could not change keyboard layout";
@@ -222,7 +257,8 @@ Item {
         onVisibleChanged: {
             if (visible) {
                 root.opening();
-                if (!root.cycling) inputNavigation.focusMenu();
+                if (!root.cycling)
+                    inputNavigation.focusMenu();
                 inputNavigation.currentIndex = root.selectedIndex;
             }
         }
@@ -258,7 +294,7 @@ Item {
             implicitHeight: menuColumn.implicitHeight
             color: "transparent"
             focus: !root.cycling
-            Keys.onPressed: function(event) {
+            Keys.onPressed: function (event) {
                 if (event.key === Qt.Key_Space && (event.modifiers & Qt.MetaModifier)) {
                     root.cycleSource((event.modifiers & Qt.ShiftModifier) !== 0);
                     event.accepted = true;
@@ -288,7 +324,10 @@ Item {
                 visible: entry !== null
                 Behavior on y {
                     enabled: inputMenu.visible && inputMenu.revealScale === 1 && !Theme.reducedMotion
-                    NumberAnimation { duration: Theme.motion; easing.type: Easing.OutCubic }
+                    NumberAnimation {
+                        duration: Theme.motion
+                        easing.type: Easing.OutCubic
+                    }
                 }
             }
 
@@ -305,7 +344,8 @@ Item {
                 Text {
                     Layout.fillWidth: true
                     color: Theme.muted
-                    font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSmall
                     text: "Keyboard layout"
                     leftPadding: 8
                     rightPadding: 8
@@ -338,7 +378,8 @@ Item {
                         Text {
                             color: Theme.text
                             elide: Text.ElideRight
-                            font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSize
                             textFormat: Text.PlainText
                             text: sourceAction.modelData.displayName
 
@@ -349,7 +390,6 @@ Item {
                                 rightMargin: 34
                                 verticalCenter: parent.verticalCenter
                             }
-
                         }
 
                         SymbolicIcon {
@@ -376,32 +416,31 @@ Item {
                         }
 
                         Keys.priority: Keys.BeforeItem
-                        Keys.onDownPressed: function(event) {
+                        Keys.onDownPressed: function (event) {
                             inputNavigation.move(1);
                             event.accepted = true;
                         }
-                        Keys.onUpPressed: function(event) {
+                        Keys.onUpPressed: function (event) {
                             inputNavigation.move(-1);
                             event.accepted = true;
                         }
-                        Keys.onReturnPressed: function(event) {
+                        Keys.onReturnPressed: function (event) {
                             inputNavigation.activateCurrent();
                             event.accepted = true;
                         }
-                        Keys.onSpacePressed: function(event) {
+                        Keys.onSpacePressed: function (event) {
                             inputNavigation.activateCurrent();
                             event.accepted = true;
                         }
-
                     }
-
                 }
 
                 Text {
                     Layout.fillWidth: true
                     visible: root.lastError !== ""
                     color: "#f4a340"
-                    font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSmall
                     wrapMode: Text.Wrap
                     text: root.lastError
                     leftPadding: 8
@@ -409,11 +448,7 @@ Item {
                     topPadding: 4
                     bottomPadding: 4
                 }
-
             }
-
         }
-
     }
-
 }

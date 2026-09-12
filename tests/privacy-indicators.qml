@@ -8,14 +8,22 @@ ShellRoot {
     property int phase: 0
     property int failures: 0
     property int stopped: 0
-    function check(ok, message) { if (!ok) { failures++; console.error("FAIL: " + message); } }
+    function check(ok, message) {
+        if (!ok) {
+            failures++;
+            console.error("FAIL: " + message);
+        }
+    }
     QtObject {
         id: fixtureCapture
         property string state: "idle"
         readonly property bool recording: state === "recording"
         readonly property bool busy: ["starting", "recording", "finalizing"].includes(state)
         property string elapsedText: "1:23"
-        function stop() { test.stopped++; state = "finalizing"; }
+        function stop() {
+            test.stopped++;
+            state = "finalizing";
+        }
     }
     QtObject {
         id: fixturePrivacy
@@ -26,8 +34,14 @@ ShellRoot {
         property bool microphoneInUse: fixtureMetrics.microphoneInUse
         property string microphoneTooltip: "Microphone in use"
         property string elapsedText: "2:45"
-        function stopRecording() { test.stopped++; fixturePrivacy.recording = false; }
-        function stopSharing() { test.stopped++; fixturePrivacy.screenSharing = false; }
+        function stopRecording() {
+            test.stopped++;
+            fixturePrivacy.recording = false;
+        }
+        function stopSharing() {
+            test.stopped++;
+            fixturePrivacy.screenSharing = false;
+        }
     }
     QtObject {
         id: fixtureMetrics
@@ -35,18 +49,33 @@ ShellRoot {
         property bool microphoneInUse: false
         property bool locationInUse: false
     }
-    PrivacyState { id: clockState }
+    PrivacyState {
+        id: clockState
+    }
     PanelWindow {
         id: panel
-        anchors { top: true; left: true }
+        anchors {
+            top: true
+            left: true
+        }
         implicitWidth: 640
         implicitHeight: 64
         color: Theme.barBackground
         RowLayout {
             anchors.centerIn: parent
             spacing: Theme.gap
-            RecordingIndicator { id: recording; capture: fixtureCapture; privacy: fixturePrivacy; barWindow: panel }
-            PrivacyIndicators { id: indicators; systemMetrics: fixtureMetrics; privacyState: fixturePrivacy; barWindow: panel }
+            RecordingIndicator {
+                id: recording
+                capture: fixtureCapture
+                privacy: fixturePrivacy
+                barWindow: panel
+            }
+            PrivacyIndicators {
+                id: indicators
+                systemMetrics: fixtureMetrics
+                privacyState: fixturePrivacy
+                barWindow: panel
+            }
         }
     }
     Timer {
@@ -61,7 +90,13 @@ ShellRoot {
                 fixturePrivacy.screenSharing = true;
                 fixtureMetrics.microphoneInUse = true;
                 fixtureMetrics.locationInUse = true;
-                clockState.apply({recording: true, recordingCount: 1, recordingElapsed: 65, cameraInUse: false, screenSharing: false});
+                clockState.apply({
+                    recording: true,
+                    recordingCount: 1,
+                    recordingElapsed: 65,
+                    cameraInUse: false,
+                    screenSharing: false
+                });
             } else if (test.phase === 1) {
                 test.check(recording.visible && recording.label === "1:23", "Own recording displays elapsed time");
                 test.check(recording.filled && recording.activityColor.toString() === "#c01c28", "Recording uses GNOME red");
@@ -84,9 +119,17 @@ ShellRoot {
                 fixtureMetrics.locationInUse = false;
                 fixturePrivacy.cameraInUse = false;
             } else if (test.phase === 4) {
-                clockState.apply({recording: false, recordingCount: 0, recordingElapsed: 0, cameraInUse: false, screenSharing: false});
+                clockState.apply({
+                    recording: false,
+                    recordingCount: 0,
+                    recordingElapsed: 0,
+                    cameraInUse: false,
+                    screenSharing: false
+                });
                 test.check(!clockState.recording && clockState.elapsed === 0, "Stopping resets elapsed state");
-                clockState.apply({recording: "bad"});
+                clockState.apply({
+                    recording: "bad"
+                });
                 test.check(!clockState.recording, "Malformed state does not activate indicators");
             } else if (test.phase === 17) {
                 test.check(indicators.implicitWidth === 0 && !recording.visible, "Indicators disappear after activity and hold time end");

@@ -9,7 +9,8 @@ Item {
     Accessible.role: Accessible.StaticText
     Accessible.name: count + (count === 1 ? " notification" : " notifications")
     function playArchive() {
-        if (!Theme.reducedMotion && count > 0) archiveLaunch.restart();
+        if (!Theme.reducedMotion && count > 0)
+            archiveLaunch.restart();
     }
     Rectangle {
         id: echo
@@ -28,11 +29,38 @@ Item {
     }
     ParallelAnimation {
         id: archiveLaunch
-        NumberAnimation { target: echo; property: "scale"; from: 1; to: 2.4; duration: 300; easing.type: Easing.OutCubic }
-        NumberAnimation { target: echo; property: "opacity"; from: 0.75; to: 0; duration: 300; easing.type: Easing.OutCubic }
+        NumberAnimation {
+            target: echo
+            property: "scale"
+            from: 1
+            to: 2.4
+            duration: 300
+            easing.type: Easing.OutCubic
+        }
+        NumberAnimation {
+            target: echo
+            property: "opacity"
+            from: 0.75
+            to: 0
+            duration: 300
+            easing.type: Easing.OutCubic
+        }
         SequentialAnimation {
-            NumberAnimation { target: badge; property: "scale"; from: 1; to: 1.15; duration: 100; easing.type: Easing.OutCubic }
-            NumberAnimation { target: badge; property: "scale"; to: 1; duration: 200; easing.type: Easing.OutCubic }
+            NumberAnimation {
+                target: badge
+                property: "scale"
+                from: 1
+                to: 1.15
+                duration: 100
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                target: badge
+                property: "scale"
+                to: 1
+                duration: 200
+                easing.type: Easing.OutCubic
+            }
         }
     }
     Rectangle {

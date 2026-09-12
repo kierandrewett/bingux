@@ -18,7 +18,8 @@ Scope {
     readonly property int minTimeoutMs: 4000
     readonly property int maxTimeoutMs: 20000
     property bool doNotDisturb: false
-    onDoNotDisturbChanged: if (doNotDisturb) archiveToasts()
+    onDoNotDisturbChanged: if (doNotDisturb)
+        archiveToasts()
     property var allEntries: []
     readonly property var visibleEntries: allEntries.filter(entry => entry.toastVisible)
     property var notificationWatchers: []
@@ -29,12 +30,16 @@ Scope {
     property var dockView: null
     property bool historyReady: false
     property string historyDirectory: Quickshell.statePath("notifications")
-    onAllEntriesChanged: if (historyReady) historySave.restart()
+    onAllEntriesChanged: if (historyReady)
+        historySave.restart()
     Process {
         id: historyDirectorySetup
         command: ["mkdir", "-p", "-m", "700", root.historyDirectory]
         running: true
-        onExited: code => { if (code === 0) historyFile.path = root.historyDirectory + "/history.json"; }
+        onExited: code => {
+            if (code === 0)
+                historyFile.path = root.historyDirectory + "/history.json";
+        }
     }
     FileView {
         id: historyFile
@@ -44,17 +49,26 @@ Scope {
         onLoadFailed: root.loadHistory("")
         onSaveFailed: console.warn("Could not save notification history")
     }
-    Timer { id: historySave; interval: 40; onTriggered: root.saveHistory() }
-    Component.onDestruction: if (historyReady) { historyFile.blockWrites = true; saveHistory(); }
+    Timer {
+        id: historySave
+        interval: 40
+        onTriggered: root.saveHistory()
+    }
+    Component.onDestruction: if (historyReady) {
+        historyFile.blockWrites = true;
+        saveHistory();
+    }
 
     function loadHistory(text) {
-        if (historyReady) return;
+        if (historyReady)
+            return;
         allEntries = History.restore(text, allEntries, retainedState.sessionToken);
         historyReady = true;
         saveHistory();
     }
     function saveHistory() {
-        if (historyReady) historyFile.setText(History.encode(allEntries, retainedState.sessionToken));
+        if (historyReady)
+            historyFile.setText(History.encode(allEntries, retainedState.sessionToken));
     }
     property var imageCaptures: new Set()
     property var capturedImages: new Map()
@@ -68,27 +82,38 @@ Scope {
         capturedImages = new Map();
         allEntries = allEntries.map(entry => {
             const update = updates.get(entry.historyKey || String(entry.notification.id));
-            return update && entry.image === update.source
-                ? Object.assign({}, entry, {image: update.path}) : entry;
+            return update && entry.image === update.source ? Object.assign({}, entry, {
+                image: update.path
+            }) : entry;
         });
-        for (const key of updates.keys()) imageCaptures.delete(key);
+        for (const key of updates.keys())
+            imageCaptures.delete(key);
     }
     function cacheImage(entry, item) {
-        if (!historyReady || !item.visible || item.width <= 0 || item.height <= 0 || item.opacity < 1
-            || !entry.image || String(entry.image).includes(historyDirectory)) return;
+        if (!historyReady || !item.visible || item.width <= 0 || item.height <= 0 || item.opacity < 1 || !entry.image || String(entry.image).includes(historyDirectory))
+            return;
         const key = entry.historyKey || String(entry.notification.id);
         // Toasts, history and app menus may all display the same image.
-        if (imageCaptures.has(key)) return;
+        if (imageCaptures.has(key))
+            return;
         imageCaptures.add(key);
         const source = entry.image;
         const path = historyDirectory + "/" + key.replace(/[^a-zA-Z0-9_-]/g, "_") + ".png";
         const started = item.grabToImage(result => {
-            if (!result.saveToFile(path)) { root.imageCaptures.delete(key); return; }
-            root.capturedImages.set(key, {source: source, path: "file://" + path});
+            if (!result.saveToFile(path)) {
+                root.imageCaptures.delete(key);
+                return;
+            }
+            root.capturedImages.set(key, {
+                source: source,
+                path: "file://" + path
+            });
             // Batch completed captures into one history/delegate update.
-            if (!imageCaptureCommit.running) imageCaptureCommit.start();
+            if (!imageCaptureCommit.running)
+                imageCaptureCommit.start();
         });
-        if (!started) imageCaptures.delete(key);
+        if (!started)
+            imageCaptures.delete(key);
     }
     property var applicationAliases: new Map()
 
@@ -127,13 +152,13 @@ Scope {
     }
 
     function applicationFor(notification) {
-        const identity = boundedText(notification.desktopEntry || notification.appName, maxApplicationNameLength)
-            .replace(/\.desktop$/, "").toLowerCase();
-        if (!identity) return null;
+        const identity = boundedText(notification.desktopEntry || notification.appName, maxApplicationNameLength).replace(/\.desktop$/, "").toLowerCase();
+        if (!identity)
+            return null;
         const desktopId = boundedText(notification.desktopEntry, maxApplicationNameLength);
-        const direct = desktopId ? DesktopEntries.byId(desktopId.replace(/\.desktop$/, ""))
-            || DesktopEntries.byId(desktopId) : null;
-        if (direct) return direct;
+        const direct = desktopId ? DesktopEntries.byId(desktopId.replace(/\.desktop$/, "")) || DesktopEntries.byId(desktopId) : null;
+        if (direct)
+            return direct;
         // Electron variants can advertise their window class instead of their desktop ID.
         return applicationAliases.get(identity) || null;
     }
@@ -143,8 +168,7 @@ Scope {
     function refreshApplicationAliases() {
         const aliases = new Map();
         for (const application of DesktopEntries.applications.values) {
-            const keys = new Set([application.id, application.startupClass, application.name]
-                .map(value => String(value || "").replace(/\.desktop$/, "").toLowerCase()).filter(Boolean));
+            const keys = new Set([application.id, application.startupClass, application.name].map(value => String(value || "").replace(/\.desktop$/, "").toLowerCase()).filter(Boolean));
             for (const key of keys)
                 aliases.set(key, aliases.has(key) && aliases.get(key) !== application ? null : application);
         }
@@ -153,11 +177,12 @@ Scope {
 
     function activationTarget(entry) {
         const application = applicationFor(entry);
-        const identities = [entry.desktopEntry, application ? application.id : "", application ? application.startupClass : ""]
-            .map(value => String(value || "").replace(/\.desktop$/, "").toLowerCase()).filter(Boolean);
-        const windows = ToplevelManager.toplevels.values.filter(window =>
-            identities.includes(String(window.appId || "").replace(/\.desktop$/, "").toLowerCase()));
-        return {application: application, window: windows.find(window => window.activated) || windows[0]};
+        const identities = [entry.desktopEntry, application ? application.id : "", application ? application.startupClass : ""].map(value => String(value || "").replace(/\.desktop$/, "").toLowerCase()).filter(Boolean);
+        const windows = ToplevelManager.toplevels.values.filter(window => identities.includes(String(window.appId || "").replace(/\.desktop$/, "").toLowerCase()));
+        return {
+            application: application,
+            window: windows.find(window => window.activated) || windows[0]
+        };
     }
 
     function canActivate(entry) {
@@ -173,7 +198,8 @@ Scope {
         if (action) {
             // Focus first. The sender can then select a more specific window
             // when it handles the action, without our fallback overriding it.
-            if (target.window) target.window.activate();
+            if (target.window)
+                target.window.activate();
             action.action.invoke();
             return true;
         }
@@ -231,11 +257,16 @@ Scope {
             const application = applicationFor(entry.notification);
             const appName = boundedText(application ? application.name : entry.notification.appName, maxApplicationNameLength);
             const appIcon = boundedText((application ? application.icon : "") || entry.notification.appIcon, maxIconNameLength);
-            if (appName === entry.appName && appIcon === entry.appIcon) return entry;
+            if (appName === entry.appName && appIcon === entry.appIcon)
+                return entry;
             changed = true;
-            return Object.assign({}, entry, {appName: appName, appIcon: appIcon});
+            return Object.assign({}, entry, {
+                appName: appName,
+                appIcon: appIcon
+            });
         });
-        if (changed) allEntries = refreshed;
+        if (changed)
+            allEntries = refreshed;
     }
 
     // Keep the model stable while the pointer is over a card, including its controls.
@@ -268,7 +299,6 @@ Scope {
         for (let index = 0; index < entries.length; index += 1) {
             if (entries[index].notification !== notification)
                 result.push(entries[index]);
-
         }
         return result;
     }
@@ -285,7 +315,9 @@ Scope {
                 if (entry.notification !== notification)
                     replacedNotifications.push(entry.notification);
                 if (!replaced) {
-                    visible.push(entryFor(notification, replacement.deadline, notification.lastGeneration ? entry : Object.assign({}, entry, {toastVisible: true})));
+                    visible.push(entryFor(notification, replacement.deadline, notification.lastGeneration ? entry : Object.assign({}, entry, {
+                        toastVisible: true
+                    })));
                     replaced = true;
                 }
             } else {
@@ -383,11 +415,10 @@ Scope {
             const deadline = entries[index].deadline;
             if (deadline > 0 && (nextDeadline === 0 || deadline < nextDeadline))
                 nextDeadline = deadline;
-
         }
         if (nextDeadline === 0) {
             expiryTimer.stop();
-            return ;
+            return;
         }
         expiryTimer.interval = Math.max(1, nextDeadline - Date.now());
         expiryTimer.restart();
@@ -400,7 +431,6 @@ Scope {
         for (let index = 0; index < entries.length; index += 1) {
             if (entries[index].deadline > 0 && entries[index].deadline <= now)
                 expired.push(entries[index].notification);
-
         }
         for (let index = 0; index < expired.length; index += 1) {
             expire(expired[index]);
@@ -424,7 +454,7 @@ Scope {
         if (replaceExistingNotification(notification)) {
             watchNotification(notification);
             scheduleExpiry();
-            return ;
+            return;
         }
         const timeout = timeoutFor(notification);
         const entry = entryFor(notification, timeout > 0 ? Date.now() + timeout : 0);
@@ -456,8 +486,12 @@ Scope {
         const hidden = JSON.parse(retainedState.hiddenIdsJson || "{}");
         hidden[String(notification.id)] = true;
         retainedState.hiddenIdsJson = JSON.stringify(hidden);
-        allEntries = allEntries.map(entry => entry.notification === notification
-            ? Object.assign({}, entry, {toastVisible: false, deadline: 0, remainingMs: 0, paused: false}) : entry);
+        allEntries = allEntries.map(entry => entry.notification === notification ? Object.assign({}, entry, {
+                toastVisible: false,
+                deadline: 0,
+                remainingMs: 0,
+                paused: false
+            }) : entry);
         scheduleExpiry();
     }
 
@@ -465,16 +499,24 @@ Scope {
         const hidden = JSON.parse(retainedState.hiddenIdsJson || "{}");
         allEntries = allEntries.map(entry => {
             hidden[String(entry.notification.id)] = true;
-            return Object.assign({}, entry, {toastVisible: false, deadline: 0, remainingMs: 0, paused: false});
+            return Object.assign({}, entry, {
+                toastVisible: false,
+                deadline: 0,
+                remainingMs: 0,
+                paused: false
+            });
         });
         retainedState.hiddenIdsJson = JSON.stringify(hidden);
         scheduleExpiry();
     }
 
-    function expire(notification) { archive(notification); }
+    function expire(notification) {
+        archive(notification);
+    }
 
     function dismissAll() {
-        for (const entry of allEntries.slice()) dismiss(entry.notification);
+        for (const entry of allEntries.slice())
+            dismiss(entry.notification);
     }
 
     function timeoutFor(notification) {
@@ -484,8 +526,7 @@ Scope {
         // Match the bounded plain text displayed by the card. Allow time to
         // notice it, then roughly 200 words/minute. The character estimate also
         // gives long tokens and text without spaces enough reading time.
-        const text = (boundedText(notification.summary, maxSummaryLength) + " "
-            + boundedText(notification.body, maxBodyLength)).replace(/\s+/g, " ").trim();
+        const text = (boundedText(notification.summary, maxSummaryLength) + " " + boundedText(notification.body, maxBodyLength)).replace(/\s+/g, " ").trim();
         const words = text ? text.split(" ").length : 0;
         const readingTime = 1500 + Math.max(words * 300, Array.from(text).length * 60);
         const requestedTime = notification.expireTimeout > 0 ? notification.expireTimeout * 1000 : 0;
@@ -507,10 +548,10 @@ Scope {
             const times = JSON.parse(receivedTimesJson);
             const hidden = JSON.parse(hiddenIdsJson);
             const restore = entry => Object.assign({}, entry, {
-                receivedAt: times[String(entry.notification.id)] || entry.receivedAt,
-                toastVisible: !hidden[String(entry.notification.id)] && entry.toastVisible,
-                deadline: hidden[String(entry.notification.id)] ? 0 : entry.deadline
-            });
+                    receivedAt: times[String(entry.notification.id)] || entry.receivedAt,
+                    toastVisible: !hidden[String(entry.notification.id)] && entry.toastVisible,
+                    deadline: hidden[String(entry.notification.id)] ? 0 : entry.deadline
+                });
             root.allEntries = root.allEntries.map(restore);
             root.scheduleExpiry();
         }
@@ -522,12 +563,17 @@ Scope {
         id: applicationRefresh
         interval: 100
         running: true
-        onTriggered: { root.refreshApplicationAliases(); root.refreshApplicationMetadata(); }
+        onTriggered: {
+            root.refreshApplicationAliases();
+            root.refreshApplicationMetadata();
+        }
     }
 
     desktopEntryWatcher: Connections {
         target: DesktopEntries
-        function onApplicationsChanged() { applicationRefresh.restart(); }
+        function onApplicationsChanged() {
+            applicationRefresh.restart();
+        }
     }
 
     notificationServer: NotificationServer {
@@ -540,9 +586,8 @@ Scope {
         inlineReplySupported: false
         persistenceSupported: true
         keepOnReload: true
-        onNotification: function(notification) {
+        onNotification: function (notification) {
             root.accept(notification);
         }
     }
-
 }

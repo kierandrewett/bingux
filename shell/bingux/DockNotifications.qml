@@ -15,8 +15,10 @@ NotificationStack {
     }
     presentedEntries: menuActive ? entries : preparedEntries
     onMenuActiveChanged: {
-        if (menuActive) prepare();
-        else preparedEntries = entries.slice();
+        if (menuActive)
+            prepare();
+        else
+            preparedEntries = entries.slice();
     }
     historyMode: true
     groupNotifications: false

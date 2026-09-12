@@ -15,28 +15,50 @@ Item {
     property bool controlsAwake: true
     readonly property bool controlsShown: controlsAwake || !playing || transportHover.hovered || seek.pressed || playPause.visualFocus || seek.visualFocus || muteButton.visualFocus
     property real reveal: 0
-    Component.onCompleted: { reveal = 1; hideControls.restart(); }
+    Component.onCompleted: {
+        reveal = 1;
+        hideControls.restart();
+    }
     opacity: reveal
-    Behavior on reveal { NumberAnimation { duration: Theme.previewMotion } }
+    Behavior on reveal {
+        NumberAnimation {
+            duration: Theme.previewMotion
+        }
+    }
     function timestamp(milliseconds) {
         const seconds = Math.floor(milliseconds / 1000);
         return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
     }
-    function wakeControls() { controlsAwake = true; hideControls.restart(); }
+    function wakeControls() {
+        controlsAwake = true;
+        hideControls.restart();
+    }
     function togglePlayback() {
-        if (animation) animationPaused = !animationPaused;
-        else if (playing) player.pause();
-        else player.play();
+        if (animation)
+            animationPaused = !animationPaused;
+        else if (playing)
+            player.pause();
+        else
+            player.play();
         wakeControls();
     }
-    Timer { id: hideControls; interval: 1800; onTriggered: root.controlsAwake = false }
-    HoverHandler { onPointChanged: root.wakeControls() }
+    Timer {
+        id: hideControls
+        interval: 1800
+        onTriggered: root.controlsAwake = false
+    }
+    HoverHandler {
+        onPointChanged: root.wakeControls()
+    }
     MediaPlayer {
         id: player
         source: root.details && !root.animation ? root.details.source : ""
         autoPlay: !Theme.reducedMotion
         videoOutput: video
-        audioOutput: AudioOutput { id: sound; muted: true }
+        audioOutput: AudioOutput {
+            id: sound
+            muted: true
+        }
     }
     component TransportButton: AbstractButton {
         id: button
@@ -45,15 +67,28 @@ Item {
         implicitHeight: 30
         Accessible.name: text
         scale: down ? 0.9 : 1
-        Behavior on scale { NumberAnimation { duration: Theme.previewMotion; easing.type: Easing.OutCubic } }
+        Behavior on scale {
+            NumberAnimation {
+                duration: Theme.previewMotion
+                easing.type: Easing.OutCubic
+            }
+        }
         background: Rectangle {
             radius: 7
             color: button.down ? "#40ffffff" : button.hovered || button.visualFocus ? "#20ffffff" : "transparent"
         }
         contentItem: Item {
-            SymbolicIcon { anchors.centerIn: parent; implicitSize: 16; source: Quickshell.iconPath(button.iconName); color: Theme.muted }
+            SymbolicIcon {
+                anchors.centerIn: parent
+                implicitSize: 16
+                source: Quickshell.iconPath(button.iconName)
+                color: Theme.muted
+            }
         }
-        ShellTooltip { visible: button.hovered; text: button.text }
+        ShellTooltip {
+            visible: button.hovered
+            text: button.text
+        }
     }
     Flickable {
         id: mediaViewport
@@ -86,7 +121,11 @@ Item {
                 fillMode: Image.PreserveAspectFit
                 cache: false
                 opacity: status === Image.Ready ? 1 : 0
-                Behavior on opacity { NumberAnimation { duration: Theme.previewMotion } }
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Theme.previewMotion
+                    }
+                }
             }
             Image {
                 anchors.centerIn: parent
@@ -95,7 +134,11 @@ Item {
                 source: root.details && root.details.poster ? root.details.poster : ""
                 fillMode: Image.PreserveAspectFit
                 opacity: root.animation ? (gif.status === Image.Ready ? 0 : 1) : (player.position > 0 ? 0 : 1)
-                Behavior on opacity { NumberAnimation { duration: Theme.previewMotion } }
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Theme.previewMotion
+                    }
+                }
             }
             SymbolicIcon {
                 anchors.centerIn: parent
@@ -104,10 +147,14 @@ Item {
                 source: Quickshell.iconPath("audio-x-generic-symbolic")
                 color: Theme.muted
             }
-            TapHandler { onTapped: root.togglePlayback() }
+            TapHandler {
+                onTapped: root.togglePlayback()
+            }
         }
         ScrollBar.vertical: ScrollBar {}
-        HorizontalWheelScroll { viewport: mediaViewport }
+        HorizontalWheelScroll {
+            viewport: mediaViewport
+        }
         ScrollBar.horizontal: ScrollBar {}
         PreviewSpinner {
             anchors.centerIn: parent
@@ -136,10 +183,19 @@ Item {
         border.width: 1
         border.color: "#25ffffff"
         opacity: root.controlsShown ? 1 : 0
-        transform: Translate { y: (1 - transport.opacity) * 6 }
-        Behavior on opacity { NumberAnimation { duration: Theme.previewMotion; easing.type: Easing.OutCubic } }
+        transform: Translate {
+            y: (1 - transport.opacity) * 6
+        }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Theme.previewMotion
+                easing.type: Easing.OutCubic
+            }
+        }
         enabled: opacity > 0.5
-        HoverHandler { id: transportHover }
+        HoverHandler {
+            id: transportHover
+        }
         RowLayout {
             anchors.fill: parent
             anchors.margins: 6
@@ -148,7 +204,15 @@ Item {
                 id: playPause
                 objectName: "previewMediaPlayPause"
                 text: root.playing ? "Pause" : "Play"
-                contentItem: Item { PlayPauseGlyph { anchors.centerIn: parent; width: 18; height: 18; playing: root.playing; color: Theme.muted } }
+                contentItem: Item {
+                    PlayPauseGlyph {
+                        anchors.centerIn: parent
+                        width: 18
+                        height: 18
+                        playing: root.playing
+                        color: Theme.muted
+                    }
+                }
                 onClicked: root.togglePlayback()
             }
             Text {
@@ -170,7 +234,10 @@ Item {
                 to: player.duration || 1
                 value: player.position
                 enabled: player.seekable
-                onMoved: { player.position = value; root.wakeControls(); }
+                onMoved: {
+                    player.position = value;
+                    root.wakeControls();
+                }
                 Accessible.name: "Playback position"
                 background: Rectangle {
                     x: seek.leftPadding
@@ -179,15 +246,26 @@ Item {
                     height: 3
                     radius: 2
                     color: "#40ffffff"
-                    Rectangle { width: seek.visualPosition * parent.width; height: parent.height; radius: 2; color: Theme.searchAccent }
+                    Rectangle {
+                        width: seek.visualPosition * parent.width
+                        height: parent.height
+                        radius: 2
+                        color: Theme.searchAccent
+                    }
                 }
                 handle: Rectangle {
                     x: seek.leftPadding + seek.visualPosition * (seek.availableWidth - width)
                     y: seek.topPadding + seek.availableHeight / 2 - height / 2
-                    width: 9; height: 9; radius: 5
+                    width: 9
+                    height: 9
+                    radius: 5
                     color: Theme.muted
                     scale: seek.pressed ? 1.25 : seek.hovered ? 1 : 0.7
-                    Behavior on scale { NumberAnimation { duration: Theme.previewMotion } }
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: Theme.previewMotion
+                        }
+                    }
                 }
             }
             Text {
@@ -203,7 +281,10 @@ Item {
                 visible: !root.animation
                 text: sound.muted ? "Unmute" : "Mute"
                 iconName: sound.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic"
-                onClicked: { sound.muted = !sound.muted; root.wakeControls(); }
+                onClicked: {
+                    sound.muted = !sound.muted;
+                    root.wakeControls();
+                }
             }
         }
     }

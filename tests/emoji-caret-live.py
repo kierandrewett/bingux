@@ -1,15 +1,24 @@
 """Opt-in GTK/AT-SPI integration check; opens and closes only our test picker."""
+
 import json
 import subprocess
 import threading
 import time
 from pathlib import Path
 import gi
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, GLib
 
-command = ["qs", "ipc", "--any-display", "-p",
-           str(Path(__file__).resolve().parents[1] / "shell/bingux/EmojiShell.qml"), "call", "emoji"]
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk, GLib  # noqa: E402 - Select GI versions before importing their modules.
+
+command = [
+    "qs",
+    "ipc",
+    "--any-display",
+    "-p",
+    str(Path(__file__).resolve().parents[1] / "shell/bingux/EmojiShell.qml"),
+    "call",
+    "emoji",
+]
 
 
 def status():
@@ -28,9 +37,9 @@ passed = []
 
 def exercise():
     try:
-        time.sleep(.5)
+        time.sleep(0.5)
         subprocess.run(command + ["open"], check=True, timeout=3)
-        time.sleep(.4)
+        time.sleep(0.4)
         result = status()
         assert result["visible"] and result["anchor"] == "caret", result
         subprocess.run(["grim", "/tmp/bingux-emoji-caret.png"], check=True, timeout=3)

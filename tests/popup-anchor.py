@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check top-bar popup anchoring beside the sidebar."""
+
 import os
 from pathlib import Path
 import shutil
@@ -15,9 +16,13 @@ with tempfile.TemporaryDirectory(prefix="bingux-popup-anchor-") as directory:
         if source.suffix in (".qml", ".js") or source.name == "qmldir":
             shutil.copy2(source, fixture)
     shutil.copy2(repo / "tests/popup-anchor.qml", fixture / "shell.qml")
-    result = subprocess.run([os.environ.get("QS_TEST_BIN", "qs"), "-p", str(fixture), "--no-color"],
+    result = subprocess.run(
+        [os.environ.get("QS_TEST_BIN", "qs"), "-p", str(fixture), "--no-color"],
         env=os.environ | {"QT_QPA_PLATFORM": "wayland", "XDG_STATE_HOME": str(fixture / "state")},
-        capture_output=True, text=True, timeout=20)
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
     output = result.stdout + result.stderr
     print(output)
     if result.returncode or "POPUP_ANCHOR_PASSED" not in output:

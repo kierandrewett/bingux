@@ -27,9 +27,15 @@ class Extensions(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.base = Path(self.temp.name)
-        self.environment = patch.dict(os.environ, {"XDG_DATA_HOME": str(self.base / "user"),
-            "XDG_DATA_DIRS": str(self.base / "system"), "XDG_CONFIG_HOME": str(self.base / "config"),
-            "BINGUX_NO_EXTENSIONS": "0"})
+        self.environment = patch.dict(
+            os.environ,
+            {
+                "XDG_DATA_HOME": str(self.base / "user"),
+                "XDG_DATA_DIRS": str(self.base / "system"),
+                "XDG_CONFIG_HOME": str(self.base / "config"),
+                "BINGUX_NO_EXTENSIONS": "0",
+            },
+        )
         self.environment.start()
         self.addCleanup(self.environment.stop)
 
@@ -37,8 +43,13 @@ class Extensions(unittest.TestCase):
         folder = self.base / ("system" if system else "user") / "bingux/extensions" / identifier
         folder.mkdir(parents=True)
         (folder / "Widget.qml").write_text("import QtQuick\nItem {}\n")
-        data = {"id": identifier, "name": "Example", "apiVersion": 1,
-            "widgets": [{"id": "sample", "name": "Sample", "component": "Widget.qml"}], **extra}
+        data = {
+            "id": identifier,
+            "name": "Example",
+            "apiVersion": 1,
+            "widgets": [{"id": "sample", "name": "Sample", "component": "Widget.qml"}],
+            **extra,
+        }
         (folder / "extension.json").write_text(json.dumps(data))
         return folder
 
@@ -70,8 +81,10 @@ class Extensions(unittest.TestCase):
 
     def test_invalid_component_and_duplicate_ids(self):
         folder = self.fixture()
-        for widgets in ([{"id": "sample", "name": "Sample", "component": "../outside.qml"}],
-                        [{"id": "sample", "name": "Sample", "component": "Widget.qml"}] * 2):
+        for widgets in (
+            [{"id": "sample", "name": "Sample", "component": "../outside.qml"}],
+            [{"id": "sample", "name": "Sample", "component": "Widget.qml"}] * 2,
+        ):
             data = json.loads((folder / "extension.json").read_text())
             data["widgets"] = widgets
             (folder / "extension.json").write_text(json.dumps(data))
@@ -79,7 +92,13 @@ class Extensions(unittest.TestCase):
 
     def test_missing_widget_placement_is_preserved_and_duplicates_rejected(self):
         desktop = copy.deepcopy(settings.DEFAULTS["desktop"])
-        desktop["layout"] = {"top-left": [], "top-center": [], "top-right": ["extension:missing/widget"], "dock": [], "sidebar": []}
+        desktop["layout"] = {
+            "top-left": [],
+            "top-center": [],
+            "top-right": ["extension:missing/widget"],
+            "dock": [],
+            "sidebar": [],
+        }
         settings.validate_desktop(desktop)
         desktop["layout"]["dock"] = ["extension:missing/widget"]
         with self.assertRaises(ValueError):

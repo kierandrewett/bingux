@@ -6,12 +6,18 @@ import Quickshell.Io
 
 ShellRoot {
     property string checks: ""
-    FileView { id: results; path: Quickshell.env("BINGUX_POPUP_TEST_RESULTS") }
+    FileView {
+        id: results
+        path: Quickshell.env("BINGUX_POPUP_TEST_RESULTS")
+    }
     ShellPopup {
         id: popup
         popupWidth: 240
         popupHeight: 140
-        Text { text: "Shared context menu"; color: Theme.text }
+        Text {
+            text: "Shared context menu"
+            color: Theme.text
+        }
     }
     TestCase {
         parent: popup.contentItem
@@ -22,7 +28,9 @@ ShellRoot {
             results.setText(checks);
             verify(value, message);
         }
-        function card() { return popup.body.parent; }
+        function card() {
+            return popup.body.parent;
+        }
         function mapped() {
             const window = popup.contentItem.Window.window;
             return window !== null && window.visible;
@@ -49,8 +57,7 @@ ShellRoot {
             check(!popup.contentItem.enabled, "Closing immediately disables menu input");
             if (!Theme.reducedMotion) {
                 wait(40);
-                check(mapped() && card().opacity > 0 && card().opacity < 1,
-                    "Closing keeps the card mapped during the fade");
+                check(mapped() && card().opacity > 0 && card().opacity < 1, "Closing keeps the card mapped during the fade");
                 check(popup.revealScale === 1, "Closing never changes scale");
             }
             finishClose();
@@ -59,15 +66,15 @@ ShellRoot {
             popup.visible = true;
             if (!Theme.reducedMotion) {
                 wait(40);
-                check(popup.revealScale > Theme.popupInitialScale && popup.revealScale < 1,
-                    "Opening scales towards full size");
+                check(popup.revealScale > Theme.popupInitialScale && popup.revealScale < 1, "Opening scales towards full size");
                 check(card().opacity > 0 && card().opacity < 1, "Opening fades in");
             }
             wait(Theme.popupOpenMotion + 80);
             check(popup.revealScale === 1 && card().opacity === 1, "Opening reaches its final state");
         }
         function test_interruptedOpen() {
-            if (Theme.reducedMotion) return;
+            if (Theme.reducedMotion)
+                return;
             popup.visible = true;
             wait(40);
             const scale = popup.revealScale;
@@ -81,7 +88,8 @@ ShellRoot {
         function test_reopen() {
             openSettled();
             popup.visible = false;
-            if (!Theme.reducedMotion) wait(40);
+            if (!Theme.reducedMotion)
+                wait(40);
             const opacity = card().opacity;
             popup.visible = true;
             if (!Theme.reducedMotion) {

@@ -4,17 +4,27 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS")
+    }
     component Adapter: QtObject {
         property bool enabled: true
         property bool discovering: false
-        property var devices: QtObject { property var values: [] }
+        property var devices: QtObject {
+            property var values: []
+        }
     }
-    Adapter { id: adapter }
-    Adapter { id: replacement }
+    Adapter {
+        id: adapter
+    }
+    Adapter {
+        id: replacement
+    }
     FloatingWindow {
         id: window
-        implicitWidth: 416; implicitHeight: 420
+        implicitWidth: 416
+        implicitHeight: 420
         Rectangle {
             id: canvas
             anchors.fill: parent
@@ -75,7 +85,9 @@ ShellRoot {
                 verify(!replacement.discovering && !replacement.enabled, "Opening does not enable Bluetooth");
                 replacement.enabled = true;
                 wait(150);
-                canvas.grabToImage(result => { test.saved = result.saveToFile("/tmp/bingux-bluetooth-discovery.png"); });
+                canvas.grabToImage(result => {
+                    test.saved = result.saveToFile("/tmp/bingux-bluetooth-discovery.png");
+                });
                 tryCompare(test, "saved", true, 2000);
                 detail.active = false;
                 report.setText("PASS automatic discovery, separate scan section, manual stop/restart, navigation, power changes, adapter replacement and external scan ownership\nFAILURES 0\n");

@@ -9,15 +9,14 @@ import Quickshell.Widgets
 Flickable {
     id: root
     objectName: "notificationViewport"
-    signal toastArchived()
+    signal toastArchived
     required property var state
     property var presentedEntries: []
     readonly property int instantiatedCardCount: cardRepeater.count
     property bool collapseOnDismiss: false
     property bool swipeEnabled: true
     property int activeCollapses: 0
-    readonly property real presence: !collapseOnDismiss || cards.count > 1 ? 1
-        : cardRepeater.count > 0 && cardRepeater.itemAt(0) ? 1 - cardRepeater.itemAt(0).collapseProgress : 0
+    readonly property real presence: !collapseOnDismiss || cards.count > 1 ? 1 : cardRepeater.count > 0 && cardRepeater.itemAt(0) ? 1 - cardRepeater.itemAt(0).collapseProgress : 0
     property bool animationsEnabled: true
     readonly property bool smoothScrolling: !Theme.reducedMotion
     readonly property bool reducedMotion: Theme.reducedMotion || !animationsEnabled
@@ -43,7 +42,8 @@ Flickable {
         placingHistory = true;
         for (let i = 0; i < cardRepeater.count; ++i) {
             const card = cardRepeater.itemAt(i);
-            if (card && !card.retiring && !card.dismissing) card.settleEntrance();
+            if (card && !card.retiring && !card.dismissing)
+                card.settleEntrance();
         }
         historyStart.restart();
     }
@@ -53,7 +53,8 @@ Flickable {
         onTriggered: {
             for (let i = 0; i < cardRepeater.count; ++i) {
                 const card = cardRepeater.itemAt(i);
-                if (card && !card.retiring && !card.dismissing) card.prepareEntrance();
+                if (card && !card.retiring && !card.dismissing)
+                    card.prepareEntrance();
             }
             root.layoutCards();
             placementFinish.start();
@@ -68,12 +69,14 @@ Flickable {
     property real bottomInset: 16
     readonly property real stackHeight: notificationColumn.height + bottomInset
     readonly property int renderedNotificationCount: {
-        if (!filterToasts || historyMode) return cards.count;
+        if (!filterToasts || historyMode)
+            return cards.count;
         let count = 0;
         for (let index = 0; index < cardRepeater.count; ++index) {
             const card = cardRepeater.itemAt(index);
             // Retiring toast delegates must finish their exit before unmapping.
-            if (card && card.entry.toastVisible) count++;
+            if (card && card.entry.toastVisible)
+                count++;
         }
         return count;
     }
@@ -84,7 +87,7 @@ Flickable {
         syncEntries();
     }
 
-    signal notificationActivated()
+    signal notificationActivated
 
     function hasDefaultAction(entry) {
         return state.canActivate(entry);
@@ -99,7 +102,6 @@ Flickable {
         for (let index = 0; index < entry.actions.length; index += 1) {
             if (!entry.actions[index].defaultAction)
                 return true;
-
         }
         return false;
     }
@@ -108,9 +110,9 @@ Flickable {
     property bool updatingGroups: false
 
     function appKey(entry) {
-        if (!groupNotifications) return "notification-" + entry.notification.id;
-        return entry.desktopEntry ? entry.desktopEntry.replace(/\.desktop$/, "")
-             : entry.appName || "notification-" + entry.notification.id;
+        if (!groupNotifications)
+            return "notification-" + entry.notification.id;
+        return entry.desktopEntry ? entry.desktopEntry.replace(/\.desktop$/, "") : entry.appName || "notification-" + entry.notification.id;
     }
 
     function toggleGroup(key) {
@@ -121,14 +123,16 @@ Flickable {
         expandedApps = expanded;
         // Expansion changes one role, not the contents of every notification.
         for (let index = 0; index < cards.count; index++) {
-            if (cards.get(index).groupKey === key) cards.setProperty(index, "groupExpanded", expanding);
+            if (cards.get(index).groupKey === key)
+                cards.setProperty(index, "groupExpanded", expanding);
         }
         layoutCards();
         updatingGroups = false;
     }
 
     function dragProgress(card) {
-        if (!card || !(card.hasBeenGrabbed || card.dismissing)) return 0;
+        if (!card || !(card.hasBeenGrabbed || card.dismissing))
+            return 0;
         const fraction = Math.min(1, Math.max(0, (card.slideOffset + card.dragOffset) / (card.width * 0.35)));
         return 1 - Math.pow(1 - fraction, 3);
     }
@@ -145,9 +149,11 @@ Flickable {
             let previousRemaining = 0;
             for (let index = 0; index < cardRepeater.count; index++) {
                 const card = cardRepeater.itemAt(index);
-                if (!card) continue;
+                if (!card)
+                    continue;
                 const remaining = 1 - card.collapseProgress;
-                if (index > 0) top += notificationColumn.spacing * Math.min(previousRemaining, remaining);
+                if (index > 0)
+                    top += notificationColumn.spacing * Math.min(previousRemaining, remaining);
                 card.layoutTargetY = top;
                 card.layoutInset = 0;
                 card.layoutY = top;
@@ -163,12 +169,17 @@ Flickable {
         const groups = new Map();
         for (let index = 0; index < cardRepeater.count; index++) {
             const card = cardRepeater.itemAt(index);
-            if (!card || (filterToasts && !historyMode && !card.entry.toastVisible)) continue;
-            if (!groups.has(card.groupKey)) groups.set(card.groupKey, []);
+            if (!card || (filterToasts && !historyMode && !card.entry.toastVisible))
+                continue;
+            if (!groups.has(card.groupKey))
+                groups.set(card.groupKey, []);
             groups.get(card.groupKey).push(card);
         }
         let hasSettledCard = false;
-        groups.forEach(group => { if (group.some(card => card.entranceComplete)) hasSettledCard = true; });
+        groups.forEach(group => {
+            if (group.some(card => card.entranceComplete))
+                hasSettledCard = true;
+        });
         notificationColumn.animateHeight = hasSettledCard && notificationColumn.height > 0;
         let top = 0;
         const retainedGroups = [];
@@ -183,40 +194,59 @@ Flickable {
                 const depth = card.groupDepth;
                 card.coveringCard = head;
                 card.handoverInProgress = false;
-                if (card.coveringSettled) card.awaitingCover = false;
+                if (card.coveringSettled)
+                    card.awaitingCover = false;
                 card.layoutTargetY = expanded ? cursor : top + root.stackDepth(depth) * 8;
                 card.layoutInset = expanded ? 6 : root.stackDepth(depth) * 6;
                 card.layoutY = expanded ? cursor : top + root.stackDepth(depth) * 8;
                 card.layoutHeight = expanded ? card.naturalHeight : head.naturalHeight;
                 bottom = Math.max(bottom, (expanded ? cursor : top + root.stackDepth(depth) * 8) + (expanded ? card.naturalHeight : head.naturalHeight));
-                if (expanded) cursor += card.naturalHeight + notificationColumn.spacing;
+                if (expanded)
+                    cursor += card.naturalHeight + notificationColumn.spacing;
                 card.layoutReady = true;
             });
             retainedGroups.push(key);
-            const backdrop = {groupKey: key, topY: top, extent: bottom - top + groupPadding, expanded: expanded};
+            const backdrop = {
+                groupKey: key,
+                topY: top,
+                extent: bottom - top + groupPadding,
+                expanded: expanded
+            };
             let existing = -1;
             for (let index = 0; index < groupBackgrounds.count; index++) {
-                if (groupBackgrounds.get(index).groupKey === key) { existing = index; break; }
+                if (groupBackgrounds.get(index).groupKey === key) {
+                    existing = index;
+                    break;
+                }
             }
-            if (existing < 0) groupBackgrounds.append(backdrop);
-            else groupBackgrounds.set(existing, backdrop);
+            if (existing < 0)
+                groupBackgrounds.append(backdrop);
+            else
+                groupBackgrounds.set(existing, backdrop);
             top = bottom + groupPadding + notificationColumn.spacing;
         });
         for (let index = groupBackgrounds.count - 1; index >= 0; index--) {
-            if (retainedGroups.indexOf(groupBackgrounds.get(index).groupKey) < 0) groupBackgrounds.remove(index);
+            if (retainedGroups.indexOf(groupBackgrounds.get(index).groupKey) < 0)
+                groupBackgrounds.remove(index);
         }
         notificationColumn.height = Math.max(0, top - notificationColumn.spacing);
     }
 
-    Timer { id: layoutTimer; interval: 0; onTriggered: root.layoutCards() }
+    Timer {
+        id: layoutTimer
+        interval: 0
+        onTriggered: root.layoutCards()
+    }
 
     // Preserve delegates when another notification arrives or its text changes.
     function syncEntries() {
-        if (!cards || !cardRepeater) return;
+        if (!cards || !cardRepeater)
+            return;
         const groups = new Map();
         for (const entry of presentedEntries) {
             const key = appKey(entry);
-            if (!groups.has(key)) groups.set(key, []);
+            if (!groups.has(key))
+                groups.set(key, []);
             groups.get(key).push(entry);
         }
         const entries = [];
@@ -236,16 +266,23 @@ Flickable {
         let insertionIndex = 0;
         for (let index = 0; index < entries.length; index += 1) {
             if (collapseOnDismiss) {
-                while (insertionIndex < cards.count && cards.get(insertionIndex).retiring
-                    && !entryIds.has(cards.get(insertionIndex).notificationId)) insertionIndex++;
+                while (insertionIndex < cards.count && cards.get(insertionIndex).retiring && !entryIds.has(cards.get(insertionIndex).notificationId))
+                    insertionIndex++;
             }
             const modelIndex = collapseOnDismiss ? insertionIndex++ : index;
             const entry = entries[index];
             const key = appKey(entry);
             const group = groups.get(key);
-            const roles = {notificationId: entry.notification.id, entryData: entry, retiring: false,
-                groupKey: key, groupCount: group.length, groupDepth: depths.get(entry), groupHead: group[0] === entry,
-                groupExpanded: expandedApps[key] === true};
+            const roles = {
+                notificationId: entry.notification.id,
+                entryData: entry,
+                retiring: false,
+                groupKey: key,
+                groupCount: group.length,
+                groupDepth: depths.get(entry),
+                groupHead: group[0] === entry,
+                groupExpanded: expandedApps[key] === true
+            };
             let existing = -1;
             for (let row = modelIndex; row < cards.count; row += 1) {
                 if (cards.get(row).notificationId === entry.notification.id) {
@@ -269,10 +306,9 @@ Flickable {
                 }
                 const current = cards.get(modelIndex);
                 for (const role of Object.keys(roles)) {
-                    const changed = role === "entryData"
-                        ? lastSyncedEntries.get(entry.notification.id) !== entry
-                        : current[role] !== roles[role];
-                    if (changed) cards.setProperty(modelIndex, role, roles[role]);
+                    const changed = role === "entryData" ? lastSyncedEntries.get(entry.notification.id) !== entry : current[role] !== roles[role];
+                    if (changed)
+                        cards.setProperty(modelIndex, role, roles[role]);
                 }
                 if (advancing) {
                     // Preserve every backing card at its current rendered position during reindexing.
@@ -295,8 +331,13 @@ Flickable {
         layoutTimer.restart();
     }
 
-    ListModel { id: cards; dynamicRoles: true }
-    ListModel { id: groupBackgrounds }
+    ListModel {
+        id: cards
+        dynamicRoles: true
+    }
+    ListModel {
+        id: groupBackgrounds
+    }
     onPresentedEntriesChanged: syncEntries()
     onGroupNotificationsChanged: syncEntries()
     Component.onCompleted: syncEntries()
@@ -308,9 +349,18 @@ Flickable {
         visible: false
         layer.enabled: true
         gradient: Gradient {
-            GradientStop { position: 0; color: "white" }
-            GradientStop { position: Math.max(0, 1 - 64 / Math.max(1, bottomFadeMask.height)); color: "white" }
-            GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 1 - root.bottomFade) }
+            GradientStop {
+                position: 0
+                color: "white"
+            }
+            GradientStop {
+                position: Math.max(0, 1 - 64 / Math.max(1, bottomFadeMask.height))
+                color: "white"
+            }
+            GradientStop {
+                position: 1
+                color: Qt.rgba(1, 1, 1, 1 - root.bottomFade)
+            }
         }
     }
 
@@ -330,7 +380,8 @@ Flickable {
     }
     ScrollBar.vertical: ScrollBar {
         policy: ScrollBar.AsNeeded
-        onPressedChanged: if (pressed) wheelMotion.stop()
+        onPressedChanged: if (pressed)
+            wheelMotion.stop()
     }
     function clampWheelTarget() {
         const bottom = originY + Math.max(0, contentHeight - height);
@@ -356,15 +407,22 @@ Flickable {
         acceptedModifiers: Qt.KeyboardModifierMask
         onWheel: event => {
             const delta = event.pixelDelta.y || event.angleDelta.y / 120 * 160;
-            if (!delta || root.contentHeight <= root.height) { event.accepted = false; return; }
+            if (!delta || root.contentHeight <= root.height) {
+                event.accepted = false;
+                return;
+            }
             root.cancelFlick();
             // Accumulate rapid input at its destination, rather than losing
             // wheel distance while the previous step is still animating.
             const destination = wheelMotion.running ? wheelMotion.to : root.contentY;
             const next = root.originY + Math.max(0, Math.min(root.contentHeight - root.height, destination - root.originY - delta));
             wheelMotion.stop();
-            if (!root.smoothScrolling) root.contentY = next;
-            else { wheelMotion.to = next; wheelMotion.start(); }
+            if (!root.smoothScrolling)
+                root.contentY = next;
+            else {
+                wheelMotion.to = next;
+                wheelMotion.start();
+            }
             event.accepted = true;
         }
     }
@@ -375,14 +433,22 @@ Flickable {
         readonly property real spacing: root.rowSeparators ? 0 : Theme.gap
         onSpacingChanged: layoutTimer.restart()
         property bool animateHeight: false
-        Behavior on height { enabled: !root.placingHistory && notificationColumn.animateHeight; NumberAnimation { duration: root.groupMotion; easing.type: Easing.OutCubic } }
+        Behavior on height {
+            enabled: !root.placingHistory && notificationColumn.animateHeight
+            NumberAnimation {
+                duration: root.groupMotion
+                easing.type: Easing.OutCubic
+            }
+        }
 
         Repeater {
             model: groupBackgrounds
             delegate: Rectangle {
                 // Group-owned, so removing the head card never replaces this surface.
                 id: groupSurface
-                SurfaceFade { target: groupSurface }
+                SurfaceFade {
+                    target: groupSurface
+                }
                 objectName: "notificationGroupBackground"
                 required property string groupKey
                 required property real topY
@@ -399,14 +465,34 @@ Flickable {
                 color: Theme.elevated
                 border.width: root.cardBorder ? 1 : 0
                 border.color: Theme.outline
-                PanelOutline { surface: groupSurface }
+                PanelOutline {
+                    surface: groupSurface
+                }
                 z: -100000
                 visible: opacity > 0
                 opacity: showBackground ? 0.55 : 0
                 // Start collapsed surfaces at zero, without animating from Item's default opacity of one.
-                Behavior on opacity { enabled: ready; NumberAnimation { duration: root.reducedMotion ? 0 : 180; easing.type: Easing.OutCubic } }
-                Behavior on y { enabled: !root.placingHistory; NumberAnimation { duration: root.groupMotion; easing.type: Easing.OutCubic } }
-                Behavior on height { enabled: !root.placingHistory; NumberAnimation { duration: root.groupMotion; easing.type: Easing.OutCubic } }
+                Behavior on opacity {
+                    enabled: ready
+                    NumberAnimation {
+                        duration: root.reducedMotion ? 0 : 180
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on y {
+                    enabled: !root.placingHistory
+                    NumberAnimation {
+                        duration: root.groupMotion
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on height {
+                    enabled: !root.placingHistory
+                    NumberAnimation {
+                        duration: root.groupMotion
+                        easing.type: Easing.OutCubic
+                    }
+                }
             }
         }
 
@@ -418,7 +504,9 @@ Flickable {
 
             delegate: Rectangle {
                 id: notificationCard
-                SurfaceFade { target: notificationCard }
+                SurfaceFade {
+                    target: notificationCard
+                }
                 objectName: "notificationCard"
                 readonly property int contentPadding: Theme.notificationPadding
 
@@ -430,15 +518,10 @@ Flickable {
                 required property bool groupExpanded
                 // Do not send every card through the viewport from the same
                 // collapsed position. Keep a small margin for smooth scrolling.
-                readonly property bool targetNearViewport: layoutTargetY + naturalHeight >= root.contentY - root.originY - 120
-                    && layoutTargetY <= root.contentY - root.originY + root.height + 120
-                readonly property bool frontNearViewport: groupDepth < root.visibleStackCards
-                    && y + height >= root.contentY - root.originY - 120
-                    && y <= root.contentY - root.originY + root.height + 120
+                readonly property bool targetNearViewport: layoutTargetY + naturalHeight >= root.contentY - root.originY - 120 && layoutTargetY <= root.contentY - root.originY + root.height + 120
+                readonly property bool frontNearViewport: groupDepth < root.visibleStackCards && y + height >= root.contentY - root.originY - 120 && y <= root.contentY - root.originY + root.height + 120
                 readonly property bool nearViewport: !root.historyMode || targetNearViewport || frontNearViewport
-                visible: (!root.filterToasts || root.historyMode || entry.toastVisible)
-                    && (groupExpanded || groupDepth < root.visibleStackCards) && nearViewport
-                    && (!root.updatingGroups || groupDepth < root.visibleStackCards)
+                visible: (!root.filterToasts || root.historyMode || entry.toastVisible) && (groupExpanded || groupDepth < root.visibleStackCards) && nearViewport && (!root.updatingGroups || groupDepth < root.visibleStackCards)
                 readonly property bool collapsedStack: groupHead && groupCount > 1 && !groupExpanded
                 readonly property bool upcomingStackHead: !groupExpanded && groupDepth === 1 && groupCount > 2 && revealProgress > 0
                 readonly property real countProgress: groupExpanded || groupHead ? 0 : revealProgress
@@ -453,8 +536,7 @@ Flickable {
                 readonly property real advancingDepth: groupDepth > 0 ? root.stackDepth(groupDepth) - root.stackDepth(groupDepth - 1) : 0
                 readonly property real effectiveInset: Math.max(0, layoutInset - advancingDepth * 6 * stackAdvance)
                 readonly property bool hasSmallImage: notificationPreview.visible && !notificationPreview.largePreview
-                readonly property real naturalHeight: Math.max(cardContents.implicitHeight,
-                    hasSmallImage ? Theme.notificationHeaderHeight + Theme.notificationSpacing + 40 : 0) + contentPadding * 2
+                readonly property real naturalHeight: Math.max(cardContents.implicitHeight, hasSmallImage ? Theme.notificationHeaderHeight + Theme.notificationSpacing + 40 : 0) + contentPadding * 2
                 onNaturalHeightChanged: layoutTimer.restart()
                 clip: true
                 layer.enabled: root.cardShadow && visible
@@ -469,13 +551,30 @@ Flickable {
                 x: effectiveInset
                 y: layoutY - advancingDepth * 8 * stackAdvance
                 height: layoutHeight + (naturalHeight - layoutHeight) * (groupCount === 2 ? revealProgress : 0)
-                Behavior on layoutInset { enabled: !root.placingHistory && notificationCard.nearViewport && notificationCard.layoutReady && notificationCard.entranceComplete; NumberAnimation { duration: root.groupMotion; easing.type: Easing.OutCubic } }
-                Behavior on layoutY { enabled: !root.placingHistory && notificationCard.nearViewport && notificationCard.layoutReady && notificationCard.entranceComplete; NumberAnimation { duration: root.groupMotion; easing.type: Easing.OutCubic } }
-                Behavior on layoutHeight { enabled: !root.placingHistory && notificationCard.nearViewport && notificationCard.layoutReady && notificationCard.entranceComplete; NumberAnimation { duration: root.groupMotion; easing.type: Easing.OutCubic } }
+                Behavior on layoutInset {
+                    enabled: !root.placingHistory && notificationCard.nearViewport && notificationCard.layoutReady && notificationCard.entranceComplete
+                    NumberAnimation {
+                        duration: root.groupMotion
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on layoutY {
+                    enabled: !root.placingHistory && notificationCard.nearViewport && notificationCard.layoutReady && notificationCard.entranceComplete
+                    NumberAnimation {
+                        duration: root.groupMotion
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on layoutHeight {
+                    enabled: !root.placingHistory && notificationCard.nearViewport && notificationCard.layoutReady && notificationCard.entranceComplete
+                    NumberAnimation {
+                        duration: root.groupMotion
+                        easing.type: Easing.OutCubic
+                    }
+                }
                 Rectangle {
                     objectName: "notificationRowSeparator"
-                    visible: root.rowSeparators && (notificationCard.groupHead || notificationCard.groupExpanded)
-                        && notificationCard.layoutY + notificationCard.height < notificationColumn.height - 1
+                    visible: root.rowSeparators && (notificationCard.groupHead || notificationCard.groupExpanded) && notificationCard.layoutY + notificationCard.height < notificationColumn.height - 1
                     x: notificationCard.contentPadding
                     y: parent.height - 1
                     width: parent.width - x * 2
@@ -501,11 +600,12 @@ Flickable {
                 width: notificationColumn.width - effectiveInset * 2
                 radius: root.cardRadius
                 readonly property color surfaceFill: root.cardBackground
-                color: Qt.rgba(surfaceFill.r, surfaceFill.g, surfaceFill.b,
-                    groupHead || groupExpanded ? 1 : surfaceFill.a + (1 - surfaceFill.a) * revealProgress)
+                color: Qt.rgba(surfaceFill.r, surfaceFill.g, surfaceFill.b, groupHead || groupExpanded ? 1 : surfaceFill.a + (1 - surfaceFill.a) * revealProgress)
                 border.width: root.cardBorder ? 1 : 0
                 border.color: Theme.outline
-                PanelOutline { surface: notificationCard }
+                PanelOutline {
+                    surface: notificationCard
+                }
                 Accessible.name: entry.appName + ": " + entry.summary
                 Accessible.role: (collapsedStack || defaultActionAvailable) ? Accessible.Button : Accessible.StaticText
                 Accessible.focusable: collapsedStack || defaultActionAvailable
@@ -514,27 +614,31 @@ Flickable {
                 property var coveringCard: null
                 property bool awaitingCover: false
                 property bool hasBeenGrabbed: false
-                readonly property bool revealingFromDrag: !handoverInProgress && !groupExpanded && groupDepth > 0 && coveringCard !== null
-                    && (coveringCard.hasBeenGrabbed || coveringCard.dismissing)
-                    && coveringCard.slideOffset + coveringCard.dragOffset > 0
+                readonly property bool revealingFromDrag: !handoverInProgress && !groupExpanded && groupDepth > 0 && coveringCard !== null && (coveringCard.hasBeenGrabbed || coveringCard.dismissing) && coveringCard.slideOffset + coveringCard.dragOffset > 0
                 readonly property real stackAdvance: {
-                    if (!revealingFromDrag) return 0;
+                    if (!revealingFromDrag)
+                        return 0;
                     return root.dragProgress(coveringCard);
                 }
                 readonly property real revealProgress: groupDepth === 1 ? stackAdvance : 0
-                readonly property bool coveringSettled: coveringCard !== null
-                    && coveringCard.slideOffset + coveringCard.dragOffset <= 0
-                    && coveringCard.entranceOpacity >= 1
+                readonly property bool coveringSettled: coveringCard !== null && coveringCard.slideOffset + coveringCard.dragOffset <= 0 && coveringCard.entranceOpacity >= 1
                 onGroupHeadChanged: {
-                    if (!groupHead && contentsOpacity > 0) awaitingCover = true;
+                    if (!groupHead && contentsOpacity > 0)
+                        awaitingCover = true;
                 }
-                onCoveringSettledChanged: { if (coveringSettled) awaitingCover = false; }
+                onCoveringSettledChanged: {
+                    if (coveringSettled)
+                        awaitingCover = false;
+                }
                 property real settledContentsOpacity: groupHead || groupExpanded || awaitingCover ? 1 : 0
                 readonly property real contentsOpacity: Math.max(settledContentsOpacity, revealProgress)
                 Behavior on settledContentsOpacity {
                     // A revealed card already has visible contents; promotion must not replay their fade-in.
                     enabled: !root.placingHistory && notificationCard.nearViewport && !notificationCard.handoverInProgress
-                    NumberAnimation { duration: root.reducedMotion ? 0 : 180; easing.type: Easing.OutCubic }
+                    NumberAnimation {
+                        duration: root.reducedMotion ? 0 : 180
+                        easing.type: Easing.OutCubic
+                    }
                 }
                 property real entranceOpacity: root.historyMode || root.reducedMotion ? 1 : Theme.notificationEntranceOpacity
                 readonly property real depthOpacity: Math.max(0.45, 1 - groupDepth * 0.12)
@@ -555,11 +659,17 @@ Flickable {
                 property bool clearAfterDismiss: false
                 readonly property bool paused: (root.historyMode && root.active) || cardHover.hovered || notificationMouse.pressed || swipe.active || dismissing
                 onPausedChanged: {
-                    if (!retiring && notification) root.state.setPaused(notification, paused);
+                    if (!retiring && notification)
+                        root.state.setPaused(notification, paused);
                     expiryProgress.updateProgress();
                 }
-                onEntryChanged: { if (!retiring && notification && paused) root.state.setPaused(notification, true); }
-                transform: Translate { x: notificationCard.slideOffset + notificationCard.dragOffset }
+                onEntryChanged: {
+                    if (!retiring && notification && paused)
+                        root.state.setPaused(notification, true);
+                }
+                transform: Translate {
+                    x: notificationCard.slideOffset + notificationCard.dragOffset
+                }
                 function settleEntrance() {
                     entranceStart.stop();
                     slideAnimation.stop();
@@ -610,16 +720,22 @@ Flickable {
                 }
 
                 function prepareEntrance() {
-                    if (retiring || dismissing) return;
+                    if (retiring || dismissing)
+                        return;
                     cardContents.forceLayout();
                     root.layoutCards();
-                    if (root.historyMode || root.placingHistory) settleEntrance();
+                    if (root.historyMode || root.placingHistory)
+                        settleEntrance();
                     else {
                         slideAnimation.start();
                         entranceFade.start();
                     }
                 }
-                Timer { id: entranceStart; interval: 0; onTriggered: notificationCard.prepareEntrance() }
+                Timer {
+                    id: entranceStart
+                    interval: 0
+                    onTriggered: notificationCard.prepareEntrance()
+                }
                 Component.onCompleted: entranceStart.start()
                 NumberAnimation {
                     id: entranceFade
@@ -631,7 +747,10 @@ Flickable {
                 }
                 NumberAnimation {
                     id: slideAnimation
-                    onFinished: { if (!notificationCard.dismissing) notificationCard.entranceComplete = true; }
+                    onFinished: {
+                        if (!notificationCard.dismissing)
+                            notificationCard.entranceComplete = true;
+                    }
                     target: notificationCard
                     property: "slideOffset"
                     to: 0
@@ -648,10 +767,24 @@ Flickable {
                 }
                 ParallelAnimation {
                     id: collapseDismiss
-                    NumberAnimation { target: notificationCard; property: "collapseOpacity"; to: 0; duration: Theme.reducedMotion ? 0 : 140; easing.type: Easing.OutCubic }
+                    NumberAnimation {
+                        target: notificationCard
+                        property: "collapseOpacity"
+                        to: 0
+                        duration: Theme.reducedMotion ? 0 : 140
+                        easing.type: Easing.OutCubic
+                    }
                     SequentialAnimation {
-                        PauseAnimation { duration: Theme.reducedMotion ? 0 : 40 }
-                        NumberAnimation { target: notificationCard; property: "collapseProgress"; to: 1; duration: Theme.reducedMotion ? 0 : 280; easing.type: Easing.InOutCubic }
+                        PauseAnimation {
+                            duration: Theme.reducedMotion ? 0 : 40
+                        }
+                        NumberAnimation {
+                            target: notificationCard
+                            property: "collapseProgress"
+                            to: 1
+                            duration: Theme.reducedMotion ? 0 : 280
+                            easing.type: Easing.InOutCubic
+                        }
                     }
                     onFinished: {
                         root.activeCollapses--;
@@ -660,10 +793,13 @@ Flickable {
                 }
                 function completeDismissal() {
                     if (!retiring && notification) {
-                        if (clearAfterDismiss) root.state.dismiss(notification);
-                        else root.state.archive(notification);
+                        if (clearAfterDismiss)
+                            root.state.dismiss(notification);
+                        else
+                            root.state.archive(notification);
                     }
-                    if (!root.historyMode && notification && root.state.allEntries.some(entry => entry.notification === notification)) root.toastArchived();
+                    if (!root.historyMode && notification && root.state.allEntries.some(entry => entry.notification === notification))
+                        root.toastArchived();
                     root.removeCard(notificationId);
                 }
                 Timer {
@@ -672,7 +808,9 @@ Flickable {
                     onTriggered: notificationCard.completeDismissal()
                 }
 
-                HoverHandler { id: cardHover }
+                HoverHandler {
+                    id: cardHover
+                }
                 DragHandler {
                     id: swipe
                     enabled: root.swipeEnabled
@@ -705,15 +843,15 @@ Flickable {
                     anchors.fill: parent
                     radius: notificationCard.radius
                     color: Theme.pressed
-                    opacity: !(notificationCard.defaultActionAvailable || notificationCard.collapsedStack) ? 0
-                        : notificationMouse.pressed ? 1 : cardHover.hovered ? .4 : 0
+                    opacity: !(notificationCard.defaultActionAvailable || notificationCard.collapsedStack) ? 0 : notificationMouse.pressed ? 1 : cardHover.hovered ? .4 : 0
                 }
 
                 MouseArea {
                     id: notificationMouse
                     anchors.fill: parent
                     cursorShape: Qt.ArrowCursor
-                    onPressed: if (root.swipeEnabled) notificationCard.interruptMotion()
+                    onPressed: if (root.swipeEnabled)
+                        notificationCard.interruptMotion()
                     onReleased: {
                         if (!swipe.active && !notificationCard.dismissing)
                             snapBack.restart();
@@ -724,8 +862,10 @@ Flickable {
                     }
                     onClicked: {
                         if (!notificationCard.dismissing && !notificationCard.interruptedMotion) {
-                            if (notificationCard.collapsedStack) root.toggleGroup(notificationCard.groupKey);
-                            else if (notificationCard.defaultActionAvailable) root.invokeDefaultAction(notificationCard.entry);
+                            if (notificationCard.collapsedStack)
+                                root.toggleGroup(notificationCard.groupKey);
+                            else if (notificationCard.defaultActionAvailable)
+                                root.invokeDefaultAction(notificationCard.entry);
                         }
                     }
                 }
@@ -771,7 +911,8 @@ Flickable {
                             color: Theme.text
                             font.weight: Font.Medium
                             elide: Text.ElideRight
-                            font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSize
                             text: notificationCard.entry.appName || notificationCard.entry.desktopEntry || "Notification"
                             textFormat: Text.PlainText
                         }
@@ -798,7 +939,8 @@ Flickable {
                                 const context = getContext("2d");
                                 context.reset();
                                 const radius = Math.max(0, width / 2 - 2);
-                                if (radius <= 0) return;
+                                if (radius <= 0)
+                                    return;
                                 context.lineWidth = 2;
                                 context.strokeStyle = Theme.outline;
                                 context.beginPath();
@@ -815,9 +957,7 @@ Flickable {
                             Timer {
                                 interval: 40
                                 repeat: true
-                                running: expiryProgress.visible && !notificationCard.paused && !notificationCard.retiring
-                                    && notificationCard.y + notificationCard.height >= root.contentY
-                                    && notificationCard.y <= root.contentY + root.height
+                                running: expiryProgress.visible && !notificationCard.paused && !notificationCard.retiring && notificationCard.y + notificationCard.height >= root.contentY && notificationCard.y <= root.contentY + root.height
                                 onTriggered: expiryProgress.updateProgress()
                             }
                         }
@@ -868,16 +1008,15 @@ Flickable {
                                 cursorShape: Qt.ArrowCursor
                                 onClicked: notificationCard.dismissAnimated()
                             }
-
                         }
-
                     }
 
                     Text {
                         width: parent.width - (notificationCard.hasSmallImage ? 48 : 0)
                         color: Theme.text
                         elide: Text.ElideRight
-                        font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize
                         font.weight: Font.DemiBold
                         maximumLineCount: 2
                         text: notificationCard.entry.summary || "Notification"
@@ -889,7 +1028,8 @@ Flickable {
                         width: parent.width - (notificationCard.hasSmallImage ? 48 : 0)
                         visible: notificationCard.entry.body.length > 0
                         color: Theme.muted
-                        font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize
                         lineHeight: 1.2
                         elide: Text.ElideRight
                         maximumLineCount: notificationCard.groupExpanded ? 30 : 3
@@ -901,12 +1041,15 @@ Flickable {
                     Image {
                         id: notificationPreview
                         objectName: "notificationImagePreview"
-                        onStatusChanged: if (status === Image.Ready) cachePreview.restart()
-                        onOpacityChanged: if (opacity === 1 && status === Image.Ready) cachePreview.restart()
+                        onStatusChanged: if (status === Image.Ready)
+                            cachePreview.restart()
+                        onOpacityChanged: if (opacity === 1 && status === Image.Ready)
+                            cachePreview.restart()
                         Timer {
                             id: cachePreview
                             interval: 150
-                            onTriggered: if (typeof root.state.cacheImage === "function") root.state.cacheImage(notificationCard.entry, notificationPreview)
+                            onTriggered: if (typeof root.state.cacheImage === "function")
+                                root.state.cacheImage(notificationCard.entry, notificationPreview)
                         }
                         readonly property bool largePreview: History.largeImage(notificationCard.entry)
                         parent: largePreview ? cardContents : notificationCard
@@ -917,20 +1060,23 @@ Flickable {
                         height: !visible ? 0 : largePreview && implicitWidth > 0 ? Math.min(width * implicitHeight / implicitWidth, 240) : 40
                         visible: source.toString() !== "" && status !== Image.Error
                         readonly property string imageSource: notificationCard.entry.image || ""
-                        readonly property string normalizedImage: !imageSource || imageSource.startsWith("/") || /^[a-z][a-z0-9+.-]*:/i.test(imageSource)
-                            ? imageSource : Quickshell.iconPath(imageSource)
+                        readonly property string normalizedImage: !imageSource || imageSource.startsWith("/") || /^[a-z][a-z0-9+.-]*:/i.test(imageSource) ? imageSource : Quickshell.iconPath(imageSource)
                         readonly property bool nativePixels: normalizedImage.startsWith("data:") || (normalizedImage.startsWith("image://") && !normalizedImage.startsWith("image://icon/"))
                         property string retainedImage: ""
                         function retainImage() {
                             const next = nativePixels ? "" : normalizedImage;
-                            if (next === retainedImage) return;
-                            if (next) OsIcons.retain(next);
-                            if (retainedImage) OsIcons.release(retainedImage);
+                            if (next === retainedImage)
+                                return;
+                            if (next)
+                                OsIcons.retain(next);
+                            if (retainedImage)
+                                OsIcons.release(retainedImage);
                             retainedImage = next;
                         }
                         onNormalizedImageChanged: retainImage()
                         Component.onCompleted: retainImage()
-                        Component.onDestruction: if (retainedImage) OsIcons.release(retainedImage)
+                        Component.onDestruction: if (retainedImage)
+                            OsIcons.release(retainedImage)
                         source: nativePixels ? normalizedImage : OsIcons.sources[normalizedImage] || ""
                         // Decode for the available column width, not the card's
                         // animated inset. Changing sourceSize reloads the image.
@@ -975,7 +1121,12 @@ Flickable {
                                 width: Math.max(currentCount.implicitWidth, nextCount.implicitWidth)
                                 height: currentCount.implicitHeight + 2
                                 clip: true
-                                Behavior on width { NumberAnimation { duration: root.reducedMotion ? 0 : 180; easing.type: Easing.OutCubic } }
+                                Behavior on width {
+                                    NumberAnimation {
+                                        duration: root.reducedMotion ? 0 : 180
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
                                 Text {
                                     id: currentCount
                                     text: notificationCard.groupCount
@@ -1015,7 +1166,12 @@ Flickable {
                                 source: Quickshell.iconPath("pan-down-symbolic", "go-down-symbolic")
                                 color: groupLabel.color
                                 rotation: notificationCard.groupExpanded ? 180 : 0
-                                Behavior on rotation { NumberAnimation { duration: root.reducedMotion ? 0 : 180; easing.type: Easing.OutCubic } }
+                                Behavior on rotation {
+                                    NumberAnimation {
+                                        duration: root.reducedMotion ? 0 : 180
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
                             }
                         }
                     }
@@ -1041,23 +1197,19 @@ Flickable {
                                 height: visible ? implicitHeight : 0
                                 text: modelData.text
                                 horizontalPadding: Theme.gap
-                                iconName: ({copy: "edit-copy-symbolic", save: "document-save-as-symbolic", discard: "user-trash-symbolic"})[modelData.action.identifier] || ""
+                                iconName: ({
+                                        copy: "edit-copy-symbolic",
+                                        save: "document-save-as-symbolic",
+                                        discard: "user-trash-symbolic"
+                                    })[modelData.action.identifier] || ""
                                 visible: !modelData.defaultAction
                                 onClicked: modelData.action.invoke()
                                 Accessible.onPressAction: modelData.action.invoke()
-
                             }
-
                         }
-
                     }
-
                 }
-
             }
-
         }
-
     }
-
 }

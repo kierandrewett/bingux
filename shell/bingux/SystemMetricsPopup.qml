@@ -7,17 +7,17 @@ ShellPopup {
     required property var monitorWidget
     property bool customising: false
     function showPage(settings) {
-        if (visible && customising === settings) { visible = false; return; }
+        if (visible && customising === settings) {
+            visible = false;
+            return;
+        }
         viewport.contentY = 0;
         customising = settings;
         visible = true;
     }
-    readonly property real maximumHeight: hostItem ? Math.max(0, Math.min(640, height - Theme.gap * 2))
-        : Math.max(0, Math.min(640, height * 0.65,
-        anchorAbove ? anchorTop - Theme.barHeight - Theme.gap : height - Theme.dockExclusiveHeight - Theme.gap - belowAnchorY))
+    readonly property real maximumHeight: hostItem ? Math.max(0, Math.min(640, height - Theme.gap * 2)) : Math.max(0, Math.min(640, height * 0.65, anchorAbove ? anchorTop - Theme.barHeight - Theme.gap : height - Theme.dockExclusiveHeight - Theme.gap - belowAnchorY))
     popupWidth: customising ? 336 : 520
-    popupHeight: !customising && performance.page !== "usage" ? maximumHeight
-        : Math.min((customising ? content.implicitHeight : performance.implicitHeight) + contentPadding * 2, maximumHeight)
+    popupHeight: !customising && performance.page !== "usage" ? maximumHeight : Math.min((customising ? content.implicitHeight : performance.implicitHeight) + contentPadding * 2, maximumHeight)
     contentPadding: 16
     surfaceColor: Theme.popupSurface
     Flickable {
@@ -28,13 +28,25 @@ ShellPopup {
         contentHeight: content.implicitHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: ScrollBar { parent: root.body; x: viewport.width + 4; y: 0; height: viewport.height; width: 8 }
+        ScrollBar.vertical: ScrollBar {
+            parent: root.body
+            x: viewport.width + 4
+            y: 0
+            height: viewport.height
+            width: 8
+        }
         ColumnLayout {
             id: content
             visible: root.customising
             width: parent.width
             spacing: 12
-            Text { text: "System monitors"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontHeading; font.weight: Font.DemiBold }
+            Text {
+                text: "System monitors"
+                color: Theme.text
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontHeading
+                font.weight: Font.DemiBold
+            }
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 0

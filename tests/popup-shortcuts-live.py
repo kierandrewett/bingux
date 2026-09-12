@@ -1,4 +1,5 @@
 """Opt-in live test: Super release and direct popup shortcuts."""
+
 import json
 import subprocess
 import time
@@ -14,7 +15,7 @@ def wait_for(predicate):
     while time.monotonic() < deadline:
         if predicate():
             return
-        time.sleep(.05)
+        time.sleep(0.05)
     raise AssertionError("Popup did not reach its expected state")
 
 
@@ -43,19 +44,19 @@ try:
     ctl("search", "close")
     ctl("emoji", "close")
     wait_for(lambda: not ctl("search", "status")["open"])
-    time.sleep(.2)
+    time.sleep(0.2)
     for _ in range(2):
         key(65515, True)  # Super_L
-        time.sleep(.4)
+        time.sleep(0.4)
         key(65515, False)
         wait_for(lambda: ctl("search", "status")["open"])
         key(65515, True)
-        time.sleep(.2)
+        time.sleep(0.2)
         key(65515, False)
         wait_for(lambda: not ctl("search", "status")["open"])
-        time.sleep(.2)
+        time.sleep(0.2)
     key(65515, True)
-    time.sleep(.4)
+    time.sleep(0.4)
     key(65515, False)
     # Type immediately after release, without waiting for the popup or its IPC.
     for symbol in [97, 98, 65288, 99, 100]:  # ab, Backspace, cd
@@ -65,13 +66,13 @@ try:
     wait_for(lambda: ctl("ipc", "search", "status")["query"] == "acd")
     ctl("search", "close")
     wait_for(lambda: not ctl("search", "status")["open"])
-    time.sleep(.2)
+    time.sleep(0.2)
     key(65515, True)
     key(46, True)  # period
     key(46, False)
     wait_for(lambda: ctl("emoji", "status")["visible"])
     key(65515, False)
-    time.sleep(.3)
+    time.sleep(0.3)
     assert not ctl("search", "status")["open"], "Super chord release must not open Search"
     ctl("emoji", "close")
     key(65513, True)  # Alt_L
@@ -80,7 +81,9 @@ try:
     key(65513, False)
     wait_for(lambda: ctl("capture", "status")["opened"])
     ctl("capture", "cancel")
-    print("PASS: immediate typing survives opening; Super toggles only on release; Emoji and Capture use persistent shortcuts; Super chords do not open Search")
+    print(
+        "PASS: immediate typing survives opening; Super toggles only on release; Emoji and Capture use persistent shortcuts; Super chords do not open Search"
+    )
 finally:
     for symbol in list(held):
         key(symbol, False)

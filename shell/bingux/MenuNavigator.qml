@@ -13,7 +13,7 @@ Item {
     property bool keyboardNavigation: false
     readonly property var currentEntry: entryAt(root.view ? root.view.currentIndex : root.currentIndex)
 
-    signal escapeRequested()
+    signal escapeRequested
     signal activateRequested(var entry)
 
     width: 0
@@ -107,23 +107,23 @@ Item {
     }
 
     Keys.priority: Keys.BeforeItem
-    Keys.onDownPressed: function(event) {
+    Keys.onDownPressed: function (event) {
         root.move(1);
         event.accepted = true;
     }
-    Keys.onUpPressed: function(event) {
+    Keys.onUpPressed: function (event) {
         root.move(-1);
         event.accepted = true;
     }
-    Keys.onReturnPressed: function(event) {
+    Keys.onReturnPressed: function (event) {
         root.activateCurrent();
         event.accepted = true;
     }
-    Keys.onSpacePressed: function(event) {
+    Keys.onSpacePressed: function (event) {
         root.activateCurrent();
         event.accepted = true;
     }
-    Keys.onEscapePressed: function(event) {
+    Keys.onEscapePressed: function (event) {
         root.escapeRequested();
         event.accepted = true;
     }

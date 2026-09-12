@@ -10,18 +10,18 @@ workspace. Notes continue to use `sidebar-notes.ini`; there is no storage migrat
 
 ## Implemented commands
 
-| Commands | Result |
-| --- | --- |
-| `/text`, `/plain` | Plain paragraph |
-| `/h1` to `/h6`, `/#` to `/######` | Heading levels 1 to 6 |
-| `/bullet`, `/num`, `/todo` | Bulleted, numbered or checkbox list |
-| `/table` | Editable two-column table with a header and two rows |
-| `/quote`, `/div`, `/code` | Quote, divider or fenced code |
-| `/bold`, `/italic`, `/strike`, `/inline code` | Selected sample text with that format; typing replaces it |
-| `/link`, `/book` | Editable Markdown link; replace the selected URL and press Enter |
-| `/image` | Editable Markdown image; replace the selected file path or URL and press Enter |
-| `/date` | Current local date |
-| `/duplicate`, `/delete` | Duplicate or remove the current paragraph |
+| Commands                                      | Result                                                                         |
+| --------------------------------------------- | ------------------------------------------------------------------------------ |
+| `/text`, `/plain`                             | Plain paragraph                                                                |
+| `/h1` to `/h6`, `/#` to `/######`             | Heading levels 1 to 6                                                          |
+| `/bullet`, `/num`, `/todo`                    | Bulleted, numbered or checkbox list                                            |
+| `/table`                                      | Editable two-column table with a header and two rows                           |
+| `/quote`, `/div`, `/code`                     | Quote, divider or fenced code                                                  |
+| `/bold`, `/italic`, `/strike`, `/inline code` | Selected sample text with that format; typing replaces it                      |
+| `/link`, `/book`                              | Editable Markdown link; replace the selected URL and press Enter               |
+| `/image`                                      | Editable Markdown image; replace the selected file path or URL and press Enter |
+| `/date`                                       | Current local date                                                             |
+| `/duplicate`, `/delete`                       | Duplicate or remove the current paragraph                                      |
 
 Insertion uses the existing document editor and grouped undo. Ctrl+Z restores the
 slash command. Tables and text formats remain editable after saving and reopening.
@@ -37,14 +37,14 @@ The list below records their command families, including those that need feature
 outside this Markdown editor. It is a reference inventory, not a claim of feature
 parity or an export of a signed-in Notion menu.
 
-| Family | Published entries |
-| --- | --- |
-| Basic | Text, page, to-do, headings 1-3, table, bullet, numbered list, toggle, quote, divider, link to page, callout |
-| Inline | Person/page mention, date/reminder, equation, emoji |
-| Media | Image, video, audio, file, code, web bookmark |
+| Family       | Published entries                                                                                                              |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| Basic        | Text, page, to-do, headings 1-3, table, bullet, numbered list, toggle, quote, divider, link to page, callout                   |
+| Inline       | Person/page mention, date/reminder, equation, emoji                                                                            |
+| Media        | Image, video, audio, file, code, web bookmark                                                                                  |
 | Named embeds | Google Drive, tweet, GitHub Gist, Google Maps, Framer, Invision, PDF, Figma, Loom, Typeform, CodePen, Whimsical, generic embed |
-| Advanced | Equation, button/template, breadcrumb, table of contents |
-| Actions | Duplicate, move to, delete, comment, turn into, text/background colour |
+| Advanced     | Equation, button/template, breadcrumb, table of contents                                                                       |
+| Actions      | Duplicate, move to, delete, comment, turn into, text/background colour                                                         |
 
 The keyboard reference also gives `/math` and `/latex` aliases for equations,
 `/bread` for breadcrumbs, and `/toc` for contents. Formatting includes bold,

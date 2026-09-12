@@ -17,12 +17,19 @@ impl SearchQuery {
     /// One literal retrieval seed per OR branch; final matching still evaluates
     /// the complete expression. Short/fuzzy-only queries use the local cache.
     pub fn index_seeds(&self) -> Vec<String> {
-        let mut seeds: Vec<_> = self.groups.iter().filter_map(|group| {
-            group.iter().filter(|term| !term.excluded && !term.extension)
-                .flat_map(|term| term.value.split(|c: char| !c.is_alphanumeric()))
-                .filter(|word| word.chars().count() >= 3)
-                .max_by_key(|word| word.len()).map(str::to_owned)
-        }).collect();
+        let mut seeds: Vec<_> = self
+            .groups
+            .iter()
+            .filter_map(|group| {
+                group
+                    .iter()
+                    .filter(|term| !term.excluded && !term.extension)
+                    .flat_map(|term| term.value.split(|c: char| !c.is_alphanumeric()))
+                    .filter(|word| word.chars().count() >= 3)
+                    .max_by_key(|word| word.len())
+                    .map(str::to_owned)
+            })
+            .collect();
         seeds.sort();
         seeds.dedup();
         seeds
@@ -220,9 +227,19 @@ mod tests {
 
     #[test]
     fn os_index_seeds_preserve_or_branches_without_operators_or_globs() {
-        assert_eq!(SearchQuery::parse("\"annual report\" -draft OR firefox ext:pdf").index_seeds(), vec!["firefox", "report"]);
-        assert!(SearchQuery::parse("-draft ext:pdf ab").index_seeds().is_empty());
-        assert_eq!(SearchQuery::parse("notes* OR notes").index_seeds(), vec!["notes"]);
+        assert_eq!(
+            SearchQuery::parse("\"annual report\" -draft OR firefox ext:pdf").index_seeds(),
+            vec!["firefox", "report"]
+        );
+        assert!(
+            SearchQuery::parse("-draft ext:pdf ab")
+                .index_seeds()
+                .is_empty()
+        );
+        assert_eq!(
+            SearchQuery::parse("notes* OR notes").index_seeds(),
+            vec!["notes"]
+        );
     }
 
     #[test]

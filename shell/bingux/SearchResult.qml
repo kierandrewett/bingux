@@ -14,8 +14,12 @@ Item {
     property bool previewOpen: false
     property var claimChevronAnimation: null
     property bool componentReady: false
-    Component.onCompleted: { componentReady = true; updateChevron(); }
-    onSelectedChanged: if (componentReady) updateChevron()
+    Component.onCompleted: {
+        componentReady = true;
+        updateChevron();
+    }
+    onSelectedChanged: if (componentReady)
+        updateChevron()
     function updateChevron() {
         chevronEntrance.stop();
         if (!selected) {
@@ -24,8 +28,12 @@ Item {
             return;
         }
         const animate = claimChevronAnimation ? claimChevronAnimation() : true;
-        if (animate && !Theme.reducedMotion && !webResult) chevronEntrance.restart();
-        else { selectionChevron.opacity = 1; chevronOffset.x = 0; }
+        if (animate && !Theme.reducedMotion && !webResult)
+            chevronEntrance.restart();
+        else {
+            selectionChevron.opacity = 1;
+            chevronOffset.x = 0;
+        }
     }
 
     signal activated(var position)
@@ -38,15 +46,15 @@ Item {
     readonly property bool fileResult: result.providerId === "files" && (result.kind === "file" || result.kind === "folder") && String(result.subtitle || "").startsWith("/")
     readonly property bool symbolic: !fileResult && !webResult && (featured || String(result.icon || "").endsWith("-symbolic"))
     readonly property Item activationIcon: featured ? featuredIconSurface : standardIconSurface
-    readonly property string activationIconSource: fileResult ? "file-preview:" + encodeURIComponent(result.subtitle) : symbolic ? symbolicSource : webResult
-        ? (Quickshell.iconPath("duckduckgo", true) || Qt.resolvedUrl("icons/duckduckgo.svg"))
-        : Quickshell.iconPath(result.icon || defaultIcon(), defaultIcon())
+    readonly property string activationIconSource: fileResult ? "file-preview:" + encodeURIComponent(result.subtitle) : symbolic ? symbolicSource : webResult ? (Quickshell.iconPath("duckduckgo", true) || Qt.resolvedUrl("icons/duckduckgo.svg")) : Quickshell.iconPath(result.icon || defaultIcon(), defaultIcon())
     readonly property int rowHeight: webResult ? 38 : result.kind === "calculation" ? 78 : result.kind === "weather" ? 84 : result.kind === "chat" ? 68 : Theme.searchResultHeight
     readonly property string symbolicSource: {
-        if (!symbolic) return "";
+        if (!symbolic)
+            return "";
         const icon = result.icon || defaultIcon();
         const themed = Quickshell.iconPath(icon.endsWith("-symbolic") ? icon : icon + "-symbolic", true);
-        if (themed) return themed;
+        if (themed)
+            return themed;
         if (result.kind === "file")
             return Quickshell.iconPath(icon === "application-pdf" ? "x-office-document-symbolic" : "text-x-generic-symbolic");
         return Quickshell.iconPath(defaultIcon().replace(/-symbolic$/, "") + "-symbolic", "system-search-symbolic");
@@ -78,11 +86,7 @@ Item {
     opacity: activationEnabled ? 1 : 0.58
 
     function escapeRichText(value) {
-        return String(value || "")
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/\"/g, "&quot;");
+        return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;");
     }
 
     // Mirror the daemon's lexical rules for presentation only; operators and
@@ -92,21 +96,33 @@ Item {
         const terms = [];
         let i = 0;
         while (i < input.length) {
-            if (/\s/.test(input[i])) { i++; continue; }
+            if (/\s/.test(input[i])) {
+                i++;
+                continue;
+            }
             const excluded = input[i] === "-" && i + 1 < input.length && !/\s/.test(input[i + 1]);
-            if (excluded) i++;
+            if (excluded)
+                i++;
             let quoted = input[i] === '"';
             let exact = quoted;
             let value = quoted ? "" : input[i];
             i++;
             while (i < input.length && (quoted || !/\s/.test(input[i]))) {
                 const next = input[i++];
-                if (next === "\\" && (input[i] === '"' || input[i] === "\\")) value += input[i++];
-                else if (next === '"') { quoted = !quoted; exact = true; }
-                else value += next;
+                if (next === "\\" && (input[i] === '"' || input[i] === "\\"))
+                    value += input[i++];
+                else if (next === '"') {
+                    quoted = !quoted;
+                    exact = true;
+                } else
+                    value += next;
             }
-            if (!value || excluded || (!exact && (value === "OR" || value === "AND" || /^(filetype|ext):/i.test(value)))) continue;
-            terms.push({ value: value.toLowerCase(), exact: exact });
+            if (!value || excluded || (!exact && (value === "OR" || value === "AND" || /^(filetype|ext):/i.test(value))))
+                continue;
+            terms.push({
+                value: value.toLowerCase(),
+                exact: exact
+            });
         }
         return terms;
     }
@@ -121,11 +137,13 @@ Item {
         const lowerText = text.toLowerCase();
         for (const token of queryTerms()) {
             const term = token.value;
-            if (!term) continue;
+            if (!term)
+                continue;
             let start = lowerText.indexOf(term);
             if (start >= 0) {
                 while (start >= 0) {
-                    for (let i = start; i < start + term.length; i++) marked[i] = true;
+                    for (let i = start; i < start + term.length; i++)
+                        marked[i] = true;
                     start = lowerText.indexOf(term, start + term.length);
                 }
             } else if (!token.exact) {
@@ -134,12 +152,14 @@ Item {
                 let cursor = 0;
                 for (const character of term) {
                     const position = lowerText.indexOf(character, cursor);
-                    if (position < 0) break;
+                    if (position < 0)
+                        break;
                     positions.push(position);
                     cursor = position + character.length;
                 }
                 if (positions.length === Array.from(term).length && positions[positions.length - 1] - positions[0] + 1 - term.length <= Array.from(term).length * 2)
-                    for (const position of positions) marked[position] = true;
+                    for (const position of positions)
+                        marked[position] = true;
             }
         }
         return marked;
@@ -151,7 +171,8 @@ Item {
             if (marked[i] && !marked[i - 1])
                 output += '<font color="' + Theme.searchAccent + '"><b>';
             output += escapeRichText(text[i]);
-            if (marked[i] && !marked[i + 1]) output += "</b></font>";
+            if (marked[i] && !marked[i + 1])
+                output += "</b></font>";
         }
         return output;
     }
@@ -174,26 +195,38 @@ Item {
             let omitted = false;
             for (let i = 0; i < text.length; i++) {
                 if (!kept[i]) {
-                    if (!omitted) { plain += "…"; marks.push(false); }
+                    if (!omitted) {
+                        plain += "…";
+                        marks.push(false);
+                    }
                     omitted = true;
                 } else {
-                    plain += text[i]; marks.push(marked[i]); omitted = false;
+                    plain += text[i];
+                    marks.push(marked[i]);
+                    omitted = false;
                 }
             }
-            return { plain: plain, rich: styledText(plain, marks) };
+            return {
+                plain: plain,
+                rich: styledText(plain, marks)
+            };
         }
         let rendered = render();
-        if (measure(rendered.rich) <= availableWidth) return rendered.rich;
+        if (measure(rendered.rich) <= availableWidth)
+            return rendered.rich;
         const removable = [];
         for (let i = 0; i < text.length; i++) {
-            if (marked[i]) continue;
+            if (marked[i])
+                continue;
             // Keep the filename and the root separator longest. Within the
             // filename, shorten its middle before its beginning or extension.
             const priority = i === 0 ? 3 : i >= basename ? 2 : 1;
-            const distance = i >= basename
-                ? Math.min(i - basename, text.length - 1 - i)
-                : Math.min(i, basename - 1 - i);
-            removable.push({ index: i, priority: priority, distance: distance });
+            const distance = i >= basename ? Math.min(i - basename, text.length - 1 - i) : Math.min(i, basename - 1 - i);
+            removable.push({
+                index: i,
+                priority: priority,
+                distance: distance
+            });
         }
         removable.sort((a, b) => a.priority - b.priority || b.distance - a.distance || a.index - b.index);
         for (const entry of removable) {
@@ -201,10 +234,13 @@ Item {
             let i = entry.index;
             kept[i] = false;
             const code = text.charCodeAt(i);
-            if (code >= 0xd800 && code <= 0xdbff && !marked[i + 1]) kept[i + 1] = false;
-            if (code >= 0xdc00 && code <= 0xdfff && !marked[i - 1]) kept[i - 1] = false;
+            if (code >= 0xd800 && code <= 0xdbff && !marked[i + 1])
+                kept[i + 1] = false;
+            if (code >= 0xdc00 && code <= 0xdfff && !marked[i - 1])
+                kept[i - 1] = false;
             rendered = render();
-            if (measure(rendered.rich) <= availableWidth) break;
+            if (measure(rendered.rich) <= availableWidth)
+                break;
         }
         return rendered.rich;
     }
@@ -227,7 +263,6 @@ Item {
         return "system-search-symbolic";
     }
 
-
     Rectangle {
         id: rowSurface
 
@@ -237,7 +272,6 @@ Item {
         border.width: root.selected ? 1 : 0
         border.color: "#387e9fc8"
     }
-
 
     Item {
         id: standardContent
@@ -313,12 +347,10 @@ Item {
                     onTriggered: subtitleViewport.updatePath()
                 }
                 function updatePath() {
-                    restText = root.result.kind === "file" || root.result.kind === "folder"
-                        ? root.compactPath(root.result.subtitle, width, function(rich) {
-                            pathMeasure.text = rich;
-                            return pathMeasure.implicitWidth;
-                        })
-                        : root.highlightedText(root.result.subtitle);
+                    restText = root.result.kind === "file" || root.result.kind === "folder" ? root.compactPath(root.result.subtitle, width, function (rich) {
+                        pathMeasure.text = rich;
+                        return pathMeasure.implicitWidth;
+                    }) : root.highlightedText(root.result.subtitle);
                 }
             }
         }
@@ -346,9 +378,21 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             visible: root.previewAvailable && root.selected
             objectName: "searchPreviewLabel"
-            Behavior on x { NumberAnimation { duration: Theme.previewMotion; easing.type: Easing.OutCubic } }
+            Behavior on x {
+                NumberAnimation {
+                    duration: Theme.previewMotion
+                    easing.type: Easing.OutCubic
+                }
+            }
             onTextChanged: labelFade.restart()
-            NumberAnimation { id: labelFade; target: previewLabel; property: "opacity"; from: 0; to: 1; duration: Theme.previewMotion }
+            NumberAnimation {
+                id: labelFade
+                target: previewLabel
+                property: "opacity"
+                from: 0
+                to: 1
+                duration: Theme.previewMotion
+            }
             text: root.previewOpen ? "Hide" : "Preview"
             color: Theme.muted
             font.family: Theme.fontFamily
@@ -361,11 +405,24 @@ Item {
             x: root.previewOpen && root.previewAvailable ? parent.width - 14 - previewLabel.width - 8 - width : parent.width - 30
             anchors.verticalCenter: parent.verticalCenter
             rotation: root.previewOpen && root.previewAvailable ? 180 : 0
-            Behavior on x { NumberAnimation { duration: Theme.previewMotion; easing.type: Easing.OutCubic } }
-            Behavior on rotation { NumberAnimation { duration: Theme.previewMotion; easing.type: Easing.OutCubic } }
+            Behavior on x {
+                NumberAnimation {
+                    duration: Theme.previewMotion
+                    easing.type: Easing.OutCubic
+                }
+            }
+            Behavior on rotation {
+                NumberAnimation {
+                    duration: Theme.previewMotion
+                    easing.type: Easing.OutCubic
+                }
+            }
             visible: opacity > 0 && !root.webResult
             opacity: 0
-            transform: Translate { id: chevronOffset; x: -24 }
+            transform: Translate {
+                id: chevronOffset
+                x: -24
+            }
             implicitSize: 16
             source: Quickshell.iconPath("go-next-symbolic")
             color: Theme.muted
@@ -373,10 +430,23 @@ Item {
 
         ParallelAnimation {
             id: chevronEntrance
-            NumberAnimation { target: selectionChevron; property: "opacity"; from: 0; to: 1; duration: 230; easing.type: Easing.OutCubic }
-            NumberAnimation { target: chevronOffset; property: "x"; from: -24; to: 0; duration: 230; easing.type: Easing.OutCubic }
+            NumberAnimation {
+                target: selectionChevron
+                property: "opacity"
+                from: 0
+                to: 1
+                duration: 230
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                target: chevronOffset
+                property: "x"
+                from: -24
+                to: 0
+                duration: 230
+                easing.type: Easing.OutCubic
+            }
         }
-
     }
 
     Text {
@@ -482,19 +552,21 @@ Item {
             }
         }
         onClicked: mouse => {
-            if (!root.activationEnabled) return;
+            if (!root.activationEnabled)
+                return;
             if (mouse.button === Qt.RightButton) {
                 root.contextMenuRequested(Qt.point(mouse.x, mouse.y));
                 return;
             }
             if (root.previewAvailable && root.selected && mouse.x >= width - 96)
                 root.previewToggled();
-            else root.activated(Qt.point(mouse.x, mouse.y));
+            else
+                root.activated(Qt.point(mouse.x, mouse.y));
         }
         // Moving the mouse selects a row; a stationary pointer must not undo
         // keyboard selection when result delegates are recreated.
-        onPositionChanged: if (containsMouse) root.hovered()
+        onPositionChanged: if (containsMouse)
+            root.hovered()
         onEntered: root.hovered()
     }
-
 }

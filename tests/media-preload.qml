@@ -2,9 +2,17 @@ import QtQuick
 import QtTest
 import Quickshell
 import Quickshell.Io
+
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS") }
-    Timer { id: finish; interval: 100; onTriggered: Qt.quit() }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS")
+    }
+    Timer {
+        id: finish
+        interval: 100
+        onTriggered: Qt.quit()
+    }
     QtObject {
         id: player
         property string identity: "Test"
@@ -24,12 +32,27 @@ ShellRoot {
         property real position: 42
     }
     FloatingWindow {
-        implicitWidth: 400; implicitHeight: 500
-        MediaControls { id: controls; width: 320; player: player; menuActive: false }
-        AlbumArtwork { id: art; width: 100; height: 100; active: false }
+        implicitWidth: 400
+        implicitHeight: 500
+        MediaControls {
+            id: controls
+            width: 320
+            player: player
+            menuActive: false
+        }
+        AlbumArtwork {
+            id: art
+            width: 100
+            height: 100
+            active: false
+        }
         TestCase {
             when: true
-            SignalSpy { id: positionSpy; target: player; signalName: "positionChanged" }
+            SignalSpy {
+                id: positionSpy
+                target: player
+                signalName: "positionChanged"
+            }
             function test_preload() {
                 art.source = Qt.resolvedUrl("icons/format-code-symbolic.svg");
                 tryCompare(art, "status", Image.Ready);
@@ -56,7 +79,8 @@ ShellRoot {
                 const glyph = findChild(elapsed, "rollingGlyph3");
                 const oldDigit = findChild(glyph, "oldRollingDigit");
                 verify(oldDigit.y < (glyph.height - oldDigit.height) / 2, "Outgoing digit slides upwards");
-                if (Quickshell.env("MEDIA_ROLL_FRAME")) grabImage(controls).save(Quickshell.env("MEDIA_ROLL_FRAME"));
+                if (Quickshell.env("MEDIA_ROLL_FRAME"))
+                    grabImage(controls).save(Quickshell.env("MEDIA_ROLL_FRAME"));
                 tryCompare(elapsed, "displayedText", "0:43", 500);
                 controls.showRemaining = true;
                 tryCompare(elapsed, "displayedText", "-4:17", 500);
@@ -71,7 +95,10 @@ ShellRoot {
                 tryCompare(elapsed, "displayedText", "-4:01", 100);
                 verify(!elapsed.animating);
             }
-            function cleanupTestCase() { report.setText("FAILURES " + qtest_results.failCount + "\n"); finish.start(); }
+            function cleanupTestCase() {
+                report.setText("FAILURES " + qtest_results.failCount + "\n");
+                finish.start();
+            }
         }
     }
 }

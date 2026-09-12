@@ -1,4 +1,7 @@
-    FileView { id: report; path: Quickshell.env("BINGUX_LAYOUT_REPORT") }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_LAYOUT_REPORT")
+    }
     TestCase {
         parent: topBar.contentItem
         when: topBar.visible && BinguxPreferences.loaded && ControlCentreServices.preferencesReady && dock.appGroupsInitialised

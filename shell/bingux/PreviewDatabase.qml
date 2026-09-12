@@ -31,7 +31,8 @@ Rectangle {
         onResponse: response => {
             root.loading = false;
             root.error = response.error || "";
-            if (!response.error) root.tableData = response;
+            if (!response.error)
+                root.tableData = response;
         }
     }
     ColumnLayout {
@@ -45,7 +46,12 @@ Rectangle {
             model: root.initialData ? root.initialData.tables : []
             onActivated: root.load(currentText, 0)
             Accessible.name: "Database table"
-            background: Rectangle { radius: 6; color: Theme.elevated; border.width: 1; border.color: Theme.outline }
+            background: Rectangle {
+                radius: 6
+                color: Theme.elevated
+                border.width: 1
+                border.color: Theme.outline
+            }
             contentItem: Text {
                 text: tableChoice.displayText
                 leftPadding: 8
@@ -72,7 +78,9 @@ Rectangle {
             contentWidth: Math.max(width, root.tableData ? root.tableData.columns.length * root.columnWidth : 0)
             contentHeight: height
             boundsBehavior: Flickable.StopAtBounds
-            HorizontalWheelScroll { viewport: horizontal }
+            HorizontalWheelScroll {
+                viewport: horizontal
+            }
             ScrollBar.horizontal: ScrollBar {}
             ListView {
                 anchors.top: parent.top
@@ -81,7 +89,11 @@ Rectangle {
                 clip: true
                 model: root.tableData ? [root.tableData.columns].concat(root.tableData.rows) : []
                 opacity: root.loading ? 0.35 : 1
-                Behavior on opacity { NumberAnimation { duration: Theme.previewMotion } }
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Theme.previewMotion
+                    }
+                }
                 ScrollBar.vertical: ScrollBar {}
                 delegate: Row {
                     required property var modelData
@@ -110,7 +122,10 @@ Rectangle {
                     }
                 }
             }
-            PreviewSpinner { anchors.centerIn: parent; loading: root.loading }
+            PreviewSpinner {
+                anchors.centerIn: parent
+                loading: root.loading
+            }
             Text {
                 anchors.centerIn: parent
                 visible: root.error !== "" || (root.tableData && root.tableData.tables.length === 0)
@@ -126,8 +141,20 @@ Rectangle {
                 color: Theme.muted
                 font.pixelSize: 11
             }
-            ActionButton { text: "Previous"; flat: true; implicitHeight: 28; enabled: !root.loading && root.offset > 0; onClicked: root.load(root.selectedTable, root.offset - 100) }
-            ActionButton { text: "Next"; flat: true; implicitHeight: 28; enabled: !root.loading && root.tableData && root.tableData.hasMore; onClicked: root.load(root.selectedTable, root.offset + 100) }
+            ActionButton {
+                text: "Previous"
+                flat: true
+                implicitHeight: 28
+                enabled: !root.loading && root.offset > 0
+                onClicked: root.load(root.selectedTable, root.offset - 100)
+            }
+            ActionButton {
+                text: "Next"
+                flat: true
+                implicitHeight: 28
+                enabled: !root.loading && root.tableData && root.tableData.hasMore
+                onClicked: root.load(root.selectedTable, root.offset + 100)
+            }
         }
     }
 }

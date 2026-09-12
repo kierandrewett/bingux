@@ -1,9 +1,15 @@
-    FileView { id: layoutReport; path: Quickshell.env("BINGUX_LAYOUT_REPORT") }
+    FileView {
+        id: layoutReport
+        path: Quickshell.env("BINGUX_LAYOUT_REPORT")
+    }
     Process {
         id: nativeInput
         property int resultCode: -1
         onExited: (code, status) => resultCode = code
-        stderr: StdioCollector { onStreamFinished: if (text) console.warn("NATIVE_INPUT", text) }
+        stderr: StdioCollector {
+            onStreamFinished: if (text)
+                console.warn("NATIVE_INPUT", text)
+        }
         property var gestureArguments: []
         command: ["python3", Quickshell.env("BINGUX_TEST_NATIVE_INPUT")].concat(nativeInput.gestureArguments)
     }
@@ -12,10 +18,12 @@
         parent: topBar.contentItem
         when: topBar.visible && BinguxPreferences.loaded && ControlCentreServices.preferencesReady && dock.appGroupsInitialised
         function actionWithText(item, text) {
-            if (item.text === text && item.clicked) return item;
+            if (item.text === text && item.clicked)
+                return item;
             for (const child of item.children || []) {
                 const found = actionWithText(child, text);
-                if (found) return found;
+                if (found)
+                    return found;
             }
             return null;
         }
@@ -40,9 +48,11 @@
                 wait(300);
                 tryVerify(() => editor.applications.length > 0);
                 const appId = "app:" + editor.appId(editor.applications[0].id);
-                editor.put(appId, "dock", 0); wait(400);
+                editor.put(appId, "dock", 0);
+                wait(400);
                 const area = DesktopEditing.surfaces.find(surface => surface.zoneName === "dock");
-                editor.apply(); tryCompare(editor, "visible", false, 4000);
+                editor.apply();
+                tryCompare(editor, "visible", false, 4000);
                 wait(350);
                 const normalApp = area.entries.find(entry => entry.id === appId).item;
                 gesture(normalApp, dock, normalApp.width / 2, normalApp.height / 2, ["--right-click"]);
@@ -61,8 +71,11 @@
                 binguxSettings.read();
                 tryCompare(binguxSettings, "busy", false, 4000);
                 verify(!binguxSettings.draft.desktop.dockApps.pinnedApps.includes(appId.slice(4)), "Normal unpin reaches the saved settings");
-                editor.open(); editor.put(appId, "dock", 0); wait(400);
-                editor.apply(); tryCompare(editor, "visible", false, 4000);
+                editor.open();
+                editor.put(appId, "dock", 0);
+                wait(400);
+                editor.apply();
+                tryCompare(editor, "visible", false, 4000);
                 wait(350);
                 const shiftApp = area.entries.find(entry => entry.id === appId).item;
                 gesture(shiftApp, dock, shiftApp.width / 2, shiftApp.height / 2, ["--shift-right-click"]);
@@ -77,7 +90,9 @@
                 binguxSettings.read();
                 tryCompare(binguxSettings, "busy", false, 4000);
                 verify(!binguxSettings.draft.desktop.dockApps.pinnedApps.includes(appId.slice(4)), "Shift unpin reaches the saved settings");
-                editor.open(); editor.put(appId, "dock", 0); wait(400);
+                editor.open();
+                editor.put(appId, "dock", 0);
+                wait(400);
                 const app = area.entries.find(entry => entry.id === appId).item;
                 gesture(app, dock, app.width / 2, app.height / 2, ["--right-click"]);
                 const menu = findChild(area, "customiseAppActions");
@@ -91,12 +106,15 @@
                 gesture(action, menu.nativeWindow, action.width / 2, action.height / 2, ["--click-only"]);
                 tryVerify(() => !editor.dockApplications.includes(appId));
                 verify(editor.optionsPage === "", "Unpin does not open the options panel");
-                editor.undo(); verify(editor.dockApplications.includes(appId));
-                editor.redo(); verify(!editor.dockApplications.includes(appId));
+                editor.undo();
+                verify(editor.dockApplications.includes(appId));
+                editor.redo();
+                verify(!editor.dockApplications.includes(appId));
                 compare(menu.pinned, false, "The edit menu tracks an unpinned running app");
                 compare(menu.menuEntries[0].text, "Pin to dock");
                 verify(menu.menuEntries[0].enabled, "An eligible running app can be pinned from its edit menu");
-                editor.apply(); tryCompare(editor, "visible", false, 4000);
+                editor.apply();
+                tryCompare(editor, "visible", false, 4000);
                 verify(!BinguxPreferences.data.desktop.dockApps.pinnedApps.includes(appId.slice(4)), "Unpin is saved");
                 layoutReport.setText("PASS");
             } catch (error) {

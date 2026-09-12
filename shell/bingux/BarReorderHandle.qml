@@ -32,18 +32,22 @@ MouseArea {
         cancelled = false;
     }
     onPositionChanged: mouse => {
-        if (!pressed || cancelled) return;
+        if (!pressed || cancelled)
+            return;
         dropPoint = mapToGlobal(mouse.x, mouse.y);
         if (!dragging && Math.hypot(dropPoint.x - startPoint.x, dropPoint.y - startPoint.y) >= 8)
             dragging = controller.beginReorder(control);
-        if (dragging) controller.updateReorder(control, dropPoint, startPoint);
+        if (dragging)
+            controller.updateReorder(control, dropPoint, startPoint);
     }
     onReleased: {
-        if (dragging && !cancelled) controller.finishReorder(control, dropPoint, false);
+        if (dragging && !cancelled)
+            controller.finishReorder(control, dropPoint, false);
         dragging = false;
     }
     onCanceled: {
-        if (dragging) controller.finishReorder(control, dropPoint, true);
+        if (dragging)
+            controller.finishReorder(control, dropPoint, true);
         cancelled = true;
         dragging = false;
     }

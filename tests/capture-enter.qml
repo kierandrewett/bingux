@@ -5,22 +5,42 @@ import Quickshell.Io
 import "../shell/bingux"
 
 ShellRoot {
-    CaptureTool { id: capture; screen: Quickshell.screens[0] }
-    FileView { id: report; path: Quickshell.env("CAPTURE_ENTER_REPORT") }
-    Timer { interval: 100; running: true; onTriggered: capture.open() }
-    Timer { id: finish; interval: 100; onTriggered: Qt.quit() }
+    CaptureTool {
+        id: capture
+        screen: Quickshell.screens[0]
+    }
+    FileView {
+        id: report
+        path: Quickshell.env("CAPTURE_ENTER_REPORT")
+    }
+    Timer {
+        interval: 100
+        running: true
+        onTriggered: capture.open()
+    }
+    Timer {
+        id: finish
+        interval: 100
+        onTriggered: Qt.quit()
+    }
     TestCase {
         name: "CaptureEnter"
         parent: capture.previewItem
         when: capture.opened && capture.previewItem !== null
         function find(item, name) {
-            if (item.objectName === name) return item;
-            for (const child of item.children || []) { const found = find(child, name); if (found) return found; }
+            if (item.objectName === name)
+                return item;
+            for (const child of item.children || []) {
+                const found = find(child, name);
+                if (found)
+                    return found;
+            }
             return null;
         }
         function test_enter_from_toolbar() {
             for (const key of [Qt.Key_Return, Qt.Key_Enter]) {
-                if (!capture.opened) capture.open();
+                if (!capture.opened)
+                    capture.open();
                 tryCompare(capture, "opened", true, 5000);
                 const surface = capture.previewItem;
                 verify(surface !== null);

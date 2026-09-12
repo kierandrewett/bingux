@@ -4,6 +4,7 @@
 No screen capture or encoder is started. Normal capture/stop commands produce
 recording, countdown and saving events consumed by the real CaptureTool.
 """
+
 import json
 import os
 import sys
@@ -12,13 +13,16 @@ import time
 
 state = "idle"
 
+
 def emit(event, **fields):
     print(json.dumps({"event": event, **fields}), flush=True)
+
 
 def finish():
     global state
     state = "saved"
     emit("saved", kind="recording", path="/tmp/customise-test-recording.webm", notified=True)
+
 
 emit("ready", window=True)
 for line in sys.stdin:

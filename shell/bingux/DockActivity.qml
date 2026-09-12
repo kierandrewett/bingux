@@ -13,11 +13,19 @@ Scope {
             onRead: data => {
                 try {
                     const streams = JSON.parse(data);
-                    if (Array.isArray(streams)) root.activeStreams = streams;
+                    if (Array.isArray(streams))
+                        root.activeStreams = streams;
                 } catch (_) {}
             }
         }
-        onExited: { root.activeStreams = []; reconnect.restart(); }
+        onExited: {
+            root.activeStreams = [];
+            reconnect.restart();
+        }
     }
-    Timer { id: reconnect; interval: 3000; onTriggered: meter.running = true }
+    Timer {
+        id: reconnect
+        interval: 3000
+        onTriggered: meter.running = true
+    }
 }

@@ -6,8 +6,15 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS") }
-    Timer { id: finish; interval: 200; onTriggered: Qt.quit() }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS")
+    }
+    Timer {
+        id: finish
+        interval: 200
+        onTriggered: Qt.quit()
+    }
     QtObject {
         id: source
         property bool loading: false
@@ -16,13 +23,20 @@ ShellRoot {
         property int count: 3
         function forDay(day) {
             const start = new Date(2026, 7, 31).getTime() / 1000;
-            return Array.from({length: count}, (_, i) => ({id: String(i), title: "Summer Bank Holiday (regional holiday)", start, end: start + 86400}));
+            return Array.from({
+                length: count
+            }, (_, i) => ({
+                        id: String(i),
+                        title: "Summer Bank Holiday (regional holiday)",
+                        start,
+                        end: start + 86400
+                    }));
         }
     }
     Window {
+        id: window
         visible: true
         flags: Qt.Window | Qt.WindowDoesNotAcceptFocus
-        id: window
         width: 520
         height: 900
         color: Theme.barBackground
@@ -65,7 +79,10 @@ ShellRoot {
                 check(card.height === Theme.calendarAgendaHeight, "Empty day returns to its compact height");
                 report.setText(checks + "FAILURES 0\n");
             }
-            function cleanupTestCase() { window.visible = false; finish.start(); }
+            function cleanupTestCase() {
+                window.visible = false;
+                finish.start();
+            }
         }
     }
 }

@@ -1,5 +1,15 @@
-    QtObject { id: reloadAdapter; property bool enabled: true; property bool discovering: false; property var devices: QtObject { property var values: [] } }
-    FileView { id: layoutReport; path: Quickshell.env("BINGUX_LAYOUT_REPORT") }
+    QtObject {
+        id: reloadAdapter
+        property bool enabled: true
+        property bool discovering: false
+        property var devices: QtObject {
+            property var values: []
+        }
+    }
+    FileView {
+        id: layoutReport
+        path: Quickshell.env("BINGUX_LAYOUT_REPORT")
+    }
     TestCase {
         parent: topBar.contentItem
         when: topBar.visible && BinguxPreferences.loaded && ControlCentreServices.preferencesReady && dock.appGroupsInitialised

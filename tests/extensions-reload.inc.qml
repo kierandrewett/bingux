@@ -1,4 +1,7 @@
-    FileView { id: extensionReloadReport; path: Quickshell.env("BINGUX_LAYOUT_REPORT") }
+    FileView {
+        id: extensionReloadReport
+        path: Quickshell.env("BINGUX_LAYOUT_REPORT")
+    }
     TestCase {
         parent: topBar.contentItem
         when: topBar.visible && BinguxPreferences.loaded && ControlCentreServices.preferencesReady && dock.appGroupsInitialised
@@ -11,6 +14,9 @@
                 tryVerify(() => !!widget.children[0].item?.button, 3000);
                 compare(ExtensionRegistry.invoke("org.bingux.example/increment"), 1);
                 extensionReloadReport.setText("PASS");
-            } catch (error) { extensionReloadReport.setText("FAIL: " + error); throw error; }
+            } catch (error) {
+                extensionReloadReport.setText("FAIL: " + error);
+                throw error;
+            }
         }
     }

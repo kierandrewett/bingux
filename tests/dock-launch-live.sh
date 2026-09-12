@@ -5,7 +5,7 @@ repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 helper="$(mktemp)"
 app_fixture="$(mktemp -d)"
 trap 'rm -f "$helper"; rm -rf "$app_fixture"' EXIT
-cat > "$app_fixture/bingux-dock-launch-app.py" <<'PY'
+cat >"$app_fixture/bingux-dock-launch-app.py" <<'PY'
 #!/usr/bin/env python3
 import gi
 gi.require_version("Gtk", "4.0")
@@ -25,7 +25,7 @@ LaunchProbe().run()
 PY
 chmod 700 "$app_fixture/bingux-dock-launch-app.py"
 mkdir -p "$XDG_DATA_HOME/applications"
-cat > "$XDG_DATA_HOME/applications/com.example.BinguxDockTest.desktop" <<EOF
+cat >"$XDG_DATA_HOME/applications/com.example.BinguxDockTest.desktop" <<EOF
 [Desktop Entry]
 Name=Bingux Dock Launch Probe
 Exec=$app_fixture/bingux-dock-launch-app.py
@@ -38,7 +38,7 @@ Actions=new-window;
 Name=New Window
 Exec=$app_fixture/bingux-dock-launch-app.py
 EOF
-cat > "$helper" <<'SH'
+cat >"$helper" <<'SH'
 #!/bin/sh
 exec python3 "$BINGUX_LAUNCH_TEST_SOURCE" --host-launch "$@"
 SH

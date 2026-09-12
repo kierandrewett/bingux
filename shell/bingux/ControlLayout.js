@@ -1,71 +1,144 @@
-const externalIds = ["search", "clock", "capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "terminal", "notes", "monitor", "calendar", "media", "tasks"];
-function isExtension(id) { return /^extension:[a-z0-9][a-z0-9._-]{0,127}\/[a-z0-9][a-z0-9._-]{0,127}$/.test(id); }
-function isExternal(id) { return isExtension(id) || externalIds.includes(id) || /^(label|icon):[1-9][0-9]{0,3}$/.test(id); }
-function acceptsMember(group, id) { return items(defaults(), group).includes(id) || (group === "control-centre" && isExternal(id)); }
+const externalIds = [
+    "search",
+    "clock",
+    "capture",
+    "tray",
+    "privacy",
+    "metrics",
+    "keyboard",
+    "overflow",
+    "controls",
+    "notifications",
+    "terminal",
+    "notes",
+    "monitor",
+    "calendar",
+    "media",
+    "tasks",
+];
+function isExtension(id) {
+    return /^extension:[a-z0-9][a-z0-9._-]{0,127}\/[a-z0-9][a-z0-9._-]{0,127}$/.test(id);
+}
+function isExternal(id) {
+    return isExtension(id) || externalIds.includes(id) || /^(label|icon):[1-9][0-9]{0,3}$/.test(id);
+}
+function acceptsMember(group, id) {
+    return items(defaults(), group).includes(id) || (group === "control-centre" && isExternal(id));
+}
 
 // Native groups remain distinct so importing a layout does not flatten its UI.
-const sections = ["controls-header", "controls-audio", "control-divider", "controls-tiles", "control-media", "control-customise"];
-const header = ["control-account", "control-header-space", "control-battery", "control-settings", "control-session", "control-lock"];
+const sections = [
+    "controls-header",
+    "controls-audio",
+    "control-divider",
+    "controls-tiles",
+    "control-media",
+    "control-customise",
+];
+const header = [
+    "control-account",
+    "control-header-space",
+    "control-battery",
+    "control-settings",
+    "control-session",
+    "control-lock",
+];
 const audio = ["control-volume", "control-microphone"];
 function defaults() {
-    return {version: 1, groups: {
-        "control-centre": sections.slice(),
-        "controls-header": header.slice(),
-        "controls-audio": audio.slice()
-    }};
+    return {
+        version: 1,
+        groups: {
+            "control-centre": sections.slice(),
+            "controls-header": header.slice(),
+            "controls-audio": audio.slice(),
+        },
+    };
 }
 function valid(layout) {
     if (!layout || layout.version !== 1 || !layout.groups || Array.isArray(layout.groups)) return false;
     if (Object.keys(layout).sort().join() !== "groups,version") return false;
     const nativeGroups = defaults().groups;
     if (Object.keys(layout.groups).sort().join() !== Object.keys(nativeGroups).sort().join()) return false;
-    return Object.keys(nativeGroups).every(group => Array.isArray(layout.groups[group]) && layout.groups[group].length <= 256 &&
-        layout.groups[group].every((id, index, values) => typeof id === "string" && acceptsMember(group, id) && values.indexOf(id) === index));
+    return Object.keys(nativeGroups).every(
+        (group) =>
+            Array.isArray(layout.groups[group]) &&
+            layout.groups[group].length <= 256 &&
+            layout.groups[group].every(
+                (id, index, values) =>
+                    typeof id === "string" && acceptsMember(group, id) && values.indexOf(id) === index,
+            ),
+    );
 }
-function items(layout, group) { return (layout || defaults()).groups[group] || []; }
-function position(layout, group, id) { return items(layout, group).indexOf(id); }
-function contains(layout, group, id) { return position(layout, group, id) >= 0; }
+function items(layout, group) {
+    return (layout || defaults()).groups[group] || [];
+}
+function position(layout, group, id) {
+    return items(layout, group).indexOf(id);
+}
+function contains(layout, group, id) {
+    return position(layout, group, id) >= 0;
+}
 function move(layout, group, id, index) {
     const current = layout || defaults();
     if (!acceptsMember(group, id)) return current;
     const next = JSON.parse(JSON.stringify(current));
-    const order = next.groups[group].filter(value => value !== id);
+    const order = next.groups[group].filter((value) => value !== id);
     if (index >= 0) order.splice(Math.max(0, Math.min(index, order.length)), 0, id);
     next.groups[group] = order;
     return next;
 }
 
 const widgets = [
-    {id: "controls-header", label: "Account and session", group: true},
-    {id: "controls-audio", label: "Audio controls", group: true},
-    {id: "control-divider", label: "Divider", group: true},
-    {id: "controls-tiles", label: "Quick controls", group: true},
-    {id: "control-media", label: "Media player", group: true},
-    {id: "control-customise", label: "Customise button", group: true},
-    {id: "control-account", action: true, label: "User account", icon: "avatar-default-symbolic"},
-    {id: "control-header-space", label: "Header space", group: true},
-    {id: "control-battery", label: "Battery", icon: "battery-good-symbolic", group: true},
-    {id: "control-settings", action: true, label: "Settings", icon: "org.gnome.Settings-symbolic"},
-    {id: "control-session", action: true, label: "Power options", icon: "system-shutdown-symbolic"},
-    {id: "control-lock", action: true, label: "Lock", icon: "system-lock-screen-symbolic"},
-    {id: "control-volume", label: "Volume", icon: "audio-volume-high-symbolic", group: true},
-    {id: "control-microphone", label: "Microphone", icon: "audio-input-microphone-symbolic", group: true}
+    { id: "controls-header", label: "Account and session", group: true },
+    { id: "controls-audio", label: "Audio controls", group: true },
+    { id: "control-divider", label: "Divider", group: true },
+    { id: "controls-tiles", label: "Quick controls", group: true },
+    { id: "control-media", label: "Media player", group: true },
+    { id: "control-customise", label: "Customise button", group: true },
+    { id: "control-account", action: true, label: "User account", icon: "avatar-default-symbolic" },
+    { id: "control-header-space", label: "Header space", group: true },
+    { id: "control-battery", label: "Battery", icon: "battery-good-symbolic", group: true },
+    { id: "control-settings", action: true, label: "Settings", icon: "org.gnome.Settings-symbolic" },
+    { id: "control-session", action: true, label: "Power options", icon: "system-shutdown-symbolic" },
+    { id: "control-lock", action: true, label: "Lock", icon: "system-lock-screen-symbolic" },
+    { id: "control-volume", label: "Volume", icon: "audio-volume-high-symbolic", group: true },
+    { id: "control-microphone", label: "Microphone", icon: "audio-input-microphone-symbolic", group: true },
 ];
-function widget(id) { return widgets.find(item => item.id === id); }
-function groupFor(id) { return Object.keys(defaults().groups).find(group => items(defaults(), group).includes(id)) || ""; }
+function widget(id) {
+    return widgets.find((item) => item.id === id);
+}
+function groupFor(id) {
+    return Object.keys(defaults().groups).find((group) => items(defaults(), group).includes(id)) || "";
+}
 
-function isAction(id) { return widget(id)?.action === true; }
+function isAction(id) {
+    return widget(id)?.action === true;
+}
 
-function isContainer(id) { return ["controls-header", "controls-audio", "controls-tiles"].includes(id); }
+function isContainer(id) {
+    return ["controls-header", "controls-audio", "controls-tiles"].includes(id);
+}
 
-function isPortable(id) { return isAction(id) || isContainer(id) || audio.includes(id) || ["control-battery", "control-media", "control-divider", "control-header-space", "control-customise"].includes(id); }
+function isPortable(id) {
+    return (
+        isAction(id) ||
+        isContainer(id) ||
+        audio.includes(id) ||
+        ["control-battery", "control-media", "control-divider", "control-header-space", "control-customise"].includes(
+            id,
+        )
+    );
+}
 
 function validPlacement(desktop) {
     if (!desktop.layout) return true;
     const lists = Object.values(desktop.layout);
-    if (!lists.every(items => Array.isArray(items))) return false;
+    if (!lists.every((items) => Array.isArray(items))) return false;
     const placed = lists.reduce((all, items) => all.concat(items), []).filter(isPortable);
     const external = lists.reduce((all, items) => all.concat(items), []).filter(isExternal);
-    return (!placed.length || (!!desktop.controlLayout && placed.every(id => !contains(desktop.controlLayout, groupFor(id), id)))) &&
-        (!desktop.controlLayout || external.every(id => !contains(desktop.controlLayout, "control-centre", id)));
+    return (
+        (!placed.length ||
+            (!!desktop.controlLayout && placed.every((id) => !contains(desktop.controlLayout, groupFor(id), id)))) &&
+        (!desktop.controlLayout || external.every((id) => !contains(desktop.controlLayout, "control-centre", id)))
+    );
 }

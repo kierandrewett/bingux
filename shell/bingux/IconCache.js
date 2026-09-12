@@ -1,6 +1,6 @@
 // Active images stay resident. Only unused entries compete for this budget.
 function create(maxBytes = 4 * 1024 * 1024, maxEntries = 256) {
-    return {references: new Map(), unused: new Map(), sizes: new Map(), maxBytes, maxEntries};
+    return { references: new Map(), unused: new Map(), sizes: new Map(), maxBytes, maxEntries };
 }
 
 function retain(cache, source) {
@@ -44,5 +44,5 @@ function trim(cache) {
 function stats(cache) {
     let bytes = 0;
     for (const source of cache.unused.keys()) bytes += cache.sizes.get(source) || 0;
-    return {activeEntries: cache.references.size, unusedEntries: cache.unused.size, unusedStringBytes: bytes};
+    return { activeEntries: cache.references.size, unusedEntries: cache.unused.size, unusedStringBytes: bytes };
 }

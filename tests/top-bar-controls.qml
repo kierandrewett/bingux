@@ -5,20 +5,32 @@ import Quickshell.Io
 
 ShellRoot {
     property int presses: 0
-    FileView { id: report; path: Quickshell.env("BINGUX_TOP_BAR_TEST_RESULTS") }
-    Timer { id: finish; interval: 300; onTriggered: Qt.quit() }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_TOP_BAR_TEST_RESULTS")
+    }
+    Timer {
+        id: finish
+        interval: 300
+        onTriggered: Qt.quit()
+    }
     FloatingWindow {
         id: window
         implicitWidth: 400
         implicitHeight: 80
         color: Theme.barBackground
-        BarSearchButton { id: search; onClicked: presses++ }
+        BarSearchButton {
+            id: search
+            onClicked: presses++
+        }
         Pill {
             id: controls
             horizontalPadding: Theme.barPrimaryPadding
             x: 140
             interactive: true
-            NotificationIndicator { id: notifications }
+            NotificationIndicator {
+                id: notifications
+            }
         }
         TestCase {
             when: window.visible
@@ -35,7 +47,8 @@ ShellRoot {
                 }
                 const before = presses;
                 search.forceActiveFocus();
-                keyClick(Qt.Key_Return); keyClick(Qt.Key_Space);
+                keyClick(Qt.Key_Return);
+                keyClick(Qt.Key_Space);
                 compare(presses, before + 2, "Keyboard activation");
                 const badge = findChild(notifications, "notificationCountBadge");
                 const count = findChild(notifications, "notificationIndicatorCount");

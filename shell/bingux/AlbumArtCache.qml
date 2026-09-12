@@ -10,7 +10,8 @@ Singleton {
     property var sources: []
     function retain(source) {
         const url = String(source || "");
-        if (!url || sources[sources.length - 1] === url) return;
+        if (!url || sources[sources.length - 1] === url)
+            return;
         sources = sources.filter(item => item !== url).concat([url]).slice(-capacity);
     }
     // Live Image references retain Qt's shared decoded-image cache across menu

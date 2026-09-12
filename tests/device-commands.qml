@@ -9,16 +9,30 @@ ShellRoot {
     property double started: Date.now()
     property string uuid: "00000000-1111-2222-3333-444444444444"
     property string failedUuid: "00000000-1111-2222-3333-555555555555"
-    function check(value, message) { if (!value) { failures++; console.error(message); } }
+    function check(value, message) {
+        if (!value) {
+            failures++;
+            console.error(message);
+        }
+    }
     QtObject {
         id: adapter
         property bool enabled: true
         property bool discovering: false
-        property var devices: ({values: []})
+        property var devices: ({
+                values: []
+            })
     }
-    ControlCentreDetails { id: details; indicators: null; bluetoothAdapter: adapter; page: "bluetooth" }
+    ControlCentreDetails {
+        id: details
+        indicators: null
+        bluetoothAdapter: adapter
+        page: "bluetooth"
+    }
     Timer {
-        interval: 50; running: true; repeat: true
+        interval: 50
+        running: true
+        repeat: true
         onTriggered: {
             if (Date.now() - test.started > 35000) {
                 test.check(false, "Device test timed out");

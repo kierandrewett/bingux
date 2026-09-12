@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Reload the real shell after editor drags without losing windows or IPC."""
+
 import json
 import os
 from pathlib import Path
@@ -25,11 +26,16 @@ with tempfile.TemporaryDirectory(prefix="bingux-editor-reload-") as directory:
     for folder in ("icons", "preview-assets"):
         shutil.copytree(repo / "shell/bingux" / folder, fixture / folder)
     sidebar = fixture / "TerminalSidebar.qml"
-    sidebar.write_text(sidebar.read_text().replace(
-        'Quickshell.env("HOME") + "/.config/bingux/sidebar.ini"',
-        'Quickshell.env("XDG_CONFIG_HOME") + "/bingux/sidebar.ini"'))
+    sidebar.write_text(
+        sidebar.read_text().replace(
+            'Quickshell.env("HOME") + "/.config/bingux/sidebar.ini"',
+            'Quickshell.env("XDG_CONFIG_HOME") + "/bingux/sidebar.ini"',
+        )
+    )
     shell = fixture / "shell.qml"
-    source = shell.read_text().rstrip()[:-1] + """
+    source = (
+        shell.read_text().rstrip()[:-1]
+        + """
     QtObject {
         id: reloadPlayer
         property string identity: "Reload test"
@@ -78,25 +84,33 @@ with tempfile.TemporaryDirectory(prefix="bingux-editor-reload-") as directory:
     }
 }
 """
+    )
     shell.write_text(source.replace("RELOAD_REVISION", "0"))
     environment = os.environ | {
         "BINGUX_TEST_COMPOSITOR_CONFIG": os.environ["XDG_CONFIG_HOME"],
         "XDG_CONFIG_HOME": str(fixture / "config"),
-        "XDG_STATE_HOME": str(fixture / "state"), "BINGUX_LAYOUT_IMPORT": "0",
+        "XDG_STATE_HOME": str(fixture / "state"),
+        "BINGUX_LAYOUT_IMPORT": "0",
     }
     environment.pop("BINGUX_SETTINGS_HELPER", None)
     input_helper = repo / "tests/customise-native-input.py"
 
     def call(method):
-        result = subprocess.run([qs, "-p", str(fixture), "ipc", "call", "reload-test", method],
-                                env=environment, capture_output=True, text=True, timeout=8)
+        result = subprocess.run(
+            [qs, "-p", str(fixture), "ipc", "call", "reload-test", method],
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
         return result.stdout.strip()
 
     def wait_for(predicate):
         deadline = time.monotonic() + 12
         last_response = ""
         while time.monotonic() < deadline:
-            if process.poll() is not None: raise AssertionError(f"Shell exited with {process.returncode}")
+            if process.poll() is not None:
+                raise AssertionError(f"Shell exited with {process.returncode}")
             last_response = call("status")
             try:
                 state = json.loads(last_response)
@@ -110,8 +124,13 @@ with tempfile.TemporaryDirectory(prefix="bingux-editor-reload-") as directory:
     stage_compositor_bridge(repo, os.environ["XDG_CONFIG_HOME"])
     subprocess.run(["python3", str(input_helper), "--prepare"], env=environment, check=True)
     with (fixture / "runtime.log").open("w+") as log:
-        process = subprocess.Popen([qs, "-p", str(fixture), "--no-color"], env=environment,
-                                   stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        process = subprocess.Popen(
+            [qs, "-p", str(fixture), "--no-color"],
+            env=environment,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
         try:
             initial = wait_for(lambda state: state["ready"])
             call("media")
@@ -129,8 +148,19 @@ with tempfile.TemporaryDirectory(prefix="bingux-editor-reload-") as directory:
                 time.sleep(1.5)
                 state = wait_for(lambda state: state["visible"] and state["clock"])
                 print("DRAG", revision, state, flush=True)
-                subprocess.run(["python3", str(input_helper), str(state["x"]), str(state["y"]),
-                                "--drag-to", str(state["dx"]), str(state["dy"])], env=environment, check=True)
+                subprocess.run(
+                    [
+                        "python3",
+                        str(input_helper),
+                        str(state["x"]),
+                        str(state["y"]),
+                        "--drag-to",
+                        str(state["dx"]),
+                        str(state["dy"]),
+                    ],
+                    env=environment,
+                    check=True,
+                )
                 wait_for(lambda state: not state["clock"] and not state["drag"])
                 if revision == 3:
                     call("cancel")
@@ -143,7 +173,9 @@ with tempfile.TemporaryDirectory(prefix="bingux-editor-reload-") as directory:
                 assert state["pid"] == initial["pid"], "Reload restarted Quickshell"
                 assert state["clock"] and not state["visible"], "Reload did not restore the saved layout"
             for revision, action, opened, detached in (
-                (5, "hideSidebar", False, False), (6, "detachSidebar", True, True)):
+                (5, "hideSidebar", False, False),
+                (6, "detachSidebar", True, True),
+            ):
                 call("media")
                 wait_for(lambda state: state["mediaCount"] == 1)
                 call(action)
@@ -167,9 +199,13 @@ with tempfile.TemporaryDirectory(prefix="bingux-editor-reload-") as directory:
             log.flush()
             log.seek(0)
             output = log.read()
-            assert not any(error in output for error in ("has crashed", "TypeError", "ReferenceError",
-                                                        "Cannot use same item on different windows")), output
-            print("PASS: populated media sidebar (open, closed, detached) and three native editor drags survive reload with saved layout and IPC")
+            assert not any(
+                error in output
+                for error in ("has crashed", "TypeError", "ReferenceError", "Cannot use same item on different windows")
+            ), output
+            print(
+                "PASS: populated media sidebar (open, closed, detached) and three native editor drags survive reload with saved layout and IPC"
+            )
         except BaseException:
             log.flush()
             log.seek(0)

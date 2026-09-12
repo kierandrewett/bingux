@@ -1,5 +1,7 @@
 function normalize(value) {
-    return String(value || "").replace(/\.desktop$/i, "").toLowerCase();
+    return String(value || "")
+        .replace(/\.desktop$/i, "")
+        .toLowerCase();
 }
 
 // Icon lookup is presentation-only. Playback matching below uses exact IDs
@@ -8,24 +10,31 @@ function playerDesktopEntry(player, provider) {
     if (!player) return null;
     const desktopId = String(player.desktopEntry || "").replace(/\.desktop$/i, "");
     function lookup(id) {
-        return id ? provider.byId(id) || provider.byId(id + ".desktop")
-            || provider.heuristicLookup(id) : null;
+        return id ? provider.byId(id) || provider.byId(id + ".desktop") || provider.heuristicLookup(id) : null;
     }
     if (desktopId) return lookup(desktopId);
     // Browser forks may publish a generic Chromium bus name but their real
     // application name as Identity. Let the OS app provider resolve that.
-    return lookup(String(player.identity || ""))
-        || lookup(String(player.dbusName || "").replace(/^org\.mpris\.MediaPlayer2\./, "")
-            .replace(/\.instance[^.]*$/, ""));
+    return (
+        lookup(String(player.identity || "")) ||
+        lookup(
+            String(player.dbusName || "")
+                .replace(/^org\.mpris\.MediaPlayer2\./, "")
+                .replace(/\.instance[^.]*$/, ""),
+        )
+    );
 }
 
 function matchesIdentity(value, group) {
     const identity = normalize(value);
     if (!identity || !group) return false;
     const entry = group.desktopEntry || {};
-    return identity === normalize(group.id) || identity === normalize(entry.id)
-        || identity === normalize(entry.startupClass)
-        || (group.windows || []).some(window => identity === normalize(window.appId));
+    return (
+        identity === normalize(group.id) ||
+        identity === normalize(entry.id) ||
+        identity === normalize(entry.startupClass) ||
+        (group.windows || []).some((window) => identity === normalize(window.appId))
+    );
 }
 
 // Build once per notification snapshot. Keep positions so alias matches retain
@@ -46,8 +55,12 @@ function notificationIndex(notifications) {
 function notificationsForGroup(index, group) {
     if (!group) return [];
     const entry = group.desktopEntry || {};
-    const identities = new Set([group.id, entry.id, entry.startupClass]
-        .concat((group.windows || []).map(window => window.appId)).map(normalize).filter(Boolean));
+    const identities = new Set(
+        [group.id, entry.id, entry.startupClass]
+            .concat((group.windows || []).map((window) => window.appId))
+            .map(normalize)
+            .filter(Boolean),
+    );
     const positions = new Set();
     function include(bucket) {
         if (bucket) for (const position of bucket) positions.add(position);
@@ -57,7 +70,7 @@ function notificationsForGroup(index, group) {
         include(index.names.get(identity));
     }
     include(index.names.get(normalize(entry.name)));
-    return [...positions].sort((a, b) => a - b).map(position => index.entries[position]);
+    return [...positions].sort((a, b) => a - b).map((position) => index.entries[position]);
 }
 
 function matchesAudio(properties, group) {
@@ -68,30 +81,36 @@ function matchesAudio(properties, group) {
     const binary = properties["application.process.binary"];
     if (binary) return matchesIdentity(String(binary).split("/").pop(), group);
     const name = properties["application.name"] || properties["node.name"];
-    return !!name && (matchesIdentity(name, group)
-        || normalize(name) === normalize((group.desktopEntry || {}).name));
+    return !!name && (matchesIdentity(name, group) || normalize(name) === normalize((group.desktopEntry || {}).name));
 }
 
 function matchesNotification(entry, group) {
     if (!entry || !group) return false;
     if (entry.desktopEntry) return matchesIdentity(entry.desktopEntry, group);
     // Older senders omit desktop-entry. Only accept an exact app name.
-    return !!entry.appName && (matchesIdentity(entry.appName, group)
-        || normalize(entry.appName) === normalize((group.desktopEntry || {}).name));
+    return (
+        !!entry.appName &&
+        (matchesIdentity(entry.appName, group) ||
+            normalize(entry.appName) === normalize((group.desktopEntry || {}).name))
+    );
 }
 
 function matches(player, group) {
     if (!player || !group) return false;
     const entry = group.desktopEntry || {};
     const identities = [group.id, entry.id, entry.startupClass]
-        .concat((group.windows || []).map(window => window.appId))
-        .map(normalize).filter(Boolean);
+        .concat((group.windows || []).map((window) => window.appId))
+        .map(normalize)
+        .filter(Boolean);
     // DesktopEntry identifies the app. Do not override it with a track title,
     // a human-readable player name, or another application's bus name.
     const desktopId = normalize(player.desktopEntry);
     if (desktopId) return identities.includes(desktopId);
-    const busId = normalize(String(player.dbusName || "")
-        .replace(/^org\.mpris\.MediaPlayer2\./, "").replace(/\.instance[^.]*$/, ""));
+    const busId = normalize(
+        String(player.dbusName || "")
+            .replace(/^org\.mpris\.MediaPlayer2\./, "")
+            .replace(/\.instance[^.]*$/, ""),
+    );
     // Chromium forks omit DesktopEntry and share Chromium's bus prefix.
     // Only that known generic bus permits an exact application-name fallback.
     if (busId === "chromium" && normalize(player.identity)) {
@@ -115,9 +134,20 @@ function prefersSeeking(player) {
     const metadata = player.metadata || {};
     if (/^video\//i.test(String(metadata["xesam:contentType"] || ""))) return true;
     const url = String(metadata["xesam:url"] || "");
-    if (/^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts|live)|youtu\.be\/|vimeo\.com\/|twitch\.tv\/|netflix\.com\/|disneyplus\.com\/)/i.test(url)) return true;
-    return ["mpv", "celluloid", "io.github.celluloid_player.celluloid", "totem", "org.gnome.totem", "org.gnome.showtime"]
-        .includes(normalize(player.desktopEntry));
+    if (
+        /^https?:\/\/(?:www\.|m\.)?(?:youtube\.com\/(?:watch|shorts|live)|youtu\.be\/|vimeo\.com\/|twitch\.tv\/|netflix\.com\/|disneyplus\.com\/)/i.test(
+            url,
+        )
+    )
+        return true;
+    return [
+        "mpv",
+        "celluloid",
+        "io.github.celluloid_player.celluloid",
+        "totem",
+        "org.gnome.totem",
+        "org.gnome.showtime",
+    ].includes(normalize(player.desktopEntry));
 }
 
 function canStep(player, direction) {

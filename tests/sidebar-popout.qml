@@ -2,16 +2,39 @@ import QtQuick
 import QtTest
 import Quickshell
 import Quickshell.Io
+
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS") }
-    Timer { id: finish; interval: 200; onTriggered: Qt.quit() }
-    QtObject { id: preferences; property bool sidebarEnabled: true; property bool dockEnabled: false }
-    TerminalSidebar { id: sidebar; settings: preferences; screen: Quickshell.screens[0]; inputSuspended: true }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS")
+    }
+    Timer {
+        id: finish
+        interval: 200
+        onTriggered: Qt.quit()
+    }
+    QtObject {
+        id: preferences
+        property bool sidebarEnabled: true
+        property bool dockEnabled: false
+    }
+    TerminalSidebar {
+        id: sidebar
+        settings: preferences
+        screen: Quickshell.screens[0]
+        inputSuspended: true
+    }
     TestCase {
         parent: sidebar.detachedSurface.contentItem
         property string checks: ""
-        function check(value, message) { checks += "Check " + value + " " + (message || "") + "\n"; verify(value,message); }
-        function equal(a,b) { checks += "Compare " + a + " / " + b + "\n"; compare(a,b); }
+        function check(value, message) {
+            checks += "Check " + value + " " + (message || "") + "\n";
+            verify(value, message);
+        }
+        function equal(a, b) {
+            checks += "Compare " + a + " / " + b + "\n";
+            compare(a, b);
+        }
         when: true
         function test_popout_preserves_content() {
             sidebar.selectContent("notes");
@@ -34,7 +57,8 @@ ShellRoot {
             window.implicitWidth = 460;
             window.implicitHeight = 560;
             wait(100);
-            if (Quickshell.env("BINGUX_POPOUT_SCREENSHOT")) grabImage(window.contentItem).save(Quickshell.env("BINGUX_POPOUT_SCREENSHOT"));
+            if (Quickshell.env("BINGUX_POPOUT_SCREENSHOT"))
+                grabImage(window.contentItem).save(Quickshell.env("BINGUX_POPOUT_SCREENSHOT"));
             const picker = findChild(sidebar.contentItem, "sidebarContentPicker");
             mouseClick(picker);
             wait(250);
@@ -73,6 +97,9 @@ ShellRoot {
             equal(findChild(sidebar.contentItem, "sidebarTerminal"), terminal);
             sidebar.hide();
         }
-        function cleanupTestCase() { report.setText("FAILURES " + qtest_results.failCount + "\n" + checks); finish.start(); }
+        function cleanupTestCase() {
+            report.setText("FAILURES " + qtest_results.failCount + "\n" + checks);
+            finish.start();
+        }
     }
 }

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Read the final report even when a test process exits between polls."""
+
 import tempfile
 import unittest
 from pathlib import Path

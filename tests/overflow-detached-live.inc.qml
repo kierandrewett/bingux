@@ -1,13 +1,18 @@
-    FileView { id: layoutReport; path: Quickshell.env("BINGUX_LAYOUT_REPORT") }
+    FileView {
+        id: layoutReport
+        path: Quickshell.env("BINGUX_LAYOUT_REPORT")
+    }
     Process {
         id: nativeCapture
         property string capturePath: ""
         property var gestureArguments: ["1", "1", "--hover-only"]
         property int resultCode: -1
         onExited: (code, status) => resultCode = code
-        stderr: StdioCollector { onStreamFinished: if (text) console.warn("NATIVE_INPUT", text) }
-        command: ["env", "BINGUX_NATIVE_SCREENSHOT=" + capturePath, "python3",
-            Quickshell.env("BINGUX_TEST_NATIVE_INPUT")].concat(nativeCapture.gestureArguments)
+        stderr: StdioCollector {
+            onStreamFinished: if (text)
+                console.warn("NATIVE_INPUT", text)
+        }
+        command: ["env", "BINGUX_NATIVE_SCREENSHOT=" + capturePath, "python3", Quickshell.env("BINGUX_TEST_NATIVE_INPUT")].concat(nativeCapture.gestureArguments)
     }
     TestCase {
         parent: topBar.contentItem
@@ -18,12 +23,9 @@
             verify(item.grabToImage(result => frame = result));
             tryVerify(() => frame !== null, 3000);
             const floating = !("anchors" in window);
-            const point = floating ? item.mapToItem(window.contentItem, item.width / 2, item.height / 2)
-                : DesktopEditing.point(item, window, item.width / 2, item.height / 2);
-            const action = modifiers === Qt.ShiftModifier ? "--shift-right-click"
-                : button === Qt.RightButton ? "--right-click" : "--click-only";
-            nativeCapture.gestureArguments = [String(point.x), String(point.y), action]
-                .concat(floating ? ["--window-title", window.title, "--window-size", String(window.width), String(window.height)] : []);
+            const point = floating ? item.mapToItem(window.contentItem, item.width / 2, item.height / 2) : DesktopEditing.point(item, window, item.width / 2, item.height / 2);
+            const action = modifiers === Qt.ShiftModifier ? "--shift-right-click" : button === Qt.RightButton ? "--right-click" : "--click-only";
+            nativeCapture.gestureArguments = [String(point.x), String(point.y), action].concat(floating ? ["--window-title", window.title, "--window-size", String(window.width), String(window.height)] : []);
             nativeCapture.running = true;
             tryCompare(nativeCapture, "running", false, 4000);
             compare(nativeCapture.resultCode, 0);
@@ -34,8 +36,7 @@
             tryCompare(barOverflow, "revealScale", 1, 3000);
         }
         function resize(window, width, height) {
-            nativeCapture.gestureArguments = ["0", "0", "--resize-to", String(width), String(height),
-                "--window-title", window.title, "--window-size", String(window.width), String(window.height)];
+            nativeCapture.gestureArguments = ["0", "0", "--resize-to", String(width), String(height), "--window-title", window.title, "--window-size", String(window.width), String(window.height)];
             nativeCapture.running = true;
             tryCompare(nativeCapture, "running", false, 4000);
             compare(nativeCapture.resultCode, 0);
@@ -43,27 +44,25 @@
             tryCompare(window, "height", height, 3000);
         }
         function checkContentFits(viewport) {
-            const items = metricsPill.monitorNames.map(name => findChild(metricsPill, name + "Readout"))
-                .concat(tray.trayItems.map(item => findChild(tray, "trayItem-" + item.id)));
+            const items = metricsPill.monitorNames.map(name => findChild(metricsPill, name + "Readout")).concat(tray.trayItems.map(item => findChild(tray, "trayItem-" + item.id)));
             for (const item of items) {
                 tryVerify(() => {
                     const point = item.mapToItem(viewport.contentItem, 0, 0);
-                    return point.x >= 0 && point.x + item.width <= viewport.width + 1
-                        && point.y >= 0 && point.y + item.height <= viewport.contentHeight + 1;
+                    return point.x >= 0 && point.x + item.width <= viewport.width + 1 && point.y >= 0 && point.y + item.height <= viewport.contentHeight + 1;
                 }, 2000, item.objectName + " fits the scrollable content");
             }
         }
         function scroll(viewport, window, direction) {
             const point = viewport.mapToItem(window.contentItem, viewport.width / 2, viewport.height / 2);
-            nativeCapture.gestureArguments = [String(point.x), String(point.y), "--scroll-" + direction,
-                "--window-title", window.title, "--window-size", String(window.width), String(window.height)];
+            nativeCapture.gestureArguments = [String(point.x), String(point.y), "--scroll-" + direction, "--window-title", window.title, "--window-size", String(window.width), String(window.height)];
             nativeCapture.running = true;
             tryCompare(nativeCapture, "running", false, 4000);
             compare(nativeCapture.resultCode, 0);
         }
         function capture(name) {
             const prefix = Quickshell.env("BINGUX_GROUP_CAPTURE");
-            if (!prefix) return;
+            if (!prefix)
+                return;
             nativeCapture.gestureArguments = ["1", "1", "--capture-only"];
             nativeCapture.capturePath = prefix + "-" + name + ".png";
             nativeCapture.running = true;
@@ -75,10 +74,16 @@
             try {
                 terminalSidebar.selectContent("notes");
                 tray.serviceEnabled = false;
-                tray.trayItems = Array.from({length: 18}, (_, index) => ({
-                    id: "detached-" + index, title: "Application " + index,
-                    icon: Quickshell.iconPath("applications-other"), menu: null, hasMenu: true, onlyMenu: true,
-                }));
+                tray.trayItems = Array.from({
+                    length: 18
+                }, (_, index) => ({
+                            id: "detached-" + index,
+                            title: "Application " + index,
+                            icon: Quickshell.iconPath("applications-other"),
+                            menu: null,
+                            hasMenu: true,
+                            onlyMenu: true
+                        }));
                 metricsPill.preferencesLocation = Qt.resolvedUrl("detached-monitors.ini");
                 metricsPill.setShown("cpu", true);
                 metricsPill.previewMonitors = metricsPill.monitorNames;

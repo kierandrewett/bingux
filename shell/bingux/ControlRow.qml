@@ -20,7 +20,9 @@ AbstractButton {
     property bool rowInteractive: true
     property bool barLayout: false
     hoverEnabled: rowInteractive || barLayout
-    HoverHandler { id: rowHover }
+    HoverHandler {
+        id: rowHover
+    }
     focusPolicy: rowInteractive || barLayout ? Qt.StrongFocus : Qt.NoFocus
     Accessible.role: rowInteractive || barLayout ? Accessible.Button : Accessible.Grouping
     Accessible.checkable: barLayout && toggleVisible && !navigation
@@ -36,8 +38,8 @@ AbstractButton {
     property string toggleLabel: title
     property string actionLabel: ""
     property string valueText: ""
-    signal toggleRequested()
-    signal actionTriggered()
+    signal toggleRequested
+    signal actionTriggered
     Layout.fillWidth: true
     // Tiles should group related controls, not look like oversized app icons.
     // Their compact height also lets the primary controls breathe as a set.
@@ -46,11 +48,19 @@ AbstractButton {
     padding: barLayout ? Theme.barControlPadding : tileLayout ? (compactTile ? Theme.compactTilePadding : Theme.controlTilePadding) : 0
     Accessible.name: displayedTitle + (subtitle ? ", " + subtitle : "")
     onClicked: if (barLayout) {
-        if (navigation) navigationRequested(root);
-        else if (toggleVisible && toggleEnabled) toggleRequested();
+        if (navigation)
+            navigationRequested(root);
+        else if (toggleVisible && toggleEnabled)
+            toggleRequested();
     }
     background: Item {
-        BarControlSurface { anchors.fill: parent; visible: root.barLayout; hovered: root.hovered; pressed: root.down; focused: root.visualFocus }
+        BarControlSurface {
+            anchors.fill: parent
+            visible: root.barLayout
+            hovered: root.hovered
+            pressed: root.down
+            focused: root.visualFocus
+        }
         ControlCentreButtonSurface {
             anchors.fill: parent
             visible: !root.barLayout && (root.rowInteractive || root.tileSurface)
@@ -64,7 +74,13 @@ AbstractButton {
             radius: root.tileSurface ? 12 : root.leadingBadge ? 10 : 8
         }
     }
-    WidgetFace { id: barFace; anchors.centerIn: parent; visible: root.barLayout; presentation: root.presentation; iconColor: root.selected ? Theme.accent : Theme.text }
+    WidgetFace {
+        id: barFace
+        anchors.centerIn: parent
+        visible: root.barLayout
+        presentation: root.presentation
+        iconColor: root.selected ? Theme.accent : Theme.text
+    }
     contentItem: GridLayout {
         visible: !root.barLayout
         columns: root.tileLayout ? 2 : 3
@@ -79,7 +95,12 @@ AbstractButton {
             implicitHeight: implicitWidth
             radius: root.tileLayout ? 7 : 10
             color: root.leadingBadge && !root.tileLayout ? (root.selected ? Theme.selection : Theme.elevated) : "transparent"
-            SymbolicIcon { anchors.centerIn: parent; implicitSize: 18; source: root.displayedIcon ? Quickshell.iconPath(root.displayedIcon) : ""; color: root.selected ? Theme.accent : Theme.muted }
+            SymbolicIcon {
+                anchors.centerIn: parent
+                implicitSize: 18
+                source: root.displayedIcon ? Quickshell.iconPath(root.displayedIcon) : ""
+                color: root.selected ? Theme.accent : Theme.muted
+            }
         }
         ColumnLayout {
             visible: root.showLabel
@@ -118,7 +139,13 @@ AbstractButton {
             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             Layout.rightMargin: root.tileLayout ? 0 : Theme.padding
             spacing: root.tileLayout ? 4 : 10
-            Text { visible: root.valueText.length > 0; text: root.valueText; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+            Text {
+                visible: root.valueText.length > 0
+                text: root.valueText
+                color: Theme.muted
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSmall
+            }
             AbstractButton {
                 id: secondary
                 visible: root.actionLabel.length > 0
@@ -127,8 +154,19 @@ AbstractButton {
                 hoverEnabled: true
                 Accessible.name: root.actionLabel + " " + root.title
                 onClicked: root.actionTriggered()
-                background: ControlCentreButtonSurface { control: secondary; radius: 7 }
-                contentItem: Text { id: actionText; text: root.actionLabel; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+                background: ControlCentreButtonSurface {
+                    control: secondary
+                    radius: 7
+                }
+                contentItem: Text {
+                    id: actionText
+                    text: root.actionLabel
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    color: Theme.muted
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSmall
+                }
             }
             ControlSwitch {
                 visible: root.toggleVisible
@@ -142,7 +180,12 @@ AbstractButton {
                 visible: (root.navigation && root.rowInteractive) || (root.selected && !root.toggleVisible && !root.navigation)
                 implicitSize: 12
                 rotation: root.navigation ? root.navigationRotation : 0
-                Behavior on rotation { NumberAnimation { duration: Theme.reducedMotion ? 0 : Theme.motion; easing.type: Easing.OutCubic } }
+                Behavior on rotation {
+                    NumberAnimation {
+                        duration: Theme.reducedMotion ? 0 : Theme.motion
+                        easing.type: Easing.OutCubic
+                    }
+                }
                 color: root.navigation ? Theme.muted : Theme.accent
                 source: Quickshell.iconPath(root.navigation ? "go-next-symbolic" : "object-select-symbolic")
             }

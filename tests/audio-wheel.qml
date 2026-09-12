@@ -4,19 +4,58 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
-    QtObject { id: outputAudio; property real volume: 0.65; property bool muted: false }
-    QtObject { id: inputAudio; property real volume: 0.4; property bool muted: false }
-    QtObject { id: outputNode; property bool ready: true; property var audio: outputAudio }
-    QtObject { id: inputNode; property bool ready: true; property var audio: inputAudio }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS")
+    }
+    QtObject {
+        id: outputAudio
+        property real volume: 0.65
+        property bool muted: false
+    }
+    QtObject {
+        id: inputAudio
+        property real volume: 0.4
+        property bool muted: false
+    }
+    QtObject {
+        id: outputNode
+        property bool ready: true
+        property var audio: outputAudio
+    }
+    QtObject {
+        id: inputNode
+        property bool ready: true
+        property var audio: inputAudio
+    }
     FloatingWindow {
         id: window
-        implicitWidth: 400; implicitHeight: 160
-        AudioLevel { id: output; x: 16; y: 16; width: 368; node: outputNode; label: "Volume"; iconName: "audio-volume-high-symbolic"; maximum: 1.5 }
-        AudioLevel { id: input; x: 16; y: 80; width: 368; node: inputNode; label: "Microphone"; iconName: "audio-input-microphone-symbolic" }
+        implicitWidth: 400
+        implicitHeight: 160
+        AudioLevel {
+            id: output
+            x: 16
+            y: 16
+            width: 368
+            node: outputNode
+            label: "Volume"
+            iconName: "audio-volume-high-symbolic"
+            maximum: 1.5
+        }
+        AudioLevel {
+            id: input
+            x: 16
+            y: 80
+            width: 368
+            node: inputNode
+            label: "Microphone"
+            iconName: "audio-input-microphone-symbolic"
+        }
         TestCase {
             when: window.visible
-            function notch(slider, delta) { mouseWheel(slider, slider.width / 2, slider.height / 2, 0, delta, Qt.NoButton); }
+            function notch(slider, delta) {
+                mouseWheel(slider, slider.width / 2, slider.height / 2, 0, delta, Qt.NoButton);
+            }
             function test_steps() {
                 report.setText("FAILURES 1\n");
                 const speaker = findChild(output, "audioLevelVolume");
@@ -59,16 +98,13 @@ ShellRoot {
                 for (const slider of [speaker, mic]) {
                     const audio = slider === speaker ? outputAudio : inputAudio;
                     for (const target of [0.49, 0.74, 0.99]) {
-                        const x = slider.leftPadding + slider.handle.width / 2
-                            + target / slider.to * (slider.availableWidth - slider.handle.width);
+                        const x = slider.leftPadding + slider.handle.width / 2 + target / slider.to * (slider.availableWidth - slider.handle.width);
                         mouseClick(slider, x, slider.height / 2);
-                        fuzzyCompare(audio.volume, Math.round(target / 0.05) * 0.05, 0.0001,
-                            "Pointer clicks snap to five-percent values");
+                        fuzzyCompare(audio.volume, Math.round(target / 0.05) * 0.05, 0.0001, "Pointer clicks snap to five-percent values");
                     }
                     mousePress(slider, slider.width / 2, slider.height / 2);
                     mouseMove(slider, slider.width * 0.73, slider.height / 2);
-                    fuzzyCompare(audio.volume / 0.05, Math.round(audio.volume / 0.05), 0.0001,
-                        "Dragging stays on the same five-percent grid");
+                    fuzzyCompare(audio.volume / 0.05, Math.round(audio.volume / 0.05), 0.0001, "Dragging stays on the same five-percent grid");
                     mouseRelease(slider, slider.width * 0.73, slider.height / 2);
                 }
                 outputAudio.volume = 0.77;

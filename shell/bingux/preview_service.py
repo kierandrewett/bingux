@@ -1,4 +1,5 @@
 """Persistent preview cache with cancellable foreground and background workers."""
+
 import asyncio
 from collections import OrderedDict
 import json
@@ -16,17 +17,24 @@ WARM_WIDTH = 1024
 def identity(filename):
     path = Path(filename)
     stat = check_file(path)
-    wal = Path(filename + '-wal')
+    wal = Path(filename + "-wal")
     wal_stat = wal.stat() if wal.is_file() else None
-    return (filename, stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns,
-            (wal_stat.st_size, wal_stat.st_mtime_ns) if wal_stat else None)
+    return (
+        filename,
+        stat.st_dev,
+        stat.st_ino,
+        stat.st_size,
+        stat.st_mtime_ns,
+        stat.st_ctime_ns,
+        (wal_stat.st_size, wal_stat.st_mtime_ns) if wal_stat else None,
+    )
 
 
 def request_key(args):
     mode, filename, *options = args
-    if mode not in ('info', 'page', 'table'):
-        raise ValueError('Unknown preview request.')
-    if mode == 'page':
+    if mode not in ("info", "page", "table"):
+        raise ValueError("Unknown preview request.")
+    if mode == "page":
         options = [int(options[0]), min(2400, max(128, math.ceil(int(options[1]) / 128) * 128))]
     return (identity(filename), mode, tuple(options))
 
@@ -39,9 +47,12 @@ class Cache:
 
     def get(self, key):
         candidate = key
-        if candidate not in self.entries and key[1] == 'page':
-            sizes = [other for other in self.entries if other[:2] == key[:2]
-                     and other[2][0] == key[2][0] and other[2][1] >= key[2][1]]
+        if candidate not in self.entries and key[1] == "page":
+            sizes = [
+                other
+                for other in self.entries
+                if other[:2] == key[:2] and other[2][0] == key[2][0] and other[2][1] >= key[2][1]
+            ]
             if sizes:
                 candidate = min(sizes, key=lambda other: other[2][1])
         if candidate not in self.entries:
@@ -50,7 +61,7 @@ class Cache:
         return self.entries[candidate][0]
 
     def put(self, key, value):
-        if 'error' in value:
+        if "error" in value:
             return
         size = len(json.dumps(value).encode())
         if size > self.limit:
@@ -78,14 +89,18 @@ class Service:
         self.closed = False
 
     async def run(self, args, background=False):
-        process = await asyncio.create_subprocess_exec(*self.command, *map(str, args),
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
-            preexec_fn=(lambda: os.nice(10)) if background else None)
+        process = await asyncio.create_subprocess_exec(
+            *self.command,
+            *map(str, args),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            preexec_fn=(lambda: os.nice(10)) if background else None,
+        )
         try:
             output, _ = await asyncio.wait_for(process.communicate(), timeout=28)
             return json.loads(output)
         except asyncio.TimeoutError:
-            return {'error': 'This file took too long to prepare for preview.'}
+            return {"error": "This file took too long to prepare for preview."}
         finally:
             if process.returncode is None:
                 process.terminate()
@@ -113,7 +128,7 @@ class Service:
         async with self.foreground:
             result = await self.run([key[1], filename, *key[2]])
         if identity(filename) != key[0]:
-            return {'error': 'The file changed while its preview was loading. Select it again.'}
+            return {"error": "The file changed while its preview was loading. Select it again."}
         self.cache.put(key, result)
         return result
 
@@ -128,11 +143,11 @@ class Service:
                     self.jobs[key] = job
                 self.requests[request_id] = (key, asyncio.current_task())
                 result = await asyncio.shield(job)
-            self.emit({'id': request_id, 'data': result})
+            self.emit({"id": request_id, "data": result})
         except asyncio.CancelledError:
             pass
         except (ValueError, OSError, IndexError, TypeError) as error:
-            self.emit({'id': request_id, 'data': {'error': str(error)}})
+            self.emit({"id": request_id, "data": {"error": str(error)}})
         finally:
             self.requests.pop(request_id, None)
             for key, job in list(self.jobs.items()):
@@ -148,11 +163,13 @@ class Service:
             entry[1].cancel()
 
     def preload(self, paths):
-        self.warm_paths = list(dict.fromkeys(path for path in paths if isinstance(path, str) and path.startswith('/')))[:6]
+        self.warm_paths = list(dict.fromkeys(path for path in paths if isinstance(path, str) and path.startswith("/")))[
+            :6
+        ]
         # Revisit evicted entries only when navigation changes the preload plan;
         # continuously trying to fit every candidate would thrash a full cache.
         for stamp, successful in list(self.warmed.items()):
-            if successful and stamp[0] in self.warm_paths and self.cache.get((stamp, 'info', ())) is None:
+            if successful and stamp[0] in self.warm_paths and self.cache.get((stamp, "info", ())) is None:
                 del self.warmed[stamp]
         if self.warm_task and self.warm_path not in self.warm_paths:
             # A visible request that joined this warm job still needs its result.
@@ -177,15 +194,15 @@ class Service:
 
     async def warm(self, filename, stamp):
         try:
-            result = await self.run(['warm', filename, str(WARM_WIDTH)], background=True)
+            result = await self.run(["warm", filename, str(WARM_WIDTH)], background=True)
             if identity(filename) != stamp:
                 return
-            if result.get('info'):
-                self.cache.put((stamp, 'info', ()), result['info'])
-                for page, data in enumerate(result.get('pages', [])):
-                    self.cache.put((stamp, 'page', (page, WARM_WIDTH)), data)
-                self.emit({'preloaded': filename})
-            self.warmed[stamp] = bool(result.get('info'))
+            if result.get("info"):
+                self.cache.put((stamp, "info", ()), result["info"])
+                for page, data in enumerate(result.get("pages", [])):
+                    self.cache.put((stamp, "page", (page, WARM_WIDTH)), data)
+                self.emit({"preloaded": filename})
+            self.warmed[stamp] = bool(result.get("info"))
             while len(self.warmed) > 64:
                 self.warmed.popitem(last=False)
         except asyncio.CancelledError:
@@ -206,6 +223,7 @@ class Service:
 async def serve(command):
     def emit(record):
         print(json.dumps(record), flush=True)
+
     service = Service(command, emit)
     current = asyncio.current_task()
     for signum in (signal.SIGTERM, signal.SIGINT):
@@ -213,17 +231,17 @@ async def serve(command):
     reader = asyncio.StreamReader(limit=65536)
     protocol = asyncio.StreamReaderProtocol(reader)
     await asyncio.get_running_loop().connect_read_pipe(lambda: protocol, sys.stdin)
-    emit({'ready': True})
+    emit({"ready": True})
     try:
         while line := await reader.readline():
             try:
                 request = json.loads(line)
-                if request.get('op') == 'preload':
-                    service.preload(request.get('paths', []))
-                elif request.get('op') == 'cancel':
-                    service.cancel(request.get('id'))
-                elif request.get('op') == 'request':
-                    asyncio.create_task(service.request(request['id'], request['args']))
+                if request.get("op") == "preload":
+                    service.preload(request.get("paths", []))
+                elif request.get("op") == "cancel":
+                    service.cancel(request.get("id"))
+                elif request.get("op") == "request":
+                    asyncio.create_task(service.request(request["id"], request["args"]))
             except (ValueError, KeyError, TypeError):
                 continue
     except asyncio.CancelledError:

@@ -10,11 +10,17 @@ cp "$repo_dir/tests/search-app-menu.qml" "$test_dir/shell.qml"
 sed -i 's@return runtimeDirectory ? runtimeDirectory + "/bingux/search-v1.sock" : "";@return "";@' "$test_dir/SearchSocket.qml"
 export XDG_CONFIG_HOME="$test_dir/config" XDG_DATA_HOME="$test_dir/data"
 mkdir -p "$XDG_CONFIG_HOME/bingux" "$XDG_CONFIG_HOME/gnoblin" "$XDG_DATA_HOME/applications"
-printf '%s\n' '{"desktop":{"dockApps":{"pinnedApps":[],"order":[]}}}' > "$XDG_CONFIG_HOME/bingux/settings.json"
-printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=Menu test app' 'Exec=true' > "$XDG_DATA_HOME/applications/bingux-menu-test.desktop"
+printf '%s\n' '{"desktop":{"dockApps":{"pinnedApps":[],"order":[]}}}' >"$XDG_CONFIG_HOME/bingux/settings.json"
+printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=Menu test app' 'Exec=true' >"$XDG_DATA_HOME/applications/bingux-menu-test.desktop"
 for unpin in 0 1; do
-    QT_LOGGING_RULES="quickshell.desktopentry.warning=false" BINGUX_MENU_UNPIN="$unpin" NO_AT_BRIDGE=1 timeout 20s "${QUICKSHELL_BIN:-quickshell}" -p "$test_dir" --no-color > "$test_dir/log" 2>&1 || { cat "$test_dir/log"; exit 1; }
-    grep -q 'SEARCH_APP_MENU_PASS' "$test_dir/log" || { cat "$test_dir/log"; exit 1; }
+    QT_LOGGING_RULES="quickshell.desktopentry.warning=false" BINGUX_MENU_UNPIN="$unpin" NO_AT_BRIDGE=1 timeout 20s "${QUICKSHELL_BIN:-quickshell}" -p "$test_dir" --no-color >"$test_dir/log" 2>&1 || {
+        cat "$test_dir/log"
+        exit 1
+    }
+    grep -q 'SEARCH_APP_MENU_PASS' "$test_dir/log" || {
+        cat "$test_dir/log"
+        exit 1
+    }
     if grep -E 'TypeError|ReferenceError|Binding loop|FAIL!' "$test_dir/log"; then exit 1; fi
     python3 - "$XDG_CONFIG_HOME/bingux/settings.json" "$unpin" <<'PY'
 import json, sys

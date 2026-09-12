@@ -17,7 +17,8 @@ Item {
 
     function play(icon, iconSource, isSymbolic, clickPosition) {
         launch.stop();
-        if (Theme.reducedMotion || !icon || !iconSource) return;
+        if (Theme.reducedMotion || !icon || !iconSource)
+            return;
         const position = icon.mapToItem(parent, 0, 0);
         x = clickPosition ? clickPosition.x - icon.width / 2 : position.x;
         y = clickPosition ? clickPosition.y - icon.height / 2 : position.y;
@@ -30,7 +31,9 @@ Item {
         launch.restart();
     }
 
-    function cancel() { launch.stop(); }
+    function cancel() {
+        launch.stop();
+    }
 
     OsIconImage {
         // Rasterise at the largest displayed size, then shrink for the start.
@@ -55,8 +58,22 @@ Item {
     }
     ParallelAnimation {
         id: launch
-        NumberAnimation { target: root; property: "scale"; from: 1; to: root.maximumScale; duration: 260; easing.type: Easing.OutCubic }
-        NumberAnimation { target: root; property: "opacity"; from: 1; to: 0; duration: 260; easing.type: Easing.OutCubic }
+        NumberAnimation {
+            target: root
+            property: "scale"
+            from: 1
+            to: root.maximumScale
+            duration: 260
+            easing.type: Easing.OutCubic
+        }
+        NumberAnimation {
+            target: root
+            property: "opacity"
+            from: 1
+            to: 0
+            duration: 260
+            easing.type: Easing.OutCubic
+        }
         onFinished: root.finished()
     }
 }

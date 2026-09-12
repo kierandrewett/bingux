@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """An intentional crash must not write a core file or a Quickshell minidump."""
+
 import json
 import os
 from pathlib import Path
@@ -28,15 +29,25 @@ ShellRoot {
 """)
     environment = os.environ | {"XDG_CACHE_HOME": str(fixture / "cache")}
     with (fixture / "runtime.log").open("w+") as log:
-        process = subprocess.Popen([qs, "-p", str(fixture), "--no-color"], cwd=fixture,
-                                   env=environment, stdout=log, stderr=subprocess.STDOUT,
-                                   start_new_session=True)
+        process = subprocess.Popen(
+            [qs, "-p", str(fixture), "--no-color"],
+            cwd=fixture,
+            env=environment,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
         try:
             deadline = time.monotonic() + 8
             pid = None
             while time.monotonic() < deadline:
-                result = subprocess.run([qs, "-p", str(fixture), "ipc", "call", "dump-test", "pid"],
-                                        env=environment, capture_output=True, text=True, timeout=5)
+                result = subprocess.run(
+                    [qs, "-p", str(fixture), "ipc", "call", "dump-test", "pid"],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
                 try:
                     pid = int(json.loads(result.stdout))
                     if pid > 1:

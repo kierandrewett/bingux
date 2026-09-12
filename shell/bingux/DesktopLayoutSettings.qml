@@ -5,10 +5,34 @@ ColumnLayout {
     id: root
     required property var settings
     readonly property var containers: [
-        {id: "top-right", page: "TopBar", title: "Top bar", description: "Arrange status widgets, labels and spaces", icon: "view-dual-symbolic"},
-        {id: "dock", page: "Dock", title: "Dock", description: "Arrange apps and widgets, size, alignment and mouse actions", icon: "view-app-grid-symbolic"},
-        {id: "sidebar", page: "Sidebar", title: "Sidebar", description: "Arrange panels and choose the screen edge", icon: "sidebar-show-symbolic"},
-        {id: "control-centre", page: "Controls", title: "Control centre", description: "Arrange controls and choose their appearance", icon: "preferences-system-symbolic"}
+        {
+            id: "top-right",
+            page: "TopBar",
+            title: "Top bar",
+            description: "Arrange status widgets, labels and spaces",
+            icon: "view-dual-symbolic"
+        },
+        {
+            id: "dock",
+            page: "Dock",
+            title: "Dock",
+            description: "Arrange apps and widgets, size, alignment and mouse actions",
+            icon: "view-app-grid-symbolic"
+        },
+        {
+            id: "sidebar",
+            page: "Sidebar",
+            title: "Sidebar",
+            description: "Arrange panels and choose the screen edge",
+            icon: "sidebar-show-symbolic"
+        },
+        {
+            id: "control-centre",
+            page: "Controls",
+            title: "Control centre",
+            description: "Arrange controls and choose their appearance",
+            icon: "preferences-system-symbolic"
+        }
     ]
     readonly property var shownContainers: settings.page === "Desktop" ? containers : containers.filter(item => item.page === settings.page)
     Layout.fillWidth: true

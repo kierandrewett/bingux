@@ -26,8 +26,7 @@ Popup {
     width: Math.min(308, parent.width - 16)
     height: Math.min(330, parent.height - 16, 66 + Math.max(1, matches.length) * 48)
     x: Math.max(8, Math.min(caret.x, parent.width - width - 8))
-    y: caret.y + editor.cursorRectangle.height + height + 8 <= parent.height
-        ? caret.y + editor.cursorRectangle.height + 4 : Math.max(8, caret.y - height - 4)
+    y: caret.y + editor.cursorRectangle.height + height + 8 <= parent.height ? caret.y + editor.cursorRectangle.height + 4 : Math.max(8, caret.y - height - 4)
     padding: 6
     focus: false
     modal: false
@@ -36,38 +35,55 @@ Popup {
     onClosed: tokenStart = -1
     onQueryChanged: selectedIndex = 0
     onSelectedIndexChanged: list.positionViewAtIndex(selectedIndex, ListView.Contain)
-    background: Rectangle { color: Qt.rgba(Theme.surface.r, Theme.surface.g, Theme.surface.b, 1); radius: Theme.radius; border.width: 1; border.color: Theme.outline }
+    background: Rectangle {
+        color: Qt.rgba(Theme.surface.r, Theme.surface.g, Theme.surface.b, 1)
+        radius: Theme.radius
+        border.width: 1
+        border.color: Theme.outline
+    }
 
     function update(typed) {
-        if (editor.formatting) return;
+        if (editor.formatting)
+            return;
         const end = editor.cursorPosition;
         const before = editor.getText(0, end);
         const current = Commands.token(before);
-        if (!editor.activeFocus || editor.inputMethodComposing || editor.selectionStart !== editor.selectionEnd
-            || !current || (tokenStart >= 0 && current.start !== tokenStart)
-            || /^\s*```/.test(editor.getFormattedText(editor.activeBlockStart, end))) {
+        if (!editor.activeFocus || editor.inputMethodComposing || editor.selectionStart !== editor.selectionEnd || !current || (tokenStart >= 0 && current.start !== tokenStart) || /^\s*```/.test(editor.getFormattedText(editor.activeBlockStart, end))) {
             close();
             return;
         }
-        if (tokenStart < 0 && !(typed && before.endsWith("/"))) return;
+        if (tokenStart < 0 && !(typed && before.endsWith("/")))
+            return;
         tokenStart = current.start;
         query = current.query;
-        if (!visible) { selectedIndex = 0; notes.closeContextMenu(); open(); }
+        if (!visible) {
+            selectedIndex = 0;
+            notes.closeContextMenu();
+            open();
+        }
     }
     function handleKey(event) {
-        if (!visible || editor.inputMethodComposing) return false;
-        if (event.key === Qt.Key_Escape) close();
+        if (!visible || editor.inputMethodComposing)
+            return false;
+        if (event.key === Qt.Key_Escape)
+            close();
         else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
             const count = matches.length;
-            if (count) selectedIndex = (selectedIndex + (event.key === Qt.Key_Down ? 1 : count - 1)) % count;
+            if (count)
+                selectedIndex = (selectedIndex + (event.key === Qt.Key_Down ? 1 : count - 1)) % count;
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Tab) {
-            if (selectedCommand) insertCommand(selectedCommand);
-        } else return false;
+            if (selectedCommand)
+                insertCommand(selectedCommand);
+        } else
+            return false;
         return true;
     }
     function insertCommand(command) {
         const start = tokenStart, end = editor.cursorPosition;
-        if (start < 0 || !editor.getText(start, end).startsWith("/")) { close(); return; }
+        if (start < 0 || !editor.getText(start, end).startsWith("/")) {
+            close();
+            return;
+        }
         close();
         notes.insertCommand(command, start, end);
     }
@@ -122,8 +138,7 @@ Popup {
                             anchors.centerIn: parent
                             implicitSize: 20
                             visible: !!entry.modelData.icon
-                            source: !entry.modelData.icon ? "" : entry.modelData.icon.startsWith("icons/")
-                                ? Qt.resolvedUrl(entry.modelData.icon) : Quickshell.iconPath(entry.modelData.icon)
+                            source: !entry.modelData.icon ? "" : entry.modelData.icon.startsWith("icons/") ? Qt.resolvedUrl(entry.modelData.icon) : Quickshell.iconPath(entry.modelData.icon)
                             color: Theme.text
                         }
                         Text {
@@ -139,8 +154,22 @@ Popup {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 2
-                        Text { Layout.fillWidth: true; text: entry.modelData.title; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: 14; elide: Text.ElideRight }
-                        Text { Layout.fillWidth: true; text: entry.modelData.hint; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 11; elide: Text.ElideRight }
+                        Text {
+                            Layout.fillWidth: true
+                            text: entry.modelData.title
+                            color: Theme.text
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 14
+                            elide: Text.ElideRight
+                        }
+                        Text {
+                            Layout.fillWidth: true
+                            text: entry.modelData.hint
+                            color: Theme.muted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            elide: Text.ElideRight
+                        }
                     }
                 }
             }

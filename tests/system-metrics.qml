@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import QtTest
 import Quickshell
 import Quickshell.Io
+
 ShellRoot {
     property int performanceClicks: 0
     property int configureClicks: 0
@@ -10,23 +11,67 @@ ShellRoot {
         id: sample
         property bool available: true
         property var sampleHardware: ({
-            gpus: [], storage: [], processCount: 80,
-            processes: Array.from({length: 80}, (_, index) => ({
-                pid: 900000 + index,
-                name: (index % 2 ? "Worker " : "Sample ") + index,
-                executable: index % 2 ? "worker" : "sample",
-                cpuPercent: index / 2, memoryBytes: 1048576 * (index + 1), state: "S"
-            }))
-        })
-        property var latest: ({cpuPercent: 24, memoryUsedBytes: 12.4 * 1073741824, memoryTotalBytes: 32 * 1073741824, networkReceiveBytesPerSecond: 240000, networkTransmitBytesPerSecond: 32000, extra: {hardware: sample.sampleHardware, cpuCores: Array.from({length: 16}, (_, id) => ({id, usage: id * 5})), cpuTemperatureCelsius: 54.2, load1: 2.35, logicalCpus: 16, swapUsedBytes: 1073741824, swapTotalBytes: 8589934592, diskReadBytesPerSecond: 24000000, diskWriteBytesPerSecond: 1200000}})
+                gpus: [],
+                storage: [],
+                processCount: 80,
+                processes: Array.from({
+                    length: 80
+                }, (_, index) => ({
+                            pid: 900000 + index,
+                            name: (index % 2 ? "Worker " : "Sample ") + index,
+                            executable: index % 2 ? "worker" : "sample",
+                            cpuPercent: index / 2,
+                            memoryBytes: 1048576 * (index + 1),
+                            state: "S"
+                        }))
+            })
+        property var latest: ({
+                cpuPercent: 24,
+                memoryUsedBytes: 12.4 * 1073741824,
+                memoryTotalBytes: 32 * 1073741824,
+                networkReceiveBytesPerSecond: 240000,
+                networkTransmitBytesPerSecond: 32000,
+                extra: {
+                    hardware: sample.sampleHardware,
+                    cpuCores: Array.from({
+                        length: 16
+                    }, (_, id) => ({
+                                id,
+                                usage: id * 5
+                            })),
+                    cpuTemperatureCelsius: 54.2,
+                    load1: 2.35,
+                    logicalCpus: 16,
+                    swapUsedBytes: 1073741824,
+                    swapTotalBytes: 8589934592,
+                    diskReadBytesPerSecond: 24000000,
+                    diskWriteBytesPerSecond: 1200000
+                }
+            })
         property var history: []
         readonly property string cpuLabel: "CPU " + latest.cpuPercent + "%"
-        function formatRate(rate) { return Math.round(rate / 1024) + "K/s"; }
-        function formatBytes(bytes) { return (bytes / 1073741824).toFixed(1) + "G"; }
+        function formatRate(rate) {
+            return Math.round(rate / 1024) + "K/s";
+        }
+        function formatBytes(bytes) {
+            return (bytes / 1073741824).toFixed(1) + "G";
+        }
     }
-    RollingNumber { id: rollProbe; text: "9"; value: 9; visible: false }
-    Timer { id: finish; interval: 200; onTriggered: Qt.quit() }
-    FileView { id: results; path: Quickshell.env("BINGUX_METRICS_RESULTS") }
+    RollingNumber {
+        id: rollProbe
+        text: "9"
+        value: 9
+        visible: false
+    }
+    Timer {
+        id: finish
+        interval: 200
+        onTriggered: Qt.quit()
+    }
+    FileView {
+        id: results
+        path: Quickshell.env("BINGUX_METRICS_RESULTS")
+    }
     FloatingWindow {
         id: window
         implicitWidth: 560
@@ -38,26 +83,65 @@ ShellRoot {
             y: 4
             systemMetrics: sample
             preferencesLocation: Qt.resolvedUrl("monitors.ini")
-            onConfigureRequested: { configureClicks++; popup.showPage(true); }
-            onPerformanceRequested: { performanceClicks++; popup.showPage(false); }
+            onConfigureRequested: {
+                configureClicks++;
+                popup.showPage(true);
+            }
+            onPerformanceRequested: {
+                performanceClicks++;
+                popup.showPage(false);
+            }
         }
-        SystemMetricsPopup { id: popup; hostItem: window.contentItem; monitorWidget: widget }
+        SystemMetricsPopup {
+            id: popup
+            hostItem: window.contentItem
+            monitorWidget: widget
+        }
         TestCase {
             when: window.visible
             name: "SystemMetrics"
             property string checks: ""
-            function check(value, message) { checks += "CHECK " + value + " " + (message || "") + "\n"; results.setText(checks); verify(value, message); }
-            function equal(actual, expected, message) { checks += "EQUAL " + actual + " / " + expected + " " + (message || "") + "\n"; results.setText(checks); compare(actual, expected, message); }
+            function check(value, message) {
+                checks += "CHECK " + value + " " + (message || "") + "\n";
+                results.setText(checks);
+                verify(value, message);
+            }
+            function equal(actual, expected, message) {
+                checks += "EQUAL " + actual + " / " + expected + " " + (message || "") + "\n";
+                results.setText(checks);
+                compare(actual, expected, message);
+            }
             function test_interactions_and_history() {
                 results.setText("FAIL: metrics checks did not complete\n");
                 if (Quickshell.env("BINGUX_HARDWARE_RECORD")) {
-                    sample.latest = Object.assign({}, sample.latest, {extra: Object.assign({}, sample.latest.extra, {hardware: JSON.parse(Quickshell.env("BINGUX_HARDWARE_RECORD")).extra.hardware})});
+                    sample.latest = Object.assign({}, sample.latest, {
+                        extra: Object.assign({}, sample.latest.extra, {
+                            hardware: JSON.parse(Quickshell.env("BINGUX_HARDWARE_RECORD")).extra.hardware
+                        })
+                    });
                 }
                 const now = Date.now();
                 const points = [];
-                for (let n = 0; n < 300; n++) points.push({at: now - (299 - n) * 1000, cpu: 26 + Math.sin(n / 8) * 18 + Math.pow(Math.sin(n / 3), 6) * 35, memory: 41 + Math.sin(n / 40) * 4, memoryUsed: 12.4 * 1073741824, memoryTotal: 32 * 1073741824, receive: 12000 + Math.pow(Math.sin(n / 16), 4) * 440000, send: 8000 + Math.pow(Math.sin(n / 9), 4) * 92000, temperature: 54 + Math.sin(n / 12) * 4, load: 2.35 + Math.sin(n / 8), swap: 12.5, swapUsed: 1073741824, swapTotal: 8589934592, diskRead: 12000 + Math.pow(Math.sin(n / 9), 4) * 24000000, diskWrite: 8000 + Math.pow(Math.sin(n / 8), 4) * 1200000});
-                for (let n = 0; n < points.length; n++) for (let core = 0; core < 16; core++)
-                    points[n]["cpu" + core] = 20 + core * 2 + Math.sin(n / (4 + core) + core) * 18;
+                for (let n = 0; n < 300; n++)
+                    points.push({
+                        at: now - (299 - n) * 1000,
+                        cpu: 26 + Math.sin(n / 8) * 18 + Math.pow(Math.sin(n / 3), 6) * 35,
+                        memory: 41 + Math.sin(n / 40) * 4,
+                        memoryUsed: 12.4 * 1073741824,
+                        memoryTotal: 32 * 1073741824,
+                        receive: 12000 + Math.pow(Math.sin(n / 16), 4) * 440000,
+                        send: 8000 + Math.pow(Math.sin(n / 9), 4) * 92000,
+                        temperature: 54 + Math.sin(n / 12) * 4,
+                        load: 2.35 + Math.sin(n / 8),
+                        swap: 12.5,
+                        swapUsed: 1073741824,
+                        swapTotal: 8589934592,
+                        diskRead: 12000 + Math.pow(Math.sin(n / 9), 4) * 24000000,
+                        diskWrite: 8000 + Math.pow(Math.sin(n / 8), 4) * 1200000
+                    });
+                for (let n = 0; n < points.length; n++)
+                    for (let core = 0; core < 16; core++)
+                        points[n]["cpu" + core] = 20 + core * 2 + Math.sin(n / (4 + core) + core) * 18;
                 sample.history = points;
                 wait(100);
                 const cpuReadout = findChild(widget, "cpuReadout");
@@ -68,27 +152,32 @@ ShellRoot {
                 const barGraph = findChild(widget, "cpuBarGraph");
                 check(barGraph.width >= 40 && barGraph.points.length > 50, "mini graph displays measured history");
                 check(memoryReadout.mapToItem(widget, 0, memoryReadout.height).y <= widget.height, "rows fit the top bar");
-                rollProbe.value = 10; rollProbe.text = "10";
+                rollProbe.value = 10;
+                rollProbe.text = "10";
                 wait(30);
                 check(Theme.reducedMotion ? !rollProbe.animating : rollProbe.animating, "rolling numbers respect motion preference");
                 equal(rollProbe.direction, 1);
                 wait(180);
                 equal(rollProbe.displayedText, "10");
-                rollProbe.value = 8; rollProbe.text = "8";
+                rollProbe.value = 8;
+                rollProbe.text = "8";
                 wait(30);
-                if (!Theme.reducedMotion) equal(rollProbe.direction, -1);
-                rollProbe.value = 42; rollProbe.text = "42";
-                rollProbe.value = 73; rollProbe.text = "73";
+                if (!Theme.reducedMotion)
+                    equal(rollProbe.direction, -1);
+                rollProbe.value = 42;
+                rollProbe.text = "42";
+                rollProbe.value = 73;
+                rollProbe.text = "73";
                 wait(350);
                 equal(rollProbe.displayedText, "73", "rapid scrubbing coalesces to latest value");
                 wait(300);
-                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT")) widget.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".default-bar.png"));
+                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT"))
+                    widget.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".default-bar.png"));
                 wait(100);
                 mouseClick(widget, widget.width / 2, widget.height / 2, Qt.LeftButton);
                 wait(250);
                 check(popup.visible && !popup.customising, "left click opens performance");
-                check(popup.popupWidth <= 520 && popup.popupHeight <= 640 && popup.popupHeight <= window.height * 0.65,
-                    "performance popup stays compact");
+                check(popup.popupWidth <= 520 && popup.popupHeight <= 640 && popup.popupHeight <= window.height * 0.65, "performance popup stays compact");
                 const scroll = findChild(popup.contentItem, "monitorPageScroll").contentItem;
                 equal(scroll.boundsBehavior, Flickable.StopAtBounds, "monitor scrolling cannot overshoot");
                 equal(scroll.boundsMovement, Flickable.StopAtBounds, "monitor scrolling has no rubber-band movement");
@@ -116,7 +205,8 @@ ShellRoot {
                 check(graph.points.length > 290, "five-minute range includes older samples");
                 mouseClick(findChild(popup.contentItem, "monitorRange_1m"));
                 wait(100);
-                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT")) popup.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".performance.png"));
+                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT"))
+                    popup.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".performance.png"));
                 wait(100);
                 wait(200);
                 for (let core = 0; core < 16; core++) {
@@ -130,19 +220,28 @@ ShellRoot {
                 wait(100);
                 verify(findChild(popup.contentItem, "logicalCpuGraph_0").points.length > 290);
                 mouseClick(findChild(popup.contentItem, "monitorRange_1m"));
-                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT")) popup.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".cores.png"));
+                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT"))
+                    popup.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".cores.png"));
                 wait(100);
                 wait(300);
-                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT")) popup.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".hardware.png"));
+                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT"))
+                    popup.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".hardware.png"));
                 wait(100);
                 mouseClick(findChild(popup.contentItem, "performancePage_processes"));
                 wait(200);
                 const details = findChild(popup.contentItem, "hardwareDetails");
-                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT")) popup.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".processes.png"));
+                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT"))
+                    popup.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".processes.png"));
                 if (DesktopEntries.byId("org.gnome.Ptyxis"))
-                    compare(details.applicationFor({name: "ptyxis", executable: "ptyxis"}).id, "org.gnome.Ptyxis");
+                    compare(details.applicationFor({
+                        name: "ptyxis",
+                        executable: "ptyxis"
+                    }).id, "org.gnome.Ptyxis");
                 if (DesktopEntries.byId("discord-canary"))
-                    compare(details.applicationFor({name: "DiscordCanary", executable: "DiscordCanary"}).id, "discord-canary");
+                    compare(details.applicationFor({
+                        name: "DiscordCanary",
+                        executable: "DiscordCanary"
+                    }).id, "discord-canary");
                 const probePid = Number(Quickshell.env("BINGUX_PROCESS_PROBE"));
                 if (probePid) {
                     const table = findChild(details, "processTable");
@@ -165,7 +264,15 @@ ShellRoot {
                         verify(button.enabled);
                         mouseClick(button);
                         tryVerify(() => details.actionMessage.length > 0, 4000);
-                        compare(details.actionMessage, probe2 ? ({pause: "Paused 2 processes", resume: "Resumed 2 processes", end: "End requested for 2 processes"})[action] : ({pause: "Process paused", resume: "Process resumed", end: "End requested"})[action]);
+                        compare(details.actionMessage, probe2 ? ({
+                                pause: "Paused 2 processes",
+                                resume: "Resumed 2 processes",
+                                end: "End requested for 2 processes"
+                            })[action] : ({
+                                pause: "Process paused",
+                                resume: "Process resumed",
+                                end: "End requested"
+                            })[action]);
                     }
                 }
                 const table = findChild(details, "processTable");
@@ -193,7 +300,13 @@ ShellRoot {
                 compare(rows.contentY, 0);
                 rows.contentY = 300;
                 const before = rows.contentY;
-                sample.latest = Object.assign({}, sample.latest, {extra: Object.assign({}, sample.latest.extra, {hardware: Object.assign({}, sample.latest.extra.hardware, {processes: sample.latest.extra.hardware.processes.map(process => Object.assign({}, process))})})});
+                sample.latest = Object.assign({}, sample.latest, {
+                    extra: Object.assign({}, sample.latest.extra, {
+                        hardware: Object.assign({}, sample.latest.extra.hardware, {
+                            processes: sample.latest.extra.hardware.processes.map(process => Object.assign({}, process))
+                        })
+                    })
+                });
                 wait(100);
                 compare(rows.contentY, before);
                 const tabButton = findChild(popup.contentItem, "performancePage_usage");
@@ -204,7 +317,8 @@ ShellRoot {
                 verify(services.visible);
                 services.scope = "System";
                 tryVerify(() => services.services.length > 0 || services.error.length > 0, 4000);
-                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT")) popup.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".services.png"));
+                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT"))
+                    popup.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".services.png"));
                 wait(250); // Let the asynchronous Services capture finish before switching pages.
                 const serviceTable = findChild(services, "servicesTable");
                 compare(serviceTable.mode, "services");
@@ -237,7 +351,8 @@ ShellRoot {
                 verify(swap.visible && swap.points.length > 50);
                 compare(swap.maximum, 100);
                 check(findChild(popup.contentItem, "diskHistory").visible, "system page has disk read/write history");
-                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT")) popup.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".system.png"));
+                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT"))
+                    popup.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".system.png"));
                 wait(100);
                 popup.visible = false;
                 wait(200);
@@ -246,7 +361,8 @@ ShellRoot {
                 check(popup.visible && popup.customising, "right click opens customisation");
                 equal(performanceClicks, 1);
                 equal(configureClicks, 1);
-                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT")) popup.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".chooser.png"));
+                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT"))
+                    popup.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".chooser.png"));
                 wait(100);
                 mouseClick(findChild(popup.contentItem, "monitorOption_receiveSwitch"));
                 mouseClick(findChild(popup.contentItem, "monitorOption_sendSwitch"));
@@ -255,7 +371,8 @@ ShellRoot {
                 check(widget.isShown("temperature"), "new monitors are opt-in");
                 widget.setShown("temperature", false);
                 wait(200);
-                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT")) widget.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".bar.png"));
+                if (Quickshell.env("BINGUX_METRICS_SCREENSHOT"))
+                    widget.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_METRICS_SCREENSHOT") + ".bar.png"));
                 wait(100);
                 popup.showPage(false);
                 check(popup.visible && !popup.customising, "switching page keeps popup open");

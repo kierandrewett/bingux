@@ -18,7 +18,7 @@ p.write_text(p.read_text().replace('"file://" + Quickshell.env("HOME") + "/.conf
 PY
 # Layout tests run offscreen; native popup behaviour is covered by system-metrics.sh.
 if [[ "${1:-}" == sidebar-system ]]; then
-cat > "$test_dir/ShellPopup.qml" <<'QML'
+    cat >"$test_dir/ShellPopup.qml" <<'QML'
 import QtQuick
 Item {
     default property alias contents: body.data
@@ -36,13 +36,25 @@ fi
 cp "$repo_dir/tests/${1:-sidebar-notes}.qml" "$test_dir/shell.qml"
 export BINGUX_NOTES_TEST_RESULTS="$test_dir/results.txt"
 if [[ "${BINGUX_NOTES_NATIVE:-0}" == 1 || "${1:-sidebar-notes}" == "notes-context" || "${1:-sidebar-notes}" == "sidebar-popout" || "${1:-sidebar-notes}" == "sidebar-calendar" ]]; then
-    timeout 20s "${QUICKSHELL_BIN:-quickshell}" -p "$test_dir" > "$test_dir/runtime.log" 2>&1 || { cat "$test_dir/runtime.log"; exit 1; }
+    timeout 20s "${QUICKSHELL_BIN:-quickshell}" -p "$test_dir" >"$test_dir/runtime.log" 2>&1 || {
+        cat "$test_dir/runtime.log"
+        exit 1
+    }
 else
-    QT_QPA_PLATFORM=offscreen timeout 20s dbus-run-session -- "${QUICKSHELL_BIN:-quickshell}" -p "$test_dir" > "$test_dir/runtime.log" 2>&1 || { cat "$test_dir/runtime.log"; exit 1; }
+    QT_QPA_PLATFORM=offscreen timeout 20s dbus-run-session -- "${QUICKSHELL_BIN:-quickshell}" -p "$test_dir" >"$test_dir/runtime.log" 2>&1 || {
+        cat "$test_dir/runtime.log"
+        exit 1
+    }
 fi
-if [[ ! -f "$test_dir/results.txt" ]]; then cat "$test_dir/runtime.log"; exit 1; fi
+if [[ ! -f "$test_dir/results.txt" ]]; then
+    cat "$test_dir/runtime.log"
+    exit 1
+fi
 cat "$test_dir/results.txt"
-grep -q '^FAILURES 0$' "$test_dir/results.txt" || { cat "$test_dir/runtime.log"; exit 1; }
+grep -q '^FAILURES 0$' "$test_dir/results.txt" || {
+    cat "$test_dir/runtime.log"
+    exit 1
+}
 if grep -E '(TypeError|ReferenceError):|Failed to load configuration' "$test_dir/runtime.log"; then
     exit 1
 fi

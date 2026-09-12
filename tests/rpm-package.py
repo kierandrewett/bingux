@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Verify the RPM spec keeps the managed user-service lifecycle intact."""
+
 from pathlib import Path
 import shutil
 import subprocess

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Deliver capture IPC across a brief shell reload without double-toggling."""
+
 import subprocess
 import sys
 import time
@@ -14,9 +15,11 @@ def launch(command, run=subprocess.run, sleep=time.sleep):
         if response not in NOT_DISPATCHED:
             # A timeout/unknown result may have executed the toggle. Never
             # blindly repeat those, even when their exit status is nonzero.
-            if response: print(response, file=sys.stderr)
+            if response:
+                print(response, file=sys.stderr)
             return result.returncode
-        if attempt < 11: sleep(.1)
+        if attempt < 11:
+            sleep(0.1)
     print("Capture unavailable: shell is still reloading", file=sys.stderr)
     return 1
 

@@ -5,10 +5,14 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS")
+    }
     FloatingWindow {
         id: window
-        implicitWidth: 416; implicitHeight: 240
+        implicitWidth: 416
+        implicitHeight: 240
         color: Theme.shellSurface
         ColumnLayout {
             id: rows
@@ -34,7 +38,8 @@ ShellRoot {
                 let widths = [];
                 for (const row of rows.children) {
                     const title = findChild(row, "controlRowTitle");
-                    if (!title) continue;
+                    if (!title)
+                        continue;
                     widths.push(title.width);
                 }
                 report.setText(JSON.stringify(widths) + "\nFAILURES 1\n");
@@ -54,7 +59,9 @@ ShellRoot {
                 mouseMove(window.contentItem, 1, 1);
                 wait(50);
                 compare(lastTitle.offset, 0);
-                rows.grabToImage(result => { test.saved = result.saveToFile("/tmp/bingux-marquee-width.png"); });
+                rows.grabToImage(result => {
+                    test.saved = result.saveToFile("/tmp/bingux-marquee-width.png");
+                });
                 tryCompare(test, "saved", true, 2000);
                 report.setText(JSON.stringify(widths) + "\nFAILURES 0\n");
             }

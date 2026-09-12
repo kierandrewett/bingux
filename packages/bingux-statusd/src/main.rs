@@ -318,7 +318,10 @@ fn write_record(client: &mut UnixStream, record: &str) -> bool {
     // A complete process snapshot can exceed one nonblocking socket write.
     // Bound slow clients, and restore nonblocking mode for disconnect probes.
     if client.set_nonblocking(false).is_err()
-        || client.set_write_timeout(Some(Duration::from_millis(100))).is_err() {
+        || client
+            .set_write_timeout(Some(Duration::from_millis(100)))
+            .is_err()
+    {
         return false;
     }
     let written = client.write_all(record.as_bytes()).is_ok();

@@ -10,18 +10,24 @@ SearchOverlay {
     mask: Region {}
     property real initialY: 0
     function find(item, name) {
-        if (item.objectName === name) return item;
+        if (item.objectName === name)
+            return item;
         for (const child of item.children || []) {
             const found = find(child, name);
-            if (found) return found;
+            if (found)
+                return found;
         }
         return null;
     }
     function check(condition, message) {
-        if (!condition) { console.error("FAIL: " + message); Qt.exit(1); }
+        if (!condition) {
+            console.error("FAIL: " + message);
+            Qt.exit(1);
+        }
     }
     Timer {
-        interval: 200; running: true
+        interval: 200
+        running: true
         onTriggered: {
             const input = preview.find(preview.contentItem, "searchInput");
             input.text = "Fi";
@@ -29,13 +35,22 @@ SearchOverlay {
             preview.activeRequestId = "";
             preview.awaitingResults = false;
             const items = [];
-            for (let i = 0; i < 20; i++) items.push({ resultId: "test-" + i, providerId: "applications", kind: "application", title: "Files " + i, subtitle: "Navigation test", icon: "system-file-manager" });
+            for (let i = 0; i < 20; i++)
+                items.push({
+                    resultId: "test-" + i,
+                    providerId: "applications",
+                    kind: "application",
+                    title: "Files " + i,
+                    subtitle: "Navigation test",
+                    icon: "system-file-manager"
+                });
             preview.displayedResults = items;
             preview.selectedIndex = 0;
         }
     }
     Timer {
-        interval: 350; running: true
+        interval: 350
+        running: true
         onTriggered: {
             const hint = preview.find(preview.contentItem, "searchSelectionHint");
             preview.check(hint.text === "les 0" && hint.visible, "selected name appears as faint suffix");
@@ -46,7 +61,8 @@ SearchOverlay {
         }
     }
     Timer {
-        interval: 600; running: true
+        interval: 600
+        running: true
         onTriggered: {
             const list = preview.find(preview.contentItem, "searchResultsList");
             preview.check(list.contentY > preview.initialY, "keyboard navigation scrolls down");
@@ -56,7 +72,8 @@ SearchOverlay {
         }
     }
     Timer {
-        interval: 900; running: true
+        interval: 900
+        running: true
         onTriggered: {
             preview.check(Math.abs(preview.find(preview.contentItem, "searchResultsList").contentY - preview.initialY) < 1, "wrapping returns smoothly to the first row");
             const input = preview.find(preview.contentItem, "searchInput");

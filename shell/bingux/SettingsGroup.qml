@@ -12,7 +12,8 @@ Rectangle {
     color: Theme.settingsSurface
     ColumnLayout {
         id: content
-        x: Theme.spaceSmall; y: Theme.spaceSmall
+        x: Theme.spaceSmall
+        y: Theme.spaceSmall
         width: parent.width - Theme.spaceSmall * 2
         spacing: root.separators ? 1 : 0
     }

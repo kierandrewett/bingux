@@ -15,6 +15,8 @@ Scope {
     }
     Connections {
         target: DesktopEntries
-        function onApplicationsChanged() { refresh.restart(); }
+        function onApplicationsChanged() {
+            refresh.restart();
+        }
     }
 }

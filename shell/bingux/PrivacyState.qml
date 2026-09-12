@@ -10,8 +10,7 @@ Scope {
     property bool microphoneAvailable: false
     property var microphoneCaptures: []
     readonly property bool microphoneInUse: microphoneCaptures.length > 0
-    readonly property string microphoneTooltip: "Microphone in use\n" + microphoneCaptures.map(
-        capture => capture.app + " — " + capture.device + (capture.muted ? " (muted)" : "")).join("\n")
+    readonly property string microphoneTooltip: "Microphone in use\n" + microphoneCaptures.map(capture => capture.app + " — " + capture.device + (capture.muted ? " (muted)" : "")).join("\n")
     Process {
         command: ["python3", Qt.resolvedUrl("microphone-status.py").toString().replace("file://", "")]
         running: true
@@ -21,7 +20,9 @@ Scope {
                     const state = JSON.parse(data);
                     root.microphoneAvailable = state.available === true;
                     root.microphoneCaptures = state.captures || [];
-                } catch (error) { console.warn("Microphone state:", error); }
+                } catch (error) {
+                    console.warn("Microphone state:", error);
+                }
             }
         }
     }
@@ -30,12 +31,19 @@ Scope {
     property int elapsed: 0
     property double recordingOrigin: 0
     readonly property string elapsedText: Math.floor(elapsed / 60) + ":" + String(elapsed % 60).padStart(2, "0")
-    function stopSharing() { connection.send({op: "stop-sharing"}); }
-    function stopRecording() { connection.send({op: "stop-recording"}); }
+    function stopSharing() {
+        connection.send({
+            op: "stop-sharing"
+        });
+    }
+    function stopRecording() {
+        connection.send({
+            op: "stop-recording"
+        });
+    }
     function apply(state) {
-        if (!state || [state.screenSharing, state.cameraInUse, state.recording].some(value => typeof value !== "boolean")
-            || !Number.isInteger(state.recordingElapsed) || state.recordingElapsed < 0
-            || !Number.isInteger(state.recordingCount) || state.recordingCount < 0) return;
+        if (!state || [state.screenSharing, state.cameraInUse, state.recording].some(value => typeof value !== "boolean") || !Number.isInteger(state.recordingElapsed) || state.recordingElapsed < 0 || !Number.isInteger(state.recordingCount) || state.recordingCount < 0)
+            return;
         available = true;
         screenSharing = state.screenSharing;
         cameraInUse = state.cameraInUse;
@@ -60,8 +68,16 @@ Scope {
     }
     IpcHandler {
         target: "privacy"
-        function status(): string { return JSON.stringify({available: root.available, screenSharing: root.screenSharing,
-            microphoneAvailable: root.microphoneAvailable, microphoneCaptures: root.microphoneCaptures,
-            cameraInUse: root.cameraInUse, recording: root.recording, elapsed: root.elapsed}); }
+        function status(): string {
+            return JSON.stringify({
+                available: root.available,
+                screenSharing: root.screenSharing,
+                microphoneAvailable: root.microphoneAvailable,
+                microphoneCaptures: root.microphoneCaptures,
+                cameraInUse: root.cameraInUse,
+                recording: root.recording,
+                elapsed: root.elapsed
+            });
+        }
     }
 }

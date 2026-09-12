@@ -1,4 +1,5 @@
 """Public command routing and safe IPC failure behaviour."""
+
 import contextlib
 import importlib.util
 import io
@@ -7,20 +8,33 @@ import subprocess
 import unittest
 from unittest.mock import Mock, patch
 
-spec = importlib.util.spec_from_file_location("binguxctl", Path(__file__).resolve().parents[1] / "packages/binguxctl/binguxctl.py")
+spec = importlib.util.spec_from_file_location(
+    "binguxctl", Path(__file__).resolve().parents[1] / "packages/binguxctl/binguxctl.py"
+)
 ctl = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ctl)
 
 
 class ControlCommands(unittest.TestCase):
     def test_popouts_use_independent_configs(self):
-        for target, filename in (("search", "SearchShell.qml"), ("switcher", "SwitcherShell.qml"),
-                                 ("capture", "CaptureShell.qml"), ("emoji", "EmojiShell.qml")):
-            for words, path in ((["--path", "/desktop/shell.qml"], "/desktop/" + filename),
-                                (["--config", "custom"], "/configs/quickshell/custom/" + filename)):
-                with patch.dict(ctl.os.environ, {"XDG_CONFIG_HOME": "/configs"}, clear=True), patch.object(ctl, "execute", return_value=0) as execute:
+        for target, filename in (
+            ("search", "SearchShell.qml"),
+            ("switcher", "SwitcherShell.qml"),
+            ("capture", "CaptureShell.qml"),
+            ("emoji", "EmojiShell.qml"),
+        ):
+            for words, path in (
+                (["--path", "/desktop/shell.qml"], "/desktop/" + filename),
+                (["--config", "custom"], "/configs/quickshell/custom/" + filename),
+            ):
+                with (
+                    patch.dict(ctl.os.environ, {"XDG_CONFIG_HOME": "/configs"}, clear=True),
+                    patch.object(ctl, "execute", return_value=0) as execute,
+                ):
                     self.assertEqual(ctl.main(["--quickshell", "qs", *words, target, "status"]), 0)
-                    self.assertEqual(execute.call_args.args[0], ["qs", "ipc", "--path", path, "call", "--", target, "status"])
+                    self.assertEqual(
+                        execute.call_args.args[0], ["qs", "ipc", "--path", path, "call", "--", target, "status"]
+                    )
         self.assertEqual(self.route(["search", "toggle"]), ["call", "--", "search", "toggle"])
 
     def route(self, words):
@@ -29,8 +43,10 @@ class ControlCommands(unittest.TestCase):
 
     def test_capture_show_is_idempotent_and_toggle_is_explicit(self):
         self.assertEqual(self.route(["capture"]), ["call", "--", "capture", "show", "", ""])
-        self.assertEqual(self.route(["capture", "open", "--mode", "recording", "--target", "screen"]),
-            ["call", "--", "capture", "show", "recording", "screen"])
+        self.assertEqual(
+            self.route(["capture", "open", "--mode", "recording", "--target", "screen"]),
+            ["call", "--", "capture", "show", "recording", "screen"],
+        )
         self.assertEqual(self.route(["capture", "toggle"]), ["call", "--", "capture", "open"])
 
     def test_text_stays_one_argument_without_shell_interpretation(self):
@@ -39,13 +55,23 @@ class ControlCommands(unittest.TestCase):
         self.assertEqual(self.route(["ipc", "example", "method", text]), ["call", "--", "example", "method", text])
 
     def test_extended_commands_target_the_shared_actions(self):
-        self.assertEqual(self.route(["audio", "mute", "--input"]), ["call", "--", "actions", "audio", "mute", "true", "0"])
-        self.assertEqual(self.route(["media", "seek", "30", "--player", "org.mpris.MediaPlayer2.test"]),
-            ["call", "--", "actions", "media", "seek", "org.mpris.MediaPlayer2.test", "30.0"])
-        self.assertEqual(self.route(["notifications", "invoke", "session:3", "open"]),
-            ["call", "--", "actions", "notification", "invoke", "session:3", "open"])
-        self.assertEqual(self.route(["windows", "close", "instance:2"]), ["call", "--", "actions", "window", "close", "instance:2"])
-        self.assertEqual(self.route(["dock", "move", "app", "2"]), ["call", "--", "actions", "dock", "move", "app", "2"])
+        self.assertEqual(
+            self.route(["audio", "mute", "--input"]), ["call", "--", "actions", "audio", "mute", "true", "0"]
+        )
+        self.assertEqual(
+            self.route(["media", "seek", "30", "--player", "org.mpris.MediaPlayer2.test"]),
+            ["call", "--", "actions", "media", "seek", "org.mpris.MediaPlayer2.test", "30.0"],
+        )
+        self.assertEqual(
+            self.route(["notifications", "invoke", "session:3", "open"]),
+            ["call", "--", "actions", "notification", "invoke", "session:3", "open"],
+        )
+        self.assertEqual(
+            self.route(["windows", "close", "instance:2"]), ["call", "--", "actions", "window", "close", "instance:2"]
+        )
+        self.assertEqual(
+            self.route(["dock", "move", "app", "2"]), ["call", "--", "actions", "dock", "move", "app", "2"]
+        )
 
     def test_desktop_controls(self):
         cases = [
@@ -61,13 +87,17 @@ class ControlCommands(unittest.TestCase):
             (["audio", "volume", "30"], ["audio", "volume", "false", "30.0"]),
             (["bluetooth", "scan", "on"], ["bluetooth", "scan", "on"]),
             (["bluetooth", "connect", "AA:BB:CC:DD:EE:FF"], ["bluetooth", "connect", "AA:BB:CC:DD:EE:FF"]),
-            (["network", "connect", "00000000-1111-2222-3333-444444444444"], ["network", "connect", "00000000-1111-2222-3333-444444444444"]),
+            (
+                ["network", "connect", "00000000-1111-2222-3333-444444444444"],
+                ["network", "connect", "00000000-1111-2222-3333-444444444444"],
+            ),
             (["power", "set", "balanced"], ["service", "power", "set", "balanced"]),
             (["night-light", "off"], ["service", "night-light", "off", ""]),
             (["awake", "toggle"], ["service", "awake", "toggle", ""]),
         ]
         for words, call in cases:
-            with self.subTest(words=words): self.assertEqual(self.route(words), ["call", "--", "actions", *call])
+            with self.subTest(words=words):
+                self.assertEqual(self.route(words), ["call", "--", "actions", *call])
 
     def test_network_refresh_waits_for_data_and_reports_failure(self):
         query = Mock(side_effect=[{"pending": True}, {"busy": True}, {"busy": False, "ready": True, "connections": []}])
@@ -75,49 +105,88 @@ class ControlCommands(unittest.TestCase):
         self.assertEqual(state["connections"], [])
         self.assertEqual(query.call_count, 3)
         query = Mock(side_effect=[{}, {"busy": False, "ready": True, "error": "nmcli failed"}])
-        with self.assertRaisesRegex(RuntimeError, "nmcli failed"): ctl.refresh_network([], query=query)
+        with self.assertRaisesRegex(RuntimeError, "nmcli failed"):
+            ctl.refresh_network([], query=query)
         query = Mock(return_value={"busy": True})
         with self.assertRaisesRegex(RuntimeError, "timed out"):
             ctl.refresh_network([], query=query, monotonic=Mock(side_effect=[0, 16]))
 
     def test_capture_options_preserve_false_and_zero(self):
         import json
+
         call = self.route(["capture", "configure", "--no-copy", "--delay", "0", "--region", "0", "0", "20", "30"])
         self.assertEqual(call[:4], ["call", "--", "capture", "configure"])
-        self.assertEqual(json.loads(call[4]), {"copy": False, "delay": 0, "region": {"x": 0, "y": 0, "width": 20, "height": 30}})
+        self.assertEqual(
+            json.loads(call[4]), {"copy": False, "delay": 0, "region": {"x": 0, "y": 0, "width": 20, "height": 30}}
+        )
 
     def test_invalid_options_fail_before_ipc(self):
-        for words in (["capture", "take", "--mode", "recording"], ["sidebar", "edge", "bottom"],
-                      ["sidebar", "open", "notes"], ["search", "query"], ["search", "open", "text"], ["audio", "volume", "nan"], ["media", "seek", "inf"],
-                      ["notifications", "clear", "1"], ["notifications", "invoke", "1"], ["windows", "close"],
-                      ["dock", "move", "app", "-1"], ["capture", "configure"],
-                      ["controls", "page"], ["controls", "open", "audio"], ["controls", "page", "network", "--input"],
-                      ["audio", "select"], ["audio", "devices", "bad"], ["audio", "volume", "bad"],
-                      ["bluetooth", "scan", "toggle"], ["bluetooth", "connect", "other"], ["network", "connect", "bad"],
-                      ["power", "set"], ["night-light", "on", "bad"],
-                      ["apps", "launch"], ["apps", "list", "--new-window"], ["keyboard", "select", "xkb"],
-                      ["keyboard", "next", "xkb", "gb"], ["controls", "hide"], ["controls", "show", "dnd", "--input"],
-                      ["vpn", "connect"], ["vpn", "list", "tailscale"]):
+        for words in (
+            ["capture", "take", "--mode", "recording"],
+            ["sidebar", "edge", "bottom"],
+            ["sidebar", "open", "notes"],
+            ["search", "query"],
+            ["search", "open", "text"],
+            ["audio", "volume", "nan"],
+            ["media", "seek", "inf"],
+            ["notifications", "clear", "1"],
+            ["notifications", "invoke", "1"],
+            ["windows", "close"],
+            ["dock", "move", "app", "-1"],
+            ["capture", "configure"],
+            ["controls", "page"],
+            ["controls", "open", "audio"],
+            ["controls", "page", "network", "--input"],
+            ["audio", "select"],
+            ["audio", "devices", "bad"],
+            ["audio", "volume", "bad"],
+            ["bluetooth", "scan", "toggle"],
+            ["bluetooth", "connect", "other"],
+            ["network", "connect", "bad"],
+            ["power", "set"],
+            ["night-light", "on", "bad"],
+            ["apps", "launch"],
+            ["apps", "list", "--new-window"],
+            ["keyboard", "select", "xkb"],
+            ["keyboard", "next", "xkb", "gb"],
+            ["controls", "hide"],
+            ["controls", "show", "dnd", "--input"],
+            ["vpn", "connect"],
+            ["vpn", "list", "tailscale"],
+        ):
             with self.subTest(words=words), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 self.route(words)
 
     def test_explicit_not_ready_can_retry(self):
-        run = Mock(side_effect=[subprocess.CompletedProcess([], 0, "Not ready to accept queries yet.\n", ""),
-            subprocess.CompletedProcess([], 0, '{"ok":true}\n', "")])
-        with contextlib.redirect_stdout(io.StringIO()): self.assertEqual(ctl.execute(["qs"], run, Mock()), 0)
+        run = Mock(
+            side_effect=[
+                subprocess.CompletedProcess([], 0, "Not ready to accept queries yet.\n", ""),
+                subprocess.CompletedProcess([], 0, '{"ok":true}\n', ""),
+            ]
+        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(ctl.execute(["qs"], run, Mock()), 0)
         self.assertEqual(run.call_count, 2)
 
     def test_unknown_outcome_is_never_repeated(self):
         for failure in (subprocess.TimeoutExpired("qs", 4), OSError("disconnected")):
             run = Mock(side_effect=failure)
-            with self.assertRaises(type(failure)): ctl.execute(["qs"], run, Mock())
+            with self.assertRaises(type(failure)):
+                ctl.execute(["qs"], run, Mock())
             self.assertEqual(run.call_count, 1)
 
     def test_missing_method_and_rejected_action_are_errors(self):
-        for output in ('No running instances for /missing/shell.qml', 'Function not found.', ' ERROR quickshell.ipc: Error occurred while waiting for response.', '{"ok":false,"error":"Capture already running"}'):
+        for output in (
+            "No running instances for /missing/shell.qml",
+            "Function not found.",
+            " ERROR quickshell.ipc: Error occurred while waiting for response.",
+            '{"ok":false,"error":"Capture already running"}',
+        ):
             run = Mock(return_value=subprocess.CompletedProcess([], 0, output, ""))
-            with self.assertRaises(RuntimeError): ctl.execute(["qs"], run, Mock())
+            with self.assertRaises(RuntimeError):
+                ctl.execute(["qs"], run, Mock())
             self.assertEqual(run.call_count, 1)
 
 
-if __name__ == "__main__": unittest.main()
+if __name__ == "__main__":
+    unittest.main()

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Run with Gnoblin's isolated run-gnome-shell.sh, never on the live session."""
+
 import json
 import os
 from pathlib import Path
@@ -8,8 +9,8 @@ import subprocess
 import sys
 import time
 
-if sys.argv[1:] == ['--window']:
-    app_file = Path(os.environ['XDG_CONFIG_HOME']) / 'popup-focus-app.qml'
+if sys.argv[1:] == ["--window"]:
+    app_file = Path(os.environ["XDG_CONFIG_HOME"]) / "popup-focus-app.qml"
     app_file.write_text("""import QtQuick
 import QtQuick.Window
 import Quickshell
@@ -22,24 +23,27 @@ ShellRoot {
     }
 }
 """)
-    os.execvp('qs', ['qs', '-p', str(app_file)])
+    os.execvp("qs", ["qs", "-p", str(app_file)])
 
-root = Path(os.environ['XDG_CONFIG_HOME']) / 'gnoblin'
-if not str(root).startswith('/tmp/gnoblin-gs.'):
-    sys.exit('Use GNOBLIN_TEST_DBUS_CLIENT with Gnoblin scripts/run-gnome-shell.sh.')
-(root / 'scripts').mkdir(parents=True, exist_ok=True)
-fixture = root / 'popup-focus-fixture'
+root = Path(os.environ["XDG_CONFIG_HOME"]) / "gnoblin"
+if not str(root).startswith("/tmp/gnoblin-gs."):
+    sys.exit("Use GNOBLIN_TEST_DBUS_CLIENT with Gnoblin scripts/run-gnome-shell.sh.")
+(root / "scripts").mkdir(parents=True, exist_ok=True)
+fixture = root / "popup-focus-fixture"
 fixture.mkdir()
-source = Path(__file__).resolve().parent.parent / 'shell/bingux'
-for name in ('Theme.qml', 'ShellPopup.qml', 'PanelOutline.qml', 'MenuNavigator.qml'):
+source = Path(__file__).resolve().parent.parent / "shell/bingux"
+for name in ("Theme.qml", "ShellPopup.qml", "PanelOutline.qml", "MenuNavigator.qml"):
     shutil.copy2(source / name, fixture / name)
-(fixture / 'qmldir').write_text('singleton Theme 1.0 Theme.qml\nShellPopup 1.0 ShellPopup.qml\nPanelOutline 1.0 PanelOutline.qml\nMenuNavigator 1.0 MenuNavigator.qml\n')
-report = root / 'popup-focus-report.json'
-probe = root / 'scripts/popup-focus-probe.js'
+(fixture / "qmldir").write_text(
+    "singleton Theme 1.0 Theme.qml\nShellPopup 1.0 ShellPopup.qml\nPanelOutline 1.0 PanelOutline.qml\nMenuNavigator 1.0 MenuNavigator.qml\n"
+)
+report = root / "popup-focus-report.json"
+probe = root / "scripts/popup-focus-probe.js"
 
 
-def snapshot(action=''):
-    probe.write_text('''
+def snapshot(action=""):
+    probe.write_text(
+        """
 import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
 import Meta from 'gi://Meta';
@@ -57,8 +61,9 @@ export default function () {
             pid: a.meta_window.get_pid(), maximized: a.meta_window.is_maximized(), layer: a.meta_window.get_window_type() === Meta.WindowType.DOCK,
             focus: a.meta_window === global.display.focus_window}))}));
 }
-'''.replace('ACTION', action).replace('REPORT', json.dumps(str(report))))
-    subprocess.run(['gnoblinctl', 'script', 'reload'], check=True, capture_output=True)
+""".replace("ACTION", action).replace("REPORT", json.dumps(str(report)))
+    )
+    subprocess.run(["gnoblinctl", "script", "reload"], check=True, capture_output=True)
     return json.loads(report.read_text())
 
 
@@ -68,40 +73,40 @@ def wait_for(operation, description):
         result = operation()
         if result:
             return result
-        time.sleep(.1)
-    raise AssertionError(f'{description}: {snapshot()}')
+        time.sleep(0.1)
+    raise AssertionError(f"{description}: {snapshot()}")
 
 
 def ipc(method, *args):
-    result = subprocess.run(['qs', '-p', str(fixture), 'ipc', 'call', 'popup', method, *args],
-                            capture_output=True, text=True, timeout=5)
+    result = subprocess.run(
+        ["qs", "-p", str(fixture), "ipc", "call", "popup", method, *args], capture_output=True, text=True, timeout=5
+    )
     if result.returncode:
         return None
-    return json.loads(result.stdout) if method == 'status' else True
+    return json.loads(result.stdout) if method == "status" else True
 
 
 def move(x, y):
-    snapshot(f'Main.wm._popupPointer.notify_absolute_motion(GLib.get_monotonic_time(), {x}, {y});')
+    snapshot(f"Main.wm._popupPointer.notify_absolute_motion(GLib.get_monotonic_time(), {x}, {y});")
 
 
 def pointer_button(state):
-    snapshot('Main.wm._popupPointer.notify_button(GLib.get_monotonic_time(), '
-             f'1, Clutter.ButtonState.{state});')
+    snapshot(f"Main.wm._popupPointer.notify_button(GLib.get_monotonic_time(), 1, Clutter.ButtonState.{state});")
 
 
 def click():
-    pointer_button('PRESSED')
-    pointer_button('RELEASED')
+    pointer_button("PRESSED")
+    pointer_button("RELEASED")
 
 
 def key(keyval):
-    for state in ['PRESSED', 'RELEASED']:
-        snapshot('Main.wm._popupKeyboard.notify_keyval(GLib.get_monotonic_time(), '
-                 f'{keyval}, Clutter.KeyState.{state});')
+    for state in ["PRESSED", "RELEASED"]:
+        snapshot(
+            f"Main.wm._popupKeyboard.notify_keyval(GLib.get_monotonic_time(), {keyval}, Clutter.KeyState.{state});"
+        )
 
 
-
-(fixture / 'shell.qml').write_text("""import QtQuick
+(fixture / "shell.qml").write_text("""import QtQuick
 import Quickshell
 import Quickshell.Io
 ShellRoot {
@@ -134,66 +139,79 @@ ShellRoot {
     }
 }
 """)
-app = subprocess.Popen([sys.executable, __file__, '--window'])
+app = subprocess.Popen([sys.executable, __file__, "--window"])
 shell = None
 try:
-    wait_for(lambda: any(w['title'] == 'Popup focus test' for w in snapshot()['windows']), 'application')
-    snapshot("global.get_window_actors().find(a => a.meta_window.get_title() === 'Popup focus test').meta_window.activate(global.get_current_time());")
-    shell = subprocess.Popen(['qs', '-p', str(fixture)])
-    wait_for(lambda: ipc('status'), 'popup IPC')
-    snapshot("Main.wm._popupFocus = []; global.display.connect('notify::focus-window', () => Main.wm._popupFocus.push(global.display.focus_window?.get_title() ?? 'null'));")
-    ipc('open')
-    time.sleep(.4)
+    wait_for(lambda: any(w["title"] == "Popup focus test" for w in snapshot()["windows"]), "application")
+    snapshot(
+        "global.get_window_actors().find(a => a.meta_window.get_title() === 'Popup focus test').meta_window.activate(global.get_current_time());"
+    )
+    shell = subprocess.Popen(["qs", "-p", str(fixture)])
+    wait_for(lambda: ipc("status"), "popup IPC")
+    snapshot(
+        "Main.wm._popupFocus = []; global.display.connect('notify::focus-window', () => Main.wm._popupFocus.push(global.display.focus_window?.get_title() ?? 'null'));"
+    )
+    ipc("open")
+    time.sleep(0.4)
     move(900, 600)
     click()
-    time.sleep(.4)
+    time.sleep(0.4)
     result = snapshot()
-    trace = result['focusTrace']
-    print('FOCUS_TRACE:', trace)
-    assert not trace, 'menu keyboard routing must leave the application focused throughout'
-    assert not ipc('status')['open'], 'outside click closes menu'
-    ipc('open')
-    time.sleep(.3)
-    ipc('reopen')
-    time.sleep(.2)
-    key(0xff54)
-    wait_for(lambda: ipc('status')['index'] == 0, 'Down works immediately without a menu click')
-    key(0xff54)
-    wait_for(lambda: ipc('status')['index'] == 1, 'Down selects next entry')
-    key(0xff52)
-    wait_for(lambda: ipc('status')['index'] == 0, 'Up selects previous entry')
-    key(0xff0d)
-    wait_for(lambda: ipc('status')['activations'] == 1 and not ipc('status')['open'], 'Enter activates selected entry')
-    ipc('open')
-    time.sleep(.3)
-    wait_for(lambda: any(w['title'] == 'Popup focus test' and w['focus'] for w in snapshot()['windows']), 'app remains focused while menu receives keys')
-    key(0xff1b)
-    wait_for(lambda: not ipc('status')['open'], 'Escape closes focused menu')
-    wait_for(lambda: any(w['title'] == 'Popup focus test' and w['focus'] for w in snapshot()['windows']), 'Escape restores application focus')
-    ipc('open')
-    time.sleep(.3)
+    trace = result["focusTrace"]
+    print("FOCUS_TRACE:", trace)
+    assert not trace, "menu keyboard routing must leave the application focused throughout"
+    assert not ipc("status")["open"], "outside click closes menu"
+    ipc("open")
+    time.sleep(0.3)
+    ipc("reopen")
+    time.sleep(0.2)
+    key(0xFF54)
+    wait_for(lambda: ipc("status")["index"] == 0, "Down works immediately without a menu click")
+    key(0xFF54)
+    wait_for(lambda: ipc("status")["index"] == 1, "Down selects next entry")
+    key(0xFF52)
+    wait_for(lambda: ipc("status")["index"] == 0, "Up selects previous entry")
+    key(0xFF0D)
+    wait_for(lambda: ipc("status")["activations"] == 1 and not ipc("status")["open"], "Enter activates selected entry")
+    ipc("open")
+    time.sleep(0.3)
+    wait_for(
+        lambda: any(w["title"] == "Popup focus test" and w["focus"] for w in snapshot()["windows"]),
+        "app remains focused while menu receives keys",
+    )
+    key(0xFF1B)
+    wait_for(lambda: not ipc("status")["open"], "Escape closes focused menu")
+    wait_for(
+        lambda: any(w["title"] == "Popup focus test" and w["focus"] for w in snapshot()["windows"]),
+        "Escape restores application focus",
+    )
+    ipc("open")
+    time.sleep(0.3)
     for cycle in range(8):
         move(640, 74)
-        wait_for(lambda: ipc('status')['hovered'], 'menu hover before leaving')
+        wait_for(lambda: ipc("status")["hovered"], "menu hover before leaving")
         move(900, 600)
-        wait_for(lambda: not ipc('status')['hovered'], 'pointer leaves menu')
-        time.sleep(.15)
+        wait_for(lambda: not ipc("status")["hovered"], "pointer leaves menu")
+        time.sleep(0.15)
         move(640, 74)
-        wait_for(lambda: ipc('status')['hovered'], f'menu hover returns on cycle {cycle}')
+        wait_for(lambda: ipc("status")["hovered"], f"menu hover returns on cycle {cycle}")
         click()
-        wait_for(lambda: ipc('status')['mouseActivations'] == cycle + 1, 'returned pointer activates menu')
+        wait_for(lambda: ipc("status")["mouseActivations"] == cycle + 1, "returned pointer activates menu")
     move(900, 600)
     click()
-    wait_for(lambda: not ipc('status')['open'], 'outside dismissal still works after pointer re-entry')
-    assert not snapshot()['focusTrace'], 'keyboard and pointer menu interaction never deactivates the app'
-    ipc('open')
-    time.sleep(.2)
+    wait_for(lambda: not ipc("status")["open"], "outside dismissal still works after pointer re-entry")
+    assert not snapshot()["focusTrace"], "keyboard and pointer menu interaction never deactivates the app"
+    ipc("open")
+    time.sleep(0.2)
     shell.terminate()
     shell.wait(timeout=5)
     shell = None
-    wait_for(lambda: not any(w['layer'] for w in snapshot()['windows']), 'open menu teardown removes surfaces')
-    assert not snapshot()['focusTrace'], 'destroying an open menu preserves application focus'
-    print('POPUP_FOCUS_PASSED')
+    wait_for(lambda: not any(w["layer"] for w in snapshot()["windows"]), "open menu teardown removes surfaces")
+    assert not snapshot()["focusTrace"], "destroying an open menu preserves application focus"
+    print("POPUP_FOCUS_PASSED")
 finally:
-    if shell: shell.terminate(); shell.wait(timeout=5)
-    app.terminate(); app.wait(timeout=5)
+    if shell:
+        shell.terminate()
+        shell.wait(timeout=5)
+    app.terminate()
+    app.wait(timeout=5)

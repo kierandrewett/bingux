@@ -12,30 +12,62 @@ Item {
     readonly property int controlSize: 24
     property string timeoutPath: "timeout"
     property var services: ControlCentreServices
-    Binding { target: root.services; property: "statusVisible"; value: root.visible }
+    Binding {
+        target: root.services
+        property: "statusVisible"
+        value: root.visible
+    }
     readonly property var extraIndicators: {
         const rows = [];
         const service = root.services;
         const state = service.state;
-        if (root.microphoneMuted) rows.push({key: "microphone", icon: "microphone-sensitivity-muted-symbolic",
-            active: true, label: "Microphone muted"});
+        if (root.microphoneMuted)
+            rows.push({
+                key: "microphone",
+                icon: "microphone-sensitivity-muted-symbolic",
+                active: true,
+                label: "Microphone muted"
+            });
         if (service.showControl("vpn") && service.vpns.length) {
             const connected = service.vpns.filter(vpn => vpn.connected);
-            rows.push({key: "vpn", icon: "network-vpn-symbolic", active: connected.length > 0,
-                label: "VPN: " + (connected.length ? connected.map(vpn => vpn.name + ", " + vpn.subtitle).join("; ") : "Disconnected")});
+            rows.push({
+                key: "vpn",
+                icon: "network-vpn-symbolic",
+                active: connected.length > 0,
+                label: "VPN: " + (connected.length ? connected.map(vpn => vpn.name + ", " + vpn.subtitle).join("; ") : "Disconnected")
+            });
         }
-        if (service.showControl("dnd")) rows.push({key: "dnd", icon: "notifications-disabled-symbolic",
-            active: service.doNotDisturb, label: "Do Not Disturb: " + (service.doNotDisturb ? "On" : "Off")});
-        if (service.showControl("nightLight")) rows.push({key: "nightLight", icon: "night-light-symbolic",
-            active: !!state.nightLightActive, label: "Night Light: " + (!state.nightLightAvailable ? "Unavailable" : state.nightLightActive ? "On" : state.nightLight ? "Scheduled" : "Off")});
+        if (service.showControl("dnd"))
+            rows.push({
+                key: "dnd",
+                icon: "notifications-disabled-symbolic",
+                active: service.doNotDisturb,
+                label: "Do Not Disturb: " + (service.doNotDisturb ? "On" : "Off")
+            });
+        if (service.showControl("nightLight"))
+            rows.push({
+                key: "nightLight",
+                icon: "night-light-symbolic",
+                active: !!state.nightLightActive,
+                label: "Night Light: " + (!state.nightLightAvailable ? "Unavailable" : state.nightLightActive ? "On" : state.nightLight ? "Scheduled" : "Off")
+            });
         if (service.showControl("power")) {
             const power = state.power || {};
             const profile = ["power-saver", "balanced", "performance"].includes(power.profile) ? power.profile : "balanced";
-            rows.push({key: "power", icon: "power-profile-" + profile + "-symbolic", active: !!power.available,
-                label: "Power mode: " + (!power.available ? "Unavailable" : profile === "power-saver" ? "Power Saver" : profile === "performance" ? "Performance" : "Balanced")});
+            rows.push({
+                key: "power",
+                icon: "power-profile-" + profile + "-symbolic",
+                active: !!power.available,
+                label: "Power mode: " + (!power.available ? "Unavailable" : profile === "power-saver" ? "Power Saver" : profile === "performance" ? "Performance" : "Balanced")
+            });
         }
-        if (service.showControl("awake") || service.keepAwake) rows.push({key: "awake", icon: "display-brightness-symbolic",
-            active: service.keepAwake, label: "Keep Awake: " + (service.keepAwake ? "On" : "Off")});
+        if (service.showControl("awake") || service.keepAwake)
+            rows.push({
+                key: "awake",
+                icon: "display-brightness-symbolic",
+                active: service.keepAwake,
+                label: "Keep Awake: " + (service.keepAwake ? "On" : "Off")
+            });
         return rows;
     }
     readonly property string extraStatusDescription: extraIndicators.filter(indicator => indicator.active).map(indicator => indicator.label).join("\n")
@@ -134,7 +166,7 @@ Item {
             onStreamFinished: root.updateNetworkState(this.text)
         }
 
-        onExited: function(exitCode) {
+        onExited: function (exitCode) {
             if (exitCode !== 0) {
                 root.networkState = "unknown";
             }
@@ -158,7 +190,6 @@ Item {
     implicitHeight: controlSize
     width: implicitWidth
     height: implicitHeight
-
 
     function audioIconName() {
         if (!audioAvailable || audioMuted || audioVolume <= 0.01) {
@@ -229,8 +260,12 @@ Item {
             MouseArea {
                 anchors.fill: parent
                 enabled: parent.shown
-                onClicked: if (root.audioAvailable) root.audioSink.audio.muted = !root.audioSink.audio.muted
-                onWheel: wheel => { root.changeVolume(wheel.angleDelta.y > 0 ? 0.05 : -0.05); wheel.accepted = true; }
+                onClicked: if (root.audioAvailable)
+                    root.audioSink.audio.muted = !root.audioSink.audio.muted
+                onWheel: wheel => {
+                    root.changeVolume(wheel.angleDelta.y > 0 ? 0.05 : -0.05);
+                    wheel.accepted = true;
+                }
             }
         }
         StatusIndicator {

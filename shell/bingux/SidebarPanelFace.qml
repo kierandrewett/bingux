@@ -14,7 +14,7 @@ Item {
     property var barWindow: null
     property bool selected: false
     readonly property alias panelBody: body
-    signal clicked()
+    signal clicked
     implicitWidth: inlinePanel ? 320 : launcher.implicitWidth
     implicitHeight: inlinePanel ? Math.min(480, panelHeight + (fitContent && showHeader ? heading.height + Theme.gap * 3 : 0)) : Theme.barHeight
     IconButton {
@@ -33,14 +33,17 @@ Item {
     WidgetFace {
         id: heading
         visible: root.inlinePanel && root.showHeader
-        x: Theme.gap; y: Theme.gap
+        x: Theme.gap
+        y: Theme.gap
         presentation: root.presentation
     }
     Item {
         id: body
         visible: root.inlinePanel
         anchors {
-            left: parent.left; right: parent.right; bottom: parent.bottom
+            left: parent.left
+            right: parent.right
+            bottom: parent.bottom
             top: root.showHeader ? heading.bottom : parent.top
             margins: root.showHeader ? Theme.gap : 0
         }

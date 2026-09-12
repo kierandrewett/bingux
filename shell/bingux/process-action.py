@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Signal the selected process without risking a reused PID."""
+
 import argparse
 import json
 import sys
@@ -12,8 +13,7 @@ def act(pid, start_time, action):
     if action == "copy":
         subprocess.run(["wl-copy", str(pid)], check=True)
         return "PID copied"
-    signals = {"pause": signal.SIGSTOP, "resume": signal.SIGCONT,
-               "end": signal.SIGTERM, "kill": signal.SIGKILL}
+    signals = {"pause": signal.SIGSTOP, "resume": signal.SIGCONT, "end": signal.SIGTERM, "kill": signal.SIGKILL}
     if pid <= 1 or start_time <= 0 or action not in signals:
         raise ValueError("Invalid process selection")
     fd = os.pidfd_open(pid)
@@ -25,8 +25,12 @@ def act(pid, start_time, action):
         signal.pidfd_send_signal(fd, signals[action])
     finally:
         os.close(fd)
-    return {"pause": "Process paused", "resume": "Process resumed",
-            "end": "End requested", "kill": "Force quit requested"}[action]
+    return {
+        "pause": "Process paused",
+        "resume": "Process resumed",
+        "end": "End requested",
+        "kill": "Force quit requested",
+    }[action]
 
 
 def act_batch(processes, action):
@@ -45,7 +49,9 @@ def act_batch(processes, action):
             succeeded += 1
         except (OSError, ValueError) as error:
             errors.append(f"PID {pid}: {error}")
-    label = {"pause": "Paused", "resume": "Resumed", "end": "End requested for", "kill": "Force quit requested for"}[action]
+    label = {"pause": "Paused", "resume": "Resumed", "end": "End requested for", "kill": "Force quit requested for"}[
+        action
+    ]
     message = f"{label} {succeeded} processes"
     if errors:
         message += f"; {len(errors)} failed. " + "; ".join(errors[:3])

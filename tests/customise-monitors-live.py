@@ -4,6 +4,7 @@
 Start Gnoblin with two 1920x1200 virtual monitors. Only the private test
 configuration is changed; no display settings are made persistent.
 """
+
 import argparse
 import json
 import os
@@ -14,8 +15,12 @@ import sys
 from private_shell import display_state
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--cases", nargs="+", choices=["editor-compact", "sidebar-layout", "overflow-edit", "dock-unpin"],
-                    default=["editor-compact", "sidebar-layout", "overflow-edit"])
+parser.add_argument(
+    "--cases",
+    nargs="+",
+    choices=["editor-compact", "sidebar-layout", "overflow-edit", "dock-unpin"],
+    default=["editor-compact", "sidebar-layout", "overflow-edit"],
+)
 parser.add_argument("--arrangements", nargs="+", choices=["horizontal", "vertical"], default=["horizontal", "vertical"])
 parser.add_argument("--capture-dir", type=Path)
 args = parser.parse_args()
@@ -23,8 +28,9 @@ if not os.environ.get("WAYLAND_DISPLAY", "").startswith("gnoblin-gs-"):
     raise SystemExit("Only a private Gnoblin compositor can change displays for this test")
 if not str(Path(os.environ["XDG_CONFIG_HOME"]).resolve()).startswith("/tmp/gnoblin-gs."):
     raise SystemExit("The test requires private compositor settings")
-subprocess.run(["gsettings", "set", "org.gnome.mutter", "experimental-features",
-                "['scale-monitor-framebuffer']"], check=True)
+subprocess.run(
+    ["gsettings", "set", "org.gnome.mutter", "experimental-features", "['scale-monitor-framebuffer']"], check=True
+)
 initial = display_state()
 if len(initial[1]) != 2:
     raise SystemExit("Start the private compositor with two virtual monitors")
@@ -43,8 +49,17 @@ for arrangement in args.arrangements:
     primary = 0 if arrangement == "horizontal" else 1
     command = ["gdctl", "set", "--layout-mode", "logical"]
     for index, connector in enumerate(connectors):
-        command += ["--logical-monitor", "--monitor", connector, "--scale", str(scales[index]),
-                    "--x", str(positions[index][0]), "--y", str(positions[index][1])]
+        command += [
+            "--logical-monitor",
+            "--monitor",
+            connector,
+            "--scale",
+            str(scales[index]),
+            "--x",
+            str(positions[index][0]),
+            "--y",
+            str(positions[index][1]),
+        ]
         if index == primary:
             command.append("--primary")
     subprocess.run(command, check=True)
@@ -53,7 +68,11 @@ for arrangement in args.arrangements:
         raise SystemExit("The compositor did not create two separate logical displays")
     for index, connector in enumerate(connectors):
         logical = next(item for item in actual[2] if any(monitor[0] == connector for monitor in item[5]))
-        if tuple(logical[:2]) != positions[index] or abs(logical[2] - scales[index]) > 0.001 or logical[4] != (index == primary):
+        if (
+            tuple(logical[:2]) != positions[index]
+            or abs(logical[2] - scales[index]) > 0.001
+            or logical[4] != (index == primary)
+        ):
             raise SystemExit(f"Unexpected logical display for {connector}: {logical}")
         environment = os.environ | {
             "BINGUX_TEST_SCREEN_NAME": connector,
@@ -65,7 +84,10 @@ for arrangement in args.arrangements:
             args.capture_dir.mkdir(parents=True, exist_ok=True)
             environment["BINGUX_GROUP_CAPTURE"] = str(args.capture_dir / f"{arrangement}-{connector}")
             environment["BINGUX_NATIVE_SCREENSHOT"] = str(args.capture_dir / f"{arrangement}-{connector}-editor.png")
-        print(f"DISPLAY {arrangement} {connector}: origin={positions[index]} size={sizes[index]} scale={scales[index]} primary={index == primary}", flush=True)
+        print(
+            f"DISPLAY {arrangement} {connector}: origin={positions[index]} size={sizes[index]} scale={scales[index]} primary={index == primary}",
+            flush=True,
+        )
         for case in args.cases:
             subprocess.run([sys.executable, str(runner), "--case", case], env=environment, check=True)
         print(f"PASS: {', '.join(args.cases)} on {arrangement} {connector}", flush=True)

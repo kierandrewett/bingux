@@ -3,10 +3,25 @@ import QtTest
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
+
 ShellRoot {
-    Timer { id: finish; interval: 200; onTriggered: Qt.quit() }
-    FileView { id: report; blockWrites: true; path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS") }
-    Dock { id: dock; visible: false; settings: ({pinnedApps: []}) }
+    Timer {
+        id: finish
+        interval: 200
+        onTriggered: Qt.quit()
+    }
+    FileView {
+        id: report
+        blockWrites: true
+        path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS")
+    }
+    Dock {
+        id: dock
+        visible: false
+        settings: ({
+                pinnedApps: []
+            })
+    }
     TestCase {
         when: true
         property var original: []
@@ -16,7 +31,10 @@ ShellRoot {
             const appId = Quickshell.env("BINGUX_DOCK_LAUNCH_TEST_ID") || "org.gnome.Nautilus";
             const app = DesktopEntries.byId(appId);
             verify(app !== null);
-            const group = {id: app.startupClass || app.id.replace(/\.desktop$/, ""), desktopEntry: app};
+            const group = {
+                id: app.startupClass || app.id.replace(/\.desktop$/, ""),
+                desktopEntry: app
+            };
             report.setText("FAIL: launch not completed\n");
             const started = Date.now();
             dock.launch(group, true);
@@ -27,7 +45,8 @@ ShellRoot {
         }
         function cleanupTestCase() {
             for (const w of ToplevelManager.toplevels.values)
-                if (!original.includes(w) && (w.appId.includes("BinguxDockTest") || w.appId.includes("Nautilus"))) w.close();
+                if (!original.includes(w) && (w.appId.includes("BinguxDockTest") || w.appId.includes("Nautilus")))
+                    w.close();
             finish.start();
         }
     }

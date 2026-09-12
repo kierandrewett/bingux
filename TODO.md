@@ -15,7 +15,7 @@ work belongs in Git history and does not stay here as a second changelog.
 ## Shell maintenance
 
 - [ ] Replace remaining direct `qs` launches with the installed launcher or an
-  explicit `BINGUX_QUICKSHELL` value.
+      explicit `BINGUX_QUICKSHELL` value.
 - [ ] Add a single runtime dependency report to Settings and `binguxctl`.
 - [ ] Move optional Python helpers behind clear feature checks.
 - [ ] Keep every long-running helper at core limit zero and test crash recovery.
@@ -29,7 +29,7 @@ work belongs in Git history and does not stay here as a second changelog.
 - [x] Provide settings, actions, events, shared controls and anchored popups.
 - [x] Test preview isolation, unload cleanup and fresh-process placement restore.
 - [ ] Add the Home Assistant extension after its server and entity contract is
-  chosen.
+      chosen.
 
 ## Documentation
 

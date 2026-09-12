@@ -10,9 +10,16 @@ ColumnLayout {
     Text {
         Layout.fillWidth: true
         text: "Extensions can add widgets and change shell behaviour. Enable extensions you trust: they run with your session access."
-        color: Theme.muted; wrapMode: Text.Wrap; font.pixelSize: Theme.fontSize
+        color: Theme.muted
+        wrapMode: Text.Wrap
+        font.pixelSize: Theme.fontSize
     }
-    SettingsRow { Layout.fillWidth: true; title: "Reload extensions"; subtitle: "Find installed extensions and reload their components"; onClicked: ExtensionRegistry.reload() }
+    SettingsRow {
+        Layout.fillWidth: true
+        title: "Reload extensions"
+        subtitle: "Find installed extensions and reload their components"
+        onClicked: ExtensionRegistry.reload()
+    }
     Repeater {
         model: ExtensionRegistry.extensions
         ColumnLayout {
@@ -35,9 +42,12 @@ ColumnLayout {
         }
     }
     Text {
-        Layout.fillWidth: true; visible: !ExtensionRegistry.extensions.length
+        Layout.fillWidth: true
+        visible: !ExtensionRegistry.extensions.length
         text: "No extensions installed. Place an extension folder in ~/.local/share/bingux/extensions, then select Reload extensions."
-        wrapMode: Text.Wrap; color: Theme.muted; font.pixelSize: Theme.fontSize
+        wrapMode: Text.Wrap
+        color: Theme.muted
+        font.pixelSize: Theme.fontSize
     }
     Repeater {
         model: ExtensionRegistry.errors
@@ -45,20 +55,33 @@ ColumnLayout {
             required property var modelData
             Layout.fillWidth: true
             text: modelData.id + ": " + modelData.message
-            wrapMode: Text.Wrap; textFormat: Text.PlainText; color: Theme.warning; font.pixelSize: Theme.fontSmall
+            wrapMode: Text.Wrap
+            textFormat: Text.PlainText
+            color: Theme.warning
+            font.pixelSize: Theme.fontSmall
         }
     }
     Loader {
         id: page
         objectName: "extensionSettingsContent"
         Layout.fillWidth: true
-        readonly property var context: ExtensionContext { extensionId: root.selectedId }
+        readonly property var context: ExtensionContext {
+            extensionId: root.selectedId
+        }
         function load() {
             source = "";
             if (root.selected?.enabled && root.selected.settingsSource)
-                setSource(root.selected.settingsSource, {context: context});
+                setSource(root.selected.settingsSource, {
+                    context: context
+                });
         }
-        Connections { target: root; function onSelectedChanged() { page.load(); } }
-        onStatusChanged: if (status === Loader.Error) context.reportError("Could not load settings component")
+        Connections {
+            target: root
+            function onSelectedChanged() {
+                page.load();
+            }
+        }
+        onStatusChanged: if (status === Loader.Error)
+            context.reportError("Could not load settings component")
     }
 }

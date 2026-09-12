@@ -10,12 +10,21 @@ ShellRoot {
         property var screens: []
         property bool activated: false
         property bool minimized: false
-        function close() {}
-        function activate() {}
-        function setRectangle(window, rect) {}
+        function close() {
+        }
+        function activate() {
+        }
+        function setRectangle(window, rect) {
+        }
     }
-    TestWindow { id: a; appId: "gnoblin-perf-a" }
-    TestWindow { id: b; appId: "gnoblin-perf-b" }
+    TestWindow {
+        id: a
+        appId: "gnoblin-perf-a"
+    }
+    TestWindow {
+        id: b
+        appId: "gnoblin-perf-b"
+    }
     QtObject {
         id: manager
         property var activeToplevel: a
@@ -25,15 +34,25 @@ ShellRoot {
             signal objectRemovedPost(var object, int index)
         }
     }
-    QtObject { id: config; property var pinnedApps: [] }
-    Dock { id: dock; settings: config; testManager: manager }
+    QtObject {
+        id: config
+        property var pinnedApps: []
+    }
+    Dock {
+        id: dock
+        settings: config
+        testManager: manager
+    }
     TestCase {
         when: dock.startupReady
         function test_refresh() {
             tryCompare(dock.testItems, "count", 2);
             wait(300);
             const groups = dock.appGroups;
-            for (let i = 0; i < 50; ++i) { a.title = "Progress " + i; wait(20); }
+            for (let i = 0; i < 50; ++i) {
+                a.title = "Progress " + i;
+                wait(20);
+            }
             verify(dock.appGroups === groups, "Title updates must not rebuild or sort the dock");
             compare(dock.appGroups[0].windows[0].title, "Progress 49");
             dock.desktopEntryFor("gnoblin-perf-uninstalled");
@@ -47,6 +66,8 @@ ShellRoot {
             tryVerify(() => dock.appGroups.some(group => group.id === "gnoblin-perf-c"));
             console.info("DOCK_TEST_PASSED");
         }
-        function cleanupTestCase() { Qt.quit(); }
+        function cleanupTestCase() {
+            Qt.quit();
+        }
     }
 }

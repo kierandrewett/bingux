@@ -2,12 +2,23 @@
 function index(entries) {
     const aliases = new Map();
     for (const entry of entries) {
-        const keys = new Set([entry.id, entry.name, entry.startupClass,
-            String(entry.command?.[0] || "").split("/").pop()]
-            .map(value => String(value || "").replace(/\.desktop$/i, "").toLowerCase())
-            .filter(Boolean));
-        for (const key of keys)
-            aliases.set(key, aliases.has(key) ? null : entry);
+        const keys = new Set(
+            [
+                entry.id,
+                entry.name,
+                entry.startupClass,
+                String(entry.command?.[0] || "")
+                    .split("/")
+                    .pop(),
+            ]
+                .map((value) =>
+                    String(value || "")
+                        .replace(/\.desktop$/i, "")
+                        .toLowerCase(),
+                )
+                .filter(Boolean),
+        );
+        for (const key of keys) aliases.set(key, aliases.has(key) ? null : entry);
     }
     return aliases;
 }

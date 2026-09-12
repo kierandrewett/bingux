@@ -23,8 +23,7 @@ Item {
     readonly property var appNotifications: MediaMatch.notificationsForGroup(notificationIndex, group)
     readonly property int notificationCount: appNotifications.length
     readonly property string appName: presentation?.label || (group && group.desktopEntry ? group.desktopEntry.name : group ? group.displayName || group.id : "")
-    readonly property string tooltipText: appName + (playingAudio ? " · Playing audio" : "")
-        + (notificationCount > 0 ? " · " + notificationCount + " notifications" : "")
+    readonly property string tooltipText: appName + (playingAudio ? " · Playing audio" : "") + (notificationCount > 0 ? " · " + notificationCount + " notifications" : "")
     implicitWidth: implicitSize
     implicitHeight: implicitSize
 
@@ -42,8 +41,7 @@ Item {
             maskThresholdMin: 0.5
             maskSpreadAtMin: 1.0
         }
-        source: Quickshell.iconPath(root.presentation?.icon || (root.group && root.group.desktopEntry && root.group.desktopEntry.icon
-            ? root.group.desktopEntry.icon : "application-x-executable"), "application-x-executable")
+        source: Quickshell.iconPath(root.presentation?.icon || (root.group && root.group.desktopEntry && root.group.desktopEntry.icon ? root.group.desktopEntry.icon : "application-x-executable"), "application-x-executable")
     }
     // The mask removes icon pixels, so hover, selection and wallpaper show
     // through the clearance around each badge. Track the animated badge shape.
@@ -78,13 +76,22 @@ Item {
     Text {
         visible: !!root.presentation?.showText
         anchors.bottom: parent.bottom
-        width: parent.width; height: root.presentation?.showIcon ? 16 : parent.height
-        text: root.appName; textFormat: Text.PlainText; elide: Text.ElideRight
-        horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+        width: parent.width
+        height: root.presentation?.showIcon ? 16 : parent.height
+        text: root.appName
+        textFormat: Text.PlainText
+        elide: Text.ElideRight
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
         wrapMode: root.presentation?.showIcon ? Text.NoWrap : Text.WordWrap
-        color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
+        color: Theme.text
+        font.family: Theme.fontFamily
+        font.pixelSize: Theme.fontSmall
     }
-    IconAccent { id: accent; source: image.normalizedSource }
+    IconAccent {
+        id: accent
+        source: image.normalizedSource
+    }
     DockBadge {
         id: audioBadge
         objectName: "dockAudioBadge"

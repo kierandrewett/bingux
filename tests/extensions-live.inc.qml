@@ -1,5 +1,15 @@
-    FileView { id: extensionReport; path: Quickshell.env("BINGUX_LAYOUT_REPORT") }
-    Component { id: extensionPreview; WidgetPreview { width: 240; height: 100; widgetId: "extension:org.bingux.example/counter" } }
+    FileView {
+        id: extensionReport
+        path: Quickshell.env("BINGUX_LAYOUT_REPORT")
+    }
+    Component {
+        id: extensionPreview
+        WidgetPreview {
+            width: 240
+            height: 100
+            widgetId: "extension:org.bingux.example/counter"
+        }
+    }
     TestCase {
         id: extensionTest
         parent: topBar.contentItem
@@ -58,7 +68,10 @@
                 console.log("EXTENSION_STAGE: control-centre");
                 const next = DesktopLayout.move(topBar.snapshotLayout(), id, "palette", 0);
                 const groups = ControlLayout.move(BinguxPreferences.data.desktop.controlLayout, "control-centre", id, 0);
-                BinguxPreferences.saveDesktop({layout: next, controlLayout: groups});
+                BinguxPreferences.saveDesktop({
+                    layout: next,
+                    controlLayout: groups
+                });
                 tryCompare(topBar.extensionWidgets[0], "parent", controlCentre.widgetHost, 3000);
                 controlCentre.visible = true;
                 const counter = topBar.extensionWidgets[0].children[0].item;
@@ -78,6 +91,9 @@
                 tryVerify(() => !!settingsContent.item, 3000);
                 compare(settingsContent.item.context.extensionId, "org.bingux.example");
                 extensionReport.setText("PASS");
-            } catch (error) { extensionReport.setText("FAIL: " + error); throw error; }
+            } catch (error) {
+                extensionReport.setText("FAIL: " + error);
+                throw error;
+            }
         }
     }

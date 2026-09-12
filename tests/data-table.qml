@@ -5,8 +5,15 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_METRICS_RESULTS") }
-    Timer { id: finish; interval: 200; onTriggered: Qt.quit() }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_METRICS_RESULTS")
+    }
+    Timer {
+        id: finish
+        interval: 200
+        onTriggered: Qt.quit()
+    }
     Window {
         id: window
         width: 620
@@ -18,7 +25,16 @@ ShellRoot {
             id: table
             anchors.fill: parent
             anchors.margins: 16
-            records: Array.from({length: 100}, (_, i) => ({pid: i + 1, name: "Process " + i, executable: "", cpuPercent: i, memoryBytes: (100 - i) * 1024, state: i % 2 ? "R" : "S"}))
+            records: Array.from({
+                length: 100
+            }, (_, i) => ({
+                        pid: i + 1,
+                        name: "Process " + i,
+                        executable: "",
+                        cpuPercent: i,
+                        memoryBytes: (100 - i) * 1024,
+                        state: i % 2 ? "R" : "S"
+                    }))
             totalCount: records.length
             applicationFor: record => null
             formatBytes: value => value + " B"
@@ -65,7 +81,20 @@ ShellRoot {
                 mouseWheel(viewport, 80, 60, 120, 0);
                 equal(viewport.contentX, 0, "Horizontal wheel reverses to left edge");
                 table.mode = "services";
-                table.records = [{key: "a", name: "alpha.service", description: "First service", state: "active"}, {key: "b", name: "beta.service", description: "Second service", state: "failed"}];
+                table.records = [
+                    {
+                        key: "a",
+                        name: "alpha.service",
+                        description: "First service",
+                        state: "active"
+                    },
+                    {
+                        key: "b",
+                        name: "beta.service",
+                        description: "Second service",
+                        state: "failed"
+                    }
+                ];
                 wait(50);
                 mouseClick(findChild(table, "processSort_State"));
                 equal(table.recordAt(0).state, "active", "First service state group");
@@ -73,7 +102,10 @@ ShellRoot {
                 equal(table.recordAt(0).state, "failed", "Cycle service state group");
                 report.setText("PASS: shared table retains process sorting, selection, keyboard, wheel, refresh and service state grouping\n");
             }
-            function cleanupTestCase() { window.visible = false; finish.start(); }
+            function cleanupTestCase() {
+                window.visible = false;
+                finish.start();
+            }
         }
     }
 }

@@ -12,7 +12,10 @@ Item {
     opacity: progress
     clip: true
     Behavior on progress {
-        NumberAnimation { duration: Theme.reducedMotion ? 0 : 160; easing.type: Easing.OutCubic }
+        NumberAnimation {
+            duration: Theme.reducedMotion ? 0 : 160
+            easing.type: Easing.OutCubic
+        }
     }
     ColumnLayout {
         id: body

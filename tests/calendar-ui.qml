@@ -4,16 +4,32 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_CALENDAR_TEST_RESULTS") }
-    Timer { id: finish; interval: 1000; onTriggered: Qt.quit() }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_CALENDAR_TEST_RESULTS")
+    }
+    Timer {
+        id: finish
+        interval: 1000
+        onTriggered: Qt.quit()
+    }
     FloatingWindow {
         id: window
         property var launchedCalendar: []
         implicitWidth: 420
         implicitHeight: 680
         color: Theme.barBackground
-        Item { id: canvas; anchors.fill: parent }
-        CalendarPopup { id: calendar; hostItem: canvas; preferredY: 8; calendarServiceEnabled: false; launchCalendar: command => window.launchedCalendar = command }
+        Item {
+            id: canvas
+            anchors.fill: parent
+        }
+        CalendarPopup {
+            id: calendar
+            hostItem: canvas
+            preferredY: 8
+            calendarServiceEnabled: false
+            launchCalendar: command => window.launchedCalendar = command
+        }
         TestCase {
             id: testCase
             property bool imageSaved: false
@@ -103,7 +119,8 @@ ShellRoot {
                 compare(calendar.popupHeight, originalHeight, "Today button reserves its space");
                 compare(agendaCard.y, originalAgendaY, "Agenda never shifts when Today becomes available");
                 calendar.shiftMonth(1);
-                if (!Theme.reducedMotion) verify(calendar.monthProgress < 1, "Month transition starts immediately");
+                if (!Theme.reducedMotion)
+                    verify(calendar.monthProgress < 1, "Month transition starts immediately");
                 calendar.shiftMonth(-1);
                 tryCompare(calendar, "monthProgress", 1, 500);
                 if (!Theme.reducedMotion) {
@@ -118,7 +135,9 @@ ShellRoot {
                     fuzzyCompare(incoming.x, outgoingX, 1, "Reversal preserves incoming page position");
                     fuzzyCompare(outgoing.x, incomingX, 1, "Reversal preserves outgoing page position");
                     wait(300);
-                    calendar.shiftMonth(1); calendar.shiftMonth(1); calendar.shiftMonth(1);
+                    calendar.shiftMonth(1);
+                    calendar.shiftMonth(1);
+                    calendar.shiftMonth(1);
                     wait(550);
                     verify(calendar.sameMonth(calendar.renderedMonth, calendar.displayedMonth), "Rapid requests settle at latest month");
                     compare(calendar.monthProgress, 1);
@@ -165,17 +184,38 @@ ShellRoot {
                 const start = new Date(2026, 8, 7).getTime() / 1000;
                 const next = new Date(2026, 8, 8).getTime() / 1000;
                 calendar.eventSource.events = [
-                    {id: "all-day", title: "Design week", start: start, end: next},
-                    {id: "meeting", title: "A deliberately long event title to check that the agenda stays inside the panel", start: start + 36000, end: start + 39600},
-                    {id: "old", title: "Yesterday", start: start - 3600, end: start}
+                    {
+                        id: "all-day",
+                        title: "Design week",
+                        start: start,
+                        end: next
+                    },
+                    {
+                        id: "meeting",
+                        title: "A deliberately long event title to check that the agenda stays inside the panel",
+                        start: start + 36000,
+                        end: start + 39600
+                    },
+                    {
+                        id: "old",
+                        title: "Yesterday",
+                        start: start - 3600,
+                        end: start
+                    }
                 ];
                 compare(calendar.dayEvents.length, 2);
                 compare(calendar.eventTime(calendar.dayEvents[0]), "All day");
                 wait(250);
                 compare(calendar.popupHeight, originalHeight, "Event loading cannot resize the popup");
                 verify(calendar.popupHeight < window.height - 16);
-                compare(calendar.eventCommand({id: "source\nevent\n", start: start}).slice(-2).join("|"), "--uuid|source:event");
-                compare(calendar.eventCommand({id: "source\nevent\n20260908T090000Z", start: start}).slice(-2).join("|"), "--uuid|source:event:20260908T090000Z");
+                compare(calendar.eventCommand({
+                    id: "source\nevent\n",
+                    start: start
+                }).slice(-2).join("|"), "--uuid|source:event");
+                compare(calendar.eventCommand({
+                    id: "source\nevent\n20260908T090000Z",
+                    start: start
+                }).slice(-2).join("|"), "--uuid|source:event:20260908T090000Z");
                 const eventRow = findChild(window.contentItem, "calendarEvent-0");
                 mouseMove(eventRow, eventRow.width / 2, eventRow.height / 2);
                 verify(eventRow.hovered);
@@ -194,7 +234,14 @@ ShellRoot {
                 calendar.selectDate(new Date(2026, 8, 7));
                 wait(300);
                 const sampleEvents = calendar.eventSource.events;
-                calendar.eventSource.events = Array.from({length: 12}, (_, i) => ({id: String(i), title: "Event " + i, start: start + 36000, end: start + 39600}));
+                calendar.eventSource.events = Array.from({
+                    length: 12
+                }, (_, i) => ({
+                            id: String(i),
+                            title: "Event " + i,
+                            start: start + 36000,
+                            end: start + 39600
+                        }));
                 wait(100);
                 const agenda = findChild(window.contentItem, "calendarAgenda");
                 agenda.forceActiveFocus();
@@ -207,13 +254,17 @@ ShellRoot {
                 calendar.selectDate(new Date(2026, 8, 7));
                 calendar.eventSource.events = sampleEvents;
                 wait(250);
-                canvas.grabToImage(result => { testCase.imageSaved = result.saveToFile(Quickshell.env("BINGUX_CALENDAR_TEST_IMAGE")); });
+                canvas.grabToImage(result => {
+                    testCase.imageSaved = result.saveToFile(Quickshell.env("BINGUX_CALENDAR_TEST_IMAGE"));
+                });
                 tryCompare(testCase, "imageSaved", true, 2000);
                 if (!Theme.reducedMotion) {
                     testCase.imageSaved = false;
                     calendar.shiftMonth(1);
                     wait(35);
-                    canvas.grabToImage(result => { testCase.imageSaved = result.saveToFile("/tmp/bingux-calendar-motion.png"); });
+                    canvas.grabToImage(result => {
+                        testCase.imageSaved = result.saveToFile("/tmp/bingux-calendar-motion.png");
+                    });
                     tryCompare(testCase, "imageSaved", true, 2000);
                 }
                 report.setText("PASS: date navigation, event boundaries, fixed Today/agenda layout, interruptible month motion, keyboard scrolling and reset\n");

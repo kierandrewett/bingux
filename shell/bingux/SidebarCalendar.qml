@@ -12,10 +12,20 @@ ScrollView {
     contentHeight: calendar.popupHeight + Theme.gap * 2
     clip: true
     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-    function focusContent() { calendar.focusCalendar(); }
-    function shiftMonth(amount) { calendar.shiftMonth(amount); }
-    function selectDate(date) { calendar.selectDate(date); }
-    CalendarEvents { id: events; active: root.visible && root.serviceEnabled; month: root.month }
+    function focusContent() {
+        calendar.focusCalendar();
+    }
+    function shiftMonth(amount) {
+        calendar.shiftMonth(amount);
+    }
+    function selectDate(date) {
+        calendar.selectDate(date);
+    }
+    CalendarEvents {
+        id: events
+        active: root.visible && root.serviceEnabled
+        month: root.month
+    }
     Item {
         id: host
         width: root.availableWidth

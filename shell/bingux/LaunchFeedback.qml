@@ -13,7 +13,8 @@ QtObject {
             const callback = root.completion;
             root.completion = null;
             try {
-                if (callback) callback();
+                if (callback)
+                    callback();
             } finally {
                 Qt.callLater(root.drain);
             }
@@ -22,13 +23,14 @@ QtObject {
 
     function enqueue(method, args, callback) {
         if (!CompositorEnvironment.gnoblin) {
-            if (callback) callback();
+            if (callback)
+                callback();
             return;
         }
-        queue.push({callback: callback, command: ["timeout", "2s", "gdbus", "call", "--session",
-            "--dest", "org.gnoblin.LaunchFeedback",
-            "--object-path", "/org/gnoblin/LaunchFeedback",
-            "--method", "org.gnoblin.LaunchFeedback." + method].concat(args)});
+        queue.push({
+            callback: callback,
+            command: ["timeout", "2s", "gdbus", "call", "--session", "--dest", "org.gnoblin.LaunchFeedback", "--object-path", "/org/gnoblin/LaunchFeedback", "--method", "org.gnoblin.LaunchFeedback." + method].concat(args)
+        });
         drain();
     }
 

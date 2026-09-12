@@ -15,12 +15,14 @@ FocusScope {
     readonly property real playerSelectorHeight: multiplePlayers ? Theme.controlHeight + Theme.gap : 0
     function cyclePlayer(direction) {
         const index = playerOptions.indexOf(player);
-        if (playerOptions.length) playerSelected(playerOptions[(Math.max(0, index) + direction + playerOptions.length) % playerOptions.length]);
+        if (playerOptions.length)
+            playerSelected(playerOptions[(Math.max(0, index) + direction + playerOptions.length) % playerOptions.length]);
     }
     property bool menuActive: false
     // Position is extrapolated by MPRIS, but bindings need a notification after
     // the hidden menu has stopped its display timer.
-    onMenuActiveChanged: if (menuActive && player && player.positionSupported) player.positionChanged()
+    onMenuActiveChanged: if (menuActive && player && player.positionSupported)
+        player.positionChanged()
     property bool compact: false
     property bool barLayout: false
     property var barWindow: null
@@ -32,11 +34,20 @@ FocusScope {
     readonly property real cardHeight: contents.implicitHeight + Theme.padding * 2 + expandedArtSpace + playerSelectorHeight
     function toggleArtwork() {
         artworkExpanded = !artworkExpanded;
-        if (barLayout) details.visible = true;
+        if (barLayout)
+            details.visible = true;
     }
-    onBarLayoutChanged: if (!barLayout) details.visible = false
-    onVisibleChanged: if (!visible) details.visible = false
-    Connections { target: DesktopEditing; function onActiveChanged() { if (DesktopEditing.active) details.visible = false; } }
+    onBarLayoutChanged: if (!barLayout)
+        details.visible = false
+    onVisibleChanged: if (!visible)
+        details.visible = false
+    Connections {
+        target: DesktopEditing
+        function onActiveChanged() {
+            if (DesktopEditing.active)
+                details.visible = false;
+        }
+    }
     Item {
         id: fullContent
         readonly property var editWindow: details.nativeWindow
@@ -76,7 +87,12 @@ FocusScope {
         anchors.fill: parent
         alignLeft: true
         presentation: root.presentation
-        background: BarControlSurface { hovered: summaryButton.hovered; pressed: summaryButton.down; selected: true; focused: summaryButton.visualFocus }
+        background: BarControlSurface {
+            hovered: summaryButton.hovered
+            pressed: summaryButton.down
+            selected: true
+            focused: summaryButton.visualFocus
+        }
         visible: root.barLayout && !root.inlineControls
         text: root.player ? root.player.trackTitle || root.player.identity : "Media playback"
         onClicked: details.visible = !details.visible
@@ -88,7 +104,12 @@ FocusScope {
     readonly property real expandedArtSpace: (expandedArtSize + Theme.gap) * artExpansion
     readonly property color accentHover: Qt.rgba(accent.r + (1 - accent.r) * 0.16, accent.g + (1 - accent.g) * 0.16, accent.b + (1 - accent.b) * 0.16, 1)
     readonly property color accentPressed: Qt.rgba(accent.r + (1 - accent.r) * 0.08, accent.g + (1 - accent.g) * 0.08, accent.b + (1 - accent.b) * 0.08, 1)
-    Behavior on artExpansion { NumberAnimation { duration: Theme.reducedMotion ? 0 : 280; easing.type: Easing.InOutCubic } }
+    Behavior on artExpansion {
+        NumberAnimation {
+            duration: Theme.reducedMotion ? 0 : 280
+            easing.type: Easing.InOutCubic
+        }
+    }
     property color accent: Theme.accent
     property color accentForeground: Theme.shellSurface
     property real cornerRadius: Theme.menuWidgetRadius
@@ -105,26 +126,30 @@ FocusScope {
     readonly property bool seekButtons: MediaMatch.prefersSeeking(player)
     property int seekTrack: -1
     property bool showRemaining: false
-    implicitWidth: !barLayout ? 0 : presentation && !presentation.showText
-        ? (presentation.showIcon ? Theme.barHeight : 0) + Theme.barHeight * 3 + Theme.gap * 3 : 320
+    implicitWidth: !barLayout ? 0 : presentation && !presentation.showText ? (presentation.showIcon ? Theme.barHeight : 0) + Theme.barHeight * 3 + Theme.gap * 3 : 320
     implicitHeight: barLayout ? Theme.barHeight : cardHeight
     Accessible.role: Accessible.Grouping
     Accessible.name: player ? player.identity + " playback" : "Media playback"
 
     FrameAnimation {
-        running: root.menuActive && root.visible && root.hasPosition && root.player.isPlaying
-            && !seek.pressed && !seek.wheelActive && !Theme.reducedMotion
+        running: root.menuActive && root.visible && root.hasPosition && root.player.isPlaying && !seek.pressed && !seek.wheelActive && !Theme.reducedMotion
         onTriggered: root.playheadFrame = (root.playheadFrame + 1) % 1000000
     }
     Timer {
         interval: 1000
         repeat: true
-        running: root.menuActive && root.visible && root.hasPosition && root.player.isPlaying
-            && !seek.pressed && Theme.reducedMotion
+        running: root.menuActive && root.visible && root.hasPosition && root.player.isPlaying && !seek.pressed && Theme.reducedMotion
         onTriggered: root.playheadFrame = (root.playheadFrame + 1) % 1000000
     }
     // Reparented controls must stay above the card when they return from the bar.
-    Rectangle { parent: fullContent; z: -1; objectName: "mediaCardSurface"; anchors.fill: parent; radius: root.cornerRadius; color: Theme.menuWidgetBackground }
+    Rectangle {
+        parent: fullContent
+        z: -1
+        objectName: "mediaCardSurface"
+        anchors.fill: parent
+        radius: root.cornerRadius
+        color: Theme.menuWidgetBackground
+    }
     Item {
         parent: fullContent
         objectName: "mediaPlayerSelector"
@@ -227,8 +252,17 @@ FocusScope {
             hoverEnabled: true
             onClicked: root.toggleArtwork()
         }
-        BarTooltip { anchorItem: artButton; barWindow: root.barWindow; requested: root.inlineControls && root.menuActive && artMouse.containsMouse; text: artButton.Accessible.name }
-        ShellTooltip { parent: artButton; visible: !root.inlineControls && root.menuActive && artMouse.containsMouse; text: artButton.Accessible.name }
+        BarTooltip {
+            anchorItem: artButton
+            barWindow: root.barWindow
+            requested: root.inlineControls && root.menuActive && artMouse.containsMouse
+            text: artButton.Accessible.name
+        }
+        ShellTooltip {
+            parent: artButton
+            visible: !root.inlineControls && root.menuActive && artMouse.containsMouse
+            text: artButton.Accessible.name
+        }
     }
     GridLayout {
         id: contents
@@ -308,21 +342,34 @@ FocusScope {
             enabled: root.controllable && root.hasPosition && root.player.canSeek
             from: 0
             to: root.hasPosition ? root.player.length : 1
-            Binding { target: seek; property: "value"; value: seek.wheelActive ? seek.wheelTarget : root.position; when: !seek.pressed; delayed: true }
+            Binding {
+                target: seek
+                property: "value"
+                value: seek.wheelActive ? seek.wheelTarget : root.position
+                when: !seek.pressed
+                delayed: true
+            }
             property bool wheelActive: false
             property real wheelTarget: 0
             property int wheelTrack: -1
             Behavior on value {
                 enabled: seek.wheelActive && !seek.pressed && !Theme.reducedMotion
-                NumberAnimation { duration: Theme.mediaActionMotion; easing.type: Easing.OutCubic }
+                NumberAnimation {
+                    duration: Theme.mediaActionMotion
+                    easing.type: Easing.OutCubic
+                }
             }
             Timer {
                 id: wheelCommit
                 interval: 60
                 onTriggered: if (seek.enabled && root.player && root.player.uniqueId === seek.wheelTrack)
-                    root.player.position = seek.wheelTarget;
+                    root.player.position = seek.wheelTarget
             }
-            Timer { id: wheelFinish; interval: Theme.mediaActionMotion + 120; onTriggered: seek.wheelActive = false }
+            Timer {
+                id: wheelFinish
+                interval: Theme.mediaActionMotion + 120
+                onTriggered: seek.wheelActive = false
+            }
             live: false
             stepSize: 1
             wheelEnabled: false
@@ -331,7 +378,10 @@ FocusScope {
             rightPadding: 0
             readonly property real previewPosition: pressed ? position : normalizedPositionAt(seekHover.point.position.x)
             readonly property bool previewVisible: enabled && (seekHover.hovered || pressed)
-            HoverHandler { id: seekHover; cursorShape: Qt.PointingHandCursor }
+            HoverHandler {
+                id: seekHover
+                cursorShape: Qt.PointingHandCursor
+            }
             WheelHandler {
                 enabled: seek.enabled && !seek.pressed
                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
@@ -364,17 +414,21 @@ FocusScope {
             Accessible.name: "Playback position"
             onPressedChanged: {
                 if (pressed && root.player) {
-                    wheelCommit.stop(); wheelFinish.stop(); wheelActive = false;
+                    wheelCommit.stop();
+                    wheelFinish.stop();
+                    wheelActive = false;
                     root.seekTrack = root.player.uniqueId;
-                }
-                else if (enabled && root.seekTrack === root.player.uniqueId) root.player.position = value;
+                } else if (enabled && root.seekTrack === root.player.uniqueId)
+                    root.player.position = value;
             }
-            Keys.onPressed: function(event) { root.seekTrack = -1; event.accepted = false; }
+            Keys.onPressed: function (event) {
+                root.seekTrack = -1;
+                event.accepted = false;
+            }
             onMoved: {
                 if (enabled && !pressed && root.seekTrack < 0)
                     root.player.position = value;
             }
-
         }
         GridLayout {
             id: transport
@@ -401,11 +455,15 @@ FocusScope {
                     activeFocusOnTab: true
                     showFocusRing: visualFocus
                     readonly property real displayedPosition: seek.pressed ? seek.position * seek.to : root.position
-                    text: !root.hasPosition ? "" : root.showRemaining
-                        ? "-" + MediaMatch.timeLabel(Math.max(0, seek.to - displayedPosition)) : MediaMatch.timeLabel(displayedPosition)
+                    text: !root.hasPosition ? "" : root.showRemaining ? "-" + MediaMatch.timeLabel(Math.max(0, seek.to - displayedPosition)) : MediaMatch.timeLabel(displayedPosition)
                     Accessible.name: (root.showRemaining ? "Time remaining " : "Elapsed time ") + text
                     onClicked: root.showRemaining = !root.showRemaining
-                    background: ControlCentreButtonSurface { control: elapsedTime; animated: false; radius: Theme.gap; baseColor: "transparent" }
+                    background: ControlCentreButtonSurface {
+                        control: elapsedTime
+                        animated: false
+                        radius: Theme.gap
+                        baseColor: "transparent"
+                    }
                     contentItem: RollingNumber {
                         id: elapsedDigits
                         objectName: "mediaElapsedDigits"
@@ -431,7 +489,10 @@ FocusScope {
                 iconName: root.seekButtons ? "media-seek-backward-symbolic" : "media-skip-backward-symbolic"
                 direction: -1
                 enabled: MediaMatch.canStep(root.player, -1)
-                onClicked: if (enabled) { animateAction(); MediaMatch.step(root.player, -1); }
+                onClicked: if (enabled) {
+                    animateAction();
+                    MediaMatch.step(root.player, -1);
+                }
             }
             MediaButton {
                 id: playPause
@@ -443,9 +504,12 @@ FocusScope {
                 iconName: root.player && root.player.isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic"
                 enabled: root.controllable && (root.player.isPlaying ? root.player.canPause : root.player.canPlay)
                 onClicked: {
-                    if (!enabled) return;
-                    if (root.player.isPlaying) root.player.pause();
-                    else root.player.play();
+                    if (!enabled)
+                        return;
+                    if (root.player.isPlaying)
+                        root.player.pause();
+                    else
+                        root.player.play();
                 }
             }
             MediaButton {
@@ -455,7 +519,10 @@ FocusScope {
                 iconName: root.seekButtons ? "media-seek-forward-symbolic" : "media-skip-forward-symbolic"
                 direction: 1
                 enabled: MediaMatch.canStep(root.player, 1)
-                onClicked: if (enabled) { animateAction(); MediaMatch.step(root.player, 1); }
+                onClicked: if (enabled) {
+                    animateAction();
+                    MediaMatch.step(root.player, 1);
+                }
             }
             Item {
                 Layout.column: 4
@@ -497,19 +564,47 @@ FocusScope {
             actionMotion.stop();
             iconOffset = 0;
             iconOpacity = 1;
-            if (Theme.reducedMotion) { displayedIcon = iconName; return; }
+            if (Theme.reducedMotion) {
+                displayedIcon = iconName;
+                return;
+            }
             actionMotion.start();
         }
         SequentialAnimation {
             id: actionMotion
             ParallelAnimation {
-                NumberAnimation { target: button; property: "iconOpacity"; to: 0; duration: Theme.mediaActionMotion / 2 }
-                NumberAnimation { target: button; property: "iconOffset"; to: button.direction * Theme.spaceSmall; duration: Theme.mediaActionMotion / 2 }
+                NumberAnimation {
+                    target: button
+                    property: "iconOpacity"
+                    to: 0
+                    duration: Theme.mediaActionMotion / 2
+                }
+                NumberAnimation {
+                    target: button
+                    property: "iconOffset"
+                    to: button.direction * Theme.spaceSmall
+                    duration: Theme.mediaActionMotion / 2
+                }
             }
-            ScriptAction { script: { button.displayedIcon = button.iconName; button.iconOffset = -button.direction * Theme.spaceSmall; } }
+            ScriptAction {
+                script: {
+                    button.displayedIcon = button.iconName;
+                    button.iconOffset = -button.direction * Theme.spaceSmall;
+                }
+            }
             ParallelAnimation {
-                NumberAnimation { target: button; property: "iconOpacity"; to: 1; duration: Theme.mediaActionMotion / 2 }
-                NumberAnimation { target: button; property: "iconOffset"; to: 0; duration: Theme.mediaActionMotion / 2 }
+                NumberAnimation {
+                    target: button
+                    property: "iconOpacity"
+                    to: 1
+                    duration: Theme.mediaActionMotion / 2
+                }
+                NumberAnimation {
+                    target: button
+                    property: "iconOffset"
+                    to: 0
+                    duration: Theme.mediaActionMotion / 2
+                }
             }
         }
         hoverEnabled: true
@@ -520,7 +615,12 @@ FocusScope {
             x: (button.width - implicitWidth) / 2
             y: -implicitHeight - Theme.spaceSmall
         }
-        BarTooltip { anchorItem: button; barWindow: root.barWindow; requested: root.inlineControls && root.menuActive && (button.hovered || button.visualFocus); text: button.text }
+        BarTooltip {
+            anchorItem: button
+            barWindow: root.barWindow
+            requested: root.inlineControls && root.menuActive && (button.hovered || button.visualFocus)
+            text: button.text
+        }
         implicitWidth: root.inlineControls ? Theme.barHeight : Theme.controlHeight + Theme.gap
         implicitHeight: implicitWidth
         cornerRadius: implicitHeight / 2

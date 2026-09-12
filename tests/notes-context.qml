@@ -3,20 +3,39 @@ import QtQuick.Window
 import QtTest
 import Quickshell
 import Quickshell.Io
+
 ShellRoot {
-    FileView { id: result; path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS") }
-    Timer { id: finish; interval: 200; onTriggered: Qt.quit() }
+    FileView {
+        id: result
+        path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS")
+    }
+    Timer {
+        id: finish
+        interval: 200
+        onTriggered: Qt.quit()
+    }
     Window {
         id: window
         visible: true
         flags: Qt.Window | Qt.WindowDoesNotAcceptFocus
-        width: 420; height: 640
+        width: 420
+        height: 640
         color: Theme.barBackground
-        SidebarNotes { id: notes; anchors.fill: parent; menuHost: window.contentItem }
+        SidebarNotes {
+            id: notes
+            anchors.fill: parent
+            menuHost: window.contentItem
+        }
         TestCase {
             property string checks: ""
-            function equal(a,b) { checks += "Compare " + a + " / " + b + "\n"; compare(a,b); }
-            function check(value, message) { checks += "Check " + value + " " + (message || "") + "\n"; verify(value,message); }
+            function equal(a, b) {
+                checks += "Compare " + a + " / " + b + "\n";
+                compare(a, b);
+            }
+            function check(value, message) {
+                checks += "Check " + value + " " + (message || "") + "\n";
+                verify(value, message);
+            }
             when: window.visible
             function test_menu_and_formatting() {
                 const editor = findChild(notes, "notesEditor");
@@ -43,7 +62,8 @@ ShellRoot {
                     notes.applyAction(action);
                     equal(editor.getText(0, editor.length), plain);
                     check(editor.text.includes("Before") && editor.text.includes("After"), action);
-                    if (action === "heading") check(editor.text.includes("## Target"), editor.text);
+                    if (action === "heading")
+                        check(editor.text.includes("## Target"), editor.text);
                 }
                 editor.text = "# Title\n\nA paragraph.";
                 editor.cursorPosition = 2;
@@ -55,7 +75,8 @@ ShellRoot {
                 keyClick(Qt.Key_F10, Qt.ShiftModifier);
                 wait(250);
                 check(menu.visible, "keyboard context menu");
-                if (Quickshell.env("BINGUX_NOTES_SCREENSHOT")) grabImage(window.contentItem).save(Quickshell.env("BINGUX_NOTES_SCREENSHOT"));
+                if (Quickshell.env("BINGUX_NOTES_SCREENSHOT"))
+                    grabImage(window.contentItem).save(Quickshell.env("BINGUX_NOTES_SCREENSHOT"));
                 keyClick(Qt.Key_Escape);
                 wait(200);
                 check(!menu.visible, "Escape dismisses menu");
@@ -70,9 +91,13 @@ ShellRoot {
                 mouseClick(fourthHeading);
                 wait(150);
                 check(editor.text.includes("#### Title"), "heading menu sets the requested level");
-                if (Quickshell.env("BINGUX_NOTES_SCREENSHOT")) grabImage(window.contentItem).save(Quickshell.env("BINGUX_NOTES_SCREENSHOT") + ".editing.png");
+                if (Quickshell.env("BINGUX_NOTES_SCREENSHOT"))
+                    grabImage(window.contentItem).save(Quickshell.env("BINGUX_NOTES_SCREENSHOT") + ".editing.png");
             }
-            function cleanupTestCase() { result.setText("FAILURES " + qtest_results.failCount + "\n" + checks); finish.start(); }
+            function cleanupTestCase() {
+                result.setText("FAILURES " + qtest_results.failCount + "\n" + checks);
+                finish.start();
+            }
         }
     }
 }

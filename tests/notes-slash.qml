@@ -2,22 +2,47 @@ import QtQuick
 import QtTest
 import Quickshell
 import Quickshell.Io
+
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS") }
-    Timer { id: finish; interval: 200; onTriggered: Qt.quit() }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS")
+    }
+    Timer {
+        id: finish
+        interval: 200
+        onTriggered: Qt.quit()
+    }
     FloatingWindow {
         id: window
-        implicitWidth: 420; implicitHeight: 700
+        implicitWidth: 420
+        implicitHeight: 700
         color: Theme.barBackground
-        SidebarNotes { id: notes; anchors.top: parent.top; anchors.bottom: parent.bottom; width: parent.width }
+        SidebarNotes {
+            id: notes
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: parent.width
+        }
         TestCase {
             when: window.visible
             property var editor
             property var menu
             property string checks: ""
-            function equal(a, b) { checks += "Compare: " + a + " / " + b + "\n"; compare(a, b); }
-            function check(value, message) { checks += message + ": " + value + "\n"; verify(value, message); }
-            function type(text) { editor.forceActiveFocus(); for (const c of text) keyClick(c); wait(20); }
+            function equal(a, b) {
+                checks += "Compare: " + a + " / " + b + "\n";
+                compare(a, b);
+            }
+            function check(value, message) {
+                checks += message + ": " + value + "\n";
+                verify(value, message);
+            }
+            function type(text) {
+                editor.forceActiveFocus();
+                for (const c of text)
+                    keyClick(c);
+                wait(20);
+            }
             function init() {
                 editor = findChild(notes, "notesEditor");
                 menu = findChild(notes, "notesSlashMenu");
@@ -30,7 +55,8 @@ ShellRoot {
                 type("/");
                 check(menu.visible, "slash opens menu");
                 check(editor.activeFocus, "editor retains typing focus");
-                if (Quickshell.env("BINGUX_NOTES_SCREENSHOT")) grabImage(window.contentItem).save(Quickshell.env("BINGUX_NOTES_SCREENSHOT") + ".all.png");
+                if (Quickshell.env("BINGUX_NOTES_SCREENSHOT"))
+                    grabImage(window.contentItem).save(Quickshell.env("BINGUX_NOTES_SCREENSHOT") + ".all.png");
                 equal(menu.selectedCommand.id, "plain");
                 keyClick(Qt.Key_Down);
                 equal(menu.selectedCommand.id, "heading1");
@@ -116,7 +142,10 @@ ShellRoot {
                 check(editor.text.includes("Name") && !editor.text.includes("Column 1"), "table cell editable");
                 check(editor.text.includes("# Before") && editor.text.includes("After"), "table preserves neighbours");
                 notes.save();
-                const restored = Qt.createComponent("SidebarNotes.qml").createObject(window.contentItem, {width: 320, height: 600});
+                const restored = Qt.createComponent("SidebarNotes.qml").createObject(window.contentItem, {
+                    width: 320,
+                    height: 600
+                });
                 equal(findChild(restored, "notesEditor").text, editor.text);
                 restored.destroy();
             }
@@ -178,9 +207,13 @@ ShellRoot {
                 notes.width = 300;
                 wait(100);
                 check(menu.width <= 284 && menu.x + menu.width <= notes.width, "menu fits narrow sidebar");
-                if (Quickshell.env("BINGUX_NOTES_SCREENSHOT")) grabImage(window.contentItem).save(Quickshell.env("BINGUX_NOTES_SCREENSHOT"));
+                if (Quickshell.env("BINGUX_NOTES_SCREENSHOT"))
+                    grabImage(window.contentItem).save(Quickshell.env("BINGUX_NOTES_SCREENSHOT"));
             }
-            function cleanupTestCase() { report.setText("FAILURES " + qtest_results.failCount + "\n" + checks); finish.start(); }
+            function cleanupTestCase() {
+                report.setText("FAILURES " + qtest_results.failCount + "\n" + checks);
+                finish.start();
+            }
         }
     }
 }

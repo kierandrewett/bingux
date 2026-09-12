@@ -10,13 +10,25 @@ ShellRoot {
         property var screens: []
         property bool activated: false
         property bool minimized: false
-        function close() {}
-        function activate() {}
-        function setRectangle(window, rect) {}
+        function close() {
+        }
+        function activate() {
+        }
+        function setRectangle(window, rect) {
+        }
     }
-    TestWindow { id: windowB; appId: "dock-section-b" }
-    TestWindow { id: windowC; appId: "dock-section-c" }
-    TestWindow { id: windowD; appId: "dock-section-d" }
+    TestWindow {
+        id: windowB
+        appId: "dock-section-b"
+    }
+    TestWindow {
+        id: windowC
+        appId: "dock-section-c"
+    }
+    TestWindow {
+        id: windowD
+        appId: "dock-section-d"
+    }
     QtObject {
         id: manager
         property var activeToplevel: window
@@ -34,9 +46,12 @@ ShellRoot {
         property var screens: []
         property bool activated: true
         property bool minimized: false
-        function close() {}
-        function activate() {}
-        function setRectangle(window, rect) {}
+        function close() {
+        }
+        function activate() {
+        }
+        function setRectangle(window, rect) {
+        }
     }
     QtObject {
         id: desktop
@@ -45,9 +60,13 @@ ShellRoot {
         property string name: "Pin test"
         property string icon: "applications-other"
         property var actions: []
-        function execute() {}
+        function execute() {
+        }
     }
-    QtObject { id: config; property var pinnedApps: [] }
+    QtObject {
+        id: config
+        property var pinnedApps: []
+    }
     Loader {
         id: loader
         sourceComponent: Component {
@@ -55,9 +74,17 @@ ShellRoot {
                 settings: config
                 testManager: manager
                 function desktopEntryFor(id) {
-                    if (id === "PinTest" || id === "dock-pin-test") return desktop;
+                    if (id === "PinTest" || id === "dock-pin-test")
+                        return desktop;
                     if (id.startsWith("dock-section-"))
-                        return { id: id, startupClass: id, name: id, icon: "applications-other", actions: [], execute: () => {} };
+                        return {
+                            id: id,
+                            startupClass: id,
+                            name: id,
+                            icon: "applications-other",
+                            actions: [],
+                            execute: () => {}
+                        };
                     return null;
                 }
             }
@@ -68,7 +95,10 @@ ShellRoot {
         parent: loader.item ? loader.item.contentItem : null
         when: loader.status === Loader.Ready
         name: "DockPinning"
-        function check(value, message) { console.warn(message + ": " + value); verify(value, message); }
+        function check(value, message) {
+            console.warn(message + ": " + value);
+            verify(value, message);
+        }
         function dragWithinSection(dock, source, target) {
             wait(50);
             const button = dock.testItems.itemAt(source);
@@ -82,8 +112,9 @@ ShellRoot {
             mouseRelease(dock.contentItem, origin.x + travel, origin.y, Qt.LeftButton);
             wait(300);
             check(dock.draggedId === "", "Drag releases capture; active=" + dock.draggedId + " settling=" + dock.settlingDrag);
-            check(dock.testItems.itemAt(target) === button, "Moved " + id + " reaches slot " + target + "; order=" + dock.appGroups.map(group => group.id)
-                  + "; rendered=" + Array.from({length: dock.testItems.count}, (_, i) => dock.testItems.itemAt(i).currentGroup.id));
+            check(dock.testItems.itemAt(target) === button, "Moved " + id + " reaches slot " + target + "; order=" + dock.appGroups.map(group => group.id) + "; rendered=" + Array.from({
+                length: dock.testItems.count
+            }, (_, i) => dock.testItems.itemAt(i).currentGroup.id));
             check(dock.appGroups[target].id === id, "Pointer reorder reaches the requested slot");
             for (let index = 1; index < dock.testItems.count; index++) {
                 const before = dock.testItems.itemAt(index - 1);
@@ -93,8 +124,7 @@ ShellRoot {
                 check(Math.abs(distance - expected) < 0.1, "Released icons have consistent spacing");
             }
             const divider = findChild(dock.contentItem, "dockSectionDivider");
-            check(divider.x > dock.testItems.itemAt(1).x + dock.testItems.itemAt(1).width
-                  && divider.x < dock.testItems.itemAt(2).x, "Divider remains between sections after pointer reorder");
+            check(divider.x > dock.testItems.itemAt(1).x + dock.testItems.itemAt(1).width && divider.x < dock.testItems.itemAt(2).x, "Divider remains between sections after pointer reorder");
         }
         function test_pin() {
             let dock = loader.item;
@@ -114,8 +144,7 @@ ShellRoot {
             check(dock.testItems.count === 1 && !dock.appGroups[0].exiting, "Pinned app remains after its last window closes");
             const idlePointer = dock.testItems.itemAt(0).testMouse;
             mouseWheel(idlePointer, 20, 20, 0, -120);
-            check(dock.pendingLaunchGroupId === "" && Object.keys(dock.launchAttempts).length === 0,
-                  "Scrolling an idle dock app does not launch it");
+            check(dock.pendingLaunchGroupId === "" && Object.keys(dock.launchAttempts).length === 0, "Scrolling an idle dock app does not launch it");
             loader.active = false;
             wait(50);
             loader.active = true;
@@ -153,14 +182,12 @@ ShellRoot {
             const divider = findChild(dock.contentItem, "dockSectionDivider");
             check(divider.visible, "Mixed dock shows a section divider");
             const gap = dock.testItems.itemAt(2).x - dock.testItems.itemAt(1).x - dock.testItems.itemAt(1).width;
-            check(gap > Theme.spaceSmall && divider.x > dock.testItems.itemAt(1).x + dock.testItems.itemAt(1).width
-                  && divider.x < dock.testItems.itemAt(2).x, "Divider has space between the two sections");
+            check(gap > Theme.spaceSmall && divider.x > dock.testItems.itemAt(1).x + dock.testItems.itemAt(1).width && divider.x < dock.testItems.itemAt(2).x, "Divider has space between the two sections");
             const saved = dock.appGroups.map(group => group.id);
             dock.moveGroup(saved[0], 3);
             check(dock.appGroups[1].id === saved[0], "Pinned reorder stops at the section boundary");
             wait(100);
-            check(divider.x > dock.testItems.itemAt(1).x + dock.testItems.itemAt(1).width
-                  && divider.x < dock.testItems.itemAt(2).x, "Divider stays at the boundary after reordering pinned apps");
+            check(divider.x > dock.testItems.itemAt(1).x + dock.testItems.itemAt(1).width && divider.x < dock.testItems.itemAt(2).x, "Divider stays at the boundary after reordering pinned apps");
             dock.moveGroup(saved[3], 0);
             check(dock.appGroups[2].id === saved[3], "Running reorder stops at the section boundary");
             const order = dock.appGroups.map(group => group.id).join(",");
@@ -201,8 +228,9 @@ ShellRoot {
             dock = loader.item;
             test.parent = dock.contentItem;
             tryCompare(dock.testItems, "count", 4);
-            tryVerify(() => Array.from({length: dock.testItems.count}, (_, index) => dock.testItems.itemAt(index)).every(item => item && item.transitionProgress === 1), 2000,
-                "Dock icons finish entering before the next drag");
+            tryVerify(() => Array.from({
+                    length: dock.testItems.count
+                }, (_, index) => dock.testItems.itemAt(index)).every(item => item && item.transitionProgress === 1), 2000, "Dock icons finish entering before the next drag");
             verify(waitForRendering(dock.testSurface), "Dock layout renders before the next drag");
             check(dock.appGroups[0].id === draggedApp && dock.isPinned(dock.appGroups[0]), "Dropped position and pin survive recreating the dock");
             const unpinOrigin = dock.testItems.itemAt(0).mapToItem(dock.contentItem, 36, 36);
@@ -210,8 +238,7 @@ ShellRoot {
             mousePress(dock.contentItem, unpinOrigin.x, unpinOrigin.y, Qt.LeftButton);
             wait(50);
             for (let step = 1; step <= 6; step++)
-                mouseMove(dock.contentItem, unpinOrigin.x + (unpinTarget.x - unpinOrigin.x) * step / 6,
-                    unpinOrigin.y + (unpinTarget.y - unpinOrigin.y) * step / 6, 20);
+                mouseMove(dock.contentItem, unpinOrigin.x + (unpinTarget.x - unpinOrigin.x) * step / 6, unpinOrigin.y + (unpinTarget.y - unpinOrigin.y) * step / 6, 20);
             mouseRelease(dock.contentItem, unpinTarget.x, unpinTarget.y, Qt.LeftButton);
             tryVerify(() => dock.draggedId === "");
             check(dock.appGroups[3].id === draggedApp && !dock.isPinned(dock.appGroups[3]), "Dropping back into running apps unpins and keeps the new position");
@@ -226,14 +253,16 @@ ShellRoot {
             tryCompare(dock, "pinnedGroupCount", 0);
             check(!findChild(dock.contentItem, "dockSectionDivider").visible, "No divider when all apps are unpinned");
             config.pinnedApps = ["dock-pin-test", windowB.appId, windowC.appId, windowD.appId];
-            for (const group of dock.appGroups.slice()) dock.setPinned(group, true);
+            for (const group of dock.appGroups.slice())
+                dock.setPinned(group, true);
             tryCompare(dock, "pinnedGroupCount", 4);
             check(!findChild(dock.contentItem, "dockSectionDivider").visible, "No divider when all apps are pinned");
             const lastPinned = dock.appGroups[3].id;
             dock.moveGroup(lastPinned, 0);
             check(dock.appGroups[0].id === lastPinned, "Reordering four pinned apps preserves the requested order");
             const finalOrder = dock.appGroups.map(group => group.id).join(",");
-            for (let refresh = 0; refresh < 4; refresh++) dock.refreshAppGroupsNow();
+            for (let refresh = 0; refresh < 4; refresh++)
+                dock.refreshAppGroupsNow();
             check(dock.appGroups.map(group => group.id).join(",") === finalOrder, "Repeated refreshes preserve the pinned order");
             loader.active = false;
             wait(50);
@@ -243,6 +272,8 @@ ShellRoot {
             check(loader.item.appGroups.map(group => group.id).join(",") === finalOrder, "Pinned order remains saved after recreation");
             console.info("DOCK_TEST_PASSED");
         }
-        function cleanupTestCase() { Qt.quit(); }
+        function cleanupTestCase() {
+            Qt.quit();
+        }
     }
 }

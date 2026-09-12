@@ -4,9 +4,13 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Bluetooth
 import "ControlLayout.js" as ControlLayout
+
 ShellRoot {
     property string checks: ""
-    FileView { id: results; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
+    FileView {
+        id: results
+        path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS")
+    }
     QtObject {
         id: bluetoothHeadphones
         property string name: "Headphones"
@@ -15,14 +19,43 @@ ShellRoot {
         property bool connected: true
         property bool paired: true
         property int state: connected ? BluetoothDeviceState.Connected : BluetoothDeviceState.Disconnected
-        function connect() { connected = true; }
-        function disconnect() { connected = false; }
+        function connect() {
+            connected = true;
+        }
+        function disconnect() {
+            connected = false;
+        }
     }
-    QtObject { id: adapter; property bool enabled: true; property bool discovering: false; property var devices: QtObject { property var values: [bluetoothHeadphones] } }
-    QtObject { id: audio; property bool muted: false; property real volume: 0.65 }
-    QtObject { id: microphoneAudio; property bool muted: false; property real volume: 0.4 }
-    QtObject { id: microphoneNode; property bool ready: true; property var audio: microphoneAudio; property string description: "Studio microphone"; property string name: "mic" }
-    QtObject { id: sink; property bool ready: true; property var audio: audio }
+    QtObject {
+        id: adapter
+        property bool enabled: true
+        property bool discovering: false
+        property var devices: QtObject {
+            property var values: [bluetoothHeadphones]
+        }
+    }
+    QtObject {
+        id: audio
+        property bool muted: false
+        property real volume: 0.65
+    }
+    QtObject {
+        id: microphoneAudio
+        property bool muted: false
+        property real volume: 0.4
+    }
+    QtObject {
+        id: microphoneNode
+        property bool ready: true
+        property var audio: microphoneAudio
+        property string description: "Studio microphone"
+        property string name: "mic"
+    }
+    QtObject {
+        id: sink
+        property bool ready: true
+        property var audio: audio
+    }
     QtObject {
         id: indicators
         property string networkState: "wifi"
@@ -32,10 +65,18 @@ ShellRoot {
         property var audioSink: sink
         property var audioSource: microphoneNode
         property bool laptopBatteryAvailable: true
-        function networkIconName() { return "network-wireless-signal-excellent-symbolic"; }
-        function networkAccessibleName() { return "Wireless network connected"; }
-        function audioIconName() { return audioMuted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic"; }
-        function batteryAccessibleName() { return "Battery 84 percent, charging"; }
+        function networkIconName() {
+            return "network-wireless-signal-excellent-symbolic";
+        }
+        function networkAccessibleName() {
+            return "Wireless network connected";
+        }
+        function audioIconName() {
+            return audioMuted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic";
+        }
+        function batteryAccessibleName() {
+            return "Battery 84 percent, charging";
+        }
     }
     QtObject {
         id: player
@@ -55,10 +96,16 @@ ShellRoot {
         property string trackTitle: "A Quiet Evening"
         property string trackArtist: "Local library"
         property string trackArtUrl: ""
-        function play() { isPlaying = true; }
-        function pause() { isPlaying = false; }
-        function previous() {}
-        function next() {}
+        function play() {
+            isPlaying = true;
+        }
+        function pause() {
+            isPlaying = false;
+        }
+        function previous() {
+        }
+        function next() {
+        }
     }
     QtObject {
         id: secondPlayer
@@ -78,10 +125,16 @@ ShellRoot {
         property string trackTitle: "A Quiet Evening"
         property string trackArtist: "Local library"
         property string trackArtUrl: ""
-        function play() { isPlaying = true; }
-        function pause() { isPlaying = false; }
-        function previous() {}
-        function next() {}
+        function play() {
+            isPlaying = true;
+        }
+        function pause() {
+            isPlaying = false;
+        }
+        function previous() {
+        }
+        function next() {
+        }
     }
     Component {
         id: notificationFactory
@@ -97,13 +150,24 @@ ShellRoot {
             property var actions: []
             property bool tracked: false
             signal closed(int reason)
-            function dismiss() {}
-            function expire() {}
+            function dismiss() {
+            }
+            function expire() {
+            }
         }
     }
-    NotificationState { id: state }
-    NotificationSurface { id: notifications; state: state; notificationCentre: history }
-    NotificationHistoryPopup { id: history; notificationSurface: notifications }
+    NotificationState {
+        id: state
+    }
+    NotificationSurface {
+        id: notifications
+        state: state
+        notificationCentre: history
+    }
+    NotificationHistoryPopup {
+        id: history
+        notificationSurface: notifications
+    }
     QtObject {
         id: services
         property bool active: false
@@ -113,38 +177,109 @@ ShellRoot {
         property bool doNotDisturb: false
         property string error: ""
         property var actions: []
-        property var controls: ({vpn: true, dnd: true, nightLight: false, power: false, awake: false})
-        property var vpns: [{id: "mullvad", name: "Mullvad", connected: false, subtitle: "Disconnected", canToggle: true}, {id: "tailscale", name: "Tailscale", connected: true, subtitle: "Exit node active", canToggle: true}]
-        property var state: ({dndAvailable: true, nightLightAvailable: true, nightLight: false, nightLightActive: false, awakeAvailable: true, power: {available: true, profile: "balanced", profiles: ["power-saver", "balanced", "performance"]}})
-        function showControl(name) { return !!controls[name]; }
-        function setControl(name, value) { controls = Object.assign({}, controls, {[name]: value}); }
-        function action(value) { actions = actions.concat([value]); }
-        function toggleAwake() { keepAwake = !keepAwake; }
+        property var controls: ({
+                vpn: true,
+                dnd: true,
+                nightLight: false,
+                power: false,
+                awake: false
+            })
+        property var vpns: [
+            {
+                id: "mullvad",
+                name: "Mullvad",
+                connected: false,
+                subtitle: "Disconnected",
+                canToggle: true
+            },
+            {
+                id: "tailscale",
+                name: "Tailscale",
+                connected: true,
+                subtitle: "Exit node active",
+                canToggle: true
+            }
+        ]
+        property var state: ({
+                dndAvailable: true,
+                nightLightAvailable: true,
+                nightLight: false,
+                nightLightActive: false,
+                awakeAvailable: true,
+                power: {
+                    available: true,
+                    profile: "balanced",
+                    profiles: ["power-saver", "balanced", "performance"]
+                }
+            })
+        function showControl(name) {
+            return !!controls[name];
+        }
+        function setControl(name, value) {
+            controls = Object.assign({}, controls, {
+                [name]: value
+            });
+        }
+        function action(value) {
+            actions = actions.concat([value]);
+        }
+        function toggleAwake() {
+            keepAwake = !keepAwake;
+        }
     }
-    ControlCentre { id: centre; keepWindowAlive: true; services: services; indicators: indicators; bluetoothAdapter: adapter }
+    ControlCentre {
+        id: centre
+        keepWindowAlive: true
+        services: services
+        indicators: indicators
+        bluetoothAdapter: adapter
+    }
     Component {
         id: compactControl
         ControlRow {
-            title: "Test control"; iconName: "notifications-disabled-symbolic"
-            barLayout: true; toggleVisible: true
-            presentation: ({label: title, icon: iconName, showIcon: true, showText: false})
+            title: "Test control"
+            iconName: "notifications-disabled-symbolic"
+            barLayout: true
+            toggleVisible: true
+            presentation: ({
+                    label: title,
+                    icon: iconName,
+                    showIcon: true,
+                    showText: false
+                })
             property int toggles: 0
             property int navigations: 0
             onToggleRequested: toggles++
             onNavigationRequested: navigations++
         }
     }
-    Timer { id: quitAfterUnmap; interval: 400; onTriggered: Qt.quit() }
+    Timer {
+        id: quitAfterUnmap
+        interval: 400
+        onTriggered: Qt.quit()
+    }
     TestCase {
         parent: centre.contentItem
         name: "ControlCentre"
         when: true
-        function check(value, message) { checks += "CHECK " + value + " " + message + "\n"; results.setText(checks); verify(value, message); }
-        function equal(actual, expected, message) { checks += "EQUAL " + actual + " " + expected + " " + message + "\n"; results.setText(checks); compare(actual, expected, message); }
+        function check(value, message) {
+            checks += "CHECK " + value + " " + message + "\n";
+            results.setText(checks);
+            verify(value, message);
+        }
+        function equal(actual, expected, message) {
+            checks += "EQUAL " + actual + " " + expected + " " + message + "\n";
+            results.setText(checks);
+            compare(actual, expected, message);
+        }
         function test_compactActions() {
             centre.visible = true;
             wait(250);
-            const control = compactControl.createObject(centre.contentItem, {x: 20, y: 20, z: 5000});
+            const control = compactControl.createObject(centre.contentItem, {
+                x: 20,
+                y: 20,
+                z: 5000
+            });
             equal(control.height, Theme.barHeight, "compact controls fit the bar height");
             mouseClick(control, control.width / 2, control.height / 2);
             equal(control.toggles, 1, "compact toggle dispatches its existing action once");
@@ -161,8 +296,12 @@ ShellRoot {
         function test_groupLayouts() {
             const previous = BinguxPreferences.data;
             const setLayout = layout => BinguxPreferences.data = Object.assign({}, previous, {
-                desktop: Object.assign({}, previous.desktop, {controlLayout: layout})});
-            centre.visible = true; wait(250);
+                    desktop: Object.assign({}, previous.desktop, {
+                        controlLayout: layout
+                    })
+                });
+            centre.visible = true;
+            wait(250);
             const header = findChild(centre.body, "controlHeader");
             const account = findChild(centre.body, "controlUserAccount");
             const settings = findChild(centre.body, "controlSettings");
@@ -175,30 +314,69 @@ ShellRoot {
                 let layout = ControlLayout.move(ControlLayout.defaults(), "control-centre", "control-media", 0);
                 layout = ControlLayout.move(layout, "controls-header", "control-settings", 0);
                 layout = ControlLayout.move(layout, "controls-audio", "control-microphone", 0);
-                setLayout(layout); wait(300);
+                setLayout(layout);
+                wait(300);
                 check(media.y < header.y, "saved section order moves the existing media card");
                 check(settings.x < account.x, "saved header order moves the existing buttons");
                 check(microphone.y < output.y, "saved audio order moves the existing sliders");
                 equal(findChild(centre.body, "controlSettings"), settings, "group changes preserve the actual button instance");
                 equal(findChild(centre.body, "controlOutputRow"), output, "group changes preserve the actual audio control");
                 layout = ControlLayout.move(layout, "controls-audio", "control-volume", -1);
-                setLayout(layout); wait(150);
+                setLayout(layout);
+                wait(150);
                 check(!output.visible, "removing a grouped control hides only that item");
                 check(microphone.visible, "the remaining audio control stays available");
-                setLayout(ControlLayout.defaults()); wait(300);
+                setLayout(ControlLayout.defaults());
+                wait(300);
                 equal([header.y, media.y, audioRows.y, account.x, settings.x, output.y, microphone.y].join(), original.join(), "restoring groups recovers the original geometry");
-            } finally { BinguxPreferences.data = previous; centre.visible = false; wait(200); }
+            } finally {
+                BinguxPreferences.data = previous;
+                centre.visible = false;
+                wait(200);
+            }
         }
         function test_zz_notificationVariants() {
-            const invoked = {reply: 0, defaultAction: 0};
-            const avatar = notificationFactory.createObject(state, {id: 501, image: Quickshell.shellPath("avatar.svg"), summary: "Message from Marc", body: "Cooking"});
-            const screenshot = notificationFactory.createObject(state, {id: 502, image: Quickshell.shellPath("avatar.svg"), summary: "Screenshot saved", body: "A screenshot with a preview"});
-            const actionable = notificationFactory.createObject(state, {id: 503, summary: "Choose an action", body: "A longer notification body. ".repeat(14), actions: [
-                {identifier: "default", text: "Open", invoke: () => invoked.defaultAction++},
-                {identifier: "reply", text: "Reply to this message using a deliberately long action label that needs more than one line", invoke: () => invoked.reply++},
-                {identifier: "later", text: "Remind me later", invoke: () => {}}
-            ]});
-            state.accept(avatar); state.accept(screenshot); state.accept(actionable);
+            const invoked = {
+                reply: 0,
+                defaultAction: 0
+            };
+            const avatar = notificationFactory.createObject(state, {
+                id: 501,
+                image: Quickshell.shellPath("avatar.svg"),
+                summary: "Message from Marc",
+                body: "Cooking"
+            });
+            const screenshot = notificationFactory.createObject(state, {
+                id: 502,
+                image: Quickshell.shellPath("avatar.svg"),
+                summary: "Screenshot saved",
+                body: "A screenshot with a preview"
+            });
+            const actionable = notificationFactory.createObject(state, {
+                id: 503,
+                summary: "Choose an action",
+                body: "A longer notification body. ".repeat(14),
+                actions: [
+                    {
+                        identifier: "default",
+                        text: "Open",
+                        invoke: () => invoked.defaultAction++
+                    },
+                    {
+                        identifier: "reply",
+                        text: "Reply to this message using a deliberately long action label that needs more than one line",
+                        invoke: () => invoked.reply++
+                    },
+                    {
+                        identifier: "later",
+                        text: "Remind me later",
+                        invoke: () => {}
+                    }
+                ]
+            });
+            state.accept(avatar);
+            state.accept(screenshot);
+            state.accept(actionable);
             history.visible = true;
             wait(700);
             const head = findChild(notifications.contentItem, "notificationCard");
@@ -207,8 +385,7 @@ ShellRoot {
             const reply = findChild(actionCard, "notificationAction_reply");
             check(reply.width <= actionCard.width && reply.height > 36, "long action labels wrap inside the card");
             const actionPoint = reply.mapToItem(notifications.viewport, 0, 0);
-            notifications.viewport.contentY = Math.max(0, Math.min(notifications.viewport.contentHeight - notifications.viewport.height,
-                notifications.viewport.contentY + actionPoint.y + reply.height - notifications.viewport.height + 8));
+            notifications.viewport.contentY = Math.max(0, Math.min(notifications.viewport.contentHeight - notifications.viewport.height, notifications.viewport.contentY + actionPoint.y + reply.height - notifications.viewport.height + 8));
             wait(80);
             mouseClick(reply, reply.width / 2, reply.height / 2);
             equal(invoked.reply, 1, "notification button invokes its own action exactly once");
@@ -219,13 +396,20 @@ ShellRoot {
             const ordered = cards.slice().sort((a, b) => a.groupDepth - b.groupDepth);
             for (let i = 0; i < ordered.length; ++i) {
                 tryVerify(() => Math.abs(ordered[i].height - ordered[i].naturalHeight) < 0.5, 3000, "expanded mixed card uses its own content height after its resize finishes");
-                if (i > 0) check(ordered[i].y >= ordered[i - 1].y + ordered[i - 1].height, "mixed cards do not overlap when expanded");
+                if (i > 0)
+                    check(ordered[i].y >= ordered[i - 1].y + ordered[i - 1].height, "mixed cards do not overlap when expanded");
             }
             const small = findChild(cards.find(item => item.notificationId === 501), "notificationImagePreview");
             const large = findChild(cards.find(item => item.notificationId === 502), "notificationImagePreview");
             equal(small.width, 40, "profile image remains avatar-sized in mixed stack");
             tryVerify(() => large.width > 40 && large.height > 40, 5000, "screenshot retains its large preview after its image loads");
-            actionable.actions = actionable.actions.concat([{identifier: "save", text: "Save", invoke: () => {}}]);
+            actionable.actions = actionable.actions.concat([
+                {
+                    identifier: "save",
+                    text: "Save",
+                    invoke: () => {}
+                }
+            ]);
             wait(250);
             check(findChild(actionCard, "notificationAction_save") !== null, "live action updates appear without replacing the card");
             equal(actionCard.slideOffset, 0, "content updates do not replay the entrance");
@@ -235,8 +419,12 @@ ShellRoot {
             wait(250);
         }
         function test_integration() {
-            if (Quickshell.env("BINGUX_NOTIFICATION_CONTENT_ONLY")) return;
-            const first = notificationFactory.createObject(state, {id: 1, image: Quickshell.shellPath("avatar.svg")});
+            if (Quickshell.env("BINGUX_NOTIFICATION_CONTENT_ONLY"))
+                return;
+            const first = notificationFactory.createObject(state, {
+                id: 1,
+                image: Quickshell.shellPath("avatar.svg")
+            });
             state.accept(first);
             wait(650);
             const viewport = notifications.viewport;
@@ -269,12 +457,14 @@ ShellRoot {
             check(microphoneAudio.volume > 0.5, "overview microphone slider controls input gain");
             const output = findChild(centre.contentItem, "controlVolume");
             const boost = findChild(output, "sliderBoostFill");
-            audio.volume = 1; wait(20);
+            audio.volume = 1;
+            wait(20);
             check(boost.width === 0, "100 percent volume has no red boost fill");
-            audio.volume = 1.2; wait(20);
-            check(boost.width > 0 && Math.abs(boost.width / output.background.width - 0.2 / 1.5) < 0.01,
-                "only the filled portion above 100 percent is red");
-            audio.volume = 0.65; wait(20);
+            audio.volume = 1.2;
+            wait(20);
+            check(boost.width > 0 && Math.abs(boost.width / output.background.width - 0.2 / 1.5) < 0.01, "only the filled portion above 100 percent is red");
+            audio.volume = 0.65;
+            wait(20);
             check(boost.width === 0, "red boost fill clears below 100 percent");
             check(findChild(microphone, "sliderBoostFill").width === 0, "microphone uses normal seek fill");
             centre.visible = false;
@@ -300,7 +490,8 @@ ShellRoot {
             results.setText(checks + "FAILURES " + qtest_results.failCount);
             centre.visible = false;
             history.visible = false;
-            if (!Quickshell.env("BINGUX_CONTROL_TEST_NO_QUIT")) quitAfterUnmap.start();
+            if (!Quickshell.env("BINGUX_CONTROL_TEST_NO_QUIT"))
+                quitAfterUnmap.start();
         }
     }
 }

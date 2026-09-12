@@ -3,16 +3,28 @@ import QtQuick.Window
 import QtTest
 import Quickshell
 import Quickshell.Io
+
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS") }
-    Timer { id: finish; interval: 100; onTriggered: Qt.quit() }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS")
+    }
+    Timer {
+        id: finish
+        interval: 100
+        onTriggered: Qt.quit()
+    }
     Window {
         id: window
         visible: true
         flags: Qt.Window | Qt.WindowDoesNotAcceptFocus
-        width: 340; height: 360
+        width: 340
+        height: 360
         color: Theme.barBackground
-        SidebarNotes { id: notes; anchors.fill: parent }
+        SidebarNotes {
+            id: notes
+            anchors.fill: parent
+        }
         TestCase {
             id: test
             when: window.visible
@@ -23,17 +35,24 @@ ShellRoot {
             Connections {
                 target: test.editor
                 function onContentHeightChanged() {
-                    if (test.watching) test.minimumHeight = Math.min(test.minimumHeight, test.editor.contentHeight);
+                    if (test.watching)
+                        test.minimumHeight = Math.min(test.minimumHeight, test.editor.contentHeight);
                 }
             }
             function caretY() {
                 const rect = editor.cursorRectangle;
                 return editor.mapToItem(notes, rect.x, rect.y).y;
             }
-            function type(text) { for (const ch of text) keyClick(ch); wait(25); }
+            function type(text) {
+                for (const ch of text)
+                    keyClick(ch);
+                wait(25);
+            }
             function prepare() {
                 // Leave enough text on both sides of a visible middle paragraph.
-                editor.text = "# First title\n\n" + Array.from({length: 24}, (_, i) => "Line " + i).join("\n\n");
+                editor.text = "# First title\n\n" + Array.from({
+                    length: 24
+                }, (_, i) => "Line " + i).join("\n\n");
                 editor.forceActiveFocus();
                 editor.cursorPosition = editor.length;
                 wait(50);
@@ -43,14 +62,19 @@ ShellRoot {
             function test_heading_keeps_viewport() {
                 for (const action of ["slash", "markdown", "context"]) {
                     prepare();
-                    if (action === "slash") type("/h1");
-                    else if (action === "markdown") type("##");
+                    if (action === "slash")
+                        type("/h1");
+                    else if (action === "markdown")
+                        type("##");
                     const beforeY = caretY(), beforeHeight = editor.contentHeight;
                     minimumHeight = beforeHeight;
                     watching = true;
-                    if (action === "slash") keyClick(Qt.Key_Return);
-                    else if (action === "markdown") keyClick(Qt.Key_Space);
-                    else notes.applyAction("heading2");
+                    if (action === "slash")
+                        keyClick(Qt.Key_Return);
+                    else if (action === "markdown")
+                        keyClick(Qt.Key_Space);
+                    else
+                        notes.applyAction("heading2");
                     wait(50);
                     watching = false;
                     const jump = Math.abs(caretY() - beforeY);

@@ -21,15 +21,9 @@ QtObject {
         const runtimeDirectory = Quickshell.env("XDG_RUNTIME_DIR");
         return runtimeDirectory ? runtimeDirectory + "/bingux/metrics-v1.sock" : "";
     }
-    readonly property string cpuLabel: available && latest.cpuPercent !== null
-        ? "CPU " + Math.round(latest.cpuPercent) + "%"
-        : "CPU --"
-    readonly property string memoryLabel: available
-        ? "MEM " + formatBytes(latest.memoryUsedBytes) + "/" + formatBytes(latest.memoryTotalBytes)
-        : "MEM --"
-    readonly property string networkLabel: available
-        ? "NET RX " + formatRate(latest.networkReceiveBytesPerSecond) + " TX " + formatRate(latest.networkTransmitBytesPerSecond)
-        : "NET --"
+    readonly property string cpuLabel: available && latest.cpuPercent !== null ? "CPU " + Math.round(latest.cpuPercent) + "%" : "CPU --"
+    readonly property string memoryLabel: available ? "MEM " + formatBytes(latest.memoryUsedBytes) + "/" + formatBytes(latest.memoryTotalBytes) : "MEM --"
+    readonly property string networkLabel: available ? "NET RX " + formatRate(latest.networkReceiveBytesPerSecond) + " TX " + formatRate(latest.networkTransmitBytesPerSecond) : "NET --"
 
     readonly property bool desktopStateAvailable: available && latest.desktopStateAvailable
     readonly property var inputSources: desktopStateAvailable ? latest.inputSources : []
@@ -74,16 +68,7 @@ QtObject {
     }
 
     function isInputSource(source) {
-        return source !== null
-            && typeof source === "object"
-            && typeof source.type === "string"
-            && typeof source.id === "string"
-            && typeof source.shortName === "string"
-            && typeof source.displayName === "string"
-            && source.type.length <= root.maxInputSourceFieldLength
-            && source.id.length <= root.maxInputSourceFieldLength
-            && source.shortName.length <= root.maxInputSourceFieldLength
-            && source.displayName.length <= root.maxInputSourceFieldLength;
+        return source !== null && typeof source === "object" && typeof source.type === "string" && typeof source.id === "string" && typeof source.shortName === "string" && typeof source.displayName === "string" && source.type.length <= root.maxInputSourceFieldLength && source.id.length <= root.maxInputSourceFieldLength && source.shortName.length <= root.maxInputSourceFieldLength && source.displayName.length <= root.maxInputSourceFieldLength;
     }
 
     function isInputSourceList(sources) {
@@ -105,62 +90,30 @@ QtObject {
             return true;
         }
 
-        return typeof record.desktopStateAvailable === "boolean"
-            && isInputSourceList(record.inputSources)
-            && (record.currentInputSource === null || isInputSource(record.currentInputSource))
-            && typeof record.screenSharing === "boolean"
-            && typeof record.microphoneInUse === "boolean"
-            && typeof record.locationInUse === "boolean";
+        return typeof record.desktopStateAvailable === "boolean" && isInputSourceList(record.inputSources) && (record.currentInputSource === null || isInputSource(record.currentInputSource)) && typeof record.screenSharing === "boolean" && typeof record.microphoneInUse === "boolean" && typeof record.locationInUse === "boolean";
     }
 
     function isHardwareRecord(hardware) {
-        if (hardware === undefined) return true;
-        if (!hardware || typeof hardware !== "object") return false;
+        if (hardware === undefined)
+            return true;
+        if (!hardware || typeof hardware !== "object")
+            return false;
         const string = value => typeof value === "string" && value.length <= 4096;
         const number = value => isFiniteNumber(value) && value >= 0;
         const optional = value => value === null || number(value);
-        return string(hardware.cpuModel) && string(hardware.kernel)
-            && optional(hardware.cpuMhz) && optional(hardware.uptimeSeconds)
-            && [hardware.processCount, hardware.runningProcesses, hardware.threads].every(number)
-            && Array.isArray(hardware.gpus) && hardware.gpus.length <= 8
-            && hardware.gpus.every(gpu => gpu && [gpu.name, gpu.driver, gpu.pciAddress].every(string)
-                && [gpu.busyPercent, gpu.memoryUsedBytes, gpu.memoryTotalBytes, gpu.temperatureCelsius,
-                    gpu.powerWatts, gpu.clockMhz, gpu.fanRpm].every(optional))
-            && Array.isArray(hardware.storage) && hardware.storage.length <= 2
-            && hardware.storage.every(volume => volume && string(volume.path) && number(volume.totalBytes) && number(volume.availableBytes))
-            && Array.isArray(hardware.processes) && hardware.processes.length <= 8192
-            && hardware.processes.every(process => process && string(process.name) && string(process.state)
-                && (process.executable === undefined || string(process.executable))
-                && (process.startTime === undefined || number(process.startTime))
-                && [process.pid, process.memoryBytes, process.threads].every(number) && optional(process.cpuPercent));
+        return string(hardware.cpuModel) && string(hardware.kernel) && optional(hardware.cpuMhz) && optional(hardware.uptimeSeconds) && [hardware.processCount, hardware.runningProcesses, hardware.threads].every(number) && Array.isArray(hardware.gpus) && hardware.gpus.length <= 8 && hardware.gpus.every(gpu => gpu && [gpu.name, gpu.driver, gpu.pciAddress].every(string) && [gpu.busyPercent, gpu.memoryUsedBytes, gpu.memoryTotalBytes, gpu.temperatureCelsius, gpu.powerWatts, gpu.clockMhz, gpu.fanRpm].every(optional)) && Array.isArray(hardware.storage) && hardware.storage.length <= 2 && hardware.storage.every(volume => volume && string(volume.path) && number(volume.totalBytes) && number(volume.availableBytes)) && Array.isArray(hardware.processes) && hardware.processes.length <= 8192 && hardware.processes.every(process => process && string(process.name) && string(process.state) && (process.executable === undefined || string(process.executable)) && (process.startTime === undefined || number(process.startTime)) && [process.pid, process.memoryBytes, process.threads].every(number) && optional(process.cpuPercent));
     }
 
     function isExtraRecord(extra) {
-        if (extra === undefined) return true;
-        if (extra === null || typeof extra !== "object" || Array.isArray(extra)) return false;
-        return (extra.cpuCores === undefined || (Array.isArray(extra.cpuCores) && extra.cpuCores.length <= 256
-            && extra.cpuCores.every(core => core && Number.isInteger(core.id) && core.id >= 0
-                && (core.usage === null || (isFiniteNumber(core.usage) && core.usage >= 0 && core.usage <= 100)))
-            && new Set(extra.cpuCores.map(core => core.id)).size === extra.cpuCores.length))
-            && isHardwareRecord(extra.hardware) && ["cpuTemperatureCelsius", "load1", "load5", "load15", "logicalCpus", "swapUsedBytes", "swapTotalBytes", "diskReadBytesPerSecond", "diskWriteBytesPerSecond"].every(key => extra[key] === undefined || extra[key] === null || (isFiniteNumber(extra[key]) && extra[key] >= 0));
+        if (extra === undefined)
+            return true;
+        if (extra === null || typeof extra !== "object" || Array.isArray(extra))
+            return false;
+        return (extra.cpuCores === undefined || (Array.isArray(extra.cpuCores) && extra.cpuCores.length <= 256 && extra.cpuCores.every(core => core && Number.isInteger(core.id) && core.id >= 0 && (core.usage === null || (isFiniteNumber(core.usage) && core.usage >= 0 && core.usage <= 100))) && new Set(extra.cpuCores.map(core => core.id)).size === extra.cpuCores.length)) && isHardwareRecord(extra.hardware) && ["cpuTemperatureCelsius", "load1", "load5", "load15", "logicalCpus", "swapUsedBytes", "swapTotalBytes", "diskReadBytesPerSecond", "diskWriteBytesPerSecond"].every(key => extra[key] === undefined || extra[key] === null || (isFiniteNumber(extra[key]) && extra[key] >= 0));
     }
 
     function isMetricsRecord(record) {
-        return record !== null
-            && typeof record === "object"
-            && record.protocolVersion === 1
-            && record.type === "metrics"
-            && isOptionalNumber(record.cpuPercent)
-            && isFiniteNumber(record.memoryTotalBytes)
-            && isFiniteNumber(record.memoryUsedBytes)
-            && isOptionalNumber(record.networkReceiveBytesPerSecond)
-            && isOptionalNumber(record.networkTransmitBytesPerSecond)
-            && record.memoryTotalBytes >= 0
-            && record.memoryUsedBytes >= 0
-            && record.memoryUsedBytes <= record.memoryTotalBytes
-            && (record.cpuPercent === null || (record.cpuPercent >= 0 && record.cpuPercent <= 100))
-            && isDesktopStateRecord(record)
-            && isExtraRecord(record.extra);
+        return record !== null && typeof record === "object" && record.protocolVersion === 1 && record.type === "metrics" && isOptionalNumber(record.cpuPercent) && isFiniteNumber(record.memoryTotalBytes) && isFiniteNumber(record.memoryUsedBytes) && isOptionalNumber(record.networkReceiveBytesPerSecond) && isOptionalNumber(record.networkTransmitBytesPerSecond) && record.memoryTotalBytes >= 0 && record.memoryUsedBytes >= 0 && record.memoryUsedBytes <= record.memoryTotalBytes && (record.cpuPercent === null || (record.cpuPercent >= 0 && record.cpuPercent <= 100)) && isDesktopStateRecord(record) && isExtraRecord(record.extra);
     }
 
     function ingest(recordText) {
@@ -223,7 +176,7 @@ QtObject {
     property var metricsSocket: Socket {
         path: root.socketPath
         parser: SplitParser {
-            onRead: function(data) {
+            onRead: function (data) {
                 root.ingest(data);
             }
         }
@@ -242,7 +195,7 @@ QtObject {
             root.scheduleReconnect();
         }
 
-        onError: function(error) {
+        onError: function (error) {
             root.failConnection(error);
         }
 

@@ -24,7 +24,8 @@ Flickable {
     readonly property bool hovered: tableHover.hovered
     signal sortRequested(string key)
     signal keyPressed(var event)
-    Layout.fillWidth: true; Layout.fillHeight: true
+    Layout.fillWidth: true
+    Layout.fillHeight: true
     Layout.minimumHeight: 80
     contentWidth: horizontal.tableWidth
     contentHeight: height
@@ -32,8 +33,12 @@ Flickable {
     flickableDirection: Flickable.HorizontalFlick
     boundsBehavior: Flickable.StopAtBounds
     clip: true
-    HorizontalWheelScroll { viewport: horizontal }
-    ScrollBar.horizontal: ScrollBar { policy: horizontal.contentWidth > horizontal.width ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff }
+    HorizontalWheelScroll {
+        viewport: horizontal
+    }
+    ScrollBar.horizontal: ScrollBar {
+        policy: horizontal.contentWidth > horizontal.width ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+    }
     WheelHandler {
         target: null
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
@@ -48,19 +53,29 @@ Flickable {
             const dy = sideways ? 0 : event.angleDelta.y;
             const px = sideways ? event.pixelDelta.y : 0;
             const py = sideways ? 0 : event.pixelDelta.y;
-            if (!dx && !dy && !px && !py) { event.accepted = false; return; }
+            if (!dx && !dy && !px && !py) {
+                event.accepted = false;
+                return;
+            }
             remainderX += px ? px / 34 : dx / 30;
             remainderY += py ? py / horizontal.rowHeight : dy / 30;
             const xSteps = Math.trunc(remainderX);
             const ySteps = Math.trunc(remainderY);
             remainderX -= xSteps;
             remainderY -= ySteps;
-            if (xSteps) horizontal.contentX = Math.max(0, Math.min(horizontal.contentWidth - horizontal.width, horizontal.contentX - xSteps * 34));
-            if (ySteps) list.contentY = list.originY + Math.max(0, Math.min(list.contentHeight - list.height, list.contentY - list.originY - ySteps * horizontal.rowHeight));
+            if (xSteps)
+                horizontal.contentX = Math.max(0, Math.min(horizontal.contentWidth - horizontal.width, horizontal.contentX - xSteps * 34));
+            if (ySteps)
+                list.contentY = list.originY + Math.max(0, Math.min(list.contentHeight - list.height, list.contentY - list.originY - ySteps * horizontal.rowHeight));
             event.accepted = true;
         }
     }
-    Rectangle { width: horizontal.tableWidth; height: headings.height; radius: 6; color: Theme.surface }
+    Rectangle {
+        width: horizontal.tableWidth
+        height: headings.height
+        radius: 6
+        color: Theme.surface
+    }
     Row {
         id: headings
         visible: horizontal.headerVisible
@@ -72,7 +87,8 @@ Flickable {
                 required property string modelData
                 required property int index
                 objectName: horizontal.sortObjectPrefix + modelData
-                width: horizontal.columnWidths[index]; height: headings.height
+                width: horizontal.columnWidths[index]
+                height: headings.height
                 hoverEnabled: true
                 Accessible.name: horizontal.headerAccessibleName(modelData)
                 onClicked: horizontal.sortRequested(modelData)
@@ -80,14 +96,19 @@ Flickable {
                     visible: heading.hovered && text.length > 0
                     text: horizontal.headerHint(heading.modelData)
                 }
-                background: Rectangle { radius: heading.index === 0 || heading.index === horizontal.columns.length - 1 ? 6 : 0; color: heading.hovered || heading.visualFocus ? Theme.hover : "transparent" }
+                background: Rectangle {
+                    radius: heading.index === 0 || heading.index === horizontal.columns.length - 1 ? 6 : 0
+                    color: heading.hovered || heading.visualFocus ? Theme.hover : "transparent"
+                }
                 contentItem: Text {
-                    leftPadding: 6; rightPadding: 6
+                    leftPadding: 6
+                    rightPadding: 6
                     text: horizontal.headerLabel(heading.modelData)
                     elide: Text.ElideRight
                     horizontalAlignment: horizontal.rightAligned(heading.index) ? Text.AlignRight : Text.AlignLeft
                     verticalAlignment: Text.AlignVCenter
-                    font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSmall
                     font.weight: horizontal.sortKey === heading.modelData ? Font.DemiBold : Font.Normal
                     color: horizontal.sortKey === heading.modelData ? Theme.text : Theme.muted
                 }
@@ -106,7 +127,9 @@ Flickable {
         boundsBehavior: Flickable.StopAtBounds
         reuseItems: true
         activeFocusOnTab: true
-        HoverHandler { id: tableHover }
+        HoverHandler {
+            id: tableHover
+        }
         Keys.onPressed: event => horizontal.keyPressed(event)
         ScrollBar.vertical: ScrollBar {
             objectName: horizontal.scrollObjectName

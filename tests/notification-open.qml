@@ -5,32 +5,60 @@ import Quickshell
 ShellRoot {
     QtObject {
         id: source
-        property var allEntries: Array.from({length: 100}, (_, i) => ({
-            notification: {id: i + 1}, appName: "App " + (i % 10), desktopEntry: "",
-            appIcon: "", summary: "Notification " + i, body: "Retained notification history",
-            actions: [], receivedAt: Date.now(), timeoutMs: 0, image: "", toastVisible: false
-        }))
+        property var allEntries: Array.from({
+            length: 100
+        }, (_, i) => ({
+                    notification: {
+                        id: i + 1
+                    },
+                    appName: "App " + (i % 10),
+                    desktopEntry: "",
+                    appIcon: "",
+                    summary: "Notification " + i,
+                    body: "Retained notification history",
+                    actions: [],
+                    receivedAt: Date.now(),
+                    timeoutMs: 0,
+                    image: "",
+                    toastVisible: false
+                }))
         property var visibleEntries: []
-        function setPaused(notification, paused) {}
-        function archiveToasts() {}
-        function canActivate(entry) { return false; }
-        function expiryProgress(notification) { return 1; }
+        function setPaused(notification, paused) {
+        }
+        function archiveToasts() {
+        }
+        function canActivate(entry) {
+            return false;
+        }
+        function expiryProgress(notification) {
+            return 1;
+        }
     }
-    NotificationSurface { id: surface; state: source; notificationCentre: history }
-    NotificationHistoryPopup { id: history; notificationSurface: surface }
+    NotificationSurface {
+        id: surface
+        state: source
+        notificationCentre: history
+    }
+    NotificationHistoryPopup {
+        id: history
+        notificationSurface: surface
+    }
     TestCase {
         name: "NotificationOpen"
         when: true
         function cards(item) {
             let result = [];
             for (const child of item.children || []) {
-                if (child.objectName === "notificationCard") result.push(child);
-                else result = result.concat(cards(child));
+                if (child.objectName === "notificationCard")
+                    result.push(child);
+                else
+                    result = result.concat(cards(child));
             }
             return result;
         }
         function check(value, message) {
-            if (!value) console.error("FAIL: " + message);
+            if (!value)
+                console.error("FAIL: " + message);
             verify(value, message);
         }
         function test_reopen() {
@@ -47,7 +75,8 @@ ShellRoot {
                 let animatedFrames = 0;
                 for (let frame = 0; frame < 20; ++frame) {
                     wait(16);
-                    if (history.slideOffset > 0) animatedFrames++;
+                    if (history.slideOffset > 0)
+                        animatedFrames++;
                 }
                 check(animatedFrames >= 3, "Opening renders intermediate slide frames");
                 history.visible = false;
@@ -56,7 +85,12 @@ ShellRoot {
                 check(initial.every(card => afterClose.includes(card)), "Closing retains every delegate");
                 check(!surface.visible, "Closing unmaps the desktop surface");
             }
-            const toast = Object.assign({}, source.allEntries[0], {notification: {id: 1001}, toastVisible: true});
+            const toast = Object.assign({}, source.allEntries[0], {
+                notification: {
+                    id: 1001
+                },
+                toastVisible: true
+            });
             source.allEntries = source.allEntries.concat([toast]);
             tryCompare(surface, "renderedNotificationCount", 1);
             wait(400);

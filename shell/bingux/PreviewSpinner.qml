@@ -10,7 +10,11 @@ Item {
     visible: opacity > 0
     Accessible.role: Accessible.Indicator
     Accessible.name: "Loading preview"
-    Behavior on opacity { NumberAnimation { duration: Theme.previewMotion } }
+    Behavior on opacity {
+        NumberAnimation {
+            duration: Theme.previewMotion
+        }
+    }
     Canvas {
         id: ring
         anchors.fill: parent
@@ -29,9 +33,16 @@ Item {
             context.arc(width / 2, height / 2, width / 2 - 3, -Math.PI / 2, Math.PI / 2);
             context.stroke();
         }
-        Connections { target: root; function onColourChanged() { ring.requestPaint(); } }
+        Connections {
+            target: root
+            function onColourChanged() {
+                ring.requestPaint();
+            }
+        }
         RotationAnimation on rotation {
-            from: 0; to: 360; duration: 850
+            from: 0
+            to: 360
+            duration: 850
             loops: Animation.Infinite
             running: root.visible && root.loading && !Theme.reducedMotion
         }

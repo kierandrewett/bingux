@@ -15,22 +15,38 @@ Scope {
     signal event(string name, var payload)
     function invoke(id, payload) {
         const action = actions[id];
-        if (!action) throw new Error("Unknown extension action: " + id);
+        if (!action)
+            throw new Error("Unknown extension action: " + id);
         return action(payload);
     }
     function setEnabled(id, enabled) {
-        if (manager.running) return;
+        if (manager.running)
+            return;
         manager.command = ["python3", decodeURIComponent(Qt.resolvedUrl("extensions.py").toString().replace("file://", "")), enabled ? "enable" : "disable", id];
         manager.running = true;
     }
     Process {
         id: manager
-        onExited: (code, status) => { if (code !== 0) root.report("manager", "Could not change extension state"); root.reload(); }
+        onExited: (code, status) => {
+            if (code !== 0)
+                root.report("manager", "Could not change extension state");
+            root.reload();
+        }
     }
-    function widget(id) { return widgets.find(item => item.id === id) || null; }
-    function reload() { if (!scan.running) scan.running = true; }
+    function widget(id) {
+        return widgets.find(item => item.id === id) || null;
+    }
+    function reload() {
+        if (!scan.running)
+            scan.running = true;
+    }
     function report(id, message) {
-        errors = errors.filter(item => item.id !== id).concat([{id, message}]);
+        errors = errors.filter(item => item.id !== id).concat([
+            {
+                id,
+                message
+            }
+        ]);
         console.warn("[extensions] " + id + ": " + message);
     }
     Process {
@@ -45,7 +61,9 @@ Scope {
                     root.widgets = data.widgets;
                     root.errors = data.errors;
                     root.generation++;
-                } catch (error) { root.report("loader", "Could not read extension registry: " + error); }
+                } catch (error) {
+                    root.report("loader", "Could not read extension registry: " + error);
+                }
             }
         }
     }

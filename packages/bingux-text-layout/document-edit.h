@@ -5,15 +5,18 @@
 
 class DocumentEdit : public DocumentSpacing {
     Q_OBJECT
-public:
+  public:
     using DocumentSpacing::DocumentSpacing;
 
     // One native edit keeps both layout and the visible cursor out of the
     // temporary state where a Markdown fragment has been removed but not replaced.
-    Q_INVOKABLE QVariantMap replace(int start, int end, const QString &markdown, bool removePlaceholder) {
-        if (!document()) return {};
+    Q_INVOKABLE QVariantMap replace(int start, int end, const QString& markdown,
+                                    bool removePlaceholder) {
+        if (!document())
+            return {};
         auto doc = document()->textDocument();
-        if (start < 0 || end < start || end >= doc->characterCount()) return {};
+        if (start < 0 || end < start || end >= doc->characterCount())
+            return {};
         QTextCursor cursor(doc);
         cursor.beginEditBlock();
         cursor.setPosition(start);

@@ -4,20 +4,45 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
-    PanelWindow { id: host; implicitWidth: 100; implicitHeight: 100 }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS")
+    }
+    PanelWindow {
+        id: host
+        implicitWidth: 100
+        implicitHeight: 100
+    }
     QtObject {
         id: state
-        property var allEntries: Array.from({length: 200}, (_, i) => ({
-            notification: {id: i + 1}, appName: "Downloads", desktopEntry: "", appIcon: "",
-            summary: "Notification " + i, body: "Saved history", actions: [],
-            receivedAt: Date.now(), timeoutMs: 0, image: "", toastVisible: false
-        }))
+        property var allEntries: Array.from({
+            length: 200
+        }, (_, i) => ({
+                    notification: {
+                        id: i + 1
+                    },
+                    appName: "Downloads",
+                    desktopEntry: "",
+                    appIcon: "",
+                    summary: "Notification " + i,
+                    body: "Saved history",
+                    actions: [],
+                    receivedAt: Date.now(),
+                    timeoutMs: 0,
+                    image: "",
+                    toastVisible: false
+                }))
         readonly property var visibleEntries: allEntries.filter(entry => entry.toastVisible)
-        function setPaused(notification, paused) {}
-        function archiveToasts() {}
-        function expiryProgress(entry) { return 0; }
-        function canActivate(entry) { return false; }
+        function setPaused(notification, paused) {
+        }
+        function archiveToasts() {
+        }
+        function expiryProgress(entry) {
+            return 0;
+        }
+        function canActivate(entry) {
+            return false;
+        }
     }
     QtObject {
         id: centre
@@ -32,13 +57,25 @@ ShellRoot {
         property int popupHeight: 500
         property var body: historyBody
     }
-    Item { id: historyBody; parent: host.contentItem }
-    NotificationSurface { id: surface; state: state; notificationCentre: centre; inputSuspended: true }
+    Item {
+        id: historyBody
+        parent: host.contentItem
+    }
+    NotificationSurface {
+        id: surface
+        state: state
+        notificationCentre: centre
+        inputSuspended: true
+    }
     TestCase {
         parent: host.contentItem
         when: host.visible
-        function initTestCase() { report.setText("RUNNING"); }
-        function cleanupTestCase() { report.setText("FAILURES " + qtest_results.failCount); }
+        function initTestCase() {
+            report.setText("RUNNING");
+        }
+        function cleanupTestCase() {
+            report.setText("FAILURES " + qtest_results.failCount);
+        }
         function test_history_releases_cards_after_close() {
             tryCompare(surface.viewport, "instantiatedCardCount", 0);
             surface.prepareForHistory();

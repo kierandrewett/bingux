@@ -29,7 +29,8 @@ QMLTermWidget {
             root.fillColor = "transparent";
         }
         setForegroundColor(Theme.text);
-        if ("selectionColor" in root) root["selectionColor"] = Theme.textSelection;
+        if ("selectionColor" in root)
+            root["selectionColor"] = Theme.textSelection;
     }
 
     session: QMLTermSession {
@@ -54,7 +55,9 @@ QMLTermWidget {
         function onTextChanged() {
             root.applyTheme();
         }
-        function onTextSelectionChanged() { root.applyTheme(); }
+        function onTextSelectionChanged() {
+            root.applyTheme();
+        }
     }
     // QMLTermWidget emits finished for normal exits, but not signal exits.
     Timer {

@@ -88,7 +88,9 @@ impl ChatHistory {
 
 impl AiProvider {
     pub fn new(config: AiConfig) -> Result<Self> {
-        if config.harness.is_none() { validate_endpoint(&config.endpoint)?; }
+        if config.harness.is_none() {
+            validate_endpoint(&config.endpoint)?;
+        }
         let agent = ureq::Agent::new_with_config(
             ureq::Agent::config_builder()
                 .https_only(true)
@@ -133,7 +135,12 @@ impl AiProvider {
         parse_first_response(&body)
     }
 
-    pub fn stream(&self, history: &ChatHistory, prompt: &str, mut update: impl FnMut(&str) -> bool) -> Result<String> {
+    pub fn stream(
+        &self,
+        history: &ChatHistory,
+        prompt: &str,
+        mut update: impl FnMut(&str) -> bool,
+    ) -> Result<String> {
         if let Some(config) = &self.cli {
             let input = serde_json::to_string(&history.messages_with(prompt))?;
             return crate::cli_ai::complete(config, &input, &mut update);

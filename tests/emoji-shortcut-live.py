@@ -1,95 +1,96 @@
 """Opt-in real Win+Period verification. Never inserts text or changes the clipboard."""
+
 import json
 from pathlib import Path
 import subprocess
 import time
 from gi.repository import Gio, GLib
 
-shell = Path(__file__).resolve().parents[1] / 'shell/bingux'
-command = ['qs', 'ipc', '--any-display', '-p', str(shell / "EmojiShell.qml"), 'call', 'emoji']
+shell = Path(__file__).resolve().parents[1] / "shell/bingux"
+command = ["qs", "ipc", "--any-display", "-p", str(shell / "EmojiShell.qml"), "call", "emoji"]
 
 
 def status():
     deadline = time.monotonic() + 3
     while time.monotonic() < deadline:
-        result = subprocess.run(command + ['status'], capture_output=True, text=True, timeout=3)
+        result = subprocess.run(command + ["status"], capture_output=True, text=True, timeout=3)
         try:
             return json.loads(result.stdout)
         except ValueError:
-            time.sleep(.05)
-    raise AssertionError('Shell did not finish reloading')
+            time.sleep(0.05)
+    raise AssertionError("Shell did not finish reloading")
 
 
-assert not status()['visible'], 'Leave an already-open emoji picker untouched'
-assert status()['ready'], 'Win+Period was not registered'
-emoji_settings = Gio.Settings.new('org.freedesktop.ibus.panel.emoji')
-assert '<Super>period' not in emoji_settings.get_strv('hotkey'), 'IBus is still intercepting Win+Period'
+assert not status()["visible"], "Leave an already-open emoji picker untouched"
+assert status()["ready"], "Win+Period was not registered"
+emoji_settings = Gio.Settings.new("org.freedesktop.ibus.panel.emoji")
+assert "<Super>period" not in emoji_settings.get_strv("hotkey"), "IBus is still intercepting Win+Period"
 bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-destination = 'org.gnome.Mutter.RemoteDesktop'
+destination = "org.gnome.Mutter.RemoteDesktop"
 
 
 def call(path, interface, method, args=None):
     return bus.call_sync(destination, path, interface, method, args, None, Gio.DBusCallFlags.NONE, 3000, None)
 
 
-session = call('/org/gnome/Mutter/RemoteDesktop', destination, 'CreateSession').unpack()[0]
+session = call("/org/gnome/Mutter/RemoteDesktop", destination, "CreateSession").unpack()[0]
 
 
 def key(code, pressed):
-    symbol = {125: 0xffeb, 52: 0x2e, 1: 0xff1b}[code]
-    call(session, destination + '.Session', 'NotifyKeyboardKeysym', GLib.Variant('(ub)', (symbol, pressed)))
+    symbol = {125: 0xFFEB, 52: 0x2E, 1: 0xFF1B}[code]
+    call(session, destination + ".Session", "NotifyKeyboardKeysym", GLib.Variant("(ub)", (symbol, pressed)))
 
 
 def press(hold):
     key(125, True)
-    time.sleep(.05)
+    time.sleep(0.05)
     key(52, True)
     time.sleep(hold)
     key(52, False)
     key(125, False)
-    time.sleep(.12)
+    time.sleep(0.12)
 
 
 def wait_visible(value):
     deadline = time.monotonic() + 2
     while time.monotonic() < deadline:
-        if status()['visible'] == value:
+        if status()["visible"] == value:
             return
-        time.sleep(.03)
-    raise AssertionError(f'Picker visible did not become {value}')
+        time.sleep(0.03)
+    raise AssertionError(f"Picker visible did not become {value}")
 
 
 try:
-    call(session, destination + '.Session', 'Start')
-    time.sleep(.1)
-    for hold in [.06, .7]:
+    call(session, destination + ".Session", "Start")
+    time.sleep(0.1)
+    for hold in [0.06, 0.7]:
         for attempt in range(5):
-            before = status()['instance']
+            before = status()["instance"]
             try:
                 press(hold)
                 wait_visible(True)
                 key(1, True)
                 key(1, False)
                 wait_visible(False)
-                assert status()['instance'] == before, 'Shell reloaded during the test'
-                print(f'PASS Win+Period opens, Escape closes; holding {hold}s keeps it open')
+                assert status()["instance"] == before, "Shell reloaded during the test"
+                print(f"PASS Win+Period opens, Escape closes; holding {hold}s keeps it open")
                 break
             except AssertionError:
-                if status()['instance'] == before or attempt == 4:
+                if status()["instance"] == before or attempt == 4:
                     raise
-                subprocess.run(command + ['close'], check=True, timeout=3)
-                print('Retrying after a concurrent shell reload')
-    for panel in ['search', 'controls', 'calendar']:
-        subprocess.run(['qs', 'ipc', '--any-display', '-p', str(shell), 'call', 'shell', panel], check=True, timeout=3)
-        time.sleep(.2)
-        press(.06)
+                subprocess.run(command + ["close"], check=True, timeout=3)
+                print("Retrying after a concurrent shell reload")
+    for panel in ["search", "controls", "calendar"]:
+        subprocess.run(["qs", "ipc", "--any-display", "-p", str(shell), "call", "shell", panel], check=True, timeout=3)
+        time.sleep(0.2)
+        press(0.06)
         wait_visible(True)
         key(1, True)
         key(1, False)
         wait_visible(False)
-        print(f'PASS visual emoji picker opens over {panel}')
+        print(f"PASS visual emoji picker opens over {panel}")
 finally:
     key(52, False)
     key(125, False)
-    call(session, destination + '.Session', 'Stop')
-    subprocess.run(command + ['close'], check=True, timeout=3)
+    call(session, destination + ".Session", "Stop")
+    subprocess.run(command + ["close"], check=True, timeout=3)

@@ -5,13 +5,26 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
-    EmojiPicker { id: picker; shortcutEnabled: false; persistRecent: false }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS")
+    }
+    EmojiPicker {
+        id: picker
+        shortcutEnabled: false
+        persistRecent: false
+    }
     FloatingWindow {
         id: window
         title: "Bingux emoji insertion test"
-        implicitWidth: 440; implicitHeight: 120
-        TextField { id: receiver; anchors.fill: parent; focus: true; text: "Before " }
+        implicitWidth: 440
+        implicitHeight: 120
+        TextField {
+            id: receiver
+            anchors.fill: parent
+            focus: true
+            text: "Before "
+        }
         TestCase {
             when: window.visible
             function test_insertion() {
@@ -35,7 +48,12 @@ ShellRoot {
                     // but only after the controlled receiver was proven focused.
                     picker.choose();
                     wait(300);
-                    report.setText(JSON.stringify({text: receiver.text, error: picker.error, pending: picker.pendingText, target: picker.targetWindow}) + "\nFAILURES 1\n");
+                    report.setText(JSON.stringify({
+                        text: receiver.text,
+                        error: picker.error,
+                        pending: picker.pendingText,
+                        target: picker.targetWindow
+                    }) + "\nFAILURES 1\n");
                     tryCompare(receiver, "text", before + emoji, 2500);
                     compare(picker.error, "");
                     tryCompare(picker, "pendingText", "", 1000);

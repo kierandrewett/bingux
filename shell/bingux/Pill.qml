@@ -16,12 +16,14 @@ Item {
     property real contentImplicitWidth: row.implicitWidth
     readonly property bool customPresentation: !!presentation?.custom
     implicitWidth: (customPresentation ? customFace.implicitWidth : contentImplicitWidth) + horizontalPadding * 2
-    implicitHeight: panelLayout && !customPresentation
-        ? Math.max(Theme.barHeight, row.implicitHeight + Theme.gap * 2) : Theme.barHeight
+    implicitHeight: panelLayout && !customPresentation ? Math.max(Theme.barHeight, row.implicitHeight + Theme.gap * 2) : Theme.barHeight
     width: panelLayout && parent ? parent.width : implicitWidth
     Layout.fillWidth: panelLayout
     Layout.maximumWidth: panelLayout && parent ? parent.width : Infinity
-    HoverHandler { id: hover; enabled: root.interactive }
+    HoverHandler {
+        id: hover
+        enabled: root.interactive
+    }
     BarControlSurface {
         hovered: root.hovered
         pressed: root.pressed

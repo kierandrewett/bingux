@@ -7,12 +7,37 @@ import "../shell/bingux"
 ShellRoot {
     id: test
     property int failures: 0
-    function check(value, message) { if (!value) { failures++; console.error(message); } }
-    QtObject { id: output; property real volume: 0.5; property bool muted: false }
-    QtObject { id: input; property real volume: 0.25; property bool muted: true }
-    QtObject { id: sink; property bool ready: true; property var audio: output }
-    QtObject { id: source; property bool ready: true; property var audio: input }
-    QtObject { id: indicatorsFixture; property var audioSink: sink; property var audioSource: source }
+    function check(value, message) {
+        if (!value) {
+            failures++;
+            console.error(message);
+        }
+    }
+    QtObject {
+        id: output
+        property real volume: 0.5
+        property bool muted: false
+    }
+    QtObject {
+        id: input
+        property real volume: 0.25
+        property bool muted: true
+    }
+    QtObject {
+        id: sink
+        property bool ready: true
+        property var audio: output
+    }
+    QtObject {
+        id: source
+        property bool ready: true
+        property var audio: input
+    }
+    QtObject {
+        id: indicatorsFixture
+        property var audioSink: sink
+        property var audioSource: source
+    }
     QtObject {
         id: player
         property string dbusName: "org.mpris.MediaPlayer2.test"
@@ -30,9 +55,14 @@ ShellRoot {
         property bool canGoNext: false
         property bool canGoPrevious: true
         property bool canSeek: true
-        function play() { isPlaying = true; }
-        function pause() { isPlaying = false; }
-        function previous() {}
+        function play() {
+            isPlaying = true;
+        }
+        function pause() {
+            isPlaying = false;
+        }
+        function previous() {
+        }
     }
     QtObject {
         id: servicesFixture
@@ -41,20 +71,62 @@ ShellRoot {
         property string error: ""
         property bool keepAwake: false
         property bool preferencesReady: true
-        property var controls: ({dnd: true})
-        property var vpns: [{id: "test-vpn", connected: false, canToggle: true}, {id: "blocked-vpn", connected: false, canToggle: false}]
-        function showControl(id) { return controls[id] === true; }
-        function setControl(id, shown) { controls = Object.assign({}, controls, {[id]: shown}); }
+        property var controls: ({
+                dnd: true
+            })
+        property var vpns: [
+            {
+                id: "test-vpn",
+                connected: false,
+                canToggle: true
+            },
+            {
+                id: "blocked-vpn",
+                connected: false,
+                canToggle: false
+            }
+        ]
+        function showControl(id) {
+            return controls[id] === true;
+        }
+        function setControl(id, shown) {
+            controls = Object.assign({}, controls, {
+                [id]: shown
+            });
+        }
         property var lastAction: null
-        property var state: ({power: {available: true, profile: "balanced", profiles: ["balanced", "power-saver"]},
-            awakeAvailable: true, nightLightAvailable: true, nightLight: false, nightLightActive: false})
-        function action(request) { lastAction = request; }
-        function toggleAwake() { keepAwake = !keepAwake; }
+        property var state: ({
+                power: {
+                    available: true,
+                    profile: "balanced",
+                    profiles: ["balanced", "power-saver"]
+                },
+                awakeAvailable: true,
+                nightLightAvailable: true,
+                nightLight: false,
+                nightLightActive: false
+            })
+        function action(request) {
+            lastAction = request;
+        }
+        function toggleAwake() {
+            keepAwake = !keepAwake;
+        }
     }
     QtObject {
         id: devicesFixture
-        property var audioOutputs: [{name: "speaker", description: "Speakers"}]
-        property var audioInputs: [{name: "microphone", description: "Microphone"}]
+        property var audioOutputs: [
+            {
+                name: "speaker",
+                description: "Speakers"
+            }
+        ]
+        property var audioInputs: [
+            {
+                name: "microphone",
+                description: "Microphone"
+            }
+        ]
         property var outputNode: audioOutputs[0]
         property var inputNode: audioInputs[0]
         property var selected: null
@@ -66,11 +138,27 @@ ShellRoot {
         property var connections: []
         property var wirelessNetworks: []
         property var connectionAction: null
-        function outputSelected(node) { selected = node; }
-        function inputSelected(node) { selected = node; }
-        function scanForCommand(enabled) { scan = enabled; }
-        function refreshNetwork() { networkBusy = true; }
-        function connectionForCommand(id, action) { connectionAction = {id, action}; return {ok: true}; }
+        function outputSelected(node) {
+            selected = node;
+        }
+        function inputSelected(node) {
+            selected = node;
+        }
+        function scanForCommand(enabled) {
+            scan = enabled;
+        }
+        function refreshNetwork() {
+            networkBusy = true;
+        }
+        function connectionForCommand(id, action) {
+            connectionAction = {
+                id,
+                action
+            };
+            return {
+                ok: true
+            };
+        }
     }
     QtObject {
         id: bluetoothDevice
@@ -80,43 +168,89 @@ ShellRoot {
         property bool blocked: false
         property bool connected: false
         property int state: BluetoothDeviceState.Disconnected
-        function connect() { connected = true; }
-        function disconnect() { connected = false; }
+        function connect() {
+            connected = true;
+        }
+        function disconnect() {
+            connected = false;
+        }
     }
     QtObject {
         id: adapterFixture
         property bool enabled: true
         property bool discovering: false
-        property var devices: ({values: [bluetoothDevice]})
+        property var devices: ({
+                values: [bluetoothDevice]
+            })
     }
     QtObject {
         id: mediaFixture
         property var mediaPlayers: [player]
         property var mediaPlayer: player
         property var services: servicesFixture
-        property var controlChoices: [{id: "dnd", title: "Do Not Disturb", available: true}, {id: "unavailable", title: "Unavailable", available: false}]
+        property var controlChoices: [
+            {
+                id: "dnd",
+                title: "Do Not Disturb",
+                available: true
+            },
+            {
+                id: "unavailable",
+                title: "Unavailable",
+                available: false
+            }
+        ]
         property var deviceControls: devicesFixture
         property var bluetoothAdapter: adapterFixture
         property bool visible: false
         property string page: ""
         property string audioTab: ""
-        function openDetail(name, trigger, tab) { page = name; audioTab = tab; }
+        function openDetail(name, trigger, tab) {
+            page = name;
+            audioTab = tab;
+        }
     }
     QtObject {
         id: notificationFixture
         property int invoked: 0
-        property var allEntries: [{historyKey: "session:42", appName: "Test", summary: "A notice", body: "Body",
-            notification: {id: 42}, actions: [{text: "Open", action: {identifier: "open", invoke: () => notificationFixture.invoked++}}]}]
-        function dismiss(item) { allEntries = allEntries.filter(entry => entry.notification !== item); }
-        function dismissAll() { allEntries = []; }
+        property var allEntries: [
+            {
+                historyKey: "session:42",
+                appName: "Test",
+                summary: "A notice",
+                body: "Body",
+                notification: {
+                    id: 42
+                },
+                actions: [
+                    {
+                        text: "Open",
+                        action: {
+                            identifier: "open",
+                            invoke: () => notificationFixture.invoked++
+                        }
+                    }
+                ]
+            }
+        ]
+        function dismiss(item) {
+            allEntries = allEntries.filter(entry => entry.notification !== item);
+        }
+        function dismissAll() {
+            allEntries = [];
+        }
     }
     QtObject {
         id: windowFixture
         property string title: "Test window"
         property bool minimized: false
         property bool activated: false
-        function activate() { activated = true; }
-        function close() { dockFixture.appGroups = []; }
+        function activate() {
+            activated = true;
+        }
+        function close() {
+            dockFixture.appGroups = [];
+        }
     }
     QtObject {
         id: dockFixture
@@ -124,23 +258,63 @@ ShellRoot {
         property int launched: 0
         property var launchedGroup: null
         property bool launchedNewWindow: false
-        property var appGroups: [{id: "test-app", desktopEntry: {name: "Test app"}, windows: [windowFixture]}]
-        function isPinned(group) { return pinned; }
-        function setPinned(group, value) { pinned = value; }
-        function launch(group, newWindow) { launched++; launchedGroup = group; launchedNewWindow = newWindow; }
-        function preferredWindow(group) { return group.windows[0]; }
-        function moveGroup(id, destination) {}
+        property var appGroups: [
+            {
+                id: "test-app",
+                desktopEntry: {
+                    name: "Test app"
+                },
+                windows: [windowFixture]
+            }
+        ]
+        function isPinned(group) {
+            return pinned;
+        }
+        function setPinned(group, value) {
+            pinned = value;
+        }
+        function launch(group, newWindow) {
+            launched++;
+            launchedGroup = group;
+            launchedNewWindow = newWindow;
+        }
+        function preferredWindow(group) {
+            return group.windows[0];
+        }
+        function moveGroup(id, destination) {
+        }
     }
     QtObject {
         id: keyboardFixture
-        property var metrics: ({desktopStateAvailable: true, currentInputSource: {type: "xkb", id: "gb"}})
-        property var sources: [{type: "xkb", id: "gb", displayName: "English"}, {type: "ibus", id: "gb", displayName: "Input method"}]
+        property var metrics: ({
+                desktopStateAvailable: true,
+                currentInputSource: {
+                    type: "xkb",
+                    id: "gb"
+                }
+            })
+        property var sources: [
+            {
+                type: "xkb",
+                id: "gb",
+                displayName: "English"
+            },
+            {
+                type: "ibus",
+                id: "gb",
+                displayName: "Input method"
+            }
+        ]
         property bool selectionBusy: false
         property bool canSelect: true
         property string lastError: ""
         property var selected: null
-        function sourceKey(source) { return source.type + "\n" + source.id; }
-        function selectSource(source, keepOpen) { selected = source; }
+        function sourceKey(source) {
+            return source.type + "\n" + source.id;
+        }
+        function selectSource(source, keepOpen) {
+            selected = source;
+        }
     }
     QtObject {
         id: appFixture
@@ -150,9 +324,18 @@ ShellRoot {
         property string icon: "application-x-executable"
         property bool runInTerminal: false
     }
-    ShellCommands { id: commands; inputSelector: keyboardFixture; applications: [appFixture]; indicators: indicatorsFixture; mediaControls: mediaFixture; notificationState: notificationFixture; dockView: dockFixture }
+    ShellCommands {
+        id: commands
+        inputSelector: keyboardFixture
+        applications: [appFixture]
+        indicators: indicatorsFixture
+        mediaControls: mediaFixture
+        notificationState: notificationFixture
+        dockView: dockFixture
+    }
     Timer {
-        running: true; interval: 100
+        running: true
+        interval: 100
         onTriggered: {
             test.check(JSON.parse(commands.appCommand("list", "", "INSTALLED")).apps.length === 1, "Application search is case insensitive");
             commands.appCommand("new-window", "installed-app.desktop", "");

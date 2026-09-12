@@ -4,15 +4,32 @@ import QtTest
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS") }
-    Timer { id: finish; interval: 200; onTriggered: Qt.quit() }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS")
+    }
+    Timer {
+        id: finish
+        interval: 200
+        onTriggered: Qt.quit()
+    }
     TerminalSidebar {
         id: sidebar
         screen: Quickshell.screens[0]
-        settings: QtObject { property bool sidebarEnabled: true; property bool dockEnabled: false }
+        settings: QtObject {
+            property bool sidebarEnabled: true
+            property bool dockEnabled: false
+        }
     }
-    Window { id: app; visible: true; width: 400; height: 300; title: "Sidebar fullscreen regression" }
+    Window {
+        id: app
+        visible: true
+        width: 400
+        height: 300
+        title: "Sidebar fullscreen regression"
+    }
     TestCase {
         property string checks: ""
         when: app.visible
@@ -100,6 +117,9 @@ ShellRoot {
             app.requestActivate();
             tryCompare(sidebar, "opened", false);
         }
-        function cleanupTestCase() { report.setText("FAILURES " + qtest_results.failCount + "\n" + checks); finish.start(); }
+        function cleanupTestCase() {
+            report.setText("FAILURES " + qtest_results.failCount + "\n" + checks);
+            finish.start();
+        }
     }
 }

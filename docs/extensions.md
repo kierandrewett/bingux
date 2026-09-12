@@ -44,20 +44,20 @@ Start the shell with `BINGUX_NO_EXTENSIONS=1` to bypass all extensions during re
 
 ```json
 {
-  "id": "org.example.home",
-  "name": "Home",
-  "apiVersion": 1,
-  "entry": "Service.qml",
-  "settings": "Settings.qml",
-  "widgets": [
-    {
-      "id": "status",
-      "name": "Home status",
-      "icon": "user-home-symbolic",
-      "component": "Status.qml",
-      "preview": "Preview.qml"
-    }
-  ]
+    "id": "org.example.home",
+    "name": "Home",
+    "apiVersion": 1,
+    "entry": "Service.qml",
+    "settings": "Settings.qml",
+    "widgets": [
+        {
+            "id": "status",
+            "name": "Home status",
+            "icon": "user-home-symbolic",
+            "component": "Status.qml",
+            "preview": "Preview.qml"
+        }
+    ]
 }
 ```
 
@@ -89,22 +89,22 @@ Entry points can be `Item` or `QtObject` components. Use `Component.onCompleted`
 work and `Component.onDestruction` to stop it. QML children are destroyed with their component.
 Clean up external changes, processes and signal connections that your code owns.
 
-| Member | Meaning |
-| --- | --- |
-| `apiVersion` | Host contract, currently `1` |
-| `extensionId`, `widgetId` | Owner IDs; `widgetId` is empty outside widgets |
-| `preview` | Use sample data and do not start live work |
-| `editing` | Customise UI is active, or this is a preview |
-| `container` | Current placement, such as `top-right`, `dock` or `sidebar` |
-| `anchorWindow`, `anchorItem` | Current window and item for a widget popup |
-| `presentation` | Effective label, icon, display mode, `showIcon` and `showText` |
-| `theme` | Shell theme; supported tokens listed below |
-| `reportError(message)` | Add an error to Settings > Extensions |
+| Member                           | Meaning                                                                |
+| -------------------------------- | ---------------------------------------------------------------------- |
+| `apiVersion`                     | Host contract, currently `1`                                           |
+| `extensionId`, `widgetId`        | Owner IDs; `widgetId` is empty outside widgets                         |
+| `preview`                        | Use sample data and do not start live work                             |
+| `editing`                        | Customise UI is active, or this is a preview                           |
+| `container`                      | Current placement, such as `top-right`, `dock` or `sidebar`            |
+| `anchorWindow`, `anchorItem`     | Current window and item for a widget popup                             |
+| `presentation`                   | Effective label, icon, display mode, `showIcon` and `showText`         |
+| `theme`                          | Shell theme; supported tokens listed below                             |
+| `reportError(message)`           | Add an error to Settings > Extensions                                  |
 | `registerAction(name, callback)` | Register `<extensionId>/<name>`; removed when the context is destroyed |
-| `invokeAction(id, payload)` | Call a registered action and return its result |
-| `publish(name, payload)` | Send an event to extension contexts |
-| `event(name, payload)` | Signal for events from extension contexts |
-| `unstable` | Direct access to shell objects, outside the compatibility contract |
+| `invokeAction(id, payload)`      | Call a registered action and return its result                         |
+| `publish(name, payload)`         | Send an event to extension contexts                                    |
+| `event(name, payload)`           | Signal for events from extension contexts                              |
+| `unstable`                       | Direct access to shell objects, outside the compatibility contract     |
 
 Stable theme tokens are `text`, `muted`, `accent`, `warning`, `elevated`, `popupSurface`,
 `fontFamily`, `fontSize`, `fontSmall`, `gap`, `padding`, `radius` and `barHeight`.

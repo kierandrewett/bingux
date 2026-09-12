@@ -4,27 +4,37 @@ function append(history, sample, at) {
     const point = {
         at: at,
         cpu: sample.cpuPercent,
-        memory: sample.memoryTotalBytes > 0 ? sample.memoryUsedBytes / sample.memoryTotalBytes * 100 : null,
+        memory: sample.memoryTotalBytes > 0 ? (sample.memoryUsedBytes / sample.memoryTotalBytes) * 100 : null,
         memoryUsed: sample.memoryUsedBytes,
         memoryTotal: sample.memoryTotalBytes,
         receive: sample.networkReceiveBytesPerSecond,
         send: sample.networkTransmitBytesPerSecond,
         temperature: extra.cpuTemperatureCelsius ?? null,
         load: extra.load1 ?? null,
-        swap: extra.swapTotalBytes > 0 ? extra.swapUsedBytes / extra.swapTotalBytes * 100 : extra.swapTotalBytes === 0 ? 0 : null,
+        swap:
+            extra.swapTotalBytes > 0
+                ? (extra.swapUsedBytes / extra.swapTotalBytes) * 100
+                : extra.swapTotalBytes === 0
+                  ? 0
+                  : null,
         swapUsed: extra.swapUsedBytes ?? null,
         swapTotal: extra.swapTotalBytes ?? null,
         diskRead: extra.diskReadBytesPerSecond ?? null,
-        diskWrite: extra.diskWriteBytesPerSecond ?? null
+        diskWrite: extra.diskWriteBytesPerSecond ?? null,
     };
     for (const core of extra.cpuCores || []) point["cpu" + core.id] = core.usage;
-    return history.filter(entry => entry.at > at - 300000 && entry.at < at).slice(-300).concat([point]);
+    return history
+        .filter((entry) => entry.at > at - 300000 && entry.at < at)
+        .slice(-300)
+        .concat([point]);
 }
 
-function valid(value) { return typeof value === "number" && Number.isFinite(value) && value >= 0; }
+function valid(value) {
+    return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
 
 function windowPoints(history, end, duration) {
-    return history.filter(point => point.at >= end - duration && point.at <= end);
+    return history.filter((point) => point.at >= end - duration && point.at <= end);
 }
 
 function peak(points, keys) {

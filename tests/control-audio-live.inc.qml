@@ -1,13 +1,35 @@
-    QtObject { id: outputAudio; property bool muted: false; property real volume: 0.65 }
-    QtObject { id: inputAudio; property bool muted: false; property real volume: 0.4 }
-    QtObject { id: testOutput; property bool ready: true; property var audio: outputAudio }
-    QtObject { id: testInput; property bool ready: true; property var audio: inputAudio }
-    FileView { id: layoutReport; path: Quickshell.env("BINGUX_LAYOUT_REPORT") }
+    QtObject {
+        id: outputAudio
+        property bool muted: false
+        property real volume: 0.65
+    }
+    QtObject {
+        id: inputAudio
+        property bool muted: false
+        property real volume: 0.4
+    }
+    QtObject {
+        id: testOutput
+        property bool ready: true
+        property var audio: outputAudio
+    }
+    QtObject {
+        id: testInput
+        property bool ready: true
+        property var audio: inputAudio
+    }
+    FileView {
+        id: layoutReport
+        path: Quickshell.env("BINGUX_LAYOUT_REPORT")
+    }
     Process {
         id: nativeInput
         property int resultCode: -1
         onExited: (code, status) => resultCode = code
-        stderr: StdioCollector { onStreamFinished: if (text) console.warn("NATIVE_INPUT", text) }
+        stderr: StdioCollector {
+            onStreamFinished: if (text)
+                console.warn("NATIVE_INPUT", text)
+        }
         property var gestureArguments: []
         command: ["python3", Quickshell.env("BINGUX_TEST_NATIVE_INPUT")].concat(nativeInput.gestureArguments)
     }
@@ -42,33 +64,61 @@
                 const output = findChild(controlCentre.body, "controlOutputRow");
                 const microphone = findChild(controlCentre.body, "controlInputRow");
                 const audioRows = output.parent;
-                output.node = testOutput; microphone.node = testInput;
+                output.node = testOutput;
+                microphone.node = testInput;
                 const dockArea = DesktopEditing.surfaces.find(surface => surface.zoneName === "dock");
                 drag(output, 20, 16, Qt.point(dockArea.screenRect.x + 12, dockArea.screenRect.y + 12));
                 compare(output.parent, dock.widgetHost);
                 compare(output.node, testOutput);
                 verify(!editor.desktop.controlLayout.groups["controls-audio"].includes("control-volume"));
-                editor.undo(); wait(150); compare(output.parent, audioRows);
-                editor.redo(); wait(150); compare(output.parent, dock.widgetHost);
-                editor.selectedContainer = "dock"; editor.containerDisplay("text");
-                editor.selectedWidget = "control-volume"; editor.widgetOption("label", "Speakers");
+                editor.undo();
+                wait(150);
+                compare(output.parent, audioRows);
+                editor.redo();
+                wait(150);
+                compare(output.parent, dock.widgetHost);
+                editor.selectedContainer = "dock";
+                editor.containerDisplay("text");
+                editor.selectedWidget = "control-volume";
+                editor.widgetOption("label", "Speakers");
                 const muteFace = findChild(output, "controlMute");
                 tryCompare(muteFace, "displayedLabel", "Speakers");
                 verify(muteFace.presentation.showText && !muteFace.presentation.showIcon);
-                editor.widgetOption("display", "both"); editor.widgetOption("icon", "starred-symbolic");
+                editor.widgetOption("display", "both");
+                editor.widgetOption("icon", "starred-symbolic");
                 verify(muteFace.presentation.showIcon && muteFace.presentation.icon === "starred-symbolic");
-                editor.widgetOption("display", "inherit"); editor.widgetOption("label", ""); editor.widgetOption("icon", "");
+                editor.widgetOption("display", "inherit");
+                editor.widgetOption("label", "");
+                editor.widgetOption("icon", "");
                 editor.containerDisplay("native");
                 editor.put("control-microphone", "top-left", 0);
-                editor.apply(); tryCompare(editor, "visible", false, 4000);
+                editor.apply();
+                tryCompare(editor, "visible", false, 4000);
                 tryCompare(binguxSettings, "busy", false, 4000);
-                compare(output.parent, dock.widgetHost); compare(microphone.parent, leftControls);
+                compare(output.parent, dock.widgetHost);
+                compare(microphone.parent, leftControls);
                 compare(BinguxPreferences.data.desktop.layout.dock[0], "control-volume");
                 verify(!BinguxPreferences.data.desktop.controlLayout.groups["controls-audio"].includes("control-volume"));
                 wait(400);
                 for (const entry of [
-                    {item: microphone, window: topBar, mute: "controlMicrophoneQuick", slider: "controlMicrophoneVolume", nav: "controlInputDetails", audio: inputAudio, tab: "input"},
-                    {item: output, window: dock, mute: "controlMute", slider: "controlVolume", nav: "controlSoundDetails", audio: outputAudio, tab: "output"}
+                    {
+                        item: microphone,
+                        window: topBar,
+                        mute: "controlMicrophoneQuick",
+                        slider: "controlMicrophoneVolume",
+                        nav: "controlInputDetails",
+                        audio: inputAudio,
+                        tab: "input"
+                    },
+                    {
+                        item: output,
+                        window: dock,
+                        mute: "controlMute",
+                        slider: "controlVolume",
+                        nav: "controlSoundDetails",
+                        audio: outputAudio,
+                        tab: "output"
+                    }
                 ]) {
                     const mute = findChild(entry.item, entry.mute);
                     gesture(mute, entry.window, mute.width / 2, mute.height / 2, ["--hover-only"]);
@@ -92,7 +142,8 @@
                     compare(controlCentre.deviceControls.audioTab, entry.tab);
                     wait(300);
                     gesture(navigation, entry.window, navigation.width / 2, navigation.height / 2, ["--hover-only"]);
-                    controlCentre.visible = false; wait(400);
+                    controlCentre.visible = false;
+                    wait(400);
                 }
                 layoutReport.setText("PASS");
             } catch (error) {

@@ -1,4 +1,5 @@
 """Run with dbus-run-session: real notification preview/actions, test file only."""
+
 import json
 import os
 from pathlib import Path
@@ -6,8 +7,9 @@ import subprocess
 import tempfile
 import time
 import gi
+
 gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import GdkPixbuf
+from gi.repository import GdkPixbuf  # noqa: E402 - Select GI versions before importing their modules.
 
 root = Path(__file__).resolve().parents[1] / "shell/bingux"
 fixture = root / "CaptureNotificationTest.qml"
@@ -20,21 +22,25 @@ with tempfile.TemporaryDirectory(prefix=".capture-notify-proof-", dir=Path.home(
     process = subprocess.Popen([qs, "-p", str(fixture)])
     notice = None
     command = [qs, "ipc", "-p", str(fixture), "call", "test"]
+
     def snapshot():
         return json.loads(subprocess.check_output(command + ["snapshot"], text=True, timeout=2))
+
     try:
-        time.sleep(.6)
-        notice = subprocess.Popen(["python3", str(root / "capture-notify.py"), str(path)],
-                                  env=dict(os.environ, GIO_USE_VFS="local"))
+        time.sleep(0.6)
+        notice = subprocess.Popen(
+            ["python3", str(root / "capture-notify.py"), str(path)], env=dict(os.environ, GIO_USE_VFS="local")
+        )
         deadline = time.monotonic() + 6
         while time.monotonic() < deadline:
             data = snapshot()
-            if data: break
-            time.sleep(.08)
+            if data:
+                break
+            time.sleep(0.08)
         assert data and data[0]["image"], data
         assert data[0]["actions"] == ["default", "copy", "save", "discard"], data
         print("PASS: real Notify delivery, image preview and action labels", flush=True)
-        time.sleep(.4)
+        time.sleep(0.4)
         preview = json.loads(subprocess.check_output(command + ["preview"], text=True, timeout=2))
         assert preview and preview["ready"] and abs(preview["height"] - preview["paintedHeight"]) < 1, preview
         assert preview["height"] < 100, preview
@@ -50,20 +56,23 @@ with tempfile.TemporaryDirectory(prefix=".capture-notify-proof-", dir=Path.home(
         subprocess.run(command + ["invoke", "discard"], check=True, timeout=2)
         deadline = time.monotonic() + 8
         while notice.poll() is None and time.monotonic() < deadline:
-            time.sleep(.1)
+            time.sleep(0.1)
         assert not path.exists(), snapshot()
         assert notice.poll() == 0, snapshot()
         print("PASS: Discard moved the generated test screenshot to Trash")
         subprocess.run(command + ["dismiss"], check=True, timeout=2)
         recording = Path(temporary) / "Recording notification.mp4"
         recording.write_bytes(b"notification-action-test")
-        notice = subprocess.Popen(["python3", str(root / "capture-notify.py"), str(recording), "recording"],
-                                  env=dict(os.environ, GIO_USE_VFS="local"))
+        notice = subprocess.Popen(
+            ["python3", str(root / "capture-notify.py"), str(recording), "recording"],
+            env=dict(os.environ, GIO_USE_VFS="local"),
+        )
         deadline = time.monotonic() + 6
         while time.monotonic() < deadline:
             data = snapshot()
-            if data and data[0]["summary"] == "Recording saved": break
-            time.sleep(.08)
+            if data and data[0]["summary"] == "Recording saved":
+                break
+            time.sleep(0.08)
         assert data[0]["summary"] == "Recording saved", data
         assert not data[0]["image"], data
         assert data[0]["actions"] == ["default", "save", "discard"], data

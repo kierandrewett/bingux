@@ -11,9 +11,19 @@ Item {
     property string retainedIcon: ""
     property real reveal: shown ? 1 : 0
     property bool ready: false
-    Component.onCompleted: { retainedIcon = iconName; ready = true; }
-    onIconNameChanged: if (iconName) retainedIcon = iconName
-    Behavior on reveal { enabled: root.ready; NumberAnimation { duration: Theme.statusIndicatorMotion; easing.type: Easing.OutCubic } }
+    Component.onCompleted: {
+        retainedIcon = iconName;
+        ready = true;
+    }
+    onIconNameChanged: if (iconName)
+        retainedIcon = iconName
+    Behavior on reveal {
+        enabled: root.ready
+        NumberAnimation {
+            duration: Theme.statusIndicatorMotion
+            easing.type: Easing.OutCubic
+        }
+    }
     implicitWidth: (slotSize + Theme.spaceSmall) * reveal
     implicitHeight: slotSize
     visible: reveal > 0
@@ -25,7 +35,9 @@ Item {
         width: root.slotSize
         height: root.slotSize
         opacity: root.reveal
-        transform: Translate { x: Theme.spaceSmall * (1 - root.reveal) }
+        transform: Translate {
+            x: Theme.spaceSmall * (1 - root.reveal)
+        }
         SymbolicIcon {
             objectName: "statusIcon"
             anchors.centerIn: parent

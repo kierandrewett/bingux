@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check that the dependency doctor reports success and useful failures."""
+
 from pathlib import Path
 import os
 import subprocess

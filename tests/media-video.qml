@@ -4,7 +4,10 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS")
+    }
     component FakePlayer: QtObject {
         property string identity: "Music"
         property string desktopEntry: ""
@@ -23,26 +26,47 @@ ShellRoot {
         property bool canGoPrevious: true
         property bool canGoNext: true
         property bool isPlaying: false
-        function play() { isPlaying = true; }
-        function pause() { isPlaying = false; }
+        function play() {
+            isPlaying = true;
+        }
+        function pause() {
+            isPlaying = false;
+        }
         property var calls: []
         property var metadata: ({})
-        function previous() { calls = calls.concat("previous"); }
-        function next() { calls = calls.concat("next"); }
-        function seek(offset) { calls = calls.concat(offset); position += offset; }
+        function previous() {
+            calls = calls.concat("previous");
+        }
+        function next() {
+            calls = calls.concat("next");
+        }
+        function seek(offset) {
+            calls = calls.concat(offset);
+            position += offset;
+        }
     }
-    FakePlayer { id: first }
-    FakePlayer { id: second; identity: "Browser"; uniqueId: 2 }
+    FakePlayer {
+        id: first
+    }
+    FakePlayer {
+        id: second
+        identity: "Browser"
+        uniqueId: 2
+    }
     FloatingWindow {
         id: window
-        implicitWidth: 416; implicitHeight: 760
+        implicitWidth: 416
+        implicitHeight: 760
         color: Theme.shellSurface
         Item {
             id: canvas
             anchors.fill: parent
             MediaControls {
                 id: media
-                x: 16; y: 16; width: 384; height: implicitHeight
+                x: 16
+                y: 16
+                width: 384
+                height: implicitHeight
                 compact: true
                 menuActive: true
                 player: first
@@ -53,7 +77,10 @@ ShellRoot {
         TestCase {
             id: test
             when: window.visible
-            function cleanupTestCase() { if (qtest_results.failCount) report.setText(report.text() + "FAILURES " + qtest_results.failCount + "\n"); }
+            function cleanupTestCase() {
+                if (qtest_results.failCount)
+                    report.setText(report.text() + "FAILURES " + qtest_results.failCount + "\n");
+            }
             function test_video_controls() {
                 report.setText("RUNNING\n");
                 waitForRendering(media);
@@ -75,7 +102,9 @@ ShellRoot {
                 verify(!previous.enabled);
                 first.canSeek = true;
                 first.length = 180;
-                first.metadata = {"xesam:url": "https://www.youtube.com/watch?v=example"};
+                first.metadata = {
+                    "xesam:url": "https://www.youtube.com/watch?v=example"
+                };
                 tryCompare(next, "text", "Forward 10 seconds");
                 first.metadata = {};
                 tryCompare(next, "text", "Next track");

@@ -31,30 +31,28 @@ QtObject {
             if (connected) {
                 root.rejectingConnection = false;
                 root.connectionState = "ready";
-                return ;
+                return;
             }
             if (root.socketPath === "") {
                 root.connectionState = "unavailable";
-                return ;
+                return;
             }
             root.connectionState = "connecting";
             root.scheduleReconnect();
         }
-        onError: function(_error) {
+        onError: function (_error) {
             root.failConnection();
         }
         Component.onCompleted: {
             if (root.socketPath !== "")
                 connected = true;
-
         }
 
         parser: SplitParser {
-            onRead: function(data) {
+            onRead: function (data) {
                 root.ingest(data);
             }
         }
-
     }
 
     property var reconnectTimer
@@ -64,7 +62,7 @@ QtObject {
         onTriggered: {
             if (root.socketPath === "") {
                 root.connectionState = "unavailable";
-                return ;
+                return;
             }
             root.localSocket.connected = true;
         }
@@ -135,10 +133,7 @@ QtObject {
     }
 
     function isValidQuery(query) {
-        return typeof query === "string"
-            && query.trim().length > 0
-            && utf8ByteLength(query) <= maxQueryBytes
-            && !/[\u0000-\u001f\u007f-\u009f]/.test(query);
+        return typeof query === "string" && query.trim().length > 0 && utf8ByteLength(query) <= maxQueryBytes && !/[\u0000-\u001f\u007f-\u009f]/.test(query);
     }
 
     function isValidLimit(limit) {
@@ -213,8 +208,10 @@ QtObject {
             return true;
         }
         if (isChatResponseRecord(record)) {
-            if (record.type === "chat-progress") root.chatProgress(record.requestId, record.message);
-            else root.chatReceived(record.requestId, record.message.trim());
+            if (record.type === "chat-progress")
+                root.chatProgress(record.requestId, record.message);
+            else
+                root.chatReceived(record.requestId, record.message.trim());
             return true;
         }
         return false;
@@ -222,22 +219,22 @@ QtObject {
 
     function ingest(recordText) {
         if (rejectingConnection)
-            return ;
+            return;
 
         if (utf8ByteLength(recordText) > maxRecordBytes) {
             failConnection();
-            return ;
+            return;
         }
         let record;
         try {
             record = JSON.parse(recordText);
         } catch (error) {
             failConnection();
-            return ;
+            return;
         }
         if (!acceptRecord(record)) {
             failConnection();
-            return ;
+            return;
         }
         reconnectDelay = 250;
     }
@@ -315,11 +312,10 @@ QtObject {
 
     function scheduleReconnect() {
         if (socketPath === "" || reconnectTimer.running)
-            return ;
+            return;
 
         reconnectTimer.interval = reconnectDelay;
         reconnectDelay = Math.min(reconnectDelay * 2, 5000);
         reconnectTimer.start();
     }
-
 }

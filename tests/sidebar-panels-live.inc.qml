@@ -17,18 +17,36 @@
         property bool isPlaying: false
         property int nextCount: 0
         property int previousCount: 0
-        function play() { isPlaying = true; }
-        function pause() { isPlaying = false; }
-        function next() { nextCount++; uniqueId++; }
-        function previous() { previousCount++; uniqueId++; }
+        function play() {
+            isPlaying = true;
+        }
+        function pause() {
+            isPlaying = false;
+        }
+        function next() {
+            nextCount++;
+            uniqueId++;
+        }
+        function previous() {
+            previousCount++;
+            uniqueId++;
+        }
     }
-    TestPlayer { id: retainedPlayer }
-    FileView { id: layoutReport; path: Quickshell.env("BINGUX_LAYOUT_REPORT") }
+    TestPlayer {
+        id: retainedPlayer
+    }
+    FileView {
+        id: layoutReport
+        path: Quickshell.env("BINGUX_LAYOUT_REPORT")
+    }
     Process {
         id: nativeInput
         property int resultCode: -1
         onExited: (code, status) => resultCode = code
-        stderr: StdioCollector { onStreamFinished: if (text) console.warn("NATIVE_INPUT", text) }
+        stderr: StdioCollector {
+            onStreamFinished: if (text)
+                console.warn("NATIVE_INPUT", text)
+        }
         property var gestureArguments: []
         property int captureNumber: 0
         command: ["env", "BINGUX_NATIVE_SCREENSHOT=" + (Quickshell.env("BINGUX_PANEL_CAPTURE") ? Quickshell.env("BINGUX_PANEL_CAPTURE") + "-" + captureNumber + ".png" : ""), "python3", Quickshell.env("BINGUX_TEST_NATIVE_INPUT")].concat(nativeInput.gestureArguments)
@@ -40,8 +58,10 @@
             const point = DesktopEditing.point(item, window, item.width / 2, item.height / 2);
             nativeInput.gestureArguments = [String(point.x), String(point.y)].concat(typing ? [] : ["--click-only"]);
             nativeInput.captureNumber++;
-            nativeInput.resultCode = -1; nativeInput.running = true;
-            tryCompare(nativeInput, "running", false, 4000); compare(nativeInput.resultCode, 0);
+            nativeInput.resultCode = -1;
+            nativeInput.running = true;
+            tryCompare(nativeInput, "running", false, 4000);
+            compare(nativeInput.resultCode, 0);
         }
         function selectPanel(id) {
             console.debug("PANEL_SELECT", id, Date.now());
@@ -61,7 +81,8 @@
             try {
                 BinguxPreferences.importDesktop(root.layoutSnapshot());
                 tryVerify(() => BinguxPreferences.data.desktop.layoutVersion === 1, 4000);
-                terminalSidebar.open(); wait(350);
+                terminalSidebar.open();
+                wait(350);
                 const calendar = selectPanel("calendar");
                 calendar.serviceEnabled = false;
                 calendar.shiftMonth(-2);
@@ -71,16 +92,22 @@
                 const tasks = selectPanel("tasks");
                 verify(!calendar.visible, "Retained hidden panels stay invisible");
                 const input = findChild(tasks, "taskInput");
-                verify(input !== null); gesture(input, terminalSidebar.widgetWindow, true);
+                verify(input !== null);
+                gesture(input, terminalSidebar.widgetWindow, true);
                 compare(input.text, "Find", "Native input reaches the task draft");
                 compare(selectPanel("calendar"), calendar, "Switching panels retains the original calendar instance");
-                compare(calendar.month, month); compare(calendar.selectedDate.getTime(), selected);
+                compare(calendar.month, month);
+                compare(calendar.selectedDate.getTime(), selected);
                 compare(selectPanel("tasks"), tasks);
-                compare(findChild(tasks, "taskInput"), input); compare(input.text, "Find", "Switching panels retains the unsent task");
+                compare(findChild(tasks, "taskInput"), input);
+                compare(input.text, "Find", "Switching panels retains the unsent task");
                 const media = selectPanel("media");
-                media.players = [retainedPlayer]; wait(200);
-                const play = findChild(media, "mediaPlayPause"); verify(play !== null);
-                gesture(play, terminalSidebar.widgetWindow); tryCompare(retainedPlayer, "isPlaying", true, 2000);
+                media.players = [retainedPlayer];
+                wait(200);
+                const play = findChild(media, "mediaPlayPause");
+                verify(play !== null);
+                gesture(play, terminalSidebar.widgetWindow);
+                tryCompare(retainedPlayer, "isPlaying", true, 2000);
                 const notes = selectPanel("notes");
                 verify(!media.visible);
                 const monitor = selectPanel("monitor");
@@ -88,32 +115,71 @@
                 verify(!terminal.useFBORendering, "Retained terminals use the image paint path");
                 const terminalPid = terminal.shellPid;
                 verify(terminalPid > 0);
-                for (const entry of [{id:"calendar", panel:calendar}, {id:"tasks", panel:tasks}, {id:"media", panel:media}, {id:"notes", panel:notes}, {id:"monitor", panel:monitor}, {id:"terminal", panel:terminal}]) {
+                for (const entry of [
+                    {
+                        id: "calendar",
+                        panel: calendar
+                    },
+                    {
+                        id: "tasks",
+                        panel: tasks
+                    },
+                    {
+                        id: "media",
+                        panel: media
+                    },
+                    {
+                        id: "notes",
+                        panel: notes
+                    },
+                    {
+                        id: "monitor",
+                        panel: monitor
+                    },
+                    {
+                        id: "terminal",
+                        panel: terminal
+                    }
+                ]) {
                     compare(selectPanel(entry.id), entry.panel);
                     compare(DesktopEditing.sources[entry.id], entry.panel, "Drag previews refer to the retained native panel");
                     const point = entry.panel.mapToItem(terminalSidebar.contentItem, 0, 0);
-                    compare(point.x, Theme.gap * 2); compare(point.y, Theme.barHeight + Theme.gap);
+                    compare(point.x, Theme.gap * 2);
+                    compare(point.y, Theme.barHeight + Theme.gap);
                     compare(entry.panel.width, terminalSidebar.contentItem.width - Theme.gap * 4);
                     compare(entry.panel.height, terminalSidebar.contentItem.height - Theme.barHeight - Theme.gap * 2);
                 }
                 compare(selectPanel("media"), media);
                 compare(terminal.shellPid, terminalPid, "Panel switching keeps the same terminal session");
                 compare(findChild(media, "mediaPlayPause"), play);
-                gesture(play, terminalSidebar.widgetWindow); tryCompare(retainedPlayer, "isPlaying", false, 2000);
-                terminalSidebar.popOut(); tryCompare(terminalSidebar.detachedSurface, "visible", true, 2000); wait(250);
+                gesture(play, terminalSidebar.widgetWindow);
+                tryCompare(retainedPlayer, "isPlaying", false, 2000);
+                terminalSidebar.popOut();
+                tryCompare(terminalSidebar.detachedSurface, "visible", true, 2000);
+                wait(250);
                 compare(terminalSidebar.activePanel, media);
                 compare(media.Window.window, terminalSidebar.detachedSurface.contentItem.Window.window);
-                mouseClick(play, play.width / 2, play.height / 2); tryCompare(retainedPlayer, "isPlaying", true, 2000);
-                terminalSidebar.dockBack(); wait(350);
-                binguxSettings.read(); tryCompare(binguxSettings, "busy", false, 4000);
+                mouseClick(play, play.width / 2, play.height / 2);
+                tryCompare(retainedPlayer, "isPlaying", true, 2000);
+                terminalSidebar.dockBack();
+                wait(350);
+                binguxSettings.read();
+                tryCompare(binguxSettings, "busy", false, 4000);
                 const editor = desktopCustomiser;
-                editor.open(); wait(350);
-                editor.put("media", "sidebar", 0); editor.undo(); editor.redo(); wait(150);
+                editor.open();
+                wait(350);
+                editor.put("media", "sidebar", 0);
+                editor.undo();
+                editor.redo();
+                wait(150);
                 compare(terminalSidebar.activePanel, media);
-                editor.cancel(); wait(350);
+                editor.cancel();
+                wait(350);
                 compare(terminalSidebar.activePanel, media);
-                compare(selectPanel("tasks"), tasks); compare(input.text, "Find");
-                compare(selectPanel("calendar"), calendar); compare(calendar.selectedDate.getTime(), selected);
+                compare(selectPanel("tasks"), tasks);
+                compare(input.text, "Find");
+                compare(selectPanel("calendar"), calendar);
+                compare(calendar.selectedDate.getTime(), selected);
                 layoutReport.setText("PASS");
             } catch (error) {
                 console.error("CUSTOMISE_TEST_FAILED", error.message, error.stack);

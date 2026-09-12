@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Private desktop: capture through binguxctl and play the real shutter event."""
+
 import json
 import os
 from pathlib import Path
@@ -23,11 +24,20 @@ assert player, "Install the GNOME event sound player for the audio integration t
 probe = config / "bin"
 probe.mkdir()
 sound_log = config / "sound.json"
-(probe / "canberra-gtk-play").write_text("#!/usr/bin/python3\nimport json, subprocess, sys\nfrom pathlib import Path\n"
-    + "result = subprocess.run(" + repr([player]) + " + sys.argv[1:])\n"
-    + "Path(" + repr(str(sound_log)) + ").write_text(json.dumps({'args': sys.argv[1:], 'code': result.returncode}))\n")
+(probe / "canberra-gtk-play").write_text(
+    "#!/usr/bin/python3\nimport json, subprocess, sys\nfrom pathlib import Path\n"
+    + "result = subprocess.run("
+    + repr([player])
+    + " + sys.argv[1:])\n"
+    + "Path("
+    + repr(str(sound_log))
+    + ").write_text(json.dumps({'args': sys.argv[1:], 'code': result.returncode}))\n"
+)
 (probe / "canberra-gtk-play").chmod(0o755)
-environment = os.environ | {"BINGUX_CAPTURE_SETTINGS_PATH": settings.as_uri(), "PATH": str(probe) + ":" + os.environ["PATH"]}
+environment = os.environ | {
+    "BINGUX_CAPTURE_SETTINGS_PATH": settings.as_uri(),
+    "PATH": str(probe) + ":" + os.environ["PATH"],
+}
 qs = os.environ.get("QS_TEST_BIN", "qs")
 command = [sys.executable, str(repo / "packages/binguxctl/binguxctl.py"), "--quickshell", qs, "--path", str(fixture)]
 log = (config / "quickshell.log").open("w")
@@ -46,10 +56,11 @@ def wait(predicate):
     while time.monotonic() < deadline:
         try:
             state = call("capture", "status")
-            if predicate(state): return state
+            if predicate(state):
+                return state
         except AssertionError:
             pass
-        time.sleep(.1)
+        time.sleep(0.1)
     raise AssertionError(state)
 
 
@@ -58,7 +69,9 @@ try:
     call("capture", "configure", "--fps", "15", "--quality", "compact", "--no-copy", "--region", "0", "0", "320", "180")
     options = call("capture", "options")
     assert options["fps"] == 15 and not options["copy"] and options["region"]["width"] == 320, options
-    rejected = subprocess.run(command + ["ipc", "capture", "configure", '{"fps":30,"quality":"invalid"}'], text=True, capture_output=True)
+    rejected = subprocess.run(
+        command + ["ipc", "capture", "configure", '{"fps":30,"quality":"invalid"}'], text=True, capture_output=True
+    )
     assert rejected.returncode == 1 and call("capture", "options")["fps"] == 15, rejected
     call("capture", "open", "--mode", "screenshot", "--target", "region")
     wait(lambda state: state["opened"])
@@ -69,10 +82,13 @@ try:
     assert Path(saved["savedPath"]).parent == output and Path(saved["savedPath"]).stat().st_size > 0, saved
     assert struct.unpack(">II", Path(saved["savedPath"]).read_bytes()[16:24]) == (320, 180), saved
     deadline = time.monotonic() + 4
-    while not sound_log.exists() and time.monotonic() < deadline: time.sleep(.05)
+    while not sound_log.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
     sound = json.loads(sound_log.read_text())
     assert sound["code"] == 0 and sound["args"][:2] == ["--id", "screen-capture"], sound
-    print("PASS: binguxctl opens selector, repeated open stays open, take saves screenshot, GNOME shutter player succeeds")
+    print(
+        "PASS: binguxctl opens selector, repeated open stays open, take saves screenshot, GNOME shutter player succeeds"
+    )
 finally:
     process.terminate()
     process.wait(timeout=5)

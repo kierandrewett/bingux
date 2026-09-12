@@ -664,7 +664,10 @@ pub fn encode_daemon_event_line(event: &DaemonEvent) -> ProtocolResult<Vec<u8>> 
                 request_id,
             })
         }
-        DaemonEvent::ChatProgress { request_id, message } => {
+        DaemonEvent::ChatProgress {
+            request_id,
+            message,
+        } => {
             validate_request_id(request_id)?;
             validate_chat_response_message(message.as_ref())?;
             encode_line(&ChatResponseWire {
@@ -963,7 +966,9 @@ fn validate_query(value: &str) -> ProtocolResult<()> {
 pub(crate) fn validate_chat_response_message(value: &str) -> ProtocolResult<()> {
     if !value.is_empty()
         && value.len() <= MAX_CHAT_RESPONSE_BYTES
-        && !value.chars().any(|c| c.is_control() && c != '\n' && c != '\t')
+        && !value
+            .chars()
+            .any(|c| c.is_control() && c != '\n' && c != '\t')
     {
         Ok(())
     } else {

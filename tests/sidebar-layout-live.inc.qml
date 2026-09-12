@@ -1,9 +1,15 @@
-    FileView { id: layoutReport; path: Quickshell.env("BINGUX_LAYOUT_REPORT") }
+    FileView {
+        id: layoutReport
+        path: Quickshell.env("BINGUX_LAYOUT_REPORT")
+    }
     Process {
         id: nativeInput
         property int resultCode: -1
         onExited: (code, status) => resultCode = code
-        stderr: StdioCollector { onStreamFinished: if (text) console.warn("NATIVE_INPUT", text) }
+        stderr: StdioCollector {
+            onStreamFinished: if (text)
+                console.warn("NATIVE_INPUT", text)
+        }
         property var gestureArguments: []
         property string capturePath: ""
         command: ["env", "BINGUX_NATIVE_SCREENSHOT=" + capturePath, "python3", Quickshell.env("BINGUX_TEST_NATIVE_INPUT")].concat(nativeInput.gestureArguments)
@@ -20,11 +26,13 @@
         }
         function drag(item, window, x, y, destination) {
             gesture(item, window, x, y, ["--drag-to", destination.x.toString(), destination.y.toString()]);
-            tryCompare(desktopCustomiser, "draggedId", "", 4000); wait(150);
+            tryCompare(desktopCustomiser, "draggedId", "", 4000);
+            wait(150);
         }
         function capture(name, item, window) {
             const prefix = Quickshell.env("BINGUX_GROUP_CAPTURE");
-            if (!prefix) return;
+            if (!prefix)
+                return;
             nativeInput.capturePath = prefix + "-" + name + ".png";
             gesture(item, window, item.width / 2, item.height / 2, ["--hover-only"]);
             nativeInput.capturePath = "";
@@ -33,7 +41,8 @@
             desktopCustomiser.apply();
             tryCompare(desktopCustomiser, "visible", false, 4000);
             tryCompare(binguxSettings, "busy", false, 4000);
-            tryCompare(dock.margins, "bottom", 0, 2000); wait(100);
+            tryCompare(dock.margins, "bottom", 0, 2000);
+            wait(100);
         }
         function test_sidebar_widgets() {
             try {
@@ -44,8 +53,12 @@
                 }
                 BinguxPreferences.importDesktop(root.layoutSnapshot());
                 tryVerify(() => !!BinguxPreferences.data.desktop.controlLayout, 4000);
-                binguxSettings.read(); tryCompare(binguxSettings, "ready", true, 4000); tryCompare(binguxSettings, "busy", false, 4000);
-                terminalSidebar.selectContent("notes"); terminalSidebar.open(); wait(350);
+                binguxSettings.read();
+                tryCompare(binguxSettings, "ready", true, 4000);
+                tryCompare(binguxSettings, "busy", false, 4000);
+                terminalSidebar.selectContent("notes");
+                terminalSidebar.open();
+                wait(350);
                 const panel = terminalSidebar.activePanel;
                 const oldSize = Qt.size(panel.width, panel.height);
                 const oldPoint = panel.mapToItem(terminalSidebar.contentItem, 0, 0);
@@ -54,7 +67,9 @@
                 compare(panel.width, terminalSidebar.contentItem.width - Theme.gap * 4);
                 compare(panel.height, terminalSidebar.contentItem.height - Theme.barHeight - Theme.gap * 2);
                 const editor = desktopCustomiser;
-                editor.open(); tryCompare(controlCentre, "revealScale", 1, 4000); wait(300);
+                editor.open();
+                tryCompare(controlCentre, "revealScale", 1, 4000);
+                wait(300);
                 const area = DesktopEditing.surfaces.find(surface => surface.zoneName === "sidebar");
                 capture("sidebar-before-drag", clockPill, topBar);
                 drag(clockPill, topBar, clockPill.width / 2, 16, Qt.point(area.screenRect.x + 40, area.screenRect.y + Theme.barHeight + 12));
@@ -62,32 +77,49 @@
                 verify(editor.layout.sidebar.indexOf("clock") < editor.layout.sidebar.indexOf("notes"), "Dropping above Notes inserts before its panel");
                 compare(clockPill.parent, terminalSidebar.widgetHost);
                 compare(terminalSidebar.activePanel, panel);
-                editor.undo(); wait(100); compare(clockPill.parent !== terminalSidebar.widgetHost, true);
-                editor.redo(); wait(100); compare(clockPill.parent, terminalSidebar.widgetHost);
-                editor.put("label", "sidebar", 1); wait(150);
+                editor.undo();
+                wait(100);
+                compare(clockPill.parent !== terminalSidebar.widgetHost, true);
+                editor.redo();
+                wait(100);
+                compare(clockPill.parent, terminalSidebar.widgetHost);
+                editor.put("label", "sidebar", 1);
+                wait(150);
                 const label = topBar.decorationWidgets.find(item => item.widgetId === "label:1");
-                verify(label); compare(label.parent, terminalSidebar.widgetHost);
-                editor.selectedWidget = "label:1"; editor.widgetOption("label", "My sidebar");
-                editor.selectContainer("sidebar"); editor.containerDisplay("both");
+                verify(label);
+                compare(label.parent, terminalSidebar.widgetHost);
+                editor.selectedWidget = "label:1";
+                editor.widgetOption("label", "My sidebar");
+                editor.selectContainer("sidebar");
+                editor.containerDisplay("both");
                 compare(label.presentation.label, "My sidebar");
                 compare(clockPill.presentation.mode, "both");
-                editor.put("label:1", "control-centre", 0); wait(100);
+                editor.put("label:1", "control-centre", 0);
+                wait(100);
                 compare(topBar.decorationWidgets.find(item => item.widgetId === "label:1"), label);
-                editor.put("label:1", "sidebar", 1); wait(100);
+                editor.put("label:1", "sidebar", 1);
+                wait(100);
                 compare(topBar.decorationWidgets.find(item => item.widgetId === "label:1"), label);
                 for (const id of ["search", "controls", "notifications", "metrics", "keyboard", "tray", "privacy", "capture", "overflow"])
                     editor.put(id, "sidebar", 0);
                 wait(200);
-                for (const entry of terminalSidebar.externalEntries) compare(entry.item.parent, terminalSidebar.widgetHost);
+                for (const entry of terminalSidebar.externalEntries)
+                    compare(entry.item.parent, terminalSidebar.widgetHost);
                 verify(panel.height > 0);
                 capture("sidebar-all", clockPill, terminalSidebar.editWindow);
-                editor.cancel(); wait(350);
-                compare(panel.width, oldSize.width); compare(panel.height, oldSize.height);
+                editor.cancel();
+                wait(350);
+                compare(panel.width, oldSize.width);
+                compare(panel.height, oldSize.height);
                 compare(panel.mapToItem(terminalSidebar.contentItem, 0, 0), oldPoint);
-                editor.open(); wait(300);
-                editor.put("clock", "sidebar", 0); editor.put("label", "sidebar", 1); editor.put("icon", "sidebar", 2);
+                editor.open();
+                wait(300);
+                editor.put("clock", "sidebar", 0);
+                editor.put("label", "sidebar", 1);
+                editor.put("icon", "sidebar", 2);
                 editor.put("keyboard", "sidebar", 3);
-                editor.selectedWidget = "label:1"; editor.widgetOption("label", "My sidebar");
+                editor.selectedWidget = "label:1";
+                editor.widgetOption("label", "My sidebar");
                 save();
                 for (const edge of ["left", "top", "right"]) {
                     editor.open();
@@ -96,11 +128,9 @@
                     tryCompare(terminalSidebar.editWindow, "reveal", 1, 3000);
                     wait(250);
                     const bar = DesktopEditing.surfaces.find(surface => surface.zoneName === "top-left");
-                    drag(clockPill, terminalSidebar.editWindow, clockPill.width / 2, 16,
-                        Qt.point(bar.screenRect.x + 24, bar.screenRect.y + 16));
+                    drag(clockPill, terminalSidebar.editWindow, clockPill.width / 2, 16, Qt.point(bar.screenRect.x + 24, bar.screenRect.y + 16));
                     compare(editor.containerFor("clock"), "top-left", "Native drag leaves the " + edge + " sidebar");
-                    drag(clockPill, topBar, clockPill.width / 2, 16,
-                        Qt.point(area.screenRect.x + 40, area.screenRect.y + Theme.barHeight + 12));
+                    drag(clockPill, topBar, clockPill.width / 2, 16, Qt.point(area.screenRect.x + 40, area.screenRect.y + Theme.barHeight + 12));
                     compare(editor.containerFor("clock"), "sidebar", "Native drag returns to the " + edge + " sidebar");
                     compare(terminalSidebar.activePanel, panel, "Changing edges retains Notes");
                     save();
@@ -109,8 +139,7 @@
                     gesture(clockPill, terminalSidebar.editWindow, clockPill.width / 2, 16, ["--shift-right-click"]);
                     tryCompare(widgetMenu, "visible", true, 3000);
                     compare(widgetMenu.widgetId, "clock");
-                    verify(!findChild(terminalSidebar.contentItem, "notesContextMenu")?.visible,
-                        "Editing a sidebar widget does not open Notes' menu on the " + edge + " edge");
+                    verify(!findChild(terminalSidebar.contentItem, "notesContextMenu")?.visible, "Editing a sidebar widget does not open Notes' menu on the " + edge + " edge");
                     widgetMenu.visible = false;
                     tryCompare(widgetMenu, "retained", false, 3000);
                     gesture(clockPill, terminalSidebar.editWindow, clockPill.width / 2, 16, ["--click-only"]);
@@ -143,7 +172,9 @@
                     tryVerify(() => notesEditor.text.includes("**Alpha**"), 3000, "Notes formatting works on the " + edge + " edge");
                     tryCompare(notesMenu, "retained", false, 3000);
                 }
-                terminalSidebar.popOut(); tryCompare(terminalSidebar.detachedSurface, "visible", true, 3000); wait(250);
+                terminalSidebar.popOut();
+                tryCompare(terminalSidebar.detachedSurface, "visible", true, 3000);
+                wait(250);
                 compare(clockPill.parent, terminalSidebar.widgetHost);
                 compare(topBar.windowFor(clockPill), terminalSidebar.detachedSurface);
                 compare(terminalSidebar.activePanel, panel);
@@ -170,7 +201,8 @@
                 tryCompare(widgetMenu, "visible", true, 3000);
                 compare(widgetMenu.hostItem, terminalSidebar.detachedSurface.contentItem);
                 widgetMenu.visible = false;
-                terminalSidebar.dockBack(); wait(200);
+                terminalSidebar.dockBack();
+                wait(200);
                 compare(calendarPopup.hostItem, null);
                 compare(clockPill.parent, terminalSidebar.widgetHost);
                 layoutReport.setText("PASS");

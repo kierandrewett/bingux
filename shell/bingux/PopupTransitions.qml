@@ -8,13 +8,14 @@ QtObject {
     property var policies: ({})
     function refresh(namespace = "gnoblin-shell-popup") {
         if (session.capabilities.includes("layer-animation-policy"))
-            session.send({op: "layer-animation-policy", namespace: namespace});
+            session.send({
+                op: "layer-animation-policy",
+                namespace: namespace
+            });
     }
     function matches(duration, easing, namespace = "gnoblin-shell-popup") {
         const policy = policies[namespace];
-        return !!(session.connected && policy
-            && policy.exit.animation === "fade" && policy.exit.duration === duration
-            && policy.exit.easing === "ease-out-cubic" && easing === Easing.OutCubic);
+        return !!(session.connected && policy && policy.exit.animation === "fade" && policy.exit.duration === duration && policy.exit.easing === "ease-out-cubic" && easing === Easing.OutCubic);
     }
     function fadesIn(namespace = "gnoblin-shell-popup") {
         return !!(session.connected && policies[namespace]?.enter.animation === "fade");
@@ -25,7 +26,7 @@ QtObject {
             for (const namespace of ["gnoblin-shell-popup", "bingux-search", "bingux-switcher", "bingux-bar-tooltip", "gnoblin-dock-tooltip"])
                 root.refresh(namespace);
         }
-        onLayerAnimationPolicy: function(state) {
+        onLayerAnimationPolicy: function (state) {
             const next = Object.assign({}, root.policies);
             next[state.namespace] = state;
             root.policies = next;

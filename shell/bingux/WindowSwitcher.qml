@@ -38,15 +38,16 @@ Scope {
     readonly property int tileGap: Theme.spaceSmall
     readonly property int cardPadding: Theme.dockPadding
     readonly property var selectedWindow: windows.length ? windows[selected] : null
-    readonly property int visibleCount: Math.max(1, Math.min(5,
-        Math.floor(((activeScreen ? activeScreen.width : 1280) - 64 - cardPadding * 2 + tileGap) / (tileWidth + tileGap))))
+    readonly property int visibleCount: Math.max(1, Math.min(5, Math.floor(((activeScreen ? activeScreen.width : 1280) - 64 - cardPadding * 2 + tileGap) / (tileWidth + tileGap))))
     readonly property int displayCount: Math.min(windows.length, visibleCount)
-    readonly property var visibleWindows: Array.from({length: displayCount}, (_, index) => windows[(trackStart + index) % windows.length])
+    readonly property var visibleWindows: Array.from({
+        length: displayCount
+    }, (_, index) => windows[(trackStart + index) % windows.length])
     readonly property var selectedIcon: {
         const revision = iconRevision;
         return icons.itemAt(trackIndex)?.appIcon ?? null;
     }
-    signal opening()
+    signal opening
     onShownChanged: {
         visibilityAnimation.stop();
         visibilityAnimation.to = shown ? 1 : 0;
@@ -58,15 +59,19 @@ Scope {
         target: root
         property: "revealProgress"
         easing.type: Easing.OutCubic
-        onFinished: if (!root.active) root.windows = []
+        onFinished: if (!root.active)
+            root.windows = []
     }
     function revealSelection() {
-        if (trackIndex < trackStart) trackStart = trackIndex;
-        else if (trackIndex >= trackStart + displayCount) trackStart = trackIndex - displayCount + 1;
+        if (trackIndex < trackStart)
+            trackStart = trackIndex;
+        else if (trackIndex >= trackStart + displayCount)
+            trackStart = trackIndex - displayCount + 1;
         recenter.restart();
     }
     function normalizeTrack() {
-        if (!windows.length || (trackIndex >= windows.length && trackIndex < windows.length * 2)) return;
+        if (!windows.length || (trackIndex >= windows.length && trackIndex < windows.length * 2))
+            return;
         const copies = 1 - Math.floor(trackIndex / windows.length);
         const pixels = copies * windows.length * (tileWidth + tileGap);
         const highlightX = selectionHighlight.x + pixels;
@@ -86,7 +91,8 @@ Scope {
         id: recenter
         interval: Theme.reducedMotion ? 0 : root.selectionMotion + 32
         onTriggered: {
-            if (!root.active || !root.windows.length) return;
+            if (!root.active || !root.windows.length)
+                return;
             root.normalizeTrack();
         }
     }
@@ -95,24 +101,30 @@ Scope {
         const live = snapshot;
         const retainedPreviews = {};
         const retainedTimes = {};
-        for (const window of live) if (previews[window.id]) retainedPreviews[window.id] = previews[window.id];
-        for (const window of live) if (previewTimes[window.id]) retainedTimes[window.id] = previewTimes[window.id];
+        for (const window of live)
+            if (previews[window.id])
+                retainedPreviews[window.id] = previews[window.id];
+        for (const window of live)
+            if (previewTimes[window.id])
+                retainedTimes[window.id] = previewTimes[window.id];
         previews = retainedPreviews;
         previewTimes = retainedTimes;
         // Resolve icons as windows change, before a shortcut reveals the card.
-        for (const window of live) OsIcons.resolve(iconFor(window));
+        for (const window of live)
+            OsIcons.resolve(iconFor(window));
         liveWindows = live;
         const previousIds = history.map(window => window.id);
-        history = history.map(window => live.find(next => next.id === window.id)).filter(Boolean)
-            .concat(live.filter(window => previousIds.indexOf(window.id) < 0).sort((a, b) => (b.lastUserTime || 0) - (a.lastUserTime || 0)));
+        history = history.map(window => live.find(next => next.id === window.id)).filter(Boolean).concat(live.filter(window => previousIds.indexOf(window.id) < 0).sort((a, b) => (b.lastUserTime || 0) - (a.lastUserTime || 0)));
         const focused = live.find(window => window.focused);
         const focusedId = focused ? focused.id : "";
         if (focusedId !== focusedWindowId) {
             focusedWindowId = focusedId;
             warmPreview.restart();
         }
-        if (focused) history = [focused].concat(history.filter(window => window.id !== focused.id));
-        if (!active) return;
+        if (focused)
+            history = [focused].concat(history.filter(window => window.id !== focused.id));
+        if (!active)
+            return;
         const previous = selectedWindow;
         const previousCount = windows.length;
         windows = windows.map(window => live.find(next => next.id === window.id)).filter(Boolean);
@@ -124,12 +136,16 @@ Scope {
             trackStart = windows.length + Math.max(0, selected - displayCount + 1);
             rebasing = false;
         }
-        if (!windows.length) cancel();
+        if (!windows.length)
+            cancel();
     }
     function step(backwards) {
         if (!active) {
             windows = history.slice();
-            if (!windows.length) { shortcuts.end(); return; }
+            if (!windows.length) {
+                shortcuts.end();
+                return;
+            }
             active = true;
             warmPreview.stop();
             previewAttempts = ({});
@@ -137,9 +153,7 @@ Scope {
             trackIndex = windows.length + selected;
             trackStart = windows.length + Math.max(0, selected - displayCount + 1);
             const focused = history.find(window => window.focused);
-            activeScreen = focused && focused.monitor ? Quickshell.screens.find(screen =>
-                screen.x === focused.monitor.x && screen.y === focused.monitor.y) || Quickshell.screens[0]
-                : Quickshell.screens[0] || null;
+            activeScreen = focused && focused.monitor ? Quickshell.screens.find(screen => screen.x === focused.monitor.x && screen.y === focused.monitor.y) || Quickshell.screens[0] : Quickshell.screens[0] || null;
             opening();
             reveal.restart();
         } else {
@@ -154,17 +168,24 @@ Scope {
         reveal.stop();
         active = false;
         shown = false;
-        if (revealProgress === 0) windows = [];
+        if (revealProgress === 0)
+            windows = [];
     }
-    function close() { cancel(); shortcuts.end(); }
+    function close() {
+        cancel();
+        shortcuts.end();
+    }
     function finish() {
-        if (!active) return;
+        if (!active)
+            return;
         const window = selectedWindow;
         cancel();
-        if (window && liveWindows.some(live => live.id === window.id)) shortcuts.activateWindow(window.id);
+        if (window && liveWindows.some(live => live.id === window.id))
+            shortcuts.activateWindow(window.id);
     }
     function appFor(window) {
-        if (!window || !window.appId) return null;
+        if (!window || !window.appId)
+            return null;
         const id = window.appId.replace(/\.desktop$/, "");
         return DesktopEntries.byId(id) || DesktopEntries.heuristicLookup(id);
     }
@@ -176,7 +197,12 @@ Scope {
         const app = appFor(window);
         return Quickshell.iconPath(app && app.icon ? app.icon : "application-x-executable", "application-x-executable");
     }
-    Timer { id: reveal; interval: root.showDelay; onTriggered: if (root.active) root.shown = true }
+    Timer {
+        id: reveal
+        interval: root.showDelay
+        onTriggered: if (root.active)
+            root.shown = true
+    }
     function needsPreview(window, now) {
         // Refresh the window being used, but reuse background snapshots across gestures.
         const maximumAge = window.focused ? 2000 : previewCacheAge;
@@ -194,7 +220,8 @@ Scope {
         id: warmPreview
         interval: 250
         onTriggered: {
-            if (!root.enabled || root.active || root.previewPending) return;
+            if (!root.enabled || root.active || root.previewPending)
+                return;
             const focused = root.liveWindows.find(window => window.id === root.focusedWindowId);
             if (focused && root.needsPreview(focused, Date.now()))
                 root.requestPreview(focused);
@@ -208,59 +235,99 @@ Scope {
         repeat: true
         running: root.shown && !root.previewPending
         onTriggered: {
-            if (!root.shown || root.previewPending) return;
+            if (!root.shown || root.previewPending)
+                return;
             const now = Date.now();
             const targets = [root.selectedWindow].concat(root.visibleWindows);
-            const target = targets.find(window => window && !root.previewAttempts[window.id]
-                && root.needsPreview(window, now));
-            if (!target) { stop(); return; }
-            root.previewAttempts = Object.assign({}, root.previewAttempts, {[target.id]: true});
+            const target = targets.find(window => window && !root.previewAttempts[window.id] && root.needsPreview(window, now));
+            if (!target) {
+                stop();
+                return;
+            }
+            root.previewAttempts = Object.assign({}, root.previewAttempts, {
+                [target.id]: true
+            });
             root.requestPreview(target);
         }
     }
-    Timer { id: previewTimeout; interval: 1500; onTriggered: root.previewPending = false }
+    Timer {
+        id: previewTimeout
+        interval: 1500
+        onTriggered: root.previewPending = false
+    }
     ShortcutSession {
         id: shortcuts
         trackWindows: true
-        onWindowSnapshot: function(windows) { root.refresh(windows); }
-        onPreviewReceived: function(id, source, error) {
+        onWindowSnapshot: function (windows) {
+            root.refresh(windows);
+        }
+        onPreviewReceived: function (id, source, error) {
             root.previewPending = false;
             root.previewError = error;
             previewTimeout.stop();
-            if (source && root.liveWindows.some(window => window.id === id))
-            {
-                root.previews = Object.assign({}, root.previews, {[id]: source});
-                root.previewTimes = Object.assign({}, root.previewTimes, {[id]: Date.now()});
+            if (source && root.liveWindows.some(window => window.id === id)) {
+                root.previews = Object.assign({}, root.previews, {
+                    [id]: source
+                });
+                root.previewTimes = Object.assign({}, root.previewTimes, {
+                    [id]: Date.now()
+                });
             }
         }
         enabled: root.enabled
         bindings: [
-            {id: "switcher-forward", accelerator: "<Alt>Tab", hold: 8},
-            {id: "switcher-backward", accelerator: "<Alt><Shift>Tab", hold: 8},
-            {id: "switcher-super-forward", accelerator: "<Super>Tab", hold: 67108864},
-            {id: "switcher-super-backward", accelerator: "<Super><Shift>Tab", hold: 67108864}
+            {
+                id: "switcher-forward",
+                accelerator: "<Alt>Tab",
+                hold: 8
+            },
+            {
+                id: "switcher-backward",
+                accelerator: "<Alt><Shift>Tab",
+                hold: 8
+            },
+            {
+                id: "switcher-super-forward",
+                accelerator: "<Super>Tab",
+                hold: 67108864
+            },
+            {
+                id: "switcher-super-backward",
+                accelerator: "<Super><Shift>Tab",
+                hold: 67108864
+            }
         ]
-        onActivated: function(id, first, modifiers) { root.step(id.indexOf("backward") >= 0); }
+        onActivated: function (id, first, modifiers) {
+            root.step(id.indexOf("backward") >= 0);
+        }
         onReleased: root.finish()
         onCancelled: root.cancel()
-        onFailed: function(message) { console.warn("bingux-switcher: " + message); }
-        onPointerPressed: function(x, y, button) {
+        onFailed: function (message) {
+            console.warn("bingux-switcher: " + message);
+        }
+        onPointerPressed: function (x, y, button) {
             const point = iconRow.mapFromItem(window.contentItem, x - root.activeScreen.x, y - root.activeScreen.y);
             x = point.x;
             y = point.y;
-            if (root.shown && button === 1 && x >= 0 && x < iconRow.width && y >= 0 && y < root.tileHeight
-                && x % (root.tileWidth + root.tileGap) < root.tileWidth) {
+            if (root.shown && button === 1 && x >= 0 && x < iconRow.width && y >= 0 && y < root.tileHeight && x % (root.tileWidth + root.tileGap) < root.tileWidth) {
                 root.trackIndex = Math.floor(x / (root.tileWidth + root.tileGap));
                 root.selected = root.trackIndex % root.windows.length;
                 root.finish();
                 shortcuts.end();
-            } else root.close();
+            } else
+                root.close();
         }
-        onKeyPressed: function(key, modifiers) {
-            if (key === 65307) { root.cancel(); shortcuts.end(); }
-            else if (key === 65293 || key === 65421) { root.finish(); shortcuts.end(); }
-            else if (key === 65361 || key === 65056) root.step(true);
-            else if (key === 65363 || key === 65289) root.step(key === 65289 && (modifiers & 1) !== 0);
+        onKeyPressed: function (key, modifiers) {
+            if (key === 65307) {
+                root.cancel();
+                shortcuts.end();
+            } else if (key === 65293 || key === 65421) {
+                root.finish();
+                shortcuts.end();
+            } else if (key === 65361 || key === 65056)
+                root.step(true);
+            else if (key === 65363 || key === 65289)
+                root.step(key === 65289 && (modifiers & 1) !== 0);
         }
     }
     FileView {
@@ -270,27 +337,34 @@ Scope {
         onLoaded: {
             try {
                 const settings = JSON.parse(text());
-                if (typeof settings !== "object" || settings === null || Array.isArray(settings)
-                    || Object.keys(settings).some(key => ["enabled", "showDelay"].indexOf(key) < 0)
-                    || (settings.enabled !== undefined && typeof settings.enabled !== "boolean")
-                    || (settings.showDelay !== undefined && (!Number.isInteger(settings.showDelay) || settings.showDelay < 0 || settings.showDelay > 500)))
+                if (typeof settings !== "object" || settings === null || Array.isArray(settings) || Object.keys(settings).some(key => ["enabled", "showDelay"].indexOf(key) < 0) || (settings.enabled !== undefined && typeof settings.enabled !== "boolean") || (settings.showDelay !== undefined && (!Number.isInteger(settings.showDelay) || settings.showDelay < 0 || settings.showDelay > 500)))
                     throw new Error("Invalid switcher settings");
                 root.cancel();
                 shortcuts.end();
                 root.enabled = settings.enabled === undefined ? true : settings.enabled;
                 root.showDelay = settings.showDelay === undefined ? 40 : settings.showDelay;
-            } catch (error) { console.warn("bingux-switcher: keeping previous settings: " + error); }
+            } catch (error) {
+                console.warn("bingux-switcher: keeping previous settings: " + error);
+            }
         }
     }
     IpcHandler {
         target: "switcher"
         function status(): string {
-            return JSON.stringify({active: root.active, shown: root.shown, ready: shortcuts.ready,
-                previewCount: Object.keys(root.previews).length, previewRequests: root.previewRequests, previewError: root.previewError,
+            return JSON.stringify({
+                active: root.active,
+                shown: root.shown,
+                ready: shortcuts.ready,
+                previewCount: Object.keys(root.previews).length,
+                previewRequests: root.previewRequests,
+                previewError: root.previewError,
                 selected: root.active && root.selectedWindow ? root.selectedWindow.title : null,
-                windows: root.windows.map(window => window.title)});
+                windows: root.windows.map(window => window.title)
+            });
         }
-        function close(): void { root.close(); }
+        function close(): void {
+            root.close();
+        }
     }
     PanelWindow {
         id: window
@@ -302,8 +376,16 @@ Scope {
         WlrLayershell.namespace: "bingux-switcher"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        anchors { top: true; bottom: true; left: true; right: true }
-        mask: Region { width: 0; height: 0 }
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
+        mask: Region {
+            width: 0
+            height: 0
+        }
         Item {
             id: presentation
             anchors.centerIn: parent
@@ -320,7 +402,9 @@ Scope {
                 color: Theme.popupSurface
                 border.width: 1
                 border.color: Theme.outline
-                PanelOutline { surface: strip }
+                PanelOutline {
+                    surface: strip
+                }
                 Flickable {
                     id: viewport
                     objectName: "switcherViewport"
@@ -333,108 +417,120 @@ Scope {
                     clip: true
                     Behavior on contentX {
                         enabled: root.shown && root.revealProgress > 0 && !root.rebasing && !Theme.reducedMotion
-                        NumberAnimation { duration: root.selectionMotion; easing.type: Easing.OutCubic }
+                        NumberAnimation {
+                            duration: root.selectionMotion
+                            easing.type: Easing.OutCubic
+                        }
                     }
-                Rectangle {
-                    id: selectionHighlight
-                    objectName: "switcherSelection"
-                    x: root.trackIndex * (root.tileWidth + root.tileGap)
-                    y: 0
-                    width: root.tileWidth
-                    height: root.tileHeight
-                    radius: Theme.insetRadius(strip.radius, root.cardPadding)
-                    color: Theme.hover
-                    Behavior on x {
-                        enabled: root.shown && root.revealProgress > 0 && !root.rebasing && !Theme.reducedMotion
-                        NumberAnimation { duration: root.selectionMotion; easing.type: Easing.OutCubic }
-                    }
-                }
-                RowLayout {
-                    id: iconRow
-                    spacing: root.tileGap
-                    Repeater {
-                        id: icons
-                        // A numeric model preserves delegates on title/focus snapshots.
-                        // Replacing a JS-array model destroys every badge and image.
-                        model: root.shown || root.revealProgress > 0 ? root.windows.length * 3 : 0
-                        onItemAdded: root.iconRevision++
-                        onItemRemoved: root.iconRevision++
-                        Item {
-                            required property int index
-                            readonly property var modelData: root.windows[index % root.windows.length] || ({id: "", appId: ""})
-                            property alias appIcon: icon
-                            Layout.preferredWidth: root.tileWidth
-                            Layout.preferredHeight: root.tileHeight
-                            AppIcon {
-                                id: icon
-                                anchors.left: parent.left
-                                anchors.leftMargin: Theme.gap
-                                anchors.bottom: parent.bottom
-                                anchors.bottomMargin: Theme.gap
-                                implicitSize: Theme.dockIconSize
-                                group: ({id: modelData.appId.replace(/\.desktop$/, ""),
-                                    displayName: root.appName(modelData), desktopEntry: root.appFor(modelData), windows: [modelData]})
-                                activeStreams: root.activeStreams
-                                notifications: root.notifications
+                    Rectangle {
+                        id: selectionHighlight
+                        objectName: "switcherSelection"
+                        x: root.trackIndex * (root.tileWidth + root.tileGap)
+                        y: 0
+                        width: root.tileWidth
+                        height: root.tileHeight
+                        radius: Theme.insetRadius(strip.radius, root.cardPadding)
+                        color: Theme.hover
+                        Behavior on x {
+                            enabled: root.shown && root.revealProgress > 0 && !root.rebasing && !Theme.reducedMotion
+                            NumberAnimation {
+                                duration: root.selectionMotion
+                                easing.type: Easing.OutCubic
                             }
-                            ClippingRectangle {
-                                id: previewSurface
-                                anchors.top: parent.top
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.margins: Theme.gap
-                                height: root.previewHeight
-                                radius: Theme.insetRadius(strip.radius - root.cardPadding, Theme.gap)
-                                color: Theme.background
-                                Image {
-                                    anchors.fill: parent
-                                    source: root.previews[modelData.id] || ""
-                                    fillMode: Image.PreserveAspectCrop
-                                    verticalAlignment: Image.AlignTop
-                                    cache: true
-                                    asynchronous: true
-                                    retainWhileLoading: true
-                                }
-                                OsIconImage {
-                                    anchors.centerIn: parent
+                        }
+                    }
+                    RowLayout {
+                        id: iconRow
+                        spacing: root.tileGap
+                        Repeater {
+                            id: icons
+                            // A numeric model preserves delegates on title/focus snapshots.
+                            // Replacing a JS-array model destroys every badge and image.
+                            model: root.shown || root.revealProgress > 0 ? root.windows.length * 3 : 0
+                            onItemAdded: root.iconRevision++
+                            onItemRemoved: root.iconRevision++
+                            Item {
+                                required property int index
+                                readonly property var modelData: root.windows[index % root.windows.length] || ({
+                                        id: "",
+                                        appId: ""
+                                    })
+                                property alias appIcon: icon
+                                Layout.preferredWidth: root.tileWidth
+                                Layout.preferredHeight: root.tileHeight
+                                AppIcon {
+                                    id: icon
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: Theme.gap
+                                    anchors.bottom: parent.bottom
+                                    anchors.bottomMargin: Theme.gap
                                     implicitSize: Theme.dockIconSize
-                                    source: root.iconFor(modelData)
-                                    opacity: 0.3
-                                    visible: !root.previews[modelData.id]
+                                    group: ({
+                                            id: modelData.appId.replace(/\.desktop$/, ""),
+                                            displayName: root.appName(modelData),
+                                            desktopEntry: root.appFor(modelData),
+                                            windows: [modelData]
+                                        })
+                                    activeStreams: root.activeStreams
+                                    notifications: root.notifications
                                 }
-                            }
-                            ColumnLayout {
-                                anchors.left: icon.right
-                                anchors.leftMargin: Theme.gap
-                                anchors.right: parent.right
-                                anchors.rightMargin: Theme.gap
-                                anchors.verticalCenter: icon.verticalCenter
-                                spacing: Theme.spaceSmall
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: modelData.title || root.appName(modelData)
-                                    textFormat: Text.PlainText
-                                    elide: Text.ElideMiddle
-                                    color: Theme.text
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: Theme.fontSize
+                                ClippingRectangle {
+                                    id: previewSurface
+                                    anchors.top: parent.top
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.margins: Theme.gap
+                                    height: root.previewHeight
+                                    radius: Theme.insetRadius(strip.radius - root.cardPadding, Theme.gap)
+                                    color: Theme.background
+                                    Image {
+                                        anchors.fill: parent
+                                        source: root.previews[modelData.id] || ""
+                                        fillMode: Image.PreserveAspectCrop
+                                        verticalAlignment: Image.AlignTop
+                                        cache: true
+                                        asynchronous: true
+                                        retainWhileLoading: true
+                                    }
+                                    OsIconImage {
+                                        anchors.centerIn: parent
+                                        implicitSize: Theme.dockIconSize
+                                        source: root.iconFor(modelData)
+                                        opacity: 0.3
+                                        visible: !root.previews[modelData.id]
+                                    }
                                 }
-                                Text {
-                                    Layout.fillWidth: true
-                                    text: root.appName(modelData)
-                                    textFormat: Text.PlainText
-                                    elide: Text.ElideRight
-                                    color: Theme.muted
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: Theme.fontSize
+                                ColumnLayout {
+                                    anchors.left: icon.right
+                                    anchors.leftMargin: Theme.gap
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: Theme.gap
+                                    anchors.verticalCenter: icon.verticalCenter
+                                    spacing: Theme.spaceSmall
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: modelData.title || root.appName(modelData)
+                                        textFormat: Text.PlainText
+                                        elide: Text.ElideMiddle
+                                        color: Theme.text
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSize
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: root.appName(modelData)
+                                        textFormat: Text.PlainText
+                                        elide: Text.ElideRight
+                                        color: Theme.muted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSize
+                                    }
                                 }
                             }
                         }
                     }
                 }
-                }
             }
-
         }
     }
 }

@@ -64,7 +64,13 @@ document.save(path / "office.docx")
 import subprocess
 subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=green:s=160x90:d=10", "-c:v", "mpeg4", "-y", str(path / "clip.mp4")], check=True)
 PY
-BINGUX_ICON_HELPER='' BINGUX_PREVIEW_HELPER='' NO_AT_BRIDGE=1 timeout 40s "${QUICKSHELL_BIN:-quickshell}" -p "$test_dir" --no-color > "$test_dir/runtime.log" 2>&1 || { cat "$test_dir/runtime.log"; exit 1; }
-grep -q 'DOCUMENT_PREVIEW_PASS' "$test_dir/runtime.log" || { cat "$test_dir/runtime.log"; exit 1; }
+BINGUX_ICON_HELPER='' BINGUX_PREVIEW_HELPER='' NO_AT_BRIDGE=1 timeout 40s "${QUICKSHELL_BIN:-quickshell}" -p "$test_dir" --no-color >"$test_dir/runtime.log" 2>&1 || {
+    cat "$test_dir/runtime.log"
+    exit 1
+}
+grep -q 'DOCUMENT_PREVIEW_PASS' "$test_dir/runtime.log" || {
+    cat "$test_dir/runtime.log"
+    exit 1
+}
 if grep -E 'TypeError|ReferenceError|Unable to assign|Binding loop' "$test_dir/runtime.log"; then exit 1; fi
 echo "PASS: Right Arrow preview, fixed search layout, PDF rendering, zoom, scroll, pan, file switching and cleanup"

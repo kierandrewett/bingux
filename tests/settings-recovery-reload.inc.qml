@@ -1,4 +1,7 @@
-    FileView { id: layoutReport; path: Quickshell.env("BINGUX_LAYOUT_REPORT") }
+    FileView {
+        id: layoutReport
+        path: Quickshell.env("BINGUX_LAYOUT_REPORT")
+    }
     TestCase {
         parent: topBar.contentItem
         when: topBar.visible && BinguxPreferences.loaded && ControlCentreServices.preferencesReady && dock.appGroupsInitialised
@@ -7,7 +10,8 @@
                 verify(BinguxPreferences.data.desktop.layout.dock.includes("clock"));
                 tryCompare(clockPill, "parent", dock.widgetHost, 3000);
                 compare(BinguxPreferences.layoutError, "");
-                desktopCustomiser.open(); desktopCustomiser.cancel();
+                desktopCustomiser.open();
+                desktopCustomiser.cancel();
                 compare(clockPill.parent, dock.widgetHost);
                 layoutReport.setText("PASS");
             } catch (error) {

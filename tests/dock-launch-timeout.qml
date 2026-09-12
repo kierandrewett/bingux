@@ -12,23 +12,37 @@ ShellRoot {
             signal objectRemovedPost(var object, int index)
         }
     }
-    QtObject { id: otherWindow; property string appId: "unrelated-app" }
-    QtObject { id: appWindow; property string appId: "slow-app" }
+    QtObject {
+        id: otherWindow
+        property string appId: "unrelated-app"
+    }
+    QtObject {
+        id: appWindow
+        property string appId: "slow-app"
+    }
     Dock {
         id: dock
         testManager: manager
-        settings: QtObject { property var pinnedApps: [] }
+        settings: QtObject {
+            property var pinnedApps: []
+        }
     }
     TestCase {
         name: "DockLaunchTimeout"
         when: dock.visible
         function check(condition, message) {
-            if (!condition) console.error("FAIL: " + message);
+            if (!condition)
+                console.error("FAIL: " + message);
             verify(condition, message);
         }
         function test_loading() {
             wait(300);
-            const group = {id: "slow-app", desktopEntry: {id: "slow-app.desktop"}};
+            const group = {
+                id: "slow-app",
+                desktopEntry: {
+                    id: "slow-app.desktop"
+                }
+            };
             dock.launch(group, false);
             wait(3300);
             check(dock.pendingLaunchGroupId === group.id, "Loading must survive the old three-second timeout and successful launcher exit");

@@ -4,25 +4,55 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
-    Timer { id: finish; interval: 200; onTriggered: Qt.quit() }
-    FileView { id: report; blockWrites: true; path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS") }
+    Timer {
+        id: finish
+        interval: 200
+        onTriggered: Qt.quit()
+    }
+    FileView {
+        id: report
+        blockWrites: true
+        path: Quickshell.env("BINGUX_NOTES_TEST_RESULTS")
+    }
     QtObject {
         id: state
-        function expiryProgress(notification) { return 0; }
-        function canActivate(entry) { return false; }
-        function setPaused(notification, paused) {}
+        function expiryProgress(notification) {
+            return 0;
+        }
+        function canActivate(entry) {
+            return false;
+        }
+        function setPaused(notification, paused) {
+        }
     }
     NotificationState {
         id: refreshState
         property int refreshCount: 0
-        function refreshApplicationMetadata() { refreshCount++; }
+        function refreshApplicationMetadata() {
+            refreshCount++;
+        }
     }
     DockNotifications {
         id: menu
         width: 320
         height: 400
         state: state
-        entries: Array.from({length: 25}, (_, i) => ({notification: {id: i + 1}, appName: "Test", desktopEntry: "", summary: "Notification", body: "Body", appIcon: "", image: "", actions: [], receivedAt: 0, timeoutMs: 0}))
+        entries: Array.from({
+            length: 25
+        }, (_, i) => ({
+                    notification: {
+                        id: i + 1
+                    },
+                    appName: "Test",
+                    desktopEntry: "",
+                    summary: "Notification",
+                    body: "Body",
+                    appIcon: "",
+                    image: "",
+                    actions: [],
+                    receivedAt: 0,
+                    timeoutMs: 0
+                }))
     }
     TestCase {
         when: true
@@ -30,7 +60,8 @@ ShellRoot {
             wait(200);
             const before = refreshState.refreshCount;
             const catalogBefore = ApplicationCatalog.entries;
-            for (let i = 0; i < 100; i++) DesktopEntries.applications.valuesChanged();
+            for (let i = 0; i < 100; i++)
+                DesktopEntries.applications.valuesChanged();
             compare(refreshState.refreshCount, before);
             verify(ApplicationCatalog.entries === catalogBefore);
             DesktopEntries.applicationsChanged();
@@ -53,7 +84,8 @@ ShellRoot {
             wait(300);
             compare(menu.renderedNotificationCount, 25);
             const snapshot = menu.preparedEntries;
-            for (let i = 0; i < 100; i++) menu.entries = menu.entries.slice();
+            for (let i = 0; i < 100; i++)
+                menu.entries = menu.entries.slice();
             wait(100);
             compare(menu.preparedEntries, snapshot);
             compare(menu.stackHeight, preparedHeight);

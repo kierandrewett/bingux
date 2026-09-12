@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """A capture's notification/actions outlive capture-worker and shell reloads."""
+
 from pathlib import Path
 import subprocess
 import sys
@@ -24,8 +25,9 @@ class CaptureNotification:
         self.identifier = 0
         self.chooser_subscription = 0
         for signal in ("ActionInvoked", "NotificationClosed"):
-            self.bus.signal_subscribe(NOTIFICATIONS, NOTIFICATIONS, signal, NOTIFICATION_PATH,
-                                      None, Gio.DBusSignalFlags.NONE, self.on_signal)
+            self.bus.signal_subscribe(
+                NOTIFICATIONS, NOTIFICATIONS, signal, NOTIFICATION_PATH, None, Gio.DBusSignalFlags.NONE, self.on_signal
+            )
 
     def fingerprint(self):
         stat = self.path.lstat()
@@ -38,26 +40,46 @@ class CaptureNotification:
             raise ValueError("Capture changed since capture; leaving it untouched")
 
     def call(self, destination, path, interface, method, signature, values):
-        return self.bus.call_sync(destination, path, interface, method, GLib.Variant(signature, values),
-                                  None, Gio.DBusCallFlags.NONE, 5000, None).unpack()
+        return self.bus.call_sync(
+            destination,
+            path,
+            interface,
+            method,
+            GLib.Variant(signature, values),
+            None,
+            Gio.DBusCallFlags.NONE,
+            5000,
+            None,
+        ).unpack()
 
     @property
     def title(self):
         return "Recording" if self.kind == "recording" else "Screenshot"
 
     def notify(self, summary=None, body=None):
-        hints = {"resident": GLib.Variant("b", True),
-                 "category": GLib.Variant("s", "transfer.complete")}
+        hints = {"resident": GLib.Variant("b", True), "category": GLib.Variant("s", "transfer.complete")}
         actions = ["default", "Open"]
         if self.kind == "screenshot":
             hints["image-path"] = GLib.Variant("s", self.path.as_uri())
             actions += ["copy", "Copy"]
         actions += ["save", "Save As…", "discard", "Discard"]
-        self.identifier = self.call(NOTIFICATIONS, NOTIFICATION_PATH, NOTIFICATIONS, "Notify",
-            "(susssasa{sv}i)", ("Capture", self.identifier,
+        self.identifier = self.call(
+            NOTIFICATIONS,
+            NOTIFICATION_PATH,
+            NOTIFICATIONS,
+            "Notify",
+            "(susssasa{sv}i)",
+            (
+                "Capture",
+                self.identifier,
                 "media-record-symbolic" if self.kind == "recording" else "screenshot-selection-symbolic",
                 summary if summary is not None else self.title + " saved",
-                body if body is not None else self.path.name, actions, hints, -1))[0]
+                body if body is not None else self.path.name,
+                actions,
+                hints,
+                -1,
+            ),
+        )[0]
 
     def on_signal(self, bus, sender, path, interface, signal, parameters):
         identifier, value = parameters.unpack()
@@ -79,7 +101,9 @@ class CaptureNotification:
             elif value == "discard":
                 # Never permanently delete if the filesystem has no trash support.
                 Gio.File.new_for_path(str(self.path)).trash(None)
-                self.call(NOTIFICATIONS, NOTIFICATION_PATH, NOTIFICATIONS, "CloseNotification", "(u)", (self.identifier,))
+                self.call(
+                    NOTIFICATIONS, NOTIFICATION_PATH, NOTIFICATIONS, "CloseNotification", "(u)", (self.identifier,)
+                )
                 self.loop.quit()
             elif value == "default":
                 Gio.AppInfo.launch_default_for_uri(self.path.as_uri(), None)
@@ -92,12 +116,32 @@ class CaptureNotification:
         token = "capture_" + uuid.uuid4().hex
         sender = self.bus.get_unique_name()[1:].replace(".", "_")
         request = "/org/freedesktop/portal/desktop/request/" + sender + "/" + token
-        self.chooser_subscription = self.bus.signal_subscribe(PORTAL, "org.freedesktop.portal.Request",
-            "Response", request, None, Gio.DBusSignalFlags.NONE, self.on_save_response)
+        self.chooser_subscription = self.bus.signal_subscribe(
+            PORTAL,
+            "org.freedesktop.portal.Request",
+            "Response",
+            request,
+            None,
+            Gio.DBusSignalFlags.NONE,
+            self.on_save_response,
+        )
         try:
-            self.call(PORTAL, "/org/freedesktop/portal/desktop", "org.freedesktop.portal.FileChooser", "SaveFile",
-                "(ssa{sv})", ("", "Save " + self.kind, {"handle_token": GLib.Variant("s", token),
-                    "current_name": GLib.Variant("s", self.path.name), "modal": GLib.Variant("b", True)}))
+            self.call(
+                PORTAL,
+                "/org/freedesktop/portal/desktop",
+                "org.freedesktop.portal.FileChooser",
+                "SaveFile",
+                "(ssa{sv})",
+                (
+                    "",
+                    "Save " + self.kind,
+                    {
+                        "handle_token": GLib.Variant("s", token),
+                        "current_name": GLib.Variant("s", self.path.name),
+                        "modal": GLib.Variant("b", True),
+                    },
+                ),
+            )
         except Exception:
             self.bus.signal_unsubscribe(self.chooser_subscription)
             self.chooser_subscription = 0

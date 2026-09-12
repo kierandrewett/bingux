@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Customisation is tested in the running shell, using its actual containers."""
+
 from pathlib import Path
 import runpy
 

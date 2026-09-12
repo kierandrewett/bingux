@@ -6,9 +6,18 @@ import Quickshell.Services.Mpris
 
 ShellRoot {
     property string checks: ""
-    FileView { id: results; path: Quickshell.env("BINGUX_MEDIA_TEST_RESULTS") }
-    NotificationState { id: notificationState }
-    NotificationSurface { id: notificationSurface; state: notificationState; notificationCentre: centre }
+    FileView {
+        id: results
+        path: Quickshell.env("BINGUX_MEDIA_TEST_RESULTS")
+    }
+    NotificationState {
+        id: notificationState
+    }
+    NotificationSurface {
+        id: notificationSurface
+        state: notificationState
+        notificationCentre: centre
+    }
     ShellPopup {
         id: centre
         hostItem: notificationSurface.desktopViewport
@@ -20,10 +29,14 @@ ShellRoot {
     }
     Dock {
         id: dock
-        settings: QtObject { property var pinnedApps: ["dock-media-test", "no-media"] }
+        settings: QtObject {
+            property var pinnedApps: ["dock-media-test", "no-media"]
+        }
         notifications: notificationState.allEntries
         notificationStore: notificationState
-        activity: QtObject { property var activeStreams: [] }
+        activity: QtObject {
+            property var activeStreams: []
+        }
     }
     TestCase {
         id: test
@@ -66,8 +79,7 @@ ShellRoot {
             check(artButton.width === section.smallArtSize, "Artwork animates back to the compact size");
             waitForRendering(seek);
             wait(100); // Let the resized layer surface receive its configure event.
-            check(elapsed.width < elapsed.parent.width && elapsed.x === 0 && findChild(elapsed, "rollingGlyph0").x === 0,
-                "Time toggle fits its text and stays left aligned");
+            check(elapsed.width < elapsed.parent.width && elapsed.x === 0 && findChild(elapsed, "rollingGlyph0").x === 0, "Time toggle fits its text and stays left aligned");
             mouseMove(seek, seek.handle.width / 2 + (seek.availableWidth - seek.handle.width) / 4, seek.height / 2);
             wait(100);
             check(seek.previewVisible, "Seek hover preview is visible (slider hovered " + seek.hovered + ")");
@@ -183,50 +195,54 @@ ShellRoot {
             const card = findChild(previews, "notificationCard");
             tryCompare(card, "slideOffset", 0);
             check(card.groupCount === 1 && !card.collapsedStack, "Dock shows notifications as individual cards");
-            check(card.radius === Theme.menuWidgetRadius && card.contentPadding === Theme.notificationPadding,
-                "Dock notification card uses the shared menu radius and notification spacing");
-            check(card.border.width === 0 && !card.layer.enabled && String(card.color) === String(Theme.menuWidgetBackground),
-                "Dock widgets share the media background without borders or shadows");
-            check(!previews.animationsEnabled && previews.cardMotion === 0 && previews.groupMotion === 0
-                && card.slideOffset === 0 && card.entranceOpacity === 1,
-                "Dock notifications appear immediately without slide or fade effects");
+            check(card.radius === Theme.menuWidgetRadius && card.contentPadding === Theme.notificationPadding, "Dock notification card uses the shared menu radius and notification spacing");
+            check(card.border.width === 0 && !card.layer.enabled && String(card.color) === String(Theme.menuWidgetBackground), "Dock widgets share the media background without borders or shadows");
+            check(!previews.animationsEnabled && previews.cardMotion === 0 && previews.groupMotion === 0 && card.slideOffset === 0 && card.entranceOpacity === 1, "Dock notifications appear immediately without slide or fade effects");
             const cards = Array.from(card.parent.children).filter(item => item.objectName === "notificationCard");
-            check(cards.length === 2 && cards[1].y >= card.height && cards[1].width === card.width,
-                "App notifications have equal widths and a flat vertical layout");
-            check(!findChild(card, "notificationGroupToggle").visible && previews.bottomInset === 0,
-                "Dock has no grouping control or extra space below notifications");
+            check(cards.length === 2 && cards[1].y >= card.height && cards[1].width === card.width, "App notifications have equal widths and a flat vertical layout");
+            check(!findChild(card, "notificationGroupToggle").visible && previews.bottomInset === 0, "Dock has no grouping control or extra space below notifications");
             mousePress(card, 80, 60);
             mouseMove(card, 100, 60, 20);
             mouseMove(card, 180, 60, 20);
             mouseRelease(card, 180, 60);
-            check(card.dragOffset === 0 && !card.dismissing && previews.entries.length === 2,
-                "Dragging a dock notification does not move or dismiss it");
+            check(card.dragOffset === 0 && !card.dismissing && previews.entries.length === 2, "Dragging a dock notification does not move or dismiss it");
             mouseMove(card, 100, 60);
             const clear = findChild(card, "notificationCloseButton");
             tryCompare(clear, "opacity", 1);
             const originalCardHeight = card.height;
             const originalMenuHeight = menu.popupHeight;
             const frames = Quickshell.env("BINGUX_NOTIFICATION_COLLAPSE_IMAGES");
-            if (frames) { menu.body.grabToImage(result => result.saveToFile(frames + "-before.png")); wait(30); }
+            if (frames) {
+                menu.body.grabToImage(result => result.saveToFile(frames + "-before.png"));
+                wait(30);
+            }
             mouseClick(clear, clear.width / 2, clear.height / 2);
             if (!Theme.reducedMotion) {
                 tryVerify(() => card.collapseProgress > 0 && card.collapseProgress < 1 && menu.popupHeight < originalMenuHeight, 1000);
-                check(card.height > 0 && card.height < originalCardHeight && card.slideOffset === 0,
-                    "X dismisses through vertical collapse without sideways movement");
-                check(menu.popupHeight < originalMenuHeight && menu.popupHeight > originalMenuHeight - originalCardHeight,
-                    "Menu height follows the card collapse in flight");
-                if (frames) menu.body.grabToImage(result => result.saveToFile(frames + "-during.png"));
+                check(card.height > 0 && card.height < originalCardHeight && card.slideOffset === 0, "X dismisses through vertical collapse without sideways movement");
+                check(menu.popupHeight < originalMenuHeight && menu.popupHeight > originalMenuHeight - originalCardHeight, "Menu height follows the card collapse in flight");
+                if (frames)
+                    menu.body.grabToImage(result => result.saveToFile(frames + "-during.png"));
             }
             tryCompare(app, "notificationCount", 1);
             check(Theme.reducedMotion || number.animating, "Clearing a preview animates the count down");
             tryCompare(number, "displayedValue", 1);
             check(previews.entries.length === 1 && menu.visible, "Clearing a preview updates the open menu");
-            if (frames) { menu.body.grabToImage(result => result.saveToFile(frames + "-after.png")); wait(30); }
+            if (frames) {
+                menu.body.grabToImage(result => result.saveToFile(frames + "-after.png"));
+                wait(30);
+            }
             notificationState.dismissAll();
             tryCompare(app, "notificationCount", 0);
             check(!badge.shown, "Dismissing notifications clears the count");
             menu.visible = false;
-            dock.activity.activeStreams = [{properties: {"application.id": "dock-media-test"}}];
+            dock.activity.activeStreams = [
+                {
+                    properties: {
+                        "application.id": "dock-media-test"
+                    }
+                }
+            ];
             const audio = findChild(app, "dockAudioBadge");
             tryCompare(audio, "opacity", 1);
             check(app.playingAudio && !other.playingAudio, "Audio activity badges only the matching application");

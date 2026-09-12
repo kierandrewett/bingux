@@ -19,10 +19,33 @@ Item {
         anchors.centerIn: parent
         visible: !root.customPresentation
         spacing: 8
-        SymbolicIcon { implicitSize: 16; color: Theme.muted; source: Quickshell.iconPath("battery-good-symbolic") }
-        Text { text: root.label; Accessible.name: root.Accessible.name; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+        SymbolicIcon {
+            implicitSize: 16
+            color: Theme.muted
+            source: Quickshell.iconPath("battery-good-symbolic")
+        }
+        Text {
+            text: root.label
+            Accessible.name: root.Accessible.name
+            color: Theme.muted
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSmall
+        }
     }
-    WidgetFace { id: face; anchors.centerIn: parent; visible: root.customPresentation; presentation: root.presentation; iconColor: Theme.muted }
-    HoverHandler { id: hover }
-    BarTooltip { anchorItem: root; barWindow: root.barWindow; requested: root.barLayout && root.visible && hover.hovered && !DesktopEditing.active; text: root.Accessible.name }
+    WidgetFace {
+        id: face
+        anchors.centerIn: parent
+        visible: root.customPresentation
+        presentation: root.presentation
+        iconColor: Theme.muted
+    }
+    HoverHandler {
+        id: hover
+    }
+    BarTooltip {
+        anchorItem: root
+        barWindow: root.barWindow
+        requested: root.barLayout && root.visible && hover.hovered && !DesktopEditing.active
+        text: root.Accessible.name
+    }
 }

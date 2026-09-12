@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Discover and manage trusted Bingux QML extensions without importing their code."""
+
 import argparse
 import json
 import os
@@ -16,14 +17,23 @@ def config_path():
 
 def roots():
     user = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
-    return [user / "bingux/extensions"] + [Path(p) / "bingux/extensions" for p in os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share").split(":") if p]
+    return [user / "bingux/extensions"] + [
+        Path(p) / "bingux/extensions"
+        for p in os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share").split(":")
+        if p
+    ]
 
 
 def component(folder, value):
     if not isinstance(value, str) or not value:
         raise ValueError("Component must be a relative QML filename")
     path = (folder / value).resolve()
-    if Path(value).is_absolute() or not path.is_relative_to(folder.resolve()) or path.suffix != ".qml" or not path.is_file():
+    if (
+        Path(value).is_absolute()
+        or not path.is_relative_to(folder.resolve())
+        or path.suffix != ".qml"
+        or not path.is_file()
+    ):
         raise ValueError(f"Missing or invalid QML component: {value}")
     return path.as_uri()
 
@@ -44,14 +54,26 @@ def manifest(folder):
     result = dict(data, directory=str(folder.resolve()), widgets=[])
     seen = set()
     for widget in widgets:
-        if not isinstance(widget, dict) or not isinstance(widget.get("id"), str) or not ID.fullmatch(widget["id"]) or widget["id"] in seen:
+        if (
+            not isinstance(widget, dict)
+            or not isinstance(widget.get("id"), str)
+            or not ID.fullmatch(widget["id"])
+            or widget["id"] in seen
+        ):
             raise ValueError("Widget ids must be valid and unique within the extension")
         seen.add(widget["id"])
         if not isinstance(widget.get("name"), str) or not widget["name"].strip():
             raise ValueError("Each widget needs a name")
-        result["widgets"].append(dict(widget, id=f"extension:{data['id']}/{widget['id']}",
-            extensionId=data["id"], label=widget["name"], source=component(folder, widget.get("component")),
-            previewSource=component(folder, widget.get("preview", widget.get("component")))))
+        result["widgets"].append(
+            dict(
+                widget,
+                id=f"extension:{data['id']}/{widget['id']}",
+                extensionId=data["id"],
+                label=widget["name"],
+                source=component(folder, widget.get("component")),
+                previewSource=component(folder, widget.get("preview", widget.get("component"))),
+            )
+        )
     result["settingsSource"] = component(folder, data["settings"]) if data.get("settings") else ""
     result["entrySource"] = component(folder, data["entry"]) if data.get("entry") else ""
     return result
@@ -62,7 +84,11 @@ def state():
         data = json.loads(config_path().read_text())
     except FileNotFoundError:
         return {"enabled": []}
-    if not isinstance(data, dict) or not isinstance(data.get("enabled"), list) or any(not isinstance(i, str) or not ID.fullmatch(i) for i in data["enabled"]):
+    if (
+        not isinstance(data, dict)
+        or not isinstance(data.get("enabled"), list)
+        or any(not isinstance(i, str) or not ID.fullmatch(i) for i in data["enabled"])
+    ):
         raise ValueError("extensions.json must contain an enabled list of extension ids")
     return data
 

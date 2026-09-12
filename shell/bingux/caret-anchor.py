@@ -1,4 +1,5 @@
 """Bounded, geometry-only AT-SPI query. Never reads or stores input text."""
+
 import json
 import signal
 import sys
@@ -6,6 +7,7 @@ import sys
 
 def caret(pid):
     import gi
+
     gi.require_version("Atspi", "2.0")
     from gi.repository import Atspi
 
@@ -45,8 +47,14 @@ def caret(pid):
                             if not parent:
                                 break
                         # At end-of-input use the trailing edge of the last glyph.
-                        return dict(x=rect.x + (rect.width if offset >= count else 0),
-                                    y=rect.y, width=1, height=rect.height, source="caret", surface=surface)
+                        return dict(
+                            x=rect.x + (rect.width if offset >= count else 0),
+                            y=rect.y,
+                            width=1,
+                            height=rect.height,
+                            source="caret",
+                            surface=surface,
+                        )
             for index in range(min(node.get_child_count(), 128)):
                 child = node.get_child_at_index(index)
                 if child:

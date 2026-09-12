@@ -24,8 +24,12 @@ PanelWindow {
             stack.prepareHistory();
         }
     }
-    function dismissAll() { state.dismissAll(); }
-    function toggleGroup(key) { stack.toggleGroup(key); }
+    function dismissAll() {
+        state.dismissAll();
+    }
+    function toggleGroup(key) {
+        stack.toggleGroup(key);
+    }
     onInHistoryChanged: {
         preparingHistory = false;
         if (!inHistory) {
@@ -47,16 +51,15 @@ PanelWindow {
         surfaceNamespace: "bingux-notifications"
         // Include the footer and shadow margin. Sliding cards remain inside
         // this final-position rectangle until the desktop clips them away.
-        region: root.inHistory
-            ? Qt.rect(desktopArea.x + root.notificationCentre.panelX - Theme.padding,
-                Math.max(0, root.notificationCentre.panelY - Theme.padding),
-                root.notificationCentre.popupWidth + Theme.padding * 2,
-                root.notificationCentre.popupHeight + Theme.padding * 2)
-            : Qt.rect(desktopArea.x + stack.x - Theme.padding, Math.max(0, stack.y - Theme.padding),
-                stack.width + Theme.padding * 2, stack.height + Theme.padding * 2)
+        region: root.inHistory ? Qt.rect(desktopArea.x + root.notificationCentre.panelX - Theme.padding, Math.max(0, root.notificationCentre.panelY - Theme.padding), root.notificationCentre.popupWidth + Theme.padding * 2, root.notificationCentre.popupHeight + Theme.padding * 2) : Qt.rect(desktopArea.x + stack.x - Theme.padding, Math.max(0, stack.y - Theme.padding), stack.width + Theme.padding * 2, stack.height + Theme.padding * 2)
     }
     WlrLayershell.keyboardFocus: inHistory && notificationCentre.visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-    anchors { top: true; bottom: true; left: true; right: true }
+    anchors {
+        top: true
+        bottom: true
+        left: true
+        right: true
+    }
 
     // Both toasts and history live in the desktop area. Clipping here also
     // contains the whole centre's entrance at the sidebar edge.
@@ -73,7 +76,8 @@ PanelWindow {
         NotificationStack {
             id: stack
             state: root.state
-            onNotificationActivated: if (root.notificationCentre) root.notificationCentre.visible = false;
+            onNotificationActivated: if (root.notificationCentre)
+                root.notificationCentre.visible = false
             presentedEntries: root.inHistory || root.preparingHistory ? root.state.allEntries : root.state.visibleEntries
             filterToasts: true
             historyMode: root.inHistory
@@ -82,13 +86,13 @@ PanelWindow {
             presentationOpacity: root.inHistory ? root.notificationCentre.body.parent.opacity : 1
             enabled: !root.inHistory || root.notificationCentre.visible
             width: Math.max(0, Math.min(Theme.notificationWidth + Theme.padding, parent.width - Theme.padding))
-            height: Math.min(contentHeight, root.inHistory ? root.notificationCentre.listHeight
-                : Math.max(0, parent.height - Theme.barHeight - Theme.gap - Theme.padding))
+            height: Math.min(contentHeight, root.inHistory ? root.notificationCentre.listHeight : Math.max(0, parent.height - Theme.barHeight - Theme.gap - Theme.padding))
             x: root.inHistory ? root.notificationCentre.listX : parent.width - width
             y: root.inHistory ? root.notificationCentre.listY : Theme.barHeight + Theme.gap
         }
     }
-    contentItem.Keys.onEscapePressed: if (notificationCentre) notificationCentre.visible = false;
+    contentItem.Keys.onEscapePressed: if (notificationCentre)
+        notificationCentre.visible = false
     mask: Region {
         x: desktopArea.x + (root.inHistory ? 0 : stack.x)
         y: root.inHistory ? 0 : stack.y

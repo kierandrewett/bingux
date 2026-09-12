@@ -24,7 +24,12 @@ Item {
             spacing: 3
             Repeater {
                 model: root.flexible ? 3 : 1
-                Rectangle { width: 2; height: 7; radius: 1; color: Theme.muted }
+                Rectangle {
+                    width: 2
+                    height: 7
+                    radius: 1
+                    color: Theme.muted
+                }
             }
         }
     }

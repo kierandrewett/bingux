@@ -99,8 +99,8 @@ Create `~/.config/bingux/switcher.json` before starting Bingux:
 
 ```json
 {
-  "enabled": true,
-  "showDelay": 40
+    "enabled": true,
+    "showDelay": 40
 }
 ```
 

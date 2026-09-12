@@ -7,7 +7,13 @@ ShellRoot {
     property string token: ""
     property string timedOutRequest: ""
     property var launches: []
-    property var sample: ({resultId: "test-app", title: "Test Application", kind: "application", providerId: "applications", desktopId: "test-app.desktop"})
+    property var sample: ({
+            resultId: "test-app",
+            title: "Test Application",
+            kind: "application",
+            providerId: "applications",
+            desktopId: "test-app.desktop"
+        })
     function check(condition, message) {
         if (!condition) {
             console.error("FAIL: " + message);
@@ -20,18 +26,29 @@ ShellRoot {
         search.activateResult(sample);
         test.token = search.launchFeedbackToken;
         test.check(!!test.token && LaunchFeedback.active.length === 1, "search requests global cursor feedback");
-        test.check(test.launches.length > 0 && test.launches[test.launches.length - 1].id === sample.desktopId,
-            "search starts the matching dock loading pill");
+        test.check(test.launches.length > 0 && test.launches[test.launches.length - 1].id === sample.desktopId, "search starts the matching dock loading pill");
     }
-    SearchOverlay { id: search; dockView: dockProxy }
+    SearchOverlay {
+        id: search
+        dockView: dockProxy
+    }
     QtObject {
         id: dockProxy
         function beginExternalLaunch(id, name) {
-            test.launches = test.launches.concat([{id, name}]);
+            test.launches = test.launches.concat([
+                {
+                    id,
+                    name
+                }
+            ]);
             return true;
         }
         function endExternalLaunch(id) {
-            test.launches = test.launches.concat([{id: "end:" + id}]);
+            test.launches = test.launches.concat([
+                {
+                    id: "end:" + id
+                }
+            ]);
         }
     }
     Timer {
@@ -65,7 +82,9 @@ ShellRoot {
                 test.check(!search.activationPending && LaunchFeedback.active.length === 0, "disconnect restores global cursor");
                 search.testSocket.connectionState = "ready";
                 test.start();
-                Qt.callLater(() => { test.timedOutRequest = search.activeActivationRequestId; });
+                Qt.callLater(() => {
+                    test.timedOutRequest = search.activeActivationRequestId;
+                });
                 steps.interval = Theme.launchTimeout + 150;
                 break;
             case 5:

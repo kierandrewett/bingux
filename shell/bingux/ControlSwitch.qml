@@ -9,7 +9,9 @@ Switch {
     hoverEnabled: true
     indicator: Rectangle {
         y: (root.height - height) / 2
-        width: 36; height: 20; radius: 10
+        width: 36
+        height: 20
+        radius: 10
         // A defined track and a light thumb make this read as a switch rather
         // than another rounded button in the grid.
         color: root.checked ? Theme.accent : Theme.elevated
@@ -30,10 +32,23 @@ Switch {
         }
         Rectangle {
             x: root.checked ? parent.width - width - 2 : 2
-            y: 2; width: root.down ? 18 : 16; height: 16; radius: 8
-            Behavior on width { NumberAnimation { duration: Theme.reducedMotion ? 0 : 80; easing.type: Easing.OutCubic } }
+            y: 2
+            width: root.down ? 18 : 16
+            height: 16
+            radius: 8
+            Behavior on width {
+                NumberAnimation {
+                    duration: Theme.reducedMotion ? 0 : 80
+                    easing.type: Easing.OutCubic
+                }
+            }
             color: root.checked ? "#ffffff" : Theme.text
-            Behavior on x { NumberAnimation { duration: Theme.reducedMotion ? 0 : 100; easing.type: Easing.OutCubic } }
+            Behavior on x {
+                NumberAnimation {
+                    duration: Theme.reducedMotion ? 0 : 100
+                    easing.type: Easing.OutCubic
+                }
+            }
         }
     }
     contentItem: Item {}

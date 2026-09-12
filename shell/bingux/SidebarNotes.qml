@@ -11,44 +11,63 @@ Item {
     property var screen: Quickshell.screens[0]
     property Item menuHost: null
     property var menuWindow: null
-    function closeContextMenu() { if (contextMenuLoader.item) contextMenuLoader.item.visible = false; }
-    onVisibleChanged: if (!visible) { closeContextMenu(); slashMenu.close(); }
+    function closeContextMenu() {
+        if (contextMenuLoader.item)
+            contextMenuLoader.item.visible = false;
+    }
+    onVisibleChanged: if (!visible) {
+        closeContextMenu();
+        slashMenu.close();
+    }
     onMenuHostChanged: slashMenu.close()
     function showContextMenu(position) {
         slashMenu.close();
         if (editor.selectionStart === editor.selectionEnd)
             editor.cursorPosition = editor.positionAt(position.x, position.y);
-        const point = menuHost ? editor.mapToItem(menuHost, position.x, position.y)
-            : menuWindow ? DesktopEditing.point(editor, menuWindow, position.x, position.y)
-            : editor.mapToGlobal(position.x, position.y);
-        if (!contextMenuLoader.item) contextMenuLoader.setSource("NotesContextMenu.qml", {notes: root, editor: editor});
+        const point = menuHost ? editor.mapToItem(menuHost, position.x, position.y) : menuWindow ? DesktopEditing.point(editor, menuWindow, position.x, position.y) : editor.mapToGlobal(position.x, position.y);
+        if (!contextMenuLoader.item)
+            contextMenuLoader.setSource("NotesContextMenu.qml", {
+                notes: root,
+                editor: editor
+            });
         const contextMenu = contextMenuLoader.item;
-        if (!contextMenu) return;
+        if (!contextMenu)
+            return;
         contextMenu.preferredX = point.x;
         contextMenu.preferredY = point.y;
         contextMenu.visible = true;
         Qt.callLater(contextMenu.focusMenu);
     }
     function undoEdit(redo) {
-        if (!(redo ? editor.canRedo : editor.canUndo)) return;
+        if (!(redo ? editor.canRedo : editor.canUndo))
+            return;
         editor[redo ? "redo" : "undo"]();
         save();
     }
     function menuEnabled(action) {
-        if (action === "undo") return editor.canUndo;
-        if (action === "redo") return editor.canRedo;
-        if (["cut", "copy"].includes(action)) return editor.selectionStart !== editor.selectionEnd;
-        if (action === "paste") return editor.canPaste;
-        if (action === "selectAll") return editor.length > 0;
+        if (action === "undo")
+            return editor.canUndo;
+        if (action === "redo")
+            return editor.canRedo;
+        if (["cut", "copy"].includes(action))
+            return editor.selectionStart !== editor.selectionEnd;
+        if (action === "paste")
+            return editor.canPaste;
+        if (action === "selectAll")
+            return editor.length > 0;
         return true;
     }
     function applyAction(action) {
         closeContextMenu();
         editor.continuation = null;
-        if (action === "undo" || action === "redo") undoEdit(action === "redo");
-        else if (["cut", "copy", "paste", "selectAll"].includes(action)) editor[action]();
-        else if (["bold", "italic", "strikeout"].includes(action)) editor.cursorSelection.font[action] = !editor.cursorSelection.font[action];
-        else editor.formatBlock(action);
+        if (action === "undo" || action === "redo")
+            undoEdit(action === "redo");
+        else if (["cut", "copy", "paste", "selectAll"].includes(action))
+            editor[action]();
+        else if (["bold", "italic", "strikeout"].includes(action))
+            editor.cursorSelection.font[action] = !editor.cursorSelection.font[action];
+        else
+            editor.formatBlock(action);
         save();
         Qt.callLater(root.focusContent);
     }
@@ -69,8 +88,10 @@ Item {
             const boundary = after.search(/[\n\u2029]/);
             const blockEnd = boundary < 0 ? editor.length : end + boundary;
             markdown = (editor.getFormattedText(blockStart, start) + editor.getFormattedText(end, blockEnd)).trim();
-            if (command.id === "duplicate") markdown += "\n\n" + markdown;
-            else markdown = "\u200b";
+            if (command.id === "duplicate")
+                markdown += "\n\n" + markdown;
+            else
+                markdown = "\u200b";
             start = blockStart;
             end = blockEnd;
             block = true;
@@ -78,13 +99,15 @@ Item {
         if (block) {
             const before = editor.getText(0, start);
             const lineStart = Math.max(before.lastIndexOf("\n"), before.lastIndexOf("\u2029")) + 1;
-            if (before.slice(lineStart).trim()) markdown = "\n\n" + markdown;
+            if (before.slice(lineStart).trim())
+                markdown = "\n\n" + markdown;
         }
         editor.formatRange(start, end, markdown, block);
         if (selection) {
             const plain = editor.getText(0, editor.length);
             const offset = plain.indexOf(selection, start);
-            if (offset >= 0) editor.select(offset, offset + selection.length);
+            if (offset >= 0)
+                editor.select(offset, offset + selection.length);
             editor.continuation = null;
         }
         save();
@@ -96,18 +119,24 @@ Item {
         property string note: ""
     }
     function normaliseHeadings(markdown) {
-        return markdown.replace(/^(#{1,6})[ \t]+((?:\\#){1,6})[ \t]+/gm, (match, heading, literal) =>
-            literal.replace(/\\/g, "") === heading ? heading + " " : match);
+        return markdown.replace(/^(#{1,6})[ \t]+((?:\\#){1,6})[ \t]+/gm, (match, heading, literal) => literal.replace(/\\/g, "") === heading ? heading + " " : match);
     }
-    function focusContent() { editor.forceActiveFocus(); }
+    function focusContent() {
+        editor.forceActiveFocus();
+    }
     function save() {
-        if (previewText) return;
+        if (previewText)
+            return;
         saved.note = editor.text;
         saved.setValue("note", editor.text);
         saved.sync();
     }
     Component.onDestruction: save()
-    Timer { id: saveDelay; interval: 350; onTriggered: root.save() }
+    Timer {
+        id: saveDelay
+        interval: 350
+        onTriggered: root.save()
+    }
     ScrollView {
         anchors.fill: parent
         anchors.bottomMargin: 24
@@ -134,11 +163,12 @@ Item {
             bottomPadding: 16
             persistentSelection: true
             background: null
-            DocumentEdit { id: documentEdit; document: editor.textDocument }
+            DocumentEdit {
+                id: documentEdit
+                document: editor.textDocument
+            }
             Accessible.name: "Sidebar notes"
-            Accessible.description: slashMenu.visible
-                ? "Note commands: " + (slashMenu.selectedCommand ? slashMenu.selectedCommand.title : "No matches") + ". Use arrow keys and Enter."
-                : "Type slash for commands. Markdown shortcuts format your note as you type."
+            Accessible.description: slashMenu.visible ? "Note commands: " + (slashMenu.selectedCommand ? slashMenu.selectedCommand.title : "No matches") + ". Use arrow keys and Enter." : "Type slash for commands. Markdown shortcuts format your note as you type."
             readonly property int activeBlockStart: {
                 const before = getText(0, cursorPosition);
                 return Math.max(before.lastIndexOf("\n"), before.lastIndexOf("\u2029")) + 1;
@@ -161,7 +191,11 @@ Item {
                 z: 2
                 color: Theme.muted
                 opacity: editor.activeFocus && text.length > 0 ? 0.65 : 0
-                Behavior on opacity { NumberAnimation { duration: Theme.reducedMotion ? 0 : 100 } }
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Theme.reducedMotion ? 0 : 100
+                    }
+                }
                 font.family: Theme.fontFamily
                 font.pixelSize: text.length > 4 ? 9 : 12
                 Accessible.ignored: true
@@ -176,12 +210,15 @@ Item {
                 const end = boundary < 0 ? length : selectionEnd + boundary;
                 let markdown = getFormattedText(Math.max(0, start - 1), end).trim();
                 const heading = /^heading([1-6])$/.exec(style);
-                if (style === "code") markdown = "```\n" + getText(start, end) + "\n```";
-                else if (style === "plain") markdown = getText(start, end).replace(/([\\`*_{}\[\]()#+.!>|~-])/g, "\\$1");
+                if (style === "code")
+                    markdown = "```\n" + getText(start, end) + "\n```";
+                else if (style === "plain")
+                    markdown = getText(start, end).replace(/([\\`*_{}\[\]()#+.!>|~-])/g, "\\$1");
                 else {
                     let number = 0;
                     markdown = markdown.split("\n").map(line => {
-                        if (!line.trim()) return line;
+                        if (!line.trim())
+                            return line;
                         const text = line.replace(/^(?:#{1,6}\s+|>\s?|[-+*]\s+|\d+\.\s+)/, "");
                         return (heading ? "#".repeat(Number(heading[1])) + " " : style === "heading" ? "## " : style === "bullet" ? "- " : style === "numbered" ? (++number) + ". " : "> ") + text;
                     }).join("\n");
@@ -190,7 +227,8 @@ Item {
             }
             function finishMarkdownLink() {
                 const start = activeBlockStart;
-                if (/^\s*```/.test(getFormattedText(start, cursorPosition))) return false;
+                if (/^\s*```/.test(getFormattedText(start, cursorPosition)))
+                    return false;
                 const tail = getText(start, length);
                 const boundary = tail.search(/[\n\u2029]/);
                 const line = boundary < 0 ? tail : tail.slice(0, boundary);
@@ -228,17 +266,24 @@ Item {
                 formatting = true;
                 try {
                     const result = documentEdit.replace(start, end, markdown, emptyBlock);
-                    if (result.cursor === undefined) return;
+                    if (result.cursor === undefined)
+                        return;
                     cursorPosition = result.cursor;
-                    if (result.font) continuationFont = Qt.font({
-                        family: result.font.family,
-                        pointSize: result.font.pointSize,
-                        bold: result.font.bold,
-                        italic: result.font.italic,
-                        underline: result.font.underline,
-                        strikeout: result.font.strikeout
-                    });
-                    continuation = { position: cursorPosition, length: length, prefix: getText(0, cursorPosition), font: continuationFont };
+                    if (result.font)
+                        continuationFont = Qt.font({
+                            family: result.font.family,
+                            pointSize: result.font.pointSize,
+                            bold: result.font.bold,
+                            italic: result.font.italic,
+                            underline: result.font.underline,
+                            strikeout: result.font.strikeout
+                        });
+                    continuation = {
+                        position: cursorPosition,
+                        length: length,
+                        prefix: getText(0, cursorPosition),
+                        font: continuationFont
+                    };
                 } finally {
                     formatting = false;
                 }
@@ -280,15 +325,7 @@ Item {
                     formatRange(start, end, "```\n\u200b\n```", true);
                     return;
                 }
-                const patterns = [
-                    /\*\*[^*\n]+\*\*$/,
-                    /__[^_\n]+__$/,
-                    /~~[^~\n]+~~$/,
-                    /`[^`\n]+`$/,
-                    /\[[^\]\n]+\]\([^\s)]+\)$/,
-                    /(?:^|[^*])(\*[^*\n]+\*)$/,
-                    /(?:^|[^_])(_[^_\n]+_)$/
-                ];
+                const patterns = [/\*\*[^*\n]+\*\*$/, /__[^_\n]+__$/, /~~[^~\n]+~~$/, /`[^`\n]+`$/, /\[[^\]\n]+\]\([^\s)]+\)$/, /(?:^|[^*])(\*[^*\n]+\*)$/, /(?:^|[^_])(_[^_\n]+_)$/];
                 for (const pattern of patterns) {
                     const match = pattern.exec(line);
                     if (!match)
@@ -305,10 +342,15 @@ Item {
             }
             onTextChanged: saveDelay.restart()
             onCursorPositionChanged: Qt.callLater(() => slashMenu.update(false))
-            onActiveFocusChanged: if (!activeFocus) slashMenu.close()
-            onInputMethodComposingChanged: if (inputMethodComposing) slashMenu.close()
+            onActiveFocusChanged: if (!activeFocus)
+                slashMenu.close()
+            onInputMethodComposingChanged: if (inputMethodComposing)
+                slashMenu.close()
             Keys.onPressed: event => {
-                if (slashMenu.handleKey(event)) { event.accepted = true; return; }
+                if (slashMenu.handleKey(event)) {
+                    event.accepted = true;
+                    return;
+                }
                 if (event.key === Qt.Key_Menu || (event.key === Qt.Key_F10 && (event.modifiers & Qt.ShiftModifier))) {
                     root.showContextMenu(Qt.point(cursorRectangle.x, cursorRectangle.y + cursorRectangle.height));
                     event.accepted = true;
@@ -356,7 +398,12 @@ Item {
             onLinkActivated: link => Qt.openUrlExternally(link)
         }
     }
-    Loader { id: contextMenuLoader }
-    NotesSlashMenu { id: slashMenu; notes: root; editor: editor }
-
+    Loader {
+        id: contextMenuLoader
+    }
+    NotesSlashMenu {
+        id: slashMenu
+        notes: root
+        editor: editor
+    }
 }

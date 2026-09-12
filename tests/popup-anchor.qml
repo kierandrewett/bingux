@@ -6,7 +6,11 @@ import Quickshell.Wayland
 ShellRoot {
     PanelWindow {
         id: bar
-        anchors { top: true; left: true; right: true }
+        anchors {
+            top: true
+            left: true
+            right: true
+        }
         implicitHeight: 32
         margins.right: 300
         exclusionMode: ExclusionMode.Ignore
@@ -15,7 +19,13 @@ ShellRoot {
             x: bar.width - 160
             width: 140
             height: 32
-            Rectangle { id: button; x: 70; width: 50; height: 32; color: "steelblue" }
+            Rectangle {
+                id: button
+                x: 70
+                width: 50
+                height: 32
+                color: "steelblue"
+            }
         }
     }
     ShellPopup {
@@ -26,14 +36,20 @@ ShellRoot {
         popupWidth: 260
         popupHeight: 120
     }
-    ShellPopup { id: overflow; screen: bar.screen; preferredX: 100; preferredY: 100; popupWidth: 200; popupHeight: 100 }
+    ShellPopup {
+        id: overflow
+        screen: bar.screen
+        preferredX: 100
+        preferredY: 100
+        popupWidth: 200
+        popupHeight: 100
+    }
     TestCase {
         parent: popup.contentItem
         when: true
         function checkAlignment() {
             const point = button.mapToItem(bar.contentItem, button.width, button.height);
-            console.info("ANCHOR", popup.preferredX, bar.margins.left + point.x - popup.popupWidth,
-                popup.preferredY, popup.panelX, popup.body.parent.width, popup.width, bar.margins.right);
+            console.info("ANCHOR", popup.preferredX, bar.margins.left + point.x - popup.popupWidth, popup.preferredY, popup.panelX, popup.body.parent.width, popup.width, bar.margins.right);
             tryCompare(popup, "preferredX", bar.margins.left + point.x - popup.popupWidth);
             compare(popup.preferredY, 40);
             verify(popup.panelX >= bar.margins.left + Theme.gap);
@@ -70,8 +86,7 @@ ShellRoot {
             tryCompare(overflow, "revealScale", 1);
             button.parent = overflow.body;
             wait(100);
-            console.info("OVERFLOW", popup.anchorPosition.x, overflow.panelX + overflow.contentPadding + button.x + button.width,
-                popup.preferredY, overflow.panelY + overflow.contentPadding + button.height + Theme.gap);
+            console.info("OVERFLOW", popup.anchorPosition.x, overflow.panelX + overflow.contentPadding + button.x + button.width, popup.preferredY, overflow.panelY + overflow.contentPadding + button.height + Theme.gap);
             compare(popup.anchorPosition.x, overflow.panelX + overflow.contentPadding + button.x + button.width);
             compare(popup.preferredY, overflow.panelY + overflow.contentPadding + button.height + Theme.gap);
             popup.visible = false;
@@ -79,6 +94,8 @@ ShellRoot {
             tryVerify(() => !popup.retained && !overflow.retained);
             console.info("POPUP_ANCHOR_PASSED");
         }
-        function cleanupTestCase() { Qt.quit(); }
+        function cleanupTestCase() {
+            Qt.quit();
+        }
     }
 }

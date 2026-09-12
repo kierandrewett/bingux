@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check the prerequisites needed to build and install Bingux."""
+
 import argparse
 import os
 from pathlib import Path
@@ -46,8 +47,12 @@ def main():
     args = parser.parse_args()
 
     failures = []
-    for label, command in (("QMake 6", args.qmake), ("Cargo", args.cargo),
-                           ("C compiler", args.cc), ("pkg-config", args.pkg_config)):
+    for label, command in (
+        ("QMake 6", args.qmake),
+        ("Cargo", args.cargo),
+        ("C compiler", args.cc),
+        ("pkg-config", args.pkg_config),
+    ):
         if not available(command):
             failures.append(f"{label} not found: {command}")
 

@@ -10,17 +10,37 @@ function connectionName(connection) {
     return connection.name;
 }
 function networkSections(connections, wireless) {
-    const physical = connections.filter(connection => ["802-3-ethernet", "802-11-wireless", "gsm", "cdma", "bluetooth"].includes(connection.type));
-    const current = physical.filter(connection => connection.connected);
-    const nearby = wireless.filter(network => !network.connected && !current.some(connection => connection.type === "802-11-wireless" && connection.name === network.name));
-    const other = physical.filter(connection => !current.includes(connection));
-    return {current: current, nearby: nearby, other: other};
+    const physical = connections.filter((connection) =>
+        ["802-3-ethernet", "802-11-wireless", "gsm", "cdma", "bluetooth"].includes(connection.type),
+    );
+    const current = physical.filter((connection) => connection.connected);
+    const nearby = wireless.filter(
+        (network) =>
+            !network.connected &&
+            !current.some((connection) => connection.type === "802-11-wireless" && connection.name === network.name),
+    );
+    const other = physical.filter((connection) => !current.includes(connection));
+    return { current: current, nearby: nearby, other: other };
 }
 
 function bluetoothIcon(icon) {
     const name = String(icon || "").replace(/-symbolic$/, "");
-    const devices = ["audio-headset", "audio-headphones", "audio-card", "audio-speakers",
-        "input-keyboard", "input-mouse", "input-gaming", "input-tablet", "input-touchpad",
-        "computer", "phone", "tablet", "printer", "camera-photo", "camera-video"];
+    const devices = [
+        "audio-headset",
+        "audio-headphones",
+        "audio-card",
+        "audio-speakers",
+        "input-keyboard",
+        "input-mouse",
+        "input-gaming",
+        "input-tablet",
+        "input-touchpad",
+        "computer",
+        "phone",
+        "tablet",
+        "printer",
+        "camera-photo",
+        "camera-video",
+    ];
     return devices.includes(name) ? name + "-symbolic" : "bluetooth-active-symbolic";
 }

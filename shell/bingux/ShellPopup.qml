@@ -23,8 +23,10 @@ Scope {
     property Item anchorItem: null
     readonly property int popupDepth: {
         for (let item = anchorItem; item; item = item.parent) {
-            if (item === card) return 0;
-            if ("shellPopupDepth" in item) return item.shellPopupDepth + 1;
+            if (item === card)
+                return 0;
+            if ("shellPopupDepth" in item)
+                return item.shellPopupDepth + 1;
         }
         return 0;
     }
@@ -36,11 +38,13 @@ Scope {
     readonly property real anchorTop: anchorAbove && typeof anchorWindow.popupAnchorTop === "number" ? anchorWindow.popupAnchorTop : anchorPosition.y - (anchorItem ? anchorItem.height : 0)
     readonly property point anchorPosition: {
         // Reparenting a launcher must not anchor a popup to its own content.
-        if (!anchorItem || anchorItem.Window.window === window.contentItem.Window.window) return Qt.point(0, Theme.barHeight);
+        if (!anchorItem || anchorItem.Window.window === window.contentItem.Window.window)
+            return Qt.point(0, Theme.barHeight);
         // Track layout and reparenting, including controls moved into overflow.
         DesktopEditing.observeGeometry(anchorItem);
         const x = anchorAlignment === Qt.AlignHCenter ? anchorItem.width / 2 : anchorItem.width;
-        if (hostItem) return anchorItem.mapToItem(hostItem, x, anchorItem.height);
+        if (hostItem)
+            return anchorItem.mapToItem(hostItem, x, anchorItem.height);
         if (anchorWindow && anchorItem.Window.window === anchorWindow.contentItem.Window.window) {
             // Convert bar-local coordinates with the layer-surface margins.
             const point = anchorItem.mapToItem(anchorWindow.contentItem, x, anchorItem.height);
@@ -52,7 +56,10 @@ Scope {
     property var motionSource: null
     Connections {
         target: root.motionSource
-        function onRetainedChanged() { if (!root.motionSource.retained) root.retained = false; }
+        function onRetainedChanged() {
+            if (!root.motionSource.retained)
+                root.retained = false;
+        }
     }
     readonly property real width: hostItem ? hostItem.width : window.width
     readonly property real height: hostItem ? hostItem.height : window.height
@@ -76,10 +83,9 @@ Scope {
     readonly property real contentRadius: Theme.insetRadius(cornerRadius, contentPadding)
     property int popupWidth: 320
     property int popupHeight: body.childrenRect.height + contentPadding * 2
-    signal aboutToOpen()
+    signal aboutToOpen
     property bool retained: false
-    readonly property bool compositorClose: !hostItem && !keepWindowAlive && !motionSource
-        && PopupTransitions.matches(closeMotion, closeEasing)
+    readonly property bool compositorClose: !hostItem && !keepWindowAlive && !motionSource && PopupTransitions.matches(closeMotion, closeEasing)
 
     onVisibleChanged: {
         reveal.stop();
@@ -98,7 +104,8 @@ Scope {
             dismissWindow.visible = !root.hostItem && root.keyboardInteractive;
             retained = true;
             reveal.start();
-            if (keyboardInteractive) contentItem.forceActiveFocus();
+            if (keyboardInteractive)
+                contentItem.forceActiveFocus();
         } else if (retained) {
             // The last committed buffer already contains the current entrance
             // opacity and scale. Freeze it, then let the compositor fade it once.
@@ -117,8 +124,20 @@ Scope {
     }
     ParallelAnimation {
         id: reveal
-        NumberAnimation { target: root; property: "revealScale"; to: 1; duration: Theme.popupOpenMotion; easing.type: Easing.OutCubic }
-        NumberAnimation { target: card; property: "opacity"; to: 1; duration: Theme.popupOpenMotion; easing.type: Easing.OutCubic }
+        NumberAnimation {
+            target: root
+            property: "revealScale"
+            to: 1
+            duration: Theme.popupOpenMotion
+            easing.type: Easing.OutCubic
+        }
+        NumberAnimation {
+            target: card
+            property: "opacity"
+            to: 1
+            duration: Theme.popupOpenMotion
+            easing.type: Easing.OutCubic
+        }
     }
     NumberAnimation {
         id: dismiss
@@ -144,7 +163,12 @@ Scope {
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "bingux-popup-dismiss"
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        anchors { top: true; bottom: true; left: true; right: true }
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
         mask: Region {
             width: root.visible ? dismissWindow.width : 0
             height: root.visible ? dismissWindow.height : 0
@@ -159,7 +183,15 @@ Scope {
             }
         }
         contentItem.enabled: root.visible
-        MouseArea { parent: root.hostItem ? root.contentItem : dismissWindow.contentItem; anchors.fill: parent; visible: root.retained; enabled: root.visible && root.dismissOnOutsideClick; z: 5 + root.popupDepth * 2; acceptedButtons: Qt.AllButtons; onClicked: root.visible = false }
+        MouseArea {
+            parent: root.hostItem ? root.contentItem : dismissWindow.contentItem
+            anchors.fill: parent
+            visible: root.retained
+            enabled: root.visible && root.dismissOnOutsideClick
+            z: 5 + root.popupDepth * 2
+            acceptedButtons: Qt.AllButtons
+            onClicked: root.visible = false
+        }
     }
 
     // A layer surface avoids native xdg-popup grabs on layer-shell parents.
@@ -173,7 +205,12 @@ Scope {
         // Menus must receive arrows and Escape immediately, before any menu click.
         // The separate outside-click surface never takes keyboard focus.
         WlrLayershell.keyboardFocus: root.visible && root.keyboardInteractive ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-        anchors { top: true; bottom: true; left: true; right: true }
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
         mask: Region {
             x: card.x
             y: card.y
@@ -190,8 +227,7 @@ Scope {
             ContextMenu.onRequested: position => {}
             // Inline child menus share one scene with their parent popup.
             readonly property int shellPopupDepth: root.popupDepth
-            readonly property var geometryRevision: [popupScale.xScale, popupScale.yScale,
-                popupScale.origin.x, popupScale.origin.y]
+            readonly property var geometryRevision: [popupScale.xScale, popupScale.yScale, popupScale.origin.x, popupScale.origin.y]
             parent: root.contentItem
             visible: root.retained
             enabled: root.visible
@@ -205,7 +241,9 @@ Scope {
             opacity: root.motionSource ? root.motionSource.body.parent.opacity : 0
             border.color: Theme.outline
             border.width: root.surfaceVisible ? 1 : 0
-            PanelOutline { surface: card }
+            PanelOutline {
+                surface: card
+            }
             transform: Scale {
                 id: popupScale
                 origin.x: root.motionSource ? root.motionSource.panelX + root.motionSource.revealOriginX - card.x : root.revealOriginX
@@ -213,7 +251,9 @@ Scope {
                 xScale: root.motionSource ? root.motionSource.revealScale : root.revealScale
                 yScale: root.motionSource ? root.motionSource.revealScale : root.revealScale
             }
-            MouseArea { anchors.fill: parent }
+            MouseArea {
+                anchors.fill: parent
+            }
             Item {
                 id: body
                 anchors.fill: parent

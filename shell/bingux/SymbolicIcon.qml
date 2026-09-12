@@ -9,6 +9,16 @@ Item {
     property color color: Theme.text
     implicitWidth: implicitSize
     implicitHeight: implicitSize
-    IconImage { id: image; anchors.fill: parent; visible: false }
-    MultiEffect { anchors.fill: parent; source: image; colorization: 1; colorizationColor: root.color; brightness: 1 }
+    IconImage {
+        id: image
+        anchors.fill: parent
+        visible: false
+    }
+    MultiEffect {
+        anchors.fill: parent
+        source: image
+        colorization: 1
+        colorizationColor: root.color
+        brightness: 1
+    }
 }

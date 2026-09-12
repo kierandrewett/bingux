@@ -21,7 +21,12 @@ AbstractButton {
         WidgetFace {
             id: face
             anchors.centerIn: parent
-            presentation: root.presentation || {icon: "system-search-symbolic", label: "Search", showIcon: true, showText: false}
+            presentation: root.presentation || {
+                icon: "system-search-symbolic",
+                label: "Search",
+                showIcon: true,
+                showText: false
+            }
         }
     }
     Keys.onReturnPressed: root.clicked()

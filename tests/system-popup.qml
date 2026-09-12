@@ -3,21 +3,59 @@ import QtQuick.Layouts
 import QtTest
 import Quickshell
 import Quickshell.Io
+
 ShellRoot {
     property int performanceClicks: 0
     property int configureClicks: 0
     QtObject {
         id: sample
         property bool available: true
-        property var latest: ({cpuPercent: 24, memoryUsedBytes: 12.4 * 1073741824, memoryTotalBytes: 32 * 1073741824, networkReceiveBytesPerSecond: 240000, networkTransmitBytesPerSecond: 32000, extra: {cpuCores: Array.from({length: 16}, (_, id) => ({id, usage: id * 5})), cpuTemperatureCelsius: 54.2, load1: 2.35, logicalCpus: 16, swapUsedBytes: 1073741824, swapTotalBytes: 8589934592, diskReadBytesPerSecond: 24000000, diskWriteBytesPerSecond: 1200000}})
+        property var latest: ({
+                cpuPercent: 24,
+                memoryUsedBytes: 12.4 * 1073741824,
+                memoryTotalBytes: 32 * 1073741824,
+                networkReceiveBytesPerSecond: 240000,
+                networkTransmitBytesPerSecond: 32000,
+                extra: {
+                    cpuCores: Array.from({
+                        length: 16
+                    }, (_, id) => ({
+                                id,
+                                usage: id * 5
+                            })),
+                    cpuTemperatureCelsius: 54.2,
+                    load1: 2.35,
+                    logicalCpus: 16,
+                    swapUsedBytes: 1073741824,
+                    swapTotalBytes: 8589934592,
+                    diskReadBytesPerSecond: 24000000,
+                    diskWriteBytesPerSecond: 1200000
+                }
+            })
         property var history: []
         readonly property string cpuLabel: "CPU " + latest.cpuPercent + "%"
-        function formatRate(rate) { return Math.round(rate / 1024) + "K/s"; }
-        function formatBytes(bytes) { return (bytes / 1073741824).toFixed(1) + "G"; }
+        function formatRate(rate) {
+            return Math.round(rate / 1024) + "K/s";
+        }
+        function formatBytes(bytes) {
+            return (bytes / 1073741824).toFixed(1) + "G";
+        }
     }
-    RollingNumber { id: rollProbe; text: "9"; value: 9; visible: false }
-    Timer { id: finish; interval: 200; onTriggered: Qt.quit() }
-    FileView { id: results; path: Quickshell.env("BINGUX_METRICS_RESULTS") }
+    RollingNumber {
+        id: rollProbe
+        text: "9"
+        value: 9
+        visible: false
+    }
+    Timer {
+        id: finish
+        interval: 200
+        onTriggered: Qt.quit()
+    }
+    FileView {
+        id: results
+        path: Quickshell.env("BINGUX_METRICS_RESULTS")
+    }
     FloatingWindow {
         id: window
         implicitWidth: 560
@@ -29,10 +67,20 @@ ShellRoot {
             y: 4
             systemMetrics: sample
             preferencesLocation: Qt.resolvedUrl("monitors.ini")
-            onConfigureRequested: { configureClicks++; popup.showPage(true); }
-            onPerformanceRequested: { performanceClicks++; popup.showPage(false); }
+            onConfigureRequested: {
+                configureClicks++;
+                popup.showPage(true);
+            }
+            onPerformanceRequested: {
+                performanceClicks++;
+                popup.showPage(false);
+            }
         }
-        SystemMetricsPopup { id: popup; hostItem: window.contentItem; monitorWidget: widget }
+        SystemMetricsPopup {
+            id: popup
+            hostItem: window.contentItem
+            monitorWidget: widget
+        }
         TestCase {
             when: window.visible
             function test_popup_bounds() {

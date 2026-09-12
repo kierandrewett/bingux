@@ -5,22 +5,42 @@ import Quickshell.Io
 
 ShellRoot {
     property bool frozenBeforeDismiss: false
-    FileView { id: report; path: Quickshell.env("BINGUX_CAPTURE_TEST_RESULTS") }
-    Timer { id: finish; interval: 300; onTriggered: Qt.quit() }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_CAPTURE_TEST_RESULTS")
+    }
+    Timer {
+        id: finish
+        interval: 300
+        onTriggered: Qt.quit()
+    }
     CaptureTool {
         id: capture
         screen: Quickshell.screens[0]
         onOpening: frozenBeforeDismiss = capture.previewToken !== "" && capture.state === "selecting"
     }
-    Timer { interval: 100; running: true; onTriggered: capture.open() }
-    Timer { interval: 15000; running: true; onTriggered: Qt.quit() }
+    Timer {
+        interval: 100
+        running: true
+        onTriggered: capture.open()
+    }
+    Timer {
+        interval: 15000
+        running: true
+        onTriggered: Qt.quit()
+    }
     TestCase {
         name: "CaptureInteractions"
         parent: capture.previewItem
         when: capture.opened && capture.previewItem !== null
         function find(item, name) {
-            if (item.objectName === name) return item;
-            for (const child of item.children || []) { const found = find(child, name); if (found) return found; }
+            if (item.objectName === name)
+                return item;
+            for (const child of item.children || []) {
+                const found = find(child, name);
+                if (found)
+                    return found;
+            }
             return null;
         }
         function test_interactions() {
@@ -94,7 +114,8 @@ ShellRoot {
             verify(qualityMenu.visible);
             compare(qualityMenu.popupWidth, qualityField.width, "Dropdown matches field width");
             compare(qualityMenu.panelX, qualityField.mapToItem(surface, 0, 0).x, "Dropdown aligns after toolbar moves");
-            keyClick(Qt.Key_Down); keyClick(Qt.Key_Return);
+            keyClick(Qt.Key_Down);
+            keyClick(Qt.Key_Return);
             keyClick(Qt.Key_Escape);
             tryCompare(capture, "opened", false, 500);
             report.setText("PASS: exact drawing/resizing/moving screen edges, frozen cursor preview, drag fade, toolbar drag, custom menu, Escape after focused controls\n");

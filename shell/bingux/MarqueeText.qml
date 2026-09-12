@@ -25,7 +25,8 @@ Item {
         scroll.stop();
         offset = 0;
         revealed = false;
-        if (active && visible && !Theme.reducedMotion) dwell.restart();
+        if (active && visible && !Theme.reducedMotion)
+            dwell.restart();
     }
     function scrollBy(delta) {
         dwell.stop();
@@ -47,13 +48,19 @@ Item {
         id: scroll
         loops: Animation.Infinite
         NumberAnimation {
-            target: root; property: "offset"
-            from: 0; to: root.travel
+            target: root
+            property: "offset"
+            from: 0
+            to: root.travel
             duration: Math.max(1000, root.travel / 32 * 1000)
             easing.type: Easing.Linear
         }
-        ScriptAction { script: root.offset = 0 }
-        PauseAnimation { duration: 800 }
+        ScriptAction {
+            script: root.offset = 0
+        }
+        PauseAnimation {
+            duration: 800
+        }
     }
     Text {
         id: measure
@@ -71,16 +78,33 @@ Item {
         layer.enabled: root.revealed && root.overflow > 0
         gradient: Gradient {
             orientation: Gradient.Horizontal
-            GradientStop { position: 0; color: root.offset > 0 ? "transparent" : "white" }
-            GradientStop { position: Math.min(0.49, Theme.padding / Math.max(1, root.width)); color: "white" }
-            GradientStop { position: 1 - Math.min(0.49, Theme.padding / Math.max(1, root.width)); color: "white" }
-            GradientStop { position: 1; color: "transparent" }
+            GradientStop {
+                position: 0
+                color: root.offset > 0 ? "transparent" : "white"
+            }
+            GradientStop {
+                position: Math.min(0.49, Theme.padding / Math.max(1, root.width))
+                color: "white"
+            }
+            GradientStop {
+                position: 1 - Math.min(0.49, Theme.padding / Math.max(1, root.width))
+                color: "white"
+            }
+            GradientStop {
+                position: 1
+                color: "transparent"
+            }
         }
     }
     Item {
         anchors.fill: parent
         layer.enabled: root.revealed && root.overflow > 0
-        layer.effect: MultiEffect { maskEnabled: true; maskSource: edgeMask; maskThresholdMin: 0.5; maskSpreadAtMin: 1.0 }
+        layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: edgeMask
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
+        }
         Text {
             x: -root.offset
             width: root.revealed ? Math.max(root.width, root.textWidth) : root.width

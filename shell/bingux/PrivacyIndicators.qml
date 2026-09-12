@@ -11,15 +11,13 @@ Item {
         return DesktopLayout.presentation(DesktopEditing.desktop, "privacy", DesktopLayout.placement(DesktopEditing.desktop, "privacy"), label, icon, true, false);
     }
     readonly property bool screenSharing: privacyState.screenSharing || (!privacyState.available && systemMetrics.screenSharing)
-    readonly property bool active: sharingVisible || privacyState.cameraInUse
-        || privacyState.microphoneInUse || systemMetrics.locationInUse
+    readonly property bool active: sharingVisible || privacyState.cameraInUse || privacyState.microphoneInUse || systemMetrics.locationInUse
     visible: active
     property bool sharingVisible: screenSharing
     property double sharingShownAt: Date.now()
     readonly property bool panelLayout: ["sidebar", "control-centre"].includes(DesktopLayout.placement(DesktopEditing.desktop, "privacy"))
     readonly property var shownIndicators: privacyRow.children.filter(item => item.visible)
-    readonly property real naturalWidth: shownIndicators.reduce((sum, item) => sum + item.implicitWidth, 0)
-        + Math.max(0, shownIndicators.length - 1) * Theme.barControlGap
+    readonly property real naturalWidth: shownIndicators.reduce((sum, item) => sum + item.implicitWidth, 0) + Math.max(0, shownIndicators.length - 1) * Theme.barControlGap
     readonly property real availableWidth: panelLayout && parent ? parent.width : naturalWidth
     implicitWidth: naturalWidth
     Layout.fillWidth: panelLayout
@@ -30,14 +28,18 @@ Item {
     onScreenSharingChanged: {
         sharingDelay.stop();
         if (screenSharing) {
-            if (!sharingVisible) sharingShownAt = Date.now();
+            if (!sharingVisible)
+                sharingShownAt = Date.now();
             sharingVisible = true;
         } else {
             sharingDelay.interval = Math.max(0, 5000 - (Date.now() - sharingShownAt));
             sharingDelay.start();
         }
     }
-    Timer { id: sharingDelay; onTriggered: root.sharingVisible = false }
+    Timer {
+        id: sharingDelay
+        onTriggered: root.sharingVisible = false
+    }
     component Indicator: ActivityIndicator {
         width: Math.min(implicitWidth, privacyRow.width)
         height: implicitHeight

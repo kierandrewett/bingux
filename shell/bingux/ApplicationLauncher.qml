@@ -41,10 +41,16 @@ Item {
                     root.pendingCommand = [];
                 }
                 if (nativeWindow && compositor.connected) {
-                    if (nativeWindow.focused) { stop(); return; }
+                    if (nativeWindow.focused) {
+                        stop();
+                        return;
+                    }
                     compositor.activateWindow(nativeWindow.id);
                 } else if (window) {
-                    if (window.activated) { stop(); return; }
+                    if (window.activated) {
+                        stop();
+                        return;
+                    }
                     window.minimized = false;
                     window.activate();
                 }
@@ -52,7 +58,8 @@ Item {
             if (root.attempts >= 60) {
                 stop();
                 root.pendingCommand = [];
-                if (!nativeWindow && !window) root.failed("Calendar did not open");
+                if (!nativeWindow && !window)
+                    root.failed("Calendar did not open");
             }
         }
     }

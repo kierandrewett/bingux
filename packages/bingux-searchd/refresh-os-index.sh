@@ -24,7 +24,7 @@ plocate "${locate_args[@]}" -- "$HOME/" |
             if (tolower($0) ~ /\.(o|obj|pyc|pyo|class|tsbuildinfo)$/) skip = 1;
             if (!skip) print;
         }
-    ' "$script_dir/search-excluded-directories.txt" - > "$task_snapshot_dir/paths.txt"
+    ' "$script_dir/search-excluded-directories.txt" - >"$task_snapshot_dir/paths.txt"
 plocate-build -p "$task_snapshot_dir/paths.txt" "$task_snapshot_dir/locate.db"
 chmod 600 "$task_snapshot_dir/locate.db"
 mv -- "$task_snapshot_dir/locate.db" "$cache_dir/locate.db"

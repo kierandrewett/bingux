@@ -11,22 +11,52 @@ ColumnLayout {
     property var tasks: []
     readonly property int remaining: tasks.filter(task => !task.done).length
     spacing: Theme.gap
-    Settings { id: saved; location: root.preferencesLocation; property string items: "[]" }
+    Settings {
+        id: saved
+        location: root.preferencesLocation
+        property string items: "[]"
+    }
     Component.onCompleted: {
-        if (previewTasks) { tasks = previewTasks; return; }
+        if (previewTasks) {
+            tasks = previewTasks;
+            return;
+        }
         try {
             const parsed = JSON.parse(saved.items);
-            if (Array.isArray(parsed)) tasks = parsed.filter(task => task && typeof task.text === "string" && typeof task.done === "boolean");
+            if (Array.isArray(parsed))
+                tasks = parsed.filter(task => task && typeof task.text === "string" && typeof task.done === "boolean");
         } catch (_) {}
     }
-    function focusContent() { input.forceActiveFocus(); }
-    function store(items) { if (previewTasks) return; tasks = items; saved.items = JSON.stringify(items); saved.setValue("items", saved.items); saved.sync(); }
-    function addTask(text) {
-        if (!text.trim()) return;
-        store(tasks.concat([{text: text.trim(), done: false}]));
+    function focusContent() {
+        input.forceActiveFocus();
     }
-    function toggleTask(index) { store(tasks.map((task, i) => i === index ? {text: task.text, done: !task.done} : task)); }
-    function removeTask(index) { store(tasks.filter((_, i) => i !== index)); }
+    function store(items) {
+        if (previewTasks)
+            return;
+        tasks = items;
+        saved.items = JSON.stringify(items);
+        saved.setValue("items", saved.items);
+        saved.sync();
+    }
+    function addTask(text) {
+        if (!text.trim())
+            return;
+        store(tasks.concat([
+            {
+                text: text.trim(),
+                done: false
+            }
+        ]));
+    }
+    function toggleTask(index) {
+        store(tasks.map((task, i) => i === index ? {
+                text: task.text,
+                done: !task.done
+            } : task));
+    }
+    function removeTask(index) {
+        store(tasks.filter((_, i) => i !== index));
+    }
     Item {
         Layout.fillWidth: true
         implicitHeight: 44
@@ -38,7 +68,11 @@ ColumnLayout {
             anchors.rightMargin: 8
             height: 1
             color: input.activeFocus ? Theme.accent : Theme.barDivider
-            Behavior on color { ColorAnimation { duration: Theme.reducedMotion ? 0 : 120 } }
+            Behavior on color {
+                ColorAnimation {
+                    duration: Theme.reducedMotion ? 0 : 120
+                }
+            }
         }
         Text {
             x: 8
@@ -69,7 +103,10 @@ ColumnLayout {
             selectionColor: Theme.textSelection
             selectedTextColor: Theme.text
             background: null
-            onAccepted: { root.addTask(text); clear(); }
+            onAccepted: {
+                root.addTask(text);
+                clear();
+            }
             Accessible.name: "New task"
         }
         IconButton {
@@ -82,8 +119,16 @@ ColumnLayout {
             label: "Add task"
             enabled: input.text.trim().length > 0
             opacity: enabled ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: Theme.reducedMotion ? 0 : 120 } }
-            onClicked: { root.addTask(input.text); input.clear(); input.forceActiveFocus(); }
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Theme.reducedMotion ? 0 : 120
+                }
+            }
+            onClicked: {
+                root.addTask(input.text);
+                input.clear();
+                input.forceActiveFocus();
+            }
         }
     }
     ListView {
@@ -100,7 +145,9 @@ ColumnLayout {
             required property int index
             width: ListView.view.width
             implicitHeight: Math.max(48, check.implicitHeight)
-            HoverHandler { id: rowHover }
+            HoverHandler {
+                id: rowHover
+            }
             Rectangle {
                 anchors.fill: parent
                 anchors.margins: 2
@@ -122,12 +169,23 @@ ColumnLayout {
                 topPadding: 12
                 bottomPadding: 12
                 indicator: Rectangle {
-                    x: 9; y: 14
-                    width: 18; height: 18; radius: 9
+                    x: 9
+                    y: 14
+                    width: 18
+                    height: 18
+                    radius: 9
                     color: check.checked ? Theme.accent : "transparent"
                     border.width: 1
                     border.color: check.visualFocus ? Theme.text : check.checked ? Theme.accent : Theme.muted
-                    Text { anchors.centerIn: parent; text: "✓"; visible: check.checked; color: Theme.background; font.family: Theme.fontFamily; font.pixelSize: 12; font.weight: Font.DemiBold }
+                    Text {
+                        anchors.centerIn: parent
+                        text: "✓"
+                        visible: check.checked
+                        color: Theme.background
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                        font.weight: Font.DemiBold
+                    }
                 }
                 contentItem: Text {
                     text: check.text

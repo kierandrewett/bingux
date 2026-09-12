@@ -29,7 +29,10 @@ PanelWindow {
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "gnoblin-dock-tooltip"
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-    anchors { bottom: true; left: true }
+    anchors {
+        bottom: true
+        left: true
+    }
     margins.bottom: Math.max(Theme.gap, Math.min(anchorBottom + Theme.spaceSmall, (screen ? screen.height : 1080) - height - Theme.gap))
     margins.left: Math.max(Theme.gap, Math.min(centreX - width / 2, (screen ? screen.width : 1920) - width - Theme.gap))
     mask: Region {}
@@ -43,17 +46,14 @@ PanelWindow {
     }
     TooltipBubble {
         id: surface
-        x: Math.max(0, Math.min(root.centreX - root.margins.left - width / 2,
-            parent.width - width))
+        x: Math.max(0, Math.min(root.centreX - root.margins.left - width / 2, parent.width - width))
         anchors.bottom: parent.bottom
         width: implicitWidth
         height: implicitHeight
         text: root.presentedText
         animated: true
-        compositorFade: PopupTransitions.fadesIn("gnoblin-dock-tooltip")
-            && PopupTransitions.matches(Theme.tooltipMotion, Easing.OutCubic, "gnoblin-dock-tooltip")
+        compositorFade: PopupTransitions.fadesIn("gnoblin-dock-tooltip") && PopupTransitions.matches(Theme.tooltipMotion, Easing.OutCubic, "gnoblin-dock-tooltip")
         shown: root.shown
         transformOrigin: Item.Bottom
-
     }
 }

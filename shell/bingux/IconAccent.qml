@@ -20,9 +20,13 @@ Scope {
         let selected = Theme.accent, score = 0;
         for (const value of colors) {
             const candidate = Qt.color(value);
-            if (candidate.a < 0.5 || candidate.hsvSaturation < 0.08) continue;
+            if (candidate.a < 0.5 || candidate.hsvSaturation < 0.08)
+                continue;
             const weight = candidate.hsvSaturation * (1 - Math.abs(candidate.hslLightness - 0.5));
-            if (weight > score) { selected = candidate; score = weight; }
+            if (weight > score) {
+                selected = candidate;
+                score = weight;
+            }
         }
         // Preserve the sampled hue while lifting dark icons off the player card.
         selected = Qt.rgba(selected.r, selected.g, selected.b, 1);

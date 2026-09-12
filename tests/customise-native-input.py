@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Click, type and drag through a persistent private compositor input service."""
+
 import json
 import os
 from pathlib import Path
@@ -7,18 +8,21 @@ import subprocess
 import sys
 import time
 
-config = Path(os.environ['BINGUX_TEST_COMPOSITOR_CONFIG'])
-if not str(config).startswith('/tmp/gnoblin-gs.') or not os.environ.get('WAYLAND_DISPLAY', '').startswith('gnoblin-gs-'):
-    raise SystemExit('Only the private Gnoblin test session can receive test input')
-prepare = sys.argv[1:] == ['--prepare']
+config = Path(os.environ["BINGUX_TEST_COMPOSITOR_CONFIG"])
+if not str(config).startswith("/tmp/gnoblin-gs.") or not os.environ.get("WAYLAND_DISPLAY", "").startswith(
+    "gnoblin-gs-"
+):
+    raise SystemExit("Only the private Gnoblin test session can receive test input")
+prepare = sys.argv[1:] == ["--prepare"]
 x, y = (300, 300) if prepare else map(float, sys.argv[1:3])
-destination = list(map(float, sys.argv[4:6])) if sys.argv[3:4] == ['--drag-to'] else None
-probe = config / 'gnoblin/scripts/bingux-customise-input.js'
-completion = probe.with_suffix('.done')
+destination = list(map(float, sys.argv[4:6])) if sys.argv[3:4] == ["--drag-to"] else None
+probe = config / "gnoblin/scripts/bingux-customise-input.js"
+completion = probe.with_suffix(".done")
 completion.unlink(missing_ok=True)
 if prepare:
     probe.parent.mkdir(parents=True, exist_ok=True)
-    probe.write_text('''
+    probe.write_text(
+        """
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
@@ -109,31 +113,65 @@ export default function (api) {
         keyboard.run_dispose();
     });
 }
-'''.replace('__COMPLETION__', json.dumps(str(completion))))
-    subprocess.run(['gnoblinctl', 'script', 'reload'], env=os.environ | {'XDG_CONFIG_HOME': str(config)}, check=True, capture_output=True)
+""".replace("__COMPLETION__", json.dumps(str(completion)))
+    )
+    subprocess.run(
+        ["gnoblinctl", "script", "reload"],
+        env=os.environ | {"XDG_CONFIG_HOME": str(config)},
+        check=True,
+        capture_output=True,
+    )
 
-window_title = sys.argv[sys.argv.index('--window-title') + 1] if '--window-title' in sys.argv else ''
-window_size = list(map(float, sys.argv[sys.argv.index('--window-size') + 1:sys.argv.index('--window-size') + 3])) if window_title else []
-request = json.dumps({'origin': [x, y], 'destination': destination, 'prepare': prepare, 'windowTitle': window_title, 'windowSize': window_size,
-    'screenOrigin': json.loads(os.environ.get('BINGUX_TEST_INPUT_ORIGIN', '[0, 0]')),
-    'resizeTo': list(map(float, sys.argv[4:6])) if sys.argv[3:4] == ['--resize-to'] else None,
-    'scroll': 1 if sys.argv[3:4] == ['--scroll-down'] else -1 if sys.argv[3:4] == ['--scroll-up'] else 0,
-    'hoverOnly': sys.argv[3:4] == ['--hover-only'],
-    'shift': sys.argv[3:4] == ['--shift-right-click'],
-    'button': 3 if sys.argv[3:4] in (['--right-click'], ['--shift-right-click']) else 1,
-    'clickOnly': sys.argv[3:4] in (['--click-only'], ['--right-click'], ['--shift-right-click']),
-    'capture': os.environ.get('BINGUX_NATIVE_SCREENSHOT', ''),
-    'captureOnly': sys.argv[3:4] == ['--capture-only'],
-    'dragCapture': os.environ.get('BINGUX_NATIVE_DRAG_CAPTURE', '')})
-result = subprocess.run(['gdbus', 'call', '--session', '--dest', 'org.gnoblin.CustomiseInput',
-    '--object-path', '/org/gnoblin/CustomiseInput', '--method', 'org.gnoblin.CustomiseInput.Run', request],
-    capture_output=True, text=True, timeout=5)
+window_title = sys.argv[sys.argv.index("--window-title") + 1] if "--window-title" in sys.argv else ""
+window_size = (
+    list(map(float, sys.argv[sys.argv.index("--window-size") + 1 : sys.argv.index("--window-size") + 3]))
+    if window_title
+    else []
+)
+request = json.dumps(
+    {
+        "origin": [x, y],
+        "destination": destination,
+        "prepare": prepare,
+        "windowTitle": window_title,
+        "windowSize": window_size,
+        "screenOrigin": json.loads(os.environ.get("BINGUX_TEST_INPUT_ORIGIN", "[0, 0]")),
+        "resizeTo": list(map(float, sys.argv[4:6])) if sys.argv[3:4] == ["--resize-to"] else None,
+        "scroll": 1 if sys.argv[3:4] == ["--scroll-down"] else -1 if sys.argv[3:4] == ["--scroll-up"] else 0,
+        "hoverOnly": sys.argv[3:4] == ["--hover-only"],
+        "shift": sys.argv[3:4] == ["--shift-right-click"],
+        "button": 3 if sys.argv[3:4] in (["--right-click"], ["--shift-right-click"]) else 1,
+        "clickOnly": sys.argv[3:4] in (["--click-only"], ["--right-click"], ["--shift-right-click"]),
+        "capture": os.environ.get("BINGUX_NATIVE_SCREENSHOT", ""),
+        "captureOnly": sys.argv[3:4] == ["--capture-only"],
+        "dragCapture": os.environ.get("BINGUX_NATIVE_DRAG_CAPTURE", ""),
+    }
+)
+result = subprocess.run(
+    [
+        "gdbus",
+        "call",
+        "--session",
+        "--dest",
+        "org.gnoblin.CustomiseInput",
+        "--object-path",
+        "/org/gnoblin/CustomiseInput",
+        "--method",
+        "org.gnoblin.CustomiseInput.Run",
+        request,
+    ],
+    capture_output=True,
+    text=True,
+    timeout=5,
+)
 if result.returncode:
-    raise SystemExit(result.stderr.strip() or result.stdout.strip() or f'Native input exited with status {result.returncode}')
+    raise SystemExit(
+        result.stderr.strip() or result.stdout.strip() or f"Native input exited with status {result.returncode}"
+    )
 deadline = time.monotonic() + 8
 while not completion.exists():
     if time.monotonic() >= deadline:
-        raise SystemExit('The private compositor did not complete the input gesture')
-    time.sleep(.02)
-if completion.read_text() != 'done':
+        raise SystemExit("The private compositor did not complete the input gesture")
+    time.sleep(0.02)
+if completion.read_text() != "done":
     raise SystemExit(completion.read_text())

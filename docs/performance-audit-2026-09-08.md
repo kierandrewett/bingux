@@ -46,7 +46,6 @@ Reviewed animation/timer lifecycles, process launch/update paths, notification m
 
 After the changes, 12 consecutive `binguxctl status` calls completed with no errors/timeouts: mean **136.7ms**, maximum **143.9ms**. This includes CLI startup/transport overhead and is not an animation latency measurement. The marquee test exercised actual QML in an isolated offscreen shell. This pass did not establish GPU frame pacing, battery impact, or long-session memory stability.
 
-
 ## Second pass
 
 ### Fixed: repeated notification reconciliation scans

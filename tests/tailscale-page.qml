@@ -5,32 +5,73 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS")
+    }
     QtObject {
         id: service
         property bool ready: true
         property bool busy: false
         property string error: ""
-        property var state: ({power: {profiles: []}})
+        property var state: ({
+                power: {
+                    profiles: []
+                }
+            })
         property var lastAction: null
-        property var vpns: [{id: "tailscale", name: "Tailscale", subtitle: "Private network connected", connected: true, canToggle: true,
-            exitNode: "", preferences: {"accept-dns": true, "accept-routes": false, "shields-up": false, "exit-node-allow-lan-access": true},
-            nodes: Array.from({length: 570}, (_, index) => ({id: "node" + index, name: index === 0 ? "Workstation" : "Device " + index,
-                dns: "device" + index + ".example", ips: ["100.64." + Math.floor(index / 250) + "." + (index % 250 + 1)], os: "linux",
-                self: index === 0, online: index < 400, exitOption: index > 0 && index < 10 || index >= 30,
-                provider: index >= 30 ? "Mullvad" : "", city: index >= 30 ? "London" : "", countryCode: index >= 30 ? "GB" : "", country: index >= 30 ? "United Kingdom" : ""}))}]
-        function action(request) { lastAction = request; }
+        property var vpns: [
+            {
+                id: "tailscale",
+                name: "Tailscale",
+                subtitle: "Private network connected",
+                connected: true,
+                canToggle: true,
+                exitNode: "",
+                preferences: {
+                    "accept-dns": true,
+                    "accept-routes": false,
+                    "shields-up": false,
+                    "exit-node-allow-lan-access": true
+                },
+                nodes: Array.from({
+                    length: 570
+                }, (_, index) => ({
+                            id: "node" + index,
+                            name: index === 0 ? "Workstation" : "Device " + index,
+                            dns: "device" + index + ".example",
+                            ips: ["100.64." + Math.floor(index / 250) + "." + (index % 250 + 1)],
+                            os: "linux",
+                            self: index === 0,
+                            online: index < 400,
+                            exitOption: index > 0 && index < 10 || index >= 30,
+                            provider: index >= 30 ? "Mullvad" : "",
+                            city: index >= 30 ? "London" : "",
+                            countryCode: index >= 30 ? "GB" : "",
+                            country: index >= 30 ? "United Kingdom" : ""
+                        }))
+            }
+        ]
+        function action(request) {
+            lastAction = request;
+        }
     }
     Window {
+        id: window
         visible: true
         flags: Qt.Window | Qt.WindowDoesNotAcceptFocus
-        id: window
-        width: 416; height: 640
+        width: 416
+        height: 640
         Rectangle {
             id: canvas
             anchors.fill: parent
             color: Theme.shellSurface
-            ControlCentreExtras { id: extras; anchors.fill: parent; anchors.margins: 16; services: service }
+            ControlCentreExtras {
+                id: extras
+                anchors.fill: parent
+                anchors.margins: 16
+                services: service
+            }
         }
         TestCase {
             id: test
@@ -38,12 +79,15 @@ ShellRoot {
             when: window.visible
             function checked(actual, expected, message) {
                 console.log("CHECK", message || "", actual, expected);
-                if (actual !== expected) report.setText("FAIL " + message + ": " + actual + " expected " + expected + "\nFAILURES 1\n");
+                if (actual !== expected)
+                    report.setText("FAIL " + message + ": " + actual + " expected " + expected + "\nFAILURES 1\n");
                 compare(actual, expected, message);
             }
             function screenshot(path) {
                 saved = false;
-                canvas.grabToImage(result => { test.saved = result.saveToFile(path); });
+                canvas.grabToImage(result => {
+                    test.saved = result.saveToFile(path);
+                });
                 tryCompare(test, "saved", true, 2000);
             }
             function test_management() {
@@ -78,7 +122,9 @@ ShellRoot {
                     checked(contextMenu.visible, false, "Copy closes the context menu");
                     checked(Quickshell.clipboardText, "100.64.0.1", "Context action copies the address");
                     checked(list.itemAtIndex(0).actionLabel, "Copied", "Copy has visible feedback");
-                } finally { Quickshell.clipboardText = clipboard; }
+                } finally {
+                    Quickshell.clipboardText = clipboard;
+                }
                 mouseClick(findChild(extras, "tailscaleConnectionSwitch"));
                 checked(service.lastAction.kind, "vpn");
                 checked(service.lastAction.enabled, false);
@@ -98,7 +144,12 @@ ShellRoot {
                 tryCompare(list, "count", 540);
                 verify(list.contentItem.children.length < 80, "Provider list is virtualised");
                 mouseClick(search);
-                keyClick(Qt.Key_L); keyClick(Qt.Key_O); keyClick(Qt.Key_N); keyClick(Qt.Key_D); keyClick(Qt.Key_O); keyClick(Qt.Key_N);
+                keyClick(Qt.Key_L);
+                keyClick(Qt.Key_O);
+                keyClick(Qt.Key_N);
+                keyClick(Qt.Key_D);
+                keyClick(Qt.Key_O);
+                keyClick(Qt.Key_N);
                 tryCompare(list, "count", 540);
                 const table = findChild(extras, "tailscaleTable");
                 checked(table.rowHeight, 56, "Location rows have room for server details");
@@ -129,7 +180,9 @@ ShellRoot {
                 report.setText("applied " + JSON.stringify(service.lastAction) + "\nFAILURES 1\n");
                 checked(service.lastAction.setting, "exit-node");
                 checked(service.lastAction.value, "node1");
-                service.vpns = service.vpns.map(row => Object.assign({}, row, {exitNode: "node1"}));
+                service.vpns = service.vpns.map(row => Object.assign({}, row, {
+                        exitNode: "node1"
+                    }));
                 wait(50);
                 checked(findChild(extras, "tailscaleCurrentExit").title, "Device 1");
                 findChild(extras, "tailscaleCurrentExit").actionTriggered();
@@ -139,7 +192,11 @@ ShellRoot {
                 list.positionViewAtIndex(1, ListView.Beginning);
                 wait(50);
                 mouseClick(list.itemAtIndex(1));
-                service.vpns = service.vpns.map(row => Object.assign({}, row, {nodes: row.nodes.map(node => node.id === "node2" ? Object.assign({}, node, {online: false}) : node)}));
+                service.vpns = service.vpns.map(row => Object.assign({}, row, {
+                        nodes: row.nodes.map(node => node.id === "node2" ? Object.assign({}, node, {
+                                online: false
+                            }) : node)
+                    }));
                 wait(50);
                 checked(findChild(extras, "tailscaleApplyExit").enabled, false, "Cannot apply a server that went offline");
                 window.width = 360;

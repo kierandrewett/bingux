@@ -12,20 +12,38 @@ ColumnLayout {
     property real blackout: 0
     readonly property bool busy: transitioning || request.running
     readonly property var actions: [
-        {id: "suspend", title: "Suspend", icon: "weather-clear-night-symbolic"},
-        {id: "logout", title: "Log Out", icon: "system-log-out-symbolic"},
-        {id: "reboot", title: "Restart", icon: "system-reboot-symbolic"},
-        {id: "poweroff", title: "Shut Down", icon: "system-shutdown-symbolic"}
+        {
+            id: "suspend",
+            title: "Suspend",
+            icon: "weather-clear-night-symbolic"
+        },
+        {
+            id: "logout",
+            title: "Log Out",
+            icon: "system-log-out-symbolic"
+        },
+        {
+            id: "reboot",
+            title: "Restart",
+            icon: "system-reboot-symbolic"
+        },
+        {
+            id: "poweroff",
+            title: "Shut Down",
+            icon: "system-shutdown-symbolic"
+        }
     ]
     readonly property var selected: actions.find(action => action.id === pending)
     spacing: 4
-    onVisibleChanged: if (!visible && !busy) { pending = ""; error = ""; }
-    function execute() {
-        if (!selected || busy) return;
+    onVisibleChanged: if (!visible && !busy) {
+        pending = "";
         error = "";
-        request.command = pending === "logout"
-            ? ["gnome-session-quit", "--logout", "--no-prompt"]
-            : ["systemctl", pending];
+    }
+    function execute() {
+        if (!selected || busy)
+            return;
+        error = "";
+        request.command = pending === "logout" ? ["gnome-session-quit", "--logout", "--no-prompt"] : ["systemctl", pending];
         recovery.interval = 10000;
         transitioning = true;
         fadeOut.start();
@@ -36,18 +54,43 @@ ColumnLayout {
     }
     SequentialAnimation {
         id: fadeOut
-        NumberAnimation { target: root; property: "blackout"; to: 1; duration: Theme.reducedMotion ? 0 : 300; easing.type: Easing.InOutCubic }
+        NumberAnimation {
+            target: root
+            property: "blackout"
+            to: 1
+            duration: Theme.reducedMotion ? 0 : 300
+            easing.type: Easing.InOutCubic
+        }
         // Leave a frame at full black before the session starts to disappear.
-        PauseAnimation { duration: 50 }
-        ScriptAction { script: { request.running = true; recovery.restart(); } }
+        PauseAnimation {
+            duration: 50
+        }
+        ScriptAction {
+            script: {
+                request.running = true;
+                recovery.restart();
+            }
+        }
     }
     SequentialAnimation {
         id: fadeIn
-        NumberAnimation { target: root; property: "blackout"; to: 0; duration: Theme.reducedMotion ? 0 : 180; easing.type: Easing.OutCubic }
-        ScriptAction { script: root.transitioning = false }
+        NumberAnimation {
+            target: root
+            property: "blackout"
+            to: 0
+            duration: Theme.reducedMotion ? 0 : 180
+            easing.type: Easing.OutCubic
+        }
+        ScriptAction {
+            script: root.transitioning = false
+        }
     }
     // A cancelled or inhibited session exit must not leave an opaque screen.
-    Timer { id: recovery; interval: 10000; onTriggered: root.restore() }
+    Timer {
+        id: recovery
+        interval: 10000
+        onTriggered: root.restore()
+    }
     Variants {
         model: Quickshell.screens
         PanelWindow {
@@ -59,22 +102,39 @@ ColumnLayout {
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.namespace: "bingux-session-fade"
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-            anchors { top: true; bottom: true; left: true; right: true }
+            anchors {
+                top: true
+                bottom: true
+                left: true
+                right: true
+            }
             // Let session inhibitor and authentication dialogs remain usable.
             mask: Region {}
-            Rectangle { anchors.fill: parent; color: "black"; opacity: root.blackout }
+            Rectangle {
+                anchors.fill: parent
+                color: "black"
+                opacity: root.blackout
+            }
         }
     }
     Process {
         id: request
-        stderr: StdioCollector { onStreamFinished: root.error = text.trim(); }
+        stderr: StdioCollector {
+            onStreamFinished: root.error = text.trim()
+        }
         onExited: code => {
-            if (code !== 0 && !root.error) root.error = "The session could not complete this request.";
-            if (code !== 0) root.restore();
+            if (code !== 0 && !root.error)
+                root.error = "The session could not complete this request.";
+            if (code !== 0)
+                root.restore();
             // systemctl can return before sleep begins. Keep black briefly;
             // the timer also releases the overlay when the machine wakes.
-            if (code === 0 && root.pending === "suspend") { recovery.interval = 1500; recovery.restart(); }
-            if (code === 0) root.pending = "";
+            if (code === 0 && root.pending === "suspend") {
+                recovery.interval = 1500;
+                recovery.restart();
+            }
+            if (code === 0)
+                root.pending = "";
         }
     }
     Repeater {
@@ -85,7 +145,10 @@ ColumnLayout {
             title: modelData.title
             iconName: modelData.icon
             navigation: true
-            onClicked: { root.error = ""; root.pending = modelData.id; }
+            onClicked: {
+                root.error = "";
+                root.pending = modelData.id;
+            }
         }
     }
     Text {
@@ -120,7 +183,10 @@ ColumnLayout {
         title: "Cancel"
         iconName: "go-previous-symbolic"
         enabled: !root.busy
-        onClicked: { root.pending = ""; root.error = ""; }
+        onClicked: {
+            root.pending = "";
+            root.error = "";
+        }
     }
     Text {
         Layout.fillWidth: true

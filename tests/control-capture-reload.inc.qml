@@ -1,4 +1,7 @@
-    FileView { id: layoutReport; path: Quickshell.env("BINGUX_LAYOUT_REPORT") }
+    FileView {
+        id: layoutReport
+        path: Quickshell.env("BINGUX_LAYOUT_REPORT")
+    }
     TestCase {
         parent: topBar.contentItem
         when: topBar.visible && BinguxPreferences.loaded && ControlCentreServices.preferencesReady && dock.appGroupsInitialised && captureTool.ready
@@ -7,7 +10,8 @@
                 verify(BinguxPreferences.data.desktop.layout.sidebar.includes("capture"));
                 tryCompare(captureStatus, "parent", terminalSidebar.widgetHost, 3000);
                 compare(captureStatus.presentation.label, "Capture status");
-                compare(captureTool.state, "idle"); verify(!captureStatus.visible);
+                compare(captureTool.state, "idle");
+                verify(!captureStatus.visible);
                 desktopCustomiser.open();
                 compare(desktopCustomiser.containerFor("capture"), "sidebar");
                 desktopCustomiser.cancel();

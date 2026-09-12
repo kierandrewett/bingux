@@ -59,9 +59,7 @@ BUN_COMMANDS: tuple[Command, ...] = (
 )
 
 CARGO_HEADER = re.compile(r"^\s*(?P<name>\S+)\s+v?(?P<version>\S+):\s*$")
-BUN_PACKAGE = re.compile(
-    r"^\s*(?:[├└]──\s+)?(?P<name>@[^@\s/]+/[^@\s]+|[^@\s]+)@(?P<version>\S+)\s*$"
-)
+BUN_PACKAGE = re.compile(r"^\s*(?:[├└]──\s+)?(?P<name>@[^@\s/]+/[^@\s]+|[^@\s]+)@(?P<version>\S+)\s*$")
 
 
 def _safe_text(value: object) -> str | None:
@@ -89,10 +87,7 @@ def _record(name: object, version: object) -> PackageRecord | None:
 
 def _sorted_records(records: Iterable[PackageRecord]) -> list[PackageRecord]:
     unique = {(record["name"], record["version"]) for record in records}
-    return [
-        {"name": name, "version": version}
-        for name, version in sorted(unique, key=lambda item: (item[0], item[1]))
-    ]
+    return [{"name": name, "version": version} for name, version in sorted(unique, key=lambda item: (item[0], item[1]))]
 
 
 def _stop_process(process: subprocess.Popen[bytes]) -> None:
@@ -367,10 +362,7 @@ def _collect_sources() -> dict[str, list[PackageRecord]]:
 def _canonical_sources(
     sources: dict[str, Iterable[PackageRecord]],
 ) -> dict[str, list[PackageRecord]]:
-    return {
-        source_name: _sorted_records(records)
-        for source_name, records in sources.items()
-    }
+    return {source_name: _sorted_records(records) for source_name, records in sources.items()}
 
 
 def _inventory_json(pretty: bool) -> str:

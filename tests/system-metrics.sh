@@ -6,14 +6,14 @@ trap 'rm -rf "$test_dir"' EXIT
 components=(HorizontalWheelScroll DataTable TableRowSurface ServicesPanel FilterField ProcessTable ProcessorDetails ActionButton HardwareDetails RollingNumber SystemMetrics SystemMetricsPopup SystemPerformance MetricGraph Pill BarControlSurface ShellPopup PanelOutline ControlRow ControlSwitch ControlCentreButtonSurface SymbolicIcon IconButton MarqueeText ShellTooltip TooltipBubble OsIconImage SegmentedControl)
 for component in "${components[@]}"; do
     cp "$repo_dir/shell/bingux/$component.qml" "$test_dir/"
-    printf '%s 1.0 %s.qml\n' "$component" "$component" >> "$test_dir/qmldir"
+    printf '%s 1.0 %s.qml\n' "$component" "$component" >>"$test_dir/qmldir"
 done
 cp "$repo_dir"/shell/bingux/{Theme,OsIcons}.qml "$repo_dir/shell/bingux/MetricsHistory.js" "$repo_dir/shell/bingux/ProcessApplications.js" "$test_dir/"
-printf '%s\n' 'singleton Theme 1.0 Theme.qml' 'singleton OsIcons 1.0 OsIcons.qml' >> "$test_dir/qmldir"
+printf '%s\n' 'singleton Theme 1.0 Theme.qml' 'singleton OsIcons 1.0 OsIcons.qml' >>"$test_dir/qmldir"
 cp "$repo_dir/shell/bingux/process-action.py" "$repo_dir/shell/bingux/render-os-icons.py" "$test_dir/"
 cp "$repo_dir/tests/${1:-system-metrics}.qml" "$test_dir/shell.qml"
 export BINGUX_METRICS_RESULTS="$test_dir/results"
-if ! timeout 35s quickshell -p "$test_dir" --no-color > "$test_dir/runtime.log" 2>&1; then
+if ! timeout 35s quickshell -p "$test_dir" --no-color >"$test_dir/runtime.log" 2>&1; then
     cat "$test_dir/runtime.log"
     exit 1
 fi

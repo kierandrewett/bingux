@@ -5,7 +5,10 @@ import Quickshell.Io
 
 ShellRoot {
     property string checks: ""
-    FileView { id: results; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
+    FileView {
+        id: results
+        path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS")
+    }
     FloatingWindow {
         id: window
         implicitWidth: 560
@@ -13,15 +16,37 @@ ShellRoot {
         color: Theme.shellSurface
         Pill {
             id: control
-            x: 20; y: 20
+            x: 20
+            y: 20
             interactive: true
             hovered: pointer.containsMouse
             pressed: pointer.pressed
-            Text { text: "Calendar"; color: Theme.text }
-            MouseArea { id: pointer; parent: control; anchors.fill: parent; hoverEnabled: true }
+            Text {
+                text: "Calendar"
+                color: Theme.text
+            }
+            MouseArea {
+                id: pointer
+                parent: control
+                anchors.fill: parent
+                hoverEnabled: true
+            }
         }
-        Pill { id: passive; x: 20; y: 70; Text { text: "CPU 12%"; color: Theme.muted } }
-        Tray { id: tray; x: 200; y: 20; parentWindow: window }
+        Pill {
+            id: passive
+            x: 20
+            y: 70
+            Text {
+                text: "CPU 12%"
+                color: Theme.muted
+            }
+        }
+        Tray {
+            id: tray
+            x: 200
+            y: 20
+            parentWindow: window
+        }
         QtObject {
             id: trayItem
             property string id: "hover-test"
@@ -30,18 +55,24 @@ ShellRoot {
             property bool onlyMenu: false
             property bool hasMenu: false
             property var menu: null
-            function activate() {}
+            function activate() {
+            }
         }
         QtObject {
             id: metrics
             property bool desktopStateAvailable: true
             property string inputSourceLabel: "en"
-            property var currentInputSource: ({type: "xkb", id: "gb", displayName: "English"})
+            property var currentInputSource: ({
+                    type: "xkb",
+                    id: "gb",
+                    displayName: "English"
+                })
             property var inputSources: [currentInputSource]
         }
         InputSourceSelector {
             id: selector
-            x: 300; y: 20
+            x: 300
+            y: 20
             parentWindow: window
             metrics: metrics
             gnoblinCtlPath: "true"
@@ -54,8 +85,13 @@ ShellRoot {
                 results.setText(checks);
                 compare(actual, expected, message);
             }
-            function surface(item) { return item.children[0]; }
-            function away() { mouseMove(window.contentItem, 540, 100); wait(30); }
+            function surface(item) {
+                return item.children[0];
+            }
+            function away() {
+                mouseMove(window.contentItem, 540, 100);
+                wait(30);
+            }
             function test_control() {
                 wait(100);
                 away();

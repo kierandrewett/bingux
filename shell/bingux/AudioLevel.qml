@@ -49,21 +49,39 @@ Item {
             implicitHeight: level.barLayout ? Theme.barHeight : Theme.sliderControlHeight
             Layout.minimumWidth: level.barLayout ? 100 : 0
             enabled: level.available
-            from: 0; to: level.maximum; stepSize: 0.05
+            from: 0
+            to: level.maximum
+            stepSize: 0.05
             snapMode: Slider.SnapAlways
             wheelEnabled: false
             value: level.available ? level.node.audio.volume : 0
             property bool wheelActive: false
             Behavior on value {
                 enabled: gain.wheelActive && !gain.pressed && !Theme.reducedMotion
-                NumberAnimation { duration: Theme.mediaActionMotion; easing.type: Easing.OutCubic }
+                NumberAnimation {
+                    duration: Theme.mediaActionMotion
+                    easing.type: Easing.OutCubic
+                }
             }
-            Timer { id: wheelFinish; interval: Theme.mediaActionMotion + 60; onTriggered: gain.wheelActive = false }
-            function stopWheelAnimation() { wheelFinish.stop(); wheelActive = false; }
-            onPressedChanged: if (pressed) stopWheelAnimation()
-            onEnabledChanged: if (!enabled) stopWheelAnimation()
+            Timer {
+                id: wheelFinish
+                interval: Theme.mediaActionMotion + 60
+                onTriggered: gain.wheelActive = false
+            }
+            function stopWheelAnimation() {
+                wheelFinish.stop();
+                wheelActive = false;
+            }
+            onPressedChanged: if (pressed)
+                stopWheelAnimation()
+            onEnabledChanged: if (!enabled)
+                stopWheelAnimation()
             Accessible.name: level.label === "Microphone" ? "Microphone level" : "Output volume"
-            onMoved: { stopWheelAnimation(); level.node.audio.muted = false; level.node.audio.volume = value; }
+            onMoved: {
+                stopWheelAnimation();
+                level.node.audio.muted = false;
+                level.node.audio.volume = value;
+            }
             WheelHandler {
                 id: volumeWheel
                 enabled: gain.enabled && !gain.pressed
@@ -77,14 +95,19 @@ Item {
                         remainder -= steps;
                         gain.wheelActive = true;
                         level.node.audio.muted = false;
-                        level.node.audio.volume = Math.max(gain.from, Math.min(gain.to,
-                            Math.round((level.node.audio.volume + steps * level.wheelStep) * 100) / 100));
+                        level.node.audio.volume = Math.max(gain.from, Math.min(gain.to, Math.round((level.node.audio.volume + steps * level.wheelStep) * 100) / 100));
                         wheelFinish.restart();
                     }
                     event.accepted = true;
                 }
             }
-            Connections { target: level; function onNodeChanged() { volumeWheel.remainder = 0; gain.stopWheelAnimation(); } }
+            Connections {
+                target: level
+                function onNodeChanged() {
+                    volumeWheel.remainder = 0;
+                    gain.stopWheelAnimation();
+                }
+            }
         }
         Text {
             Layout.preferredWidth: 40
@@ -93,7 +116,9 @@ Item {
             color: Theme.muted
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSmall
-            font.features: ({"tnum": 1})
+            font.features: ({
+                    "tnum": 1
+                })
         }
         IconButton {
             objectName: level.navigationObjectName

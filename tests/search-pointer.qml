@@ -17,10 +17,12 @@ SearchOverlay {
         animateActivation(result, position);
     }
     function find(item, name) {
-        if (item.objectName === name) return item;
+        if (item.objectName === name)
+            return item;
         for (const child of item.children || []) {
             const found = find(child, name);
-            if (found) return found;
+            if (found)
+                return found;
         }
         return null;
     }
@@ -35,7 +37,15 @@ SearchOverlay {
         function test_growth() {
             wait(250);
             const items = [];
-            for (let i = 0; i < 3; i++) items.push({ resultId: 'test-' + i, providerId: 'applications', kind: 'application', title: 'Test ' + i, subtitle: '', icon: 'system-file-manager' });
+            for (let i = 0; i < 3; i++)
+                items.push({
+                    resultId: 'test-' + i,
+                    providerId: 'applications',
+                    kind: 'application',
+                    title: 'Test ' + i,
+                    subtitle: '',
+                    icon: 'system-file-manager'
+                });
             preview.displayedResults = items;
             wait(250);
             const list = preview.find(preview.contentItem, 'searchResultsList');
@@ -49,7 +59,8 @@ SearchOverlay {
             preview.selectedIndex = 0;
             preview.keyboardSelection = true;
             wait(30);
-            if (!Theme.reducedMotion) equal(preview.pointerBlocked, true, 'growth blocks mouse events');
+            if (!Theme.reducedMotion)
+                equal(preview.pointerBlocked, true, 'growth blocks mouse events');
             mouseClick(preview.contentItem, target.x, target.y);
             equal(preview.activationCount, 0, 'click during growth is blocked');
             wait(250);
@@ -64,12 +75,10 @@ SearchOverlay {
             equal(preview.pointerResultIndex, 2, 'only hovered row accepts clicks');
             mouseClick(preview.contentItem, target.x + 2, target.y);
             equal(preview.activationCount, 1, 'deliberate click activates once');
-            equal(Math.abs(preview.activationPosition.x - target.x - 2) < 1
-                && Math.abs(preview.activationPosition.y - target.y) < 1, true, 'click coordinates reach the launch animation');
+            equal(Math.abs(preview.activationPosition.x - target.x - 2) < 1 && Math.abs(preview.activationPosition.y - target.y) < 1, true, 'click coordinates reach the launch animation');
             const effect = preview.find(preview.contentItem, 'searchLaunchEffect');
             if (!Theme.reducedMotion) {
-                equal(Math.abs(effect.x + effect.width / 2 - target.x - 2) < 1
-                    && Math.abs(effect.y + effect.height / 2 - target.y) < 1, true, 'mouse launch pulse is centred on the click');
+                equal(Math.abs(effect.x + effect.width / 2 - target.x - 2) < 1 && Math.abs(effect.y + effect.height / 2 - target.y) < 1, true, 'mouse launch pulse is centred on the click');
                 preview.animateActivation(items[2]);
                 const icon = list.itemAtIndex(2).resultItem.activationIcon;
                 const iconOrigin = icon.mapToItem(preview.contentItem, 0, 0);
@@ -87,6 +96,8 @@ SearchOverlay {
             equal(preview.pointerResultIndex, -1, 'reopening requires fresh motion');
             console.warn('SEARCH_POINTER_PASS');
         }
-        function cleanupTestCase() { Qt.quit(); }
+        function cleanupTestCase() {
+            Qt.quit();
+        }
     }
 }

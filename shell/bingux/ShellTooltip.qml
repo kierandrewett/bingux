@@ -10,12 +10,34 @@ Controls.ToolTip {
     Component.onDestruction: Theme.endTooltip(root)
     readonly property int revealDuration: Theme.tooltipMotion
     enter: Transition {
-        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: root.revealDuration; easing.type: Easing.OutCubic }
-        NumberAnimation { property: "scale"; from: Theme.tooltipHiddenScale; to: 1; duration: root.revealDuration; easing.type: Easing.OutCubic }
+        NumberAnimation {
+            property: "opacity"
+            from: 0
+            to: 1
+            duration: root.revealDuration
+            easing.type: Easing.OutCubic
+        }
+        NumberAnimation {
+            property: "scale"
+            from: Theme.tooltipHiddenScale
+            to: 1
+            duration: root.revealDuration
+            easing.type: Easing.OutCubic
+        }
     }
     exit: Transition {
-        NumberAnimation { property: "opacity"; to: 0; duration: Theme.tooltipMotion; easing.type: Easing.OutCubic }
-        NumberAnimation { property: "scale"; to: Theme.tooltipHiddenScale; duration: Theme.tooltipMotion; easing.type: Easing.OutCubic }
+        NumberAnimation {
+            property: "opacity"
+            to: 0
+            duration: Theme.tooltipMotion
+            easing.type: Easing.OutCubic
+        }
+        NumberAnimation {
+            property: "scale"
+            to: Theme.tooltipHiddenScale
+            duration: Theme.tooltipMotion
+            easing.type: Easing.OutCubic
+        }
     }
     delay: Theme.tooltipDelay
     timeout: 8000

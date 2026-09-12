@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check that window removal and focus changes keep the dock pill inside its clip."""
+
 import os
 from pathlib import Path
 import shutil
@@ -18,7 +19,9 @@ with tempfile.TemporaryDirectory(prefix="bingux-indicator-") as directory:
     result = subprocess.run(
         [os.environ.get("QS_TEST_BIN", "qs"), "-p", str(fixture), "--no-color"],
         env=os.environ | {"QT_QPA_PLATFORM": "offscreen", "QT_QUICK_BACKEND": "software"},
-        capture_output=True, text=True, timeout=10,
+        capture_output=True,
+        text=True,
+        timeout=10,
     )
     output = result.stdout + result.stderr
     if result.returncode or "INDICATOR_TEST_PASSED" not in output or "PILL_CLIPPED" in output:

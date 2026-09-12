@@ -5,7 +5,10 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
-    FileView { id: report; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS")
+    }
     FloatingWindow {
         id: window
         implicitWidth: 440
@@ -22,16 +25,67 @@ ShellRoot {
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: Theme.gap
-                    ControlRow { id: compact; tileLayout: true; compactTile: true; rowInteractive: false; toggleVisible: true; title: "Do Not Disturb"; iconName: "notifications-disabled-symbolic" }
-                    ControlRow { tileLayout: true; compactTile: true; rowInteractive: false; toggleVisible: true; selected: true; title: "Night Light"; iconName: "night-light-symbolic" }
+                    ControlRow {
+                        id: compact
+                        tileLayout: true
+                        compactTile: true
+                        rowInteractive: false
+                        toggleVisible: true
+                        title: "Do Not Disturb"
+                        iconName: "notifications-disabled-symbolic"
+                    }
+                    ControlRow {
+                        tileLayout: true
+                        compactTile: true
+                        rowInteractive: false
+                        toggleVisible: true
+                        selected: true
+                        title: "Night Light"
+                        iconName: "night-light-symbolic"
+                    }
                 }
-                Text { text: "Volume"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize }
-                SeekSlider { id: volume; Layout.fillWidth: true; from: 0; to: 1.5; value: 0.65; stepSize: 0.01; warningFrom: 1 }
-                Text { text: "Playback"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize }
-                SeekSlider { id: playback; Layout.fillWidth: true; from: 0; to: 240; value: 95 }
-                Text { text: "Unavailable"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
-                SeekSlider { Layout.fillWidth: true; enabled: false; value: 0.35 }
-                Item { Layout.fillHeight: true }
+                Text {
+                    text: "Volume"
+                    color: Theme.text
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSize
+                }
+                SeekSlider {
+                    id: volume
+                    Layout.fillWidth: true
+                    from: 0
+                    to: 1.5
+                    value: 0.65
+                    stepSize: 0.01
+                    warningFrom: 1
+                }
+                Text {
+                    text: "Playback"
+                    color: Theme.text
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSize
+                }
+                SeekSlider {
+                    id: playback
+                    Layout.fillWidth: true
+                    from: 0
+                    to: 240
+                    value: 95
+                }
+                Text {
+                    text: "Unavailable"
+                    color: Theme.muted
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSmall
+                }
+                SeekSlider {
+                    Layout.fillWidth: true
+                    enabled: false
+                    value: 0.35
+                }
+                Item {
+                    Layout.fillHeight: true
+                }
             }
         }
         TestCase {
@@ -79,7 +133,8 @@ ShellRoot {
                 mouseClick(volume, 0, volume.height / 2);
                 compare(volume.value, disabledValue, "Disabled slider cannot change");
                 volume.enabled = true;
-                volume.leftPadding = 8; volume.rightPadding = 12;
+                volume.leftPadding = 8;
+                volume.rightPadding = 12;
                 compare(volume.normalizedPositionAt(0), 0);
                 compare(volume.normalizedPositionAt(volume.width), 1);
                 volume.LayoutMirroring.enabled = true;
@@ -87,12 +142,15 @@ ShellRoot {
                 mouseClick(volume, volume.width - 1, volume.height / 2);
                 compare(volume.value, 0, "RTL right endpoint");
                 volume.LayoutMirroring.enabled = false;
-                volume.leftPadding = 0; volume.rightPadding = 0;
+                volume.leftPadding = 0;
+                volume.rightPadding = 0;
                 volume.value = 0.65;
                 canvas.forceActiveFocus();
                 mouseMove(volume, volume.width * 0.9, volume.height / 2);
                 wait(160);
-                canvas.grabToImage(result => { test.saved = result.saveToFile("/tmp/bingux-control-polish.png"); });
+                canvas.grabToImage(result => {
+                    test.saved = result.saveToFile("/tmp/bingux-control-polish.png");
+                });
                 tryCompare(test, "saved", true, 2000);
                 report.setText("PASS padded tiles; slider hit area, stable thumb geometry, endpoints, boost/mute, keyboard, disabled and RTL\nFAILURES 0\n");
             }

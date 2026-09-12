@@ -3,9 +3,13 @@ import QtTest
 import Quickshell
 import Quickshell.Io
 import Quickshell.Bluetooth
+
 ShellRoot {
     property string checks: ""
-    FileView { id: results; path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS") }
+    FileView {
+        id: results
+        path: Quickshell.env("BINGUX_CONTROL_TEST_RESULTS")
+    }
     QtObject {
         id: bluetoothHeadphones
         property string name: "Headphones"
@@ -14,14 +18,43 @@ ShellRoot {
         property bool connected: true
         property bool paired: true
         property int state: connected ? BluetoothDeviceState.Connected : BluetoothDeviceState.Disconnected
-        function connect() { connected = true; }
-        function disconnect() { connected = false; }
+        function connect() {
+            connected = true;
+        }
+        function disconnect() {
+            connected = false;
+        }
     }
-    QtObject { id: adapter; property bool enabled: true; property bool discovering: false; property var devices: QtObject { property var values: [bluetoothHeadphones] } }
-    QtObject { id: audio; property bool muted: false; property real volume: 0.65 }
-    QtObject { id: microphoneAudio; property bool muted: false; property real volume: 0.4 }
-    QtObject { id: microphoneNode; property bool ready: true; property var audio: microphoneAudio; property string description: "Studio microphone"; property string name: "mic" }
-    QtObject { id: sink; property bool ready: true; property var audio: audio }
+    QtObject {
+        id: adapter
+        property bool enabled: true
+        property bool discovering: false
+        property var devices: QtObject {
+            property var values: [bluetoothHeadphones]
+        }
+    }
+    QtObject {
+        id: audio
+        property bool muted: false
+        property real volume: 0.65
+    }
+    QtObject {
+        id: microphoneAudio
+        property bool muted: false
+        property real volume: 0.4
+    }
+    QtObject {
+        id: microphoneNode
+        property bool ready: true
+        property var audio: microphoneAudio
+        property string description: "Studio microphone"
+        property string name: "mic"
+    }
+    QtObject {
+        id: sink
+        property bool ready: true
+        property var audio: audio
+    }
     QtObject {
         id: indicators
         property string networkState: "wifi"
@@ -31,10 +64,18 @@ ShellRoot {
         property var audioSink: sink
         property var audioSource: microphoneNode
         property bool laptopBatteryAvailable: true
-        function networkIconName() { return "network-wireless-signal-excellent-symbolic"; }
-        function networkAccessibleName() { return "Wireless network connected"; }
-        function audioIconName() { return audioMuted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic"; }
-        function batteryAccessibleName() { return "Battery 84 percent, charging"; }
+        function networkIconName() {
+            return "network-wireless-signal-excellent-symbolic";
+        }
+        function networkAccessibleName() {
+            return "Wireless network connected";
+        }
+        function audioIconName() {
+            return audioMuted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic";
+        }
+        function batteryAccessibleName() {
+            return "Battery 84 percent, charging";
+        }
     }
     QtObject {
         id: player
@@ -54,10 +95,16 @@ ShellRoot {
         property string trackTitle: "A Quiet Evening"
         property string trackArtist: "Local library"
         property string trackArtUrl: ""
-        function play() { isPlaying = true; }
-        function pause() { isPlaying = false; }
-        function previous() {}
-        function next() {}
+        function play() {
+            isPlaying = true;
+        }
+        function pause() {
+            isPlaying = false;
+        }
+        function previous() {
+        }
+        function next() {
+        }
     }
     QtObject {
         id: secondPlayer
@@ -77,10 +124,16 @@ ShellRoot {
         property string trackTitle: "A Quiet Evening"
         property string trackArtist: "Local library"
         property string trackArtUrl: ""
-        function play() { isPlaying = true; }
-        function pause() { isPlaying = false; }
-        function previous() {}
-        function next() {}
+        function play() {
+            isPlaying = true;
+        }
+        function pause() {
+            isPlaying = false;
+        }
+        function previous() {
+        }
+        function next() {
+        }
     }
     Component {
         id: notificationFactory
@@ -96,11 +149,16 @@ ShellRoot {
             property var actions: []
             property bool tracked: false
             signal closed(int reason)
-            function dismiss() {}
-            function expire() {}
+            function dismiss() {
+            }
+            function expire() {
+            }
         }
     }
-    NotificationState { id: state; historyDirectory: Quickshell.shellPath("notification-fixture") }
+    NotificationState {
+        id: state
+        historyDirectory: Quickshell.shellPath("notification-fixture")
+    }
     QtObject {
         id: services
         property bool active: false
@@ -111,33 +169,106 @@ ShellRoot {
         property bool doNotDisturb: false
         property string error: ""
         property var actions: []
-        property var controls: ({vpn: true, dnd: true, nightLight: false, power: false, awake: false})
-        property var vpns: [{id: "mullvad", name: "Mullvad", connected: false, subtitle: "Disconnected", canToggle: true}, {id: "tailscale", name: "Tailscale", connected: true, subtitle: "Exit node active", canToggle: true}]
-        property var state: ({dndAvailable: true, nightLightAvailable: true, nightLight: false, nightLightActive: false, awakeAvailable: true, power: {available: true, profile: "balanced", profiles: ["power-saver", "balanced", "performance"]}})
-        function showControl(name) { return !!controls[name]; }
-        function setControl(name, value) { controls = Object.assign({}, controls, {[name]: value}); }
-        function action(value) { actions = actions.concat([value]); }
-        function toggleAwake() { keepAwake = !keepAwake; }
+        property var controls: ({
+                vpn: true,
+                dnd: true,
+                nightLight: false,
+                power: false,
+                awake: false
+            })
+        property var vpns: [
+            {
+                id: "mullvad",
+                name: "Mullvad",
+                connected: false,
+                subtitle: "Disconnected",
+                canToggle: true
+            },
+            {
+                id: "tailscale",
+                name: "Tailscale",
+                connected: true,
+                subtitle: "Exit node active",
+                canToggle: true
+            }
+        ]
+        property var state: ({
+                dndAvailable: true,
+                nightLightAvailable: true,
+                nightLight: false,
+                nightLightActive: false,
+                awakeAvailable: true,
+                power: {
+                    available: true,
+                    profile: "balanced",
+                    profiles: ["power-saver", "balanced", "performance"]
+                }
+            })
+        function showControl(name) {
+            return !!controls[name];
+        }
+        function setControl(name, value) {
+            controls = Object.assign({}, controls, {
+                [name]: value
+            });
+        }
+        function action(value) {
+            actions = actions.concat([value]);
+        }
+        function toggleAwake() {
+            keepAwake = !keepAwake;
+        }
     }
-    PanelWindow { id: testHost; visible: true; implicitWidth: 1280; implicitHeight: 1080; color: "transparent" }
-    SystemIndicators { id: barIndicators; parent: testHost.contentItem; services: services; x: 8; y: 8 }
-    ControlCentre { id: centre; hostItem: testHost.contentItem; services: services; indicators: indicators; bluetoothAdapter: adapter }
-    ControlCentre { id: nativeCentre; services: services; indicators: indicators; bluetoothAdapter: adapter; mediaPlayers: [] }
+    PanelWindow {
+        id: testHost
+        visible: true
+        implicitWidth: 1280
+        implicitHeight: 1080
+        color: "transparent"
+    }
+    SystemIndicators {
+        id: barIndicators
+        parent: testHost.contentItem
+        services: services
+        x: 8
+        y: 8
+    }
+    ControlCentre {
+        id: centre
+        hostItem: testHost.contentItem
+        services: services
+        indicators: indicators
+        bluetoothAdapter: adapter
+    }
+    ControlCentre {
+        id: nativeCentre
+        services: services
+        indicators: indicators
+        bluetoothAdapter: adapter
+        mediaPlayers: []
+    }
     TestCase {
         parent: centre.contentItem
         name: "ControlCentreServices"
         when: true
-        function check(value, message) { checks += "CHECK " + value + " " + message + "\n"; results.setText(checks); verify(value, message); }
+        function check(value, message) {
+            checks += "CHECK " + value + " " + message + "\n";
+            results.setText(checks);
+            verify(value, message);
+        }
         function visibleTitle(item, text) {
-            if (item.objectName === "controlRowTitle" && item.visible && item.text === text) return item;
+            if (item.objectName === "controlRowTitle" && item.visible && item.text === text)
+                return item;
             for (const child of item.children || []) {
                 const found = visibleTitle(child, text);
-                if (found) return found;
+                if (found)
+                    return found;
             }
             return null;
         }
         function test_scrolling_names_and_stable_width() {
-            if (Quickshell.env("BINGUX_CONTROL_STATUS_ONLY")) return;
+            if (Quickshell.env("BINGUX_CONTROL_STATUS_ONLY"))
+                return;
             centre.visible = true;
             const detail = findChild(centre.contentItem, "controlDetailPage");
             detail.active = false; // Fixture data only; no discovery or PipeWire tracking.
@@ -146,7 +277,14 @@ ShellRoot {
             microphoneNode.description = longName;
             detail.audioOutputs = [microphoneNode];
             detail.audioInputs = [microphoneNode];
-            detail.connections = [{uuid: "fixture", type: "802-11-wireless", name: longName, connected: true}];
+            detail.connections = [
+                {
+                    uuid: "fixture",
+                    type: "802-11-wireless",
+                    name: longName,
+                    connected: true
+                }
+            ];
             detail.wirelessNetworks = [];
             for (const page of ["bluetooth", "audio", "input", "network"]) {
                 centre.openDetail(page === "input" ? "audio" : page, null, page === "input" ? "input" : "output");
@@ -172,7 +310,8 @@ ShellRoot {
             const list = findChild(detail, "controlDeviceList");
             const bar = findChild(detail, "controlDeviceScrollbar");
             check(list.scrollable && bar.x >= list.x + list.width, "overflow scrollbar occupies outer padding, outside device rows");
-            if (Quickshell.env("BINGUX_CONTROL_SCREENSHOT")) centre.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_CONTROL_SCREENSHOT") + ".scrolling.png"));
+            if (Quickshell.env("BINGUX_CONTROL_SCREENSHOT"))
+                centre.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_CONTROL_SCREENSHOT") + ".scrolling.png"));
             wait(100);
             centre.openDetail("bluetooth");
             for (let frame = 0; frame < 16; frame++) {
@@ -186,15 +325,21 @@ ShellRoot {
         }
         function test_status_indicators() {
             const actionCount = services.actions.length;
-            for (const name of ["vpn", "dnd", "nightLight", "power", "awake"]) services.setControl(name, true);
+            for (const name of ["vpn", "dnd", "nightLight", "power", "awake"])
+                services.setControl(name, true);
             wait(50);
             check(barIndicators.extraIndicators.filter(row => row.key !== "microphone").length === 5, "all opted-in controls have top-bar indicators");
-            for (const name of ["vpn", "dnd", "nightLight", "power", "awake"]) check(findChild(barIndicators, "controlStatus_" + name) !== null, "status icon renders: " + name);
+            for (const name of ["vpn", "dnd", "nightLight", "power", "awake"])
+                check(findChild(barIndicators, "controlStatus_" + name) !== null, "status icon renders: " + name);
             check(services.statusVisible && !centre.visible, "status monitoring continues with Control Centre closed");
             check(barIndicators.extraIndicators.find(row => row.key === "vpn").active, "connected VPN has an active indicator");
-            if (Quickshell.env("BINGUX_CONTROL_SCREENSHOT")) barIndicators.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_CONTROL_SCREENSHOT") + ".indicators.png"));
+            if (Quickshell.env("BINGUX_CONTROL_SCREENSHOT"))
+                barIndicators.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_CONTROL_SCREENSHOT") + ".indicators.png"));
             wait(100);
-            services.vpns = services.vpns.map(vpn => Object.assign({}, vpn, {connected: false, subtitle: "Disconnected"}));
+            services.vpns = services.vpns.map(vpn => Object.assign({}, vpn, {
+                    connected: false,
+                    subtitle: "Disconnected"
+                }));
             check(!barIndicators.extraIndicators.find(row => row.key === "vpn").active && !barIndicators.extraStatusDescription.includes("VPN: Disconnected"), "inactive VPN is omitted from the top-bar description");
             const vpnIcon = findChild(barIndicators, "controlStatus_vpn");
             check(!vpnIcon.shown, "disconnected VPN exits");
@@ -222,7 +367,8 @@ ShellRoot {
             check(services.actions.length === actionCount, "status rendering never changes system settings");
         }
         function test_z_opening_size() {
-            if (Quickshell.env("BINGUX_CONTROL_STATUS_ONLY")) return;
+            if (Quickshell.env("BINGUX_CONTROL_STATUS_ONLY"))
+                return;
             centre.visible = true;
             wait(300);
             const fullHeight = centre.popupHeight;
@@ -249,7 +395,8 @@ ShellRoot {
             wait(300);
         }
         function test_optional_controls() {
-            if (Quickshell.env("BINGUX_CONTROL_STATUS_ONLY")) return;
+            if (Quickshell.env("BINGUX_CONTROL_STATUS_ONLY"))
+                return;
             centre.mediaPlayers = [];
             centre.visible = true;
             wait(500);
@@ -266,7 +413,8 @@ ShellRoot {
             check(tail.subtitle === "Exit node active", "exit node status is explicit");
             mouseClick(findChild(tail, "controlVpn_tailscaleSwitch"));
             check(services.actions.length === 1 && services.actions[0].id === "tailscale" && !services.actions[0].enabled, "VPN switch requests only its own service action");
-            if (Quickshell.env("BINGUX_CONTROL_SCREENSHOT")) centre.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_CONTROL_SCREENSHOT") + ".vpn.png"));
+            if (Quickshell.env("BINGUX_CONTROL_SCREENSHOT"))
+                centre.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_CONTROL_SCREENSHOT") + ".vpn.png"));
             mouseClick(findChild(extra, "controlExtrasBack"));
             wait(250);
             const customise = findChild(centre.contentItem, "controlCustomise");
@@ -278,7 +426,8 @@ ShellRoot {
                 check(services.showControl(name), "optional control can be added: " + name);
             }
             check(services.actions.length === 1 && !services.keepAwake, "adding controls does not enable their features");
-            if (Quickshell.env("BINGUX_CONTROL_SCREENSHOT")) centre.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_CONTROL_SCREENSHOT") + ".customise.png"));
+            if (Quickshell.env("BINGUX_CONTROL_SCREENSHOT"))
+                centre.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_CONTROL_SCREENSHOT") + ".customise.png"));
             mouseClick(findChild(extra, "controlExtrasBack"));
             wait(300);
             check(findChild(centre.contentItem, "controlNightLight").visible, "opted-in control appears on overview");
@@ -288,7 +437,8 @@ ShellRoot {
             check(services.keepAwake, "Keep Awake can be enabled explicitly");
             mouseClick(findChild(centre.contentItem, "controlKeepAwakeSwitch"));
             check(!services.keepAwake, "Keep Awake can be stopped");
-            if (Quickshell.env("BINGUX_CONTROL_SCREENSHOT")) centre.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_CONTROL_SCREENSHOT") + ".overview.png"));
+            if (Quickshell.env("BINGUX_CONTROL_SCREENSHOT"))
+                centre.body.parent.grabToImage(result => result.saveToFile(Quickshell.env("BINGUX_CONTROL_SCREENSHOT") + ".overview.png"));
             mouseClick(findChild(centre.contentItem, "controlPowerNavigation"));
             wait(250);
             check(centre.visible && centre.detailPage === "power", "power arrow opens the power mode page");
@@ -297,7 +447,9 @@ ShellRoot {
             mouseClick(saver);
             check(services.actions[2].kind === "power" && services.actions[2].profile === "power-saver", "power mode selection is explicit");
             state.doNotDisturb = true;
-            const notification = notificationFactory.createObject(state, {id: 998});
+            const notification = notificationFactory.createObject(state, {
+                id: 998
+            });
             state.accept(notification);
             check(state.allEntries.length === 1 && state.visibleEntries.length === 0, "Do Not Disturb saves history without a banner");
             state.doNotDisturb = false;
@@ -309,6 +461,9 @@ ShellRoot {
             centre.visible = false;
             wait(300);
         }
-        function cleanupTestCase() { results.setText(checks + "FAILURES " + qtest_results.failCount); Qt.quit(); }
+        function cleanupTestCase() {
+            results.setText(checks + "FAILURES " + qtest_results.failCount);
+            Qt.quit();
+        }
     }
 }

@@ -4,14 +4,21 @@ import threading
 import unittest
 from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location("web_suggestions", Path(__file__).resolve().parents[1] / "packages/bingux-searchd/web-suggestions.py")
+spec = importlib.util.spec_from_file_location(
+    "web_suggestions", Path(__file__).resolve().parents[1] / "packages/bingux-searchd/web-suggestions.py"
+)
 web = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(web)
 
 
 class SuggestionsTests(unittest.TestCase):
     def test_filters_duplicates_controls_and_bounds(self):
-        self.assertEqual(web.suggestions(["rust", ["rust", "Rust book", "rust BOOK", "bad\ntext", "x" * 513, "rust tutorial"]], "RUST"), ["Rust book", "rust tutorial"])
+        self.assertEqual(
+            web.suggestions(
+                ["rust", ["rust", "Rust book", "rust BOOK", "bad\ntext", "x" * 513, "rust tutorial"]], "RUST"
+            ),
+            ["Rust book", "rust tutorial"],
+        )
         self.assertEqual(web.suggestions({}, "rust"), [])
         self.assertEqual(web.suggestions(["rust", ["rust book"]], "rust", 0), [])
 
@@ -23,14 +30,17 @@ class SuggestionsTests(unittest.TestCase):
     def test_discards_inflight_stale_response(self):
         entered, release, completed = threading.Event(), threading.Event(), threading.Event()
         output = []
+
         def fetch(query):
             if query == "old query":
                 entered.set()
                 release.wait(2)
             return [query + " suggestion"]
+
         def emit(record):
             output.append(record)
             completed.set()
+
         provider = web.Provider(fetcher=fetch, emit=emit)
         threading.Thread(target=provider.run, daemon=True).start()
         provider.submit(dict(queryId="old", query="old query", limit=4))

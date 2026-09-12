@@ -1,4 +1,7 @@
-    FileView { id: layoutReport; path: Quickshell.env("BINGUX_LAYOUT_REPORT") }
+    FileView {
+        id: layoutReport
+        path: Quickshell.env("BINGUX_LAYOUT_REPORT")
+    }
     Process {
         id: compactInput
         property var gestureArguments: []
@@ -65,13 +68,13 @@
                 gesture(spacer, topBar, ["--drag-to", String(remove.x + remove.width / 2), String(remove.y + remove.height / 2)]);
                 tryVerify(() => !topBar.spacingWidgets.some(item => !item.flexible), 3000, "The visible Remove target accepts native container drags");
                 const dockArea = DesktopEditing.surfaces.find(surface => surface.zoneName === "dock");
-                gesture(clockPill, topBar, ["--drag-to", String(dockArea.screenRect.x + dockArea.screenRect.width / 2),
-                    String(dockArea.screenRect.y + dockArea.screenRect.height / 2)]);
+                gesture(clockPill, topBar, ["--drag-to", String(dockArea.screenRect.x + dockArea.screenRect.width / 2), String(dockArea.screenRect.y + dockArea.screenRect.height / 2)]);
                 tryVerify(() => editor.containerFor("clock") === "dock", 3000, "Native drag reaches the dock on the edited display");
                 compare(clockPill.parent, dock.widgetHost);
                 editor.undo();
                 tryVerify(() => editor.containerFor("clock") === "top-center", 3000);
-                if (editor.compactPalette) gesture(toggle, editor.nativeWindow, ["--click-only"]);
+                if (editor.compactPalette)
+                    gesture(toggle, editor.nativeWindow, ["--click-only"]);
                 tryCompare(palette, "visible", true);
                 gesture(findChild(palette, "customise-tab-Apps"), editor.paletteNativeWindow, ["--click-only"]);
                 tryCompare(editor, "tab", "Apps", 3000, "The reopened palette receives input above the real control centre");
@@ -81,7 +84,8 @@
                 // Inspector and palette must not compete for the same input area.
                 editor.selectContainer("control-centre");
                 tryCompare(findChild(editor.optionsContentItem, "customiseInspector"), "visible", true);
-                if (editor.compactPalette) verify(!palette.visible);
+                if (editor.compactPalette)
+                    verify(!palette.visible);
                 editor.optionsPage = "";
                 for (const edge of ["left", "top", "right"]) {
                     editor.change("sidebarEdge", edge);
@@ -97,9 +101,13 @@
                 layoutReport.setText("PASS");
             } catch (error) {
                 console.error("CUSTOMISE_TEST_FAILED", error.message, error.stack);
-                console.error("CONTAINER_SCREENS", JSON.stringify({bar: topBar.screen?.name, dock: dock.screen?.name,
-                    sidebar: terminalSidebar.editWindow.screen?.name, controls: controlCentre.nativeWindow.screen?.name,
-                    editor: desktopCustomiser.nativeWindow.screen?.name}));
+                console.error("CONTAINER_SCREENS", JSON.stringify({
+                    bar: topBar.screen?.name,
+                    dock: dock.screen?.name,
+                    sidebar: terminalSidebar.editWindow.screen?.name,
+                    controls: controlCentre.nativeWindow.screen?.name,
+                    editor: desktopCustomiser.nativeWindow.screen?.name
+                }));
                 layoutReport.setText("FAIL " + error.stack);
             }
         }

@@ -20,8 +20,7 @@ QtObject {
     property string connectionState: "unavailable"
     property int reconnectDelay: 250
     property bool rejectingConnection: false
-    property var requests: ({
-    })
+    property var requests: ({})
     property var expiryTimer
     property var osdSocket
     property var reconnectTimer
@@ -92,7 +91,6 @@ QtObject {
             const request = requests[monitorIndex];
             if (request.expiresAt > now && request.outputNames.indexOf(outputName) !== -1)
                 return request;
-
         }
         return null;
     }
@@ -103,11 +101,10 @@ QtObject {
             const expiry = requests[monitorIndex].expiresAt;
             if (earliestExpiry === 0 || expiry < earliestExpiry)
                 earliestExpiry = expiry;
-
         }
         if (earliestExpiry === 0) {
             expiryTimer.stop();
-            return ;
+            return;
         }
         expiryTimer.interval = Math.max(1, earliestExpiry - Date.now());
         expiryTimer.restart();
@@ -115,8 +112,7 @@ QtObject {
 
     function expireRequests() {
         const now = Date.now();
-        const next = {
-        };
+        const next = {};
         let changed = false;
         for (const monitorIndex in requests) {
             const request = requests[monitorIndex];
@@ -135,12 +131,10 @@ QtObject {
         if (!isOsdRecord(record))
             return false;
 
-        const request = Object.assign({
-        }, record, {
+        const request = Object.assign({}, record, {
             "expiresAt": Date.now() + requestTimeout
         });
-        const next = Object.assign({
-        }, requests);
+        const next = Object.assign({}, requests);
         next[String(record.monitorIndex)] = request;
         requests = next;
         scheduleExpiry();
@@ -149,22 +143,22 @@ QtObject {
 
     function ingest(recordText) {
         if (rejectingConnection)
-            return ;
+            return;
 
         if (utf8ByteLength(recordText) > maxRecordBytes) {
             failConnection();
-            return ;
+            return;
         }
         let record;
         try {
             record = JSON.parse(recordText);
         } catch (error) {
             failConnection();
-            return ;
+            return;
         }
         if (!acceptRecord(record)) {
             failConnection();
-            return ;
+            return;
         }
         reconnectDelay = 250;
     }
@@ -178,7 +172,7 @@ QtObject {
 
     function scheduleReconnect() {
         if (socketPath === "" || reconnectTimer.running)
-            return ;
+            return;
 
         reconnectTimer.interval = reconnectDelay;
         reconnectDelay = Math.min(reconnectDelay * 2, 5000);
@@ -197,30 +191,28 @@ QtObject {
                 root.rejectingConnection = false;
                 root.connectionState = "ready";
                 root.reconnectDelay = 250;
-                return ;
+                return;
             }
             if (root.socketPath === "") {
                 root.connectionState = "unavailable";
-                return ;
+                return;
             }
             root.connectionState = "connecting";
             root.scheduleReconnect();
         }
-        onError: function(_error) {
+        onError: function (_error) {
             root.failConnection();
         }
         Component.onCompleted: {
             if (root.socketPath !== "")
                 connected = true;
-
         }
 
         parser: SplitParser {
-            onRead: function(data) {
+            onRead: function (data) {
                 root.ingest(data);
             }
         }
-
     }
 
     reconnectTimer: Timer {
@@ -228,10 +220,9 @@ QtObject {
         onTriggered: {
             if (root.socketPath === "") {
                 root.connectionState = "unavailable";
-                return ;
+                return;
             }
             root.osdSocket.connected = true;
         }
     }
-
 }

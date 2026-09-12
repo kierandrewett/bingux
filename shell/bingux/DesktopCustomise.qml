@@ -23,22 +23,33 @@ Scope {
     UiSession {
         id: stackingSession
         sessionName: root.initialised ? "customise" : ""
-        state: ({visible: root.visible, surface: "bingux-customise", companionsAbove: true,
-            companions: DesktopEditing.surfaces.map(surface => surface.window.WlrLayershell.namespace)
-                .concat(["gnoblin-shell-popup", "bingux-sidebar-corner", "bingux-panel-outline"])})
+        state: ({
+                visible: root.visible,
+                surface: "bingux-customise",
+                companionsAbove: true,
+                companions: DesktopEditing.surfaces.map(surface => surface.window.WlrLayershell.namespace).concat(["gnoblin-shell-popup", "bingux-sidebar-corner", "bingux-panel-outline"])
+            })
     }
     // Reuse the render window after the first open so previews retain their scene.
     PanelWindow {
         id: editWindow
         visible: root.initialised
         color: "transparent"
-        anchors { top: true; bottom: true; left: true; right: true }
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
         exclusionMode: ExclusionMode.Ignore
         exclusiveZone: 0
         WlrLayershell.layer: stackingSession.capabilities.includes("ui-sessions") ? WlrLayer.Overlay : WlrLayer.Top
         WlrLayershell.namespace: "bingux-customise"
         WlrLayershell.keyboardFocus: root.visible && root.optionsPage === "" ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-        mask: Region { width: root.visible ? editWindow.width : 0; height: root.visible ? editWindow.height : 0 }
+        mask: Region {
+            width: root.visible ? editWindow.width : 0
+            height: root.visible ? editWindow.height : 0
+        }
     }
     // A pointer-transparent surface keeps the pickup image above native containers.
     PanelWindow {
@@ -47,18 +58,27 @@ Scope {
         visible: root.visible && root.draggedId !== ""
         screen: editWindow.screen
         color: "transparent"
-        anchors { top: true; bottom: true; left: true; right: true }
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "bingux-customise-drag"
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        mask: Region { width: 0; height: 0 }
+        mask: Region {
+            width: 0
+            height: 0
+        }
         Image {
             visible: root.visible && root.draggedId !== ""
             source: root.dragImage
             x: root.pointer.x - root.dragHotSpot.x
             y: root.pointer.y - root.dragHotSpot.y
-            width: root.dragSize.width; height: root.dragSize.height
+            width: root.dragSize.width
+            height: root.dragSize.height
             cache: false
         }
     }
@@ -72,7 +92,8 @@ Scope {
             enabled: DesktopEditing.active
             keys: ["application/x-bingux-widget"]
             function track(event) {
-                if (!root.draggedId) return;
+                if (!root.draggedId)
+                    return;
                 root.pointer = DesktopEditing.point(this, modelData, event.x, event.y);
                 root.hoverZone = "";
                 event.accepted = true;
@@ -86,12 +107,22 @@ Scope {
         visible: root.initialised
         screen: editWindow.screen
         color: "transparent"
-        anchors { top: true; bottom: true; left: true; right: true }
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "gnoblin-shell-popup"
         WlrLayershell.keyboardFocus: root.visible && root.optionsPage !== "" ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-        mask: Region { x: optionsPopover.x; y: optionsPopover.y; width: root.visible && root.optionsPage ? optionsPopover.width : 0; height: root.visible && root.optionsPage ? optionsPopover.height : 0 }
+        mask: Region {
+            x: optionsPopover.x
+            y: optionsPopover.y
+            width: root.visible && root.optionsPage ? optionsPopover.width : 0
+            height: root.visible && root.optionsPage ? optionsPopover.height : 0
+        }
         contentItem.Keys.onEscapePressed: root.optionsPage = ""
     }
     property var desktop: ({})
@@ -100,41 +131,59 @@ Scope {
     property var undoStack: []
     property var redoStack: []
     property bool groupingChange: false
-    function snapshot() { return JSON.stringify({desktop, layout}); }
+    function snapshot() {
+        return JSON.stringify({
+            desktop,
+            layout
+        });
+    }
     function checkpoint() {
-        if (groupingChange) return;
+        if (groupingChange)
+            return;
         const state = snapshot();
-        if (undoStack[undoStack.length - 1] !== state) undoStack = undoStack.slice(-49).concat([state]);
+        if (undoStack[undoStack.length - 1] !== state)
+            undoStack = undoStack.slice(-49).concat([state]);
         redoStack = [];
     }
     function restoreSnapshot(state) {
         const saved = JSON.parse(state);
-        desktop = saved.desktop; layout = saved.layout;
+        desktop = saved.desktop;
+        layout = saved.layout;
         optionsPage = "";
     }
     function undo() {
-        if (!undoStack.length || draggedId) return;
+        if (!undoStack.length || draggedId)
+            return;
         redoStack = redoStack.concat([snapshot()]);
         const state = undoStack[undoStack.length - 1];
-        undoStack = undoStack.slice(0, -1); restoreSnapshot(state);
+        undoStack = undoStack.slice(0, -1);
+        restoreSnapshot(state);
     }
     function redo() {
-        if (!redoStack.length || draggedId) return;
+        if (!redoStack.length || draggedId)
+            return;
         undoStack = undoStack.concat([snapshot()]);
         const state = redoStack[redoStack.length - 1];
-        redoStack = redoStack.slice(0, -1); restoreSnapshot(state);
+        redoStack = redoStack.slice(0, -1);
+        restoreSnapshot(state);
     }
     function restoreDefaults() {
-        if (!settings.desktopDefaults || draggedId) return;
+        if (!settings.desktopDefaults || draggedId)
+            return;
         checkpoint();
         const defaults = JSON.parse(JSON.stringify(settings.desktopDefaults));
         desktop = Object.assign({}, desktop, defaults, {
-            layoutVersion: 1, dockApps: desktop.dockApps, sidebarEdge: defaults.sidebarEdge || "right",
-            layout: DesktopLayout.defaults(), controlLayout: ControlLayout.defaults(), controlOrder: DesktopLayout.controlOrder(),
+            layoutVersion: 1,
+            dockApps: desktop.dockApps,
+            sidebarEdge: defaults.sidebarEdge || "right",
+            layout: DesktopLayout.defaults(),
+            controlLayout: ControlLayout.defaults(),
+            controlOrder: DesktopLayout.controlOrder(),
             controlCentre: Object.assign({}, ControlCentreServices.defaultControls)
         });
         layout = desktop.layout;
-        optionsPage = ""; selectedWidget = "";
+        optionsPage = "";
+        selectedWidget = "";
     }
     property string tab: "Widgets"
     property string appFilter: ""
@@ -142,18 +191,17 @@ Scope {
     property bool behaviourExpanded: false
     property rect paletteSelection: Qt.rect(0, 0, 0, 0)
     readonly property string inspectedZone: optionsPage === "Container" ? (ControlLayout.isContainer(selectedContainer) ? DesktopLayout.zone(layout, selectedContainer) || "control-centre" : selectedContainer) : optionsPage === "Dock" ? "dock" : optionsPage === "Sidebar" ? "sidebar" : containerFor(selectedWidget)
-    readonly property string inspectionTargetId: optionsPage === "Container" && ControlLayout.isContainer(selectedContainer) ? selectedContainer
-        : ["Widget", "Move"].includes(optionsPage) ? selectedWidget : ""
+    readonly property string inspectionTargetId: optionsPage === "Container" && ControlLayout.isContainer(selectedContainer) ? selectedContainer : ["Widget", "Move"].includes(optionsPage) ? selectedWidget : ""
     readonly property var inspectionSurface: {
         const visibleSurfaces = DesktopEditing.surfaces.filter(area => area.visible && area.window.visible);
-        return (inspectionTargetId ? visibleSurfaces.find(area => area.expandedEntries.some(entry => entry.id === inspectionTargetId && entry.item?.visible)) : null)
-            || visibleSurfaces.find(area => area.zoneName === inspectedZone);
+        return (inspectionTargetId ? visibleSurfaces.find(area => area.expandedEntries.some(entry => entry.id === inspectionTargetId && entry.item?.visible)) : null) || visibleSurfaces.find(area => area.zoneName === inspectedZone);
     }
     readonly property rect inspectionAnchor: {
         const surface = inspectionSurface;
         if (surface) {
             // Keep the inspector clear of the whole temporary popup.
-            if (surface.sourceOnly) return surface.screenRect;
+            if (surface.sourceOnly)
+                return surface.screenRect;
             const item = inspectionTargetId ? surface.expandedEntries.find(entry => entry.id === inspectionTargetId)?.item : null;
             if (item && item.visible) {
                 const geometry = [item.x, item.y, item.width, item.height, surface.screenRect];
@@ -164,8 +212,14 @@ Scope {
         }
         return paletteSelection.width ? paletteSelection : Qt.rect(palette.x, palette.y + 100, 160, 100);
     }
-    onOptionsPageChanged: { iconsExpanded = false; behaviourExpanded = false; }
-    onDraggedIdChanged: if (draggedId) { optionsPage = ""; paletteOpen = false; }
+    onOptionsPageChanged: {
+        iconsExpanded = false;
+        behaviourExpanded = false;
+    }
+    onDraggedIdChanged: if (draggedId) {
+        optionsPage = "";
+        paletteOpen = false;
+    }
     readonly property real paletteSpace: width - leftInset - rightInset - Theme.notificationWidth - 112
     readonly property real paletteHeight: height - Theme.barHeight - topInset - 220
     readonly property bool compactPalette: paletteSpace < 240 || paletteHeight < 300
@@ -177,17 +231,52 @@ Scope {
         visible: root.visible && root.compactPalette && (root.paletteOpen || !!root.draggedId) && !root.optionsPage
         screen: editWindow.screen
         color: "transparent"
-        anchors { top: true; bottom: true; left: true; right: true }
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "gnoblin-shell-popup"
         WlrLayershell.keyboardFocus: root.visible && root.paletteOpen && !root.optionsPage ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-        mask: Region { x: palette.x; y: palette.y; width: palette.visible ? palette.width : 0; height: palette.visible ? palette.height : 0 }
+        mask: Region {
+            x: palette.x
+            y: palette.y
+            width: palette.visible ? palette.width : 0
+            height: palette.visible ? palette.height : 0
+        }
         contentItem.Keys.onEscapePressed: root.paletteOpen = false
     }
     property string optionsPage: ""
     property string selectedContainer: "top-right"
-    readonly property var containerChoices: [{id: "top-left", label: "Top left"}, {id: "top-center", label: "Top centre"}, {id: "top-right", label: "Top right"}, {id: "dock", label: "Dock"}, {id: "sidebar", label: "Sidebar"}, {id: "control-centre", label: "Control centre"}].concat(ControlLayout.widgets.filter(item => ControlLayout.isContainer(item.id)))
+    readonly property var containerChoices: [
+        {
+            id: "top-left",
+            label: "Top left"
+        },
+        {
+            id: "top-center",
+            label: "Top centre"
+        },
+        {
+            id: "top-right",
+            label: "Top right"
+        },
+        {
+            id: "dock",
+            label: "Dock"
+        },
+        {
+            id: "sidebar",
+            label: "Sidebar"
+        },
+        {
+            id: "control-centre",
+            label: "Control centre"
+        }
+    ].concat(ControlLayout.widgets.filter(item => ControlLayout.isContainer(item.id)))
     readonly property var iconChoices: ["system-search-symbolic", "preferences-system-symbolic", "x-office-calendar-symbolic", "preferences-system-notifications-symbolic", "computer-symbolic", "input-keyboard-symbolic", "view-more-symbolic", "microphone-sensitivity-high-symbolic", "media-record-symbolic", "utilities-terminal-symbolic", "accessories-text-editor-symbolic", "applications-multimedia-symbolic", "view-list-symbolic", "network-wireless-symbolic", "bluetooth-active-symbolic", "network-vpn-symbolic", "notifications-disabled-symbolic", "night-light-symbolic", "power-profile-balanced-symbolic", "display-brightness-symbolic", "audio-volume-high-symbolic", "audio-input-microphone-symbolic", "system-lock-screen-symbolic", "avatar-default-symbolic", "starred-symbolic", "user-home-symbolic", "folder-symbolic", "web-browser-symbolic", "mail-unread-symbolic", "camera-photo-symbolic", "view-pin-symbolic", "document-edit-symbolic"]
     property string selectedWidget: ""
     readonly property bool appearanceEditable: !ControlLayout.isContainer(selectedWidget) && !["control-divider", "control-header-space"].includes(selectedWidget) && !DesktopLayout.isSpacing(selectedWidget) && (!ControlLayout.groupFor(selectedWidget) || ControlLayout.isPortable(selectedWidget))
@@ -200,14 +289,24 @@ Scope {
     property point pointer: Qt.point(0, 0)
     property string wallpaper: ""
     property bool restoreSettings: false
-    onVisibleChanged: if (!visible && restoreSettings) { restoreSettings = false; settings.visible = true; }
+    onVisibleChanged: if (!visible && restoreSettings) {
+        restoreSettings = false;
+        settings.visible = true;
+    }
     property bool applying: false
     property var originalDesktop: ({})
     property bool originalDirty: false
     property var originalChanges: ({})
     function cancel() {
-        if (applying) { settings.draft = Object.assign({}, settings.draft, {desktop: originalDesktop}); settings.dirty = originalDirty; settings.changedSettings = originalChanges; }
-        applying = false; visible = false;
+        if (applying) {
+            settings.draft = Object.assign({}, settings.draft, {
+                desktop: originalDesktop
+            });
+            settings.dirty = originalDirty;
+            settings.changedSettings = originalChanges;
+        }
+        applying = false;
+        visible = false;
     }
     readonly property real topInset: settings.currentSidebarEdge === "top" ? (DesktopEditing.surfaces.find(surface => surface.zoneName === "sidebar" && surface.window.visible)?.screenRect.height || 0) : 0
     readonly property real leftInset: settings.currentSidebarEdge === "left" ? sidebarExtent : 0
@@ -218,37 +317,67 @@ Scope {
     }
     readonly property var zones: DesktopEditing.surfaces
     function selectContainer(id) {
-        selectedContainer = id; selectedWidget = "";
+        selectedContainer = id;
+        selectedWidget = "";
         optionsPage = "Container";
     }
-    function appId(value) { return value.endsWith(".desktop") ? value.slice(0, -8) : value; }
-    function appEntry(value) { return DesktopEntries.byId(value) || DesktopEntries.byId(value + ".desktop") || DesktopEntries.heuristicLookup(value); }
-    function baseInfo(id) {
-        if (!id.startsWith("app:")) return ExtensionRegistry.widget(id) || ControlLayout.widget(id) || DesktopLayout.widget(id);
-        const entry = appEntry(id.slice(4));
-        return {id, label: entry?.name || id.slice(4), icon: entry?.icon || "application-x-executable", app: true};
+    function appId(value) {
+        return value.endsWith(".desktop") ? value.slice(0, -8) : value;
     }
-    function memberGroup(id) { return ControlLayout.groupFor(id) || (DesktopLayout.controlWidgets.some(item => item.id === id) ? "controls-tiles" : ""); }
-    function containerFor(id) { if (ControlLayout.isExternal(id) && ControlLayout.contains(desktop.controlLayout, "control-centre", id)) return "control-centre"; if (memberGroup(id)) return DesktopLayout.zone(layout, id) || DesktopLayout.zone(layout, memberGroup(id)) || "control-centre"; return id.startsWith("app:") ? "dock" : DesktopLayout.zone(layout, id) || (id.startsWith("control-") ? "control-centre" : ""); }
+    function appEntry(value) {
+        return DesktopEntries.byId(value) || DesktopEntries.byId(value + ".desktop") || DesktopEntries.heuristicLookup(value);
+    }
+    function baseInfo(id) {
+        if (!id.startsWith("app:"))
+            return ExtensionRegistry.widget(id) || ControlLayout.widget(id) || DesktopLayout.widget(id);
+        const entry = appEntry(id.slice(4));
+        return {
+            id,
+            label: entry?.name || id.slice(4),
+            icon: entry?.icon || "application-x-executable",
+            app: true
+        };
+    }
+    function memberGroup(id) {
+        return ControlLayout.groupFor(id) || (DesktopLayout.controlWidgets.some(item => item.id === id) ? "controls-tiles" : "");
+    }
+    function containerFor(id) {
+        if (ControlLayout.isExternal(id) && ControlLayout.contains(desktop.controlLayout, "control-centre", id))
+            return "control-centre";
+        if (memberGroup(id))
+            return DesktopLayout.zone(layout, id) || DesktopLayout.zone(layout, memberGroup(id)) || "control-centre";
+        return id.startsWith("app:") ? "dock" : DesktopLayout.zone(layout, id) || (id.startsWith("control-") ? "control-centre" : "");
+    }
     function appearance(id) {
         const item = baseInfo(id);
         return DesktopLayout.presentation(desktop, id, containerFor(id), item?.label || "", item?.icon || "", id !== "clock", id === "clock");
     }
-    function info(id) { return Object.assign({}, baseInfo(id), appearance(id)); }
+    function info(id) {
+        return Object.assign({}, baseInfo(id), appearance(id));
+    }
     function widgetOption(key, value) {
         const options = Object.assign({}, desktop.widgetOptions || {});
-        options[selectedWidget] = Object.assign({}, options[selectedWidget] || {}, {[key]: value});
+        options[selectedWidget] = Object.assign({}, options[selectedWidget] || {}, {
+            [key]: value
+        });
         change("widgetOptions", options);
     }
     function containerDisplay(value) {
         const options = Object.assign({}, desktop.containers || {});
-        if (value === "inherit") delete options[selectedContainer];
-        else options[selectedContainer] = {display: value};
+        if (value === "inherit")
+            delete options[selectedContainer];
+        else
+            options[selectedContainer] = {
+                display: value
+            };
         change("containers", options);
     }
     readonly property var applications: ApplicationCatalog.entries.filter(entry => !appFilter || entry.name.toLowerCase().includes(appFilter.toLowerCase())).slice().sort((a, b) => a.name.localeCompare(b.name))
     readonly property var dockApplications: {
-        const saved = desktop.dockApps || {pinnedApps: [], order: []};
+        const saved = desktop.dockApps || {
+            pinnedApps: [],
+            order: []
+        };
         const order = saved.order.map(id => appId(appEntry(id)?.id || id));
         return saved.pinnedApps.slice().sort((a, b) => {
             const ai = order.indexOf(a), bi = order.indexOf(b);
@@ -257,25 +386,39 @@ Scope {
     }
     function orderFor(zone, id) {
         const group = ControlLayout.groupFor(id);
-        if (ControlLayout.isContainer(zone)) return zone === "controls-tiles" ? (desktop.controlOrder || DesktopLayout.controlOrder()).map(name => "control-" + name) : ControlLayout.items(desktop.controlLayout, zone);
-        if (zone === "control-centre") return ControlLayout.isExternal(id) || DesktopLayout.isDecoration(id) ? ControlLayout.items(desktop.controlLayout, zone) : group ? ControlLayout.items(desktop.controlLayout, group)
-            : (desktop.controlOrder || DesktopLayout.controlOrder()).map(name => "control-" + name);
+        if (ControlLayout.isContainer(zone))
+            return zone === "controls-tiles" ? (desktop.controlOrder || DesktopLayout.controlOrder()).map(name => "control-" + name) : ControlLayout.items(desktop.controlLayout, zone);
+        if (zone === "control-centre")
+            return ControlLayout.isExternal(id) || DesktopLayout.isDecoration(id) ? ControlLayout.items(desktop.controlLayout, zone) : group ? ControlLayout.items(desktop.controlLayout, group) : (desktop.controlOrder || DesktopLayout.controlOrder()).map(name => "control-" + name);
         return zone === "dock" && id.startsWith("app:") ? dockApplications : layout[zone] || [];
     }
     function accepts(id, target) {
-        if (ControlLayout.isContainer(target)) return memberGroup(id) === target;
-        if (ControlLayout.groupFor(id) && !ControlLayout.isPortable(id)) return ["control-centre", "palette"].includes(target);
+        if (ControlLayout.isContainer(target))
+            return memberGroup(id) === target;
+        if (ControlLayout.groupFor(id) && !ControlLayout.isPortable(id))
+            return ["control-centre", "palette"].includes(target);
         return id.startsWith("app:") ? ["dock-apps", "dock", "palette"].includes(target) : DesktopLayout.accepts(id, target);
     }
     function open() {
-        if (!settings.shellHosted) { settings.requestShellCustomise(); return; }
+        if (!settings.shellHosted) {
+            settings.requestShellCustomise();
+            return;
+        }
         desktop = JSON.parse(JSON.stringify(settings.draft.desktop));
-        originalDesktop = JSON.parse(JSON.stringify(desktop)); originalDirty = settings.dirty;
+        originalDesktop = JSON.parse(JSON.stringify(desktop));
+        originalDirty = settings.dirty;
         originalChanges = JSON.parse(JSON.stringify(settings.changedSettings));
         desktop.sidebarEdge = desktop.sidebarEdge || settings.currentSidebarEdge;
         layout = JSON.parse(JSON.stringify(desktop.layout || settings.currentLayout || DesktopLayout.defaults()));
-        undoStack = []; redoStack = [];
-        selectedWidget = ""; draggedId = ""; applying = false; tab = "Widgets"; optionsPage = ""; appFilter = ""; paletteOpen = true;
+        undoStack = [];
+        redoStack = [];
+        selectedWidget = "";
+        draggedId = "";
+        applying = false;
+        tab = "Widgets";
+        optionsPage = "";
+        appFilter = "";
+        paletteOpen = true;
         restoreSettings = settings.visible;
         settings.visible = false;
         DesktopEditing.editor = root;
@@ -284,34 +427,58 @@ Scope {
         wallpaperReader.running = true;
         canvas.forceActiveFocus();
     }
-    function change(key, value) { if (JSON.stringify(desktop[key]) === JSON.stringify(value)) return; checkpoint(); desktop = Object.assign({}, desktop, {[key]: value}); }
+    function change(key, value) {
+        if (JSON.stringify(desktop[key]) === JSON.stringify(value))
+            return;
+        checkpoint();
+        desktop = Object.assign({}, desktop, {
+            [key]: value
+        });
+    }
     function put(id, target, index) {
-        if (!accepts(id, target)) return;
-        checkpoint(); groupingChange = true;
-        try { putItem(id, target, index); } finally { groupingChange = false; }
+        if (!accepts(id, target))
+            return;
+        checkpoint();
+        groupingChange = true;
+        try {
+            putItem(id, target, index);
+        } finally {
+            groupingChange = false;
+        }
     }
     function putItem(id, target, index) {
         if (DesktopLayout.isTemplate(id)) {
-            if (target === "palette") return;
-            const allPlacements = Object.assign({}, layout, {"control-centre": ControlLayout.items(desktop.controlLayout, "control-centre")});
+            if (target === "palette")
+                return;
+            const allPlacements = Object.assign({}, layout, {
+                "control-centre": ControlLayout.items(desktop.controlLayout, "control-centre")
+            });
             const created = DesktopLayout.freshInstanceId(allPlacements, id);
-            if (!created) return;
+            if (!created)
+                return;
             putItem(created, target, index);
             const options = Object.assign({}, desktop.widgetOptions || {});
             delete options[created];
-            if (options[id]) options[created] = Object.assign({}, options[id]);
+            if (options[id])
+                options[created] = Object.assign({}, options[id]);
             change("widgetOptions", options);
             return;
         }
         if (ControlLayout.isExternal(id)) {
             change("controlLayout", ControlLayout.move(desktop.controlLayout, "control-centre", id, target === "control-centre" ? index : -1));
             layout = DesktopLayout.move(layout, id, target === "control-centre" ? "palette" : target, index);
-            if (target === "dock") change("dock", true);
-            if (target === "sidebar") change("sidebar", true);
-            if (target === "sidebar" && DesktopLayout.widget(id)?.panel) sidebarPanelRequested(id);
-            if (id === "metrics" && target !== "palette") change("metrics", true);
+            if (target === "dock")
+                change("dock", true);
+            if (target === "sidebar")
+                change("sidebar", true);
+            if (target === "sidebar" && DesktopLayout.widget(id)?.panel)
+                sidebarPanelRequested(id);
+            if (id === "metrics" && target !== "palette")
+                change("metrics", true);
             if (target === "palette" && DesktopLayout.isDecoration(id)) {
-                const options = Object.assign({}, desktop.widgetOptions || {}); delete options[id]; change("widgetOptions", options);
+                const options = Object.assign({}, desktop.widgetOptions || {});
+                delete options[id];
+                change("widgetOptions", options);
             }
             return;
         }
@@ -326,13 +493,16 @@ Scope {
             change("controlLayout", next);
             if (ControlLayout.isPortable(id)) {
                 layout = DesktopLayout.move(layout, id, nativeTarget ? "palette" : target, index);
-                if (target === "dock") change("dock", true);
-                if (target === "sidebar") change("sidebar", true);
+                if (target === "dock")
+                    change("dock", true);
+                if (target === "sidebar")
+                    change("sidebar", true);
             }
             return;
         }
         if (id.startsWith("control-")) {
-            if (!accepts(id, target)) return;
+            if (!accepts(id, target))
+                return;
             const nativeTarget = target === "control-centre" || target === "controls-tiles";
             if (target === "control-centre" && !ControlLayout.contains(desktop.controlLayout, "control-centre", "controls-tiles")) {
                 layout = DesktopLayout.move(layout, "controls-tiles", "palette", 0);
@@ -340,176 +510,326 @@ Scope {
             }
             const name = id.slice(8);
             const order = (desktop.controlOrder || DesktopLayout.controlOrder()).filter(value => value !== name);
-            if (nativeTarget) order.splice(Math.max(0, Math.min(index, order.length)), 0, name);
+            if (nativeTarget)
+                order.splice(Math.max(0, Math.min(index, order.length)), 0, name);
             change("controlOrder", order);
             layout = DesktopLayout.move(layout, id, nativeTarget ? "palette" : target, index);
-            if (target === "dock") change("dock", true);
-            if (target === "sidebar") change("sidebar", true);
-            if (!["network", "bluetooth"].includes(name)) change("controlCentre", Object.assign({vpn: true, dnd: true, nightLight: false, power: false, awake: false}, desktop.controlCentre || {}, {[name]: target !== "palette"}));
+            if (target === "dock")
+                change("dock", true);
+            if (target === "sidebar")
+                change("sidebar", true);
+            if (!["network", "bluetooth"].includes(name))
+                change("controlCentre", Object.assign({
+                    vpn: true,
+                    dnd: true,
+                    nightLight: false,
+                    power: false,
+                    awake: false
+                }, desktop.controlCentre || {}, {
+                    [name]: target !== "palette"
+                }));
             return;
         }
         if (id.startsWith("app:")) {
-            if (!accepts(id, target)) return;
+            if (!accepts(id, target))
+                return;
             const pins = dockApplications.map(value => value.slice(4)).filter(value => value !== id.slice(4));
-            if (target !== "palette") pins.splice(Math.max(0, Math.min(index, pins.length)), 0, id.slice(4));
+            if (target !== "palette")
+                pins.splice(Math.max(0, Math.min(index, pins.length)), 0, id.slice(4));
             const oldOrder = desktop.dockApps?.order || [];
-            change("dockApps", {pinnedApps: pins, order: pins.concat(oldOrder.filter(value => !pins.includes(appId(appEntry(value)?.id || value))))});
-            if (target !== "palette") change("dock", true);
+            change("dockApps", {
+                pinnedApps: pins,
+                order: pins.concat(oldOrder.filter(value => !pins.includes(appId(appEntry(value)?.id || value))))
+            });
+            if (target !== "palette")
+                change("dock", true);
             return;
         }
         const previous = layout;
         layout = DesktopLayout.move(layout, id, target, index);
-        if (layout === previous) return;
+        if (layout === previous)
+            return;
         if (target === "palette" && DesktopLayout.isSpacing(id)) {
             const options = Object.assign({}, desktop.widgetOptions || {});
             delete options[id];
             change("widgetOptions", options);
         }
-        if (target === "dock") change("dock", true);
-        if (id === "metrics" && target !== "palette") change("metrics", true);
-        if (target === "sidebar") change("sidebar", true);
+        if (target === "dock")
+            change("dock", true);
+        if (id === "metrics" && target !== "palette")
+            change("metrics", true);
+        if (target === "sidebar")
+            change("sidebar", true);
     }
     function dragGlobal(id, point) {
-        draggedId = id; pointer = point; hoverZone = "";
+        draggedId = id;
+        pointer = point;
+        hoverZone = "";
         for (const area of DesktopEditing.surfaces) {
-            if (!area.visible || !area.window.visible) continue;
+            if (!area.visible || !area.window.visible)
+                continue;
             const rect = area.screenRect;
-            if (point.x < rect.x || point.y < rect.y || point.x > rect.x + rect.width || point.y > rect.y + rect.height) continue;
-            if (!accepts(id, area.zoneName)) continue;
+            if (point.x < rect.x || point.y < rect.y || point.x > rect.x + rect.width || point.y > rect.y + rect.height)
+                continue;
+            if (!accepts(id, area.zoneName))
+                continue;
             hoverZone = area.zoneName;
             hoverIndex = area.insertionIndex(point, id);
             return;
         }
         const palette = root.preview.paletteRect;
         if (point.x >= palette.x && point.x <= palette.x + palette.width && point.y >= palette.y && point.y <= palette.y + palette.height) {
-            hoverZone = "palette"; hoverIndex = 0;
+            hoverZone = "palette";
+            hoverIndex = 0;
         }
     }
     function release() {
-        if (draggedId && hoverZone) put(draggedId, hoverZone, hoverIndex);
-        draggedId = ""; hoverZone = "";
+        if (draggedId && hoverZone)
+            put(draggedId, hoverZone, hoverIndex);
+        draggedId = "";
+        hoverZone = "";
     }
     function apply() {
         settings.update("desktop", "layout", layout);
-        for (const key of Object.keys(desktop)) if (key !== "layout") settings.update("desktop", key, desktop[key]);
+        for (const key of Object.keys(desktop))
+            if (key !== "layout")
+                settings.update("desktop", key, desktop[key]);
         applying = true;
         settings.save();
     }
     Connections {
         target: root.settings
-        function onSaved() { if (root.applying) { root.applying = false; root.visible = false; } }
+        function onSaved() {
+            if (root.applying) {
+                root.applying = false;
+                root.visible = false;
+            }
+        }
     }
     Process {
         id: wallpaperReader
         command: root.settings.helper.concat(["wallpaper"])
-        stdout: StdioCollector { onStreamFinished: { try { root.wallpaper = JSON.parse(text).wallpaper || ""; } catch (_) {} } }
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.wallpaper = JSON.parse(text).wallpaper || "";
+                } catch (_) {}
+            }
+        }
     }
     component DragHandle: MouseArea {
-            required property string widgetId
-            required property Item dragVisual
-            anchors.fill: parent; hoverEnabled: true
-            preventStealing: true
-            cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-            property point start
-            property bool hadDrag: false
-            onPressed: mouse => { hadDrag = false; start = Qt.point(mouse.x, mouse.y); root.selectedWidget = widgetId; }
-            onPositionChanged: mouse => {
-                if (pressed && !hadDrag && Math.abs(mouse.x - start.x) + Math.abs(mouse.y - start.y) > 6) {
-                    hadDrag = true;
-                    nativeDrag.begin(widgetId, dragVisual, root.paletteNativeWindow, DesktopEditing.point(this, root.paletteNativeWindow, start.x, start.y));
-                }
-            }
-            onReleased: nativeDrag.cancelPending()
-            onCanceled: nativeDrag.cancelPending()
-            WidgetDrag { id: nativeDrag }
+        required property string widgetId
+        required property Item dragVisual
+        anchors.fill: parent
+        hoverEnabled: true
+        preventStealing: true
+        cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+        property point start
+        property bool hadDrag: false
+        onPressed: mouse => {
+            hadDrag = false;
+            start = Qt.point(mouse.x, mouse.y);
+            root.selectedWidget = widgetId;
         }
+        onPositionChanged: mouse => {
+            if (pressed && !hadDrag && Math.abs(mouse.x - start.x) + Math.abs(mouse.y - start.y) > 6) {
+                hadDrag = true;
+                nativeDrag.begin(widgetId, dragVisual, root.paletteNativeWindow, DesktopEditing.point(this, root.paletteNativeWindow, start.x, start.y));
+            }
+        }
+        onReleased: nativeDrag.cancelPending()
+        onCanceled: nativeDrag.cancelPending()
+        WidgetDrag {
+            id: nativeDrag
+        }
+    }
     component Chip: Item {
         id: chip
         objectName: "customise-widget-" + widgetId
         required property string widgetId
         readonly property var info: root.baseInfo(widgetId)
-        width: paletteGrid.cellWidth; height: paletteGrid.cellHeight
+        width: paletteGrid.cellWidth
+        height: paletteGrid.cellHeight
         opacity: root.draggedId === widgetId ? 0.35 : 1
-        Rectangle { anchors.fill: parent; anchors.margins: 4; radius: 8; color: chipMouse.containsMouse ? Theme.hover : "transparent" }
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 4
+            radius: 8
+            color: chipMouse.containsMouse ? Theme.hover : "transparent"
+        }
         Item {
-            x: 8; y: 8; width: parent.width - 16; height: parent.height - 44
-            WidgetPreview { id: widgetPreview; anchors.fill: parent; widgetId: chip.widgetId; visible: !chip.info?.app; metrics: root.settings.systemMetrics }
+            x: 8
+            y: 8
+            width: parent.width - 16
+            height: parent.height - 44
+            WidgetPreview {
+                id: widgetPreview
+                anchors.fill: parent
+                widgetId: chip.widgetId
+                visible: !chip.info?.app
+                metrics: root.settings.systemMetrics
+            }
             AppIcon {
                 id: appPreview
                 visible: !!chip.info?.app
                 anchors.centerIn: parent
                 implicitSize: root.desktop.dockSize || 56
-                group: ({id: chip.widgetId.slice(4), desktopEntry: root.appEntry(chip.widgetId.slice(4))})
+                group: ({
+                        id: chip.widgetId.slice(4),
+                        desktopEntry: root.appEntry(chip.widgetId.slice(4))
+                    })
                 activeStreams: []
                 notifications: []
             }
         }
         Text {
-            x: 8; y: parent.height - 28; width: parent.width - 16
-            text: chip.info?.label || ""; textFormat: Text.PlainText
-            horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
-            color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall
+            x: 8
+            y: parent.height - 28
+            width: parent.width - 16
+            text: chip.info?.label || ""
+            textFormat: Text.PlainText
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
+            color: Theme.text
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSmall
         }
         activeFocusOnTab: true
-        Accessible.role: Accessible.Button; Accessible.name: info?.label || "Widget"
+        Accessible.role: Accessible.Button
+        Accessible.name: info?.label || "Widget"
         function inspect() {
             const point = DesktopEditing.point(chip, root.paletteNativeWindow, 0, 0);
             root.paletteSelection = Qt.rect(point.x, point.y, width, height);
-            root.selectedWidget = widgetId; root.optionsPage = "Widget";
+            root.selectedWidget = widgetId;
+            root.optionsPage = "Widget";
         }
         Keys.onReturnPressed: inspect()
-        DragHandle { id: chipMouse; widgetId: chip.widgetId; dragVisual: chip.info?.app ? appPreview : widgetPreview.visualItem; onDoubleClicked: chip.inspect() }
+        DragHandle {
+            id: chipMouse
+            widgetId: chip.widgetId
+            dragVisual: chip.info?.app ? appPreview : widgetPreview.visualItem
+            onDoubleClicked: chip.inspect()
+        }
     }
     Item {
         id: canvas
         parent: editWindow.contentItem
         visible: root.visible
         readonly property rect paletteRect: {
-            if (!root.compactPalette) return Qt.rect(palette.x, palette.y, palette.width, palette.height);
+            if (!root.compactPalette)
+                return Qt.rect(palette.x, palette.y, palette.width, palette.height);
             const point = paletteToggle.mapToItem(canvas, 0, 0);
             return Qt.rect(point.x, point.y, paletteToggle.width, paletteToggle.height);
         }
         anchors.fill: parent
         focus: true
         Keys.onEscapePressed: {
-            if (root.draggedId) { root.draggedId = ""; root.hoverZone = ""; }
-            else if (root.optionsPage) root.optionsPage = "";
-            else if (!root.settings.busy) root.cancel();
+            if (root.draggedId) {
+                root.draggedId = "";
+                root.hoverZone = "";
+            } else if (root.optionsPage)
+                root.optionsPage = "";
+            else if (!root.settings.busy)
+                root.cancel();
         }
-        Image { anchors.fill: parent; source: root.wallpaper; fillMode: Image.PreserveAspectCrop; asynchronous: true }
-        Rectangle { anchors.fill: parent; color: Qt.rgba(0, 0, 0, 0.48) }
+        Image {
+            anchors.fill: parent
+            source: root.wallpaper
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+        }
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.rgba(0, 0, 0, 0.48)
+        }
         Item {
             id: palette
             objectName: "customisePalette"
             readonly property string zoneName: "palette"
             parent: root.compactPalette ? paletteWindow.contentItem : canvas
             visible: root.visible && (!root.compactPalette || (root.paletteOpen && !root.draggedId && !root.optionsPage))
-            WidgetDropArea { anchors.fill: parent; zoneName: "palette"; window: root.paletteNativeWindow }
+            WidgetDropArea {
+                anchors.fill: parent
+                zoneName: "palette"
+                window: root.paletteNativeWindow
+            }
             x: root.compactPalette ? (canvas.width - width) / 2 : root.leftInset + 24
             y: Theme.barHeight + 40 + (root.compactPalette ? 0 : root.topInset)
             width: root.compactPalette ? Math.min(600, canvas.width - 48) : root.paletteSpace
             height: canvas.height - y - 180
-            Rectangle { anchors.fill: parent; anchors.margins: root.compactPalette ? -12 : 0; radius: 8; color: root.compactPalette ? Theme.popupSurface : "transparent"; border.width: root.compactPalette || root.hoverZone === "palette" ? 1 : 0; border.color: root.hoverZone === "palette" ? Theme.accent : Theme.outline }
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: root.compactPalette ? -12 : 0
+                radius: 8
+                color: root.compactPalette ? Theme.popupSurface : "transparent"
+                border.width: root.compactPalette || root.hoverZone === "palette" ? 1 : 0
+                border.color: root.hoverZone === "palette" ? Theme.accent : Theme.outline
+            }
             ColumnLayout {
-                anchors.fill: parent; spacing: 14
+                anchors.fill: parent
+                spacing: 14
                 RowLayout {
                     Layout.fillWidth: true
-                    Text { Layout.fillWidth: true; text: root.draggedId ? "Drop into a highlighted container, or here to remove." : "Drag items into your desktop."; wrapMode: Text.Wrap; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSize; font.weight: Font.DemiBold }
-                    IconButton { visible: root.compactPalette; objectName: "customisePaletteClose"; iconName: "window-close-symbolic"; label: "Close widgets"; onClicked: root.paletteOpen = false }
+                    Text {
+                        Layout.fillWidth: true
+                        text: root.draggedId ? "Drop into a highlighted container, or here to remove." : "Drag items into your desktop."
+                        wrapMode: Text.Wrap
+                        color: Theme.text
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize
+                        font.weight: Font.DemiBold
+                    }
+                    IconButton {
+                        visible: root.compactPalette
+                        objectName: "customisePaletteClose"
+                        iconName: "window-close-symbolic"
+                        label: "Close widgets"
+                        onClicked: root.paletteOpen = false
+                    }
                 }
                 RowLayout {
                     spacing: 4
-                    Repeater { model: ["Widgets", "Apps"]; ActionButton { required property string modelData; objectName: "customise-tab-" + modelData; text: modelData; flat: root.tab !== modelData; onClicked: { root.tab = modelData; root.appFilter = ""; root.optionsPage = ""; } } }
-                    Item { Layout.fillWidth: true }
+                    Repeater {
+                        model: ["Widgets", "Apps"]
+                        ActionButton {
+                            required property string modelData
+                            objectName: "customise-tab-" + modelData
+                            text: modelData
+                            flat: root.tab !== modelData
+                            onClicked: {
+                                root.tab = modelData;
+                                root.appFilter = "";
+                                root.optionsPage = "";
+                            }
+                        }
+                    }
+                    Item {
+                        Layout.fillWidth: true
+                    }
                 }
-                SettingsField { objectName: "customiseFilter"; label: root.tab === "Apps" ? "Find an app" : "Find a widget"; placeholderText: root.tab === "Apps" ? "Search installed apps" : "Search widgets"; Layout.margins: 0; text: root.appFilter; onEdited: value => root.appFilter = value }
+                SettingsField {
+                    objectName: "customiseFilter"
+                    label: root.tab === "Apps" ? "Find an app" : "Find a widget"
+                    placeholderText: root.tab === "Apps" ? "Search installed apps" : "Search widgets"
+                    Layout.margins: 0
+                    text: root.appFilter
+                    onEdited: value => root.appFilter = value
+                }
                 GridView {
                     id: paletteGrid
                     objectName: "customiseWidgetGrid"
-                    Layout.fillWidth: true; Layout.fillHeight: true
-                    cellWidth: width / Math.max(1, Math.floor(width / 190)); cellHeight: 144; clip: true; cacheBuffer: 100; reuseItems: true
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    cellWidth: width / Math.max(1, Math.floor(width / 190))
+                    cellHeight: 144
+                    clip: true
+                    cacheBuffer: 100
+                    reuseItems: true
                     model: !root.visible ? [] : root.tab === "Apps" ? root.applications.map(entry => "app:" + root.appId(entry.id)) : DesktopLayout.layoutWidgets.concat(DesktopLayout.decorationWidgets, DesktopLayout.widgets, DesktopLayout.controlWidgets, ControlLayout.widgets, ExtensionRegistry.widgets).filter(widget => !root.appFilter || widget.label.toLowerCase().includes(root.appFilter.toLowerCase())).map(widget => widget.id)
-                    delegate: Chip { required property string modelData; widgetId: modelData }
+                    delegate: Chip {
+                        required property string modelData
+                        widgetId: modelData
+                    }
                     boundsBehavior: Flickable.StopAtBounds
                     ScrollBar.vertical: ScrollBar {}
                 }
@@ -517,36 +837,90 @@ Scope {
         }
         Rectangle {
             id: footer
-            x: root.leftInset; y: parent.height - height; width: parent.width - root.leftInset - root.rightInset; height: 56; color: Theme.barBackground
+            x: root.leftInset
+            y: parent.height - height
+            width: parent.width - root.leftInset - root.rightInset
+            height: 56
+            color: Theme.barBackground
             RowLayout {
-                anchors.fill: parent; anchors.margins: 10; spacing: 6
-                IconButton { objectName: "customiseUndo"; iconName: "edit-undo-symbolic"; label: "Undo"; enabled: root.undoStack.length > 0 && !root.draggedId; onClicked: root.undo() }
-                IconButton { objectName: "customiseRedo"; iconName: "edit-redo-symbolic"; label: "Redo"; enabled: root.redoStack.length > 0 && !root.draggedId; onClicked: root.redo() }
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 6
+                IconButton {
+                    objectName: "customiseUndo"
+                    iconName: "edit-undo-symbolic"
+                    label: "Undo"
+                    enabled: root.undoStack.length > 0 && !root.draggedId
+                    onClicked: root.undo()
+                }
+                IconButton {
+                    objectName: "customiseRedo"
+                    iconName: "edit-redo-symbolic"
+                    label: "Redo"
+                    enabled: root.redoStack.length > 0 && !root.draggedId
+                    onClicked: root.redo()
+                }
                 ActionButton {
                     id: paletteToggle
                     objectName: "customisePaletteToggle"
                     visible: root.compactPalette
                     text: root.draggedId ? "Remove" : "Widgets"
                     flat: !root.paletteOpen
-                    onClicked: { root.optionsPage = ""; root.paletteOpen = !root.paletteOpen; }
-                    WidgetDropArea { anchors.fill: parent; zoneName: "palette"; window: root.nativeWindow }
+                    onClicked: {
+                        root.optionsPage = "";
+                        root.paletteOpen = !root.paletteOpen;
+                    }
+                    WidgetDropArea {
+                        anchors.fill: parent
+                        zoneName: "palette"
+                        window: root.nativeWindow
+                    }
                 }
-                Item { Layout.fillWidth: true }
-                Text { visible: root.settings.status !== "" && root.settings.status !== "Saved"; text: root.settings.status; color: Theme.warning; Layout.maximumWidth: 260; elide: Text.ElideRight; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+                Item {
+                    Layout.fillWidth: true
+                }
+                Text {
+                    visible: root.settings.status !== "" && root.settings.status !== "Saved"
+                    text: root.settings.status
+                    color: Theme.warning
+                    Layout.maximumWidth: 260
+                    elide: Text.ElideRight
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSmall
+                }
                 ActionButton {
-                    text: root.compactPalette ? "" : "Restore defaults"; iconName: root.compactPalette ? "edit-clear-all-symbolic" : ""; Accessible.name: "Restore defaults"; flat: true
+                    text: root.compactPalette ? "" : "Restore defaults"
+                    iconName: root.compactPalette ? "edit-clear-all-symbolic" : ""
+                    Accessible.name: "Restore defaults"
+                    flat: true
                     enabled: !root.settings.busy && !!root.settings.desktopDefaults && !root.draggedId
                     onClicked: root.restoreDefaults()
-                    ShellTooltip { visible: parent.hovered; text: "Reset widget layout, appearance and behaviour. Keep pinned apps." }
+                    ShellTooltip {
+                        visible: parent.hovered
+                        text: "Reset widget layout, appearance and behaviour. Keep pinned apps."
+                    }
                 }
-                ActionButton { objectName: "customiseCancel"; text: "Cancel"; enabled: !root.settings.busy; onClicked: root.cancel() }
-                ActionButton { objectName: "customiseApply"; text: root.settings.busy ? "Saving…" : "Done"; enabled: !root.settings.busy; onClicked: root.apply() }
+                ActionButton {
+                    objectName: "customiseCancel"
+                    text: "Cancel"
+                    enabled: !root.settings.busy
+                    onClicked: root.cancel()
+                }
+                ActionButton {
+                    objectName: "customiseApply"
+                    text: root.settings.busy ? "Saving…" : "Done"
+                    enabled: !root.settings.busy
+                    onClicked: root.apply()
+                }
             }
         }
         MouseArea {
             anchors.fill: parent
             visible: root.optionsPage !== ""
-            onPressed: mouse => { root.optionsPage = ""; mouse.accepted = false; }
+            onPressed: mouse => {
+                root.optionsPage = "";
+                mouse.accepted = false;
+            }
         }
         Rectangle {
             id: optionsPopover
@@ -566,82 +940,319 @@ Scope {
             y: Math.max(Theme.barHeight + root.topInset + 12, Math.min(desiredY, footer.y - height - 12))
             width: Math.min(380, canvas.width - root.leftInset - root.rightInset - 24)
             height: Math.min(optionContents.implicitHeight + 32, footer.y - Theme.barHeight - root.topInset - 36)
-            border.width: 1; border.color: Theme.outline
-            MouseArea { anchors.fill: parent }
-            radius: Theme.cardRadius; color: Qt.rgba(Theme.popupSurface.r, Theme.popupSurface.g, Theme.popupSurface.b, 1)
+            border.width: 1
+            border.color: Theme.outline
+            MouseArea {
+                anchors.fill: parent
+            }
+            radius: Theme.cardRadius
+            color: Qt.rgba(Theme.popupSurface.r, Theme.popupSurface.g, Theme.popupSurface.b, 1)
             Flickable {
-                anchors.fill: parent; anchors.margins: 16; clip: true; contentWidth: width; contentHeight: optionContents.implicitHeight
+                anchors.fill: parent
+                anchors.margins: 16
+                clip: true
+                contentWidth: width
+                contentHeight: optionContents.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
                 ScrollBar.vertical: ScrollBar {}
                 ColumnLayout {
-                    id: optionContents; width: parent.width; spacing: 12
+                    id: optionContents
+                    width: parent.width
+                    spacing: 12
                     RowLayout {
                         Layout.fillWidth: true
-                        Text { Layout.fillWidth: true; text: root.optionsPage === "Container" ? root.containerChoices.find(item => item.id === root.selectedContainer)?.label || "Container" : root.optionsPage === "Widget" ? root.baseInfo(root.selectedWidget)?.label || "Widget" : root.optionsPage; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontHeading; font.weight: Font.Medium }
-                        IconButton { iconName: "window-close-symbolic"; label: "Close options"; onClicked: root.optionsPage = "" }
+                        Text {
+                            Layout.fillWidth: true
+                            text: root.optionsPage === "Container" ? root.containerChoices.find(item => item.id === root.selectedContainer)?.label || "Container" : root.optionsPage === "Widget" ? root.baseInfo(root.selectedWidget)?.label || "Widget" : root.optionsPage
+                            color: Theme.text
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontHeading
+                            font.weight: Font.Medium
+                        }
+                        IconButton {
+                            iconName: "window-close-symbolic"
+                            label: "Close options"
+                            onClicked: root.optionsPage = ""
+                        }
                     }
                     Flow {
-                        visible: root.optionsPage === "Move"; Layout.fillWidth: true; spacing: 4
+                        visible: root.optionsPage === "Move"
+                        Layout.fillWidth: true
+                        spacing: 4
                         Repeater {
-                            model: [{id: "top-left", label: "Top left"}, {id: "top-center", label: "Top centre"}, {id: "top-right", label: "Top right"}, {id: "dock", label: "Dock"}, {id: "sidebar", label: "Sidebar"}, {id: "control-centre", label: "Control centre"}, {id: "palette", label: "Remove"}]
-                            ActionButton { required property var modelData; objectName: "customise-destination-" + modelData.id; text: modelData.label; enabled: root.accepts(root.selectedWidget, modelData.id); onClicked: { root.put(root.selectedWidget, modelData.id, root.orderFor(modelData.id, root.selectedWidget).length); root.optionsPage = ""; } }
+                            model: [
+                                {
+                                    id: "top-left",
+                                    label: "Top left"
+                                },
+                                {
+                                    id: "top-center",
+                                    label: "Top centre"
+                                },
+                                {
+                                    id: "top-right",
+                                    label: "Top right"
+                                },
+                                {
+                                    id: "dock",
+                                    label: "Dock"
+                                },
+                                {
+                                    id: "sidebar",
+                                    label: "Sidebar"
+                                },
+                                {
+                                    id: "control-centre",
+                                    label: "Control centre"
+                                },
+                                {
+                                    id: "palette",
+                                    label: "Remove"
+                                }
+                            ]
+                            ActionButton {
+                                required property var modelData
+                                objectName: "customise-destination-" + modelData.id
+                                text: modelData.label
+                                enabled: root.accepts(root.selectedWidget, modelData.id)
+                                onClicked: {
+                                    root.put(root.selectedWidget, modelData.id, root.orderFor(modelData.id, root.selectedWidget).length);
+                                    root.optionsPage = "";
+                                }
+                            }
                         }
                     }
                     ColumnLayout {
-                        visible: root.optionsPage === "Container"; Layout.fillWidth: true; spacing: 12
-                        SettingsChoice { label: "Show"; choices: (ControlLayout.isContainer(root.selectedContainer) ? ["Follow container"] : []).concat(["Original", "Icons", "Text", "Icons and text"]); values: (ControlLayout.isContainer(root.selectedContainer) ? ["inherit"] : []).concat(["native", "icons", "text", "both"]); value: root.desktop.containers?.[root.selectedContainer]?.display || (ControlLayout.isContainer(root.selectedContainer) ? "inherit" : "native"); onChosen: value => root.containerDisplay(value) }
+                        visible: root.optionsPage === "Container"
+                        Layout.fillWidth: true
+                        spacing: 12
+                        SettingsChoice {
+                            label: "Show"
+                            choices: (ControlLayout.isContainer(root.selectedContainer) ? ["Follow container"] : []).concat(["Original", "Icons", "Text", "Icons and text"])
+                            values: (ControlLayout.isContainer(root.selectedContainer) ? ["inherit"] : []).concat(["native", "icons", "text", "both"])
+                            value: root.desktop.containers?.[root.selectedContainer]?.display || (ControlLayout.isContainer(root.selectedContainer) ? "inherit" : "native")
+                            onChosen: value => root.containerDisplay(value)
+                        }
                     }
                     ColumnLayout {
-                        visible: root.optionsPage === "Widget"; Layout.fillWidth: true; spacing: 12
-                        Text { visible: DesktopLayout.isSpacing(root.selectedWidget); Layout.fillWidth: true; wrapMode: Text.Wrap; text: root.selectedWidget.startsWith("spring") ? "Expands to fill the available room in this part of the bar." : "Leaves a fixed gap between neighbouring items."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+                        visible: root.optionsPage === "Widget"
+                        Layout.fillWidth: true
+                        spacing: 12
+                        Text {
+                            visible: DesktopLayout.isSpacing(root.selectedWidget)
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
+                            text: root.selectedWidget.startsWith("spring") ? "Expands to fill the available room in this part of the bar." : "Leaves a fixed gap between neighbouring items."
+                            color: Theme.muted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSmall
+                        }
                         RowLayout {
                             visible: root.selectedWidget.startsWith("spacer:") || root.selectedWidget === "control-header-space"
-                            Text { text: "Width"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
-                            SeekSlider { Layout.fillWidth: true; from: 8; to: 160; stepSize: 4; value: root.desktop.widgetOptions?.[root.selectedWidget]?.width || (root.selectedWidget === "control-header-space" ? 16 : 20); onMoved: root.widgetOption("width", Math.round(value)); Accessible.name: "Space width" }
-                            Text { text: (root.desktop.widgetOptions?.[root.selectedWidget]?.width || (root.selectedWidget === "control-header-space" ? 16 : 20)) + " px"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+                            Text {
+                                text: "Width"
+                                color: Theme.muted
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSmall
+                            }
+                            SeekSlider {
+                                Layout.fillWidth: true
+                                from: 8
+                                to: 160
+                                stepSize: 4
+                                value: root.desktop.widgetOptions?.[root.selectedWidget]?.width || (root.selectedWidget === "control-header-space" ? 16 : 20)
+                                onMoved: root.widgetOption("width", Math.round(value))
+                                Accessible.name: "Space width"
+                            }
+                            Text {
+                                text: (root.desktop.widgetOptions?.[root.selectedWidget]?.width || (root.selectedWidget === "control-header-space" ? 16 : 20)) + " px"
+                                color: Theme.text
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSmall
+                            }
                         }
-                        ActionButton { visible: ControlLayout.isContainer(root.selectedWidget); text: "Group display…"; flat: true; onClicked: root.selectContainer(root.selectedWidget) }
-                        ActionButton { visible: root.selectedWidget === "control-header-space" && root.desktop.widgetOptions?.[root.selectedWidget]?.width !== undefined; text: "Original spacing"; flat: true; onClicked: root.widgetOption("width", undefined) }
-                        SettingsChoice { visible: root.appearanceEditable; label: "Show"; choices: ["Follow container", "Original", "Icons", "Text", "Both"]; values: ["inherit", "native", "icons", "text", "both"]; value: root.desktop.widgetOptions?.[root.selectedWidget]?.display || "inherit"; onChosen: value => root.widgetOption("display", value) }
-                        SettingsField { visible: root.appearanceEditable; objectName: "customiseWidgetLabel"; Layout.margins: 0; label: "Label"; text: root.desktop.widgetOptions?.[root.selectedWidget]?.label || ""; placeholderText: root.baseInfo(root.selectedWidget)?.label || "Widget label"; onEdited: value => root.widgetOption("label", value) }
-                        ActionButton { objectName: "customiseIconPickerToggle"; visible: root.appearanceEditable; text: root.iconsExpanded ? "Hide icons" : "Change icon…"; flat: true; onClicked: root.iconsExpanded = !root.iconsExpanded }
+                        ActionButton {
+                            visible: ControlLayout.isContainer(root.selectedWidget)
+                            text: "Group display…"
+                            flat: true
+                            onClicked: root.selectContainer(root.selectedWidget)
+                        }
+                        ActionButton {
+                            visible: root.selectedWidget === "control-header-space" && root.desktop.widgetOptions?.[root.selectedWidget]?.width !== undefined
+                            text: "Original spacing"
+                            flat: true
+                            onClicked: root.widgetOption("width", undefined)
+                        }
+                        SettingsChoice {
+                            visible: root.appearanceEditable
+                            label: "Show"
+                            choices: ["Follow container", "Original", "Icons", "Text", "Both"]
+                            values: ["inherit", "native", "icons", "text", "both"]
+                            value: root.desktop.widgetOptions?.[root.selectedWidget]?.display || "inherit"
+                            onChosen: value => root.widgetOption("display", value)
+                        }
+                        SettingsField {
+                            visible: root.appearanceEditable
+                            objectName: "customiseWidgetLabel"
+                            Layout.margins: 0
+                            label: "Label"
+                            text: root.desktop.widgetOptions?.[root.selectedWidget]?.label || ""
+                            placeholderText: root.baseInfo(root.selectedWidget)?.label || "Widget label"
+                            onEdited: value => root.widgetOption("label", value)
+                        }
+                        ActionButton {
+                            objectName: "customiseIconPickerToggle"
+                            visible: root.appearanceEditable
+                            text: root.iconsExpanded ? "Hide icons" : "Change icon…"
+                            flat: true
+                            onClicked: root.iconsExpanded = !root.iconsExpanded
+                        }
                         GridLayout {
                             visible: root.iconsExpanded && root.appearanceEditable
-                            Layout.fillWidth: true; columns: 8; rowSpacing: 4; columnSpacing: 4
+                            Layout.fillWidth: true
+                            columns: 8
+                            rowSpacing: 4
+                            columnSpacing: 4
                             Repeater {
                                 model: root.iconChoices
-                                IconButton { required property string modelData; objectName: "customise-icon-" + modelData; iconName: modelData; label: modelData.replace(/-symbolic$/, "").replace(/-/g, " "); implicitWidth: 36; implicitHeight: 36; onClicked: root.widgetOption("icon", modelData) }
+                                IconButton {
+                                    required property string modelData
+                                    objectName: "customise-icon-" + modelData
+                                    iconName: modelData
+                                    label: modelData.replace(/-symbolic$/, "").replace(/-/g, " ")
+                                    implicitWidth: 36
+                                    implicitHeight: 36
+                                    onClicked: root.widgetOption("icon", modelData)
+                                }
                             }
                         }
                         RowLayout {
-                            ActionButton { text: "Move…"; flat: true; onClicked: root.optionsPage = "Move" }
-                            ActionButton { text: "Remove"; flat: true; onClicked: { root.put(root.selectedWidget, "palette", 0); root.optionsPage = ""; } }
-                            ActionButton { text: "Reset"; flat: true; onClicked: { const next = Object.assign({}, root.desktop.widgetOptions || {}); delete next[root.selectedWidget]; root.change("widgetOptions", next); } }
+                            ActionButton {
+                                text: "Move…"
+                                flat: true
+                                onClicked: root.optionsPage = "Move"
+                            }
+                            ActionButton {
+                                text: "Remove"
+                                flat: true
+                                onClicked: {
+                                    root.put(root.selectedWidget, "palette", 0);
+                                    root.optionsPage = "";
+                                }
+                            }
+                            ActionButton {
+                                text: "Reset"
+                                flat: true
+                                onClicked: {
+                                    const next = Object.assign({}, root.desktop.widgetOptions || {});
+                                    delete next[root.selectedWidget];
+                                    root.change("widgetOptions", next);
+                                }
+                            }
                         }
                     }
-                        ColumnLayout {
-                            visible: root.optionsPage === "Dock" || (root.optionsPage === "Container" && root.selectedContainer === "dock"); Layout.fillWidth: true; spacing: 16
+                    ColumnLayout {
+                        visible: root.optionsPage === "Dock" || (root.optionsPage === "Container" && root.selectedContainer === "dock")
+                        Layout.fillWidth: true
+                        spacing: 16
 
-                            ControlRow { title: "Show dock"; iconName: ""; toggleVisible: true; toggleChecked: root.desktop.dock !== false; onToggleRequested: root.change("dock", !toggleChecked); onClicked: toggleRequested() }
-                            SettingsChoice { label: "Alignment"; choices: ["Left", "Centre", "Right"]; values: ["left", "center", "right"]; value: root.desktop.dockAlignment || "center"; onChosen: value => root.change("dockAlignment", value) }
-                            RowLayout {
-                                Text { text: "Icon size"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
-                                SeekSlider { Layout.fillWidth: true; from: 32; to: 80; stepSize: 4; value: root.desktop.dockSize || 56; onMoved: root.change("dockSize", Math.round(value)); Accessible.name: "Dock icon size" }
-                                Text { text: (root.desktop.dockSize || 56) + " px"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.fontSmall }
+                        ControlRow {
+                            title: "Show dock"
+                            iconName: ""
+                            toggleVisible: true
+                            toggleChecked: root.desktop.dock !== false
+                            onToggleRequested: root.change("dock", !toggleChecked)
+                            onClicked: toggleRequested()
+                        }
+                        SettingsChoice {
+                            label: "Alignment"
+                            choices: ["Left", "Centre", "Right"]
+                            values: ["left", "center", "right"]
+                            value: root.desktop.dockAlignment || "center"
+                            onChosen: value => root.change("dockAlignment", value)
+                        }
+                        RowLayout {
+                            Text {
+                                text: "Icon size"
+                                color: Theme.muted
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSmall
                             }
-                            ActionButton { text: root.behaviourExpanded ? "Hide mouse and trackpad settings" : "Mouse and trackpad…"; flat: true; onClicked: root.behaviourExpanded = !root.behaviourExpanded }
-                            SettingsChoice { visible: root.behaviourExpanded; label: "Click"; choices: ["Focus or minimise", "Always focus", "New window"]; values: ["toggle", "focus", "launch"]; value: root.desktop.dockClick || "toggle"; onChosen: value => root.change("dockClick", value) }
-                            SettingsChoice { visible: root.behaviourExpanded; label: "Middle click"; choices: ["New window", "Close windows", "Do nothing"]; values: ["launch", "close", "none"]; value: root.desktop.dockMiddleClick || "launch"; onChosen: value => root.change("dockMiddleClick", value) }
-                            SettingsChoice { visible: root.behaviourExpanded; label: "Mouse wheel and trackpad"; choices: ["Switch windows", "Do nothing"]; values: ["cycle", "none"]; value: root.desktop.dockScroll || "cycle"; onChosen: value => root.change("dockScroll", value) }
-                            SettingsChoice { visible: root.behaviourExpanded; label: "Scroll direction"; choices: ["Normal", "Reverse"]; values: ["natural", "reverse"]; value: root.desktop.dockScrollDirection || "natural"; onChosen: value => root.change("dockScrollDirection", value) }
+                            SeekSlider {
+                                Layout.fillWidth: true
+                                from: 32
+                                to: 80
+                                stepSize: 4
+                                value: root.desktop.dockSize || 56
+                                onMoved: root.change("dockSize", Math.round(value))
+                                Accessible.name: "Dock icon size"
+                            }
+                            Text {
+                                text: (root.desktop.dockSize || 56) + " px"
+                                color: Theme.text
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSmall
+                            }
                         }
-                        ColumnLayout {
-                            visible: root.optionsPage === "Sidebar" || (root.optionsPage === "Container" && root.selectedContainer === "sidebar"); Layout.fillWidth: true; spacing: 16
-
-                            ControlRow { title: "Show sidebar"; iconName: ""; toggleVisible: true; toggleChecked: root.desktop.sidebar !== false; onToggleRequested: root.change("sidebar", !toggleChecked); onClicked: toggleRequested() }
-                            SettingsChoice { label: "Screen edge"; choices: ["Left", "Top", "Right"]; values: ["left", "top", "right"]; value: root.desktop.sidebarEdge || "right"; onChosen: value => root.change("sidebarEdge", value) }
+                        ActionButton {
+                            text: root.behaviourExpanded ? "Hide mouse and trackpad settings" : "Mouse and trackpad…"
+                            flat: true
+                            onClicked: root.behaviourExpanded = !root.behaviourExpanded
                         }
+                        SettingsChoice {
+                            visible: root.behaviourExpanded
+                            label: "Click"
+                            choices: ["Focus or minimise", "Always focus", "New window"]
+                            values: ["toggle", "focus", "launch"]
+                            value: root.desktop.dockClick || "toggle"
+                            onChosen: value => root.change("dockClick", value)
+                        }
+                        SettingsChoice {
+                            visible: root.behaviourExpanded
+                            label: "Middle click"
+                            choices: ["New window", "Close windows", "Do nothing"]
+                            values: ["launch", "close", "none"]
+                            value: root.desktop.dockMiddleClick || "launch"
+                            onChosen: value => root.change("dockMiddleClick", value)
+                        }
+                        SettingsChoice {
+                            visible: root.behaviourExpanded
+                            label: "Mouse wheel and trackpad"
+                            choices: ["Switch windows", "Do nothing"]
+                            values: ["cycle", "none"]
+                            value: root.desktop.dockScroll || "cycle"
+                            onChosen: value => root.change("dockScroll", value)
+                        }
+                        SettingsChoice {
+                            visible: root.behaviourExpanded
+                            label: "Scroll direction"
+                            choices: ["Normal", "Reverse"]
+                            values: ["natural", "reverse"]
+                            value: root.desktop.dockScrollDirection || "natural"
+                            onChosen: value => root.change("dockScrollDirection", value)
+                        }
+                    }
+                    ColumnLayout {
+                        visible: root.optionsPage === "Sidebar" || (root.optionsPage === "Container" && root.selectedContainer === "sidebar")
+                        Layout.fillWidth: true
+                        spacing: 16
 
+                        ControlRow {
+                            title: "Show sidebar"
+                            iconName: ""
+                            toggleVisible: true
+                            toggleChecked: root.desktop.sidebar !== false
+                            onToggleRequested: root.change("sidebar", !toggleChecked)
+                            onClicked: toggleRequested()
+                        }
+                        SettingsChoice {
+                            label: "Screen edge"
+                            choices: ["Left", "Top", "Right"]
+                            values: ["left", "top", "right"]
+                            value: root.desktop.sidebarEdge || "right"
+                            onChosen: value => root.change("sidebarEdge", value)
+                        }
+                    }
                 }
             }
         }

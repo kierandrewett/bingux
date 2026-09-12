@@ -1,4 +1,7 @@
-    FileView { id: layoutReport; path: Quickshell.env("BINGUX_LAYOUT_REPORT") }
+    FileView {
+        id: layoutReport
+        path: Quickshell.env("BINGUX_LAYOUT_REPORT")
+    }
     Process {
         id: savedInput
         property point position
@@ -6,7 +9,11 @@
         command: ["python3", Quickshell.env("BINGUX_TEST_NATIVE_INPUT"), String(position.x), String(position.y), "--click-only"]
         onExited: (code, status) => resultCode = code
     }
-    SignalSpy { id: networkRequests; target: DesktopEditing.sources["control-network"] || null; signalName: "navigationRequested" }
+    SignalSpy {
+        id: networkRequests
+        target: DesktopEditing.sources["control-network"] || null
+        signalName: "navigationRequested"
+    }
     TestCase {
         id: savedInputTest
         parent: topBar.contentItem
