@@ -20,25 +20,22 @@ systemctl --user daemon-reload
 systemctl --user enable --now bingux.target
 ```
 
-If Gnoblin is installed, load the shipped integration fragment into the user's
-Gnoblin TOML file. This enables the protocols Bingux uses, hands OSD rendering
-to Bingux, and disables duplicate compositor motion for Bingux surfaces:
+If Gnoblin uses an `init.lua` file, load package and user drop-in directories.
+This loads the shipped Bingux module, enables the protocols Bingux uses, hands
+OSD rendering to Bingux, and disables duplicate compositor motion for Bingux
+surfaces:
 
-```sh
-gnoblinctl load-config /usr/share/bingux/gnoblin.toml
+```lua
+local g = require("gnoblin")
+g.load("/usr/share/gnoblin/conf.d/*.lua")
+g.load("~/.config/gnoblin/conf.d/*.lua")
 ```
 
-The command is idempotent, writes atomically, and never overwrites the user's
-configuration. Source installs use the corresponding
-`$USER_PREFIX/share/bingux/gnoblin.toml` path. Gnoblin watches the main file and
-the included fragment, so shell/effect changes take effect through the same
-hot-reload path. Protocol advertisement is fixed when the compositor session
-starts; log out and back in after first enabling the fragment. Before removing
-Bingux, detach the fragment while it still exists:
-
-```sh
-gnoblinctl unload-config /usr/share/bingux/gnoblin.toml
-```
+Source installs use the corresponding `$USER_PREFIX/share/gnoblin/conf.d/`
+directory. Gnoblin watches the main file and matching modules, so shell and
+effect changes use the same reload path. Protocol advertisement is fixed when
+the compositor session starts. Log out and back in after the first enable.
+Removing Bingux removes only its package drop-in; the glob remains valid.
 
 The package does not change the selected login session. Use Gnoblin for the
 compositor/session, or start Bingux from another compatible Wayland session.

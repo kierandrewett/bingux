@@ -32,8 +32,7 @@ class InstallTest(unittest.TestCase):
             self.assertEqual(config["commands"]["applicationLauncher"][1],
                              "/usr/share/bingux/shell/launch-application.py")
             self.assertTrue((stage / "usr/share/bingux/shell/ProfileSettings.qml").is_file())
-            self.assertTrue((stage / "usr/share/bingux/gnoblin.toml").is_file())
-            self.assertIn("wlr-layer-shell = true", (stage / "usr/share/bingux/gnoblin.toml").read_text())
+            self.assertTrue((stage / "usr/share/gnoblin/conf.d/bingux.lua").is_file())
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Text/qmldir").is_file())
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Effects/libbinguxeffects.so").is_file())
             self.assertFalse((stage / "home").exists())
@@ -75,6 +74,7 @@ class InstallTest(unittest.TestCase):
                             "--prefix", str(prefix), "--build-dir", str(build)], env=environment, check=True)
             self.assertTrue((prefix / ".bingux-install.json").is_file())
             self.assertTrue((prefix / "share/bingux/shell/ProfileSettings.qml").is_file())
+            self.assertTrue((prefix / "share/gnoblin/conf.d/bingux.lua").is_file())
             launcher = home / ".local/bin/bingux"
             self.assertTrue(launcher.is_symlink())
             self.assertEqual(launcher.resolve(), (prefix / "bin/bingux").resolve())
@@ -163,7 +163,6 @@ class InstallTest(unittest.TestCase):
                             "--prefix", str(prefix), "--build-dir", str(build)], env=environment, check=True)
             subprocess.run([str(home / ".local/bin/bingux-uninstall")], env=environment, check=True)
             self.assertFalse(prefix.exists())
-
 
 if __name__ == "__main__":
     unittest.main()

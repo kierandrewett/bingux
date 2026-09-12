@@ -34,6 +34,12 @@ def write_launcher(path, contents):
     path.chmod(0o755)
 
 
+def lua_quote(value):
+    escaped = (str(value).replace("\\", "\\\\").replace('"', '\\"')
+               .replace("\n", "\\n").replace("\r", "\\r"))
+    return '"' + escaped + '"'
+
+
 def resolve_quickshell(no_systemd):
     configured = os.environ.get("BINGUX_QUICKSHELL")
     if configured:
@@ -83,7 +89,7 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         build / "bingux-audio-meter": prefix / "bin/bingux-audio-meter",
         build / "cargo/release/bingux-searchd": prefix / "bin/bingux-searchd",
         build / "cargo/release/bingux-statusd": prefix / "bin/bingux-statusd",
-        source / "packaging/gnoblin/bingux.toml": prefix / "share/bingux/gnoblin.toml",
+        source / "packaging/gnoblin/bingux.lua": prefix / "share/gnoblin/conf.d/bingux.lua",
     }
     missing = [str(path) for path in payload if not path.is_file()]
     if missing:
@@ -249,9 +255,10 @@ def install_user(source, build, prefix, qml, no_systemd):
     print(f"Installed Bingux under {prefix}")
     print("  command links: " + str(Path(os.environ.get("XDG_BIN_HOME") or Path.home() / ".local/bin")))
     print("  service links: " + str(Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd/user"))
-    fragment = prefix / "share/bingux/gnoblin.toml"
-    print("  enable Gnoblin integration: gnoblinctl load-config " + str(fragment))
-    print("  remove integration before uninstall: gnoblinctl unload-config " + str(fragment))
+    module_directory = prefix / "share/gnoblin/conf.d"
+    load_expression = 'local g = require("gnoblin"); g.load(' + lua_quote(module_directory / "*.lua") + ")"
+    print("  enable Gnoblin integration: add " + load_expression + " to init.lua")
+    print("  add a separate g.load(\"~/.config/gnoblin/conf.d/*.lua\") for user drop-ins")
     print("  remove with: make uninstall-user USER_PREFIX=" + str(prefix))
 
 
@@ -265,15 +272,6 @@ def uninstall_user(prefix, no_systemd):
     if not no_systemd:
         systemctl_user(["disable", "--now", "bingux.target"], check=False)
         systemctl_user(["daemon-reload"], check=False)
-    fragment = prefix / "share/bingux/gnoblin.toml"
-    try:
-        result = subprocess.run(["gnoblinctl", "unload-config", str(fragment)], capture_output=True, text=True, check=False)
-        if result.returncode == 0:
-            print(result.stdout.strip())
-        else:
-            print("  warning: could not detach Gnoblin integration: " + (result.stderr or result.stdout).strip())
-    except OSError as error:
-        print("  warning: gnoblinctl unavailable; detach " + str(fragment) + " before the next Gnoblin reload (" + str(error) + ")")
     target_path = prefix / "lib/systemd/user/bingux.target"
     unit_dirs = {
         Path(link["path"]).parent

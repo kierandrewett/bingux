@@ -36,6 +36,17 @@ Removal stops Bingux and deletes the install root while preserving
 `$XDG_CONFIG_HOME/bingux` user settings. For package builds, use the separate
 staging flow documented in [package management](docs/package-management.md).
 
+If Gnoblin uses `init.lua`, load the package and user drop-in directories:
+
+```lua
+local g = require("gnoblin")
+g.load("/usr/share/gnoblin/conf.d/*.lua")
+g.load("~/.config/gnoblin/conf.d/*.lua")
+```
+
+The managed installer prints its exact package drop-in directory. Bingux user
+settings remain under `$XDG_CONFIG_HOME/bingux`.
+
 A Fedora package is being prepared in the [Bingux COPR](https://copr.fedorainfracloud.org/coprs/kierandrewett/bingux/).
 The repository does not publish a ready package until a clean Fedora build and
 a fresh install test pass.

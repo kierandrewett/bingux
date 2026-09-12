@@ -54,8 +54,8 @@ other convenience commands directly. The installer detects `qs` or
 `quickshell`; set `BINGUX_QUICKSHELL=/path/to/qs` when the matching Quickshell
 build is not on `PATH`. It also installs `bingux-uninstall`, so the source
 checkout is not needed later to remove the managed installation. If Gnoblin is
-installed, the installer prints the command to load its bundled integration
-fragment from the managed install root.
+installed, the installer prints the `g.load` call for its package drop-in
+directory and the matching user drop-in directory.
 
 Remove the managed install with:
 
@@ -69,9 +69,8 @@ Once `~/.local/bin` is on `PATH`, the equivalent standalone command is:
 bingux-uninstall
 ```
 
-If you loaded the Gnoblin fragment, remove it first with the printed
-`gnoblinctl unload-config ...` command. The uninstall then stops Bingux,
-removes its integration symlinks, and deletes only the
+The Gnoblin package drop-in disappears with the managed install. The uninstall
+then stops Bingux, removes its integration symlinks, and deletes only the
 managed installation root. It deliberately keeps `$XDG_CONFIG_HOME/bingux`,
 so layouts, search settings, extensions and notification history survive a
 reinstall. Use `USER_PREFIX=/some/other/root` with both commands when a
@@ -87,8 +86,8 @@ make install PREFIX=/usr DESTDIR="$PWD/dist/root"
 
 The package-oriented installer writes only below `DESTDIR`. It installs shell files under
 `share/bingux/shell`, native QML plugins under `lib/bingux/qml`, helper programs
-under `bin` and `libexec/bingux`, the optional Gnoblin integration fragment under
-`share/bingux/gnoblin.toml`, and user-systemd units under
+under `bin` and `libexec/bingux`, the optional Gnoblin Lua module under
+`share/gnoblin/conf.d/bingux.lua`, and user-systemd units under
 `lib/systemd/user`. It does not enable a service or change an existing user
 configuration. This layout is for RPM and other package builders; source users
 should prefer the managed `make install-user` flow above.
