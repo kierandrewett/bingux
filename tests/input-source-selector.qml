@@ -64,7 +64,7 @@ ShellRoot {
                 tryCompare(selector, "menuOpen", false, 2000);
                 selectionReader.running = true;
                 tryCompare(selectionReader, "running", false, 2000);
-                compare(selectionOutput.text.trim(), "set-input-source xkb us", "manual selection dispatches the selected source");
+                compare(selectionOutput.text.trim(), "input select xkb us", "manual selection dispatches the selected source");
                 selector.openMenu(); wait(200);
                 metrics.inputSources = [metrics.inputSources[1]];
                 compare(selector.selectedIndex, 0, "selection survives a reordered source list");

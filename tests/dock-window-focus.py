@@ -39,7 +39,7 @@ export default function () {
             focus: a.meta_window === global.display.focus_window}))}));
 }
 '''.replace('ACTION', action).replace('REPORT', json.dumps(str(report))).replace('SEQUENCE', str(sequence)))
-    subprocess.run(['gnoblinctl', 'reload-scripts'], check=True, capture_output=True)
+    subprocess.run(['gnoblinctl', 'script', 'reload'], check=True, capture_output=True)
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
         try:

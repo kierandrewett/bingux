@@ -225,7 +225,7 @@ ShellPopup {
             }
         }
         onTextInserted: if (root.inserting) root.insertionFinished();
-        // Popup commands are registered in gnoblin.toml through binguxctl.
+        // Popup commands are registered in init.lua through binguxctl.
         // Keep this transport for window tracking, caret lookup and insertion.
         onFailed: message => { if (root.pendingText) root.insertionFailed(message); else console.warn("Emoji shortcut:", message); }
     }

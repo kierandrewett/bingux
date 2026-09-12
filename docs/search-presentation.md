@@ -111,13 +111,17 @@ index as a tie-breaker: Qt's JavaScript sort cannot be assumed stable. Regressio
 tests exercise an intentionally unstable sort, not just Node's stable implementation.
 
 Search animates its own card. Configure this Gnoblin window rule in
-`~/.config/gnoblin/gnoblin.toml` so the compositor does not also slide the
+`~/.config/gnoblin/init.lua` so the compositor does not also slide the
 full-screen layer surface:
 
-```toml
-[[window-rules]]
-match.layer = "^bingux-search$"
-animation = "none"
+```lua
+local g = require("gnoblin")
+g.set({
+    ["window-rules"] = {{
+        match = { layer = "^bingux-search$" },
+        animation = "none",
+    }},
+})
 ```
 
 Providers already supply a themed `icon` with each result. Empty or missing theme

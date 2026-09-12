@@ -240,7 +240,7 @@ Source-path runs need QMLTermWidget 2.0 built for Qt 6 on `QML_IMPORT_PATH`.
 The terminal component loads only after a valid opening drag is released (or an explicit open command). Aborted drags never start a shell. Existing sessions resize and rewrap their text during subsequent drags. The terminal uses a custom Bingux palette and the same background as its panel; sidebar, dock, and top bar share their surface, outline, and corner treatment. A missing plugin shows a retry
 message inside the panel and does not prevent the rest of the shell from loading.
 
-Gnoblin compositor effects are configured in `~/.config/gnoblin/gnoblin.toml`.
+Gnoblin compositor effects are configured in `~/.config/gnoblin/init.lua`.
 The rebuilt compositor supports alpha-masked layer blur and per-window rules.
 Dock icon rectangles are published through foreign-toplevel management so
 minimise animations can target each icon. Those native changes need one new

@@ -58,7 +58,7 @@ export default function () {
             focus: a.meta_window === global.display.focus_window}))}));
 }
 '''.replace('ACTION', action).replace('REPORT', json.dumps(str(report))))
-    subprocess.run(['gnoblinctl', 'reload-scripts'], check=True, capture_output=True)
+    subprocess.run(['gnoblinctl', 'script', 'reload'], check=True, capture_output=True)
     return json.loads(report.read_text())
 
 

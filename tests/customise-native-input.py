@@ -110,7 +110,7 @@ export default function (api) {
     });
 }
 '''.replace('__COMPLETION__', json.dumps(str(completion))))
-    subprocess.run(['gnoblinctl', 'reload-scripts'], env=os.environ | {'XDG_CONFIG_HOME': str(config)}, check=True, capture_output=True)
+    subprocess.run(['gnoblinctl', 'script', 'reload'], env=os.environ | {'XDG_CONFIG_HOME': str(config)}, check=True, capture_output=True)
 
 window_title = sys.argv[sys.argv.index('--window-title') + 1] if '--window-title' in sys.argv else ''
 window_size = list(map(float, sys.argv[sys.argv.index('--window-size') + 1:sys.argv.index('--window-size') + 3])) if window_title else []

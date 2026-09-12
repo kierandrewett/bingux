@@ -12,7 +12,7 @@ def ipc(method,*args):
   time.sleep(.1)
  raise RuntimeError(output)
 old=json.loads(ipc('options'))
-wins=json.loads(subprocess.check_output(['gnoblinctl','windows','--json'],text=True))['windows']
+wins=json.loads(subprocess.check_output(['gnoblinctl','window','list','--json'],text=True))['windows']
 w=next(w for w in wins if w['focused']);r=w['geometry']
 bus=Gio.bus_get_sync(Gio.BusType.SESSION,None);dest='org.gnome.Mutter.RemoteDesktop'
 def call(path,iface,method,args=None):return bus.call_sync(dest,path,iface,method,args,None,Gio.DBusCallFlags.NONE,3000,None).unpack()

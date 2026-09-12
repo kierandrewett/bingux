@@ -76,7 +76,7 @@ export default function enable(api) {
 
 
 def reload():
-    subprocess.run([str(repo / 'src/tools/gnoblinctl'), 'reload-scripts'], check=True)
+    subprocess.run([str(repo / 'src/tools/gnoblinctl'), 'script', 'reload'], check=True)
 
 
 def call(method, *args):
@@ -121,6 +121,18 @@ qml.write_text('import Quickshell\nimport "' + (bingux / 'shell/bingux').as_uri(
 config = Path(os.environ['XDG_CONFIG_HOME']) / 'bingux/switcher.json'
 config.parent.mkdir(parents=True, exist_ok=True)
 config.write_text('{}')
+compositor_config = Path(os.environ['XDG_CONFIG_HOME']) / 'gnoblin/init.lua'
+compositor_config.write_text((compositor_config.read_text() if compositor_config.exists() else '') + '''
+local g = require("gnoblin")
+g.set({["window-rules"] = {{
+    match = {layer = "^bingux-switcher$"},
+    animation = "none",
+    opacity = 1.0,
+    ["blur-ignore-shadows"] = true,
+    blur = 24,
+}}})
+''')
+subprocess.run([str(repo / 'src/tools/gnoblinctl'), 'config', 'reload'], check=True)
 reload()
 qslog = open('/tmp/bingux-switcher-runtime.log', 'w')
 shell = subprocess.Popen([qs, '-p', str(qml)], stdout=qslog, stderr=qslog)

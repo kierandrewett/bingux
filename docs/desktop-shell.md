@@ -12,7 +12,7 @@ Quickshell is pre-1.0. Bingux source must target the pinned 0.2.1 release line. 
 ## Process model
 
 ```text
-Gnoblin gnoblin.toml shortcut
+Gnoblin init.lua shortcut
           |
           v
 binguxctl -> Quickshell IPC -> Bingux popup
@@ -22,7 +22,7 @@ binguxctl -> Quickshell IPC -> Bingux popup
                           bingux-searchd
 ```
 
-Search, emoji, capture and the window switcher receive shortcuts over persistent compositor connections. Bare Super toggles search on release without another key or pointer action. Keep duplicate command bindings out of `gnoblin.toml`. `bingux-statusd` owns the Gnoblin OSD and desktop-state signal subscription. The QML process does not parse Gnoblin D-Bus output or start long-lived daemon monitors. It connects to local Unix sockets and renders typed records from the daemons. `SystemIndicators` also runs a bounded `nmcli` probe to identify the current NetworkManager connection type; the probe is killed after two seconds and is retried every five seconds.
+Search, emoji, capture and the window switcher receive shortcuts over persistent compositor connections. Bare Super toggles search on release without another key or pointer action. Keep duplicate command bindings out of `init.lua`. `bingux-statusd` owns the Gnoblin OSD and desktop-state signal subscription. The QML process does not parse Gnoblin D-Bus output or start long-lived daemon monitors. It connects to local Unix sockets and renders typed records from the daemons. `SystemIndicators` also runs a bounded `nmcli` probe to identify the current NetworkManager connection type; the probe is killed after two seconds and is retried every five seconds.
 
 The shell and daemon run as the profile user. The socket directory has mode `0700`. The socket has mode `0600`. The service does not listen on TCP or another network transport.
 
@@ -70,7 +70,7 @@ consumer of this D-Bus signal. It validates the request and publishes one
 newline-delimited UTF-8 JSON record to
 `$XDG_RUNTIME_DIR/bingux/osd-v2.sock`.
 
-Bingux sets `[shell] osd = false` in `gnoblin.toml` as well as the session's
+Bingux sets `shell.osd = false` through its Gnoblin Lua drop-in as well as the session's
 disabled-features setting. `osd-bridge.js` supplies the same signal on older
 running Gnoblin builds which can suppress their OSD but cannot emit the event.
 It checks the native interface first and stays inactive when native support is
@@ -231,7 +231,7 @@ Every request contains these fields:
 }
 ```
 
-`show-search` and `gnoblin-super-release` integration records are legacy wire formats. The daemon no longer emits them; the shell accepts and ignores old show-search records during upgrades. Popup opening is owned by `binguxctl` commands in `gnoblin.toml`.
+`show-search` and `gnoblin-super-release` integration records are legacy wire formats. The daemon no longer emits them; the shell accepts and ignores old show-search records during upgrades. Popup opening is owned by `binguxctl` commands in `init.lua`.
 
 ```json
 {

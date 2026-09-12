@@ -148,7 +148,7 @@ export default function enable(api) {
 }
 '''.replace('CONFIG_URL', (gnoblin / 'src/gnome-shell-overlay/js/ui/components/gnoblinConfig.js').as_uri())
         .replace('EMOJI_COMMAND', json.dumps(IPC + ['open'])))
-    subprocess.run([str(gnoblin / "src/tools/gnoblinctl"), "reload-scripts"], check=True)
+    subprocess.run([str(gnoblin / "src/tools/gnoblinctl"), "script", "reload"], check=True)
     fixture = CONFIG / "emoji-test"
     fixture.mkdir()
     for path in (ROOT / "shell/bingux").iterdir():

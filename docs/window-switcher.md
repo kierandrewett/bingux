@@ -13,7 +13,7 @@ Stop through `UiSession`. Opening a companion closes the other companions. Captu
 Alt+S and Super+Period through the persistent compositor connection, so keyboard
 activation does not start `binguxctl` or Quickshell. Set `BINGUX_CAPTURE_SHORTCUT`
 or `BINGUX_EMOJI_SHORTCUT` in the corresponding service to change those bindings.
-Do not also register those keys as command shortcuts in `gnoblin.toml`.
+Do not also register those keys as command shortcuts in `init.lua`.
 Emoji accepts input at the compositor anchor while accessibility caret lookup
 runs separately. The capture toolbar has no entrance fade; its fresh frozen
 preview still requires compositor readback before it can open.
@@ -112,26 +112,38 @@ package installs this file with these defaults; copy it to
 The Gnoblin package also installs the compositor's `compositor-bridge.js` script and clears
 the four GNOME `switch-applications` / `switch-windows` forward and backward
 bindings. For a manual installation, link the bridge into
-`~/.config/gnoblin/scripts/`, run `gnoblinctl reload-scripts`, and clear these
-keys in Gnoblin's TOML configuration:
+`~/.config/gnoblin/scripts/`, run `gnoblinctl script reload`, and clear these
+keys in Gnoblin's Lua configuration:
 
-```toml
-[keybindings.wm]
-switch-applications = []
-switch-applications-backward = []
-switch-windows = []
-switch-windows-backward = []
+```lua
+local g = require("gnoblin")
+g.set({
+    keybindings = {
+        wm = {
+            ["switch-applications"] = {},
+            ["switch-applications-backward"] = {},
+            ["switch-windows"] = {},
+            ["switch-windows-backward"] = {},
+        },
+    },
+})
 ```
 
-If broad compositor rules apply blur or slide animations to layer surfaces,
-exclude the transparent switcher overlay:
+Use the same backdrop blur as Bingux popouts, with compositor animations
+disabled so shortcut presentation remains immediate. The switcher publishes
+its panel bounds through `BlurRegion` to limit the blur work:
 
-```toml
-[[window-rules]]
-match.layer = "^bingux-switcher$"
-animation = "none"
-opacity = 1.0
-blur = 0
+```lua
+local g = require("gnoblin")
+g.set({
+    ["window-rules"] = {{
+        match = { layer = "^bingux-switcher$" },
+        animation = "none",
+        opacity = 1.0,
+        ["blur-ignore-shadows"] = true,
+        blur = 24,
+    }},
+})
 ```
 
 `ShortcutSession.qml` is reusable by other Quickshell components. It maintains

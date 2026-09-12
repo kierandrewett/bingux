@@ -98,7 +98,7 @@ Item {
         const source = pendingSource;
         pendingSource = null;
         if (!sources.some(item => sourceKey(item) === sourceKey(source))) return;
-        inputProcess.exec([root.gnoblinCtlPath, "set-input-source", source.type, source.id]);
+        inputProcess.exec([root.gnoblinCtlPath, "input", "select", source.type, source.id]);
     }
 
     function cycleSource(backward) {

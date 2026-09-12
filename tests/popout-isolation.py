@@ -30,7 +30,7 @@ ctl = [str(repo / 'packages/binguxctl/binguxctl.py'), '--quickshell', qs, '--pat
 compat = os.environ.get('GNOBLIN_SHORTCUT_COMPAT')
 if compat:
     shutil.copy2(compat, scripts / 'config-shortcuts.js')
-(config / 'gnoblin/gnoblin.toml').write_text('[shell]\nwindow-switcher = false\n')
+(config / 'gnoblin/init.lua').write_text('local g = require("gnoblin")\ng.set({shell = { ["window-switcher"] = false }})\n')
 (scripts / 'popout-test.js').write_text('''
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -113,8 +113,8 @@ def companions_above_fullscreen():
     order = state()['order']
     return all(name in order for name in ['Popout Fullscreen', 'bingux-top-bar', 'bingux-dock', 'bingux-search']) and all(order.index('Popout Fullscreen') < order.index('bingux-search') < order.index(name) for name in ['bingux-top-bar', 'bingux-dock'])
 
-run([str(gnoblin / 'src/tools/gnoblinctl'), 'reload-config'])
-run([str(gnoblin / 'src/tools/gnoblinctl'), 'reload-scripts'])
+run([str(gnoblin / 'src/tools/gnoblinctl'), 'config', 'reload'])
+run([str(gnoblin / 'src/tools/gnoblinctl'), 'script', 'reload'])
 apps_qml = config / 'popout-apps.qml'
 apps_qml.write_text('''import QtQuick
 import QtQuick.Window
