@@ -182,3 +182,6 @@ ExtensionWidget 1.0 ExtensionWidget.qml
 ExtensionServices 1.0 ExtensionServices.qml
 
 ExtensionSettings 1.0 ExtensionSettings.qml
+
+singleton BackgroundEffects 1.0 BackgroundEffects.qml
+BackgroundEffect 1.0 BackgroundEffect.qml

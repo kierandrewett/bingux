@@ -12,6 +12,8 @@
 #include <cstring>
 #include "blur-fade-client.h"
 
+void registerBackgroundEffect(const char *uri);
+
 namespace {
 
 struct Connection {
@@ -185,6 +187,7 @@ class EffectsPlugin : public QQmlExtensionPlugin {
 public:
     void registerTypes(const char *uri) override {
         qmlRegisterType<SurfaceFade>(uri, 1, 0, "SurfaceFade");
+        registerBackgroundEffect(uri);
     }
 };
 
