@@ -2,5 +2,6 @@ pragma Singleton
 import QtQuick
 
 QtObject {
-    readonly property var component: Qt.createComponent("BackgroundEffectNative.qml")
+    readonly property bool nativeEnabled: true
+    readonly property var component: nativeEnabled ? Qt.createComponent("BackgroundEffectNative.qml") : null
 }

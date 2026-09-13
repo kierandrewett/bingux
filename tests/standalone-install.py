@@ -49,6 +49,7 @@ class InstallTest(unittest.TestCase):
                 subprocess.run(["sh", "-n", str(launcher)], check=True)
                 self.assertNotIn(str(stage), launcher.read_text())
             config = json.loads((stage / "usr/share/bingux/search.json").read_text())
+            self.assertEqual(config["commands"]["applicationLauncher"][0], sys.executable)
             self.assertEqual(
                 config["commands"]["applicationLauncher"][1], "/usr/share/bingux/shell/launch-application.py"
             )

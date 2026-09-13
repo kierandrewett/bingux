@@ -75,7 +75,7 @@ def main():
                     {
                         "protocolVersion": 1,
                         "commands": {
-                            "applicationLauncher": ["python3", str(source / "launch-application.py")],
+                            "applicationLauncher": [sys.executable, str(source / "launch-application.py")],
                             "fileOpener": ["xdg-open"],
                             "clipboard": ["wl-copy"],
                         },

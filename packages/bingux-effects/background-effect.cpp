@@ -245,6 +245,9 @@ void WindowBackground::synchronise(QQuickWindow* window) {
 } // namespace
 
 void registerBackgroundEffect(const char* uri) {
-    qmlRegisterType<BackgroundEffect>(uri, 1, 0, "BackgroundEffect");
+    // Quickshell 0.3 exports its own attached-only BackgroundEffect type.
+    // Keep our instantiable client type under a distinct name so QML cannot
+    // resolve the wrong type when both modules are imported.
+    qmlRegisterType<BackgroundEffect>(uri, 1, 0, "BinguxBackgroundEffect");
 }
 #include "background-effect.moc"

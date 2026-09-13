@@ -8,6 +8,7 @@ from pathlib import Path
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 
 
@@ -169,7 +170,10 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
             {
                 "protocolVersion": 1,
                 "commands": {
-                    "applicationLauncher": ["python3", str(shell / "launch-application.py")],
+                    # The daemon validates the executable path before it starts.
+                    # Use the interpreter that ran this installer so the command
+                    # remains valid when the user does not have python3 on PATH.
+                    "applicationLauncher": [str(Path(sys.executable)), str(shell / "launch-application.py")],
                     "fileOpener": ["xdg-open"],
                     "clipboard": ["wl-copy"],
                 },
