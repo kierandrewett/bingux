@@ -8,17 +8,19 @@ captures = module["captures"]
 
 class CameraStatusTest(unittest.TestCase):
     def test_running_camera_stream_has_owner_and_device(self):
-        nodes = [{
-            "info": {
-                "state": "running",
-                "props": {
-                    "media.role": "Camera",
-                    "application.name": "Firefox WebRTC",
-                    "application.process.binary": "firefox",
-                    "node.description": "Integrated camera",
+        nodes = [
+            {
+                "info": {
+                    "state": "running",
+                    "props": {
+                        "media.role": "Camera",
+                        "application.name": "Firefox WebRTC",
+                        "application.process.binary": "firefox",
+                        "node.description": "Integrated camera",
+                    },
                 },
-            },
-        }]
+            }
+        ]
         self.assertEqual(
             captures(nodes),
             [{"app": "Firefox WebRTC", "appId": "firefox", "device": "Integrated camera"}],

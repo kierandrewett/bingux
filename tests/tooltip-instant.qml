@@ -39,7 +39,12 @@ ShellRoot {
                 id: controlTip
                 visible: controlHover.containsMouse
                 text: "Control tooltip"
-                details: [{label: "Context", value: "Calendar and control centre"}]
+                details: [
+                    {
+                        label: "Context",
+                        value: "Calendar and control centre"
+                    }
+                ]
             }
         }
         BarTooltip {

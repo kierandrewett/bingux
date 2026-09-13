@@ -34,7 +34,12 @@ ShellRoot {
         property int nextSerial: 0
 
         function pose(x, y, maximized, newDrag) {
-            const screen = {x: 0, y: 0, width: 1280, height: 800};
+            const screen = {
+                x: 0,
+                y: 0,
+                width: 1280,
+                height: 800
+            };
             snap.update({
                 active: true,
                 serial: newDrag ? ++nextSerial : nextSerial,
@@ -43,8 +48,19 @@ ShellRoot {
                 y,
                 modifiers: 0,
                 maximized,
-                monitor: {id: 0, x: screen.x, y: screen.y, width: screen.width, height: screen.height},
-                area: {x: screen.x, y: screen.y + 32, width: screen.width, height: screen.height - 32}
+                monitor: {
+                    id: 0,
+                    x: screen.x,
+                    y: screen.y,
+                    width: screen.width,
+                    height: screen.height
+                },
+                area: {
+                    x: screen.x,
+                    y: screen.y + 32,
+                    width: screen.width,
+                    height: screen.height - 32
+                }
             });
         }
 

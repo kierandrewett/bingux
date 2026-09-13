@@ -74,8 +74,7 @@ ShellRoot {
             for (let frame = 0; frame < 20; frame++) {
                 wait(16);
                 const popupOverflow = menu.body.childrenRect.height - menu.body.height;
-                verify(popupOverflow <= initialPopupOverflow + 0.5,
-                    "Artwork expansion keeps dock contents inside the popup (frame " + frame + ")");
+                verify(popupOverflow <= initialPopupOverflow + 0.5, "Artwork expansion keeps dock contents inside the popup (frame " + frame + ")");
             }
             check(Theme.reducedMotion ? section.artExpansion === 1 : section.artExpansion > 0 && section.artExpansion < 1, "Artwork expansion respects motion preference");
             tryCompare(section, "artExpansion", 1);

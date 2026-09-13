@@ -31,13 +31,32 @@ ShellRoot {
         property bool recording: false
         property bool cameraInUse: false
         property string cameraTooltip: "Camera in use"
-        property var cameraDetails: [{app: "Firefox", appIcon: "firefox", device: "Integrated camera"}]
+        property var cameraDetails: [
+            {
+                app: "Firefox",
+                appIcon: "firefox",
+                device: "Integrated camera"
+            }
+        ]
         property bool screenSharing: false
         property bool microphoneInUse: fixtureMetrics.microphoneInUse
         property string microphoneTooltip: "Microphone in use"
-        property var microphoneDetails: [{app: "Firefox", appIcon: "firefox", device: "USB microphone", muted: false}]
+        property var microphoneDetails: [
+            {
+                app: "Firefox",
+                appIcon: "firefox",
+                device: "USB microphone",
+                muted: false
+            }
+        ]
         property string locationTooltip: "Location in use"
-        property var locationDetails: [{app: "Firefox", appIcon: "firefox", device: "Location"}]
+        property var locationDetails: [
+            {
+                app: "Firefox",
+                appIcon: "firefox",
+                device: "Location"
+            }
+        ]
         property string elapsedText: "2:45"
         function stopRecording() {
             test.stopped++;
