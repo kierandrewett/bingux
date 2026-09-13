@@ -125,6 +125,17 @@ test("desktop metadata supplies app name and missing icon with sender fallback",
     assert.equal(entry.appIcon, "/tmp/icon.png");
 });
 
+test("application names supply icons before the first notification arrives", () => {
+    const { state, make } = fixture();
+    state.DesktopEntries.applications.values = [{ name: "ChatGPT Community", icon: "codex-desktop" }];
+    state.refreshApplicationAliases();
+    const notification = make();
+    notification.appName = "ChatGPT Community";
+    notification.appIcon = "";
+    notification.desktopEntry = "";
+    assert.equal(state.entryFor(notification, 0).appIcon, "codex-desktop");
+});
+
 test("dismissal leaves other cards in the stack without expiring paused cards", () => {
     const { state, make, advance } = fixture();
     const notifications = Array.from({ length: 4 }, () => make(0));

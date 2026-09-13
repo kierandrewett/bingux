@@ -111,6 +111,7 @@ def state():
         **native,
         "shown": switcher["shown"],
         "visible": switcher["active"],
+        "shownAt": switcher["shownAt"],
         "label": switcher["selected"] or "",
         "ready": switcher["ready"],
         "previewCount": switcher["previewCount"],
@@ -185,9 +186,13 @@ try:
         wait_for(lambda s: s["focus"] == title)
     assert state()["windows"][:3] == ["Switcher Three", "Switcher Two", "Switcher One"]
     call("Minimize", "Switcher One")
+    pressed_at = time.time() * 1000
     key(56, True)
     tap(15)
     shown = wait_for(lambda s: s["shown"])
+    show_latency = shown["shownAt"] - pressed_at
+    print(f"INITIAL SHOW: {show_latency:.2f} ms")
+    assert 0 <= show_latency <= 50, f"Initial Alt+Tab presentation took {show_latency:.2f} ms"
     wait_for(lambda s: s["previewCount"] == 3)
     captured = state()["previewRequests"]
     time.sleep(0.65)

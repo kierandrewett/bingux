@@ -22,7 +22,7 @@ Item {
         Text {
             anchors.centerIn: parent
             text: root.count
-            color: Theme.shellSurface
+            color: Theme.background
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSmall
         }
@@ -77,7 +77,7 @@ Item {
             objectName: "notificationIndicatorCount"
             anchors.centerIn: parent
             value: Math.max(0, root.count)
-            color: Theme.shellSurface
+            color: Theme.background
         }
     }
 }

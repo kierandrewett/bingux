@@ -268,7 +268,7 @@ Item {
 
         anchors.fill: parent
         radius: Theme.insetRadius(Theme.radius + 2, 2)
-        color: root.selected ? Theme.searchSelection : "transparent"
+        color: root.selected ? Theme.selection : "transparent"
         border.width: root.selected ? 1 : 0
         border.color: "#387e9fc8"
     }

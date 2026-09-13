@@ -26,8 +26,19 @@ def captures(sources, outputs):
         if stream.get("corked") is True:
             continue
         app = props.get("application.name") or props.get("application.process.binary") or "Unknown application"
+        app_id = (
+            props.get("application.id")
+            or props.get("application.desktop")
+            or props.get("application.process.binary")
+            or ""
+        )
         device = source.get("description", source.get("name", "Audio input")) if source else "Audio input"
-        entry = {"app": app, "device": device, "muted": bool(stream.get("mute") or (source or {}).get("mute"))}
+        entry = {
+            "app": app,
+            "appId": app_id,
+            "device": device,
+            "muted": bool(stream.get("mute") or (source or {}).get("mute")),
+        }
         if entry not in result:
             result.append(entry)
     return result

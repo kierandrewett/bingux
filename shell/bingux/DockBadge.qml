@@ -4,14 +4,16 @@ import Quickshell
 Rectangle {
     id: root
     property bool shown: false
-    readonly property int cutoutMargin: 2
+    property int badgeSize: Theme.dockBadgeSize
+    readonly property real sizeRatio: badgeSize / Theme.dockBadgeSize
+    readonly property int cutoutMargin: Math.max(1, Math.round(2 * sizeRatio))
     property int count: 0
     property string iconName: ""
     property color foreground: Theme.shellSurface
     property int fadeOutDuration: Theme.motion
     readonly property string label: count > 99 ? "99+" : String(count)
-    height: Theme.dockBadgeSize
-    width: iconName ? height : Math.max(height, number.implicitWidth + Theme.padding)
+    height: badgeSize
+    width: iconName ? height : Math.max(height, number.implicitWidth + Theme.padding * sizeRatio)
     radius: height / 2
     opacity: 0
     onShownChanged: {
@@ -40,7 +42,7 @@ Rectangle {
         visible: !root.iconName
         value: Math.max(1, root.count)
         color: root.foreground
-        font.pixelSize: 13
+        font.pixelSize: Math.max(8, Math.round(13 * root.sizeRatio))
         font.weight: Font.Bold
         opticalCenter: true
     }
@@ -48,7 +50,7 @@ Rectangle {
         anchors.centerIn: parent
         visible: !!root.iconName
         source: root.iconName ? Quickshell.iconPath(root.iconName) : ""
-        implicitSize: Theme.fontSmall
+        implicitSize: Math.max(8, Math.round(Theme.fontSmall * root.sizeRatio))
         color: root.foreground
     }
 }

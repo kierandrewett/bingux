@@ -72,6 +72,17 @@ ShellRoot {
             wait(Theme.popupOpenMotion + 80);
             check(popup.revealScale === 1 && card().opacity === 1, "Opening reaches its final state");
         }
+        function test_fractionalAnchor() {
+            const originalX = popup.preferredX;
+            const originalY = popup.preferredY;
+            popup.preferredX = 100.5;
+            popup.preferredY = 80.5;
+            openSettled();
+            compare(card().x, 101, "Centred popup snaps its horizontal border to a pixel");
+            compare(card().y, 81, "Popup snaps its vertical placement to a pixel");
+            popup.preferredX = originalX;
+            popup.preferredY = originalY;
+        }
         function test_interruptedOpen() {
             if (Theme.reducedMotion)
                 return;

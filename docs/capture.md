@@ -47,6 +47,9 @@ Saved recordings use normal desktop notifications with Open, Save As and Discard
 actions. Successful saves never display a separate capture feedback panel.
 Saved screenshots send a normal desktop notification with an aspect-correct
 image preview and standard icon-labelled Copy, Save As and Discard buttons.
+Screenshot copying publishes the final PNG/JPEG through the native Wayland
+clipboard source; it does not spawn `wl-copy`. A small native owner process
+keeps that source alive for later paste requests.
 Clicking the body opens the image. Save As uses the desktop file chooser and
 keeps the original; Discard moves the original to Trash (never permanently
 deletes it if trash is unsupported). Actions retain the specific capture path
@@ -120,5 +123,8 @@ cancellation, failure and recording completion do not play the shutter.
 The selector runs in `bingux-capture-ui.service`. Its frozen preview uses the
 `bingux-capture` layer. The toolbar and settings use a separate transparent
 `bingux-capture-controls` layer above it, so compositor blur samples the preview.
-Keep blur disabled for `bingux-capture` and enable it for `bingux-capture-controls`.
+The packaged Gnoblin integration keeps blur disabled for `bingux-capture` and
+enables 24px blur for `bingux-capture-controls`; the latter also publishes the
+toolbar/settings geometry through the native background-effect protocol and the
+legacy `BlurRegion` fallback.
 `CaptureShell.qml` publishes their stacking relationship through `UiSession`.

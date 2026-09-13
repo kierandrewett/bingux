@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import urllib.request
 
 from gi.repository import Gio, GLib
 
@@ -206,6 +207,33 @@ def vpn_state():
     return rows
 
 
+def public_network():
+    request = urllib.request.Request("https://ipapi.co/json/", headers={"User-Agent": "Bingux/1.0"})
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            data = json.load(response)
+        if not isinstance(data, dict):
+            raise ValueError("Public connection response was not an object.")
+        ip = str(data.get("ip") or "")
+        ipaddress.ip_address(ip)
+        return {
+            "status": "ready",
+            "ip": ip,
+            "provider": str(data.get("org") or ""),
+            "country": str(data.get("country_name") or data.get("country") or ""),
+            "region": str(data.get("region") or ""),
+        }
+    except (ValueError, OSError, TimeoutError, UnicodeError, TypeError, AttributeError):
+        return {
+            "status": "error",
+            "ip": "",
+            "provider": "",
+            "country": "",
+            "region": "",
+            "error": "Could not load public connection details.",
+        }
+
+
 def settings(schema):
     source = Gio.SettingsSchemaSource.get_default()
     found = source.lookup(schema, True) if source else None
@@ -364,6 +392,29 @@ class Controls:
     def action(self, request):
         self.executor.submit(self.apply, request).add_done_callback(lambda future: GLib.idle_add(self.applied, future))
 
+    def public_network(self):
+        self.executor.submit(public_network).add_done_callback(
+            lambda future: GLib.idle_add(self.public_network_ready, future)
+        )
+
+    def public_network_ready(self, future):
+        try:
+            self.emit({"publicNetwork": future.result()})
+        except Exception:
+            self.emit(
+                {
+                    "publicNetwork": {
+                        "status": "error",
+                        "ip": "",
+                        "provider": "",
+                        "country": "",
+                        "region": "",
+                        "error": "Could not load public connection details.",
+                    }
+                }
+            )
+        return False
+
     def applied(self, future):
         error = ""
         try:
@@ -404,6 +455,8 @@ def main():
                         controls.refresh()
                 elif request.get("op") == "action":
                     controls.action(request)
+                elif request.get("op") == "public-network":
+                    controls.public_network()
             except (ValueError, TypeError):
                 continue
         return True

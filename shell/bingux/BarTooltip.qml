@@ -11,6 +11,8 @@ Scope {
     readonly property Item hostItem: barWindow && !("anchors" in barWindow) ? barWindow.contentItem : null
     property bool requested: false
     property string text: ""
+    property string supportingText: ""
+    property var details: []
     property bool reorderable: false
     property bool detectedReorderable: false
     function detectReorderable() {
@@ -88,7 +90,8 @@ Scope {
             width: root.hostItem ? Math.min(implicitWidth, parent.width - Theme.gap * 2) : popup.width
             height: implicitHeight
             text: root.text
-            supportingText: root.reorderable || root.detectedReorderable ? "Shift + right-click to customise" : ""
+            details: root.details
+            supportingText: root.supportingText || ((root.reorderable || root.detectedReorderable) && DesktopEditing.active ? "Shift + right-click to customise" : "")
             wrapText: true
         }
     }

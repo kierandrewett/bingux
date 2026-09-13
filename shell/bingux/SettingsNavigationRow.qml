@@ -17,7 +17,7 @@ AbstractButton {
     background: ControlCentreButtonSurface {
         control: root
         radius: 8
-        baseColor: root.selected ? Theme.settingsSelection : "transparent"
+        baseColor: root.selected ? Theme.hover : "transparent"
     }
     contentItem: Item {
         SymbolicIcon {

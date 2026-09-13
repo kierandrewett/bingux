@@ -15,7 +15,7 @@ PanelWindow {
     }
     margins.top: 100
     margins.left: 100
-    color: Theme.searchSurface
+    color: Theme.popupSurface
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None

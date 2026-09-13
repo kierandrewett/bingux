@@ -2,10 +2,12 @@
 
 import importlib.util
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "shell/bingux"))
 spec = importlib.util.spec_from_file_location(
     "capture_notify", Path(__file__).resolve().parents[1] / "shell/bingux/capture-notify.py"
 )
@@ -51,9 +53,9 @@ class NotificationActions(unittest.TestCase):
         self.assertEqual(values[2:4], ("media-record-symbolic", "Recording saved"))
         self.assertEqual(values[5], ["default", "Open", "save", "Save As…", "discard", "Discard"])
         self.assertNotIn("image-path", values[6])
-        with patch.object(module.subprocess, "run") as run:
+        with patch.object(module, "copy_image_to_clipboard") as copy:
             self.invoke("copy")
-            run.assert_not_called()
+            copy.assert_not_called()
 
     def test_recording_opens_its_saved_file(self):
         self.notice.kind = "recording"
@@ -62,10 +64,9 @@ class NotificationActions(unittest.TestCase):
             launch.assert_called_once_with(self.path.as_uri(), None)
 
     def test_copy_reads_this_capture_not_latest_capture(self):
-        with patch.object(module.subprocess, "run") as run:
+        with patch.object(module, "copy_image_to_clipboard") as copy:
             self.invoke("copy")
-            self.assertEqual(run.call_args.args[0], ["wl-copy", "--type", "image/png"])
-            self.assertEqual(run.call_args.kwargs["stdin"].name, str(self.path))
+            copy.assert_called_once_with(self.path, "image/png")
         self.notice.notify.assert_called_with("Screenshot copied")
 
     def test_other_notifications_do_not_trigger_actions(self):

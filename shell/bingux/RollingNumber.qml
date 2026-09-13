@@ -9,6 +9,7 @@ Item {
     property int pixelSize: 26
     property int duration: 140
     property int fontWeight: Font.Medium
+    property bool shadowed: false
     property string displayedText: text
     property string incomingText: text
     property real displayedValue: value
@@ -70,6 +71,8 @@ Item {
         font.features: ({
                 "tnum": 1
             })
+        style: root.shadowed ? Text.Raised : 0
+        styleColor: Theme.contentShadow
     }
     Row {
         id: glyphRow
@@ -103,6 +106,8 @@ Item {
                     text: glyph.oldChar
                     font: prefixText.font
                     color: root.color
+                    style: root.shadowed ? Text.Raised : 0
+                    styleColor: Theme.contentShadow
                     y: (glyph.height - height) / 2 - (glyph.rolling ? root.direction * root.progress * glyph.height : 0)
                     opacity: glyph.changed ? 1 - root.progress : 1
                 }
@@ -112,6 +117,8 @@ Item {
                     text: glyph.newChar
                     font: prefixText.font
                     color: root.color
+                    style: root.shadowed ? Text.Raised : 0
+                    styleColor: Theme.contentShadow
                     y: (glyph.height - height) / 2 + (glyph.rolling ? root.direction * (1 - root.progress) * glyph.height : 0)
                     opacity: root.progress
                 }

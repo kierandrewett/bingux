@@ -63,12 +63,19 @@ Item {
             width: root.panelLayout ? root.width : root.naturalWidth
             Repeater {
                 id: trayRepeater
-                model: root.trayItems
+                model: ScriptModel {
+                    values: root.trayItems
+                    objectProp: "id"
+                }
                 delegate: Item {
                     id: trayButton
 
                     required property var modelData
+                    required property int index
                     objectName: "trayItem-" + modelData.id
+                    property real transitionProgress: 0
+                    property int slideDirection: 1
+                    readonly property real slideOffset: slideDirection * (width + Theme.spaceSmall) * (1 - transitionProgress)
                     function revealFocus() {
                         if (!activeFocus || root.panelLayout)
                             return;
@@ -77,24 +84,24 @@ Item {
                     onActiveFocusChanged: revealFocus()
                     onXChanged: if (activeFocus)
                         Qt.callLater(revealFocus)
-                    ParallelAnimation {
-                        running: true
-                        NumberAnimation {
-                            target: trayButton
-                            property: "opacity"
-                            from: 0
-                            to: 1
-                            duration: Theme.reducedMotion || !root.enabled ? 0 : Theme.motion * 2
-                            easing.type: Easing.OutCubic
-                        }
-                        NumberAnimation {
-                            target: trayButton
-                            property: "scale"
-                            from: 0
-                            to: 1
-                            duration: Theme.reducedMotion || !root.enabled ? 0 : Theme.motion * 2
-                            easing.type: Easing.OutCubic
-                        }
+                    NumberAnimation {
+                        id: presenceAnimation
+                        target: trayButton
+                        property: "transitionProgress"
+                        from: 0
+                        to: 1
+                        duration: Theme.reducedMotion || !root.enabled ? 0 : Theme.motion * 3
+                        easing.type: Easing.OutCubic
+                    }
+                    Component.onCompleted: {
+                        // Enter from the nearest outside edge so an item does
+                        // not slide across or underneath its neighbour.
+                        slideDirection = trayRepeater.count < 2 ? 0 : index < (trayRepeater.count - 1) / 2 ? -1 : 1;
+                        presenceAnimation.start();
+                    }
+                    opacity: transitionProgress
+                    transform: Translate {
+                        x: trayButton.slideOffset
                     }
                     activeFocusOnTab: true
                     Accessible.role: Accessible.Button
@@ -225,7 +232,8 @@ Item {
                         anchorWindow: root.parentWindow
                         anchorItem: trayButton
                         function open() {
-                            visible = true;
+                            if (hasMenuItems)
+                                visible = true;
                         }
                     }
                     MouseArea {

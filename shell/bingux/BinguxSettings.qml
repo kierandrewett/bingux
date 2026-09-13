@@ -630,7 +630,7 @@ Window {
         width: root.width - root.shadowMargin * 2
         height: root.height - root.shadowMargin * 2
         radius: Theme.radius
-        color: Theme.settingsBackground
+        color: Theme.background
         visible: false
     }
     MultiEffect {
@@ -649,10 +649,10 @@ Window {
         anchors.fill: parent
         anchors.margins: root.shadowMargin
         radius: root.maximised ? 0 : Theme.radius
-        color: Theme.settingsBackground
+        color: Theme.background
         Rectangle {
             anchors.fill: parent
-            color: Theme.settingsBackground
+            color: Theme.background
         }
         Item {
             id: mainPane
@@ -663,7 +663,7 @@ Window {
                 anchors.top: parent.top
                 width: parent.width
                 height: root.headerHeight
-                color: Theme.settingsBackground
+                color: Theme.background
                 MouseArea {
                     anchors.fill: parent
                     onPressed: root.startSystemMove()
@@ -801,7 +801,7 @@ Window {
                         visible: root.status !== "" && root.status !== "Saved"
                         Layout.fillWidth: true
                         implicitHeight: notice.implicitHeight + Theme.padding * 2
-                        color: Theme.surface
+                        color: Theme.elevated
                         radius: Theme.radius
                         Text {
                             id: notice
@@ -1115,7 +1115,7 @@ Window {
             anchors.bottom: parent.bottom
             anchors.left: parent.left
             visible: root.wideLayout || root.navigationOpen
-            color: Theme.settingsSidebar
+            color: Theme.surface
             Rectangle {
                 anchors.right: parent.right
                 height: parent.height

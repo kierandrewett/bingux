@@ -32,8 +32,13 @@ class MicrophoneStatusTest(unittest.TestCase):
 
     def test_real_capture_has_owner_and_device(self):
         self.assertEqual(
-            captures(self.sources, [self.stream()]), [dict(app="Firefox", device="USB microphone", muted=False)]
+            captures(self.sources, [self.stream()]),
+            [dict(app="Firefox", appId="", device="USB microphone", muted=False)],
         )
+
+    def test_real_capture_preserves_application_identity_for_icon_lookup(self):
+        stream = self.stream(**{"application.process.binary": "DiscordCanary"})
+        self.assertEqual(captures(self.sources, [stream])[0]["appId"], "DiscordCanary")
 
     def test_muted_capture_remains_visible_and_paused_capture_does_not(self):
         stream = self.stream()

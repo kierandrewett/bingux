@@ -2,10 +2,12 @@
 
 import importlib.util
 from pathlib import Path
+import sys
 import unittest
 import tempfile
 from unittest.mock import Mock, patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "shell/bingux"))
 spec = importlib.util.spec_from_file_location(
     "capture", Path(__file__).resolve().parents[1] / "shell/bingux/capture_backend.py"
 )
@@ -83,6 +85,34 @@ class CapturePolicy(unittest.TestCase):
                 ):
                     worker.complete()
                     self.assertEqual(shutter.call_count, int(kind == "screenshot" and has_output))
+
+    def test_shutter_waits_for_clipboard_copy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            worker = capture.Capture.__new__(capture.Capture)
+            worker.job = {"kind": "screenshot", "copy": True, "format": "png"}
+            worker.final = Path(directory) / "saved.png"
+            worker.temporary = Path(directory) / "partial.png"
+            worker.temporary.write_bytes(b"capture")
+            worker.cleanup = Mock()
+            worker.clear_preview = Mock()
+            worker.emit = Mock()
+            order = []
+
+            def copy_image(path, mime):
+                order.append("copy")
+                self.assertEqual(path, worker.final)
+                self.assertEqual(mime, "image/png")
+                return True
+
+            with (
+                patch.object(capture, "play_shutter", side_effect=lambda: order.append("shutter")),
+                patch.object(capture, "copy_image_to_clipboard", side_effect=copy_image),
+                patch.object(capture.subprocess, "Popen"),
+                patch.object(capture.select, "select", return_value=([], [], [])),
+            ):
+                worker.complete()
+
+            self.assertEqual(order, ["copy", "shutter"])
 
     def test_software_only_never_probes_hardware(self):
         worker = self.worker(["vah264enc", "nvh264enc", "x264enc", "openh264enc"], {"vah264enc", "openh264enc"})

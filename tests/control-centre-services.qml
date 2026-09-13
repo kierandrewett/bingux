@@ -169,6 +169,16 @@ ShellRoot {
         property bool doNotDisturb: false
         property string error: ""
         property var actions: []
+        property bool publicNetworkBusy: false
+        property var publicNetwork: ({
+                status: "ready",
+                ip: "203.0.113.7",
+                provider: "Example ISP",
+                country: "United Kingdom",
+                region: "England",
+                error: ""
+            })
+        property int publicNetworkRequests: 0
         property var controls: ({
                 vpn: true,
                 dnd: true,
@@ -214,6 +224,9 @@ ShellRoot {
         }
         function action(value) {
             actions = actions.concat([value]);
+        }
+        function refreshPublicNetwork() {
+            publicNetworkRequests++;
         }
         function toggleAwake() {
             keepAwake = !keepAwake;
@@ -411,6 +424,17 @@ ShellRoot {
             check(extra.visible && centre.detailPage === "vpn", "VPN arrow opens its detail page");
             const tail = findChild(extra, "controlVpn_tailscale");
             check(tail.subtitle === "Exit node active", "exit node status is explicit");
+            const publicNetwork = findChild(extra, "controlVpnPublicNetwork");
+            check(publicNetwork.visible && publicNetwork.subtitle === "203.0.113.7", "public connection details stay collapsed with a useful summary");
+            mouseClick(publicNetwork);
+            wait(80);
+            const publicDetails = findChild(extra, "controlVpnPublicNetworkDetails");
+            check(publicDetails.visible && findChild(publicDetails, "controlVpnPublicIp").text === "203.0.113.7", "public connection details expand with the current IP");
+            check(findChild(publicDetails, "controlVpnPublicProvider").text === "Example ISP" && findChild(publicDetails, "controlVpnPublicRegion").text === "United Kingdom · England", "public connection details show provider and region");
+            check(services.publicNetworkRequests === 1, "opening public connection details refreshes the lookup once");
+            mouseClick(publicNetwork);
+            wait(80);
+            check(!publicDetails.visible, "public connection details collapse cleanly");
             mouseClick(findChild(tail, "controlVpn_tailscaleSwitch"));
             check(services.actions.length === 1 && services.actions[0].id === "tailscale" && !services.actions[0].enabled, "VPN switch requests only its own service action");
             if (Quickshell.env("BINGUX_CONTROL_SCREENSHOT"))

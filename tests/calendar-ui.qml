@@ -39,6 +39,11 @@ ShellRoot {
                 report.setText("FAIL: calendar checks did not finish\n");
                 calendar.visible = true;
                 wait(250);
+                const openCalendarButton = findChild(window.contentItem, "openCalendarButton");
+                const openCalendarPosition = openCalendarButton.mapToItem(canvas, 0, 0);
+                mouseMove(canvas, openCalendarPosition.x + openCalendarButton.width - 1, openCalendarPosition.y + openCalendarButton.height / 2);
+                wait(30);
+                verify(openCalendarButton.hovered, "Open Calendar right padding enters hover");
                 const originalHeight = calendar.popupHeight;
                 calendar.selectDate(new Date(calendar.today.getFullYear(), calendar.today.getMonth(), calendar.today.getDate() === 1 ? 2 : calendar.today.getDate() - 1));
                 mouseClick(findChild(window.contentItem, "backToToday"));

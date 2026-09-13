@@ -10,6 +10,7 @@ done
 printf '%s\n' 'singleton Theme 1.0 Theme.qml' 'ShellPopup 1.0 ShellPopup.qml' 'PanelOutline 1.0 PanelOutline.qml' >"$test_dir/qmldir"
 sed -i '/id: root/a\    property alias testDismissContentItem: dismissWindow.contentItem' "$test_dir/ShellPopup.qml"
 cp "$repo_dir/tests/popup-motion.qml" "$test_dir/shell.qml"
+bash "$repo_dir/tests/copy-panel-effects.sh" "$test_dir"
 export BINGUX_POPUP_TEST_RESULTS="$test_dir/results.txt"
 timeout 20s dbus-run-session -- "${QUICKSHELL_BIN:-quickshell}" -p "$test_dir" --no-color >"$test_dir/runtime.log" 2>&1 || {
     cat "$test_dir/runtime.log"

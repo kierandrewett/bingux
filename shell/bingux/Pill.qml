@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 
@@ -36,6 +37,13 @@ Item {
         anchors.centerIn: parent
         width: root.panelLayout ? Math.max(0, root.width - root.horizontalPadding * 2) : implicitWidth
         spacing: Theme.gap
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Theme.contentShadow
+            shadowBlur: 0.28
+            shadowVerticalOffset: 1.2
+        }
     }
     WidgetFace {
         id: customFace

@@ -163,12 +163,14 @@ import Quickshell.Io
 ShellRoot {
  id: fixture
  property string received: ""
- IpcHandler { target: "fixture"; function received(): string { return fixture.received; } }
+ IpcHandler { target: "fixture"; function received(): string { return fixture.received; } function clear(): string { fixture.received = ""; return ""; } }
  Window { visible: true; width: 640; height: 400; title: "Popout Other"; color: "#246824"
   Item { focus: true; Keys.onPressed: event => { fixture.received = "Popout Other:" + event.key; } }
+  MouseArea { anchors.fill: parent; onClicked: fixture.received = "Popout Other:mouse" }
  }
  Window { visible: true; width: 640; height: 400; title: "Popout Fullscreen"; color: "#243868"
   Item { focus: true; Keys.onPressed: event => { fixture.received = "Popout Fullscreen:" + event.key; } }
+  MouseArea { anchors.fill: parent; onClicked: fixture.received = "Popout Fullscreen:mouse" }
  }
 }""")
 processes = []
@@ -234,26 +236,34 @@ try:
         )
     tap(125)
     wait(lambda: ipc("search").get("acceptingKeyboard"), "search before returning to video")
-    tap(125)
-    wait(lambda: "bingux-search-chrome" in state()["order"], "chrome only before video click")
     native("ResetMotion")
+    run([qs, "ipc", "--path", str(apps_qml), "call", "fixture", "clear"])
+    # The search layer owns the first outside click and hides itself. It must
+    # not fall through to the fullscreen app.
+    native("Click", 640, 400, 1)
+    wait(
+        lambda: not ipc("search").get("visible") and "bingux-search-chrome" in state()["order"],
+        "outside click leaves chrome only",
+    )
+    received = run([qs, "ipc", "--path", str(apps_qml), "call", "fixture", "received"]).strip()
+    assert received == "", ("outside search click was delivered to the app", received)
+    # The second click is the first normal app click. Its press/release may
+    # also dismiss the panels through the compositor's raised-window path.
     click(640, 400, 1)
     wait(
         lambda: (
-            lambda motion: (
-                any(y < 0 for y in motion.get("bingux-top-bar", []))
-                and any(y > 0 for y in motion.get("bingux-dock", []))
-            )
-        )(state()["motion"]),
-        "panels slide toward opposite screen edges",
+            run([qs, "ipc", "--path", str(apps_qml), "call", "fixture", "received"]).strip()
+            == "Popout Fullscreen:mouse"
+        ),
+        "second fullscreen click reaches the app",
     )
-    wait(lambda: "bingux-search-chrome" not in state()["order"], "video click dismisses chrome")
+    wait(lambda: "bingux-search-chrome" not in state()["order"], "second click dismisses chrome")
     wait(
         lambda: all(
             state()["order"].index(panel) < state()["order"].index("Popout Fullscreen")
             for panel in ("bingux-top-bar", "bingux-dock")
         ),
-        "video click hides both panels",
+        "second click hides both panels",
     )
     # Real clicks must reach the visible panels, not the search dismiss area.
     tap(125)

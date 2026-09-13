@@ -101,8 +101,6 @@ ShellPopup {
     property var presentedEvents: []
     property date agendaDate: selectedDate
     popupWidth: 384
-    contentPadding: 16
-    surfaceColor: Theme.popupSurface
     popupHeight: calendar.implicitHeight + contentPadding * 2
     onAboutToOpen: {
         if (inlineMode)
@@ -326,6 +324,8 @@ ShellPopup {
         }
         ScrollBar.vertical: ScrollBar {
             policy: root.inlineMode ? ScrollBar.AlwaysOff : ScrollBar.AsNeeded
+            y: dateHeading.height + Theme.padding
+            height: Math.max(0, parent.height - y)
         }
         ColumnLayout {
             id: calendar
@@ -358,6 +358,7 @@ ShellPopup {
                     Layout.fillWidth: true
                 }
                 IconButton {
+                    objectName: "openCalendarButton"
                     visible: root.popupWidth >= 240
                     Layout.fillWidth: false
                     iconName: "x-office-calendar-symbolic"

@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Controls
 import Quickshell
 
@@ -23,6 +24,14 @@ AbstractButton {
         focused: root.visualFocus
     }
     contentItem: Item {
+        id: overflowContent
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Theme.contentShadow
+            shadowBlur: 0.28
+            shadowVerticalOffset: 1.2
+        }
         WidgetFace {
             id: face
             anchors.centerIn: parent

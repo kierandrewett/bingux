@@ -344,6 +344,7 @@ Item {
                 objectName: "controlDetailBack"
                 iconName: "go-previous-symbolic"
                 label: "Back to Control Centre"
+                tooltipEnabled: false
                 onClicked: root.backRequested()
             }
             Text {

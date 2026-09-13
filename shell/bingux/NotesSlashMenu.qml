@@ -36,7 +36,7 @@ Popup {
     onQueryChanged: selectedIndex = 0
     onSelectedIndexChanged: list.positionViewAtIndex(selectedIndex, ListView.Contain)
     background: Rectangle {
-        color: Qt.rgba(Theme.surface.r, Theme.surface.g, Theme.surface.b, 1)
+        color: Theme.popupSurface
         radius: Theme.radius
         border.width: 1
         border.color: Theme.outline

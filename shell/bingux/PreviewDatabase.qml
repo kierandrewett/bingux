@@ -16,7 +16,7 @@ Rectangle {
     property bool requested: false
     property bool loading: false
     property string error: ""
-    color: Theme.searchSurface
+    color: Theme.popupSurface
     readonly property real columnWidth: Math.max(140, horizontal.width / Math.max(1, tableData ? tableData.columns.length : 1)) * zoom
     onSelectedTableChanged: tableChoice.currentIndex = initialData ? initialData.tables.indexOf(selectedTable) : -1
     function load(table, offset) {

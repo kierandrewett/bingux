@@ -32,6 +32,7 @@ Scope {
     property string historyDirectory: Quickshell.statePath("notifications")
     onAllEntriesChanged: if (historyReady)
         historySave.restart()
+    Component.onCompleted: root.refreshApplicationAliases()
     Process {
         id: historyDirectorySetup
         command: ["mkdir", "-p", "-m", "700", root.historyDirectory]

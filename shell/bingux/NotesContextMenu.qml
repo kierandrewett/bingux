@@ -18,10 +18,8 @@ ShellPopup {
     objectName: "notesContextMenu"
     screen: notes.screen
     hostItem: notes.menuHost
-    cornerRadius: Theme.radius
     popupWidth: 236
     contentPadding: 6
-    surfaceColor: Theme.popupSurface
     popupHeight: Math.min(menuColumn.implicitHeight + 12, height - Theme.barHeight - 24)
     onVisibleChanged: {
         if (visible)

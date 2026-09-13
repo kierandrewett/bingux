@@ -77,6 +77,8 @@ ShellRoot {
         return false;
     }
     function closePanelsExcept(panel) {
+        if (panel !== windowMenuPopup)
+            windowMenuPopup.visible = false;
         const editingContainers = DesktopEditing.active && (panel === barOverflow || panel === controlCentre);
         for (const widget of terminalSidebar.panelWidgets) {
             if (panel !== widget.popup)
@@ -107,12 +109,16 @@ ShellRoot {
     function openSearch() {
         searchOverlay.showSearch();
     }
+    function toggleSearch() {
+        searchOverlay.toggleSearch();
+    }
     function openWidgetMenu(id, item, window) {
         widgetMenu.widgetId = id;
         widgetMenu.anchorItem = item;
         widgetMenu.anchorWindow = window.nativeWindow || window;
         widgetMenu.visible = true;
     }
+    WindowMenu { id: windowMenuPopup }
     TrayMenu {
         id: widgetMenu
         property string widgetId: ""
@@ -263,6 +269,11 @@ ShellRoot {
                 action: "open"
             });
         }
+        function toggleSearch() {
+            popouts.command("search", {
+                action: "toggle"
+            });
+        }
         function closeSearch() {
             popouts.command("search", {
                 action: "hide"
@@ -400,6 +411,10 @@ ShellRoot {
 
     IpcHandler {
         target: "shell"
+        function windowMenu(payload: string): void {
+            root.closePanelsExcept(windowMenuPopup);
+            windowMenuPopup.showRequest(payload);
+        }
         function customise(): void {
             binguxSettings.openCustomise("", "");
         }
@@ -1008,7 +1023,7 @@ ShellRoot {
         color: "transparent"
         WlrLayershell.layer: DesktopEditing.active || !!popouts.states.search?.revealCompanions ? WlrLayer.Overlay : WlrLayer.Top
         WlrLayershell.namespace: "bingux-top-bar"
-        WlrLayershell.keyboardFocus: DesktopEditing.active || !!popouts.states.search?.revealCompanions ? WlrKeyboardFocus.None : WlrKeyboardFocus.OnDemand
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
         anchors {
             top: true
             left: true
@@ -1095,7 +1110,7 @@ ShellRoot {
                 Layout.column: topBar.controlColumn(searchPill)
                 Layout.row: topBar.controlRow(searchPill)
                 visible: topBar.chosen(searchPill)
-                onClicked: root.openSearch()
+                onClicked: root.toggleSearch()
             }
             Pill {
                 id: clockPill
@@ -1122,6 +1137,7 @@ ShellRoot {
                     value: root.currentTime.getTime()
                     pixelSize: Theme.fontSize
                     fontWeight: Font.DemiBold
+                    shadowed: true
                 }
                 RollingNumber {
                     id: timeLabel
@@ -1129,6 +1145,7 @@ ShellRoot {
                     value: root.currentTime.getTime()
                     pixelSize: Theme.fontSize
                     fontWeight: Font.DemiBold
+                    shadowed: true
                 }
                 MouseArea {
                     id: clockMouse
@@ -1217,7 +1234,8 @@ ShellRoot {
                             anchorItem: metricsPill
                             barWindow: topBar.windowFor(metricsPill)
                             requested: metricsPill.pointerHovered && !metricsPopup.visible
-                            text: metricsPill.description
+                            text: "System monitors"
+                            supportingText: metricsPill.description
                         }
                     }
                     InputSourceSelector {
@@ -1260,7 +1278,8 @@ ShellRoot {
                             anchorItem: systemPill
                             barWindow: topBar.windowFor(systemPill)
                             requested: systemMouse.containsMouse
-                            text: "Control Centre" + (systemIndicators.extraStatusDescription ? "\n" + systemIndicators.extraStatusDescription : "")
+                            text: "Control centre"
+                            supportingText: "Quick settings and session controls"
                         }
                         MouseArea {
                             id: systemMouse

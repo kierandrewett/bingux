@@ -7,11 +7,12 @@ import Quickshell.Widgets
 
 Scope {
     id: root
+    readonly property alias nativeWindow: window
     property bool enabled: true
-    property int showDelay: 40
-    readonly property int selectionMotion: 70
+    property int showDelay: 0
     property bool active: false
     property bool shown: false
+    property double shownAt: 0
     property var activeStreams: []
     property var notifications: []
     property var previews: ({})
@@ -23,35 +24,38 @@ Scope {
     property string previewError: ""
     property int previewRequests: 0
     property real revealProgress: 0
+    readonly property bool compositorClose: PopupTransitions.matches(100, Easing.OutCubic, "bingux-switcher")
     property var history: []
     property var liveWindows: []
     property string focusedWindowId: ""
     property var windows: []
     property int selected: 0
-    property int trackIndex: 0
-    property int trackStart: 0
-    property bool rebasing: false
     property var activeScreen: Quickshell.screens[0] || null
-    readonly property int tileWidth: 240
-    readonly property int previewHeight: 126
-    readonly property int tileHeight: previewHeight + Theme.dockIconSize + Theme.gap * 3
-    readonly property int tileGap: Theme.spaceSmall
-    readonly property int cardPadding: Theme.dockPadding
+    readonly property int gridGap: Theme.spaceSmall
+    readonly property int cardPadding: Theme.gap
+    readonly property int headerHeight: Theme.iconSize + Theme.gap
+    // Keep the chooser in the central 40% of the monitor: 30% remains clear
+    // on both sides while additional windows wrap onto centered rows.
+    readonly property int gridMaxWidth: activeScreen ? Math.max(240, Math.round(activeScreen.width * 0.4) - cardPadding * 2) : 496
+    readonly property int previewBaseHeight: 120
+    readonly property int gridWidth: cardLayout.width
+    readonly property var cardLayout: arrangeCards()
     readonly property var selectedWindow: windows.length ? windows[selected] : null
-    readonly property int visibleCount: Math.max(1, Math.min(5, Math.floor(((activeScreen ? activeScreen.width : 1280) - 64 - cardPadding * 2 + tileGap) / (tileWidth + tileGap))))
-    readonly property int displayCount: Math.min(windows.length, visibleCount)
-    readonly property var visibleWindows: Array.from({
-        length: displayCount
-    }, (_, index) => windows[(trackStart + index) % windows.length])
+    readonly property int displayCount: windows.length
+    readonly property var visibleWindows: windows
+    readonly property var cardWindows: active || revealProgress > 0 ? windows : history
+    readonly property int cardCount: cards.count
     readonly property var selectedIcon: {
         const revision = iconRevision;
-        return icons.itemAt(trackIndex)?.appIcon ?? null;
+        return cards.itemAt(selected)?.appIcon ?? null;
     }
     signal opening
     onShownChanged: {
+        if (shown)
+            shownAt = Date.now();
         visibilityAnimation.stop();
         visibilityAnimation.to = shown ? 1 : 0;
-        visibilityAnimation.duration = Theme.reducedMotion || shown ? 0 : 60;
+        visibilityAnimation.duration = Theme.reducedMotion || shown || compositorClose ? 0 : 100;
         visibilityAnimation.start();
     }
     NumberAnimation {
@@ -62,41 +66,6 @@ Scope {
         onFinished: if (!root.active)
             root.windows = []
     }
-    function revealSelection() {
-        if (trackIndex < trackStart)
-            trackStart = trackIndex;
-        else if (trackIndex >= trackStart + displayCount)
-            trackStart = trackIndex - displayCount + 1;
-        recenter.restart();
-    }
-    function normalizeTrack() {
-        if (!windows.length || (trackIndex >= windows.length && trackIndex < windows.length * 2))
-            return;
-        const copies = 1 - Math.floor(trackIndex / windows.length);
-        const pixels = copies * windows.length * (tileWidth + tileGap);
-        const highlightX = selectionHighlight.x + pixels;
-        const scrollX = viewport.contentX + pixels;
-        rebasing = true;
-        trackIndex += copies * windows.length;
-        trackStart += copies * windows.length;
-        // Preserve the current interpolated positions as well as the targets.
-        // This also works while key repeat keeps an animation in progress.
-        selectionHighlight.x = highlightX;
-        viewport.contentX = scrollX;
-        rebasing = false;
-        selectionHighlight.x = Qt.binding(() => root.trackIndex * (root.tileWidth + root.tileGap));
-        viewport.contentX = Qt.binding(() => root.trackStart * (root.tileWidth + root.tileGap));
-    }
-    Timer {
-        id: recenter
-        interval: Theme.reducedMotion ? 0 : root.selectionMotion + 32
-        onTriggered: {
-            if (!root.active || !root.windows.length)
-                return;
-            root.normalizeTrack();
-        }
-    }
-
     function refresh(snapshot) {
         const live = snapshot;
         const retainedPreviews = {};
@@ -126,16 +95,9 @@ Scope {
         if (!active)
             return;
         const previous = selectedWindow;
-        const previousCount = windows.length;
         windows = windows.map(window => live.find(next => next.id === window.id)).filter(Boolean);
         const retained = previous ? windows.findIndex(window => window.id === previous.id) : -1;
         selected = retained >= 0 ? retained : Math.max(0, Math.min(selected, windows.length - 1));
-        if (windows.length !== previousCount) {
-            rebasing = true;
-            trackIndex = windows.length + selected;
-            trackStart = windows.length + Math.max(0, selected - displayCount + 1);
-            rebasing = false;
-        }
         if (!windows.length)
             cancel();
     }
@@ -150,17 +112,15 @@ Scope {
             warmPreview.stop();
             previewAttempts = ({});
             selected = backwards ? windows.length - 1 : windows.length > 1 ? 1 : 0;
-            trackIndex = windows.length + selected;
-            trackStart = windows.length + Math.max(0, selected - displayCount + 1);
             const focused = history.find(window => window.focused);
             activeScreen = focused && focused.monitor ? Quickshell.screens.find(screen => screen.x === focused.monitor.x && screen.y === focused.monitor.y) || Quickshell.screens[0] : Quickshell.screens[0] || null;
             opening();
-            reveal.restart();
+            if (root.showDelay === 0)
+                root.shown = true;
+            else
+                reveal.restart();
         } else {
-            normalizeTrack();
             selected = (selected + (backwards ? -1 : 1) + windows.length) % windows.length;
-            trackIndex += backwards ? -1 : 1;
-            revealSelection();
             previewPump.restart();
         }
     }
@@ -197,6 +157,66 @@ Scope {
         const app = appFor(window);
         return Quickshell.iconPath(app && app.icon ? app.icon : "application-x-executable", "application-x-executable");
     }
+    function previewAspect(window) {
+        const geometry = window?.geometry;
+        return geometry && geometry.width > 0 && geometry.height > 0 ? geometry.width / geometry.height : 16 / 9;
+    }
+    function previewSize(window) {
+        const aspect = root.previewAspect(window);
+        const width = Math.min(root.gridMaxWidth - Theme.gap * 2, 320, Math.round(root.previewBaseHeight * aspect));
+        return {
+            width: Math.max(1, width),
+            height: Math.max(1, Math.round(width / aspect))
+        };
+    }
+    function cardWidthFor(window) {
+        return Math.max(124, root.previewSize(window).width + Theme.gap * 2);
+    }
+    function cardHeightFor(window) {
+        return root.headerHeight + root.previewSize(window).height + Theme.gap * 2 + Theme.spaceSmall;
+    }
+    function arrangeCards() {
+        const positions = [];
+        let row = [], rowWidth = 0, rowHeight = 0, top = 0, widestRow = 0;
+        function placeRow() {
+            widestRow = Math.max(widestRow, rowWidth);
+            let left = (root.gridMaxWidth - rowWidth) / 2;
+            for (const entry of row) {
+                positions[entry.index] = {
+                    x: left,
+                    y: top
+                };
+                left += entry.width + root.gridGap;
+            }
+            top += rowHeight + root.gridGap;
+            row = [];
+            rowWidth = 0;
+            rowHeight = 0;
+        }
+        root.windows.forEach((window, index) => {
+            const width = root.cardWidthFor(window);
+            if (row.length && rowWidth + root.gridGap + width > root.gridMaxWidth)
+                placeRow();
+            rowWidth += (row.length ? root.gridGap : 0) + width;
+            rowHeight = Math.max(rowHeight, root.cardHeightFor(window));
+            row.push({
+                index,
+                width
+            });
+        });
+        if (row.length)
+            placeRow();
+        // Wrap against the monitor limit, then trim the unused space equally
+        // from both sides without changing the row breaks or their centering.
+        const inset = (root.gridMaxWidth - widestRow) / 2;
+        for (const position of positions)
+            position.x -= inset;
+        return {
+            positions,
+            width: widestRow,
+            height: Math.max(0, top - root.gridGap)
+        };
+    }
     Timer {
         id: reveal
         interval: root.showDelay
@@ -212,7 +232,8 @@ Scope {
         previewPending = true;
         previewTimeout.restart();
         previewRequests++;
-        shortcuts.requestPreview(window.id, tileWidth - Theme.gap * 2, previewHeight);
+        const size = root.previewSize(window);
+        shortcuts.requestPreview(window.id, size.width, size.height);
     }
     // One idle snapshot after focus settles prepares the next switch and keeps
     // content for clients that release their buffers when minimised.
@@ -306,12 +327,17 @@ Scope {
             console.warn("bingux-switcher: " + message);
         }
         onPointerPressed: function (x, y, button) {
-            const point = iconRow.mapFromItem(window.contentItem, x - root.activeScreen.x, y - root.activeScreen.y);
-            x = point.x;
-            y = point.y;
-            if (root.shown && button === 1 && x >= 0 && x < iconRow.width && y >= 0 && y < root.tileHeight && x % (root.tileWidth + root.tileGap) < root.tileWidth) {
-                root.trackIndex = Math.floor(x / (root.tileWidth + root.tileGap));
-                root.selected = root.trackIndex % root.windows.length;
+            const point = grid.mapFromItem(window.contentItem, x - root.activeScreen.x, y - root.activeScreen.y);
+            let clicked = -1;
+            for (let index = 0; index < cards.count; index++) {
+                const card = cards.itemAt(index);
+                if (card && point.x >= card.x && point.x < card.x + card.width && point.y >= card.y && point.y < card.y + card.height) {
+                    clicked = index;
+                    break;
+                }
+            }
+            if (root.shown && button === 1 && clicked >= 0) {
+                root.selected = clicked;
                 root.finish();
                 shortcuts.end();
             } else
@@ -342,7 +368,7 @@ Scope {
                 root.cancel();
                 shortcuts.end();
                 root.enabled = settings.enabled === undefined ? true : settings.enabled;
-                root.showDelay = settings.showDelay === undefined ? 40 : settings.showDelay;
+                root.showDelay = settings.showDelay === undefined ? 0 : settings.showDelay;
             } catch (error) {
                 console.warn("bingux-switcher: keeping previous settings: " + error);
             }
@@ -355,6 +381,7 @@ Scope {
                 active: root.active,
                 shown: root.shown,
                 ready: shortcuts.ready,
+                shownAt: root.shownAt,
                 previewCount: Object.keys(root.previews).length,
                 previewRequests: root.previewRequests,
                 previewError: root.previewError,
@@ -386,104 +413,134 @@ Scope {
             width: 0
             height: 0
         }
+        BlurRegion {
+            enabled: !standardBlur.available
+            window: window
+            surfaceNamespace: "bingux-switcher"
+            region: Qt.rect(presentation.x - 1, presentation.y - 1, presentation.width + 2, presentation.height + 2)
+        }
         Item {
             id: presentation
+            SurfaceFade {
+                target: presentation
+            }
             anchors.centerIn: parent
             width: strip.width
             height: strip.height
-            opacity: root.revealProgress
-            scale: Theme.popupInitialScale + (1 - Theme.popupInitialScale) * root.revealProgress
+            opacity: root.compositorClose ? 1 : root.revealProgress
+            scale: 1
             Rectangle {
                 id: strip
+                BackgroundEffect {
+                    id: standardBlur
+                    target: strip
+                    radius: strip.radius
+                }
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: root.displayCount * (root.tileWidth + root.tileGap) - root.tileGap + root.cardPadding * 2
-                height: root.tileHeight + root.cardPadding * 2
-                radius: Theme.shellRadius
-                color: Theme.popupSurface
+                width: root.gridWidth + root.cardPadding * 2
+                height: grid.implicitHeight + root.cardPadding * 2
+                radius: Theme.cardRadius
+                color: Theme.overlaySurface
                 border.width: 1
                 border.color: Theme.outline
                 PanelOutline {
                     surface: strip
                 }
-                Flickable {
-                    id: viewport
-                    objectName: "switcherViewport"
-                    anchors.fill: parent
-                    anchors.margins: root.cardPadding
-                    contentWidth: iconRow.implicitWidth
-                    contentHeight: root.tileHeight
-                    contentX: root.trackStart * (root.tileWidth + root.tileGap)
-                    interactive: false
-                    clip: true
-                    Behavior on contentX {
-                        enabled: root.shown && root.revealProgress > 0 && !root.rebasing && !Theme.reducedMotion
-                        NumberAnimation {
-                            duration: root.selectionMotion
-                            easing.type: Easing.OutCubic
-                        }
-                    }
-                    Rectangle {
-                        id: selectionHighlight
-                        objectName: "switcherSelection"
-                        x: root.trackIndex * (root.tileWidth + root.tileGap)
-                        y: 0
-                        width: root.tileWidth
-                        height: root.tileHeight
-                        radius: Theme.insetRadius(strip.radius, root.cardPadding)
-                        color: Theme.hover
-                        Behavior on x {
-                            enabled: root.shown && root.revealProgress > 0 && !root.rebasing && !Theme.reducedMotion
-                            NumberAnimation {
-                                duration: root.selectionMotion
-                                easing.type: Easing.OutCubic
+                PopupShadow {
+                    surface: strip
+                }
+                Item {
+                    id: grid
+                    objectName: "switcherGrid"
+                    anchors.centerIn: parent
+                    width: root.gridWidth
+                    implicitHeight: root.cardLayout.height
+                    Repeater {
+                        id: cards
+                        // Keep one card per live window ready while unmapped.
+                        // A shortcut only updates order and selection.
+                        model: root.cardWindows.length
+                        onItemAdded: root.iconRevision++
+                        onItemRemoved: root.iconRevision++
+                        Item {
+                            required property int index
+                            readonly property var modelData: root.cardWindows[index] || ({
+                                    id: "",
+                                    appId: ""
+                                })
+                            readonly property var previewDimensions: root.previewSize(modelData)
+                            readonly property bool selectedCard: index === root.selected
+                            property alias appIcon: icon
+                            objectName: selectedCard ? "switcherSelection" : "switcherCard"
+                            width: root.cardWidthFor(modelData)
+                            height: root.cardHeightFor(modelData)
+                            x: root.cardLayout.positions[index]?.x ?? 0
+                            y: root.cardLayout.positions[index]?.y ?? 0
+                            ControlCentreButtonSurface {
+                                anchors.fill: parent
+                                control: QtObject {
+                                    readonly property bool enabled: true
+                                    readonly property bool hovered: false
+                                    readonly property bool down: false
+                                    readonly property bool visualFocus: false
+                                }
+                                radius: Theme.insetRadius(Theme.cardRadius, root.cardPadding)
+                                baseColor: Theme.hover
+                                opacity: selectedCard ? 1 : 0
+                                Behavior on opacity {
+                                    enabled: root.shown && !Theme.reducedMotion
+                                    NumberAnimation {
+                                        duration: 80
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
                             }
-                        }
-                    }
-                    RowLayout {
-                        id: iconRow
-                        spacing: root.tileGap
-                        Repeater {
-                            id: icons
-                            // A numeric model preserves delegates on title/focus snapshots.
-                            // Replacing a JS-array model destroys every badge and image.
-                            model: root.shown || root.revealProgress > 0 ? root.windows.length * 3 : 0
-                            onItemAdded: root.iconRevision++
-                            onItemRemoved: root.iconRevision++
-                            Item {
-                                required property int index
-                                readonly property var modelData: root.windows[index % root.windows.length] || ({
-                                        id: "",
-                                        appId: ""
-                                    })
-                                property alias appIcon: icon
-                                Layout.preferredWidth: root.tileWidth
-                                Layout.preferredHeight: root.tileHeight
-                                AppIcon {
-                                    id: icon
-                                    anchors.left: parent.left
-                                    anchors.leftMargin: Theme.gap
-                                    anchors.bottom: parent.bottom
-                                    anchors.bottomMargin: Theme.gap
-                                    implicitSize: Theme.dockIconSize
-                                    group: ({
-                                            id: modelData.appId.replace(/\.desktop$/, ""),
-                                            displayName: root.appName(modelData),
-                                            desktopEntry: root.appFor(modelData),
-                                            windows: [modelData]
-                                        })
-                                    activeStreams: root.activeStreams
-                                    notifications: root.notifications
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: Theme.gap
+                                spacing: Theme.spaceSmall
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: root.headerHeight
+                                    spacing: Theme.gap
+                                    AppIcon {
+                                        id: icon
+                                        objectName: "switcherAppIcon"
+                                        implicitSize: 24
+                                        badgeSize: 12
+                                        shadowed: false
+                                        Layout.preferredWidth: 24
+                                        Layout.preferredHeight: 24
+                                        group: ({
+                                                id: modelData.appId.replace(/\.desktop$/, ""),
+                                                displayName: root.appName(modelData),
+                                                desktopEntry: root.appFor(modelData),
+                                                windows: [modelData]
+                                            })
+                                        activeStreams: root.activeStreams
+                                        notifications: root.notifications
+                                    }
+                                    Text {
+                                        objectName: "switcherAppTitle"
+                                        Layout.fillWidth: true
+                                        text: modelData.title || root.appName(modelData)
+                                        textFormat: Text.PlainText
+                                        elide: Text.ElideRight
+                                        color: Theme.text
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: Theme.fontSize
+                                    }
                                 }
                                 ClippingRectangle {
                                     id: previewSurface
-                                    anchors.top: parent.top
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.margins: Theme.gap
-                                    height: root.previewHeight
-                                    radius: Theme.insetRadius(strip.radius - root.cardPadding, Theme.gap)
+                                    objectName: "switcherPreview"
+                                    Layout.alignment: Qt.AlignHCenter
+                                    Layout.preferredWidth: previewDimensions.width
+                                    Layout.preferredHeight: previewDimensions.height
+                                    radius: Theme.barControlRadius
                                     color: Theme.background
                                     Image {
+                                        id: previewImage
                                         anchors.fill: parent
                                         source: root.previews[modelData.id] || ""
                                         fillMode: Image.PreserveAspectCrop
@@ -494,36 +551,10 @@ Scope {
                                     }
                                     OsIconImage {
                                         anchors.centerIn: parent
-                                        implicitSize: Theme.dockIconSize
+                                        implicitSize: 36
                                         source: root.iconFor(modelData)
                                         opacity: 0.3
-                                        visible: !root.previews[modelData.id]
-                                    }
-                                }
-                                ColumnLayout {
-                                    anchors.left: icon.right
-                                    anchors.leftMargin: Theme.gap
-                                    anchors.right: parent.right
-                                    anchors.rightMargin: Theme.gap
-                                    anchors.verticalCenter: icon.verticalCenter
-                                    spacing: Theme.spaceSmall
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: modelData.title || root.appName(modelData)
-                                        textFormat: Text.PlainText
-                                        elide: Text.ElideMiddle
-                                        color: Theme.text
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: Theme.fontSize
-                                    }
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: root.appName(modelData)
-                                        textFormat: Text.PlainText
-                                        elide: Text.ElideRight
-                                        color: Theme.muted
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: Theme.fontSize
+                                        visible: previewImage.status !== Image.Ready
                                     }
                                 }
                             }

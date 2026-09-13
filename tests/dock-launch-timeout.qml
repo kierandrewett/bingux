@@ -35,14 +35,40 @@ ShellRoot {
                 console.error("FAIL: " + message);
             verify(condition, message);
         }
+        function findLabel(item, label) {
+            if (item && item.label === label)
+                return item;
+            for (const child of item?.children || []) {
+                const found = findLabel(child, label);
+                if (found)
+                    return found;
+            }
+            return null;
+        }
         function test_loading() {
             wait(300);
             const group = {
                 id: "slow-app",
+                windows: [],
                 desktopEntry: {
                     id: "slow-app.desktop"
                 }
             };
+            dock.appGroups = [group];
+            dock.launch(group, false);
+            wait(100);
+            const menu = dock.testItems.itemAt(0).testMenu;
+            menu.visible = true;
+            tryCompare(menu, "revealScale", 1);
+            const loading = findLabel(menu.body, "Loading...");
+            check(loading && loading.loading, "Open windows shows a loading entry");
+            const cancel = loading.contentItem.children[0].children.find(item => item.objectName === "closeWindowButton");
+            check(cancel && cancel.visible, "Loading entry exposes a cancel button");
+            mouseClick(cancel, cancel.width / 2, cancel.height / 2, Qt.LeftButton);
+            check(!dock.launchAttempts[group.id] && dock.pendingLaunchGroupId === "" && LaunchFeedback.active.length === 0, "Cancel clears the pending launch and feedback");
+            menu.visible = false;
+
+            // Continue with the timeout coverage using a fresh launch.
             dock.launch(group, false);
             wait(3300);
             check(dock.pendingLaunchGroupId === group.id, "Loading must survive the old three-second timeout and successful launcher exit");

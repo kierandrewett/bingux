@@ -54,10 +54,14 @@ card, including multiple windows from one app, minimised windows, and listed
 transient windows. Closed windows disappear without changing the identity of
 the selected window when it remains open.
 
-Quick taps switch without showing the chooser. Holding the shortcut shows
-window previews after 40 ms. Opening takes 40 ms and closing takes 60 ms;
-the selection highlight slides between cards in 70 ms. Activation does not wait for an
-animation or thumbnail. `BINGUX_REDUCED_MOTION=1` disables these animations.
+Quick taps switch without waiting for a thumbnail. The chooser starts opening
+immediately by default, at full opacity. Selection crossfades between cards
+over 80 ms while the grid stays stationary. Cards
+are centered in a surface with a 30% monitor buffer on each side. Their preview
+width follows the source window aspect ratio, and additional cards wrap onto
+new rows when the central surface is full. Closing fades out over 100 ms. Activation does
+not wait for an animation or thumbnail. `BINGUX_REDUCED_MOTION=1` disables
+these animations.
 
 The shell prepares one cached thumbnail after window focus settles for 250 ms.
 Further requests run while the chooser is shown, after navigation has
@@ -75,10 +79,10 @@ valid cached image; if none was captured, they show an icon until an image is
 available. Captures do not change focus or raise windows.
 
 The compositor scales textures on the GPU before reading thumbnail pixels and
-encodes PNGs asynchronously. Quick taps do not construct icon or preview
-delegates. Window title and focus updates preserve existing delegates, so badge
-animations do not restart. The continuous carousel scrolls at its edges and
-rebases equivalent copies at wraparound; it does not replace pages.
+encodes PNGs asynchronously. Window title and focus updates preserve existing delegates, so badge
+animations do not restart. The switcher keeps one card per live window ready while unmapped, keeps cards inside the centered 40% surface, wraps
+overflow onto new rows, and changes selection without scrolling or duplicating
+cards.
 
 ## Shared presentation
 
@@ -91,7 +95,10 @@ and fades, including dock warning and pin badges. Consumers can read `playingAud
 `notificationCount`, `appNotifications`, `tooltipText`, `accentColor`, and
 `accentForeground`. The switcher uses the dock's existing audio stream source.
 
-The switcher shows window and app names inside each card, without a tooltip.
+The switcher places the app icon and window title above each preview, using the
+shared popup surface, padding, typography and selection colors. Unselected
+cards have no extra surface or outline. Previews retain their source proportions
+and stay the same size as the window count changes; additional windows wrap.
 
 ## Configuration
 
@@ -100,7 +107,7 @@ Create `~/.config/bingux/switcher.json` before starting Bingux:
 ```json
 {
     "enabled": true,
-    "showDelay": 40
+    "showDelay": 0
 }
 ```
 
@@ -112,7 +119,7 @@ package installs this file with these defaults; copy it to
 The Gnoblin package also installs the compositor's `compositor-bridge.js` script and clears
 the four GNOME `switch-applications` / `switch-windows` forward and backward
 bindings. For a manual installation, link the bridge into
-`~/.config/gnoblin/scripts/`, run `gnoblinctl script reload`, and clear these
+`~/.config/gnoblin/scripts/`, run `gnoblinctl reload`, and clear these
 keys in Gnoblin's Lua configuration:
 
 ```lua
@@ -170,8 +177,8 @@ runtime. The test reports Alt-release-to-focus time from the compositor clock;
 this measures focus changes, not display scanout latency.
 
 `tests/window-switcher-ui.py`, run through the same launcher with `QS_TEST_BIN`,
-checks badge matching, delegate identity during window updates,
-rendered animation progress, and rapid carousel wraparound. The keyboard test
+checks badge matching, delegate identity during window updates, preview aspect
+sizing, constrained-row layout, and direct selection changes. The keyboard test
 also checks preview pixels and that a held chooser stops capturing. Repeat
 with `BINGUX_REDUCED_MOTION=1` to check the immediate presentation path.
 

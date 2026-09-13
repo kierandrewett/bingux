@@ -40,6 +40,7 @@ SystemIndicators 1.0 SystemIndicators.qml
 StatusIndicator 1.0 StatusIndicator.qml
 Tray 1.0 Tray.qml
 TrayMenu 1.0 TrayMenu.qml
+WindowMenu 1.0 WindowMenu.qml
 TerminalSidebar 1.0 TerminalSidebar.qml
 BarControlSurface 1.0 BarControlSurface.qml
 DockMediaControls 1.0 DockMediaControls.qml
@@ -161,6 +162,7 @@ BlurRegion 1.0 BlurRegion.qml
 HorizontalWheelScroll 1.0 HorizontalWheelScroll.qml
 
 PanelOutline 1.0 PanelOutline.qml
+PopupShadow 1.0 PopupShadow.qml
 
 singleton PopupTransitions 1.0 PopupTransitions.qml
 LaunchErrorDialog 1.0 LaunchErrorDialog.qml

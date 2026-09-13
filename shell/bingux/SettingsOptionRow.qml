@@ -26,7 +26,7 @@ SettingsRow {
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         background: Rectangle {
             radius: 10
-            color: Theme.settingsSurface
+            color: Theme.popupSurface
             border.width: 1
             border.color: Theme.outline
         }

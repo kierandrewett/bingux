@@ -77,6 +77,13 @@ ShellRoot {
             metrics: metrics
             gnoblinCtlPath: "true"
         }
+        BarNotificationButton {
+            id: notifications
+            x: 420
+            y: 20
+            count: 1
+            onClicked: selected = !selected
+        }
         TestCase {
             name: "TopBarHover"
             when: window.visible
@@ -124,10 +131,24 @@ ShellRoot {
                 mouseRelease(window.contentItem, 540, 100);
                 away();
                 equal(surface(selector).color.a, 0, "Keyboard selector clears hover");
+                mouseClick(selector, 10, selector.height / 2);
+                wait(150);
+                verify(selector.menuOpen, "Keyboard selector opens on click");
+                mouseClick(selector, 10, selector.height / 2);
+                wait(150);
+                verify(!selector.menuOpen, "Keyboard selector closes on second click");
+                away();
+                equal(surface(selector).color.a, 0, "Keyboard selector clears hover after toggle close");
                 metrics.desktopStateAvailable = false;
                 mouseMove(selector, 10, 10);
                 equal(surface(selector).color.a, 0, "Unavailable selector has no hover");
                 metrics.desktopStateAvailable = true;
+                selector.forceActiveFocus();
+                selector.openMenu();
+                wait(150);
+                selector.menuOpen = false;
+                away();
+                equal(surface(selector).color.a, 0, "Keyboard selector clears hover after menu close");
             }
             function test_tray() {
                 tray.trayItems = [trayItem];
@@ -143,6 +164,17 @@ ShellRoot {
                 equal(surface(button).color.a, 0, "Tray clears hover");
                 button.forceActiveFocus();
                 equal(surface(button).color, Theme.hover, "Tray keyboard focus is visible");
+            }
+            function test_notifications() {
+                away();
+                mouseMove(notifications, 10, 0);
+                equal(notifications.background.color, Theme.hover, "Notifications hover before toggle");
+                mouseClick(notifications, 10, notifications.height / 2);
+                verify(notifications.selected, "Notifications opens on click");
+                mouseClick(notifications, 10, notifications.height / 2);
+                verify(!notifications.selected, "Notifications closes on second click");
+                away();
+                equal(notifications.background.color.a, 0, "Notifications clears hover after toggle close");
             }
             function cleanupTestCase() {
                 results.setText(checks + "FAILURES " + qtest_results.failCount);

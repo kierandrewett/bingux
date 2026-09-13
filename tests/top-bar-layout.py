@@ -79,6 +79,7 @@ ShellRoot {
  property var currentTime: new Date()
  function closePanelsExcept(panel) {}
  function openSearch() {}
+ function toggleSearch() {}
  QtObject { id: terminalSidebar; property int leftInset: 0; property int rightInset: 0; property int topInset: 0; property int desktopCornerSize: 0 }
  QtObject { id: profileSettings; property bool metricsEnabled: true }
  QtObject { id: metrics; property bool desktopStateAvailable: true }

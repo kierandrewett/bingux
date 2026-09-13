@@ -4,6 +4,16 @@ repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 fixture="$(mktemp -d /tmp/bingux-keyboard-test.XXXXXX)"
 trap 'rm -rf "$fixture"' EXIT
 cp "$repo_dir"/shell/bingux/{AnimatedCount,InputSourceSelector,Theme,ShellPopup,PanelOutline,MenuNavigator,ShortcutSession,BarControlSurface,BarTooltip,ShellTooltip,TooltipBubble,SymbolicIcon,WidgetFace}.qml "$fixture/"
+cat >"$fixture/BackgroundEffect.qml" <<'EOF'
+import QtQuick
+
+Item {
+    required property Item target
+    property real radius: 0
+    property bool requested: true
+    readonly property bool available: false
+}
+EOF
 cat >"$fixture/DesktopEditing.qml" <<'EOF'
 pragma Singleton
 import QtQuick
@@ -21,15 +31,19 @@ cat >"$fixture/PopupTransitions.qml" <<'EOF'
 pragma Singleton
 import QtQuick
 QtObject {
+    readonly property var policies: ({})
     function refresh() {}
     function matches(duration, easing) { return false; }
+    function fadesIn(namespace) { return false; }
 }
 EOF
 printf '%s\n' 'singleton Theme 1.0 Theme.qml' 'singleton DesktopEditing 1.0 DesktopEditing.qml' 'singleton CompositorEnvironment 1.0 CompositorEnvironment.qml' 'singleton PopupTransitions 1.0 PopupTransitions.qml' >"$fixture/qmldir"
 for component in AnimatedCount InputSourceSelector ShellPopup PanelOutline MenuNavigator ShortcutSession BarControlSurface BarTooltip ShellTooltip TooltipBubble SymbolicIcon WidgetFace; do
     printf '%s 1.0 %s.qml\n' "$component" "$component" >>"$fixture/qmldir"
 done
+printf '%s\n' 'BackgroundEffect 1.0 BackgroundEffect.qml' >>"$fixture/qmldir"
 cp "$repo_dir/tests/input-source-selector.qml" "$fixture/shell.qml"
+bash "$repo_dir/tests/copy-panel-effects.sh" "$fixture"
 printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" > "$BINGUX_KEYBOARD_TEST_SELECTION"\nsleep 0.08\n' >"$fixture/source-cli"
 chmod +x "$fixture/source-cli"
 export BINGUX_KEYBOARD_TEST_CLI="$fixture/source-cli"

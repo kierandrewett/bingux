@@ -11,6 +11,8 @@ BuildRequires:  gcc
 BuildRequires:  make
 BuildRequires:  pkgconfig(libpulse)
 BuildRequires:  pkgconfig(wayland-client)
+BuildRequires:  pkgconfig(gtk4)
+BuildRequires:  pkgconfig(libadwaita-1)
 BuildRequires:  wayland-devel
 BuildRequires:  qt6-qtbase-devel
 BuildRequires:  qt6-qtdeclarative-devel
@@ -23,6 +25,8 @@ BuildRequires:  systemd-rpm-macros
 Requires:       gnome-control-center
 Requires:       gnome-session
 Requires:       gnome-settings-daemon
+Requires:       gtk4
+Requires:       libadwaita
 Requires:       python3
 Requires:       python3-cairo
 Requires:       python3-gobject

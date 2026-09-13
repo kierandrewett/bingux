@@ -946,7 +946,7 @@ Scope {
                 anchors.fill: parent
             }
             radius: Theme.cardRadius
-            color: Qt.rgba(Theme.popupSurface.r, Theme.popupSurface.g, Theme.popupSurface.b, 1)
+            color: Theme.popupSurface
             Flickable {
                 anchors.fill: parent
                 anchors.margins: 16

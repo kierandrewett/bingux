@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 
@@ -9,6 +10,7 @@ Item {
     property string iconName: ""
     property string trailingIcon: ""
     property string tooltip: ""
+    property var tooltipDetails: []
     property var presentation: null
     property bool filled: false
     property bool interactive: false
@@ -48,6 +50,13 @@ Item {
         visible: !root.presentation?.custom
         anchors.centerIn: parent
         spacing: Theme.spaceSmall
+        layer.enabled: true
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: Theme.contentShadow
+            shadowBlur: 0.28
+            shadowVerticalOffset: 1.2
+        }
         SymbolicIcon {
             visible: root.iconName !== ""
             implicitSize: Theme.iconSize
@@ -108,6 +117,7 @@ Item {
         barWindow: root.barWindow
         requested: mouse.containsMouse && root.barWindow !== null
         text: root.tooltip
+        details: root.tooltipDetails
         reorderable: root.reorderable
     }
 }

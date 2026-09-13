@@ -87,6 +87,8 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         build / "settings/libbinguxsettings.so": qml / "Bingux/Settings/libbinguxsettings.so",
         source / "packages/bingux-settings/platform/qmldir": qml / "Bingux/Settings/qmldir",
         build / "bingux-audio-meter": prefix / "bin/bingux-audio-meter",
+        build / "bingux-image-clipboard": prefix / "libexec/bingux/bingux-image-clipboard",
+        build / "bingux-frame": prefix / "libexec/bingux/bingux-frame",
         build / "cargo/release/bingux-searchd": prefix / "bin/bingux-searchd",
         build / "cargo/release/bingux-statusd": prefix / "bin/bingux-statusd",
         source / "packaging/gnoblin/bingux.lua": prefix / "share/gnoblin/conf.d/bingux.lua",
@@ -113,7 +115,13 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
             continue
         copy(path, shell / path.relative_to(source / "shell/bingux"))
     for path, destination in payload.items():
-        copy(path, destination, destination.parent == prefix / "bin")
+        copy(
+            path,
+            destination,
+            destination.parent == prefix / "bin"
+            or destination
+            in (prefix / "libexec/bingux/bingux-image-clipboard", prefix / "libexec/bingux/bingux-frame"),
+        )
     copy(source / "packages/binguxctl/binguxctl.py", prefix / "libexec/bingux/binguxctl.py")
     copy(source / "packages/bingux-settings/bingux-settings", prefix / "libexec/bingux/bingux-settings", True)
     if managed:

@@ -13,12 +13,30 @@ Scope {
     property bool expanded: false
     property int keyboardSelection: 0
     property string error: ""
+    property point dragOrigin: Qt.point(0, 0)
     // Pointer samples must not rebuild the regions and their delegates every frame.
     property var geometryContext: null
     readonly property var monitor: geometryContext ? geometryContext.monitor : null
     readonly property var area: geometryContext ? geometryContext.area : null
     readonly property var output: monitor ? Quickshell.screens.find(s => s.x === monitor.x && s.y === monitor.y) || null : null
     readonly property bool control: dragging && state && Boolean(state.modifiers & 4)
+    // A maximized titlebar drag may still be handled by Mutter, but it is not
+    // an invitation to open the shell's snapping affordances.
+    readonly property bool dragAssistAllowed: !dragging || !state || !state.maximized
+    readonly property real pillTriggerWidth: 112
+    readonly property real pillTriggerHeight: 36
+    readonly property var pillTriggerBounds: Qt.rect(centerX - pillTriggerWidth / 2, pickerY - pillTriggerHeight / 2, pillTriggerWidth, pillTriggerHeight)
+    readonly property bool dragMoved: dragging && state && Math.hypot(state.x - dragOrigin.x, state.y - dragOrigin.y) >= 8
+    readonly property bool pickerOpen: dragMoved && dragging && dragAssistAllowed && expanded && !control
+    readonly property bool pickerPresentationOpen: keyboardMode || pickerOpen
+    property real pickerProgress: pickerPresentationOpen ? 1 : 0
+    // The small capsule and the picker share one interruptible reveal clock.
+    Behavior on pickerProgress {
+        NumberAnimation {
+            duration: Theme.reducedMotion ? 0 : (root.pickerPresentationOpen ? 170 : 130)
+            easing.type: Easing.OutCubic
+        }
+    }
     readonly property var layouts: {
         try {
             const list = JSON.parse(preferences.layouts);
@@ -29,13 +47,13 @@ Scope {
     }
     readonly property int columns: Math.max(1, Math.min(layouts.length, Math.floor(((area ? area.width : monitor ? monitor.width : 800) - 48) / 116)))
     readonly property int rows: Math.ceil(layouts.length / columns)
-    readonly property int pickerWidth: columns * 116 + 24
+    readonly property int pickerWidth: (columns - 1) * 116 + 104 + 24
     readonly property int pickerHeight: rows * 80 + 4
     readonly property real centerX: area ? area.x + area.width / 2 : monitor ? monitor.x + monitor.width / 2 : 0
     readonly property real pickerX: centerX - pickerWidth / 2
     readonly property real pickerY: monitor && area ? Math.max(monitor.y + Theme.barHeight + 8, area.y + 8) : 0
     readonly property var regions: {
-        if (!area || !monitor)
+        if (!area || !monitor || (dragging && (!dragAssistAllowed || !dragMoved)))
             return [];
         const list = dragging && !control && !keyboardMode ? Layouts.edgeRegions(monitor, area, preferences.innerGap, preferences.outerGap) : [];
         if (!(expanded || control || keyboardMode))
@@ -65,7 +83,7 @@ Scope {
             }));
         return list;
     }
-    readonly property var selected: keyboardMode ? regions[keyboardSelection] || null : dragging && state ? regions.find(region => Layouts.contains(region.hit, state.x, state.y)) || null : null
+    readonly property var selected: keyboardMode ? regions[keyboardSelection] || null : dragging && state && dragAssistAllowed ? regions.find(region => Layouts.contains(region.hit, state.x, state.y)) || null : null
     onRegionsChanged: if (dragging && state)
         connection.send({
             op: "snap-offer",
@@ -114,18 +132,25 @@ Scope {
             expanded = false;
             return;
         }
-        if (!state || record.serial !== state.serial || record.monitor.id !== state.monitor.id)
+        const newDrag = !state || record.serial !== state.serial || record.monitor.id !== state.monitor.id;
+        if (newDrag) {
             expanded = false;
+            dragOrigin = Qt.point(record.x, record.y);
+        }
         state = record;
         updateGeometry(record);
         dragging = true;
         keyboardMode = false;
-        const reach = {
+        if (!dragAssistAllowed || !dragMoved) {
+            expanded = false;
+            return;
+        }
+        const reach = expanded ? {
             x: pickerX - 48,
             y: monitor.y,
             width: pickerWidth + 96,
-            height: expanded ? pickerY - monitor.y + pickerHeight + 48 : pickerY - monitor.y + 54
-        };
+            height: pickerY - monitor.y + pickerHeight + 48
+        } : pillTriggerBounds;
         expanded = Layouts.contains(reach, state.x, state.y);
     }
     function close() {
@@ -207,7 +232,8 @@ Scope {
     ShellPopup {
         id: picker
         screen: root.output
-        visible: !!root.output && (root.keyboardMode || (root.dragging && root.expanded && !root.control))
+        motionSource: snapTransition
+        visible: !!root.output && (root.keyboardMode || (root.dragging && root.dragAssistAllowed && !root.control))
         keyboardInteractive: root.keyboardMode
         pointerInteractive: root.keyboardMode
         dismissOnOutsideClick: root.keyboardMode
@@ -217,9 +243,12 @@ Scope {
             else if (visible && root.keyboardMode)
                 Qt.callLater(() => body.forceActiveFocus());
         }
+        // Fixed layout bounds avoid stretching the panel and clipping its tiles.
         popupWidth: root.pickerWidth
         popupHeight: root.pickerHeight
-        preferredX: root.monitor ? root.pickerX - root.monitor.x : 0
+        cornerRadius: Theme.cardRadius
+        surfaceColor: Theme.popupSurface
+        preferredX: root.monitor ? root.centerX - root.monitor.x - popupWidth / 2 : 0
         preferredY: root.monitor ? root.pickerY - root.monitor.y : 0
         contentPadding: 12
         initialRevealScale: .98
@@ -236,6 +265,28 @@ Scope {
             else
                 return;
             event.accepted = true;
+        }
+        // This small capsule stays at the reveal origin. It never stretches
+        // across the picker, and its light indicator never grows.
+        Rectangle {
+            parent: picker.contentItem
+            z: 7
+            x: picker.panelX + picker.popupWidth / 2 - width / 2
+            y: picker.panelY
+            width: 56 + 20 * root.pickerProgress
+            height: 5 + 13 * root.pickerProgress
+            radius: height / 2
+            color: Theme.popupSurface
+            opacity: 1 - root.pickerProgress
+            visible: picker.visible && opacity > 0
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 56
+                height: 5
+                radius: 2.5
+                color: Theme.muted
+                opacity: Math.max(0, 1 - root.pickerProgress * 5)
+            }
         }
         Repeater {
             model: root.layouts
@@ -278,12 +329,22 @@ Scope {
             }
         }
     }
+    QtObject {
+        id: snapTransition
+        readonly property bool retained: root.keyboardMode || (root.dragging && root.dragAssistAllowed && !root.control)
+        readonly property real presentationOpacity: root.pickerProgress
+        readonly property real revealScale: 0.96 + 0.04 * root.pickerProgress
+        readonly property real panelX: picker.panelX
+        readonly property real panelY: picker.panelY
+        readonly property real revealOriginX: picker.popupWidth / 2
+        readonly property real revealOriginY: 0
+    }
     PanelWindow {
         id: preview
         screen: root.output
         // Keep the surface mapped until its last visual has faded away.
-        visible: !!root.output && (root.dragging || root.keyboardMode || highlight.opacity > 0 || snapPill.opacity > 0 || guideOpacity > 0)
-        property real guideOpacity: root.dragging && !root.control ? (root.selected ? .25 : .65) : 0
+        visible: !!root.output && (root.keyboardMode || (root.dragging && root.dragAssistAllowed) || (root.dragAssistAllowed && (highlight.opacity > 0 || guideOpacity > 0)))
+        property real guideOpacity: root.dragging && root.dragAssistAllowed && !root.control ? (root.selected ? .25 : .65) : 0
         Behavior on guideOpacity {
             NumberAnimation {
                 duration: Theme.reducedMotion ? 0 : 160
@@ -388,27 +449,6 @@ Scope {
                     easing.type: Easing.OutCubic
                 }
             }
-        }
-        Rectangle {
-            id: snapPill
-            visible: opacity > 0
-            property real reveal: root.dragging && !root.expanded && !root.control ? 1 : 0
-            opacity: reveal
-            transform: Translate {
-                y: -10 * (1 - snapPill.reveal)
-            }
-            Behavior on reveal {
-                NumberAnimation {
-                    duration: Theme.reducedMotion ? 0 : 180
-                    easing.type: Easing.OutCubic
-                }
-            }
-            x: root.centerX - (root.monitor ? root.monitor.x : 0) - width / 2
-            y: root.area && root.monitor ? Math.max(Theme.barHeight + 8, root.area.y - root.monitor.y + 8) : 0
-            width: 56
-            height: 5
-            radius: 3
-            color: Theme.muted
         }
     }
 }

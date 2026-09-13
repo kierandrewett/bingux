@@ -13,6 +13,7 @@ printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=Files' 'Exec=true' 'Ico
 export XDG_DATA_HOME="$test_dir/data"
 cp "$repo_dir"/shell/bingux/{OsIconImage.qml,OsIcons.qml,render-os-icons.py} "$test_dir/"
 printf '%s\n' 'OsIconImage 1.0 OsIconImage.qml' 'singleton OsIcons 1.0 OsIcons.qml' >>"$test_dir/qmldir"
+bash "$repo_dir/tests/copy-panel-effects.sh" "$test_dir"
 export BINGUX_NOTIFICATION_TEST_RESULTS="$test_dir/results.txt"
 export BINGUX_REDUCED_MOTION=0
 timeout 30s dbus-run-session -- quickshell -p "$test_dir" --no-color >"$test_dir/runtime.log" 2>&1 || {

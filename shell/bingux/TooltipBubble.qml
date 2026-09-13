@@ -1,8 +1,16 @@
 import QtQuick
+import QtQuick.Layouts
+import Quickshell
 
 // Shared tooltip surface for layer windows and anchored controls.
 Rectangle {
     id: root
+    BackgroundEffect {
+        id: backgroundBlur
+        target: root
+        radius: Theme.tooltipRadius
+    }
+    readonly property bool backgroundBlurRequested: backgroundBlur.requested
     SurfaceFade {
         target: root
     }
@@ -92,15 +100,17 @@ Rectangle {
     }
     property string text: ""
     property string supportingText: ""
+    property var details: []
     property int maximumWidth: 320
     property bool wrapText: true
-    readonly property int horizontalPadding: 12
-    readonly property int verticalPadding: 9
-    implicitWidth: Math.min(maximumWidth, Math.ceil(Math.max(textMeasure.contentWidth, hintMeasure.contentWidth)) + horizontalPadding * 2)
+    readonly property int horizontalPadding: Theme.tooltipHorizontalPadding
+    readonly property int verticalPadding: Theme.tooltipVerticalPadding
+    implicitWidth: Math.min(maximumWidth, Math.ceil(Math.max(textMeasure.contentWidth, hintMeasure.contentWidth, detailMeasure.implicitWidth)) + horizontalPadding * 2)
     implicitHeight: Math.ceil(content.implicitHeight) + verticalPadding * 2
-    color: Theme.popupSurface
-    border.color: Theme.outline
-    radius: Theme.insetRadius(Theme.cardRadius, Theme.gap)
+    color: Theme.tooltipSurface
+    border.width: 1
+    border.color: Theme.tooltipOutline
+    radius: Theme.tooltipRadius
     // Measure wrapping at a fixed limit so the bubble can fit the rendered
     // lines without creating a width binding loop with the visible labels.
     Text {
@@ -122,6 +132,38 @@ Rectangle {
         wrapMode: hint.wrapMode
     }
     Column {
+        id: detailMeasure
+        visible: false
+        Repeater {
+            model: root.details
+            RowLayout {
+                required property var modelData
+                spacing: Theme.tooltipRowSpacing
+                Image {
+                    readonly property string iconName: modelData.icon || modelData.appIcon || ""
+                    visible: iconName !== ""
+                    Layout.preferredWidth: visible ? Theme.tooltipIconSize : 0
+                    Layout.preferredHeight: visible ? Theme.tooltipIconSize : 0
+                    source: visible ? Quickshell.iconPath(iconName, "application-x-executable") : ""
+                    sourceSize: Qt.size(Theme.tooltipIconSize, Theme.tooltipIconSize)
+                    fillMode: Image.PreserveAspectFit
+                }
+                ColumnLayout {
+                    Text {
+                        text: modelData.label || modelData.app || ""
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize
+                    }
+                    Text {
+                        text: modelData.value || modelData.device || ""
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSmall
+                    }
+                }
+            }
+        }
+    }
+    Column {
         id: content
         x: root.horizontalPadding
         y: root.verticalPadding
@@ -139,6 +181,45 @@ Rectangle {
             color: Theme.text
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSize
+        }
+        Repeater {
+            model: root.details
+            RowLayout {
+                required property var modelData
+                width: content.width
+                spacing: Theme.tooltipRowSpacing
+                Image {
+                    readonly property string iconName: modelData.icon || modelData.appIcon || ""
+                    visible: iconName !== ""
+                    Layout.preferredWidth: visible ? Theme.tooltipIconSize : 0
+                    Layout.preferredHeight: visible ? Theme.tooltipIconSize : 0
+                    source: visible ? Quickshell.iconPath(iconName, "application-x-executable") : ""
+                    sourceSize: Qt.size(Theme.tooltipIconSize, Theme.tooltipIconSize)
+                    fillMode: Image.PreserveAspectFit
+                    Layout.alignment: Qt.AlignTop
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Text {
+                        text: modelData.label || modelData.app || ""
+                        color: Theme.text
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize
+                        font.weight: Font.DemiBold
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                    Text {
+                        text: (modelData.value || modelData.device || "") + (modelData.muted ? " (muted)" : "")
+                        color: Theme.muted
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSmall
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                }
+            }
         }
         Text {
             id: hint

@@ -9,7 +9,7 @@ Rectangle {
     Layout.fillWidth: true
     implicitHeight: content.implicitHeight + Theme.spaceSmall * 2
     radius: Theme.radius
-    color: Theme.settingsSurface
+    color: Theme.elevated
     ColumnLayout {
         id: content
         x: Theme.spaceSmall
@@ -27,7 +27,7 @@ Rectangle {
             y: Theme.spaceSmall + modelData.y + modelData.height
             width: root.width - x * 2
             height: 1
-            color: Theme.settingsSeparator
+            color: Theme.barDivider
         }
     }
 }

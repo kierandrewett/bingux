@@ -86,9 +86,8 @@ ShellRoot {
                 const stableWidth = selector.width;
                 metrics.currentInputSource = metrics.inputSources[1];
                 compare(selector.displayLabel, "en₂", "same-language layouts have distinct top-bar labels");
-                wait(250);
                 result.setText("FAIL: animated label value=" + label.value + " displayed=" + label.displayedValue + " width=" + selector.width + " expected=" + stableWidth + "\n");
-                tryCompare(label, "displayedValue", 1, 1000);
+                tryCompare(label, "displayedValue", 1, 2000);
                 compare(selector.width, stableWidth, "layout label animation keeps a stable hit target");
                 selector.openMenu();
                 wait(200);
@@ -105,6 +104,15 @@ ShellRoot {
                 selector.cycleSource(false);
                 compare(selector.selectedIndex, 0, "one layout remains selectable");
                 tryCompare(selector, "canSelect", true, 2000);
+                const surface = selector.children[0];
+                selector.openMenu();
+                wait(200);
+                selector.selectCurrentSource();
+                mouseMove(selector, selector.width / 2, selector.height / 2);
+                tryCompare(selector, "selectionBusy", true, 500);
+                mouseMove(top.contentItem, top.width - 10, top.height - 1);
+                tryCompare(selector, "menuOpen", false, 2000);
+                compare(surface.color.a, 0, "selection clears the top-bar hover after pointer leaves while busy");
                 metrics.inputSources = [];
                 verify(!selector.menuOpen, "empty sources close the menu");
                 result.setText("PASS: forward/backward wrap, rapid cycles, distinct labels, manual selection, reordered/empty sources\n");

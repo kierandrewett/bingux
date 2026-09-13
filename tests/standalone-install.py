@@ -22,6 +22,8 @@ class InstallTest(unittest.TestCase):
                 "settings/libbinguxsettings.so",
                 "effects/libbinguxeffects.so",
                 "bingux-audio-meter",
+                "bingux-image-clipboard",
+                "bingux-frame",
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
             ):
@@ -52,6 +54,10 @@ class InstallTest(unittest.TestCase):
             )
             self.assertTrue((stage / "usr/share/bingux/shell/ProfileSettings.qml").is_file())
             self.assertTrue((stage / "usr/share/gnoblin/conf.d/bingux.lua").is_file())
+            integration = (stage / "usr/share/gnoblin/conf.d/bingux.lua").read_text()
+            self.assertIn('["ext-background-effect-v1"] = true', integration)
+            self.assertIn('layer = "^bingux-capture$"', integration)
+            self.assertIn('layer = "^bingux-capture-controls$"', integration)
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Text/qmldir").is_file())
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Effects/libbinguxeffects.so").is_file())
             self.assertFalse((stage / "home").exists())
@@ -90,6 +96,8 @@ class InstallTest(unittest.TestCase):
                 "settings/libbinguxsettings.so",
                 "effects/libbinguxeffects.so",
                 "bingux-audio-meter",
+                "bingux-image-clipboard",
+                "bingux-frame",
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
             ):
@@ -200,6 +208,8 @@ class InstallTest(unittest.TestCase):
                 "settings/libbinguxsettings.so",
                 "effects/libbinguxeffects.so",
                 "bingux-audio-meter",
+                "bingux-image-clipboard",
+                "bingux-frame",
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
             ):
@@ -252,6 +262,8 @@ class InstallTest(unittest.TestCase):
                 "settings/libbinguxsettings.so",
                 "effects/libbinguxeffects.so",
                 "bingux-audio-meter",
+                "bingux-image-clipboard",
+                "bingux-frame",
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
             ):

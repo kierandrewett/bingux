@@ -118,6 +118,7 @@ GridLayout {
         Layout.column: placed ? root.widgetLayout.controlColumn(action) : headerControls.memberColumn(widgetId)
         Layout.row: placed ? root.widgetLayout.controlRow(action) : headerControls.memberRow(widgetId)
         barStyle: barLayout
+        tooltipEnabled: barLayout
         barWindow: placed && root.widgetLayout ? root.widgetLayout.windowFor(action) : headerControls.barWindow
         implicitHeight: barLayout ? Theme.barHeight : 32
         presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "controls-header", label, iconName, true, false, placed ? "" : headerControls.container || "control-centre")

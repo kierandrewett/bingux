@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Controls
 import QtQuick.Layouts
 
@@ -10,7 +11,6 @@ AbstractButton {
     property bool selected: false
     implicitWidth: face.implicitWidth + Theme.barEdgeHitWidth - Theme.iconSize
     implicitHeight: Theme.barHeight
-    hoverEnabled: true
     Accessible.name: "Notifications"
     Accessible.description: count + " notifications"
     function playArchive() {
@@ -21,6 +21,13 @@ AbstractButton {
             id: face
             anchors.centerIn: parent
             spacing: Theme.gap
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                shadowEnabled: true
+                shadowColor: Theme.contentShadow
+                shadowBlur: 0.28
+                shadowVerticalOffset: 1.2
+            }
             WidgetFace {
                 visible: !!root.presentation?.custom
                 presentation: root.presentation
@@ -35,13 +42,17 @@ AbstractButton {
         reorderable: true
         anchorItem: root
         barWindow: root.barWindow
-        requested: root.hovered
-        text: root.count > 0 ? "Notifications · " + root.count : "No notifications"
+        requested: notificationHover.hovered
+        text: "Notifications"
+        supportingText: root.count === 1 ? "1 unread notification" : root.count + " unread notifications"
     }
     background: BarControlSurface {
-        hovered: root.hovered
+        hovered: notificationHover.hovered
         pressed: root.down
-        focused: root.activeFocus
+        focused: root.visualFocus
         selected: root.selected
+    }
+    HoverHandler {
+        id: notificationHover
     }
 }

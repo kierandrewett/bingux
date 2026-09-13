@@ -40,7 +40,7 @@ TextField {
     }
     background: Rectangle {
         radius: 7
-        color: Theme.surface
+        color: Theme.elevated
         border.width: root.activeFocus ? 1 : 0
         border.color: Theme.accent
     }

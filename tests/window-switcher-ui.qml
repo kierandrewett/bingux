@@ -8,10 +8,9 @@ ShellRoot {
     property var failures: []
     property var openingFrames: []
     property var closingFrames: []
-    property var selectionFrames: []
     property var selection: null
-    property real selectionStart: 0
-    property var viewport: null
+    property var grid: null
+    property var presentation: null
     function findChild(parent, name) {
         if (parent.objectName === name)
             return parent;
@@ -63,12 +62,6 @@ ShellRoot {
         onTriggered: {
             if (test.phase === 1)
                 test.openingFrames.push(chooser.revealProgress);
-            if (test.phase === 2 && test.selection)
-                test.selectionFrames.push(test.selection.x);
-            if (test.phase === 3 && test.selection && test.viewport) {
-                const x = test.selection.x - test.viewport.contentX;
-                test.check(x >= -1 && x + chooser.tileWidth <= test.viewport.width + 1, "Highlight stays inside the viewport during scrolling and wraparound");
-            }
             if (test.phase === 4)
                 test.closingFrames.push(chooser.revealProgress);
         }
@@ -84,7 +77,7 @@ ShellRoot {
             test.check(chooser.selectedIcon === before, "Window snapshots preserve icon delegates during key repeat");
             chooser.step(presses >= 20);
             test.check(chooser.selectedIcon !== null, "Key repeat always has a rendered selected card");
-            test.check(chooser.visibleWindows.length === chooser.displayCount && chooser.visibleWindows.every(window => !!window), "Every viewport slot remains populated across boundaries");
+            test.check(chooser.cardCount === chooser.windows.length && chooser.visibleWindows.length === chooser.windows.length, "The grid keeps exactly one card for every window across boundaries");
             if (++presses === 40)
                 stop();
         }
@@ -101,32 +94,52 @@ ShellRoot {
                         appId: "test-first.desktop",
                         title: "First window",
                         lastUserTime: 5,
-                        focused: true
+                        focused: true,
+                        geometry: {
+                            width: 1920,
+                            height: 1080
+                        }
                     },
                     {
                         id: "2",
                         appId: "test-second.desktop",
                         title: "Second window",
-                        lastUserTime: 4
+                        lastUserTime: 4,
+                        geometry: {
+                            width: 1280,
+                            height: 800
+                        }
                     },
                     {
                         id: "3",
                         appId: "test-third.desktop",
                         title: "Third window",
-                        lastUserTime: 3
+                        lastUserTime: 3,
+                        geometry: {
+                            width: 900,
+                            height: 1400
+                        }
                     },
                     {
                         id: "4",
                         appId: "test-first.desktop",
                         title: "Another window from the same app",
                         parent: "1",
-                        lastUserTime: 2
+                        lastUserTime: 2,
+                        geometry: {
+                            width: 1600,
+                            height: 900
+                        }
                     },
                     {
                         id: "5",
                         appId: "test-fifth.desktop",
                         title: "",
-                        lastUserTime: 1
+                        lastUserTime: 1,
+                        geometry: {
+                            width: 800,
+                            height: 600
+                        }
                     }
                 ]);
                 test.check(chooser.history.length === 5, "Each window is retained, including transients and untitled windows");
@@ -145,7 +158,9 @@ ShellRoot {
                 test.check(chooser.needsPreview(chooser.liveWindows[2], now), "Capture windows without a preview");
                 chooser.previews = ({});
                 chooser.previewTimes = ({});
+                test.check(chooser.cardCount === chooser.history.length, "Idle cards are prepared before the shortcut");
                 chooser.step(false);
+                test.check(chooser.revealProgress === 1, "The shortcut reveals the chooser immediately");
             } else if (test.phase === 1) {
                 test.check(chooser.revealProgress === 1, "Opening reaches full opacity");
                 test.check(test.openingFrames.every(value => value === 1), "Opening does not delay the first fully visible frame");
@@ -160,17 +175,28 @@ ShellRoot {
                 const notifications = test.findChild(chooser.selectedIcon, "dockNotificationBadge");
                 test.check(audio && audio.visible && audio.opacity === 1, "Audio badge is rendered");
                 test.check(notifications && notifications.visible && notifications.count === 2, "Notification count is rendered");
-                let presentation = chooser.selectedIcon;
-                while (presentation && !test.findChild(presentation, "switcherViewport"))
-                    presentation = presentation.parent;
-                test.selection = test.findChild(presentation, "switcherSelection");
-                test.viewport = test.findChild(presentation, "switcherViewport");
-                test.selectionStart = test.selection.x;
+                test.check(audio.height === 12 && notifications.height === 12, "Switcher badges are half the icon height");
+                test.check(audio.cutoutMargin === 1, "Compact badges use a compact icon cutout");
+                test.presentation = chooser.selectedIcon;
+                while (test.presentation && !test.findChild(test.presentation, "switcherGrid"))
+                    test.presentation = test.presentation.parent;
+                test.grid = test.findChild(test.presentation, "switcherGrid");
+                test.selection = test.findChild(test.presentation, "switcherSelection");
+                test.check(chooser.gridWidth > 0 && chooser.gridWidth <= chooser.gridMaxWidth, "Window cards stay within the constrained central thumbnail width");
+                test.check(chooser.previewSize(chooser.liveWindows[0]).width !== chooser.previewSize(chooser.liveWindows[2]).width, "Preview width follows the source window aspect ratio");
+                test.check(test.grid && test.grid.width === chooser.gridWidth, "The switcher lays cards out in the computed thumbnail row width");
+                test.check(test.grid && test.grid.height > chooser.cardHeightFor(chooser.liveWindows[0]), "Additional windows wrap onto a new thumbnail row");
+                test.check(test.selection && test.findChild(test.selection, "switcherAppIcon"), "Selected cards put the app icon above the preview");
+                test.check(test.selection && test.findChild(test.selection, "switcherAppTitle"), "Selected cards put the app title above the preview");
+                test.check(test.selection && test.findChild(test.selection, "switcherPreview"), "Selected cards contain a preview below the header");
+                test.check(chooser.cardCount === chooser.windows.length, "The grid has one card per window, without carousel copies");
+                const previousSelection = test.selection;
                 chooser.step(false);
+                test.check(test.findChild(test.presentation, "switcherSelection") !== previousSelection, "Selection changes cards directly without sliding the grid");
             } else if (test.phase === 2) {
-                const target = chooser.trackIndex * (chooser.tileWidth + chooser.tileGap);
-                test.check(test.selection && test.selection.x === target, "Highlight reaches selected icon");
-                test.check(Theme.reducedMotion || test.selectionFrames.some(value => value > test.selectionStart && value < target), "Selection slides between icons");
+                test.selection = test.findChild(test.presentation, "switcherSelection");
+                test.check(test.selection && test.selection.selectedCard, "Selection is represented by the active grid card");
+                test.check(chooser.cardCount === chooser.windows.length, "Grid selection does not create duplicate cards");
                 test.check(!chooser.selectedIcon.playingAudio && chooser.selectedIcon.notificationCount === 0, "Badges do not transfer to another app");
                 keyRepeat.start();
             } else if (test.phase === 3) {
@@ -181,7 +207,13 @@ ShellRoot {
                 test.check(!chooser.active, "Closing releases selection immediately");
                 test.check(Theme.reducedMotion || chooser.revealProgress > 0, "Closing retains the rendered surface during its animation");
             } else if (test.phase === 4) {
-                test.check(chooser.revealProgress === 0 && chooser.windows.length === 0, "Closing releases retained content");
+                test.check(chooser.revealProgress === 0 && chooser.windows.length === 0, "Closing releases the gesture snapshot");
+                chooser.selected = 1;
+                const preparedIcon = chooser.selectedIcon;
+                test.check(chooser.cardCount === chooser.history.length, "Closed chooser keeps its live cards ready");
+                chooser.step(false);
+                test.check(chooser.selectedIcon === preparedIcon, "Reopening reuses the prepared selected icon");
+                chooser.cancel();
                 test.check(Theme.reducedMotion || test.closingFrames.some(value => value > 0 && value < 1), "Closing renders intermediate frames");
                 console.info(test.failures.length ? "SWITCHER_UI_FAILED" : "SWITCHER_UI_PASSED");
                 Qt.quit();

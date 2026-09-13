@@ -194,6 +194,7 @@ AbstractButton {
                 visible: root.navigation && !root.rowInteractive
                 iconName: "go-next-symbolic"
                 label: root.title + " settings"
+                tooltipEnabled: root.barLayout
                 onClicked: root.navigationRequested(this)
             }
         }

@@ -94,6 +94,7 @@ ShellRoot {
     }
     SearchOverlay {
         id: search
+        keepChromeOnOutsideClick: true
         onVisibleChanged: if (visible) {
             session.command("switcher", {
                 action: "close"

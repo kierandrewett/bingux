@@ -15,6 +15,7 @@ if test_name not in (
     "dock-pinning",
     "dock-behaviour",
     "dock-refresh",
+    "dock-overflow",
     "search-launch-cursor",
     "dock-launch-timeout",
     "dock-startup",

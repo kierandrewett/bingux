@@ -754,6 +754,9 @@ Scope {
                 onVisibleChanged: if (visible)
                     root.previewItem = controls.contentItem
                 color: "transparent"
+                // The compositor needs the transparent buffer to sample the
+                // frozen preview behind the toolbar and settings panel.
+                surfaceFormat.opaque: false
                 exclusionMode: ExclusionMode.Ignore
                 anchors {
                     top: true
@@ -775,6 +778,15 @@ Scope {
                 }
                 // The preview is a separate buffer below this surface, so the
                 // compositor can blur it behind the translucent controls.
+                BackgroundEffect {
+                    target: toolbar
+                    radius: toolbar.radius
+                }
+                BackgroundEffect {
+                    target: optionsPanel
+                    radius: optionsPanel.radius
+                    requested: optionsPanel.visible
+                }
                 BlurRegion {
                     window: controls
                     surfaceNamespace: "bingux-capture-controls"

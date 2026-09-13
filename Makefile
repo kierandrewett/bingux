@@ -16,12 +16,21 @@ ROOT := $(abspath .)
 .PHONY: all native daemons doctor doctor-build check install install-user uninstall-user rpm-package source-archive
 all: native daemons
 
-native:
+native: $(BUILD_DIR)/bingux-image-clipboard $(BUILD_DIR)/bingux-frame
 	mkdir -p $(BUILD_DIR)/text $(BUILD_DIR)/settings $(BUILD_DIR)/effects
 	cd $(BUILD_DIR)/text && $(QMAKE) $(ROOT)/packages/bingux-text-layout/text-layout.pro && $(MAKE)
 	cd $(BUILD_DIR)/settings && $(QMAKE) $(ROOT)/packages/bingux-settings/platform/platform.pro && $(MAKE)
 	cd $(BUILD_DIR)/effects && $(QMAKE) $(ROOT)/packages/bingux-effects/effects.pro && $(MAKE)
 	$(CC) -std=c11 -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra -Werror packages/bingux-audio-meter/main.c -o $(BUILD_DIR)/bingux-audio-meter $$($(PKG_CONFIG) --cflags --libs libpulse)
+
+$(BUILD_DIR)/bingux-image-clipboard: packages/bingux-image-clipboard/main.c packages/bingux-image-clipboard/ext-data-control-v1.xml
+	mkdir -p $(BUILD_DIR)
+	wayland-scanner client-header packages/bingux-image-clipboard/ext-data-control-v1.xml $(BUILD_DIR)/ext-data-control-v1-client-protocol.h
+	wayland-scanner private-code packages/bingux-image-clipboard/ext-data-control-v1.xml $(BUILD_DIR)/ext-data-control-v1-protocol.c
+	$(CC) -std=c11 -D_POSIX_C_SOURCE=200809L -O2 -Wall -Wextra -Werror packages/bingux-image-clipboard/main.c $(BUILD_DIR)/ext-data-control-v1-protocol.c -I$(BUILD_DIR) -o $@ $$($(PKG_CONFIG) --cflags --libs wayland-client)
+
+$(BUILD_DIR)/bingux-frame: packages/bingux-frame/paint-gtk.c packages/bingux-frame/build.sh packages/bingux-frame/vendor/client.c packages/bingux-frame/vendor/paint.h packages/bingux-frame/vendor/gnoblin-window-frame-v1.xml
+	bash packages/bingux-frame/build.sh $(BUILD_DIR)
 
 daemons:
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-searchd/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo

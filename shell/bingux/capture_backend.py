@@ -16,6 +16,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
+from capture_clipboard import ClipboardError, copy_image_to_clipboard
 import gi
 
 gi.require_version("Gst", "1.0")
@@ -753,20 +754,16 @@ class Capture:
             self.emit("error", message="Capture produced no output")
             return
         os.replace(temporary, output)
-        if job["kind"] == "screenshot":
-            play_shutter()
         copied = False
-        if job["kind"] == "screenshot" and job["copy"] and shutil.which("wl-copy"):
+        if job["kind"] == "screenshot" and job["copy"]:
             try:
-                with output.open("rb") as image:
-                    copied = (
-                        subprocess.run(
-                            ["wl-copy", "--type", "image/" + job["format"]], stdin=image, timeout=4
-                        ).returncode
-                        == 0
-                    )
-            except (OSError, subprocess.SubprocessError):
+                copied = copy_image_to_clipboard(output, "image/" + job["format"])
+            except (ClipboardError, OSError, GLib.Error):
                 pass  # Clipboard failure must not hide a successfully saved image.
+        if job["kind"] == "screenshot":
+            # The shutter confirms the complete screenshot action: the file is
+            # in its final location and the optional clipboard copy has ended.
+            play_shutter()
         notified = False
         try:
             notifier = subprocess.Popen(

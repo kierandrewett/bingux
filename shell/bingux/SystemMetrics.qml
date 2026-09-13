@@ -104,7 +104,7 @@ Pill {
             return Math.max(1, sample && sample.extra && sample.extra.logicalCpus || 1, peak || 0);
         return 0;
     }
-    readonly property string description: !available || !sample ? "System usage unavailable" : systemMetrics.cpuLabel + "\nMemory " + systemMetrics.formatBytes(sample.memoryUsedBytes) + " of " + systemMetrics.formatBytes(sample.memoryTotalBytes) + " · " + Math.round(memoryFraction * 100) + "%" + "\nNetwork receive " + valueFor("receive") + " · send " + valueFor("send")
+    readonly property string description: !available || !sample ? "Usage unavailable" : "CPU " + valueFor("cpu") + " · RAM " + Math.round(memoryFraction * 100) + "% · ↓ " + valueFor("receive") + " · ↑ " + valueFor("send")
     readonly property bool pointerHovered: mouse.containsMouse
     signal configureRequested
     signal performanceRequested

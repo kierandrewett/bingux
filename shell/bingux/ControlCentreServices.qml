@@ -16,9 +16,26 @@ Singleton {
             power: {
                 available: false,
                 profiles: []
-            }
+            },
+            publicNetwork: ({
+                    status: "idle",
+                    ip: "",
+                    provider: "",
+                    country: "",
+                    region: "",
+                    error: ""
+                })
         })
     readonly property var vpns: state.vpns || []
+    readonly property var publicNetwork: state.publicNetwork || ({
+            status: "idle",
+            ip: "",
+            provider: "",
+            country: "",
+            region: "",
+            error: ""
+        })
+    property bool publicNetworkBusy: false
     readonly property bool doNotDisturb: !!state.doNotDisturb
     property bool keepAwake: false
     readonly property var defaultControls: ({
@@ -60,6 +77,14 @@ Singleton {
         worker.write(JSON.stringify(Object.assign({
             op: "action"
         }, request)) + "\n");
+    }
+    function refreshPublicNetwork() {
+        if (!ready || publicNetworkBusy)
+            return;
+        publicNetworkBusy = true;
+        worker.write(JSON.stringify({
+            op: "public-network"
+        }) + "\n");
     }
     function toggleAwake() {
         error = "";
@@ -113,6 +138,12 @@ Singleton {
                 }
                 if (response.state)
                     root.state = Object.assign({}, root.state, response.state);
+                if (response.publicNetwork) {
+                    root.state = Object.assign({}, root.state, {
+                        publicNetwork: response.publicNetwork
+                    });
+                    root.publicNetworkBusy = false;
+                }
                 if (response.ready) {
                     root.ready = true;
                     worker.write(JSON.stringify({
@@ -129,6 +160,7 @@ Singleton {
         onExited: {
             root.ready = false;
             root.busy = false;
+            root.publicNetworkBusy = false;
             root.error = "Desktop controls are unavailable.";
             restart.restart();
         }

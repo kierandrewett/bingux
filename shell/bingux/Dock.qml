@@ -21,8 +21,24 @@ PanelWindow {
     readonly property alias editSurface: dockSurface
     readonly property alias widgetHost: dockWidgets
     readonly property var preferences: DesktopEditing.desktop
-    readonly property int itemSize: (preferences.dockSize || 56) + 16
-    readonly property int iconSize: preferences.dockSize || 56
+    readonly property int preferredIconSize: preferences.dockSize || 56
+    readonly property int minimumIconSize: 32
+    readonly property int dockItemCount: appGroups.length
+    property int effectiveIconSize: preferredIconSize
+    function iconSizeForWidth(width, itemCount, pinnedCount, preferredSize) {
+        if (itemCount < 1 || width <= 0)
+            return preferredSize;
+
+        // The dock surface has 8px of padding on each side, plus the
+        // inter-item gaps and the pinned/running section gap. Keep the saved
+        // preference as the ceiling and reduce it only when the current
+        // screen cannot fit the complete row.
+        const fixedWidth = Math.max(0, itemCount - 1) * Theme.spaceSmall + (pinnedCount > 0 && pinnedCount < itemCount ? Theme.padding : 0) + 16;
+        const availableItemWidth = width - Theme.padding * 2 - fixedWidth;
+        return Math.max(minimumIconSize, Math.min(preferredSize, Math.floor(availableItemWidth / itemCount - 16)));
+    }
+    readonly property int iconSize: effectiveIconSize
+    readonly property int itemSize: iconSize + 16
     required property var settings
     property var notifications: []
     readonly property var notificationIndex: MediaMatch.notificationIndex(notifications)
@@ -96,10 +112,29 @@ PanelWindow {
             }
         }
     }
-    onAppGroupsChanged: rectangleUpdate.restart()
-    onWidthChanged: rectangleUpdate.restart()
+    function updateDockSize() {
+        const next = root.iconSizeForWidth(root.width, root.appGroups.length, root.pinnedGroupCount, root.preferredIconSize);
+        if (root.effectiveIconSize !== next)
+            root.effectiveIconSize = next;
+    }
+    onAppGroupsChanged: {
+        Qt.callLater(root.updateDockSize);
+        dockSizeSettle.restart();
+        rectangleUpdate.restart();
+    }
+    onWidthChanged: {
+        root.updateDockSize();
+        dockSizeSettle.restart();
+        rectangleUpdate.restart();
+    }
+    onPreferredIconSizeChanged: root.updateDockSize()
+    onPinnedGroupCountChanged: root.updateDockSize()
     onHeightChanged: rectangleUpdate.restart()
-    onVisibleChanged: rectangleUpdate.restart()
+    onVisibleChanged: {
+        root.updateDockSize();
+        dockSizeSettle.restart();
+        rectangleUpdate.restart();
+    }
     onDragOffsetChanged: rectangleUpdate.restart()
     onSettleOffsetChanged: rectangleUpdate.restart()
     Timer {
@@ -113,6 +148,11 @@ PanelWindow {
             }
             root.updateTooltipPosition();
         }
+    }
+    Timer {
+        id: dockSizeSettle
+        interval: 100
+        onTriggered: root.updateDockSize()
     }
     Instantiator {
         model: ToplevelManager.toplevels
@@ -504,6 +544,25 @@ PanelWindow {
         launchAttempts = attempts;
     }
 
+    function cancelLaunch(groupId) {
+        if (!groupId || !launchAttempts[groupId])
+            return false;
+
+        const attempts = Object.assign({}, launchAttempts);
+        delete attempts[groupId];
+        launchAttempts = attempts;
+
+        if (pendingLaunchGroupId === groupId) {
+            pendingLaunchTimer.stop();
+            if (pendingLaunchToplevel) {
+                removeToplevelAssociation(pendingLaunchToplevel);
+                pendingLaunchToplevel = null;
+            }
+            pendingLaunchGroupId = "";
+        }
+        return true;
+    }
+
     LaunchErrorDialog {
         id: launchError
         screen: root.screen
@@ -780,6 +839,7 @@ PanelWindow {
         // QML's sort can shuffle equal entries. Partition without sorting
         // again so the user's saved order survives within each section.
         root.appGroups = groups.filter(group => root.isPinned(group)).concat(groups.filter(group => !root.isPinned(group)));
+        root.updateDockSize();
         root.appGroupsInitialised = true;
         const layoutKey = JSON.stringify([groups.map(group => group.id), root.iconSize, root.pinnedGroupCount, root.preferences.layout?.dock]);
         if (!root.startupReady && layoutKey !== root.startupLayoutKey) {
@@ -857,6 +917,11 @@ PanelWindow {
         root.pendingLaunchGroupId = group.id;
         LaunchFeedback.end(root.launchFeedbackToken);
         root.launchFeedbackToken = LaunchFeedback.begin(group.id, () => {
+            // The menu can cancel the request while the launch-feedback call
+            // is still queued. Do not dispatch the application after that.
+            const attempt = root.launchAttempts[group.id];
+            if (root.pendingLaunchGroupId !== group.id || !attempt || attempt.serial !== serial)
+                return;
             const helper = Quickshell.env("BINGUX_APP_LAUNCHER_HELPER");
             const command = helper ? [helper] : ["python3", decodeURIComponent(Qt.resolvedUrl("launch-application.py").toString().replace(/^file:\/\//, ""))];
             command.push("--dock-feedback");
@@ -894,16 +959,33 @@ PanelWindow {
         return root.activeWindow(group) || root.windowFocusHistory.find(window => group.windows.indexOf(window) >= 0) || group.windows[0];
     }
 
+    function lastMinimisedWindow(group) {
+        if (!group || !group.windows)
+            return null;
+        // The history is newest-first and spans all applications. Restrict it
+        // to this group so dock activation always restores the window that was
+        // most recently minimised for the app under the pointer.
+        return root.minimisedWindowHistory.find(candidate => candidate && candidate.minimized && group.windows.indexOf(candidate) >= 0) || group.windows.find(candidate => candidate && candidate.minimized) || null;
+    }
+
     function toggleGroup(group) {
+        if (!group || !group.windows)
+            return;
         if (group.windows.length === 0) {
             root.launch(group);
             return;
         }
+
         const active = root.activeWindow(group);
         if (active) {
             root.groupRestoreTargets = Object.assign({}, root.groupRestoreTargets, {
                 [group.id]: active
             });
+            // Record synchronously as well as through onMinimizedChanged. A
+            // second click or wheel event can arrive before the protocol emits
+            // the property change, and should still restore this exact window.
+            const remaining = root.minimisedWindowHistory.filter(window => window && window !== active);
+            root.minimisedWindowHistory = [active].concat(remaining);
             // Hide the other windows first so minimising the focused window
             // cannot expose another window from this app.
             for (const window of group.windows) {
@@ -913,8 +995,27 @@ PanelWindow {
             active.minimized = true;
             return;
         }
+
+        // With no active window, restore the newest minimised window before
+        // consulting focus history. This is the click-side of the dock rule:
+        // clicking a minimised group brings back its last minimised window.
+        const minimised = root.lastMinimisedWindow(group);
+        if (minimised) {
+            const remainingTargets = Object.assign({}, root.groupRestoreTargets);
+            delete remainingTargets[group.id];
+            root.groupRestoreTargets = remainingTargets;
+            root.minimisedWindowHistory = root.minimisedWindowHistory.filter(window => window && window !== minimised);
+            minimised.minimized = false;
+            minimised.activate();
+            return;
+        }
+
+        // Focus may be temporarily clear while a shell surface owns the
+        // pointer. Retain the old fallback for that transient state.
         const remembered = root.groupRestoreTargets[group.id];
-        const window = (remembered && group.windows.indexOf(remembered) >= 0 ? remembered : null) || root.minimisedWindowHistory.find(candidate => candidate.minimized && group.windows.indexOf(candidate) >= 0) || group.windows.find(candidate => candidate && candidate.minimized) || root.preferredWindow(group);
+        const window = (remembered && group.windows.indexOf(remembered) >= 0 ? remembered : null) || root.preferredWindow(group);
+        if (!window)
+            return;
         const remainingTargets = Object.assign({}, root.groupRestoreTargets);
         delete remainingTargets[group.id];
         root.groupRestoreTargets = remainingTargets;
@@ -923,18 +1024,40 @@ PanelWindow {
     }
 
     function cycleGroup(group, delta) {
-        // Scrolling cycles windows that already exist. It must never turn a
-        // wheel gesture into an application launch for an idle dock item.
+        // A wheel gesture cycles windows, but a minimised window is always the
+        // first restore target. This prevents scrolling from jumping to the
+        // last-focused window when the group has a known minimisation history.
         if (!group || !group.windows || group.windows.length === 0)
             return;
-        const activeIndex = group.windows.indexOf(root.preferredWindow(group));
+        const minimised = root.lastMinimisedWindow(group);
+        if (minimised) {
+            root.minimisedWindowHistory = root.minimisedWindowHistory.filter(window => window && window !== minimised);
+            minimised.minimized = false;
+            minimised.activate();
+            return;
+        }
+        const active = root.activeWindow(group);
+        const basis = active || root.preferredWindow(group);
+        const activeIndex = group.windows.indexOf(basis);
         const startIndex = activeIndex >= 0 ? activeIndex : 0;
         const direction = delta > 0 ? -1 : 1;
         const nextIndex = (startIndex + direction + group.windows.length) % group.windows.length;
-        if (group.windows[nextIndex]) {
-            group.windows[nextIndex].minimized = false;
-            group.windows[nextIndex].activate();
+        const next = group.windows[nextIndex];
+        if (next) {
+            next.minimized = false;
+            next.activate();
         }
+    }
+
+    function scrollDock(delta) {
+        const extent = Math.max(0, dockLiveWidgets.contentWidth - dockLiveWidgets.width);
+        if (!delta || extent === 0)
+            return false;
+
+        dockLiveWidgets.cancelFlick();
+        const origin = dockLiveWidgets.originX || 0;
+        dockLiveWidgets.contentX = origin + Math.max(0, Math.min(extent, dockLiveWidgets.contentX - origin - delta));
+        return true;
     }
 
     exclusiveZone: implicitHeight
@@ -943,6 +1066,7 @@ PanelWindow {
         item: root.draggedId.length > 0 ? dragCapture : dockInputArea
     }
     color: "transparent"
+    surfaceFormat.opaque: false
     WlrLayershell.layer: DesktopEditing.active ? WlrLayer.Overlay : WlrLayer.Top
     margins.bottom: DesktopEditing.active ? 64 : 0
     Behavior on margins.bottom {
@@ -952,8 +1076,22 @@ PanelWindow {
         }
     }
     WlrLayershell.namespace: "bingux-dock"
+    // Input padding stays transparent; only the visible material requests blur.
+    BackgroundEffect {
+        id: standardDockBlur
+        target: dockSurface
+        radius: dockSurface.radius
+    }
+
+    BlurRegion {
+        enabled: !standardDockBlur.available
+        window: root
+        surfaceNamespace: "bingux-dock"
+        region: dockSurface.visible ? Qt.rect(dockSurface.x, dockSurface.y, dockSurface.width, dockSurface.height) : Qt.rect(0, 0, 0, 0)
+    }
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     Component.onCompleted: {
+        root.updateDockSize();
         root.observedGroupOrder = dockState.observedOrder.slice();
         startupDeadline.start();
         root.rememberFocusedWindow();
@@ -1109,6 +1247,7 @@ PanelWindow {
         visible: DesktopEditing.active || root.appGroups.length > 0 || (root.preferences.layout?.dock.length || 0) > 0
 
         Flickable {
+            id: dockLiveWidgets
             // Dock editing is handled by NativeEditSurface. Keep the live app
             // buttons inert while the editor is open.
             objectName: "dockLiveWidgets"
@@ -1125,6 +1264,18 @@ PanelWindow {
             clip: true
             interactive: root.draggedId.length === 0 && contentWidth > width
             boundsBehavior: Flickable.StopAtBounds
+            WheelHandler {
+                target: null
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                acceptedModifiers: Qt.KeyboardModifierMask
+                onWheel: event => {
+                    const delta = event.pixelDelta.x || event.angleDelta.x || event.pixelDelta.y || event.angleDelta.y;
+                    if (!root.scrollDock(delta))
+                        event.accepted = false;
+                    else
+                        event.accepted = true;
+                }
+            }
             Rectangle {
                 objectName: "dockSectionDivider"
                 // Use the section's extent. A cached delegate at the boundary
@@ -1160,6 +1311,7 @@ PanelWindow {
 
                 Repeater {
                     id: dockItems
+                    onCountChanged: root.updateDockSize()
                     model: ScriptModel {
                         // Keep metadata updates out of reorder operations so each
                         // app retains its button and animation state while moving.
@@ -1468,13 +1620,17 @@ PanelWindow {
                                 }
                             }
                             onWheel: function (wheel) {
+                                const delta = wheel.pixelDelta.y || wheel.angleDelta.y || wheel.pixelDelta.x || wheel.angleDelta.x;
+                                if (!delta)
+                                    return;
+                                if (root.scrollDock(delta)) {
+                                    wheel.accepted = true;
+                                    return;
+                                }
                                 if (root.preferences.dockScroll === "none") {
                                     wheel.accepted = false;
                                     return;
                                 }
-                                const delta = wheel.pixelDelta.y || wheel.angleDelta.y || wheel.pixelDelta.x || wheel.angleDelta.x;
-                                if (!delta)
-                                    return;
                                 const now = Date.now();
                                 if (now - lastScroll < 140)
                                     return;
@@ -1677,30 +1833,38 @@ PanelWindow {
                                     }
 
                                     MenuSeparator {
-                                        visible: dockButton.currentGroup.windows.length > 0
+                                        visible: dockButton.currentGroup.windows.length > 0 || !!root.launchAttempts[dockButton.currentGroup.id]
                                     }
 
                                     MenuSection {
                                         label: "Open windows"
-                                        visible: dockButton.currentGroup.windows.length > 0
+                                        visible: dockButton.currentGroup.windows.length > 0 || !!root.launchAttempts[dockButton.currentGroup.id]
                                     }
 
                                     Repeater {
                                         model: ScriptModel {
-                                            values: dockButton.currentGroup.windows
+                                            values: dockButton.currentGroup.windows.concat(root.launchAttempts[dockButton.currentGroup.id] ? [
+                                                {
+                                                    loading: true
+                                                }
+                                            ] : [])
                                         }
 
                                         delegate: MenuAction {
                                             cornerRadius: appMenu.contentRadius
                                             navigation: menuNavigation
                                             required property var modelData
+                                            readonly property bool isLoading: !!modelData?.loading
 
-                                            label: root.menuLabel(modelData && modelData.title, dockButton.currentGroup.id)
+                                            label: isLoading ? "Loading..." : root.menuLabel(modelData && modelData.title, dockButton.currentGroup.id)
                                             iconSource: dockIcon.source
-                                            closable: !!modelData
-                                            selectedWindow: !!modelData && (modelData.activated || (appMenu.visible && !ToplevelManager.activeToplevel && root.lastActiveWindow === modelData))
+                                            loading: isLoading
+                                            closable: isLoading || !!modelData
+                                            selectedWindow: !isLoading && !!modelData && (modelData.activated || (appMenu.visible && !ToplevelManager.activeToplevel && root.lastActiveWindow === modelData))
                                             onCloseRequested: {
-                                                if (modelData) {
+                                                if (isLoading) {
+                                                    root.cancelLaunch(dockButton.currentGroup.id);
+                                                } else if (modelData) {
                                                     appMenu.dismissOnOutsideClick = false;
                                                     closeClickGuard.restart();
                                                     const window = modelData;
@@ -1711,9 +1875,10 @@ PanelWindow {
                                                 }
                                             }
                                             onTriggered: {
-                                                if (modelData)
+                                                if (!isLoading && modelData)
                                                     modelData.activate();
-                                                dockButton.menuOpen = false;
+                                                if (!isLoading)
+                                                    dockButton.menuOpen = false;
                                             }
                                         }
                                     }
@@ -1775,6 +1940,7 @@ PanelWindow {
         id: action
         readonly property bool menuEntry: true
         property url iconSource: ""
+        property bool loading: false
         property bool closable: false
         property bool closing: false
         Timer {
@@ -1823,9 +1989,17 @@ PanelWindow {
                 anchors.fill: parent
                 spacing: Theme.gap
                 OsIconImage {
-                    visible: action.iconSource.toString().length > 0
+                    visible: !action.loading && action.iconSource.toString().length > 0
                     source: action.iconSource
                     implicitSize: Theme.iconSize
+                    Layout.alignment: Qt.AlignVCenter
+                }
+                PreviewSpinner {
+                    visible: action.loading
+                    implicitWidth: Theme.iconSize
+                    implicitHeight: Theme.iconSize
+                    loading: action.loading
+                    colour: Theme.accent
                     Layout.alignment: Qt.AlignVCenter
                 }
                 Text {
@@ -1833,7 +2007,7 @@ PanelWindow {
                     text: action.label
                     textFormat: Text.PlainText
                     elide: Text.ElideRight
-                    color: action.selectedWindow ? Theme.accent : Theme.text
+                    color: action.selectedWindow ? Theme.accent : action.loading ? Theme.muted : Theme.text
                     font.weight: action.selectedWindow ? Font.Medium : Font.Normal
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSize
@@ -1867,7 +2041,7 @@ PanelWindow {
                             Accessible.name: "Closing " + action.label
                         }
                     }
-                    Accessible.name: (action.closing ? "Closing " : "Close ") + action.label
+                    Accessible.name: action.loading ? "Cancel loading" : (action.closing ? "Closing " : "Close ") + action.label
                     showFocusRing: action.navigation !== null && action.navigation.keyboardNavigation
                     background: Rectangle {
                         radius: closeWindow.cornerRadius

@@ -14,6 +14,7 @@ AbstractButton {
     readonly property bool customPresentation: !!presentation?.custom
     readonly property string displayedLabel: presentation?.label || label
     property string tooltipText: displayedLabel
+    property bool tooltipEnabled: true
     property bool highlighted: false
     implicitWidth: customPresentation ? Math.max(32, face.implicitWidth + Theme.gap * 2) : 32
     implicitHeight: 32
@@ -78,12 +79,12 @@ AbstractButton {
         objectName: "iconButtonBarTooltip"
         anchorItem: root
         barWindow: root.barWindow
-        requested: root.barStyle && root.visible && root.enabled && (root.hovered || root.visualFocus)
+        requested: root.tooltipEnabled && root.barStyle && root.visible && root.enabled && (root.hovered || root.visualFocus)
         text: root.tooltipText
     }
     ShellTooltip {
         parent: root
-        visible: !root.barStyle && root.visible && root.enabled && (root.hovered || root.visualFocus)
+        visible: root.tooltipEnabled && !root.barStyle && root.visible && root.enabled && (root.hovered || root.visualFocus)
         text: root.tooltipText
     }
 }

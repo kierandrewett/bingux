@@ -64,6 +64,7 @@ ShellRoot {
             wait(250);
             const menu = findChild(window.contentItem, "sidebarContentMenu");
             check(menu !== null, "detached content menu belongs to its own window");
+            check(findChild(window.contentItem, "sidebar-position-right") !== null, "sidebar menu restores the position switcher");
             const anchor = picker.mapToItem(window.contentItem, 0, picker.height);
             const position = menu.mapToItem(window.contentItem, 0, 0);
             equal(position.x, anchor.x + Theme.spaceSmall);

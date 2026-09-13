@@ -37,6 +37,7 @@ Item {
             iconName: level.muteIconName
             Accessible.name: label
             tooltipText: label
+            tooltipEnabled: level.barLayout
             highlighted: level.available && level.node.audio.muted
             onClicked: level.node.audio.muted = !level.node.audio.muted
         }
@@ -126,6 +127,7 @@ Item {
             barWindow: level.barWindow
             implicitHeight: level.barLayout ? Theme.barHeight : 32
             visible: level.navigation
+            tooltipEnabled: level.barLayout
             iconName: "go-next-symbolic"
             label: level.label === "Microphone" ? "Input devices" : "Output devices"
             onClicked: level.devicesRequested(this)

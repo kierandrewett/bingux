@@ -178,7 +178,7 @@ Item {
     }
 
     BarControlSurface {
-        hovered: selectorMouse.containsMouse && root.canSelect
+        hovered: selectorHover.hovered && root.canSelect
         pressed: selectorMouse.pressed && root.canSelect
         selected: root.menuOpen
         focused: root.activeFocus && root.canSelect
@@ -206,14 +206,12 @@ Item {
 
     MouseArea {
         id: selectorMouse
-        hoverEnabled: true
         enabled: root.canSelect
 
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton
         cursorShape: Qt.ArrowCursor
         onClicked: {
-            root.forceActiveFocus();
             if (root.menuOpen)
                 root.menuOpen = false;
             else
@@ -221,11 +219,16 @@ Item {
         }
     }
 
+    HoverHandler {
+        id: selectorHover
+    }
+
     BarTooltip {
         anchorItem: root
         barWindow: root.parentWindow
-        requested: selectorMouse.containsMouse
-        text: root.Accessible.name + " · Super+Space"
+        requested: selectorHover.hovered && root.canSelect
+        text: root.metrics.currentInputSource !== null ? root.metrics.currentInputSource.displayName : "Language unavailable"
+        supportingText: "Super + Space to switch"
     }
 
     Process {
@@ -364,6 +367,7 @@ Item {
                         required property int index
                         readonly property bool menuEntry: true
                         readonly property int sourceIndex: index
+                        readonly property bool pointerHovered: sourceActionHover.hovered
                         Layout.fillWidth: true
                         Layout.preferredHeight: 38
                         Accessible.name: sourceAction.modelData.displayName
@@ -372,7 +376,7 @@ Item {
                         Rectangle {
                             anchors.fill: parent
                             radius: inputMenu.contentRadius
-                            color: sourceActionMouse.pressed ? Theme.pressed : sourceActionMouse.containsMouse ? Theme.hover : "transparent"
+                            color: sourceActionMouse.pressed ? Theme.pressed : sourceAction.pointerHovered && root.canSelect ? Theme.hover : "transparent"
                         }
 
                         Text {
@@ -406,13 +410,16 @@ Item {
                             id: sourceActionMouse
 
                             anchors.fill: parent
-                            hoverEnabled: true
                             cursorShape: Qt.ArrowCursor
                             enabled: root.canSelect
                             onClicked: {
                                 inputNavigation.pointerActivate();
                                 root.selectSource(sourceAction.modelData);
                             }
+                        }
+
+                        HoverHandler {
+                            id: sourceActionHover
                         }
 
                         Keys.priority: Keys.BeforeItem

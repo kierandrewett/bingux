@@ -5,6 +5,7 @@ Controls.ToolTip {
     id: root
     property int maximumWidth: 320
     property bool wrapText: true
+    property var details: []
     onAboutToShow: Theme.beginTooltip(root)
     onClosed: Theme.endTooltip(root)
     Component.onDestruction: Theme.endTooltip(root)
@@ -47,6 +48,7 @@ Controls.ToolTip {
     background: Item {}
     contentItem: TooltipBubble {
         text: root.text
+        details: root.details
         maximumWidth: root.maximumWidth
         wrapText: root.wrapText
     }

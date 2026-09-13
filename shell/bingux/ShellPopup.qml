@@ -8,9 +8,13 @@ import Quickshell.Wayland
 // enough to finish closing, with input released as soon as closing starts.
 Scope {
     id: root
+    property bool windowShadow: false
     default property alias contents: body.data
     property bool visible: false
     property bool keepWindowAlive: false
+    // Keep the card and its delegates resident while hidden. The input mask
+    // still drops to zero when invisible, so this is a presentation cache only.
+    property bool keepContentAlive: false
     property bool keyboardInteractive: true
     property bool pointerInteractive: true
     property bool dismissOnOutsideClick: true
@@ -65,17 +69,19 @@ Scope {
     readonly property real height: hostItem ? hostItem.height : window.height
     readonly property var contentItem: hostItem ? hostItem : window.contentItem
     readonly property alias body: body
+    property alias presentationOpacity: card.opacity
     readonly property bool closing: retained && !visible
     property real preferredX: anchorItem ? anchorPosition.x - popupWidth / (anchorAlignment === Qt.AlignHCenter ? 2 : 1) : (width - popupWidth) / 2
     property real preferredY: anchorItem ? (anchorAbove ? anchorTop - popupHeight - Theme.gap : anchorPosition.y + Theme.gap) : Theme.barHeight + Theme.gap
     property bool surfaceVisible: true
     property color surfaceColor: Theme.popupSurface
     property real cornerRadius: Theme.cardRadius
-    property int contentPadding: Theme.padding
+    property int contentPadding: Theme.popupPadding
     property real revealOriginX: card.width / 2
     property real revealOriginY: 0
     property real revealScale: 1
     property real initialRevealScale: Theme.popupInitialScale
+    property int openMotion: Theme.popupOpenMotion
     property int closeMotion: Theme.popupCloseMotion
     property int closeEasing: Easing.OutCubic
     readonly property real panelX: card.x
@@ -86,6 +92,7 @@ Scope {
     signal aboutToOpen
     property bool retained: false
     readonly property bool compositorClose: !hostItem && !keepWindowAlive && !motionSource && PopupTransitions.matches(closeMotion, closeEasing)
+    readonly property bool compositorOpen: !hostItem && !keepWindowAlive && PopupTransitions.fadesIn()
 
     onVisibleChanged: {
         reveal.stop();
@@ -99,7 +106,7 @@ Scope {
             aboutToOpen();
             if (!retained) {
                 revealScale = Theme.reducedMotion ? 1 : root.initialRevealScale;
-                card.opacity = Theme.reducedMotion ? 1 : 0;
+                card.opacity = Theme.reducedMotion || compositorOpen ? 1 : 0;
             }
             dismissWindow.visible = !root.hostItem && root.keyboardInteractive;
             retained = true;
@@ -128,14 +135,14 @@ Scope {
             target: root
             property: "revealScale"
             to: 1
-            duration: Theme.popupOpenMotion
+            duration: root.openMotion
             easing.type: Easing.OutCubic
         }
         NumberAnimation {
             target: card
             property: "opacity"
             to: 1
-            duration: Theme.popupOpenMotion
+            duration: root.openMotion
             easing.type: Easing.OutCubic
         }
     }
@@ -147,7 +154,8 @@ Scope {
         duration: root.closeMotion
         easing.type: root.closeEasing
         onFinished: if (!root.visible) {
-            root.retained = false;
+            if (!root.keepContentAlive)
+                root.retained = false;
             dismissWindow.visible = false;
         }
     }
@@ -219,8 +227,17 @@ Scope {
         }
         contentItem.enabled: root.visible
         contentItem.Keys.onEscapePressed: root.visible = false
-        Rectangle {
+        Item {
             id: card
+            BackgroundEffect {
+                target: card
+                radius: root.cornerRadius
+                requested: root.surfaceVisible
+            }
+            SurfaceFade {
+                target: card
+                layerTarget: root.windowShadow ? composition : card
+            }
             // Keep native context-menu events inside the popup, including
             // right-clicks handled by controls before this event arrives.
             ContextMenu.menu: null
@@ -232,17 +249,51 @@ Scope {
             visible: root.retained
             enabled: root.visible
             z: 6 + root.popupDepth * 2
-            x: Math.max(root.placementLeft + Theme.gap, Math.min(root.preferredX, root.placementRight - width - Theme.gap))
-            y: Math.max(Theme.gap, Math.min(root.preferredY, root.height - height - Theme.gap))
+            // Centred anchors can land between pixels; keep settled borders crisp.
+            x: Math.round(Math.max(root.placementLeft + Theme.gap, Math.min(root.preferredX, root.placementRight - width - Theme.gap)))
+            y: Math.round(Math.max(Theme.gap, Math.min(root.preferredY, root.height - height - Theme.gap)))
             width: Math.max(0, Math.min(root.popupWidth, root.placementRight - root.placementLeft - Theme.gap * 2))
             height: Math.min(root.popupHeight, root.height - Theme.gap * 2)
-            radius: root.cornerRadius
-            color: root.surfaceVisible ? root.surfaceColor : "transparent"
-            opacity: root.motionSource ? root.motionSource.body.parent.opacity : 0
-            border.color: Theme.outline
-            border.width: root.surfaceVisible ? 1 : 0
-            PanelOutline {
-                surface: card
+            opacity: root.motionSource ? root.motionSource.presentationOpacity : 0
+            MouseArea {
+                anchors.fill: parent
+            }
+            Item {
+                id: composition
+                x: -128
+                y: -128
+                width: card.width + 256
+                height: card.height + 256
+                Rectangle {
+                    id: material
+                    parent: root.windowShadow ? composition : card
+                    x: root.windowShadow ? 128 : 0
+                    y: x
+                    width: card.width
+                    height: card.height
+                    radius: root.cornerRadius
+                    color: root.surfaceVisible ? root.surfaceColor : "transparent"
+                    border.color: Theme.outline
+                    border.width: root.surfaceVisible ? 1 : 0
+                    PanelOutline {
+                        surface: material
+                    }
+                    Loader {
+                        active: root.windowShadow && root.surfaceVisible
+                        sourceComponent: PopupShadow {
+                            surface: material
+                        }
+                    }
+                }
+                Item {
+                    id: body
+                    parent: root.windowShadow ? material : card
+                    // Reparenting can append the material after this item.
+                    // Keep content above it regardless of child insertion order.
+                    z: 1
+                    anchors.fill: parent
+                    anchors.margins: root.contentPadding
+                }
             }
             transform: Scale {
                 id: popupScale
@@ -250,14 +301,6 @@ Scope {
                 origin.y: root.motionSource ? root.motionSource.panelY + root.motionSource.revealOriginY - card.y : root.revealOriginY
                 xScale: root.motionSource ? root.motionSource.revealScale : root.revealScale
                 yScale: root.motionSource ? root.motionSource.revealScale : root.revealScale
-            }
-            MouseArea {
-                anchors.fill: parent
-            }
-            Item {
-                id: body
-                anchors.fill: parent
-                anchors.margins: root.contentPadding
             }
         }
     }

@@ -10,14 +10,27 @@ import "SearchGroups.js" as SearchGroups
 PanelWindow {
     id: root
 
-    // Keep the compositor buffer until the actual layer and input field have focus.
+    // Release the temporary compositor grab once the field exists and owns Qt
+    // focus. Wayland activation can only follow after that grab is released.
+    readonly property bool preparedKeyboard: visible && !closing && searchInput.activeFocus && !!searchInput.Window.window
+    onPreparedKeyboardChanged: syncKeyboardHandoff()
+    function syncKeyboardHandoff() {
+        if (preparedKeyboard)
+            inputHandoff.send({
+                op: "shortcut-input",
+                name: "search",
+                state: "prepared"
+            });
+        if (acceptingKeyboard)
+            inputHandoff.send({
+                op: "shortcut-input",
+                name: "search",
+                state: "ready"
+            });
+    }
+    // Buffered keys are replayed only after the native window has focus too.
     readonly property bool acceptingKeyboard: visible && !closing && searchInput.activeFocus && searchInput.Window.active
-    onAcceptingKeyboardChanged: if (acceptingKeyboard)
-        inputHandoff.send({
-            op: "shortcut-input",
-            name: "search",
-            state: "ready"
-        })
+    onAcceptingKeyboardChanged: syncKeyboardHandoff()
     ShortcutSession {
         id: inputHandoff
         onReadyChanged: if (ready) {
@@ -27,12 +40,7 @@ PanelWindow {
                     name: "search",
                     state: "closed"
                 });
-            if (root.acceptingKeyboard)
-                send({
-                    op: "shortcut-input",
-                    name: "search",
-                    state: "ready"
-                });
+            root.syncKeyboardHandoff();
         }
     }
 
@@ -281,6 +289,9 @@ PanelWindow {
     }
 
     property bool chromeRevealed: false
+    // SearchShell keeps the revealed top bar and dock as the next interaction
+    // layer. Other embedded previews retain their normal outside-click close.
+    property bool keepChromeOnOutsideClick: false
     function toggleSearch() {
         if (visible && !closing)
             closeSearch(false, true);
@@ -309,15 +320,8 @@ PanelWindow {
             searchInput.text = "";
             visible = true;
         }
-        focusSearchInput();
-        Qt.callLater(() => {
-            if (root.acceptingKeyboard)
-                inputHandoff.send({
-                    op: "shortcut-input",
-                    name: "search",
-                    state: "ready"
-                });
-        });
+        focusInput.restart();
+        Qt.callLater(root.syncKeyboardHandoff);
     }
 
     function closeSearch(keepLaunchFeedback = false, keepChrome = false) {
@@ -627,13 +631,19 @@ PanelWindow {
             lastChevronIndex = -1;
             closing = false;
             openAnimation.restart();
-            focusSearchInput();
+            focusInput.restart();
         } else {
             appMenu.visible = false;
             previewOpen = false;
             openAnimation.stop();
             closeAnimation.stop();
         }
+    }
+    Timer {
+        id: focusInput
+        interval: 0
+        onTriggered: if (root.visible)
+            searchInput.forceActiveFocus()
     }
 
     anchors {
@@ -839,12 +849,20 @@ PanelWindow {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton
             onClicked: if (!root.pointerBlocked)
-                root.closeSearch()
+                root.closeSearch(false, root.keepChromeOnOutsideClick)
         }
     }
 
-    Rectangle {
+    Item {
         id: surface
+        BackgroundEffect {
+            target: surface
+            radius: surface.radius
+        }
+        SurfaceFade {
+            target: surface
+            layerTarget: searchComposition
+        }
         objectName: "searchSurface"
         z: 1
         readonly property int contentPadding: 6
@@ -852,14 +870,7 @@ PanelWindow {
 
         width: Math.max(0, Math.min(660, root.width - 32))
         height: content.implicitHeight + surface.contentPadding * 2
-        radius: Theme.searchCardRadius
-        color: Theme.searchSurface
-        border.width: 1
-        border.color: "#555960"
-        PanelOutline {
-            surface: surface
-        }
-        clip: true
+        readonly property real radius: Theme.searchCardRadius
         y: Math.max(16, Math.min(root.height * 0.38 - (Theme.searchInputHeight + 16) / 2, root.height - height - 24))
         Behavior on height {
             enabled: root.acceptingKeyboard && !root.closing
@@ -882,459 +893,487 @@ PanelWindow {
             horizontalCenter: parent.horizontalCenter
         }
 
-        // Absorb clicks on inactive results instead of dismissing the popup.
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.AllButtons
-            onWheel: wheel => {
-                wheel.accepted = true;
-            }
-        }
-
-        ColumnLayout {
-            id: content
-            width: surface.width - surface.contentPadding * 2
-
-            spacing: 4
-
-            anchors {
-                left: parent.left
-                top: parent.top
-                margins: surface.contentPadding
-            }
-
+        Item {
+            id: searchComposition
+            x: -128
+            y: -128
+            width: surface.width + 256
+            height: surface.height + 256
             Rectangle {
-                id: searchFieldSurface
-
-                Layout.fillWidth: true
-                Layout.preferredHeight: Theme.searchInputHeight
-                radius: surface.contentRadius
-                color: "transparent"
-
-                SymbolicIcon {
-                    id: searchFieldIcon
-                    anchors.left: parent.left
-                    anchors.leftMargin: 18
-                    anchors.verticalCenter: parent.verticalCenter
-                    implicitSize: 20
-                    color: Theme.muted
-                    source: Quickshell.iconPath("system-search-symbolic")
+                id: searchCard
+                x: 128
+                y: 128
+                width: surface.width
+                height: surface.height
+                radius: surface.radius
+                color: Theme.overlaySurface
+                border.width: 1
+                border.color: Theme.outline
+                PanelOutline {
+                    surface: searchCard
+                }
+                PopupShadow {
+                    surface: searchCard
+                }
+                clip: true
+                // Absorb clicks on inactive results instead of dismissing the popup.
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.AllButtons
+                    onWheel: wheel => {
+                        wheel.accepted = true;
+                    }
                 }
 
-                Text {
-                    visible: searchInput.text === ""
-                    color: Theme.muted
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.searchInputFontSize
-                    text: root.chatMode ? "Ask a follow-up…" : "Search apps, files, web…"
-                    textFormat: Text.PlainText
-                    elide: Text.ElideRight
+                ColumnLayout {
+                    id: content
+                    width: surface.width - surface.contentPadding * 2
+
+                    spacing: 4
 
                     anchors {
                         left: parent.left
-                        right: parent.right
-                        leftMargin: 56
-                        rightMargin: inlineStatus.width + (clearQueryButton.visible ? 52 : 28)
-                        verticalCenter: parent.verticalCenter
-                    }
-                }
-
-                TextInput {
-                    id: searchInput
-                    objectName: "searchInput"
-                    HoverHandler {
-                        cursorShape: Qt.IBeamCursor
-                    }
-
-                    activeFocusOnTab: true
-                    focus: root.visible
-                    clip: true
-                    color: Theme.text
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.searchInputFontSize
-                    maximumLength: 512
-                    readOnly: root.activationPending || root.closing
-                    selectByMouse: true
-                    selectionColor: Theme.textSelection
-                    selectedTextColor: Theme.text
-                    verticalAlignment: TextInput.AlignVCenter
-                    Accessible.name: root.chatMode ? "Ask a follow-up" : "Search"
-                    onTextChanged: root.submitQuery()
-                    Keys.onPressed: function (event) {
-                        if (event.key === Qt.Key_Menu || (event.key === Qt.Key_F10 && (event.modifiers & Qt.ShiftModifier))) {
-                            const row = resultsList.itemAtIndex(root.selectedIndex);
-                            if (row)
-                                root.openAppMenu(root.displayedResults[root.selectedIndex], row.mapToItem(root.contentItem, 24, row.height));
-                            event.accepted = true;
-                        } else if (event.key === Qt.Key_Escape) {
-                            root.closeSearch();
-                            event.accepted = true;
-                        } else if (event.key === Qt.Key_Left && root.previewOpen) {
-                            root.previewOpen = false;
-                            event.accepted = true;
-                        } else if (event.key === Qt.Key_Right && root.previewResult && searchInput.cursorPosition === searchInput.length) {
-                            root.previewOpen = true;
-                            event.accepted = true;
-                        } else if (event.key === Qt.Key_L && (event.modifiers & Qt.ControlModifier)) {
-                            searchInput.selectAll();
-                            event.accepted = true;
-                        } else if (event.key === Qt.Key_Tab && !(event.modifiers & Qt.ShiftModifier)) {
-                            root.completeSelectedName();
-                            event.accepted = true;
-                        } else if (event.key === Qt.Key_Backtab || (event.key === Qt.Key_Tab && (event.modifiers & Qt.ShiftModifier))) {
-                            root.moveSelection(-1);
-                            event.accepted = true;
-                        } else if (event.key === Qt.Key_Up) {
-                            root.moveSelection(-1);
-                            event.accepted = true;
-                        } else if (event.key === Qt.Key_Down) {
-                            root.moveSelection(1);
-                            event.accepted = true;
-                        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                            if (root.selectedIndex >= 0 && root.selectedIndex < root.displayedResults.length) {
-                                root.activateSelected();
-                                event.accepted = true;
-                            } else if (root.chatMode && root.queryComplete && searchInput.text.trim() !== "" && root.chatCandidate() !== null) {
-                                root.activateResult(root.chatCandidate());
-                                event.accepted = true;
-                            } else if (root.queryError !== "" && searchInput.text !== "") {
-                                root.submitQuery();
-                                event.accepted = true;
-                            }
-                        }
-                    }
-
-                    anchors {
-                        fill: parent
-                        leftMargin: 56
-                        rightMargin: inlineStatus.width + (clearQueryButton.visible ? 52 : 28)
-                    }
-                }
-
-                Text {
-                    id: selectionHint
-                    objectName: "searchSelectionHint"
-                    readonly property string title: root.selectedIndex >= 0 && root.selectedIndex < root.displayedResults.length ? String(root.displayedResults[root.selectedIndex].title || "") : ""
-                    text: root.inputHint(searchInput.text, title)
-                    textFormat: Text.PlainText
-                    font: searchInput.font
-                    color: Theme.text
-                    opacity: 0.35
-                    x: searchInput.x + searchInput.contentWidth
-                    anchors.baseline: searchInput.baseline
-                    width: Math.max(0, searchInput.x + searchInput.width - x)
-                    elide: Text.ElideRight
-                    clip: true
-                    visible: text !== "" && !root.awaitingResults && !root.closing && searchInput.cursorPosition === searchInput.length && searchInput.selectedText === "" && searchInput.preeditText === "" && searchInput.contentWidth < searchInput.width
-                    Accessible.ignored: true
-                }
-
-                Text {
-                    id: inlineStatus
-                    anchors.right: parent.right
-                    anchors.rightMargin: clearQueryButton.visible ? 46 : 14
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: visible ? Math.min(220, implicitWidth) : 0
-                    visible: root.inlineStatusText !== ""
-                    text: root.inlineStatusText
-                    textFormat: Text.PlainText
-                    elide: Text.ElideRight
-                    color: root.queryError !== "" || !root.serviceReady ? "#edb778" : Theme.muted
-                    font.family: Theme.fontFamily
-                    font.pixelSize: 12
-                    Accessible.name: root.inlineStatusText
-                }
-
-                Rectangle {
-                    id: clearQueryButton
-                    visible: searchInput.text.length > 0
-                    width: 32
-                    height: 32
-                    radius: 8
-                    anchors.right: parent.right
-                    anchors.rightMargin: 8
-                    anchors.verticalCenter: parent.verticalCenter
-                    color: clearQueryMouse.pressed ? Theme.pressed : clearQueryMouse.containsMouse ? Theme.surface : "transparent"
-                    Accessible.role: Accessible.Button
-                    Accessible.name: "Clear search"
-                    Accessible.onPressAction: {
-                        searchInput.clear();
-                        root.focusSearchInput();
-                    }
-                    SymbolicIcon {
-                        anchors.centerIn: parent
-                        implicitSize: 16
-                        source: Quickshell.iconPath("edit-clear-symbolic", "window-close-symbolic")
-                        color: clearQueryMouse.containsMouse ? Theme.text : Theme.muted
-                    }
-                    MouseArea {
-                        id: clearQueryMouse
-                        anchors.fill: parent
-                        enabled: !root.activationPending && !root.closing
-                        hoverEnabled: true
-                        onClicked: {
-                            searchInput.clear();
-                            root.focusSearchInput();
-                        }
-                    }
-                    ShellTooltip {
-                        parent: clearQueryButton
-                        visible: clearQueryMouse.containsMouse
-                        text: "Clear search · Ctrl+L selects the query"
-                    }
-                }
-            }
-
-            ActionButton {
-                visible: root.quickChatEnabled && searchInput.text.trim().startsWith("!") && root.chatPrompt() !== "" && root.queryComplete && root.results.length === 0 && !root.chatMode
-                text: "Set up AI in Bingux Settings"
-                iconName: "preferences-system-symbolic"
-                Layout.fillWidth: true
-                onClicked: {
-                    root.closeSearch();
-                    root.settingsRequested();
-                }
-            }
-
-            ListView {
-                id: chatTranscriptList
-
-                Layout.fillWidth: true
-                Layout.preferredHeight: visible ? Math.min(contentHeight, 360) : 0
-                visible: root.chatMode && root.chatTranscript.length > 0
-                clip: true
-                boundsBehavior: Flickable.StopAtBounds
-                interactive: contentHeight > height
-                model: root.chatTranscript
-                onCountChanged: Qt.callLater(() => positionViewAtEnd())
-
-                delegate: Column {
-                    id: chatExchange
-
-                    required property var modelData
-
-                    width: chatTranscriptList.width
-                    spacing: 4
-
-                    Text {
-                        color: Theme.muted
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSmall
-                        text: "You"
-                        textFormat: Text.PlainText
+                        top: parent.top
+                        margins: surface.contentPadding
                     }
 
                     Rectangle {
-                        width: parent.width
-                        height: promptText.implicitHeight + 16
+                        id: searchFieldSurface
+
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Theme.searchInputHeight
                         radius: surface.contentRadius
-                        color: Theme.background
-                        border.width: 1
-                        border.color: Theme.outline
+                        color: "transparent"
+
+                        SymbolicIcon {
+                            id: searchFieldIcon
+                            anchors.left: parent.left
+                            anchors.leftMargin: 18
+                            anchors.verticalCenter: parent.verticalCenter
+                            implicitSize: 20
+                            color: Theme.muted
+                            source: Quickshell.iconPath("system-search-symbolic")
+                        }
 
                         Text {
-                            id: promptText
-
-                            color: Theme.text
+                            visible: searchInput.text === ""
+                            color: Theme.muted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.searchInputFontSize
+                            text: root.chatMode ? "Ask a follow-up…" : "Search apps, files, web…"
+                            textFormat: Text.PlainText
                             elide: Text.ElideRight
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSize
-                            maximumLineCount: 3
-                            text: chatExchange.modelData.prompt
-                            textFormat: Text.PlainText
-                            wrapMode: Text.Wrap
 
                             anchors {
                                 left: parent.left
                                 right: parent.right
-                                top: parent.top
-                                leftMargin: 10
-                                rightMargin: 10
-                                topMargin: 8
+                                leftMargin: 56
+                                rightMargin: inlineStatus.width + (clearQueryButton.visible ? 52 : 28)
+                                verticalCenter: parent.verticalCenter
                             }
                         }
-                    }
 
-                    Text {
-                        color: Theme.muted
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSmall
-                        text: "AI"
-                        textFormat: Text.PlainText
-                    }
+                        TextInput {
+                            id: searchInput
+                            objectName: "searchInput"
+                            HoverHandler {
+                                cursorShape: Qt.IBeamCursor
+                            }
 
-                    Rectangle {
-                        width: parent.width
-                        height: responseText.implicitHeight + 16
-                        radius: surface.contentRadius
-                        color: Theme.surface
-                        border.width: 1
-                        border.color: Theme.outline
-
-                        Text {
-                            id: responseText
-
+                            activeFocusOnTab: true
+                            focus: false
+                            clip: true
                             color: Theme.text
                             font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSize
-                            text: chatExchange.modelData.pending ? (root.streamingChatText || "Connecting…") : chatExchange.modelData.message
-                            textFormat: Text.PlainText
-                            wrapMode: Text.Wrap
+                            font.pixelSize: Theme.searchInputFontSize
+                            maximumLength: 512
+                            readOnly: root.activationPending || root.closing
+                            selectByMouse: true
+                            TapHandler {
+                                onTapped: root.focusSearchInput()
+                            }
+                            selectionColor: Theme.textSelection
+                            selectedTextColor: Theme.text
+                            verticalAlignment: TextInput.AlignVCenter
+                            Accessible.name: root.chatMode ? "Ask a follow-up" : "Search"
+                            onTextChanged: root.submitQuery()
+                            Keys.onPressed: function (event) {
+                                if (event.key === Qt.Key_Menu || (event.key === Qt.Key_F10 && (event.modifiers & Qt.ShiftModifier))) {
+                                    const row = resultsList.itemAtIndex(root.selectedIndex);
+                                    if (row)
+                                        root.openAppMenu(root.displayedResults[root.selectedIndex], row.mapToItem(root.contentItem, 24, row.height));
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Escape) {
+                                    root.closeSearch();
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Left && root.previewOpen) {
+                                    root.previewOpen = false;
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Right && root.previewResult && searchInput.cursorPosition === searchInput.length) {
+                                    root.previewOpen = true;
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_L && (event.modifiers & Qt.ControlModifier)) {
+                                    searchInput.selectAll();
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Tab && !(event.modifiers & Qt.ShiftModifier)) {
+                                    root.completeSelectedName();
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Backtab || (event.key === Qt.Key_Tab && (event.modifiers & Qt.ShiftModifier))) {
+                                    root.moveSelection(-1);
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Up) {
+                                    root.moveSelection(-1);
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Down) {
+                                    root.moveSelection(1);
+                                    event.accepted = true;
+                                } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                    if (root.selectedIndex >= 0 && root.selectedIndex < root.displayedResults.length) {
+                                        root.activateSelected();
+                                        event.accepted = true;
+                                    } else if (root.chatMode && root.queryComplete && searchInput.text.trim() !== "" && root.chatCandidate() !== null) {
+                                        root.activateResult(root.chatCandidate());
+                                        event.accepted = true;
+                                    } else if (root.queryError !== "" && searchInput.text !== "") {
+                                        root.submitQuery();
+                                        event.accepted = true;
+                                    }
+                                }
+                            }
 
                             anchors {
-                                left: parent.left
-                                right: parent.right
-                                top: parent.top
-                                leftMargin: 10
-                                rightMargin: 10
-                                topMargin: 8
+                                fill: parent
+                                leftMargin: 56
+                                rightMargin: inlineStatus.width + (clearQueryButton.visible ? 52 : 28)
                             }
                         }
-                    }
-                }
-            }
 
-            ListView {
-                id: resultsList
-                objectName: "searchResultsList"
-                // Keep this bounded (20-result) model laid out so navigation can
-                // use real provider row bounds without repositioning the list.
-                cacheBuffer: Math.max(0, contentHeight)
-                function revealSelection() {
-                    keyboardScroll.stop();
-                    cancelFlick();
-                    forceLayout();
-                    const row = itemAtIndex(root.selectedIndex);
-                    if (!row) {
-                        positionViewAtIndex(root.selectedIndex, ListView.Contain);
-                        return;
-                    }
-                    let destination = contentY;
-                    if (row.y < contentY)
-                        destination = row.y;
-                    else if (row.y + row.height > contentY + height)
-                        destination = row.y + row.height - height;
-                    destination = Math.max(originY, Math.min(destination, originY + Math.max(0, contentHeight - height)));
-                    if (Theme.reducedMotion) {
-                        contentY = destination;
-                        return;
-                    }
-                    if (Math.abs(destination - contentY) < 1)
-                        return;
-                    keyboardScroll.to = destination;
-                    keyboardScroll.restart();
-                }
-                NumberAnimation {
-                    id: keyboardScroll
-                    target: resultsList
-                    property: "contentY"
-                    duration: 150
-                    easing.type: Easing.OutCubic
-                }
-                onMovementStarted: keyboardScroll.stop()
-                onModelChanged: keyboardScroll.stop()
-
-                Layout.fillWidth: true
-                Layout.preferredHeight: visible ? Math.min(contentHeight, Math.max(64, Math.min(420, root.height - 160 - (chatTranscriptList.visible ? chatTranscriptList.height : 0)))) : 0
-                visible: root.displayedResults.length > 0
-                clip: true
-                boundsBehavior: Flickable.StopAtBounds
-                // Selection belongs to the overlay; ListView's implicit current
-                // item tracking would jump before our scroll animation starts.
-                currentIndex: -1
-                highlightFollowsCurrentItem: false
-                interactive: !root.pointerBlocked && root.pointerResultIndex >= 0 && contentHeight > height
-                model: root.displayedResults
-                spacing: 2
-                HoverHandler {
-                    id: resultPointer
-                    // Track the fixed window, so moving the popup beneath a
-                    // stationary pointer cannot count as mouse movement.
-                    parent: root.contentItem
-                    property point lastPosition: Qt.point(-1, -1)
-                    function selectAtPointer() {
-                        const previous = Qt.point(lastPosition.x, lastPosition.y);
-                        lastPosition = point.position;
-                        if (!hovered || root.pointerBlocked || previous.x < 0 || previous.y < 0 || (point.position.x === previous.x && point.position.y === previous.y))
-                            return;
-                        const local = resultsList.mapFromItem(root.contentItem, point.position.x, point.position.y);
-                        const index = local.x >= 0 && local.x < resultsList.width && local.y >= 0 && local.y < resultsList.height ? resultsList.indexAt(local.x + resultsList.contentX, local.y + resultsList.contentY) : -1;
-                        root.pointerResultIndex = index;
-                        if (index >= 0) {
-                            root.keyboardSelection = false;
-                            root.selectedIndex = index;
+                        Text {
+                            id: selectionHint
+                            objectName: "searchSelectionHint"
+                            readonly property string title: root.selectedIndex >= 0 && root.selectedIndex < root.displayedResults.length ? String(root.displayedResults[root.selectedIndex].title || "") : ""
+                            text: root.inputHint(searchInput.text, title)
+                            textFormat: Text.PlainText
+                            font: searchInput.font
+                            color: Theme.text
+                            opacity: 0.35
+                            x: searchInput.x + searchInput.contentWidth
+                            anchors.baseline: searchInput.baseline
+                            width: Math.max(0, searchInput.x + searchInput.width - x)
+                            elide: Text.ElideRight
+                            clip: true
+                            visible: text !== "" && !root.awaitingResults && !root.closing && searchInput.cursorPosition === searchInput.length && searchInput.selectedText === "" && searchInput.preeditText === "" && searchInput.contentWidth < searchInput.width
+                            Accessible.ignored: true
                         }
-                    }
-                    onPointChanged: selectAtPointer()
-                    onHoveredChanged: {
-                        lastPosition = point.position;
-                        root.pointerResultIndex = -1;
-                    }
-                }
 
-                delegate: Item {
-                    id: groupedRow
-                    readonly property var resultItem: resultLoader.item
-                    required property int index
-                    required property var modelData
-                    readonly property string groupKey: SearchGroups.key(modelData)
-                    readonly property bool firstInGroup: index === 0 || SearchGroups.key(root.displayedResults[index - 1]) !== groupKey
-                    width: resultsList.width
-                    height: resultLoader.height + (firstInGroup ? 24 : 0)
-
-                    Text {
-                        visible: groupedRow.firstInGroup
-                        x: 14
-                        y: 3
-                        text: SearchGroups.label(groupedRow.groupKey)
-                        textFormat: Text.PlainText
-                        color: Theme.muted
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 12
-                        font.weight: Font.DemiBold
-                    }
-                    Loader {
-                        id: resultLoader
-                        enabled: !root.pointerBlocked && root.pointerResultIndex === index
-                        property int index: groupedRow.index
-                        property var modelData: groupedRow.modelData
-                        y: groupedRow.firstInGroup ? 24 : 0
-                        width: resultsList.width
-                        height: item ? item.implicitHeight : Theme.searchResultHeight
-                        sourceComponent: root.providerDelegates[modelData.providerId] || defaultResult
-                        Accessible.name: modelData.title + (modelData.subtitle ? ", " + modelData.subtitle : "")
-                        Accessible.role: Accessible.Button
-                        Accessible.onPressAction: root.activateResult(modelData)
-                        onLoaded: {
-                            item.result = Qt.binding(() => resultLoader.modelData);
-                            item.query = Qt.binding(() => searchInput.text);
-                            item.selected = Qt.binding(() => root.selectedIndex === resultLoader.index);
-                            item.activationEnabled = Qt.binding(() => !root.activationPending && !root.awaitingResults && !root.closing);
+                        Text {
+                            id: inlineStatus
+                            anchors.right: parent.right
+                            anchors.rightMargin: clearQueryButton.visible ? 46 : 14
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: visible ? Math.min(220, implicitWidth) : 0
+                            visible: root.inlineStatusText !== ""
+                            text: root.inlineStatusText
+                            textFormat: Text.PlainText
+                            elide: Text.ElideRight
+                            color: root.queryError !== "" || !root.serviceReady ? "#edb778" : Theme.muted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                            Accessible.name: root.inlineStatusText
                         }
-                        Connections {
-                            target: resultLoader.item
-                            ignoreUnknownSignals: true
-                            function onActivated(position) {
-                                const origin = position ? resultLoader.item.mapToItem(root.contentItem, position.x, position.y) : null;
-                                root.activateResult(resultLoader.modelData, origin);
-                            }
-                            function onContextMenuRequested(position) {
-                                root.openAppMenu(resultLoader.modelData, resultLoader.item.mapToItem(root.contentItem, position.x, position.y));
-                            }
-                            function onPreviewToggled() {
-                                root.previewOpen = !root.previewOpen;
+
+                        Rectangle {
+                            id: clearQueryButton
+                            visible: searchInput.text.length > 0
+                            width: 32
+                            height: 32
+                            radius: 8
+                            anchors.right: parent.right
+                            anchors.rightMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: clearQueryMouse.pressed ? Theme.pressed : clearQueryMouse.containsMouse ? Theme.hover : "transparent"
+                            Accessible.role: Accessible.Button
+                            Accessible.name: "Clear search"
+                            Accessible.onPressAction: {
+                                searchInput.clear();
                                 root.focusSearchInput();
                             }
+                            SymbolicIcon {
+                                anchors.centerIn: parent
+                                implicitSize: 16
+                                source: Quickshell.iconPath("edit-clear-symbolic", "window-close-symbolic")
+                                color: clearQueryMouse.containsMouse ? Theme.text : Theme.muted
+                            }
+                            MouseArea {
+                                id: clearQueryMouse
+                                anchors.fill: parent
+                                enabled: !root.activationPending && !root.closing
+                                hoverEnabled: true
+                                onClicked: {
+                                    searchInput.clear();
+                                    root.focusSearchInput();
+                                }
+                            }
+                            ShellTooltip {
+                                parent: clearQueryButton
+                                visible: clearQueryMouse.containsMouse
+                                text: "Clear search · Ctrl+L selects the query"
+                            }
                         }
-                        Component {
-                            id: defaultResult
-                            SearchResult {
-                                previewOpen: root.previewOpen
-                                previewAvailable: root.previewResult !== null && root.selectedIndex === resultLoader.index
-                                claimChevronAnimation: () => root.claimChevronAnimation(resultLoader.index)
-                                result: resultLoader.modelData
-                                query: searchInput.text
-                                selected: root.selectedIndex === resultLoader.index
+                    }
+
+                    ActionButton {
+                        visible: root.quickChatEnabled && searchInput.text.trim().startsWith("!") && root.chatPrompt() !== "" && root.queryComplete && root.results.length === 0 && !root.chatMode
+                        text: "Set up AI in Bingux Settings"
+                        iconName: "preferences-system-symbolic"
+                        Layout.fillWidth: true
+                        onClicked: {
+                            root.closeSearch();
+                            root.settingsRequested();
+                        }
+                    }
+
+                    ListView {
+                        id: chatTranscriptList
+
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: visible ? Math.min(contentHeight, 360) : 0
+                        visible: root.chatMode && root.chatTranscript.length > 0
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+                        interactive: contentHeight > height
+                        model: root.chatTranscript
+                        onCountChanged: Qt.callLater(() => positionViewAtEnd())
+
+                        delegate: Column {
+                            id: chatExchange
+
+                            required property var modelData
+
+                            width: chatTranscriptList.width
+                            spacing: 4
+
+                            Text {
+                                color: Theme.muted
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSmall
+                                text: "You"
+                                textFormat: Text.PlainText
+                            }
+
+                            Rectangle {
+                                width: parent.width
+                                height: promptText.implicitHeight + 16
+                                radius: surface.contentRadius
+                                color: Theme.elevated
+                                border.width: 1
+                                border.color: Theme.outline
+
+                                Text {
+                                    id: promptText
+
+                                    color: Theme.text
+                                    elide: Text.ElideRight
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSize
+                                    maximumLineCount: 3
+                                    text: chatExchange.modelData.prompt
+                                    textFormat: Text.PlainText
+                                    wrapMode: Text.Wrap
+
+                                    anchors {
+                                        left: parent.left
+                                        right: parent.right
+                                        top: parent.top
+                                        leftMargin: 10
+                                        rightMargin: 10
+                                        topMargin: 8
+                                    }
+                                }
+                            }
+
+                            Text {
+                                color: Theme.muted
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSmall
+                                text: "AI"
+                                textFormat: Text.PlainText
+                            }
+
+                            Rectangle {
+                                width: parent.width
+                                height: responseText.implicitHeight + 16
+                                radius: surface.contentRadius
+                                color: Theme.elevated
+                                border.width: 1
+                                border.color: Theme.outline
+
+                                Text {
+                                    id: responseText
+
+                                    color: Theme.text
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSize
+                                    text: chatExchange.modelData.pending ? (root.streamingChatText || "Connecting…") : chatExchange.modelData.message
+                                    textFormat: Text.PlainText
+                                    wrapMode: Text.Wrap
+
+                                    anchors {
+                                        left: parent.left
+                                        right: parent.right
+                                        top: parent.top
+                                        leftMargin: 10
+                                        rightMargin: 10
+                                        topMargin: 8
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    ListView {
+                        id: resultsList
+                        objectName: "searchResultsList"
+                        // Keep this bounded (20-result) model laid out so navigation can
+                        // use real provider row bounds without repositioning the list.
+                        cacheBuffer: Math.max(0, contentHeight)
+                        function revealSelection() {
+                            keyboardScroll.stop();
+                            cancelFlick();
+                            forceLayout();
+                            const row = itemAtIndex(root.selectedIndex);
+                            if (!row) {
+                                positionViewAtIndex(root.selectedIndex, ListView.Contain);
+                                return;
+                            }
+                            let destination = contentY;
+                            if (row.y < contentY)
+                                destination = row.y;
+                            else if (row.y + row.height > contentY + height)
+                                destination = row.y + row.height - height;
+                            destination = Math.max(originY, Math.min(destination, originY + Math.max(0, contentHeight - height)));
+                            if (Theme.reducedMotion) {
+                                contentY = destination;
+                                return;
+                            }
+                            if (Math.abs(destination - contentY) < 1)
+                                return;
+                            keyboardScroll.to = destination;
+                            keyboardScroll.restart();
+                        }
+                        NumberAnimation {
+                            id: keyboardScroll
+                            target: resultsList
+                            property: "contentY"
+                            duration: 150
+                            easing.type: Easing.OutCubic
+                        }
+                        onMovementStarted: keyboardScroll.stop()
+                        onModelChanged: keyboardScroll.stop()
+
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: visible ? Math.min(contentHeight, Math.max(64, Math.min(420, root.height - 160 - (chatTranscriptList.visible ? chatTranscriptList.height : 0)))) : 0
+                        visible: root.displayedResults.length > 0
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+                        // Selection belongs to the overlay; ListView's implicit current
+                        // item tracking would jump before our scroll animation starts.
+                        currentIndex: -1
+                        highlightFollowsCurrentItem: false
+                        interactive: !root.pointerBlocked && root.pointerResultIndex >= 0 && contentHeight > height
+                        model: root.displayedResults
+                        spacing: 2
+                        HoverHandler {
+                            id: resultPointer
+                            // Track the fixed window, so moving the popup beneath a
+                            // stationary pointer cannot count as mouse movement.
+                            parent: root.contentItem
+                            property point lastPosition: Qt.point(-1, -1)
+                            function selectAtPointer() {
+                                const previous = Qt.point(lastPosition.x, lastPosition.y);
+                                lastPosition = point.position;
+                                if (!hovered || root.pointerBlocked || previous.x < 0 || previous.y < 0 || (point.position.x === previous.x && point.position.y === previous.y))
+                                    return;
+                                const local = resultsList.mapFromItem(root.contentItem, point.position.x, point.position.y);
+                                const index = local.x >= 0 && local.x < resultsList.width && local.y >= 0 && local.y < resultsList.height ? resultsList.indexAt(local.x + resultsList.contentX, local.y + resultsList.contentY) : -1;
+                                root.pointerResultIndex = index;
+                                if (index >= 0) {
+                                    root.keyboardSelection = false;
+                                    root.selectedIndex = index;
+                                }
+                            }
+                            onPointChanged: selectAtPointer()
+                            onHoveredChanged: {
+                                lastPosition = point.position;
+                                root.pointerResultIndex = -1;
+                            }
+                        }
+
+                        delegate: Item {
+                            id: groupedRow
+                            readonly property var resultItem: resultLoader.item
+                            required property int index
+                            required property var modelData
+                            readonly property string groupKey: SearchGroups.key(modelData)
+                            readonly property bool firstInGroup: index === 0 || SearchGroups.key(root.displayedResults[index - 1]) !== groupKey
+                            width: resultsList.width
+                            height: resultLoader.height + (firstInGroup ? 24 : 0)
+
+                            Text {
+                                visible: groupedRow.firstInGroup
+                                x: 14
+                                y: 3
+                                text: SearchGroups.label(groupedRow.groupKey)
+                                textFormat: Text.PlainText
+                                color: Theme.muted
+                                font.family: Theme.fontFamily
+                                font.pixelSize: 12
+                                font.weight: Font.DemiBold
+                            }
+                            Loader {
+                                id: resultLoader
+                                enabled: !root.pointerBlocked && root.pointerResultIndex === index
+                                property int index: groupedRow.index
+                                property var modelData: groupedRow.modelData
+                                y: groupedRow.firstInGroup ? 24 : 0
+                                width: resultsList.width
+                                height: item ? item.implicitHeight : Theme.searchResultHeight
+                                sourceComponent: root.providerDelegates[modelData.providerId] || defaultResult
+                                Accessible.name: modelData.title + (modelData.subtitle ? ", " + modelData.subtitle : "")
+                                Accessible.role: Accessible.Button
+                                Accessible.onPressAction: root.activateResult(modelData)
+                                onLoaded: {
+                                    item.result = Qt.binding(() => resultLoader.modelData);
+                                    item.query = Qt.binding(() => searchInput.text);
+                                    item.selected = Qt.binding(() => root.selectedIndex === resultLoader.index);
+                                    item.activationEnabled = Qt.binding(() => !root.activationPending && !root.awaitingResults && !root.closing);
+                                }
+                                Connections {
+                                    target: resultLoader.item
+                                    ignoreUnknownSignals: true
+                                    function onActivated(position) {
+                                        const origin = position ? resultLoader.item.mapToItem(root.contentItem, position.x, position.y) : null;
+                                        root.activateResult(resultLoader.modelData, origin);
+                                    }
+                                    function onContextMenuRequested(position) {
+                                        root.openAppMenu(resultLoader.modelData, resultLoader.item.mapToItem(root.contentItem, position.x, position.y));
+                                    }
+                                    function onPreviewToggled() {
+                                        root.previewOpen = !root.previewOpen;
+                                        root.focusSearchInput();
+                                    }
+                                }
+                                Component {
+                                    id: defaultResult
+                                    SearchResult {
+                                        previewOpen: root.previewOpen
+                                        previewAvailable: root.previewResult !== null && root.selectedIndex === resultLoader.index
+                                        claimChevronAnimation: () => root.claimChevronAnimation(resultLoader.index)
+                                        result: resultLoader.modelData
+                                        query: searchInput.text
+                                        selected: root.selectedIndex === resultLoader.index
+                                    }
+                                }
                             }
                         }
                     }
@@ -1342,9 +1381,17 @@ PanelWindow {
             }
         }
     }
-
-    Rectangle {
+    Item {
         id: previewSurface
+        BackgroundEffect {
+            target: previewSurface
+            radius: Theme.searchCardRadius
+        }
+        SurfaceFade {
+            target: previewSurface
+            layerTarget: previewComposition
+        }
+        // Include the sibling outline and shadows in the same fade texture.
         objectName: "searchPreviewSurface"
         property var presentedResult: null
         readonly property var selectedResult: root.previewResult
@@ -1366,29 +1413,46 @@ PanelWindow {
         x: (besideSearch ? surface.x + surface.width + 10 : surface.x) - (1 - reveal) * 18
         y: Math.max(16, Math.min(surface.y, root.height - height - 24))
         opacity: surface.opacity * reveal
-        radius: Theme.searchCardRadius
-        color: Theme.searchSurface
-        border.width: 1
-        border.color: "#555960"
-        PanelOutline {
-            surface: previewSurface
-        }
-        clip: true
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.AllButtons
-            onWheel: wheel => {
-                wheel.accepted = true;
+        Item {
+            id: previewComposition
+            x: -128
+            y: -128
+            width: previewSurface.width + 256
+            height: previewSurface.height + 256
+            Rectangle {
+                id: previewCard
+                x: 128
+                y: 128
+                width: previewSurface.width
+                height: previewSurface.height
+                radius: Theme.searchCardRadius
+                color: Theme.overlaySurface
+                border.width: 1
+                border.color: Theme.outline
+                PanelOutline {
+                    surface: previewCard
+                }
+                PopupShadow {
+                    surface: previewCard
+                }
+                clip: true
+                MouseArea {
+                    anchors.fill: parent
+                    acceptedButtons: Qt.AllButtons
+                    onWheel: wheel => {
+                        wheel.accepted = true;
+                    }
+                }
+                SearchPreview {
+                    id: filePreview
+                    objectName: "searchPreview"
+                    anchors.fill: parent
+                    anchors.margins: 1
+                    enabled: !root.pointerBlocked && previewSurface.reveal === 1
+                    path: previewSurface.visible && previewSurface.presentedResult ? previewSurface.presentedResult.subtitle : ""
+                    title: previewSurface.presentedResult ? previewSurface.presentedResult.title : ""
+                }
             }
-        }
-        SearchPreview {
-            id: filePreview
-            objectName: "searchPreview"
-            anchors.fill: parent
-            anchors.margins: 1
-            enabled: !root.pointerBlocked && previewSurface.reveal === 1
-            path: previewSurface.visible && previewSurface.presentedResult ? previewSurface.presentedResult.subtitle : ""
-            title: previewSurface.presentedResult ? previewSurface.presentedResult.title : ""
         }
     }
 

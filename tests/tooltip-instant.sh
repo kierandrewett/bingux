@@ -12,6 +12,7 @@ for component in BarTooltip ShellTooltip DockTooltip TooltipBubble; do
 done
 sed -i '/id: root/a\    property alias testPopup: popup' "$test_dir/BarTooltip.qml"
 cp "$repo_dir/tests/tooltip-instant.qml" "$test_dir/shell.qml"
+bash "$repo_dir/tests/copy-panel-effects.sh" "$test_dir"
 if ! timeout 15s "${BINGUX_QUICKSHELL:-quickshell}" -p "$test_dir" --no-color >"$test_dir/log" 2>&1; then
     cat "$test_dir/log"
     exit 1

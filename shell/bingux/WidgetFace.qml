@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Layouts
 import Quickshell
 
@@ -8,6 +9,14 @@ RowLayout {
     property url iconSource: presentation?.icon ? Quickshell.iconPath(presentation.icon) : ""
     property bool colouredIcon: false
     property color iconColor: Theme.text
+    property bool shadowed: true
+    layer.enabled: root.shadowed
+    layer.effect: MultiEffect {
+        shadowEnabled: root.shadowed
+        shadowColor: Theme.contentShadow
+        shadowBlur: 0.28
+        shadowVerticalOffset: 1.2
+    }
     spacing: Theme.gap
     SymbolicIcon {
         visible: !!root.presentation?.showIcon && !root.colouredIcon

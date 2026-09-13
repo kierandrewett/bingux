@@ -71,8 +71,6 @@ FocusScope {
         contentPadding: 0
         popupWidth: 400
         popupHeight: root.cardHeight
-        surfaceVisible: false
-        cornerRadius: root.cornerRadius
     }
     GridLayout {
         id: inlineBar
@@ -96,6 +94,14 @@ FocusScope {
         visible: root.barLayout && !root.inlineControls
         text: root.player ? root.player.trackTitle || root.player.identity : "Media playback"
         onClicked: details.visible = !details.visible
+        // The compact top-bar control is an ActionButton rather than an
+        // IconButton, so it needs to opt into the shared bar tooltip itself.
+        BarTooltip {
+            anchorItem: summaryButton
+            barWindow: root.barWindow
+            requested: summaryButton.visible && (summaryButton.hovered || summaryButton.visualFocus)
+            text: root.player ? root.player.trackTitle || root.player.identity : "Media playback"
+        }
     }
     property bool artworkExpanded: false
     property real artExpansion: artworkExpanded ? 1 : 0
@@ -114,7 +120,10 @@ FocusScope {
         }
     }
     property color accent: Theme.accent
-    property color accentForeground: Theme.shellSurface
+    // The primary transport button has a light accent fill. Use the shared
+    // dark foreground token at full contrast; shellSurface is translucent and
+    // would make the play/pause glyph look washed out here.
+    property color accentForeground: Theme.background
     property real cornerRadius: Theme.menuWidgetRadius
     readonly property bool menuEntry: true
     readonly property bool controllable: player !== null && player.canControl
@@ -149,6 +158,7 @@ FocusScope {
         parent: fullContent
         z: -1
         objectName: "mediaCardSurface"
+        visible: !root.barLayout
         anchors.fill: parent
         radius: root.cornerRadius
         color: Theme.menuWidgetBackground
@@ -509,6 +519,10 @@ FocusScope {
                 onClicked: {
                     if (!enabled)
                         return;
+                    // Pin the player before changing its state. Otherwise the
+                    // control-centre fallback immediately chooses the next
+                    // playing player when this one is paused.
+                    root.playerSelected(root.player);
                     if (root.player.isPlaying)
                         root.player.pause();
                     else

@@ -30,7 +30,7 @@ QtObject {
                 op: "blur-region",
                 namespace: item.surfaceNamespace,
                 screen: [screen.x, screen.y],
-                region: item.window.visible ? [item.region.x, item.region.y, item.region.width, item.region.height] : null
+                region: item.enabled && item.window.visible ? [item.region.x, item.region.y, item.region.width, item.region.height] : null
             } : null;
             const old = item.published;
             if (old && (!record || old.namespace !== record.namespace || JSON.stringify(old.screen) !== JSON.stringify(record.screen)))

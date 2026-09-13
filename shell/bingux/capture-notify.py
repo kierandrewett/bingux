@@ -2,11 +2,11 @@
 """A capture's notification/actions outlive capture-worker and shell reloads."""
 
 from pathlib import Path
-import subprocess
 import sys
 import uuid
 
 from gi.repository import Gio, GLib
+from capture_clipboard import ClipboardError, copy_image_to_clipboard
 
 NOTIFICATIONS = "org.freedesktop.Notifications"
 NOTIFICATION_PATH = "/org/freedesktop/Notifications"
@@ -93,8 +93,7 @@ class CaptureNotification:
             self.validate()
             if value == "copy" and self.kind == "screenshot":
                 mime = "image/jpeg" if self.path.suffix.lower() in (".jpg", ".jpeg") else "image/png"
-                with self.path.open("rb") as image:
-                    subprocess.run(["wl-copy", "--type", mime], stdin=image, check=True, timeout=4)
+                copy_image_to_clipboard(self.path, mime)
                 self.notify("Screenshot copied")
             elif value == "save":
                 self.save_as()
@@ -107,7 +106,7 @@ class CaptureNotification:
                 self.loop.quit()
             elif value == "default":
                 Gio.AppInfo.launch_default_for_uri(self.path.as_uri(), None)
-        except (OSError, ValueError, GLib.Error, subprocess.SubprocessError) as error:
+        except (ClipboardError, OSError, ValueError, GLib.Error) as error:
             self.notify(self.title + " action failed", str(error))
 
     def save_as(self):

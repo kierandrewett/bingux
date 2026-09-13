@@ -7,8 +7,12 @@ ShellRoot {
         id: dockTip
         text: "Dock tooltip"
     }
-    FloatingWindow {
+    PanelWindow {
         id: window
+        anchors {
+            top: true
+            left: true
+        }
         implicitWidth: 240
         implicitHeight: 100
         Item {
@@ -35,6 +39,7 @@ ShellRoot {
                 id: controlTip
                 visible: controlHover.containsMouse
                 text: "Control tooltip"
+                details: [{label: "Context", value: "Calendar and control centre"}]
             }
         }
         BarTooltip {
@@ -76,6 +81,8 @@ ShellRoot {
                 equal(controlTip.visible, true);
                 equal(controlTip.revealDuration, Theme.tooltipMotion);
                 equal(controlTip.delay, 0);
+                check(controlTip.contentItem.backgroundBlurRequested, "Control tooltip requests a compositor blur region");
+                equal(controlTip.contentItem.details.length, 1);
                 check(controlTip.opacity < 1, "Immediate control tooltip still fades in");
                 check(controlTip.scale < 1, "Immediate control tooltip still scales in");
                 const barBubble = barTip.testPopup.contentItem.children[0];

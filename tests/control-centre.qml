@@ -309,6 +309,8 @@ ShellRoot {
             const audioRows = findChild(centre.body, "controlAudioRows");
             const output = findChild(centre.body, "controlOutputRow");
             const microphone = findChild(centre.body, "controlInputRow");
+            check(settings.tooltipEnabled === false, "control-centre header actions do not create redundant tooltips");
+            check(findChild(centre.body, "controlMute").tooltipEnabled === false, "control-centre audio actions do not create redundant tooltips");
             const original = [header.y, media.y, audioRows.y, account.x, settings.x, output.y, microphone.y];
             try {
                 let layout = ControlLayout.move(ControlLayout.defaults(), "control-centre", "control-media", 0);

@@ -74,7 +74,7 @@ Flickable {
         width: horizontal.tableWidth
         height: headings.height
         radius: 6
-        color: Theme.surface
+        color: Theme.elevated
     }
     Row {
         id: headings

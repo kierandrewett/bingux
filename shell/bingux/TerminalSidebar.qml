@@ -665,6 +665,7 @@ Scope {
         WlrLayershell.namespace: "bingux-terminal-sidebar"
         BlurRegion {
             window: panel
+            enabled: !sidebarBackground.available
             surfaceNamespace: "bingux-terminal-sidebar"
             region: root.edge === "top" ? Qt.rect(0, 0, panel.width, panel.extent) : Qt.rect(root.edge === "right" ? panel.width - panel.extent : 0, 0, panel.extent, panel.height)
         }
@@ -679,6 +680,11 @@ Scope {
 
         Rectangle {
             id: panelSurface
+            BackgroundEffect {
+                id: sidebarBackground
+                target: panelSurface
+                requested: panel.visible
+            }
             readonly property real geometryRevision: panel.reveal
             NativeEditSurface {
                 anchors.fill: parent
@@ -932,6 +938,10 @@ Scope {
                 saved.sync();
             }
         }
+        BackgroundEffect {
+            target: detachedWindow.contentItem
+            requested: detachedWindow.visible
+        }
         Shortcut {
             sequence: "Ctrl+Shift+F12"
             enabled: detachedWindow.visible
@@ -964,20 +974,23 @@ Scope {
             margins.left: Math.max(0, root.leftInset - 1)
             margins.right: Math.max(0, root.rightInset - 1)
             ShellCorner {
+                id: corner
                 anchors.fill: parent
                 mirrored: cornerWindow.rightCorner
                 opacity: panel.reveal
             }
+            // Gnoblin derives coverage from the painted corner and shares the
+            // layer backdrop; no client-side scanline blur mask is needed.
         }
     }
 
     ShellPopup {
         id: contentMenu
         hostItem: root.floating ? detachedWindow.contentItem : null
-        cornerRadius: Theme.radius
-        surfaceColor: Theme.popupSurface
         screen: root.floating ? detachedWindow.screen : root.screen
-        popupWidth: Math.max(190, Math.ceil(sidebarCustomise.implicitWidth + contentPadding * 2))
+        // Give the menu enough room for the action labels and the position
+        // control; the old 190px minimum made the final action look clipped.
+        popupWidth: Math.max(272, Math.ceil(sidebarCustomise.implicitWidth + contentPadding * 2))
         popupHeight: Math.min(contentMenuColumn.implicitHeight + contentPadding * 2, height - preferredY - Theme.gap)
         contentPadding: Theme.spaceSmall
         property point anchorPoint: Qt.point(0, 0)
@@ -1039,7 +1052,7 @@ Scope {
                         onHoveredChanged: if (hovered)
                             contentNavigation.pointerActivate()
                         Layout.fillWidth: true
-                        implicitHeight: 32
+                        implicitHeight: 36
                         Keys.forwardTo: [contentNavigation]
                         onClicked: triggered()
                         onTriggered: {
@@ -1060,7 +1073,7 @@ Scope {
                     signal triggered
                     visible: !DesktopEditing.active
                     Layout.fillWidth: true
-                    implicitHeight: 32
+                    implicitHeight: 36
                     text: root.detached ? "Dock in sidebar" : "Pop out window"
                     iconName: root.detached ? "view-restore-symbolic" : "window-new-symbolic"
                     flat: true
@@ -1078,6 +1091,46 @@ Scope {
                     Layout.topMargin: 4
                     Layout.bottomMargin: 4
                 }
+                Text {
+                    text: "Sidebar position"
+                    color: Theme.muted
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSmall
+                    font.weight: Font.DemiBold
+                    Layout.leftMargin: Theme.gap
+                    Layout.topMargin: 2
+                    Layout.bottomMargin: 2
+                }
+                SegmentedControl {
+                    id: sidebarPosition
+                    objectNamePrefix: "sidebar-position-"
+                    options: ["left", "top", "right"]
+                    currentValue: root.edge
+                    implicitHeight: 40
+                    accessiblePrefix: ""
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Theme.spaceSmall
+                    Layout.rightMargin: Theme.spaceSmall
+                    onSelected: value => root.setEdge(value)
+                    segmentContent: Component {
+                        Item {
+                            SymbolicIcon {
+                                anchors.centerIn: parent
+                                source: Quickshell.iconPath("sidebar-show-symbolic")
+                                rotation: parent.parent.segmentValue === "top" ? 90 : parent.parent.segmentValue === "right" ? 180 : 0
+                                implicitSize: 16
+                                color: parent.parent.segmentSelected ? Theme.text : Theme.muted
+                            }
+                        }
+                    }
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    implicitHeight: 1
+                    color: Theme.barDivider
+                    Layout.topMargin: 4
+                    Layout.bottomMargin: 4
+                }
                 ActionButton {
                     id: sidebarCustomise
                     readonly property bool menuEntry: true
@@ -1085,7 +1138,7 @@ Scope {
                     text: "Customise sidebar…"
                     iconName: "preferences-system-symbolic"
                     Layout.fillWidth: true
-                    implicitHeight: 32
+                    implicitHeight: 36
                     flat: true
                     alignLeft: true
                     cornerRadius: contentMenu.contentRadius

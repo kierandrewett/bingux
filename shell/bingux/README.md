@@ -59,11 +59,14 @@ window, pointer, keyboard, interruption, and reopening checks. Repeat with
 the script through Gnoblin's `GNOBLIN_TEST_DBUS_CLIENT` launcher so desktop input
 cannot dismiss the test menus.
 
-Tray submenus use the same surface and provide a Back action. `DockTooltip.qml` provides a non-interactive
+Tray submenus use the same surface, provide a Back action, and slide between
+pages with the same eased horizontal transition as Control Centre. `DockTooltip.qml` provides a non-interactive
 application tooltip after a 500 ms initial hover delay. Moving to another tooltip target
 skips the delay until one second after the last tooltip closes. Every open and close
 keeps the same 160 ms fade and scale animation, including immediate target switches.
 All tooltips share the dock bubble styling, and surfaces stay mapped until the exit finishes.
+The shared accent token follows GNOME's `org.gnome.desktop.interface` accent
+choice and is softened automatically for dark mode.
 
 Click the clock for the calendar, the system indicators for the control centre,
 and the search icon for the floating search panel. Search needs bingux-searchd;

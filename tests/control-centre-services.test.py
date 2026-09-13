@@ -11,6 +11,53 @@ spec.loader.exec_module(controls)
 
 
 class ControlTests(unittest.TestCase):
+    def test_public_network_details_are_normalized(self):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def read(self):
+                return json.dumps(
+                    {
+                        "ip": "203.0.113.7",
+                        "org": "AS64500 Example ISP",
+                        "country_name": "United Kingdom",
+                        "region": "England",
+                    }
+                ).encode()
+
+        with patch.object(controls.urllib.request, "urlopen", return_value=Response()):
+            result = controls.public_network()
+        self.assertEqual(
+            result,
+            {
+                "status": "ready",
+                "ip": "203.0.113.7",
+                "provider": "AS64500 Example ISP",
+                "country": "United Kingdom",
+                "region": "England",
+            },
+        )
+
+    def test_public_network_rejects_malformed_response(self):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                return False
+
+            def read(self):
+                return b"[]"
+
+        with patch.object(controls.urllib.request, "urlopen", return_value=Response()):
+            result = controls.public_network()
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["ip"], "")
+
     def test_tailscale_nodes_preferences_and_exit_identity(self):
         data = {
             "BackendState": "Running",

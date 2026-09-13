@@ -11,7 +11,7 @@ import time
 
 root = Path(__file__).resolve().parents[1] / "shell/bingux"
 folder = Path(tempfile.mkdtemp(prefix="bingux-recording-reconnect-"))
-for name in ("capture_service.py", "capture_backend.py", "capture-notify.py"):
+for name in ("capture_service.py", "capture_backend.py", "capture-notify.py", "capture_clipboard.py"):
     shutil.copy2(root / name, folder / name)
 
 

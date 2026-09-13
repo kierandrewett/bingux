@@ -13,7 +13,7 @@ Item {
             document.item.setZoom(document.item.targetZoom * Math.pow(1.1, steps));
     }
     property bool showInformation: true
-    property bool lightBackground: Theme.searchSurface.r * 0.2126 + Theme.searchSurface.g * 0.7152 + Theme.searchSurface.b * 0.0722 > 0.5
+    property bool lightBackground: Theme.popupSurface.r * 0.2126 + Theme.popupSurface.g * 0.7152 + Theme.popupSurface.b * 0.0722 > 0.5
     property string displayedPath: ""
     property string displayedTitle: ""
     property bool switching: false

@@ -7,14 +7,26 @@ Item {
     required property var services
     property string page: "vpn"
     property bool tailscaleOpen: false
-    onPageChanged: tailscaleOpen = false
-    onVisibleChanged: if (!visible)
-        tailscaleOpen = false
+    property bool publicNetworkOpen: false
+    readonly property var publicNetwork: root.services.publicNetwork || ({})
+    onPageChanged: {
+        tailscaleOpen = false;
+        publicNetworkOpen = false;
+    }
+    onVisibleChanged: if (!visible) {
+        tailscaleOpen = false;
+        publicNetworkOpen = false;
+    }
     function goBack() {
         if (tailscaleOpen)
             tailscaleOpen = false;
         else
             backRequested();
+    }
+    function togglePublicNetwork() {
+        publicNetworkOpen = !publicNetworkOpen;
+        if (publicNetworkOpen && root.services.refreshPublicNetwork)
+            root.services.refreshPublicNetwork();
     }
     implicitHeight: layout.implicitHeight
     readonly property bool keyboardNavigation: back.visualFocus
@@ -68,6 +80,7 @@ Item {
                 objectName: "controlExtrasBack"
                 iconName: "go-previous-symbolic"
                 label: root.tailscaleOpen ? "Back to VPN" : "Back to Control Centre"
+                tooltipEnabled: false
                 onClicked: root.goBack()
             }
             Text {
@@ -133,6 +146,108 @@ Item {
                             id: modelData.id,
                             enabled: !modelData.connected
                         })
+                    }
+                }
+                ControlRow {
+                    id: publicNetworkRow
+                    objectName: "controlVpnPublicNetwork"
+                    visible: root.page === "vpn"
+                    title: "Connection details"
+                    subtitle: root.services.publicNetworkBusy ? "Checking public connection…" : root.publicNetwork.status === "ready" ? root.publicNetwork.ip : "Show current IP, provider and region"
+                    iconName: "network-wired-symbolic"
+                    navigation: true
+                    navigationRotation: root.publicNetworkOpen ? 90 : 0
+                    onClicked: root.togglePublicNetwork()
+                }
+                Rectangle {
+                    id: publicNetworkDetails
+                    objectName: "controlVpnPublicNetworkDetails"
+                    visible: root.page === "vpn" && root.publicNetworkOpen
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 8
+                    Layout.rightMargin: 8
+                    implicitHeight: detailsColumn.implicitHeight + 20
+                    radius: 10
+                    color: Theme.elevated
+                    border.width: 1
+                    border.color: Theme.outline
+                    ColumnLayout {
+                        id: detailsColumn
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 6
+                        Text {
+                            visible: !!root.services.publicNetworkBusy
+                            Layout.fillWidth: true
+                            text: "Looking up public connection…"
+                            color: Theme.muted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSmall
+                        }
+                        GridLayout {
+                            visible: root.publicNetwork.status === "ready"
+                            Layout.fillWidth: true
+                            columns: 2
+                            columnSpacing: 16
+                            rowSpacing: 5
+                            Text {
+                                text: "Current IP"
+                                color: Theme.muted
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSmall
+                            }
+                            Text {
+                                objectName: "controlVpnPublicIp"
+                                text: root.publicNetwork.ip || "Unavailable"
+                                color: Theme.text
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSmall
+                                elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignRight
+                                Layout.fillWidth: true
+                            }
+                            Text {
+                                text: "ISP / Provider"
+                                color: Theme.muted
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSmall
+                            }
+                            Text {
+                                objectName: "controlVpnPublicProvider"
+                                text: root.publicNetwork.provider || "Unavailable"
+                                color: Theme.text
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSmall
+                                elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignRight
+                                Layout.fillWidth: true
+                            }
+                            Text {
+                                text: "Country / Region"
+                                color: Theme.muted
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSmall
+                            }
+                            Text {
+                                objectName: "controlVpnPublicRegion"
+                                text: [root.publicNetwork.country, root.publicNetwork.region].filter(Boolean).join(" · ") || "Unavailable"
+                                color: Theme.text
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSmall
+                                elide: Text.ElideRight
+                                horizontalAlignment: Text.AlignRight
+                                Layout.fillWidth: true
+                            }
+                        }
+                        Text {
+                            visible: root.publicNetwork.status === "error"
+                            Layout.fillWidth: true
+                            text: root.publicNetwork.error || "Public connection details unavailable."
+                            wrapMode: Text.Wrap
+                            color: Theme.muted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSmall
+                        }
                     }
                 }
                 Text {

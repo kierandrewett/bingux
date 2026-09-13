@@ -16,7 +16,7 @@ Rectangle {
     implicitWidth: options.length * 42 + 8
     implicitHeight: 32
     radius: buttonRadius + 2
-    color: Theme.surface
+    color: Theme.elevated
     Component {
         id: defaultContent
         Text {

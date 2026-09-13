@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 
-PanelWindow {
+ShellPopup {
     id: root
     objectName: "launchErrorDialog"
     property var pending: []
@@ -42,24 +42,19 @@ PanelWindow {
             dismissCurrent();
     }
     visible: false
-    implicitWidth: 440
-    implicitHeight: contents.implicitHeight + 40
-    color: "transparent"
-    exclusionMode: ExclusionMode.Ignore
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.namespace: "bingux-launch-error"
-    WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-    Rectangle {
+    popupWidth: 440
+    popupHeight: contents.implicitHeight + contentPadding * 2
+    preferredY: (height - popupHeight) / 2
+    dismissOnOutsideClick: false
+    body.Keys.onEscapePressed: root.dismissCurrent()
+    Item {
         anchors.fill: parent
-        radius: Theme.cardRadius
-        color: Theme.popupSurface
         ColumnLayout {
             id: contents
             anchors {
                 left: parent.left
                 right: parent.right
                 top: parent.top
-                margins: 20
             }
             spacing: 12
             Keys.onEscapePressed: root.dismissCurrent()
