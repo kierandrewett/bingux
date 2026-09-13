@@ -23,8 +23,13 @@ ShellRoot {
         property bool available: true
         property bool screenSharing: true
         property bool cameraInUse: true
+        property string cameraTooltip: "Camera in use"
+        property var cameraDetails: []
         property bool microphoneInUse: true
         property string microphoneTooltip: "Microphone in use"
+        property var microphoneDetails: []
+        property string locationTooltip: "Location in use"
+        property var locationDetails: []
         property int stops: 0
         function stopSharing() {
             stops++;

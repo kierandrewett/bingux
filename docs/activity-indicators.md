@@ -5,7 +5,8 @@ Bingux follows GNOME Shell's panel activity design:
 - Recording: a filled Adwaita red button, elapsed `m:ss` time, and the rounded square stop glyph.
 - Screen sharing: a filled Adwaita orange button with screen-sharing and stop symbols.
 - Camera: an orange `camera-web-symbolic` icon while GNOME reports a camera in use.
-- Microphone and location: orange symbolic icons with descriptive tooltips.
+- Microphone and location: orange symbolic icons with descriptive tooltips naming
+  the requesting application when the desktop entry is available.
 
 All icons use 16px slots and the bar's existing font. Buttons retain a full-height
 hit target, with inset backgrounds. Recording and privacy indicators never move
@@ -22,7 +23,9 @@ Gnoblin's bridge uses `Shell.CameraMonitor`, the same PipeWire monitor as GNOME,
 and Mutter's remote-access handles. Active handle start times survive script
 reloads. A temporary connection loss retains the last known indicators; stop
 controls are disabled until the connection returns. Microphone and location
-state continue to come from the existing metrics service.
+visibility continue to come from the existing metrics service; location app
+details are carried in the persistent privacy snapshot from GeoClue
+authorization events.
 
 The design references are GNOME Shell's `js/ui/status/remoteAccess.js`,
 `js/ui/status/camera.js`, and `data/theme/gnome-shell-sass/widgets/_panel.scss`.

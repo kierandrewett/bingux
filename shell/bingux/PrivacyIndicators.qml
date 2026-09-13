@@ -66,7 +66,8 @@ Item {
             visible: root.privacyState.cameraInUse
             barWindow: root.barWindow
             iconName: "camera-web-symbolic"
-            tooltip: "Camera in use"
+            tooltip: root.privacyState.cameraTooltip
+            tooltipDetails: root.privacyState.cameraDetails
         }
         Indicator {
             presentation: root.appearance(tooltip, iconName)
@@ -75,6 +76,7 @@ Item {
             barWindow: root.barWindow
             iconName: "microphone-sensitivity-high-symbolic"
             tooltip: root.privacyState.microphoneTooltip
+            tooltipDetails: root.privacyState.microphoneDetails
         }
         Indicator {
             presentation: root.appearance(tooltip, iconName)
@@ -82,7 +84,8 @@ Item {
             visible: root.systemMetrics.locationInUse
             barWindow: root.barWindow
             iconName: "find-location-symbolic"
-            tooltip: "Location in use"
+            tooltip: root.privacyState.locationTooltip
+            tooltipDetails: root.privacyState.locationDetails
         }
     }
 }

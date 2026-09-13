@@ -99,6 +99,9 @@ FocusScope {
     }
     property bool artworkExpanded: false
     property real artExpansion: artworkExpanded ? 1 : 0
+    // The dock owns the popup height, so it must follow this geometry directly
+    // while artwork is resizing instead of easing behind it.
+    readonly property bool artworkAnimating: artworkExpanded ? artExpansion < 1 : artExpansion > 0
     readonly property real smallArtSize: compact ? 48 : Theme.controlHeight * 2
     readonly property real expandedArtSize: Math.max(0, fullContent.width - Theme.padding * 2)
     readonly property real expandedArtSpace: (expandedArtSize + Theme.gap) * artExpansion

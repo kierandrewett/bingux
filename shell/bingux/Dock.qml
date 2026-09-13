@@ -1503,6 +1503,13 @@ PanelWindow {
                                 onTriggered: appMenu.dismissOnOutsideClick = true
                             }
                             readonly property var mediaPlayers: Mpris.players.values.filter(player => MediaMatch.matches(player, dockButton.currentGroup))
+                            readonly property bool mediaArtworkAnimating: {
+                                for (let index = 0; index < mediaControls.count; index++) {
+                                    if (mediaControls.itemAt(index)?.artworkAnimating)
+                                        return true;
+                                }
+                                return false;
+                            }
                             revealOriginY: popupHeight
                             popupWidth: mediaPlayers.length > 0 || dockButton.notificationCount > 0 || notificationPreview.renderedNotificationCount > 0 ? 320 : 280
                             Behavior on popupWidth {
@@ -1515,7 +1522,7 @@ PanelWindow {
                             contentPadding: Theme.gap
                             popupHeight: menuColumn.implicitHeight + contentPadding * 2
                             Behavior on popupHeight {
-                                enabled: appMenu.visible && notificationPreview.activeCollapses === 0
+                                enabled: appMenu.visible && notificationPreview.activeCollapses === 0 && !appMenu.mediaArtworkAnimating
                                 NumberAnimation {
                                     duration: Theme.reducedMotion ? 0 : 240
                                     easing.type: Easing.OutCubic
@@ -1587,6 +1594,7 @@ PanelWindow {
                                     }
 
                                     Repeater {
+                                        id: mediaControls
                                         model: appMenu.mediaPlayers
                                         delegate: DockMediaControls {
                                             accent: dockIcon.accentColor
