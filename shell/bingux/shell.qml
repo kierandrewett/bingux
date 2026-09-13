@@ -118,7 +118,9 @@ ShellRoot {
         widgetMenu.anchorWindow = window.nativeWindow || window;
         widgetMenu.visible = true;
     }
-    WindowMenu { id: windowMenuPopup }
+    WindowMenu {
+        id: windowMenuPopup
+    }
     TrayMenu {
         id: widgetMenu
         property string widgetId: ""

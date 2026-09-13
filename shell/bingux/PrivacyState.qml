@@ -22,8 +22,7 @@ Scope {
             return direct;
         const compact = value => String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
         const compactId = compact(withoutSuffix);
-        return Array.from(DesktopEntries.applications.values).find(entry =>
-            [entry.id, entry.startupClass, entry.name].some(value => compact(value) === compactId)) || null;
+        return Array.from(DesktopEntries.applications.values).find(entry => [entry.id, entry.startupClass, entry.name].some(value => compact(value) === compactId)) || null;
     }
     function detailForCapture(capture) {
         const entry = desktopEntryForCapture(capture);

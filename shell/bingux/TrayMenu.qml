@@ -61,7 +61,7 @@ ShellPopup {
         transitionToEntries = [];
     }
     onHasMenuItemsChanged: if (!hasMenuItems)
-        visible = false;
+        visible = false
     // Populate menu entries while the tray icon is hovered, before a click
     // needs to show the menu surface.
     QsMenuOpener {
