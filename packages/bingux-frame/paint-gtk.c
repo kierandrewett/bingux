@@ -123,8 +123,8 @@ void* frame_paint_create(void) {
     gtk_widget_realize(v->window);
     gtk_widget_set_visible(v->window, TRUE);
     gtk_widget_map(v->window);
-    v->paint_handler = g_signal_connect_after(gtk_widget_get_frame_clock(v->window),
-                                              "after-paint", G_CALLBACK(after_paint), v);
+    v->paint_handler = g_signal_connect_after(gtk_widget_get_frame_clock(v->window), "after-paint",
+                                              G_CALLBACK(after_paint), v);
     v->dirty = TRUE;
     views = g_list_prepend(views, v);
     return v;
@@ -176,7 +176,8 @@ void frame_paint(void* pixels, const struct FramePaint* m) {
             GtkStateFlags flags = (m->state & 1) ? 0 : GTK_STATE_FLAG_BACKDROP;
             if (m->hover == (uint32_t)i + 2)
                 flags |= m->pressed ? GTK_STATE_FLAG_ACTIVE : GTK_STATE_FLAG_PRELIGHT;
-            GtkStateFlags mask = GTK_STATE_FLAG_PRELIGHT | GTK_STATE_FLAG_ACTIVE | GTK_STATE_FLAG_BACKDROP;
+            GtkStateFlags mask =
+                GTK_STATE_FLAG_PRELIGHT | GTK_STATE_FLAG_ACTIVE | GTK_STATE_FLAG_BACKDROP;
             gtk_widget_unset_state_flags(button, mask & ~flags);
             gtk_widget_set_state_flags(button, flags, FALSE);
             if (i == 1)
