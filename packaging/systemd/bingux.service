@@ -10,5 +10,8 @@ RestartSec=3
 LimitCORE=0
 Environment=QT_QPA_PLATFORM=wayland
 Environment=QML_IMPORT_PATH=/usr/lib64/bingux/qml
-Type=dbus
-BusName=org.freedesktop.Notifications
+Environment=BINGUX_AUDIO_METER=/usr/bin/bingux-audio-meter
+# Quickshell may share notification ownership with another desktop service.
+# The shell is ready when its Wayland surfaces are running; do not make its
+# lifetime depend on exclusive ownership of the notification bus name.
+Type=simple

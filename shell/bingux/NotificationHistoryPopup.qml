@@ -47,7 +47,7 @@ ShellPopup {
     property real dockSafeInset: Theme.dockExclusiveHeight
     preferredX: width - popupWidth - Theme.padding
     preferredY: Theme.barHeight + Theme.gap
-    readonly property real listHeight: Math.min(notificationSurface ? notificationSurface.stackHeight : 0, Math.max(0, Math.min(height * 0.8 - 40, height - dockSafeInset - Theme.gap - preferredY - 40)))
+    readonly property real listHeight: hasNotifications ? Math.min(notificationSurface.stackHeight, Math.max(0, Math.min(height * 0.8 - 40, height - dockSafeInset - Theme.gap - preferredY - 40))) : 56
     readonly property real listX: panelX + slideOffset
     readonly property real listY: panelY
     popupHeight: listHeight + 40
@@ -61,5 +61,13 @@ ShellPopup {
         text: "Clear all"
         Accessible.name: "Clear all notifications"
         onClicked: root.notificationSurface.dismissAll()
+    }
+
+    Text {
+        anchors.centerIn: parent
+        visible: !root.hasNotifications
+        text: "No notifications"
+        color: Theme.muted
+        font.pixelSize: Theme.fontSize
     }
 }

@@ -21,9 +21,10 @@ systemctl --user enable --now bingux.target
 ```
 
 If Gnoblin uses an `init.lua` file, load package and user drop-in directories.
-This loads the shipped Bingux module, enables the protocols Bingux uses, hands
-OSD rendering to Bingux, and disables duplicate compositor motion for Bingux
-surfaces:
+The managed source installer does this automatically. For a system package,
+add these lines manually; this loads the shipped Bingux module, enables the
+protocols Bingux uses, hands OSD rendering to Bingux, and disables duplicate
+compositor motion for Bingux surfaces:
 
 ```lua
 local g = require("gnoblin")

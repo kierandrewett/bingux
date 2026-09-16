@@ -76,8 +76,8 @@ def main():
                         "protocolVersion": 1,
                         "commands": {
                             "applicationLauncher": [sys.executable, str(source / "launch-application.py")],
-                            "fileOpener": ["xdg-open"],
-                            "clipboard": ["wl-copy"],
+                            "fileOpener": ["/usr/bin/xdg-open"],
+                            "clipboard": ["/usr/bin/wl-copy"],
                         },
                     }
                 )

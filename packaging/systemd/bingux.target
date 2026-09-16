@@ -1,8 +1,10 @@
 [Unit]
 Description=Bingux desktop shell
+# Bingux uses Gnoblin's layer-shell and compositor shortcut protocols. It is
+# enabled under the Gnoblin session target, never under generic graphical use.
 PartOf=graphical-session.target
 After=graphical-session.target
 Wants=bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service
 
 [Install]
-WantedBy=graphical-session.target
+WantedBy=gnome-session@gnoblin.target

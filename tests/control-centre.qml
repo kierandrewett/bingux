@@ -272,6 +272,30 @@ ShellRoot {
             results.setText(checks);
             compare(actual, expected, message);
         }
+        function test_batteryButton() {
+            centre.visible = true;
+            wait(350);
+            const battery = findChild(centre.contentItem, "controlBattery");
+            equal(battery.text, "84%", "battery button displays the supplied charge");
+            equal(battery.height, findChild(centre.contentItem, "controlSettings").height, "battery and settings buttons share the same height");
+            check(!battery.barStyle && battery.customPresentation, "battery uses the settings button surface with its percentage label");
+            check(battery.activeFocusOnTab && !battery.checkable, "battery is a normal keyboard-accessible button");
+            mouseClick(battery, battery.width / 2, battery.height / 2);
+            wait(350);
+            check(centre.detailOpen && centre.detailPage === "power", "battery button opens power controls");
+            const back = findChild(centre.contentItem, "controlDetailBack");
+            mouseClick(back, 16, 16);
+            wait(350);
+            battery.forceActiveFocus();
+            tryVerify(() => battery.activeFocus);
+            keyClick(Qt.Key_Space, Qt.NoModifier, 50);
+            wait(350);
+            check(centre.detailOpen && centre.detailPage === "power", "battery button supports keyboard activation");
+            mouseClick(back, 16, 16);
+            wait(350);
+            centre.visible = false;
+            wait(200);
+        }
         function test_compactActions() {
             centre.visible = true;
             wait(250);

@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Effects
 import QtQuick.Controls
 import QtQuick.Layouts
+import Quickshell
 
 AbstractButton {
     id: root
@@ -31,6 +32,14 @@ AbstractButton {
             WidgetFace {
                 visible: !!root.presentation?.custom
                 presentation: root.presentation
+            }
+            SymbolicIcon {
+                // The notification indicator intentionally disappears at zero.
+                // Keep the control discoverable with the bell in that state.
+                visible: root.count === 0
+                implicitSize: Theme.iconSize
+                source: root.presentation?.icon ? Quickshell.iconPath(root.presentation.icon) : Quickshell.iconPath("preferences-system-notifications-symbolic")
+                color: Theme.text
             }
             NotificationIndicator {
                 id: badge

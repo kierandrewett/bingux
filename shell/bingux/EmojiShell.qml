@@ -12,22 +12,9 @@ ShellRoot {
     UiSession {
         id: session
         sessionName: "emoji"
-        bindings: [
-            {
-                id: "emoji",
-                accelerator: Quickshell.env("BINGUX_EMOJI_SHORTCUT") || "<Super>period",
-                hold: 67108864,
-                modal: false
-            }
-        ]
-        onActivated: (id, first) => {
-            if (first) {
-                if (!picker.visible && !picker.locating) {
-                    picker.activationCount++;
-                    picker.open();
-                }
-            }
-        }
+        // Super+Period is registered by Gnoblin's native command-shortcut
+        // integration. This client remains the IPC target for that command.
+        bindings: []
         state: ({
                 visible: picker.visible
             })

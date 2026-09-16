@@ -36,11 +36,6 @@ def write_launcher(path, contents):
     path.chmod(0o755)
 
 
-def lua_quote(value):
-    escaped = str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
-    return '"' + escaped + '"'
-
-
 def resolve_quickshell(no_systemd):
     configured = os.environ.get("BINGUX_QUICKSHELL")
     if configured:
@@ -76,6 +71,29 @@ def systemctl_user(arguments, check=True):
         command_text = "systemctl --user " + " ".join(arguments)
         raise ValueError(f"{command_text} failed ({result.returncode}): {detail or 'no diagnostic'}")
     return result
+
+
+def release_gnome_input_source_bindings():
+    """Release GNOME's bindings so Bingux can own layout switching."""
+    for key in ("switch-input-source", "switch-input-source-backward"):
+        try:
+            subprocess.run(
+                ["gsettings", "set", "org.gnome.desktop.wm.keybindings", key, "[]"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError:
+            # Minimal sessions may not ship gsettings. The compositor-side
+            # shortcut remains optional there, so installation can continue.
+            pass
+
+
+def enable_bingux_target():
+    """Enable Bingux for Gnoblin without starting it in another desktop."""
+    systemctl_user(["enable", "bingux.target"])
+    if systemctl_user(["is-active", "--quiet", "gnome-session@gnoblin.target"], check=False).returncode == 0:
+        systemctl_user(["start", "bingux.target"])
 
 
 def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=False):
@@ -116,13 +134,26 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
             continue
         copy(path, shell / path.relative_to(source / "shell/bingux"))
     for path, destination in payload.items():
-        copy(
-            path,
-            destination,
-            destination.parent == prefix / "bin"
-            or destination
-            in (prefix / "libexec/bingux/bingux-image-clipboard", prefix / "libexec/bingux/bingux-frame"),
+        executable = destination.parent == prefix / "bin" or destination in (
+            prefix / "libexec/bingux/bingux-image-clipboard",
+            prefix / "libexec/bingux/bingux-frame",
         )
+        if path == source / "packaging/gnoblin/bingux.lua":
+            # The Gnoblin bridge spawns this command directly. A user install
+            # puts binguxctl in ~/.local/share/bingux/bin, which is not
+            # guaranteed to be present in the compositor's PATH.
+            generated = path.read_text()
+            generated = generated.replace('"binguxctl"', json.dumps(str(prefix / "bin/binguxctl")))
+            generated = generated.replace(
+                '"/usr/local/libexec/bingux/bingux-frame"',
+                json.dumps(str(prefix / "libexec/bingux/bingux-frame")),
+            )
+            destination_path = target(destination)
+            destination_path.parent.mkdir(parents=True, exist_ok=True)
+            destination_path.write_text(generated)
+            installed.append(destination.relative_to(prefix))
+        else:
+            copy(path, destination, executable)
     copy(source / "packages/binguxctl/binguxctl.py", prefix / "libexec/bingux/binguxctl.py")
     copy(source / "packages/bingux-settings/bingux-settings", prefix / "libexec/bingux/bingux-settings", True)
     if managed:
@@ -132,6 +163,7 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     common += "export BINGUX_QUICKSHELL=${BINGUX_QUICKSHELL:-" + shlex.quote(quickshell) + "}\n"
     common += "export QML_IMPORT_PATH=" + shlex.quote(str(qml)) + "${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}\n"
     common += "export BINGUX_CONFIG_PATH=" + shlex.quote(str(shell)) + "\n"
+    common += "export BINGUX_AUDIO_METER=" + shlex.quote(str(prefix / "bin/bingux-audio-meter")) + "\n"
     common += "export BINGUX_SETTINGS_QML=" + shlex.quote(str(shell / "settings.qml")) + "\n"
     wrappers = {
         "bingux": 'exec "${BINGUX_QUICKSHELL:-qs}" -p "$BINGUX_CONFIG_PATH" "$@"\n',
@@ -174,8 +206,8 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
                     # Use the interpreter that ran this installer so the command
                     # remains valid when the user does not have python3 on PATH.
                     "applicationLauncher": [str(Path(sys.executable)), str(shell / "launch-application.py")],
-                    "fileOpener": ["xdg-open"],
-                    "clipboard": ["wl-copy"],
+                    "fileOpener": ["/usr/bin/xdg-open"],
+                    "clipboard": ["/usr/bin/wl-copy"],
                 },
             },
             indent=2,
@@ -234,16 +266,79 @@ def integration_paths(prefix, managed=False):
         "bingux-emoji-ui.service",
     )
     bin_dir = Path(os.environ.get("XDG_BIN_HOME") or Path.home() / ".local/bin")
-    unit_dir = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd/user"
-    return [(bin_dir / name, prefix / "bin" / name) for name in names] + [
+    config_dir = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    unit_dir = config_dir / "systemd/user"
+    links = [(bin_dir / name, prefix / "bin" / name) for name in names] + [
         (unit_dir / name, prefix / "lib/systemd/user" / name) for name in units
-    ]
+    ] + [(config_dir / "gnoblin/conf.d/bingux.lua", prefix / "share/gnoblin/conf.d/bingux.lua")]
+    links.extend(gnoblin_bridge_paths(config_dir))
+    return links
+
+
+def gnoblin_bridge_paths(config_dir):
+    """Link the installed Gnoblin bridge and every module it imports.
+
+    Bingux's global shortcuts and window actions are clients of this bridge.
+    Leaving the link as a manual step makes a fresh standalone install look
+    complete while Search, Alt+Tab, emoji, SnapAssist, and window menus are
+    all inert.
+    """
+    candidates = []
+    configured = os.environ.get("GNOBLIN_PREFIX")
+    if configured:
+        candidates.append(Path(configured))
+    command = shutil.which("gnoblinctl")
+    if command:
+        resolved = Path(command).resolve()
+        candidates.append(resolved.parent.parent)
+    candidates.extend((Path("/usr/lib/gnoblin"), Path("/usr/local/lib/gnoblin")))
+    for root in dict.fromkeys(candidates):
+        source = root / "share/gnoblin/scripts"
+        required = [source / "compositor-bridge.js", source / "input-sources.js"]
+        required += [source / "lib" / name for name in (
+            "ui-sessions.js",
+            "layer-companions.js",
+            "window-switcher-fallback.js",
+            "window-snap.js",
+            "blur-regions.js",
+            "clipboard-paste.js",
+            "clipboard-paste.py",
+            "fullscreen-return-guard.js",
+        )]
+        if all(path.is_file() for path in required):
+            target = config_dir / "gnoblin/scripts"
+            return [(target / path.relative_to(source), path) for path in required]
+    return []
 
 
 def ensure_integration_is_safe(paths):
     for link, target_path in paths:
         if link.exists() and (not link.is_symlink() or link.resolve() != target_path.resolve()):
             raise ValueError(f"refusing to replace existing file: {link}")
+
+
+def ensure_gnoblin_dropin_loader():
+    """Create or extend init.lua so the managed conf.d drop-in is loaded."""
+    config_dir = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    init = config_dir / "gnoblin/init.lua"
+    include = 'g.load("conf.d/**/*.lua")'
+    user_include = f'g.load("{config_dir / "gnoblin/conf.d"}'
+    if init.exists():
+        if not init.is_file():
+            raise ValueError(f"refusing to replace existing Gnoblin config: {init}")
+        contents = init.read_text()
+        if include in contents or user_include in contents:
+            return
+        suffix = "" if contents.endswith("\n") else "\n"
+        init.write_text(contents + suffix + "\n-- Load installed and personal Gnoblin drop-ins.\n" + include + "\n")
+        return
+    init.parent.mkdir(parents=True, exist_ok=True)
+    init.write_text(
+        "-- Generated by Bingux; keep machine-specific settings in conf.d/.\n"
+        "local g = require(\"gnoblin\")\n"
+        + include
+        + "\n"
+    )
 
 
 def install_user(source, build, prefix, qml, no_systemd):
@@ -277,10 +372,13 @@ def install_user(source, build, prefix, qml, no_systemd):
             "links": [{"path": str(link), "target": str(target_path)} for link, target_path in links],
         }
         (staging / ".bingux-install.json").write_text(json.dumps(manifest, indent=2) + "\n")
+        if not no_systemd:
+            was_active = systemctl_user(["is-active", "--quiet", "bingux.target"], check=False).returncode == 0
+            systemctl_user(["stop", "bingux.target"], check=False)
+            # disable removes the old unit symlink as well as its wants
+            # links, so do it before recreating the integration links.
+            systemctl_user(["disable", "bingux.target"], check=False)
         if prefix.exists():
-            if not no_systemd:
-                was_active = systemctl_user(["is-active", "--quiet", "bingux.target"], check=False).returncode == 0
-                systemctl_user(["stop", "bingux.target"], check=False)
             backup = Path(tempfile.mkdtemp(prefix=f".{prefix.name}.old-", dir=prefix.parent))
             backup.rmdir()
             prefix.rename(backup)
@@ -291,10 +389,12 @@ def install_user(source, build, prefix, qml, no_systemd):
             if link.is_symlink():
                 link.unlink()
             link.symlink_to(target_path)
+        ensure_gnoblin_dropin_loader()
+        release_gnome_input_source_bindings()
         committed = True
         if not no_systemd:
             systemctl_user(["daemon-reload"])
-            systemctl_user(["enable", "--now", "bingux.target"])
+            enable_bingux_target()
     except Exception:
         if staging is not None and staging.exists():
             shutil.rmtree(staging)
@@ -304,11 +404,11 @@ def install_user(source, build, prefix, qml, no_systemd):
             if backup is not None and backup.exists():
                 backup.rename(prefix)
             if was_active and not no_systemd:
-                systemctl_user(["enable", "--now", "bingux.target"], check=False)
+                enable_bingux_target()
         elif not no_systemd:
             # The payload is complete, but recover the desktop if systemd
             # rejected the reload/start operation after the swap.
-            systemctl_user(["enable", "--now", "bingux.target"], check=False)
+            enable_bingux_target()
         raise
     finally:
         if backup is not None and backup.exists():
@@ -318,10 +418,7 @@ def install_user(source, build, prefix, qml, no_systemd):
     print(
         "  service links: " + str(Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd/user")
     )
-    module_directory = prefix / "share/gnoblin/conf.d"
-    load_expression = 'local g = require("gnoblin"); g.load(' + lua_quote(module_directory / "*.lua") + ")"
-    print("  enable Gnoblin integration: add " + load_expression + " to init.lua")
-    print('  add a separate g.load("~/.config/gnoblin/conf.d/*.lua") for user drop-ins')
+    print("  Gnoblin integration: installed and loaded through ~/.config/gnoblin/conf.d/")
     print("  remove with: make uninstall-user USER_PREFIX=" + str(prefix))
 
 

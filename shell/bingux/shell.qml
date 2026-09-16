@@ -536,8 +536,7 @@ ShellRoot {
             });
         }
         function notifications(): void {
-            if (notificationState.allEntries.length > 0)
-                notificationCentre.visible = !notificationCentre.visible;
+            notificationCentre.visible = !notificationCentre.visible;
         }
         function keyboard(): void {
             inputSourceSelector.openMenu();
@@ -947,7 +946,7 @@ ShellRoot {
             easing.type: Easing.OutCubic
             onFinished: topBar.completeReorder()
         }
-        readonly property var availableControls: [[captureStatus, captureStatus.active], [trayContainer, tray.implicitWidth > 0], [privacyContainer, privacyContainer.active], [metricsPill, profileSettings.metricsEnabled], [inputSourceSelector, metrics.desktopStateAvailable], [systemPill, true], [notificationButton, notificationState.allEntries.length > 0], [searchPill, true], [clockPill, true]].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat(controlCentre.movableWidgets.filter(item => chosen(item)), spacingWidgets.filter(item => chosen(item)), decorationWidgets.filter(item => chosen(item)), terminalSidebar.panelWidgets.filter(item => item.placed), extensionWidgets.filter(item => chosen(item)))
+        readonly property var availableControls: [[captureStatus, captureStatus.active], [trayContainer, tray.implicitWidth > 0], [privacyContainer, privacyContainer.active], [metricsPill, profileSettings.metricsEnabled], [inputSourceSelector, metrics.desktopStateAvailable], [systemPill, true], [notificationButton, true], [searchPill, true], [clockPill, true]].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat(controlCentre.movableWidgets.filter(item => chosen(item)), spacingWidgets.filter(item => chosen(item)), decorationWidgets.filter(item => chosen(item)), terminalSidebar.panelWidgets.filter(item => item.placed), extensionWidgets.filter(item => chosen(item)))
         readonly property var overflowItems: {
             if (customLayout && !nativeTopBarLayout) {
                 const hidden = [];
@@ -1308,12 +1307,11 @@ ShellRoot {
                         parent: topBar.hostFor(notificationButton)
                         Layout.column: topBar.controlColumn(notificationButton)
                         Layout.row: topBar.controlRow(notificationButton)
-                        visible: topBar.chosen(notificationButton) && count > 0
+                        visible: topBar.chosen(notificationButton)
                         count: notificationState.allEntries.length
                         selected: notificationCentre.visible
                         barWindow: topBar.windowFor(notificationButton)
-                        onClicked: if (count > 0)
-                            notificationCentre.visible = !notificationCentre.visible
+                        onClicked: notificationCentre.visible = !notificationCentre.visible
                         Connections {
                             target: notificationSurface.viewport
                             function onToastArchived() {

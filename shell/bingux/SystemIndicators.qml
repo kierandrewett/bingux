@@ -224,7 +224,7 @@ Item {
             return "Battery status unavailable";
         }
 
-        const percentage = Math.round(battery.percentage);
+        const percentage = Math.round(battery.percentage * 100);
         return UPower.onBattery ? "Battery " + percentage + " percent, discharging" : "Battery " + percentage + " percent, charging";
     }
 

@@ -53,12 +53,17 @@ class InstallTest(unittest.TestCase):
             self.assertEqual(
                 config["commands"]["applicationLauncher"][1], "/usr/share/bingux/shell/launch-application.py"
             )
+            self.assertEqual(config["commands"]["fileOpener"], ["/usr/bin/xdg-open"])
+            self.assertEqual(config["commands"]["clipboard"], ["/usr/bin/wl-copy"])
             self.assertTrue((stage / "usr/share/bingux/shell/ProfileSettings.qml").is_file())
             self.assertTrue((stage / "usr/share/gnoblin/conf.d/bingux.lua").is_file())
             integration = (stage / "usr/share/gnoblin/conf.d/bingux.lua").read_text()
             self.assertIn('["ext-background-effect-v1"] = true', integration)
             self.assertIn('layer = "^bingux-capture$"', integration)
             self.assertIn('layer = "^bingux-capture-controls$"', integration)
+            self.assertIn('bingux = { "/usr/libexec/bingux/bingux-frame", "--compact" }', integration)
+            self.assertIn('mode = "auto"', integration)
+            self.assertNotIn('["remove-csd"] = true', integration)
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Text/qmldir").is_file())
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Effects/libbinguxeffects.so").is_file())
             self.assertFalse((stage / "home").exists())
@@ -76,6 +81,9 @@ class InstallTest(unittest.TestCase):
                 self.assertTrue((stage / f"usr/bin/bingux-{name}-ui").is_file())
             searchd_unit = (stage / "usr/lib/systemd/user/bingux-searchd.service").read_text()
             self.assertIn("ExecStart=/usr/libexec/bingux/search-service", searchd_unit)
+            target_unit = (stage / "usr/lib/systemd/user/bingux.target").read_text()
+            self.assertIn("WantedBy=gnome-session@gnoblin.target", target_unit)
+            self.assertNotIn("WantedBy=graphical-session.target", target_unit)
 
     def test_missing_build_fails_before_install(self):
         with tempfile.TemporaryDirectory() as name:
@@ -123,6 +131,16 @@ class InstallTest(unittest.TestCase):
             self.assertTrue((prefix / ".bingux-install.json").is_file())
             self.assertTrue((prefix / "share/bingux/shell/ProfileSettings.qml").is_file())
             self.assertTrue((prefix / "share/gnoblin/conf.d/bingux.lua").is_file())
+            user_integration = (prefix / "share/gnoblin/conf.d/bingux.lua").read_text()
+            self.assertIn(f'bingux = {{ "{prefix}/libexec/bingux/bingux-frame", "--compact" }}', user_integration)
+            self.assertIn('mode = "auto"', user_integration)
+            self.assertNotIn('["remove-csd"] = true', user_integration)
+            init = config / "gnoblin/init.lua"
+            dropin = config / "gnoblin/conf.d/bingux.lua"
+            self.assertTrue(init.is_file())
+            self.assertIn('g.load("conf.d/**/*.lua")', init.read_text())
+            self.assertTrue(dropin.is_symlink())
+            self.assertEqual(dropin.resolve(), (prefix / "share/gnoblin/conf.d/bingux.lua").resolve())
             launcher = home / ".local/bin/bingux"
             self.assertTrue(launcher.is_symlink())
             self.assertEqual(launcher.resolve(), (prefix / "bin/bingux").resolve())
@@ -149,6 +167,8 @@ class InstallTest(unittest.TestCase):
             self.assertFalse((home / ".local/bin/bingux-uninstall").exists())
             self.assertFalse(unit.exists())
             self.assertFalse((config / "bingux").exists())
+            self.assertFalse(dropin.exists())
+            self.assertTrue(init.exists())
 
     def test_user_install_does_not_take_over_unmanaged_directory(self):
         with tempfile.TemporaryDirectory() as name:
@@ -243,8 +263,11 @@ class InstallTest(unittest.TestCase):
                 check=True,
             )
             self.assertIn("daemon-reload", log.read_text())
-            self.assertIn("enable --now bingux.target", log.read_text())
-            wants = config / "systemd/user/graphical-session.target.wants"
+            self.assertIn("disable bingux.target", log.read_text())
+            self.assertIn("enable bingux.target", log.read_text())
+            self.assertIn("is-active --quiet gnome-session@gnoblin.target", log.read_text())
+            self.assertIn("start bingux.target", log.read_text())
+            wants = config / "systemd/user/gnome-session@gnoblin.target.wants"
             wants.mkdir(parents=True)
             enabled_target = wants / "bingux.target"
             enabled_target.symlink_to(prefix / "lib/systemd/user/bingux.target")

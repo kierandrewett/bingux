@@ -44,18 +44,21 @@ make install-user
 ```
 
 This builds the native pieces if needed, installs the complete Bingux payload
-under `$XDG_DATA_HOME/bingux` (normally `~/.local/share/bingux`), and starts
-`bingux.target`. The only files outside that root are symlinks in
-`$XDG_BIN_HOME` (normally `~/.local/bin`) and `$XDG_CONFIG_HOME/systemd/user`;
-they are recorded in
+under `$XDG_DATA_HOME/bingux` (normally `~/.local/share/bingux`), enables
+`bingux.target` for the Gnoblin session, and loads the installed Gnoblin
+drop-in automatically. The only files outside that root are symlinks in
+`$XDG_BIN_HOME` (normally `~/.local/bin`), `$XDG_CONFIG_HOME/systemd/user`,
+and `$XDG_CONFIG_HOME/gnoblin/conf.d`; they are recorded in
 `.bingux-install.json` and are removed safely by the matching uninstall command.
+The installer may also create or extend `$XDG_CONFIG_HOME/gnoblin/init.lua` to
+load `conf.d`; existing settings are preserved.
 Make sure `~/.local/bin` is on `PATH` if you want to run `binguxctl` and the
 other convenience commands directly. The installer detects `qs` or
 `quickshell`; set `BINGUX_QUICKSHELL=/path/to/qs` when the matching Quickshell
 build is not on `PATH`. It also installs `bingux-uninstall`, so the source
-checkout is not needed later to remove the managed installation. If Gnoblin is
-installed, the installer prints the `g.load` call for its package drop-in
-directory and the matching user drop-in directory.
+checkout is not needed later to remove the managed installation. If an
+`init.lua` does not already load `conf.d`, the installer creates or extends it
+without replacing existing personal settings.
 
 Remove the managed install with:
 
