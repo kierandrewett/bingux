@@ -1036,13 +1036,11 @@ PanelWindow {
             minimised.activate();
             return;
         }
-        const active = root.activeWindow(group);
-        const basis = active || root.preferredWindow(group);
-        const activeIndex = group.windows.indexOf(basis);
-        const startIndex = activeIndex >= 0 ? activeIndex : 0;
+        // A background app has no selected indicator. Reveal its remembered
+        // window first, just as for minimise; only a focused app advances.
+        const activeIndex = group.windows.indexOf(ToplevelManager.activeToplevel);
         const direction = delta > 0 ? -1 : 1;
-        const nextIndex = (startIndex + direction + group.windows.length) % group.windows.length;
-        const next = group.windows[nextIndex];
+        const next = activeIndex < 0 ? root.preferredWindow(group) : group.windows[(activeIndex + direction + group.windows.length) % group.windows.length];
         if (next) {
             next.minimized = false;
             next.activate();

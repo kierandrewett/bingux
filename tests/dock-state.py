@@ -12,6 +12,7 @@ root = Path(__file__).resolve().parent.parent
 test_name = os.environ.get("BINGUX_SHELL_TEST", "dock-state")
 if test_name not in (
     "dock-state",
+    "dock-focus-indicators",
     "dock-pinning",
     "dock-behaviour",
     "dock-refresh",
