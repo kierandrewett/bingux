@@ -13,6 +13,83 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class InstallTest(unittest.TestCase):
+    def test_user_upgrade_migrates_legacy_launcher_without_losing_search_settings(self):
+        with tempfile.TemporaryDirectory() as name:
+            base = Path(name)
+            build, prefix = base / "build", base / "install"
+            home, config = base / "home", base / "config"
+            for filename in (
+                "text/libbinguxtext.so",
+                "settings/libbinguxsettings.so",
+                "effects/libbinguxeffects.so",
+                "bingux-audio-meter",
+                "bingux-image-clipboard",
+                "bingux-frame",
+                "cargo/release/bingux-searchd",
+                "cargo/release/bingux-statusd",
+            ):
+                path = build / filename
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("test fixture\n")
+            search_config = config / "bingux/search.json"
+            search_config.parent.mkdir(parents=True)
+            search_config.write_text(
+                json.dumps(
+                    {
+                        "protocolVersion": 1,
+                        "providerManifestPaths": ["/custom/provider.json"],
+                        "commands": {
+                            "applicationLauncher": ["/usr/bin/gtk-launch"],
+                            "fileOpener": ["/custom/open"],
+                            "clipboard": ["/custom/copy"],
+                        },
+                    }
+                )
+                + "\n"
+            )
+            environment = {**os.environ, "HOME": str(home), "XDG_CONFIG_HOME": str(config)}
+            subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "scripts/install-shell.py"),
+                    "--user",
+                    "--no-systemd",
+                    "--prefix",
+                    str(prefix),
+                    "--build-dir",
+                    str(build),
+                ],
+                env=environment,
+                check=True,
+            )
+            migrated = json.loads(search_config.read_text())
+            self.assertEqual(
+                migrated["commands"]["applicationLauncher"],
+                [sys.executable, str(prefix / "share/bingux/shell/launch-application.py")],
+            )
+            self.assertEqual(migrated["commands"]["fileOpener"], ["/custom/open"])
+            self.assertEqual(migrated["commands"]["clipboard"], ["/custom/copy"])
+            self.assertEqual(migrated["providerManifestPaths"], ["/custom/provider.json"])
+            migrated["commands"]["applicationLauncher"] = ["/custom/launch"]
+            search_config.write_text(json.dumps(migrated) + "\n")
+            subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "scripts/install-shell.py"),
+                    "--user",
+                    "--no-systemd",
+                    "--prefix",
+                    str(prefix),
+                    "--build-dir",
+                    str(build),
+                ],
+                env=environment,
+                check=True,
+            )
+            self.assertEqual(
+                json.loads(search_config.read_text())["commands"]["applicationLauncher"], ["/custom/launch"]
+            )
+
     def test_stage(self):
         with tempfile.TemporaryDirectory() as name:
             base = Path(name)
@@ -55,6 +132,9 @@ class InstallTest(unittest.TestCase):
             )
             self.assertEqual(config["commands"]["fileOpener"], ["/usr/bin/xdg-open"])
             self.assertEqual(config["commands"]["clipboard"], ["/usr/bin/wl-copy"])
+            search_service = stage / "usr/libexec/bingux/search-service"
+            subprocess.run(["sh", "-n", str(search_service)], check=True)
+            self.assertIn("/usr/share/bingux/shell/migrate-search-config.py", search_service.read_text())
             self.assertTrue((stage / "usr/share/bingux/shell/ProfileSettings.qml").is_file())
             self.assertTrue((stage / "usr/share/gnoblin/conf.d/bingux.lua").is_file())
             integration = (stage / "usr/share/gnoblin/conf.d/bingux.lua").read_text()

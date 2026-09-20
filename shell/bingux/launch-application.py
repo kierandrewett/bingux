@@ -21,10 +21,33 @@ FEEDBACK_PATH = None
 LAST_ERROR = None
 LAUNCH_ACCEPT_TIMEOUT = 5.0
 HOST_MANAGER_TIMEOUT = 5.0
+GRAPHICAL_ENVIRONMENT = ("DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY")
 
 
 class LaunchTimeout(RuntimeError):
     pass
+
+
+def refresh_graphical_environment():
+    """Use the current session display even when the caller started before it."""
+    try:
+        result = subprocess.run(
+            ["systemctl", "--user", "show-environment"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return
+    if result.returncode:
+        return
+    values = {}
+    for line in result.stdout.splitlines():
+        name, separator, value = line.partition("=")
+        if separator and name in GRAPHICAL_ENVIRONMENT and value and "\0" not in value:
+            values[name] = value
+    os.environ.update(values)
 
 
 def call_with_timeout(callback):
@@ -112,6 +135,7 @@ def launch_and_watch(entry, context):
 
 
 def launch_local(args):
+    refresh_graphical_environment()
     identity = args.desktop_id
     if "/" in identity or not identity:
         raise ValueError("Expected a desktop entry ID")

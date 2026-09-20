@@ -16,6 +16,33 @@ launcher = Path(__file__).resolve().parents[1] / "shell/bingux/launch-applicatio
 
 
 class ApplicationLaunch(unittest.TestCase):
+    def test_graphical_environment_is_refreshed_from_user_manager(self):
+        spec = importlib.util.spec_from_file_location("launcher_environment", launcher)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        manager_environment = subprocess.CompletedProcess(
+            [],
+            0,
+            "DISPLAY=:7\nWAYLAND_DISPLAY=wayland-7\nXAUTHORITY=/run/user/1000/xauth\nIGNORED=value\n",
+            "",
+        )
+        with (
+            patch.dict(module.os.environ, {}, clear=True),
+            patch.object(module.subprocess, "run", return_value=manager_environment) as run,
+        ):
+            module.refresh_graphical_environment()
+            self.assertEqual(module.os.environ.get("DISPLAY"), ":7")
+            self.assertEqual(module.os.environ.get("WAYLAND_DISPLAY"), "wayland-7")
+            self.assertEqual(module.os.environ.get("XAUTHORITY"), "/run/user/1000/xauth")
+            self.assertNotIn("IGNORED", module.os.environ)
+        run.assert_called_once_with(
+            ["systemctl", "--user", "show-environment"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+
     def test_application_id_ending_in_desktop(self):
         with tempfile.TemporaryDirectory() as temporary:
             apps = Path(temporary) / "applications"
