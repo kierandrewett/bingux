@@ -68,7 +68,8 @@ export default function enable(api) {
  Pointer() { const [x,y] = global.get_pointer(); let a = global.stage.get_actor_at_pos(Clutter.PickMode.REACTIVE,x,y); while(a && !a.meta_window) a=a.get_parent(); return JSON.stringify({x,y,picked:a?.meta_window ? Meta.gnoblin_layer_namespace(a.meta_window):null}); },
  State() { return JSON.stringify({motion, panels: global.get_window_actors().filter(a => ['bingux-top-bar','bingux-dock'].includes(Meta.gnoblin_layer_namespace(a.meta_window))).map(a => ({name: Meta.gnoblin_layer_namespace(a.meta_window), offset: a.translation_y})), focus: global.display.focus_window?.title,
   windows: windows().map(w => ({title: w.title, fullscreen: w.is_fullscreen()})),
-  order: global.window_group.get_children().filter(a => a.meta_window && a.visible).map(a => Meta.gnoblin_layer_namespace(a.meta_window) || a.meta_window.title)}); }
+  order: global.window_group.get_children().filter(a => a.meta_window && a.visible).map(a => Meta.gnoblin_layer_namespace(a.meta_window) || a.meta_window.title),
+  panelTransitions: global.get_window_actors().filter(a => ['bingux-top-bar','bingux-dock'].includes(Meta.gnoblin_layer_namespace(a.meta_window))).map(a => ({name: Meta.gnoblin_layer_namespace(a.meta_window), animating: a.get_transition('translation-y') !== null}))}); }
  });
  impl.export(Gio.DBus.session, '/org/gnoblin/PopoutTest');
  const name = Gio.bus_own_name(Gio.BusType.SESSION, 'org.gnoblin.PopoutTest', Gio.BusNameOwnerFlags.NONE, null, null, null);
@@ -78,7 +79,12 @@ export default function enable(api) {
 
 
 def run(command, **kwargs):
-    return subprocess.run(command, check=True, text=True, capture_output=True, timeout=5, **kwargs).stdout
+    try:
+        return subprocess.run(command, check=True, text=True, capture_output=True, timeout=5, **kwargs).stdout
+    except subprocess.CalledProcessError as error:
+        raise subprocess.SubprocessError(
+            f"command failed: {command!r}\nstdout:\n{error.stdout}\nstderr:\n{error.stderr}"
+        ) from error
 
 
 def native(method, *args):
@@ -154,7 +160,7 @@ def companions_above_fullscreen():
 
 
 run([str(gnoblin / "src/tools/gnoblinctl"), "config", "reload"])
-run([str(gnoblin / "src/tools/gnoblinctl"), "script", "reload"])
+run([str(gnoblin / "src/tools/gnoblinctl"), "reload"])
 apps_qml = config / "popout-apps.qml"
 apps_qml.write_text("""import QtQuick
 import QtQuick.Window
@@ -163,12 +169,18 @@ import Quickshell.Io
 ShellRoot {
  id: fixture
  property string received: ""
- IpcHandler { target: "fixture"; function received(): string { return fixture.received; } function clear(): string { fixture.received = ""; return ""; } }
+ IpcHandler { target: "fixture"
+  function received(): string { return fixture.received; }
+  function clear(): string { fixture.received = ""; return ""; }
+  function fullscreen(): string { gameWindow.showFullScreen(); return ""; }
+  function windowed(): string { gameWindow.showNormal(); return ""; }
+ }
  Window { visible: true; width: 640; height: 400; title: "Popout Other"; color: "#246824"
   Item { focus: true; Keys.onPressed: event => { fixture.received = "Popout Other:" + event.key; } }
   MouseArea { anchors.fill: parent; onClicked: fixture.received = "Popout Other:mouse" }
  }
- Window { visible: true; width: 640; height: 400; title: "Popout Fullscreen"; color: "#243868"
+ Window { id: gameWindow; width: 640; height: 400; title: "Popout Fullscreen"; color: "#243868"
+  visibility: Window.Windowed
   Item { focus: true; Keys.onPressed: event => { fixture.received = "Popout Fullscreen:" + event.key; } }
   MouseArea { anchors.fill: parent; onClicked: fixture.received = "Popout Fullscreen:mouse" }
  }
@@ -207,12 +219,12 @@ try:
         wait(lambda: ipc("search").get("query") == "acd", "direct Super preserves immediate editing input")
         tap(1)
         wait(lambda: not ipc("search").get("visible"), "close after immediate typing")
-    native("Fullscreen", "Popout Fullscreen")
+    run([qs, "ipc", "--path", str(apps_qml), "call", "fixture", "fullscreen"])
     wait(lambda: any(w["title"] == "Popout Fullscreen" and w["fullscreen"] for w in state()["windows"]), "fullscreen")
     time.sleep(0.5)
     # A fresh fullscreen transition ends the persistent Super reveal.
     for hide_search in (False, True):
-        native("Unfullscreen", "Popout Fullscreen")
+        run([qs, "ipc", "--path", str(apps_qml), "call", "fixture", "windowed"])
         wait(
             lambda: not next(w for w in state()["windows"] if w["title"] == "Popout Fullscreen")["fullscreen"],
             "leave fullscreen",
@@ -222,7 +234,7 @@ try:
         if hide_search:
             tap(125)
             wait(lambda: "bingux-search-chrome" in state()["order"], "search hidden but chrome revealed")
-        native("Fullscreen", "Popout Fullscreen")
+        run([qs, "ipc", "--path", str(apps_qml), "call", "fixture", "fullscreen"])
         wait(
             lambda: not ipc("search").get("visible") and "bingux-search-chrome" not in state()["order"],
             "fullscreen resets reveal",
@@ -247,23 +259,28 @@ try:
     )
     received = run([qs, "ipc", "--path", str(apps_qml), "call", "fixture", "received"]).strip()
     assert received == "", ("outside search click was delivered to the app", received)
-    # The second click is the first normal app click. Its press/release may
-    # also dismiss the panels through the compositor's raised-window path.
+    # The second click is a shell action: consume it, slide both panels fully
+    # away, and keep every fullscreen pointer event blocked during the exit.
+    click(640, 400, 1)
+    time.sleep(0.08)
+    native("Click", 640, 400, 1)
+    wait(
+        lambda: (
+            len(state()["panels"]) == 2
+            and all(panel["offset"] != 0 for panel in state()["panels"])
+            and all(not panel["animating"] for panel in state()["panelTransitions"])
+        ),
+        "second click fully hides both panels",
+    )
+    received = run([qs, "ipc", "--path", str(apps_qml), "call", "fixture", "received"]).strip()
+    assert received == "", ("fullscreen input escaped before chrome finished hiding", received)
     click(640, 400, 1)
     wait(
         lambda: (
             run([qs, "ipc", "--path", str(apps_qml), "call", "fixture", "received"]).strip()
             == "Popout Fullscreen:mouse"
         ),
-        "second fullscreen click reaches the app",
-    )
-    wait(lambda: "bingux-search-chrome" not in state()["order"], "second click dismisses chrome")
-    wait(
-        lambda: all(
-            state()["order"].index(panel) < state()["order"].index("Popout Fullscreen")
-            for panel in ("bingux-top-bar", "bingux-dock")
-        ),
-        "second click hides both panels",
+        "post-animation fullscreen click reaches the app",
     )
     # Real clicks must reach the visible panels, not the search dismiss area.
     tap(125)
