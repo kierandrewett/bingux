@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 import sys
 import os
+import re
 import signal
 import time
 import subprocess
@@ -139,6 +140,25 @@ def launch_local(args):
     identity = args.desktop_id
     if "/" in identity or not identity:
         raise ValueError("Expected a desktop entry ID")
+    steam_game = re.fullmatch(r"steam_app_([0-9]+)", identity)
+    if steam_game:
+        if args.report_timeout:
+            return report_failure(
+                identity,
+                "No application window appeared before the launch timeout. The application may still be starting or running in the background.",
+                args.notify_errors,
+            )
+        uri = f"steam://rungameid/{steam_game.group(1)}"
+        try:
+            handler = Gio.AppInfo.get_default_for_uri_scheme("steam")
+            if handler is None:
+                return report_failure(identity, "Steam's URI handler is not installed.", args.notify_errors)
+            accepted = handler.launch_uris([uri], Gio.AppLaunchContext())
+            if not accepted:
+                return report_failure(identity, "Steam did not accept the launch request.", args.notify_errors)
+        except GLib.Error as error:
+            return report_failure(identity, error.message, args.notify_errors)
+        return 0
     # Quickshell removes the file extension, including when the application
     # ID itself ends in .desktop (for example org.telegram.desktop).
     candidates = [identity + ".desktop"]

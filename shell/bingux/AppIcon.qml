@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Effects
 import Quickshell
 import "MediaMatch.js" as MediaMatch
+import "SteamApplications.js" as SteamApplications
 
 // One app image and activity presentation for the dock and window switcher.
 Item {
@@ -12,8 +13,11 @@ Item {
     property var notifications: []
     property var notificationIndex: MediaMatch.notificationIndex(notifications)
     property var additionalBadges: []
+    property bool showSteamBadge: false
     property bool shadowed: true
-    readonly property var badges: [audioBadge, notificationBadge].concat(additionalBadges)
+    readonly property string requestedIcon: root.presentation?.icon || root.group?.desktopEntry?.icon || "application-x-executable"
+    readonly property string steamAppId: SteamApplications.steamAppId(root.group && root.group.desktopEntry)
+    readonly property var badges: [audioBadge, notificationBadge, steamBadge].concat(additionalBadges)
     readonly property bool hasBadges: badges.some(badge => badge.visible && badge.opacity > 0)
     property int implicitSize: Theme.dockIconSize
     property int badgeSize: Theme.dockBadgeSize
@@ -55,7 +59,9 @@ Item {
                 maskThresholdMin: 0.5
                 maskSpreadAtMin: 1.0
             }
-            source: Quickshell.iconPath(root.presentation?.icon || (root.group && root.group.desktopEntry && root.group.desktopEntry.icon ? root.group.desktopEntry.icon : "application-x-executable"), "application-x-executable")
+            source: root.requestedIcon.startsWith("file://")
+                    ? root.requestedIcon
+                    : Quickshell.iconPath(root.requestedIcon, "application-x-executable")
         }
     }
     // The mask removes icon pixels, so hover, selection and wallpaper show
@@ -134,5 +140,18 @@ Item {
         count: root.visibleNotificationCount
         color: Theme.notificationBadge
         foreground: "#ffffff"
+    }
+    DockBadge {
+        id: steamBadge
+        objectName: "dockSteamBadge"
+        badgeSize: root.badgeSize
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.margins: -Theme.spaceSmall * sizeRatio
+        shown: root.showSteamBadge && root.steamAppId.length > 0
+        iconName: "steam"
+        symbolicIcon: false
+        iconSize: badgeSize
+        color: Theme.shellSurface
     }
 }

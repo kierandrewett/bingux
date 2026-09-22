@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Widgets
 
 Rectangle {
     id: root
@@ -9,6 +10,9 @@ Rectangle {
     readonly property int cutoutMargin: Math.max(1, Math.round(2 * sizeRatio))
     property int count: 0
     property string iconName: ""
+    property bool symbolicIcon: true
+    property int iconSize: 0
+    readonly property int effectiveIconSize: iconSize > 0 ? iconSize : Math.max(8, Math.round(Theme.fontSmall * sizeRatio))
     property color foreground: Theme.shellSurface
     property int fadeOutDuration: Theme.motion
     readonly property string label: count > 99 ? "99+" : String(count)
@@ -48,9 +52,17 @@ Rectangle {
     }
     SymbolicIcon {
         anchors.centerIn: parent
-        visible: !!root.iconName
+        visible: !!root.iconName && root.symbolicIcon
         source: root.iconName ? Quickshell.iconPath(root.iconName) : ""
-        implicitSize: Math.max(8, Math.round(Theme.fontSmall * root.sizeRatio))
+        implicitSize: root.effectiveIconSize
         color: root.foreground
+    }
+    IconImage {
+        anchors.centerIn: parent
+        visible: !!root.iconName && !root.symbolicIcon
+        source: root.iconName ? Quickshell.iconPath(root.iconName) : ""
+        width: root.effectiveIconSize
+        height: root.effectiveIconSize
+        mipmap: true
     }
 }

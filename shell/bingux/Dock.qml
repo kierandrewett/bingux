@@ -10,6 +10,7 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 import Quickshell.Services.Mpris
 import "MediaMatch.js" as MediaMatch
+import "SteamApplications.js" as SteamApplications
 import "DesktopLayout.js" as DesktopLayout
 
 PanelWindow {
@@ -45,6 +46,7 @@ PanelWindow {
     property var notificationStore: null
     property var activity: DockActivity {}
     property var appGroups: []
+    property var installedSteamGames: []
     // A layer menu can temporarily clear the compositor's active toplevel.
     property var lastActiveWindow: ToplevelManager.activeToplevel
     property var windowFocusHistory: []
@@ -168,10 +170,14 @@ PanelWindow {
             function onParentChanged() {
                 root.refreshAppGroups();
             }
-            // Titles are read directly by menus/tooltips. Only unidentified
-            // windows use title presence to decide whether they form a group.
+            // Titles can identify Steam games whose engine exposes a different
+            // app ID from the Steam desktop entry.
             function onTitleChanged() {
-                if (!modelData.appId)
+                const appId = root.normaliseAppId(modelData.appId || "");
+                const desktopEntry = appId ? DesktopEntries.byId(appId) || DesktopEntries.byId(appId + ".desktop") : null;
+                const steamMatch = SteamApplications.entryForWindow(DesktopEntries.applications.values, appId, modelData.title)
+                    || SteamApplications.gameForWindow(root.installedSteamGames, appId, modelData.title);
+                if (!appId || steamMatch || (!desktopEntry && !root.steamDesktopEntryCache.has(appId)))
                     root.refreshAppGroups();
             }
             function onScreensChanged() {
@@ -207,6 +213,37 @@ PanelWindow {
         // newly opened window feel delayed.
         interval: 16
         onTriggered: root.refreshAppGroupsNow()
+    }
+
+    Process {
+        id: steamGameCatalog
+        command: [
+            "python3",
+            decodeURIComponent(Qt.resolvedUrl("steam-games.py").toString().replace(/^file:\/\//, ""))
+        ]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    root.installedSteamGames = JSON.parse(text);
+                    root.steamDesktopEntryCache = new Map();
+                    root.refreshAppGroups();
+                } catch (error) {
+                    console.warn("Could not read installed Steam games:", error);
+                }
+            }
+        }
+        stderr: StdioCollector {
+            onStreamFinished: if (text.trim())
+                console.warn("Steam game discovery:", text.trim());
+        }
+    }
+    Timer {
+        interval: 300000
+        running: true
+        repeat: true
+        onTriggered: if (!steamGameCatalog.running)
+            steamGameCatalog.running = true
     }
 
     Timer {
@@ -641,6 +678,51 @@ PanelWindow {
         cache.set(appId, entry);
         return entry;
     }
+    property var steamDesktopEntryCache: new Map()
+    function steamGameEntry(game) {
+        const appId = String(game.appId);
+        return {
+            "id": "steam_app_" + appId,
+            "startupClass": "",
+            "name": game.name,
+            "icon": game.iconPath || "application-x-executable",
+            "steamAppId": appId,
+            "actions": [],
+            "execString": "steam steam://rungameid/" + appId,
+            "command": ["steam", "steam://rungameid/" + appId],
+            "workingDirectory": ""
+        };
+    }
+    function desktopEntryForWindow(appId, title) {
+        const id = root.normaliseAppId(appId || "");
+        const exactEntry = id ? DesktopEntries.byId(id) || DesktopEntries.byId(id + ".desktop") : null;
+        const cache = root.steamDesktopEntryCache;
+        if (id && cache.has(id))
+            return cache.get(id);
+
+        const steamEntries = DesktopEntries.applications.values;
+        const steamShortcut = SteamApplications.entryForWindow(steamEntries, id, title);
+        const steamGame = SteamApplications.gameForWindow(root.installedSteamGames, id, title);
+        let steamEntry = steamShortcut;
+        if (steamShortcut && steamGame && steamGame.iconPath)
+            steamEntry = SteamApplications.wrappedDesktopEntry(steamShortcut, steamGame);
+        else if (!steamEntry && steamGame)
+            steamEntry = root.steamGameEntry(steamGame);
+
+        if (steamEntry) {
+            if (id) {
+                const updatedCache = new Map(cache);
+                updatedCache.set(id, steamEntry);
+                root.steamDesktopEntryCache = updatedCache;
+            }
+            return steamEntry;
+        }
+
+        if (exactEntry)
+            return exactEntry;
+
+        return id ? DesktopEntries.heuristicLookup(id) || null : null;
+    }
     function menuLabel(value, fallback) {
         const text = typeof value === "string" && value.length > 0 ? value : fallback;
         return text.slice(0, 256);
@@ -660,7 +742,7 @@ PanelWindow {
         const appId = toplevel && typeof toplevel.appId === "string" ? toplevel.appId : "";
         const normalisedAppId = root.normaliseAppId(appId);
 
-        const desktopEntry = root.desktopEntryFor(normalisedAppId);
+        const desktopEntry = root.desktopEntryForWindow(normalisedAppId, toplevel.title);
         const desktopEntryIdentity = desktopEntry ? root.normaliseAppId(desktopEntry.startupClass || desktopEntry.id) : "";
         return desktopEntryIdentity.length > 0 ? desktopEntryIdentity : normalisedAppId;
     }
@@ -725,12 +807,12 @@ PanelWindow {
         const groups = [];
         const groupIndexes = {};
         const discoveryIndexes = {};
-        const addGroup = function addGroup(appId, fallbackId) {
+        const addGroup = function addGroup(appId, fallbackId, title) {
             const normalisedAppId = root.normaliseAppId(appId);
             if (normalisedAppId.length === 0 && fallbackId.length === 0)
                 return -1;
 
-            const desktopEntry = normalisedAppId.length > 0 ? root.desktopEntryFor(normalisedAppId) : null;
+            const desktopEntry = root.desktopEntryForWindow(normalisedAppId, title);
             const desktopEntryIdentity = desktopEntry ? root.normaliseAppId(desktopEntry.startupClass || desktopEntry.id) : "";
             const groupId = desktopEntryIdentity.length > 0 ? desktopEntryIdentity : normalisedAppId.length > 0 ? normalisedAppId : fallbackId;
             if (groupIndexes[groupId] !== undefined) {
@@ -753,6 +835,13 @@ PanelWindow {
             return groupIndexes[groupId];
         };
         const toplevels = ToplevelManager.toplevels.values;
+        // Resolve any game identity before grouping so an earlier window for
+        // the same app ID also receives a later window's exact Steam match.
+        for (let index = 0; index < toplevels.length; index++) {
+            const toplevel = toplevels[index];
+            if (toplevel)
+                root.desktopEntryForWindow(toplevel.appId, toplevel.title);
+        }
         for (let index = 0; index < root.pinnedApps.length; index++) {
             addGroup(root.pinnedApps[index], "");
         }
@@ -770,7 +859,7 @@ PanelWindow {
                 continue;
 
             const fallbackId = !hasAppId && associatedGroupId.length > 0 ? associatedGroupId : "toplevel-" + index;
-            const groupIndex = addGroup(toplevel.appId, fallbackId);
+            const groupIndex = addGroup(toplevel.appId, fallbackId, title);
             if (groupIndex >= 0)
                 groups[groupIndex].windows.push(toplevel);
         }
@@ -1491,6 +1580,7 @@ PanelWindow {
                                 id: dockIcon
                                 objectName: "dockApplicationIcon"
                                 additionalBadges: [failureBadge, pinBadge]
+                                showSteamBadge: true
                                 presentation: DesktopLayout.presentation(root.preferences, "app:" + root.pinIdentity(dockButton.currentGroup.desktopEntry?.id || dockButton.currentGroup.id), "dock", dockButton.currentGroup.desktopEntry?.name || dockButton.currentGroup.id, dockButton.currentGroup.desktopEntry?.icon || "application-x-executable", true, false)
                                 implicitSize: root.iconSize
                                 opacity: root.launchFailures[dockButton.currentGroup.id] ? 0.5 : 1
@@ -1928,6 +2018,9 @@ PanelWindow {
     Connections {
         function onApplicationsChanged() {
             root.desktopEntryCache = new Map();
+            root.steamDesktopEntryCache = new Map();
+            if (!steamGameCatalog.running)
+                steamGameCatalog.running = true;
             root.refreshAppGroups();
         }
 
