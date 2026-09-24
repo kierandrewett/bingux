@@ -5,7 +5,7 @@ import Quickshell.Io
 
 // Lock appearance is deliberately independent of BinguxPreferences. The
 // client reads only this small, local JSON file and never writes policy.
-QtObject {
+Scope {
     id: root
 
     readonly property string path: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/bingux/lock-theme.json"
@@ -44,7 +44,7 @@ QtObject {
             useTwelveHourClock = data.useTwelveHourClock;
     }
 
-    property var file: FileView {
+    FileView {
         path: root.path
         watchChanges: true
         printErrors: false

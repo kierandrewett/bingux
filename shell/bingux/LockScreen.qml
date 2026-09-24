@@ -106,7 +106,7 @@ Item {
             Button {
                 width: parent.width
                 text: authentication.active ? "Continue" : "Unlock"
-                enabled: !authentication.unlockRequested && (!authentication.active || authentication.responseRequired)
+                enabled: authentication.sessionLock.secure && !authentication.unlockRequested && (!authentication.active || authentication.responseRequired)
                 onClicked: authentication.active ? root.submitResponse() : authentication.start()
                 contentItem: Text {
                     text: parent.text

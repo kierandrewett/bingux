@@ -18,7 +18,7 @@ QtObject {
     signal responseRequested
 
     function start() {
-        if (!pam.active)
+        if (sessionLock.secure && !pam.active)
             pam.start();
     }
 
@@ -37,11 +37,16 @@ QtObject {
                 root.responseRequested();
         }
         onCompleted: result => {
-            if (result === PamResult.Success) {
+            if (result === PamResult.Success && root.sessionLock.secure) {
                 root.unlockRequested = true;
                 root.status = "Unlocking…";
                 root.statusIsError = false;
                 root.sessionLock.locked = false;
+                return;
+            }
+            if (result === PamResult.Success) {
+                root.status = "The lock session ended before authentication completed";
+                root.statusIsError = true;
                 return;
             }
             root.status = result === PamResult.MaxTries ? "Too many authentication attempts" : "Authentication failed";

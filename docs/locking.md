@@ -7,31 +7,29 @@ every Wayland output, not a layer-shell or regular window.
 
 ## Lifecycle
 
-`gnoblin-lockd` starts `bingux-lock` with a fresh `GNOBLIN_LOCK_TOKEN`.
-The client refuses to start without that token. It requests the Wayland lock
-and creates a lock surface for each output. Only when Quickshell reports
-`WlSessionLock.secure` does it call:
+Gnoblin's native compositor launches the fixed packaged command
+`/usr/bin/bingux-lock` and authorizes that exact process ID before requesting
+the Wayland lock. The client has no broker token, D-Bus authority, or policy
+channel. It requests the Wayland lock and creates a lock surface for each
+output. `WlSessionLock.secure` becomes true only when Quickshell receives the
+compositor's confirmation that every output is covered; Gnoblin's native
+compositor state, not any client report, authorizes suspend, `LockedHint`, and
+the claim that the session is locked.
 
-```
-org.gnoblin.Lock /org/gnoblin/Lock ReportPresented(s token)
-```
-
-`secure` is emitted only after Quickshell receives the compositor's confirmation
-that every output is covered. The current broker records this as diagnostic
-prototype evidence only: a public session-bus method authenticated by a
-same-user token is not a compositor-origin security boundary. Only a
-compositor-origin state event may authorize suspend, `LockedHint`, or a claim
-that the session is locked. A rejected lock, missing protocol, authentication
-failure, or PAM error never reports presentation.
+Gnoblin may pass `GNOBLIN_LOCK_START_FD`, an inherited read-end of a startup
+pipe. The launcher reads exactly one byte before it starts Quickshell; EOF or
+a read error exits without connecting to Wayland. The pipe is only an ordering
+barrier: the compositor admits the child PID before writing the byte. It is
+not an authentication credential and is ignored for manual launches.
 
 On authentication success the client requests `unlock_and_destroy` and stays
-alive. Quickshell 0.2.1 does not expose `wl_display.sync`, so Bingux does not
-call `ReportEnded`: its local unlock transition is not proof that the
-compositor processed the request. Gnoblin must add a compositor-confirmed
-completion callback before using that method or cleaning the client up. A
-lock-client crash while locked must leave the compositor locked and blanked.
-Gnoblin must provide a trusted replacement/recovery client before making the
-broker generally available.
+alive. Quickshell 0.2.1 does not expose `wl_display.sync`, so a local
+`locked=false` is not proof that the compositor has processed the request and
+does not cause process exit. Quickshell maps the protocol's compositor-sent
+`finished` event to `secure=false`; an externally finished lock exits then.
+The native compositor owns final cleanup of the PAM-unlock path. A lock-client
+crash while locked must leave the compositor locked and blanked. Gnoblin must
+provide a trusted replacement/recovery client before enabling general use.
 
 The packaged `bingux-lock.service` has no `[Install]` section and is not a
 dependency of `bingux.target`. It is intentionally inactive until the

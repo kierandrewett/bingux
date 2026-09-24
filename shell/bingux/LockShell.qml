@@ -7,20 +7,13 @@ import Quickshell.Wayland
 // or fail without taking a secure lock client down with it.
 ShellRoot {
     id: root
+    property bool secureSeen: false
 
     // A reload destroys the current QML objects. That is appropriate for the
     // desktop shell but unsafe for a session lock, whose compositor state is
     // intentionally retained if the client dies.
     Component.onCompleted: {
         Quickshell.watchFiles = false;
-        // A token is issued only by Gnoblin lockd. Refuse standalone locking:
-        // without the broker, GNOME/Gnoblin cannot safely coordinate suspend,
-        // resume, recovery, or system state.
-        if (!LockBroker.available) {
-            console.error("bingux-lock: GNOBLIN_LOCK_TOKEN is required");
-            Qt.quit();
-            return;
-        }
         lock.locked = true;
     }
 
@@ -33,10 +26,18 @@ ShellRoot {
         id: lock
 
         onSecureChanged: {
-            if (secure) {
-                LockBroker.reportPresented();
-            }
+            if (secure)
+                root.secureSeen = true;
+            else
+            // Quickshell 0.2.1 maps ext_session_lock_v1.finished to this
+            // transition. A compositor-finished lock can safely exit. PAM
+            // unlock sends unlock_and_destroy asynchronously, so that path
+            // deliberately remains alive; QML has no wl_display.sync API.
+            if (root.secureSeen && !lockAuthentication.unlockRequested)
+                Qt.quit();
         }
+        onLockedChanged: if (!locked && !root.secureSeen)
+            Qt.quit()
 
         WlSessionLockSurface {
             color: "#111318"

@@ -217,7 +217,13 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         "bingux-capture-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
         + shlex.quote(str(shell / "CaptureShell.qml"))
         + ' "$@"\n',
-        "bingux-lock": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "LockShell.qml")) + ' "$@"\n',
+        "bingux-lock": "exec "
+        + shlex.quote(str(Path(sys.executable)))
+        + " "
+        + shlex.quote(str(shell / "lock-start-gate.py"))
+        + ' "${BINGUX_QUICKSHELL:-qs}" -p '
+        + shlex.quote(str(shell / "LockShell.qml"))
+        + ' "$@"\n',
         "bingux-settings": "exec " + shlex.quote(str(prefix / "libexec/bingux/bingux-settings")) + ' "$@"\n',
         "binguxctl": "exec python3 " + shlex.quote(str(prefix / "libexec/bingux/binguxctl.py")) + ' "$@"\n',
     }

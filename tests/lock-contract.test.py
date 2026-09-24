@@ -9,28 +9,29 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class LockContractTest(unittest.TestCase):
-    def test_uses_session_lock_and_reports_only_secure_boundaries(self):
+    def test_uses_session_lock_and_keeps_authority_in_the_compositor(self):
         shell = (ROOT / "shell/bingux/LockShell.qml").read_text()
         self.assertIn("WlSessionLock", shell)
         self.assertIn("WlSessionLockSurface", shell)
         self.assertIn("if (secure)", shell)
-        self.assertIn("LockBroker.reportPresented()", shell)
+        self.assertIn("secureSeen", shell)
+        self.assertIn("lockAuthentication.unlockRequested", shell)
+        self.assertNotIn("ReportPresented", shell)
         self.assertNotIn("ReportEnded", shell)
         self.assertNotIn("PanelWindow", shell)
 
-    def test_requires_broker_token_and_uses_dedicated_pam_service(self):
-        broker = (ROOT / "shell/bingux/LockBroker.qml").read_text()
+    def test_uses_a_dedicated_pam_service_without_a_broker_token(self):
         authentication = (ROOT / "shell/bingux/LockAuthentication.qml").read_text()
-        self.assertIn('Quickshell.env("GNOBLIN_LOCK_TOKEN")', broker)
-        helper = (ROOT / "shell/bingux/lock-broker.py").read_text()
-        self.assertIn('"org.gnoblin.Lock"', helper)
-        self.assertIn('"/org/gnoblin/Lock"', helper)
-        self.assertIn("ReportPresented", helper)
-        self.assertNotIn("token\n", broker)
         self.assertIn('config: "bingux-lock"', authentication)
         self.assertIn("PamResult.Success", authentication)
         self.assertIn("responseRequired", authentication)
         self.assertIn("responseVisible", authentication)
+        self.assertIn("sessionLock.secure && !pam.active", authentication)
+        self.assertIn("PamResult.Success && root.sessionLock.secure", authentication)
+        self.assertIn("authentication.sessionLock.secure", (ROOT / "shell/bingux/LockScreen.qml").read_text())
+        self.assertFalse((ROOT / "shell/bingux/LockBroker.qml").exists())
+        self.assertFalse((ROOT / "shell/bingux/lock-broker.py").exists())
+        self.assertTrue((ROOT / "shell/bingux/lock-start-gate.py").exists())
 
     def test_theme_is_client_only_and_rejects_nonlocal_values(self):
         theme = (ROOT / "shell/bingux/LockTheme.qml").read_text()

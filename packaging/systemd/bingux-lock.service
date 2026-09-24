@@ -1,8 +1,8 @@
 [Unit]
 Description=Bingux secure Wayland lock client
-# Gnoblin lockd launches this client with GNOBLIN_LOCK_TOKEN. It is packaged
-# as a diagnostic/manual unit only and is intentionally not wanted by
-# bingux.target until Gnoblin has enabled its compositor-side gate.
+# Gnoblin's native lock path launches this fixed command and authorizes its
+# exact PID. This unit remains diagnostic/manual and is intentionally not
+# wanted by bingux.target until the compositor-side gate is enabled.
 
 [Service]
 Type=exec
