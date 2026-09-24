@@ -57,9 +57,10 @@ that provide the layer-shell protocols.
 %install
 %make_install PREFIX=%{_prefix} DESTDIR=%{buildroot} BUILD_DIR=build QMLDIR=%{_libdir}/bingux/qml
 
-for unit in bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service; do
+for unit in bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service bingux-lock.service; do
     sed -e 's|/usr/lib64|%{_libdir}|g' packaging/systemd/$unit > %{buildroot}%{_userunitdir}/$unit
 done
+install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bingux-lock
 
 %post
 %systemd_user_post bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service
@@ -72,8 +73,9 @@ done
 
 %files
 %license COPYING
-%doc README.md docs/extensions.md
+%doc README.md docs/extensions.md docs/locking.md
 %{_bindir}/bingux
+%{_bindir}/bingux-lock
 %{_bindir}/bingux-capture-ui
 %{_bindir}/bingux-emoji-ui
 %{_bindir}/bingux-search-ui
@@ -88,6 +90,7 @@ done
 %{_datadir}/bingux/
 %{_userunitdir}/bingux*.service
 %{_userunitdir}/bingux.target
+%config(noreplace) %{_sysconfdir}/pam.d/bingux-lock
 
 %changelog
 * Thu Sep 10 2026 Kieran Drewett <kieran@drewett.dev> - 0.1.0-1

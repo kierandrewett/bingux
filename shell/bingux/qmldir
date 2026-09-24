@@ -123,6 +123,9 @@ TableRowSurface 1.0 TableRowSurface.qml
 ShellCommands 1.0 ShellCommands.qml
 
 singleton BinguxPreferences 1.0 BinguxPreferences.qml
+singleton LockBroker 1.0 LockBroker.qml
+LockAuthentication 1.0 LockAuthentication.qml
+LockScreen 1.0 LockScreen.qml
 BinguxSettings 1.0 BinguxSettings.qml
 
 singleton CompositorEnvironment 1.0 CompositorEnvironment.qml

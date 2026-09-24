@@ -196,6 +196,7 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         "bingux-capture-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
         + shlex.quote(str(shell / "CaptureShell.qml"))
         + ' "$@"\n',
+        "bingux-lock": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "LockShell.qml")) + ' "$@"\n',
         "bingux-settings": "exec " + shlex.quote(str(prefix / "libexec/bingux/bingux-settings")) + ' "$@"\n',
         "binguxctl": "exec python3 " + shlex.quote(str(prefix / "libexec/bingux/binguxctl.py")) + ' "$@"\n',
     }
@@ -278,6 +279,7 @@ def integration_paths(prefix, managed=False):
         "bingux-emoji-ui",
         "bingux-capture-ui",
         "bingux-settings",
+        "bingux-lock",
         "binguxctl",
     )
     if managed:
@@ -291,6 +293,7 @@ def integration_paths(prefix, managed=False):
         "bingux-switcher-ui.service",
         "bingux-capture-ui.service",
         "bingux-emoji-ui.service",
+        "bingux-lock.service",
     )
     bin_dir = Path(os.environ.get("XDG_BIN_HOME") or Path.home() / ".local/bin")
     config_dir = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")

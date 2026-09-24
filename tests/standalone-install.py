@@ -120,7 +120,7 @@ class InstallTest(unittest.TestCase):
                 ],
                 check=True,
             )
-            for name in ("bingux", "binguxctl", "bingux-settings"):
+            for name in ("bingux", "binguxctl", "bingux-settings", "bingux-lock"):
                 launcher = stage / "usr/bin" / name
                 self.assertTrue(launcher.stat().st_mode & 0o111)
                 subprocess.run(["sh", "-n", str(launcher)], check=True)
@@ -155,6 +155,9 @@ class InstallTest(unittest.TestCase):
             switcher_unit = (stage / "usr/lib/systemd/user/bingux-switcher-ui.service").read_text()
             self.assertIn("ExecStart=/usr/bin/bingux-search-ui", search_unit)
             self.assertIn("ExecStart=/usr/bin/bingux-switcher-ui", switcher_unit)
+            lock_unit = (stage / "usr/lib/systemd/user/bingux-lock.service").read_text()
+            self.assertIn("ExecStart=/usr/bin/bingux-lock", lock_unit)
+            self.assertNotIn("WantedBy=", lock_unit)
             for name in ("capture", "emoji"):
                 unit = (stage / f"usr/lib/systemd/user/bingux-{name}-ui.service").read_text()
                 self.assertIn(f"ExecStart=/usr/bin/bingux-{name}-ui", unit)
