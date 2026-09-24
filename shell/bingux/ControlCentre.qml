@@ -220,7 +220,7 @@ ShellPopup {
                 onSettingsRequested: panel => root.settings(panel)
                 onDetailRequested: (page, trigger, audioTab) => root.openDetail(page, trigger, audioTab)
                 onLockRequested: {
-                    Quickshell.execDetached(["loginctl", "lock-session"]);
+                    Quickshell.execDetached(["bingux-lock"]);
                     root.visible = false;
                 }
                 onWidgetEditRequested: (id, item) => root.widgetEditRequested(id, item)

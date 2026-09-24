@@ -10,7 +10,7 @@ import subprocess
 import signal
 import resource
 import time
-from private_shell import run_reported_shell, stage_compositor_bridge
+from private_shell import run_reported_shell, private_script_dir
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -89,7 +89,7 @@ with tempfile.TemporaryDirectory(prefix="bingux-layout-live-") as directory:
             '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><circle cx="24" cy="24" r="24" fill="#77aaff"/></svg>'
         )
         environment["BINGUX_ACTION_REPORT"] = str(fixture / "actions.jsonl")
-        for name in ("gnome-control-center", "loginctl"):
+        for name in ("gnome-control-center", "bingux-lock"):
             helper = fixture / "bin" / name
             helper.write_text(
                 '#!/usr/bin/python3\nimport json,os,sys\nwith open(os.environ["BINGUX_ACTION_REPORT"],"a") as output: output.write(json.dumps({"command":os.path.basename(sys.argv[0]),"arguments":sys.argv[1:]})+"\\n")\n'
@@ -107,7 +107,7 @@ with tempfile.TemporaryDirectory(prefix="bingux-layout-live-") as directory:
         environment["XDG_DATA_HOME"] = str(fixture / "data")
         environment["BINGUX_NO_EXTENSIONS"] = "0"
     environment.pop("BINGUX_SETTINGS_HELPER", None)
-    stage_compositor_bridge(repo, os.environ["XDG_CONFIG_HOME"])
+    private_script_dir(os.environ["XDG_CONFIG_HOME"])
     subprocess.run(["python3", str(repo / "tests/customise-native-input.py"), "--prepare"], env=environment, check=True)
     time.sleep(0.3)
     # Search is a separate UI session, so exercise its actual receiver too.

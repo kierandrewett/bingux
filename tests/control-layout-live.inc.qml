@@ -171,8 +171,8 @@
                         arguments: ["users"]
                     },
                     {
-                        command: "loginctl",
-                        arguments: ["lock-session"]
+                        command: "bingux-lock",
+                        arguments: []
                     }
                 ]));
                 const battery = findChild(controlCentre.body, "controlBattery");

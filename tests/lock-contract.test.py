@@ -9,6 +9,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class LockContractTest(unittest.TestCase):
+    def test_control_centre_starts_bingux_lock_not_the_gnome_lock_path(self):
+        control_centre = (ROOT / "shell/bingux/ControlCentre.qml").read_text()
+
+        self.assertIn('Quickshell.execDetached(["bingux-lock"])', control_centre)
+        self.assertNotIn('loginctl", "lock-session', control_centre)
+
     def test_uses_session_lock_and_keeps_authority_in_the_compositor(self):
         shell = (ROOT / "shell/bingux/LockShell.qml").read_text()
         self.assertIn("WlSessionLock", shell)
