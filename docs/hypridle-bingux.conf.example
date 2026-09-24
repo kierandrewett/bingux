@@ -1,0 +1,18 @@
+# Optional idle-only example. Copy the relevant blocks into
+# ~/.config/hypr/hypridle.conf after verifying the compositor advertises both
+# ext-idle-notify-v1 and ext-session-lock-v1. Bingux does not install or enable
+# hypridle because idle policy belongs to the user/session manager.
+
+# Do not add before_sleep_cmd, inhibit_sleep, on_lock_cmd, or on_unlock_cmd to
+# this integration. hypridle cannot confirm that Bingux has presented a secure
+# session lock before suspend. Its stronger lock/sleep hooks require Hyprland's
+# private hyprland-lock-notify-v1 protocol and are not portable to Gnoblin.
+
+listener {
+    # Choose a user policy value. This sample is five minutes.
+    timeout = 300
+    # A later listener firing may start another client. The compositor rejects
+    # that second ext-session-lock-v1 request with finished while the first
+    # Bingux lock is active.
+    on-timeout = bingux-lock
+}

@@ -1,35 +1,26 @@
 # Secure session locking
 
-Bingux supplies the lock-screen client; Gnoblin owns policy, timers, recovery,
-and the decision to start it. The client uses Quickshell's `WlSessionLock`,
-which implements `ext-session-lock-v1`. It is a real session-lock surface for
+Bingux supplies one lock-screen client. Gnoblin exposes secure
+`ext-session-lock-v1` support; it does not choose a locker or own idle policy.
+Hyprlock and other conforming clients remain valid alternatives. Bingux uses
+Quickshell's `WlSessionLock`, which creates a real session-lock surface for
 every Wayland output, not a layer-shell or regular window.
 
 ## Lifecycle
 
-Gnoblin's native compositor launches the fixed packaged command
-`/usr/bin/bingux-lock` and authorizes that exact process ID before requesting
-the Wayland lock. The client has no broker token, D-Bus authority, or policy
-channel. It requests the Wayland lock and creates a lock surface for each
-output. `WlSessionLock.secure` becomes true only when Quickshell receives the
-compositor's confirmation that every output is covered; Gnoblin's native
-compositor state, not any client report, authorizes suspend, `LockedHint`, and
-the claim that the session is locked.
-
-Gnoblin may pass `GNOBLIN_LOCK_START_FD`, an inherited read-end of a startup
-pipe. The launcher reads exactly one byte before it starts Quickshell; EOF or
-a read error exits without connecting to Wayland. The pipe is only an ordering
-barrier: the compositor admits the child PID before writing the byte. It is
-not an authentication credential and is ignored for manual launches.
+`/usr/bin/bingux-lock` starts the independent Quickshell client. It has no
+broker token, D-Bus authority, or policy channel. It requests the Wayland lock
+and creates a lock surface for each output. `WlSessionLock.secure` becomes true
+only when Quickshell receives the compositor's confirmation that every output
+is covered.
 
 On authentication success the client requests `unlock_and_destroy` and stays
 alive. Quickshell 0.2.1 does not expose `wl_display.sync`, so a local
 `locked=false` is not proof that the compositor has processed the request and
 does not cause process exit. Quickshell maps the protocol's compositor-sent
 `finished` event to `secure=false`; an externally finished lock exits then.
-The native compositor owns final cleanup of the PAM-unlock path. A lock-client
-crash while locked must leave the compositor locked and blanked. Gnoblin must
-provide a trusted replacement/recovery client before enabling general use.
+The launcher or service manager owns final cleanup of the PAM-unlock path. A
+lock-client crash while locked must leave the compositor locked and blanked.
 
 The packaged `bingux-lock.service` has no `[Install]` section and is not a
 dependency of `bingux.target`. It is intentionally inactive until the
@@ -68,11 +59,28 @@ It never writes this file and does not read the normal Bingux settings store.
 }
 ```
 
-`IdleTimeoutSeconds` remains a manual Gnoblin lockd setting. It is inactive
-until the compositor gate and broker policy cutover are enabled. Bingux does
-not expose it in Settings yet because a visible control without an active
-broker would be misleading. Once lockd owns live policy, Settings can bind a
-real timeout control to that broker configuration.
+### Optional hypridle integration
+
+The example [hypridle-bingux.conf.example](hypridle-bingux.conf.example) uses
+an `ext-idle-notify-v1` listener to start `bingux-lock` after idle time. It is
+not installed, enabled, or merged into a user's hypridle configuration. Use it
+only after confirming that the current compositor advertises both
+`ext-idle-notify-v1` and `ext-session-lock-v1`; otherwise the timeout either
+cannot fire or cannot lock securely.
+
+The example is idle-only. Do not treat hypridle's `before_sleep_cmd` or
+`inhibit_sleep=1` as proof a lock surface was presented: it only waits for the
+command to spawn. `inhibit_sleep=3`, `on_lock_cmd`, and `on_unlock_cmd` depend
+on Hyprland's private `hyprland-lock-notify-v1` protocol, so they cannot
+provide a portable Gnoblin lock-before-suspend path. A future Bingux-owned
+policy service must wait for a compositor-confirmed locked state before it
+claims that guarantee.
+
+The example starts `bingux-lock` directly. Its launcher execs Quickshell, so
+`pgrep -x bingux-lock` would not reliably identify an existing lock client. If
+an idle listener starts a second client while one lock is active, the
+`ext-session-lock-v1` compositor rejects that request with `finished`; the
+second client exits without affecting the active lock.
 
 ## Protocol requirements
 

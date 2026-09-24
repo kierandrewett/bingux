@@ -31,7 +31,8 @@ class LockContractTest(unittest.TestCase):
         self.assertIn("authentication.sessionLock.secure", (ROOT / "shell/bingux/LockScreen.qml").read_text())
         self.assertFalse((ROOT / "shell/bingux/LockBroker.qml").exists())
         self.assertFalse((ROOT / "shell/bingux/lock-broker.py").exists())
-        self.assertTrue((ROOT / "shell/bingux/lock-start-gate.py").exists())
+        self.assertFalse((ROOT / "shell/bingux/lock-start-gate.py").exists())
+        self.assertFalse((ROOT / "tests/lock-start-gate.test.py").exists())
 
     def test_theme_is_client_only_and_rejects_nonlocal_values(self):
         theme = (ROOT / "shell/bingux/LockTheme.qml").read_text()
@@ -42,6 +43,19 @@ class LockContractTest(unittest.TestCase):
         self.assertIn("LockTheme.backgroundImage", screen)
         self.assertIn("SystemClock", screen)
         self.assertNotIn("IdleTimeoutSeconds", theme)
+
+    def test_hypridle_example_is_explicitly_opt_in(self):
+        example = (ROOT / "docs/hypridle-bingux.conf.example").read_text()
+        docs = (ROOT / "docs/locking.md").read_text()
+        self.assertIn("ext-idle-notify-v1", docs)
+        self.assertIn("ext-session-lock-v1", docs)
+        self.assertIn("on-timeout = bingux-lock", example)
+        self.assertNotIn("pgrep -x bingux-lock", example)
+        self.assertNotIn("before_sleep_cmd =", example)
+        self.assertNotIn("inhibit_sleep =", example)
+        self.assertIn("hyprland-lock-notify-v1", docs)
+        self.assertIn("rejects that request with `finished`", docs)
+        self.assertIn("not installed, enabled", docs)
 
     def test_pam_and_unit_are_packaged_but_not_enabled(self):
         pam = (ROOT / "packaging/pam/bingux-lock").read_text()
