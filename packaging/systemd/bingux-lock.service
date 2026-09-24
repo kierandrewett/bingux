@@ -1,0 +1,13 @@
+[Unit]
+Description=Bingux secure Wayland lock client
+# Gnoblin lockd launches this client with GNOBLIN_LOCK_TOKEN. It is packaged
+# as a diagnostic/manual unit only and is intentionally not wanted by
+# bingux.target until Gnoblin has enabled its compositor-side gate.
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/bingux-lock
+Restart=no
+LimitCORE=0
+Environment=QT_QPA_PLATFORM=wayland
+Environment=QML_IMPORT_PATH=/usr/lib64/bingux/qml

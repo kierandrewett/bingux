@@ -1,0 +1,6 @@
+#%PAM-1.0
+#
+# Bingux runs as the logged-in user and PamContext supports the auth stack.
+# Fedora's system-auth keeps this aligned with the administrator's password,
+# fprintd, smart-card, faillock and policy configuration.
+auth include system-auth
