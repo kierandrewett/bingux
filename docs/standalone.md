@@ -48,7 +48,8 @@ under `$XDG_DATA_HOME/bingux` (normally `~/.local/share/bingux`), enables
 `bingux.target` for the Gnoblin session, and loads the installed Gnoblin
 drop-in automatically. The only files outside that root are symlinks in
 `$XDG_BIN_HOME` (normally `~/.local/bin`), `$XDG_CONFIG_HOME/systemd/user`,
-and `$XDG_CONFIG_HOME/gnoblin/conf.d`; they are recorded in
+`$XDG_CONFIG_HOME/gnoblin/conf.d`, and `$XDG_DATA_HOME/gnoblin/scripts`; they
+are recorded in
 `.bingux-install.json` and are removed safely by the matching uninstall command.
 The installer may also create or extend `$XDG_CONFIG_HOME/gnoblin/init.lua` to
 load `conf.d`; existing settings are preserved.
@@ -109,8 +110,9 @@ the same QML import path as the shell.
 
 The full shell uses Qt 6, Quickshell, PipeWire or PulseAudio, NetworkManager,
 systemd user services, GNOME settings helpers, `wl-clipboard`, `xdg-utils`,
-PyGObject and the Python libraries used by document previews. The terminal
-sidebar additionally needs a Qt 6 QMLTermWidget build that matches Quickshell.
+PyGObject and the Python libraries used by document previews. GTK 3 is used by
+the emoji text-entry helper for XWayland clients. The terminal sidebar
+additionally needs a Qt 6 QMLTermWidget build that matches Quickshell.
 
 The terminal plugin is optional. If it is absent, the rest of the shell stays
 available and the sidebar shows a retry message.

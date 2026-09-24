@@ -7,6 +7,8 @@ export GNOBLIN_SOURCE="${GNOBLIN_SOURCE:-$(dirname "$repo_dir")/gnoblin}"
 test_dir="$(mktemp -d /tmp/bingux-emoji-test.XXXXXX)"
 trap 'rmdir "$test_dir"' EXIT
 export GNOBLIN_COMPOSITOR_SOCKET="$test_dir/compositor.sock"
+export GNOBLIN_TEST_SCRIPT_ROOT="$repo_dir/shell/gnoblin"
+export PATH="$repo_dir/scripts:$PATH"
 # IBus can discover the host daemon outside the private session bus. Prevent
 # that connection so test keys never enter the host input method.
 export IBUS_ADDRESS="unix:path=$test_dir/no-ibus"

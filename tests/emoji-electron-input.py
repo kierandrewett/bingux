@@ -54,7 +54,7 @@ def drive(mode, pid, query):
         bridge.sendall((json.dumps({"op": "activate", "window": window["id"]}) + "\n").encode())
 
         def anchor():
-            reply = request({"op": "input-anchor"}, "input-anchor")
+            reply = request({"op": "bingux.input-anchor"}, "input-anchor")
             return reply if reply["pid"] == pid else None
 
         wait_for(anchor, "Electron did not receive focus")
@@ -64,7 +64,7 @@ def drive(mode, pid, query):
             if X11:
                 return
             wait_for(lambda: (r := anchor()) and r.get("caret") is None, "Stale caret after input blur")
-            error = request({"op": "type-text", "window": window["id"], "text": "unexpected"}, "error")
+            error = request({"op": "bingux.type-text", "window": window["id"], "text": "unexpected"}, "error")
             assert "text input" in error["message"], error
             return
         before = (
@@ -142,8 +142,6 @@ else:
     scripts = CONFIG / "gnoblin/scripts"
     scripts.mkdir(parents=True, exist_ok=True)
     gnoblin = Path(os.environ["GNOBLIN_SOURCE"])
-    shutil.copy2(gnoblin / "src/scripts/compositor-bridge.js", scripts)
-    shutil.copytree(gnoblin / "src/scripts/lib", scripts / "lib")
     (scripts / "emoji-test.js").write_text(
         """import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -158,7 +156,7 @@ export default function enable(api) {
             enabled ? Shell.ActionMode.NORMAL : Shell.ActionMode.NONE);
     });
     shortcuts.apply([{name: 'emoji', binding: '<Super>period', command: EMOJI_COMMAND}]);
-    api._disposers.push(() => shortcuts.destroy());
+    api.addCleanup(() => shortcuts.destroy());
     const seat = global.stage.context.get_backend().get_default_seat();
     const keyboard = seat.create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
     const pointer = seat.create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
@@ -175,13 +173,13 @@ export default function enable(api) {
     });
     service.export(Gio.DBus.session, '/org/gnoblin/EmojiTest');
     const name = Gio.bus_own_name(Gio.BusType.SESSION, 'org.gnoblin.EmojiTest', Gio.BusNameOwnerFlags.NONE, null, null, null);
-    api._disposers.push(() => { service.unexport(); Gio.bus_unown_name(name); keyboard.run_dispose(); pointer.run_dispose(); });
+    api.addCleanup(() => { service.unexport(); Gio.bus_unown_name(name); keyboard.run_dispose(); pointer.run_dispose(); });
 }
 """.replace("CONFIG_URL", (gnoblin / "src/gnome-shell-overlay/js/ui/components/gnoblinConfig.js").as_uri()).replace(
             "EMOJI_COMMAND", json.dumps(IPC + ["open"])
         )
     )
-    subprocess.run([str(gnoblin / "src/tools/gnoblinctl"), "script", "reload"], check=True)
+    subprocess.run([str(gnoblin / "src/tools/gnoblinctl"), "reload"], check=True)
     fixture = CONFIG / "emoji-test"
     fixture.mkdir()
     for path in (ROOT / "shell/bingux").iterdir():

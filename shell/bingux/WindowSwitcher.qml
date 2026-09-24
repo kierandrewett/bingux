@@ -319,6 +319,15 @@ Scope {
             }
         ]
         onActivated: function (id, first, modifiers) {
+            if (first)
+                shortcuts.send({
+                    op: "ui-session",
+                    action: "command",
+                    name: "search",
+                    command: {
+                        action: "close"
+                    }
+                });
             root.step(id.indexOf("backward") >= 0);
         }
         onReleased: root.finish()

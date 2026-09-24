@@ -127,6 +127,7 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         build / "bingux-frame": prefix / "libexec/bingux/bingux-frame",
         build / "cargo/release/bingux-searchd": prefix / "bin/bingux-searchd",
         build / "cargo/release/bingux-statusd": prefix / "bin/bingux-statusd",
+        source / "scripts/bingux-clipboard-paste": prefix / "bin/bingux-clipboard-paste",
         source / "packaging/gnoblin/bingux.lua": prefix / "share/gnoblin/conf.d/bingux.lua",
     }
     missing = [str(path) for path in payload if not path.is_file()]
@@ -150,6 +151,11 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         if path.name.endswith("Test.qml"):
             continue
         copy(path, shell / path.relative_to(source / "shell/bingux"))
+    gnoblin_integration = prefix / "share/bingux/gnoblin"
+    for path in (source / "shell/gnoblin").rglob("*"):
+        if not path.is_file() or "__pycache__" in path.parts or path.suffix == ".pyc":
+            continue
+        copy(path, gnoblin_integration / path.relative_to(source / "shell/gnoblin"))
     for path, destination in payload.items():
         executable = destination.parent == prefix / "bin" or destination in (
             prefix / "libexec/bingux/bingux-image-clipboard",
@@ -171,6 +177,21 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
             installed.append(destination.relative_to(prefix))
         else:
             copy(path, destination, executable)
+    entry_path = prefix / "share/gnoblin/scripts/bingux-text-input.js"
+    entry = target(entry_path)
+    entry.parent.mkdir(parents=True, exist_ok=True)
+    entry.write_text(
+        "const integration = "
+        + json.dumps((gnoblin_integration / "bingux-text-input.js").as_uri())
+        + ";\n"
+        + "export default async function (api) {\n"
+        + '    const offset = import.meta.url.indexOf("?");\n'
+        + '    const suffix = offset < 0 ? "" : import.meta.url.slice(offset);\n'
+        + "    const script = await import(integration + suffix);\n"
+        + "    return script.default(api);\n"
+        + "}\n"
+    )
+    installed.append(entry_path.relative_to(prefix))
     copy(source / "packages/binguxctl/binguxctl.py", prefix / "libexec/bingux/binguxctl.py")
     copy(source / "packages/bingux-settings/bingux-settings", prefix / "libexec/bingux/bingux-settings", True)
     if managed:
@@ -281,6 +302,7 @@ def integration_paths(prefix, managed=False):
         "bingux-settings",
         "bingux-lock",
         "binguxctl",
+        "bingux-clipboard-paste",
     )
     if managed:
         names += ("bingux-uninstall",)
@@ -297,53 +319,15 @@ def integration_paths(prefix, managed=False):
     )
     bin_dir = Path(os.environ.get("XDG_BIN_HOME") or Path.home() / ".local/bin")
     config_dir = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    data_dir = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
     unit_dir = config_dir / "systemd/user"
     links = (
         [(bin_dir / name, prefix / "bin" / name) for name in names]
         + [(unit_dir / name, prefix / "lib/systemd/user" / name) for name in units]
         + [(config_dir / "gnoblin/conf.d/bingux.lua", prefix / "share/gnoblin/conf.d/bingux.lua")]
+        + [(data_dir / "gnoblin/scripts/bingux-text-input.js", prefix / "share/gnoblin/scripts/bingux-text-input.js")]
     )
-    links.extend(gnoblin_bridge_paths(config_dir))
     return links
-
-
-def gnoblin_bridge_paths(config_dir):
-    """Link the installed Gnoblin bridge and every module it imports.
-
-    Bingux's global shortcuts and window actions are clients of this bridge.
-    Leaving the link as a manual step makes a fresh standalone install look
-    complete while Search, Alt+Tab, emoji, SnapAssist, and window menus are
-    all inert.
-    """
-    candidates = []
-    configured = os.environ.get("GNOBLIN_PREFIX")
-    if configured:
-        candidates.append(Path(configured))
-    command = shutil.which("gnoblinctl")
-    if command:
-        resolved = Path(command).resolve()
-        candidates.append(resolved.parent.parent)
-    candidates.extend((Path("/usr/lib/gnoblin"), Path("/usr/local/lib/gnoblin")))
-    for root in dict.fromkeys(candidates):
-        source = root / "share/gnoblin/scripts"
-        required = [source / "compositor-bridge.js", source / "input-sources.js"]
-        required += [
-            source / "lib" / name
-            for name in (
-                "ui-sessions.js",
-                "layer-companions.js",
-                "window-switcher-fallback.js",
-                "window-snap.js",
-                "blur-regions.js",
-                "clipboard-paste.js",
-                "clipboard-paste.py",
-                "fullscreen-return-guard.js",
-            )
-        ]
-        if all(path.is_file() for path in required):
-            target = config_dir / "gnoblin/scripts"
-            return [(target / path.relative_to(source), path) for path in required]
-    return []
 
 
 def ensure_integration_is_safe(paths):
@@ -452,7 +436,7 @@ def install_user(source, build, prefix, qml, no_systemd):
     print(
         "  service links: " + str(Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd/user")
     )
-    print("  Gnoblin integration: installed and loaded through ~/.config/gnoblin/conf.d/")
+    print("  Gnoblin integration: config drop-in and compositor script installed under XDG data/config directories")
     print("  remove with: make uninstall-user USER_PREFIX=" + str(prefix))
 
 

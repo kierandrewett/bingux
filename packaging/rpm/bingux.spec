@@ -25,6 +25,7 @@ BuildRequires:  systemd-rpm-macros
 Requires:       gnome-control-center
 Requires:       gnome-session
 Requires:       gnome-settings-daemon
+Requires:       gtk3
 Requires:       gtk4
 Requires:       libadwaita
 Requires:       python3
@@ -83,11 +84,13 @@ install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bin
 %{_bindir}/bingux-switcher-ui
 %{_bindir}/binguxctl
 %{_bindir}/bingux-audio-meter
+%{_bindir}/bingux-clipboard-paste
 %{_bindir}/bingux-searchd
 %{_bindir}/bingux-statusd
 %{_libdir}/bingux/
 %{_libexecdir}/bingux/
 %{_datadir}/bingux/
+%{_datadir}/gnoblin/scripts/bingux-text-input.js
 %{_userunitdir}/bingux*.service
 %{_userunitdir}/bingux.target
 %config(noreplace) %{_sysconfdir}/pam.d/bingux-lock

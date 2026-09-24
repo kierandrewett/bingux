@@ -35,12 +35,12 @@ QtObject {
     signal inputAnchor(var anchor)
     function requestInputAnchor() {
         send({
-            op: "input-anchor"
+            op: "bingux.input-anchor"
         });
     }
     function insertText(windowId, text) {
         send({
-            op: "type-text",
+            op: "bingux.type-text",
             window: windowId,
             text: text
         });
