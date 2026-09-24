@@ -1,8 +1,8 @@
 [Unit]
 Description=Bingux secure Wayland lock client
-# Gnoblin's native lock path launches this fixed command and authorizes its
-# exact PID. This unit remains diagnostic/manual and is intentionally not
-# wanted by bingux.target until the compositor-side gate is enabled.
+# This is an ordinary ext-session-lock-v1 client. This unit remains
+# diagnostic/manual and is intentionally not wanted by bingux.target until
+# the compositor-side gate is enabled.
 
 [Service]
 Type=exec
