@@ -16,6 +16,9 @@ class LockContractTest(unittest.TestCase):
         self.assertIn("if (secure)", shell)
         self.assertIn("secureSeen", shell)
         self.assertIn("lockAuthentication.unlockRequested", shell)
+        self.assertIn("import Bingux.Wayland", shell)
+        self.assertIn("onUnlockSubmitted: unlockRoundtrip.synchronize()", shell)
+        self.assertIn("onCompleted:", shell)
         self.assertNotIn("ReportPresented", shell)
         self.assertNotIn("ReportEnded", shell)
         self.assertNotIn("PanelWindow", shell)
@@ -28,11 +31,20 @@ class LockContractTest(unittest.TestCase):
         self.assertIn("responseVisible", authentication)
         self.assertIn("sessionLock.secure && !pam.active", authentication)
         self.assertIn("PamResult.Success && root.sessionLock.secure", authentication)
+        self.assertIn("root.sessionLock.locked = false;\n                root.unlockSubmitted();", authentication)
         self.assertIn("authentication.sessionLock.secure", (ROOT / "shell/bingux/LockScreen.qml").read_text())
         self.assertFalse((ROOT / "shell/bingux/LockBroker.qml").exists())
         self.assertFalse((ROOT / "shell/bingux/lock-broker.py").exists())
         self.assertFalse((ROOT / "shell/bingux/lock-start-gate.py").exists())
         self.assertFalse((ROOT / "tests/lock-start-gate.test.py").exists())
+
+    def test_unlock_completion_syncs_the_qt_wayland_connection(self):
+        plugin = (ROOT / "packages/bingux-wayland-sync/plugin.cpp").read_text()
+        self.assertIn("wl_display_sync(display)", plugin)
+        self.assertIn("wl_display_flush(display)", plugin)
+        self.assertIn("including unlock_and_destroy", plugin)
+        self.assertIn("emit self->completed()", plugin)
+        self.assertIn("EAGAIN", plugin)
 
     def test_theme_is_client_only_and_rejects_nonlocal_values(self):
         theme = (ROOT / "shell/bingux/LockTheme.qml").read_text()

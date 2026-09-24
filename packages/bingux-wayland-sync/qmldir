@@ -1,0 +1,2 @@
+module Bingux.Wayland
+plugin binguxwaylandsync

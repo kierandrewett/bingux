@@ -16,6 +16,7 @@ QtObject {
     readonly property bool responseVisible: pam.responseVisible
     readonly property string prompt: pam.message
     signal responseRequested
+    signal unlockSubmitted
 
     function start() {
         if (sessionLock.secure && !pam.active)
@@ -42,6 +43,7 @@ QtObject {
                 root.status = "Unlocking…";
                 root.statusIsError = false;
                 root.sessionLock.locked = false;
+                root.unlockSubmitted();
                 return;
             }
             if (result === PamResult.Success) {

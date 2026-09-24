@@ -14,13 +14,14 @@ and creates a lock surface for each output. `WlSessionLock.secure` becomes true
 only when Quickshell receives the compositor's confirmation that every output
 is covered.
 
-On authentication success the client requests `unlock_and_destroy` and stays
-alive. Quickshell 0.2.1 does not expose `wl_display.sync`, so a local
-`locked=false` is not proof that the compositor has processed the request and
-does not cause process exit. Quickshell maps the protocol's compositor-sent
-`finished` event to `secure=false`; an externally finished lock exits then.
-The launcher or service manager owns final cleanup of the PAM-unlock path. A
-lock-client crash while locked must leave the compositor locked and blanked.
+On authentication success the client requests `unlock_and_destroy`, then queues
+`wl_display.sync` on Quickshell's existing Wayland connection. The callback is
+ordered after the unlock request, so it proves the compositor processed that
+request before the client exits. A failed sync is never replaced with a timer:
+the client remains alive because it lacks completion proof. Quickshell maps the
+protocol's compositor-sent `finished` event to `secure=false`; an externally
+finished lock exits then. A lock-client crash while locked must leave the
+compositor locked and blanked.
 
 The packaged `bingux-lock.service` has no `[Install]` section and is not a
 dependency of `bingux.target`. It is intentionally inactive until the

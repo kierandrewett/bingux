@@ -22,6 +22,7 @@ class InstallTest(unittest.TestCase):
                 "text/libbinguxtext.so",
                 "settings/libbinguxsettings.so",
                 "effects/libbinguxeffects.so",
+                "wayland-sync/libbinguxwaylandsync.so",
                 "bingux-audio-meter",
                 "bingux-image-clipboard",
                 "bingux-frame",
@@ -98,6 +99,7 @@ class InstallTest(unittest.TestCase):
                 "text/libbinguxtext.so",
                 "settings/libbinguxsettings.so",
                 "effects/libbinguxeffects.so",
+                "wayland-sync/libbinguxwaylandsync.so",
                 "bingux-audio-meter",
                 "bingux-image-clipboard",
                 "bingux-frame",
@@ -146,6 +148,7 @@ class InstallTest(unittest.TestCase):
             self.assertNotIn('["remove-csd"] = true', integration)
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Text/qmldir").is_file())
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Effects/libbinguxeffects.so").is_file())
+            self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Wayland/libbinguxwaylandsync.so").is_file())
             self.assertFalse((stage / "home").exists())
             self.assertFalse((stage / "usr/share/bingux/shell/__pycache__").exists())
             unit = (stage / "usr/lib/systemd/user/bingux.service").read_text()
@@ -187,6 +190,7 @@ class InstallTest(unittest.TestCase):
                 "text/libbinguxtext.so",
                 "settings/libbinguxsettings.so",
                 "effects/libbinguxeffects.so",
+                "wayland-sync/libbinguxwaylandsync.so",
                 "bingux-audio-meter",
                 "bingux-image-clipboard",
                 "bingux-frame",
@@ -311,6 +315,7 @@ class InstallTest(unittest.TestCase):
                 "text/libbinguxtext.so",
                 "settings/libbinguxsettings.so",
                 "effects/libbinguxeffects.so",
+                "wayland-sync/libbinguxwaylandsync.so",
                 "bingux-audio-meter",
                 "bingux-image-clipboard",
                 "bingux-frame",
@@ -368,6 +373,7 @@ class InstallTest(unittest.TestCase):
                 "text/libbinguxtext.so",
                 "settings/libbinguxsettings.so",
                 "effects/libbinguxeffects.so",
+                "wayland-sync/libbinguxwaylandsync.so",
                 "bingux-audio-meter",
                 "bingux-image-clipboard",
                 "bingux-frame",

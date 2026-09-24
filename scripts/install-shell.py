@@ -118,6 +118,8 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     payload = {
         build / "effects/libbinguxeffects.so": qml / "Bingux/Effects/libbinguxeffects.so",
         source / "packages/bingux-effects/qmldir": qml / "Bingux/Effects/qmldir",
+        build / "wayland-sync/libbinguxwaylandsync.so": qml / "Bingux/Wayland/libbinguxwaylandsync.so",
+        source / "packages/bingux-wayland-sync/qmldir": qml / "Bingux/Wayland/qmldir",
         build / "text/libbinguxtext.so": qml / "Bingux/Text/libbinguxtext.so",
         source / "packages/bingux-text-layout/qmldir": qml / "Bingux/Text/qmldir",
         build / "settings/libbinguxsettings.so": qml / "Bingux/Settings/libbinguxsettings.so",
