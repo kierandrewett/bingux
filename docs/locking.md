@@ -52,6 +52,30 @@ fingerprint, smart-card and failure-lock configuration before enabling it.
 Other distributions must provide an equivalent dedicated
 `bingux-lock` PAM service; copying GDM's PAM file is not a portable contract.
 
+## Appearance and timeout
+
+The dedicated client reads `~/.config/bingux/lock-theme.json`. It accepts only
+hex colours, a local absolute background-image path, and a 12-hour clock flag.
+It never writes this file and does not read the normal Bingux settings store.
+
+```json
+{
+    "background": "#111318",
+    "surface": "#261f232b",
+    "text": "#ffffff",
+    "mutedText": "#c7cbd5",
+    "accent": "#3584e4",
+    "backgroundImage": "/home/me/Pictures/lock.jpg",
+    "useTwelveHourClock": false
+}
+```
+
+`IdleTimeoutSeconds` remains a manual Gnoblin lockd setting. It is inactive
+until the compositor gate and broker policy cutover are enabled. Bingux does
+not expose it in Settings yet because a visible control without an active
+broker would be misleading. Once lockd owns live policy, Settings can bind a
+real timeout control to that broker configuration.
+
 ## Protocol requirements
 
 The compositor must advertise `ext_session_lock_manager_v1`. The protocol

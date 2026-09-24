@@ -32,6 +32,16 @@ class LockContractTest(unittest.TestCase):
         self.assertIn("responseRequired", authentication)
         self.assertIn("responseVisible", authentication)
 
+    def test_theme_is_client_only_and_rejects_nonlocal_values(self):
+        theme = (ROOT / "shell/bingux/LockTheme.qml").read_text()
+        screen = (ROOT / "shell/bingux/LockScreen.qml").read_text()
+        self.assertIn("lock-theme.json", theme)
+        self.assertIn("isColour", theme)
+        self.assertIn("isLocalAbsolutePath", theme)
+        self.assertIn("LockTheme.backgroundImage", screen)
+        self.assertIn("SystemClock", screen)
+        self.assertNotIn("IdleTimeoutSeconds", theme)
+
     def test_pam_and_unit_are_packaged_but_not_enabled(self):
         pam = (ROOT / "packaging/pam/bingux-lock").read_text()
         unit = (ROOT / "packaging/systemd/bingux-lock.service").read_text()

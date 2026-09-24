@@ -124,6 +124,7 @@ ShellCommands 1.0 ShellCommands.qml
 
 singleton BinguxPreferences 1.0 BinguxPreferences.qml
 singleton LockBroker 1.0 LockBroker.qml
+singleton LockTheme 1.0 LockTheme.qml
 LockAuthentication 1.0 LockAuthentication.qml
 LockScreen 1.0 LockScreen.qml
 BinguxSettings 1.0 BinguxSettings.qml
