@@ -11,7 +11,7 @@ import signal
 import subprocess
 import tempfile
 import time
-from private_shell import stage_compositor_bridge
+from private_shell import private_script_dir
 
 repo = Path(__file__).resolve().parents[1]
 config = Path(os.environ["XDG_CONFIG_HOME"])
@@ -25,7 +25,7 @@ def run(args, **kwargs):
     return subprocess.run(args, check=True, capture_output=True, text=True, timeout=8, **kwargs).stdout.strip()
 
 
-scripts = stage_compositor_bridge(repo, config)
+scripts = private_script_dir(config)
 (scripts / "customise-stacking-test.js").write_text("""
 import Gio from 'gi://Gio';
 import Meta from 'gi://Meta';
@@ -45,7 +45,7 @@ export default function (api) {
     });
     service.export(Gio.DBus.session, '/org/gnoblin/CustomiseStack');
     const name = Gio.bus_own_name(Gio.BusType.SESSION, 'org.gnoblin.CustomiseStack', Gio.BusNameOwnerFlags.NONE, null, null, null);
-    api._disposers.push(() => { service.unexport(); Gio.bus_unown_name(name); });
+    api.addCleanup(() => { service.unexport(); Gio.bus_unown_name(name); });
 }
 """)
 with tempfile.TemporaryDirectory(prefix="bingux-editor-fullscreen-") as directory:

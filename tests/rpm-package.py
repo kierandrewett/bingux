@@ -50,6 +50,7 @@ class RpmPackageTest(unittest.TestCase):
             "bingux-settings",
             "bingux-switcher-ui",
             "binguxctl",
+            "bingux-frame",
         ):
             self.assertIn(f"/usr/bin/{wrapper}", self.spec)
         self.assertIn("%license COPYING", self.spec)

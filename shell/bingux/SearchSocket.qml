@@ -128,6 +128,10 @@ QtObject {
         return typeof value === "string" && /^[A-Za-z0-9._:-]{1,128}$/.test(value);
     }
 
+    function isValidDesktopId(value) {
+        return typeof value === "string" && utf8ByteLength(value) > 0 && utf8ByteLength(value) <= 512 && !/[\/\u0000-\u001f\u007f-\u009f]/.test(value);
+    }
+
     function isSafeDisplayText(value) {
         return typeof value === "string" && utf8ByteLength(value) <= maxResultDisplayBytes && !/[\u0000-\u001f\u007f-\u009f]/.test(value);
     }
@@ -142,7 +146,7 @@ QtObject {
 
     function isValidResult(result) {
         const kinds = ["application", "file", "folder", "database", "calculation", "weather", "chat", "action"];
-        return hasOnlyFields(result, ["resultId", "desktopId", "providerId", "kind", "title", "subtitle", "icon", "score"]) && (result.desktopId === undefined || (result.providerId === "applications" && result.kind === "application" && typeof result.desktopId === "string" && /^[A-Za-z0-9._:-]{1,128}$/.test(result.desktopId))) && isValidOpaqueResultId(result.resultId) && isValidProviderId(result.providerId) && kinds.indexOf(result.kind) !== -1 && isSafeDisplayText(result.title) && isSafeDisplayText(result.subtitle) && isSafeDisplayText(result.icon) && utf8ByteLength(result.title) + utf8ByteLength(result.subtitle) + utf8ByteLength(result.icon) <= maxResultDisplayBytes && isFiniteNumber(result.score) && result.score >= 0 && result.score <= 1;
+        return hasOnlyFields(result, ["resultId", "desktopId", "providerId", "kind", "title", "subtitle", "icon", "score"]) && (result.desktopId === undefined || (result.providerId === "applications" && result.kind === "application" && isValidDesktopId(result.desktopId))) && isValidOpaqueResultId(result.resultId) && isValidProviderId(result.providerId) && kinds.indexOf(result.kind) !== -1 && isSafeDisplayText(result.title) && isSafeDisplayText(result.subtitle) && isSafeDisplayText(result.icon) && utf8ByteLength(result.title) + utf8ByteLength(result.subtitle) + utf8ByteLength(result.icon) <= maxResultDisplayBytes && isFiniteNumber(result.score) && result.score >= 0 && result.score <= 1;
     }
 
     function isCommonRecord(record) {

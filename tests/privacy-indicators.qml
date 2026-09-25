@@ -8,6 +8,16 @@ ShellRoot {
     property int phase: 0
     property int failures: 0
     property int stopped: 0
+    function findChild(item, name) {
+        if (item.objectName === name)
+            return item;
+        for (const child of item.children || []) {
+            const match = findChild(child, name);
+            if (match)
+                return match;
+        }
+        return null;
+    }
     function check(ok, message) {
         if (!ok) {
             failures++;
@@ -16,6 +26,7 @@ ShellRoot {
     }
     QtObject {
         id: fixtureCapture
+        property bool cleanStop: true
         property string state: "idle"
         readonly property bool recording: state === "recording"
         readonly property bool busy: ["starting", "recording", "finalizing"].includes(state)
@@ -39,6 +50,13 @@ ShellRoot {
             }
         ]
         property bool screenSharing: false
+        property var screenSharingDetails: [
+            {
+                app: "RustDesk",
+                appIcon: "com.rustdesk.RustDesk",
+                device: "Screen sharing"
+            }
+        ]
         property bool microphoneInUse: fixtureMetrics.microphoneInUse
         property string microphoneTooltip: "Microphone in use"
         property var microphoneDetails: [
@@ -122,12 +140,14 @@ ShellRoot {
                     screenSharing: false
                 });
             } else if (test.phase === 1) {
-                test.check(recording.visible && recording.label === "1:23", "Own recording displays elapsed time");
+                test.check(recording.visible && recording.label === "1:23  Stop", "Own recording displays elapsed time and Stop");
                 test.check(recording.filled && recording.activityColor.toString() === "#c01c28", "Recording uses GNOME red");
                 test.check(recording.trailingIcon === "screencast-stop-symbolic" && recording.interactive, "Recording has an active stop control");
                 test.check(recording.height === 32 && indicators.height === 32, "Full-height bar targets");
                 test.check(indicators.visible && indicators.implicitWidth > 100 && indicators.sharingVisible, "Sharing, camera, microphone and location render together");
                 const microphone = findChild(indicators, "microphoneIndicator");
+                const sharing = findChild(indicators, "screenSharingIndicator");
+                test.check(sharing.tooltip === "Stop screen sharing" && sharing.tooltipDetails[0].app === "RustDesk", "Sharing tooltip carries the owning app identity and keeps the stop action");
                 test.check(microphone.tooltipDetails.length === 1 && microphone.tooltipDetails[0].app === "Firefox", "Microphone tooltip carries the owning app identity");
                 const camera = findChild(indicators, "cameraIndicator");
                 test.check(camera.tooltipDetails.length === 1 && camera.tooltipDetails[0].app === "Firefox", "Camera tooltip carries the owning app identity");
@@ -144,6 +164,8 @@ ShellRoot {
                 test.check(test.stopped === 2 && !fixturePrivacy.recording, "External recording stop reaches privacy service");
                 test.check(clockState.elapsed >= 66 && clockState.elapsedText.startsWith("1:"), "Elapsed timer advances from compositor time");
                 fixturePrivacy.screenSharing = false;
+                const sharing = findChild(indicators, "screenSharingIndicator");
+                test.check(sharing.tooltipDetails.length === 0 && !sharing.interactive, "Ended sharing clears app details and disables stop during the hold time");
                 test.check(indicators.sharingVisible, "Sharing retains GNOME minimum visible duration");
                 fixtureMetrics.microphoneInUse = false;
                 fixtureMetrics.locationInUse = false;

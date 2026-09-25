@@ -62,7 +62,7 @@ app.whenReady().then(async () => {
             const startHelper = async () => {
                 const child = spawn(
                     "python3",
-                    [path.join(process.env.GNOBLIN_SOURCE, "src/scripts/lib/clipboard-paste.py")],
+                    [path.join(process.env.GNOBLIN_SOURCE, "src/tools/gnoblin-clipboard-paste")],
                     { env: { ...process.env, GDK_BACKEND: "x11" } },
                 );
                 child.stdin.write(JSON.stringify("😀") + "\n");

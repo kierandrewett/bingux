@@ -15,6 +15,7 @@ Item {
     }
     readonly property int windowCount: windows.length
     readonly property int visibleCount: Math.min(4, windowCount)
+    readonly property int effectiveFirstVisibleIndex: Math.min(firstVisibleIndex, Math.max(0, windowCount - visibleCount))
     readonly property int activeIndex: {
         for (let i = 0; i < windows.length; i++) {
             if (windows[i]?.activated)
@@ -23,16 +24,17 @@ Item {
         return -1;
     }
     property int firstVisibleIndex: 0
-    readonly property bool moreBefore: firstVisibleIndex > 0
-    readonly property bool moreAfter: firstVisibleIndex + visibleCount < windowCount
-    property real scrollOffset: -firstVisibleIndex * 8 - (activeIndex >= 0 && activeIndex < firstVisibleIndex ? 10 : 0)
+    readonly property bool moreBefore: effectiveFirstVisibleIndex > 0
+    readonly property bool moreAfter: effectiveFirstVisibleIndex + visibleCount < windowCount
+    property real scrollOffset: -effectiveFirstVisibleIndex * 8 - (activeIndex >= 0 && activeIndex < effectiveFirstVisibleIndex ? 10 : 0)
     Behavior on scrollOffset {
+        enabled: !Theme.reducedMotion && root.windowCount > root.visibleCount
         NumberAnimation {
-            duration: Theme.reducedMotion ? 0 : 240
+            duration: 240
             easing.type: Easing.OutQuart
         }
     }
-    implicitWidth: launching ? 28 : visibleCount > 0 ? visibleCount * 8 + 10 + (activeIndex >= firstVisibleIndex && activeIndex < firstVisibleIndex + visibleCount ? 10 : 0) : 0
+    implicitWidth: launching ? 28 : visibleCount > 0 ? visibleCount * 8 + 10 + (activeIndex >= effectiveFirstVisibleIndex && activeIndex < effectiveFirstVisibleIndex + visibleCount ? 10 : 0) : 0
     implicitHeight: 8
     visible: width > 0
     Behavior on implicitWidth {
@@ -45,7 +47,7 @@ Item {
     Accessible.name: launching ? "Opening window" : windowCount + " windows" + (activeIndex >= 0 ? ", window " + (activeIndex + 1) + " active" : "")
 
     function revealActiveWindow() {
-        let start = Math.min(firstVisibleIndex, Math.max(0, windowCount - 4));
+        let start = Math.min(effectiveFirstVisibleIndex, Math.max(0, windowCount - 4));
         if (activeIndex >= 0) {
             if (activeIndex < start)
                 start = activeIndex;

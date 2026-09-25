@@ -6,6 +6,7 @@ Scope {
     id: root
     property bool available: false
     property bool screenSharing: false
+    property var screenSharingCaptures: []
     property bool cameraInUse: false
     property var cameraCaptures: []
     property bool microphoneAvailable: false
@@ -32,6 +33,7 @@ Scope {
         });
     }
     readonly property var microphoneDetails: microphoneCaptures.map(detailForCapture)
+    readonly property var screenSharingDetails: screenSharingCaptures.map(detailForCapture)
     readonly property string microphoneTooltip: "Microphone in use"
     readonly property var cameraDetails: cameraCaptures.map(detailForCapture)
     readonly property string cameraTooltip: "Camera in use"
@@ -60,6 +62,7 @@ Scope {
                 try {
                     const state = JSON.parse(data);
                     root.cameraCaptures = state.captures || [];
+                    root.screenSharingCaptures = state.screenSharingCaptures || [];
                 } catch (error) {
                     console.warn("Camera state:", error);
                 }
@@ -113,6 +116,8 @@ Scope {
             return JSON.stringify({
                 available: root.available,
                 screenSharing: root.screenSharing,
+                screenSharingCaptures: root.screenSharingCaptures,
+                screenSharingDetails: root.screenSharingDetails,
                 microphoneAvailable: root.microphoneAvailable,
                 microphoneCaptures: root.microphoneCaptures,
                 cameraInUse: root.cameraInUse,

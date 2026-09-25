@@ -34,16 +34,24 @@ function steamAppIdMatch(appId) {
     return match ? match[1] : "";
 }
 
-function entryForWindow(entries, appId, title) {
+function entryForWindow(entries, appId, title, desktopEntry) {
     const values = (entries || []).filter(entry => steamAppId(entry));
-    const id = steamAppIdMatch(appId);
-    return id ? uniqueMatch(values, entry => steamAppId(entry) === id) : uniqueTitleMatch(values, title);
+    const id = steamAppIdMatch(appId) || steamAppId(desktopEntry);
+    if (id)
+        return uniqueMatch(values, entry => steamAppId(entry) === id);
+    if (appId && desktopEntry)
+        return null;
+    return uniqueTitleMatch(values, title);
 }
 
-function gameForWindow(games, appId, title) {
+function gameForWindow(games, appId, title, desktopEntry) {
     const values = games || [];
-    const id = steamAppIdMatch(appId);
-    return id ? uniqueMatch(values, game => String(game.appId) === id) : uniqueTitleMatch(values, title);
+    const id = steamAppIdMatch(appId) || steamAppId(desktopEntry);
+    if (id)
+        return uniqueMatch(values, game => String(game.appId) === id);
+    if (appId && desktopEntry)
+        return null;
+    return uniqueTitleMatch(values, title);
 }
 
 function wrappedDesktopEntry(entry, game) {

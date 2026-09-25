@@ -494,6 +494,7 @@ FocusScope {
     }
     QtObject {
         id: sampleCapture
+        property bool cleanStop: true
         property bool recording: true
         property bool busy: true
         property string state: "recording"

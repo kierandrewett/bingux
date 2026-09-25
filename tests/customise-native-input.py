@@ -105,7 +105,7 @@ export default function (api) {
     });
     service.export(Gio.DBus.session, '/org/gnoblin/CustomiseInput');
     const name = Gio.bus_own_name(Gio.BusType.SESSION, 'org.gnoblin.CustomiseInput', Gio.BusNameOwnerFlags.NONE, null, null, null);
-    api._disposers.push(() => {
+    api.addCleanup(() => {
         if (timer) GLib.source_remove(timer);
         service.unexport();
         Gio.bus_unown_name(name);
@@ -116,7 +116,7 @@ export default function (api) {
 """.replace("__COMPLETION__", json.dumps(str(completion)))
     )
     subprocess.run(
-        ["gnoblinctl", "script", "reload"],
+        ["gnoblinctl", "reload"],
         env=os.environ | {"XDG_CONFIG_HOME": str(config)},
         check=True,
         capture_output=True,

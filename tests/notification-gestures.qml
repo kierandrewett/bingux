@@ -66,6 +66,25 @@ ShellRoot {
                 // incoming toasts and centre transitions are covered by the
                 // notification-performance fixture.
                 surface.viewport.groupNotifications = true;
+                state.isAfk = true;
+                const afkNotification = notificationFactory.createObject(surface, {
+                    id: 99,
+                    expireTimeout: 0.8,
+                    summary: "Arrived while AFK"
+                });
+                state.accept(afkNotification);
+                waitForRendering(card());
+                tryCompare(card(), "slideOffset", 0, 1000);
+                equal(state.visibleEntries[0].timeoutMs, 0, "AFK toast has no expiry timer");
+                mousePress(card(), 80, 60);
+                mouseMove(card(), 100, 60, 20);
+                mouseMove(card(), 160, 60, 20);
+                mouseRelease(card(), 160, 60);
+                tryVerify(() => state.visibleEntries.length === 0, 1000);
+                check(state.allEntries.some(entry => entry.notification === afkNotification && !entry.toastVisible), "AFK toast can still be swiped away");
+                state.isAfk = false;
+                wait(350);
+
                 const notification = notificationFactory.createObject(surface);
                 state.accept(notification);
                 waitForRendering(card());

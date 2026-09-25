@@ -94,7 +94,7 @@ export default function enable(api) {
         },
     );
 
-    api._disposers.push(() => {
+    api.addCleanup(() => {
         disposed = true;
         if (monitorSignal) Main.layoutManager.disconnect(monitorSignal);
         if (wrapper && manager._showOsdWindow === wrapper) manager._showOsdWindow = original;

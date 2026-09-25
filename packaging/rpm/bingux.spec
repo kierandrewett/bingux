@@ -9,6 +9,7 @@ Source0:        %{name}-%{version}.tar.xz
 BuildRequires:  cargo
 BuildRequires:  gcc
 BuildRequires:  make
+BuildRequires:  pkgconfig(gio-2.0)
 BuildRequires:  pkgconfig(libpulse)
 BuildRequires:  pkgconfig(wayland-client)
 BuildRequires:  pkgconfig(gtk4)
@@ -33,6 +34,7 @@ Requires:       python3-cairo
 Requires:       python3-gobject
 Requires:       python3-pillow
 Requires:       python3-pyyaml
+Requires:       /usr/bin/ffmpeg
 # Fedora's Quickshell package is named differently across repositories.  The
 # shell requires the stable executable interface, while the provider supplies
 # the matching Qt/QML runtime and modules.
@@ -76,14 +78,15 @@ install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bin
 %license COPYING
 %doc README.md docs/extensions.md docs/locking.md
 %{_bindir}/bingux
-%{_bindir}/bingux-lock
 %{_bindir}/bingux-capture-ui
+%{_bindir}/bingux-lock
 %{_bindir}/bingux-emoji-ui
 %{_bindir}/bingux-search-ui
 %{_bindir}/bingux-settings
 %{_bindir}/bingux-switcher-ui
 %{_bindir}/binguxctl
 %{_bindir}/bingux-audio-meter
+%{_bindir}/bingux-frame
 %{_bindir}/bingux-clipboard-paste
 %{_bindir}/bingux-searchd
 %{_bindir}/bingux-statusd

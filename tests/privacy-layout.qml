@@ -22,6 +22,7 @@ ShellRoot {
         id: privacy
         property bool available: true
         property bool screenSharing: true
+        property var screenSharingDetails: []
         property bool cameraInUse: true
         property string cameraTooltip: "Camera in use"
         property var cameraDetails: []

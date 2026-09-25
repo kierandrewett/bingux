@@ -92,11 +92,15 @@ try:
         )
     )["streams"][0]
     selected = hovered["selectedWindow"]
+    assert selected["bufferWidth"] > selected["width"] or selected["bufferHeight"] > selected["height"], (
+        "Window capture bounds must include compositor paint outside the frame",
+        selected,
+    )
     assert (dimensions["width"], dimensions["height"]) == (selected["bufferWidth"], selected["bufferHeight"]), (
         dimensions,
         selected,
     )
-    print("PASS: native window image matches selected window dimensions", dimensions)
+    print("PASS: native window image includes compositor paint bounds", dimensions)
 finally:
     ipc("cancel")
     ipc("configure", json.dumps(old))

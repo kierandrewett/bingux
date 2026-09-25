@@ -5,6 +5,8 @@ repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 fixture="$(mktemp -d)"
 trap 'rm -rf "$fixture"' EXIT
 cp "$repo_dir"/shell/bingux/*.qml "$repo_dir"/shell/bingux/*.js "$repo_dir"/shell/bingux/qmldir "$fixture/"
+cp "$repo_dir"/shell/bingux/shell_notify.py "$repo_dir"/shell/bingux/launch-application.py "$fixture/"
+cp -r "$repo_dir/shell/bingux/icons" "$fixture/"
 cp "$repo_dir/tests/dock-launch-errors.qml" "$fixture/shell.qml"
 python3 - "$fixture/Dock.qml" <<'PY'
 from pathlib import Path
@@ -20,7 +22,10 @@ exec python3 "$repo_dir/shell/bingux/launch-application.py" "\$@"
 EOF2
 chmod +x "$fixture/launcher"
 export BINGUX_APP_LAUNCHER_HELPER="$fixture/launcher" BINGUX_NOTES_TEST_RESULTS="$fixture/results.txt"
-timeout 25s "${QUICKSHELL_BIN:-quickshell}" -p "$fixture" >"$fixture/runtime.log" 2>&1 || {
+export BINGUX_CAPTURE_HELPER="$repo_dir/tests/customise-capture-helper.py"
+export BINGUX_CAPTURE_SETTINGS_PATH="file://$fixture/capture.ini"
+export XDG_STATE_HOME="$fixture/state"
+timeout 35s dbus-run-session -- "${QUICKSHELL_BIN:-quickshell}" -p "$fixture" >"$fixture/runtime.log" 2>&1 || {
     cat "$fixture/runtime.log"
     exit 1
 }

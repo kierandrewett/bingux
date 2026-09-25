@@ -17,6 +17,7 @@ Scope {
     readonly property int maxScannedActions: 32
     readonly property int minTimeoutMs: 4000
     readonly property int maxTimeoutMs: 20000
+    property bool isAfk: false
     property bool doNotDisturb: false
     onDoNotDisturbChanged: if (doNotDisturb)
         archiveToasts()
@@ -233,15 +234,17 @@ Scope {
         const application = applicationFor(notification);
         const toastVisible = !root.doNotDisturb && (previous ? previous.toastVisible : !(notification.lastGeneration && JSON.parse(retainedState.hiddenIdsJson || "{}")[String(notification.id)]));
         const paused = toastVisible && previous ? previous.paused : false;
+        const persistent = root.isAfk || !!(previous && previous.persistent);
         return {
             "notification": notification,
             "historyKey": previous && previous.historyKey || retainedState.sessionToken + ":" + notification.id,
             "toastVisible": toastVisible,
             "receivedAt": JSON.parse(retainedState.receivedTimesJson)[String(notification.id)] || Date.now(),
-            "timeoutMs": timeoutFor(notification),
-            "deadline": paused || !toastVisible ? 0 : deadline,
+            "persistent": persistent,
+            "timeoutMs": persistent ? 0 : timeoutFor(notification),
+            "deadline": paused || !toastVisible || persistent ? 0 : deadline,
             "paused": paused,
-            "remainingMs": toastVisible && deadline > 0 ? Math.max(1, deadline - Date.now()) : 0,
+            "remainingMs": toastVisible && !persistent && deadline > 0 ? Math.max(1, deadline - Date.now()) : 0,
             "appName": boundedText(application ? application.name : notification.appName, maxApplicationNameLength),
             "desktopEntry": boundedText(notification.desktopEntry, maxApplicationNameLength),
             "appIcon": boundedText((application ? application.icon : "") || notification.appIcon, maxIconNameLength),
@@ -305,8 +308,10 @@ Scope {
     }
 
     function replaceExistingNotification(notification) {
-        const timeout = timeoutFor(notification);
-        const replacement = entryFor(notification, timeout > 0 ? Date.now() + timeout : 0);
+        const previous = allEntries.find(entry => entry.notification.id === notification.id);
+        const persistent = root.isAfk || !!(previous && previous.persistent);
+        const timeout = persistent ? 0 : timeoutFor(notification);
+        const replacement = entryFor(notification, timeout > 0 ? Date.now() + timeout : 0, previous);
         const replacedNotifications = [];
         let replaced = false;
         const visible = [];

@@ -48,7 +48,7 @@ ignore_shadows = "true" if os.environ.get("EXPECT_STANDARD") == "0" else "false"
     "return {shell={['layer-animation']='none'}, "
     "['window-rules']={{match={type='layer'},blur=24,['blur-ignore-shadows']=" + ignore_shadows + "}}}"
 )
-subprocess.run([str(source.parents[2] / "gnoblin/src/tools/gnoblinctl"), "script", "reload"], check=True)
+subprocess.run([str(source.parents[2] / "gnoblin/src/tools/gnoblinctl"), "reload"], check=True)
 qs = os.environ.get("QS_TEST_BIN", "qs")
 
 

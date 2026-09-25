@@ -6,9 +6,8 @@
 
 return {
     ["frame-renderers"] = {
-        -- Bingux's GTK/libadwaita renderer supplies the actual SSD titlebar.
-        -- The installer rewrites this placeholder to the selected prefix.
-        bingux = { "/usr/local/libexec/bingux/bingux-frame", "--compact" },
+        -- The installer exposes bingux-frame as a command on the user's PATH.
+        bingux = { "bingux-frame", "--compact" },
     },
     shortcuts = {
         {
@@ -72,7 +71,12 @@ return {
             match = {
                 layer = "^(bingux-[a-z0-9-]+|gnoblin-(shell-popup|dock-tooltip))$",
             },
-            -- Bingux owns this surface motion. Avoid two animations.
+            -- Bingux owns these surface transitions. Gnoblin's registered
+            -- animation system can preview layer-shell motion with
+            -- `gnoblinctl animation preview NAME --namespace NAME`, but keep
+            -- compositor motion disabled here to avoid running both systems.
+            -- Remove or narrow this rule explicitly if a panel opts in to a
+            -- named `layer-open` / `layer-close` compositor animation.
             animation = "none",
         },
         {

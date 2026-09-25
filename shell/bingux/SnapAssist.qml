@@ -203,7 +203,7 @@ Scope {
         }
         onFailed: message => {
             root.error = message;
-            console.warn("Snapping:", message);
+            ShellNotifications.send("Could not arrange windows", message);
         }
     }
     IpcHandler {

@@ -411,7 +411,7 @@ Scope {
             return ok({
                 apps: groups.map((group, index) => ({
                             id: group.id,
-                            name: group.desktopEntry ? group.desktopEntry.name : group.id,
+                            name: group.folder ? (dockView.folderById(group.id)?.name || "Folder") : group.desktopEntry ? group.desktopEntry.name : group.id,
                             index,
                             pinned: dockView.isPinned(group),
                             windows: group.windows.length
@@ -420,13 +420,25 @@ Scope {
         const group = groups.find(candidate => candidate.id === identity);
         if (!group)
             return fail("Dock item no longer exists");
-        if (["pin", "launch"].includes(action) && !group.desktopEntry)
+        if (action === "pin" && !group.desktopEntry)
             return fail("This app has no desktop entry");
+        if (action === "launch" && !group.desktopEntry && !group.folder)
+            return fail("This app has no desktop entry");
+        if (action === "unpin" && group.folder)
+            return fail("Ungroup the folder before unpinning its apps");
         if (action === "pin" || action === "unpin")
             dockView.setPinned(group, action === "pin");
-        else if (action === "launch")
-            dockView.launch(group, true);
+        else if (action === "launch") {
+            if (group.folder)
+                dockView.openFolder(group.id);
+            else
+                dockView.launch(group, true);
+        }
         else if (action === "activate") {
+            if (group.folder) {
+                dockView.openFolder(group.id);
+                return ok();
+            }
             const window = dockView.preferredWindow(group);
             if (window) {
                 window.minimized = false;

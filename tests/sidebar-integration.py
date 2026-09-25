@@ -120,7 +120,7 @@ export default function () {
 }
 """.replace("ACTION", action).replace("REPORT", json.dumps(str(report)))
     )
-    subprocess.run(["gnoblinctl", "script", "reload"], check=True, capture_output=True)
+    subprocess.run(["gnoblinctl", "reload"], check=True, capture_output=True)
     return json.loads(report.read_text())
 
 

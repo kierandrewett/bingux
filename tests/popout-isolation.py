@@ -21,8 +21,6 @@ gnoblin = repo.parent / "gnoblin"
 config = Path(os.environ["XDG_CONFIG_HOME"])
 scripts = config / "gnoblin/scripts"
 scripts.mkdir(parents=True, exist_ok=True)
-shutil.copy2(gnoblin / "src/scripts/compositor-bridge.js", scripts)
-shutil.copytree(gnoblin / "src/scripts/lib", scripts / "lib", dirs_exist_ok=True)
 qs = os.environ.get("QUICKSHELL_BIN", "qs")
 qml = config / "quickshell/bingux"
 shutil.copytree(repo / "shell/bingux", qml, dirs_exist_ok=True)
@@ -73,7 +71,7 @@ export default function enable(api) {
  });
  impl.export(Gio.DBus.session, '/org/gnoblin/PopoutTest');
  const name = Gio.bus_own_name(Gio.BusType.SESSION, 'org.gnoblin.PopoutTest', Gio.BusNameOwnerFlags.NONE, null, null, null);
- api._disposers.push(() => { impl.unexport(); Gio.bus_unown_name(name); keyboard.run_dispose(); pointer.run_dispose(); });
+ api.addCleanup(() => { impl.unexport(); Gio.bus_unown_name(name); keyboard.run_dispose(); pointer.run_dispose(); });
 }
 """)
 

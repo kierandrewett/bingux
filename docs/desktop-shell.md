@@ -1,5 +1,19 @@
 # Bingux desktop-shell contract
 
+## Surface animation ownership
+
+Bingux animates the contents and visibility of its own layer-shell surfaces.
+The Gnoblin drop-in therefore sets `animation = "none"` for Bingux layer
+namespaces, preventing a second compositor transition. Gnoblin's shared
+animation system supports layer-shell events and `gnoblinctl` previews; to
+opt in a specific panel, narrow or remove its `none` rule and attach a
+registered `layer-open` / `layer-close` animation. Keep the default exclusion
+for surfaces whose motion is already handled by Bingux.
+
+Use `gnoblinctl animation surfaces` to list live layer IDs and namespaces, then
+preview an opted-in transition with `gnoblinctl animation preview NAME
+--namespace NAMESPACE`.
+
 ## Scope
 
 The Bingux desktop shell is an optional profile feature. It supplies the top bar, dock, search surface, notification surface, and on-screen display for a Gnoblin session. The top bar includes clock, tray, metrics, privacy, input, network, audio, and power indicators. It is not a compositor and it does not modify GNOME Shell UI.

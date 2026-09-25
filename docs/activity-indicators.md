@@ -3,7 +3,8 @@
 Bingux follows GNOME Shell's panel activity design:
 
 - Recording: a filled Adwaita red button, elapsed `m:ss` time, and the rounded square stop glyph.
-- Screen sharing: a filled Adwaita orange button with screen-sharing and stop symbols.
+- Screen sharing: a filled Adwaita orange button with screen-sharing and stop symbols,
+  with a tooltip naming the sharing applications and showing their icons.
 - Camera: an orange `camera-web-symbolic` icon while GNOME reports a camera in use.
 - Microphone and location: orange symbolic icons with descriptive tooltips naming
   the requesting application when the desktop entry is available.
@@ -26,6 +27,12 @@ controls are disabled until the connection returns. Microphone and location
 visibility continue to come from the existing metrics service; location app
 details are carried in the persistent privacy snapshot from GeoClue
 authorization events.
+
+The video privacy helper reads camera streams and screen-sharing portal clients
+from the same PipeWire snapshot. Sharing app IDs resolve through the same desktop
+entry lookup as microphone app IDs. Camera portal clients and ordinary Flatpak
+audio clients are excluded. The compositor still controls sharing visibility and
+the stop action; app details disappear when sharing ends.
 
 The design references are GNOME Shell's `js/ui/status/remoteAccess.js`,
 `js/ui/status/camera.js`, and `data/theme/gnome-shell-sass/widgets/_panel.scss`.

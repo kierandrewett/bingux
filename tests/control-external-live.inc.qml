@@ -33,6 +33,7 @@
         property bool microphoneInUse: false
         property string microphoneTooltip: "Microphone in use"
         property bool screenSharing: true
+        property var screenSharingDetails: []
         property int stops: 0
         function stopSharing() {
             stops++;

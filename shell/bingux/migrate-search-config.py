@@ -8,7 +8,7 @@ import sys
 import tempfile
 
 
-def migrate(path, launcher):
+def migrate(path, launcher, steam_catalog):
     if not path.is_file() or path.is_symlink():
         return False
     try:
@@ -17,9 +17,9 @@ def migrate(path, launcher):
         return False
     if not isinstance(data, dict) or not isinstance(data.get("commands"), dict):
         return False
-    command = data["commands"].get("applicationLauncher")
-    if command == launcher:
-        return False
+    commands = data["commands"]
+    command = commands.get("applicationLauncher")
+    changed = False
     legacy_gtk = command in (["gtk-launch"], ["/usr/bin/gtk-launch"])
     legacy_helper = (
         isinstance(command, list)
@@ -28,9 +28,25 @@ def migrate(path, launcher):
         and Path(command[0]).name.startswith("python")
         and Path(command[1]).name == "launch-application.py"
     )
-    if not legacy_gtk and not legacy_helper:
+    if command != launcher and (legacy_gtk or legacy_helper):
+        commands["applicationLauncher"] = launcher
+        changed = True
+
+    old_steam_helper = (
+        isinstance(commands.get("steamGameCatalog"), list)
+        and len(commands["steamGameCatalog"]) in (2, 3)
+        and all(isinstance(part, str) for part in commands["steamGameCatalog"])
+        and Path(commands["steamGameCatalog"][0]).name.startswith("python")
+        and Path(commands["steamGameCatalog"][1]).name == "steam-games.py"
+        and commands["steamGameCatalog"][2:] in ([], ["--search"])
+    )
+    if "steamGameCatalog" not in commands or old_steam_helper:
+        if commands.get("steamGameCatalog") != steam_catalog:
+            commands["steamGameCatalog"] = steam_catalog
+            changed = True
+
+    if not changed:
         return False
-    data["commands"]["applicationLauncher"] = launcher
     mode = path.stat().st_mode & 0o777
     with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as stream:
         temporary = Path(stream.name)
@@ -47,9 +63,12 @@ def migrate(path, launcher):
 
 
 def main(argv):
-    if len(argv) != 4:
-        raise SystemExit("usage: migrate-search-config.py CONFIG INTERPRETER LAUNCHER")
-    migrate(Path(argv[1]), argv[2:])
+    if len(argv) != 5:
+        raise SystemExit("usage: migrate-search-config.py CONFIG INTERPRETER LAUNCHER STEAM_GAMES")
+    interpreter = argv[2]
+    launcher = [interpreter, argv[3]]
+    steam_catalog = [interpreter, argv[4], "--search"]
+    migrate(Path(argv[1]), launcher, steam_catalog)
 
 
 if __name__ == "__main__":

@@ -307,6 +307,7 @@ ShellRoot {
         readonly property string state: status.state || "idle"
         readonly property bool busy: status.busy || false
         readonly property bool recording: status.recording || false
+        readonly property bool cleanStop: status.cleanStop || false
         readonly property string elapsedText: status.elapsedText || "0:00"
         readonly property int countdown: status.countdown || 0
         onOpenedChanged: if (opened) {
@@ -323,9 +324,10 @@ ShellRoot {
                 action: "close"
             });
         }
-        function stop() {
+        function stop(hoveredAt = 0) {
             popouts.command("capture", {
-                action: "stop"
+                action: "stop",
+                hoveredAt: hoveredAt
             });
         }
     }
@@ -349,8 +351,13 @@ ShellRoot {
         }
     }
 
+    SessionActivity {
+        id: sessionActivity
+    }
+
     NotificationState {
         id: notificationState
+        isAfk: sessionActivity.isAfk
         doNotDisturb: ControlCentreServices.doNotDisturb
         dockView: dock
     }

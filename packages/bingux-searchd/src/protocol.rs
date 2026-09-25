@@ -206,7 +206,7 @@ impl DaemonResult {
     pub fn validate(&self) -> ProtocolResult<()> {
         validate_opaque_result_id(&self.result_id)?;
         if let Some(desktop_id) = &self.desktop_id {
-            validate_provider_result_id(desktop_id)?;
+            validate_desktop_id(desktop_id)?;
         }
         validate_provider_id(&self.provider_id)?;
         validate_result_display_text(&self.title, &self.subtitle, &self.icon)?;
@@ -915,6 +915,18 @@ fn validate_provider_result_id(value: &str) -> ProtocolResult<()> {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-'))
+    {
+        Ok(())
+    } else {
+        Err(ProtocolError::new(ProtocolErrorKind::InvalidIdentifier))
+    }
+}
+
+fn validate_desktop_id(value: &str) -> ProtocolResult<()> {
+    if !value.is_empty()
+        && value.len() <= 512
+        && !value.contains('/')
+        && !value.chars().any(char::is_control)
     {
         Ok(())
     } else {

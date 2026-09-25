@@ -122,7 +122,7 @@ class InstallTest(unittest.TestCase):
                 ],
                 check=True,
             )
-            for name in ("bingux", "binguxctl", "bingux-settings", "bingux-lock"):
+            for name in ("bingux", "binguxctl", "bingux-settings", "bingux-lock", "bingux-frame"):
                 launcher = stage / "usr/bin" / name
                 self.assertTrue(launcher.stat().st_mode & 0o111)
                 subprocess.run(["sh", "-n", str(launcher)], check=True)
@@ -143,7 +143,7 @@ class InstallTest(unittest.TestCase):
             self.assertIn('["ext-background-effect-v1"] = true', integration)
             self.assertIn('layer = "^bingux-capture$"', integration)
             self.assertIn('layer = "^bingux-capture-controls$"', integration)
-            self.assertIn('bingux = { "/usr/libexec/bingux/bingux-frame", "--compact" }', integration)
+            self.assertIn('bingux = { "bingux-frame", "--compact" }', integration)
             self.assertIn('mode = "auto"', integration)
             self.assertNotIn('["remove-csd"] = true', integration)
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Text/qmldir").is_file())
@@ -158,13 +158,13 @@ class InstallTest(unittest.TestCase):
             switcher_unit = (stage / "usr/lib/systemd/user/bingux-switcher-ui.service").read_text()
             self.assertIn("ExecStart=/usr/bin/bingux-search-ui", search_unit)
             self.assertIn("ExecStart=/usr/bin/bingux-switcher-ui", switcher_unit)
-            lock_unit = (stage / "usr/lib/systemd/user/bingux-lock.service").read_text()
-            self.assertIn("ExecStart=/usr/bin/bingux-lock", lock_unit)
-            self.assertNotIn("WantedBy=", lock_unit)
             for name in ("capture", "emoji"):
                 unit = (stage / f"usr/lib/systemd/user/bingux-{name}-ui.service").read_text()
                 self.assertIn(f"ExecStart=/usr/bin/bingux-{name}-ui", unit)
                 self.assertTrue((stage / f"usr/bin/bingux-{name}-ui").is_file())
+            lock_unit = (stage / "usr/lib/systemd/user/bingux-lock.service").read_text()
+            self.assertIn("ExecStart=/usr/bin/bingux-lock", lock_unit)
+            self.assertNotIn("WantedBy=", lock_unit)
             searchd_unit = (stage / "usr/lib/systemd/user/bingux-searchd.service").read_text()
             self.assertIn("ExecStart=/usr/libexec/bingux/search-service", searchd_unit)
             target_unit = (stage / "usr/lib/systemd/user/bingux.target").read_text()
@@ -219,7 +219,7 @@ class InstallTest(unittest.TestCase):
             self.assertTrue((prefix / "share/bingux/shell/ProfileSettings.qml").is_file())
             self.assertTrue((prefix / "share/gnoblin/conf.d/bingux.lua").is_file())
             user_integration = (prefix / "share/gnoblin/conf.d/bingux.lua").read_text()
-            self.assertIn(f'bingux = {{ "{prefix}/libexec/bingux/bingux-frame", "--compact" }}', user_integration)
+            self.assertIn('bingux = { "bingux-frame", "--compact" }', user_integration)
             self.assertIn('mode = "auto"', user_integration)
             self.assertNotIn('["remove-csd"] = true', user_integration)
             init = config / "gnoblin/init.lua"
@@ -231,6 +231,9 @@ class InstallTest(unittest.TestCase):
             launcher = home / ".local/bin/bingux"
             self.assertTrue(launcher.is_symlink())
             self.assertEqual(launcher.resolve(), (prefix / "bin/bingux").resolve())
+            frame_command = home / ".local/bin/bingux-frame"
+            self.assertTrue(frame_command.is_symlink())
+            self.assertEqual(frame_command.resolve(), (prefix / "bin/bingux-frame").resolve())
             self.assertTrue((home / ".local/bin/bingux-uninstall").is_symlink())
             unit = config / "systemd/user/bingux.service"
             self.assertTrue(unit.is_symlink())
@@ -251,6 +254,7 @@ class InstallTest(unittest.TestCase):
             )
             self.assertFalse(prefix.exists())
             self.assertFalse(launcher.exists())
+            self.assertFalse(frame_command.exists())
             self.assertFalse((home / ".local/bin/bingux-uninstall").exists())
             self.assertFalse(unit.exists())
             self.assertFalse((config / "bingux").exists())

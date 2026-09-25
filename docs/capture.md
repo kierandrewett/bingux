@@ -6,18 +6,28 @@ See [binguxctl](binguxctl.md) for the other shell commands.
 
 Alt+S opens Bingux Capture. Press it again to close the selector, cancel a pending
 capture or stop and save a recording. The top-bar stop button also ends recording.
-Enter captures; Escape closes the selector even after a button or dropdown gains
-focus. Drag a region, move its interior or resize its edges/corners. Arrow keys
+Enter captures; Escape returns from settings to capture controls, then a second
+Escape closes the selector, including when a button has focus. Holding Escape
+does not dismiss both pages. Drag a region, move its interior or resize its edges/corners. Arrow keys
 move the region; Shift moves ten pixels at a time. Reopening remembers the region.
 
-The compact toolbar has a grip on its left; drag it anywhere on the screen.
+Drag the compact toolbar by its background to move it around the screen.
 It fades in over 120 ms and dims to 25% while drawing, moving or resizing a region,
 then returns to full opacity on release. Reduced-motion mode skips these fades.
-Settings live in a separate popover; dropdowns reuse Bingux's ShellPopup,
-ActionButton and MenuNavigator rather than native ComboBox popups.
-Mode/target switches use the same SegmentedControl as the sidebar and Control
-Centre. Menus measure their field anchor when opened, match its width, and flip
-above it when there is insufficient room below.
+Settings replace the controls inside the same card, using Control Centre's
+160 ms page transition and 180 ms resize timing. Each page stays at its final
+screen position while the card reveals it; controls do not reflow or fly with
+the moving edge. Outgoing controls fade before incoming controls appear.
+Changing direction mid-transition continues from the current size. Reduced
+motion skips the transition. Back is a fixed 36-pixel square.
+Recording settings start with independent System audio and Microphone switches.
+Both default to off. Enable either source or both in settings.
+Microphone uses the default input device. Encoder and capture
+backend choices are under Advanced. Screenshot settings hide video options and
+show image quality only for JPEG.
+Settings use Control Centre's SettingsRow switches and inline SegmentedControl
+choices, without nested popovers. Save to opens a folder chooser; Reset restores
+the default capture folder.
 
 On screencopy-capable desktops, the selector freezes full-resolution frames both
 with and without the OS cursor. The cursor toggle switches the preview variant.
@@ -25,6 +35,7 @@ Existing menus, including Search, are dismissed only after the frozen frame has
 arrived. Capture does not steal focus and start their exit animation first.
 Zero-delay region/screen screenshots are cropped from that exact frozen image;
 recordings and delayed screenshots capture live after the selector closes.
+Recording mode also shows the live desktop while framing the shot.
 PPM frames avoid PNG compression during opening. The measured open-state round
 trip on the development desktop fell from about 380 ms to 150 ms, including IPC.
 If freezing is unavailable, the selector explicitly labels its live-preview fallback.
@@ -34,6 +45,14 @@ Window mode uses the desktop's permission picker and captures the selected windo
 not a fixed rectangle that happens to contain it. Availability is detected from
 the portal. Screen selection is per monitor.
 
+While recording a region, its white outline and rounded markers remain visible.
+The area outside is covered with 20% black, with the top-bar controls left clear.
+The guide is input-transparent and its border/markers sit outside the recorded
+crop. It uses the same screen-aligned, unblurred compositor policy as selection.
+Hovering the top-bar Stop button marks the intended ending; clicking trims the
+hover/click tail with ffmpeg. Leaving the button cancels that mark. A failed trim
+preserves the original recording and reports its path.
+
 Options persist in `$XDG_CONFIG_HOME/bingux/capture.ini` (normally
 `~/.config/bingux/capture.ini`): cursor visibility, delay, PNG/JPEG, quality,
 clipboard copying, output directory, 15/30/60 fps, resolution limit, system/mic
@@ -41,10 +60,12 @@ audio, encoder and backend. Audio defaults off. Screenshots default to
 Pictures/Screenshots; recordings to Videos/Recordings, respecting XDG user dirs.
 
 Return and keypad Enter activate Capture after a toolbar control takes focus.
-While settings are open, Enter remains available to fields and menus.
+While settings are open, Enter remains available to settings controls.
 
 Saved recordings use normal desktop notifications with Open, Save As and Discard
-actions. Successful saves never display a separate capture feedback panel.
+actions. Errors also use the normal notification path, including worker failures
+and any preserved partial-recording path. There is no separate capture feedback
+panel, and replaying an error after a UI reload does not notify it again.
 Saved screenshots send a normal desktop notification with an aspect-correct
 image preview and standard icon-labelled Copy, Save As and Discard buttons.
 Screenshot copying publishes the final PNG/JPEG through the native Wayland
@@ -105,15 +126,25 @@ python3 tests/capture-shortcut-live.py
 python3 tests/capture-drag-live.py
 # Opt-in: captures a real 640x360 desktop region; no audio. Outputs in /tmp.
 python3 tests/capture-live.py
+# Real recording guide, exact scrim opacity, top-bar stop and hover-tail trim:
+python3 tests/capture-recording-controls-live.py
+# Also records the default system audio and microphone devices for three seconds
+# each, then both together. Checks AAC tracks, duration and full decode:
+python3 tests/capture-live.py --audio
 qs -p shell/bingux/CapturePreviewTest.qml
 # Set BINGUX_CAPTURE_SETTINGS_PATH to a temporary file:// path and
 # BINGUX_CAPTURE_TEST_RESULTS to a temporary output path for interaction tests:
 qs -p shell/bingux/CaptureInteractionTest.qml
+# With the same temporary settings/report environment, test audio switches,
+# Advanced settings, keyboard control, resize and Escape without recording:
+qs -p shell/bingux/CaptureSettingsTest.qml
 ```
 
 Live checks cover CPU and automatic H.264 recording duration/full decode, PNG and
-JPEG on Gnoblin. Portal window selection, microphone/system audio, mixed-DPI and
-other compositors still require interactive platform coverage; pure tests cover
+JPEG on Gnoblin. The opt-in audio check covers system, microphone and mixed AAC
+tracks with matching video duration. It does not establish microphone speech
+quality. Portal window selection, mixed-DPI and other compositors still require
+interactive platform coverage; pure tests cover
 HiDPI crop arithmetic and unavailable hardware fallback.
 
 Successful screenshots play the GNOME `screen-capture` shutter event through
