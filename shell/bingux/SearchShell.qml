@@ -18,6 +18,7 @@ ShellRoot {
                 id: "search",
                 accelerator: "Super",
                 hold: 0,
+                trigger: "release",
                 captureInput: true
             }
         ]
