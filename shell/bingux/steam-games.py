@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import re
 import struct
+import sys
 
 
 VDF_TOKEN = re.compile(r'"((?:\\.|[^"\\])*)"|([{}])')
@@ -229,5 +230,24 @@ def installed_games():
     return list(result.values())
 
 
+def searchable_games(games):
+    """Exclude Steam compatibility runtimes and redistributables from app search."""
+    infrastructure_prefixes = (
+        "proton",
+        "steam linux runtime",
+        "steamworks common redistributables",
+    )
+    return [
+        game
+        for game in games
+        if not game["name"].strip().casefold().startswith(infrastructure_prefixes)
+    ]
+
+
 if __name__ == "__main__":
-    print(json.dumps(installed_games(), ensure_ascii=False, separators=(",", ":")))
+    games = installed_games()
+    if sys.argv[1:] == ["--search"]:
+        games = searchable_games(games)
+    elif sys.argv[1:]:
+        raise SystemExit("usage: steam-games.py [--search]")
+    print(json.dumps(games, ensure_ascii=False, separators=(",", ":")))

@@ -29,7 +29,7 @@ It is not automatically enabled. Add to your Gnoblin Lua config (adjust PREFIX):
 
 ```lua
 ["frame-renderers"] = {
-    bingux = { "/usr/local/libexec/bingux/bingux-frame", "--compact" },
+    bingux = { "bingux-frame", "--compact" },
 },
 ["window-rules"] = {
     { match = { ["app-id"] = "^spotify$" },

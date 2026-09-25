@@ -1,9 +1,14 @@
 use anyhow::{Context, Result};
+use gio::{AppInfoMonitor, DesktopAppInfo, prelude::*};
 use ignore::WalkBuilder;
 use rusqlite::{Connection, OpenFlags, params, types::ValueRef};
+use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::env;
-use std::fs::{self, File};
+use std::fs;
+#[cfg(test)]
+use std::fs::File;
+#[cfg(test)]
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -19,12 +24,14 @@ use crate::protocol::{ProviderResult, ResultKind};
 const MAX_APPLICATION_INDEX_ENTRIES: usize = 4_096;
 /// Upper bound for cached file entries, preventing an unbounded configured root from consuming memory.
 const MAX_FILE_INDEX_ENTRIES: usize = 20_000;
+#[cfg(test)]
 /// Upper bound for all filesystem entries inspected during one application-index refresh.
 const MAX_APPLICATION_WALK_ENTRIES: usize = 32_768;
 /// Upper bound for all filesystem entries inspected during one file-index refresh.
 const MAX_FILE_WALK_ENTRIES: usize = 131_072;
-const APPLICATION_INDEX_REFRESH_INTERVAL: Duration = Duration::from_secs(900);
+const APPLICATION_INDEX_REFRESH_INTERVAL: Duration = Duration::from_secs(300);
 const FILE_INDEX_REFRESH_INTERVAL: Duration = Duration::from_secs(300);
+#[cfg(test)]
 const MAX_DESKTOP_FILE_BYTES: u64 = 64 * 1024;
 const MAX_DISPLAY_BYTES: usize = 16 * 1024;
 const MAX_RESULT_ID_BYTES: usize = 128;
@@ -82,6 +89,9 @@ fn simple_path_score(score: f64, path: &Path) -> f64 {
 pub struct Candidate {
     pub provider_id: String,
     pub result: ProviderResult,
+    /// Original desktop-entry ID for launch and dock correlation. This stays
+    /// separate from the bounded opaque provider result ID.
+    pub desktop_id: Option<String>,
     pub activation: Activation,
 }
 
@@ -132,6 +142,7 @@ struct SqliteSource {
     activation_command: Vec<String>,
 }
 
+#[cfg(test)]
 struct DesktopEntry {
     name: String,
     comment: String,
@@ -152,18 +163,15 @@ impl LocalProviders {
         let applications = Arc::new(RwLock::new(Vec::new()));
         let files = Arc::new(RwLock::new(Vec::new()));
         if start_index_workers {
-            let application_directories = xdg_application_directories();
             let application_launcher = config.commands.application_launcher.clone();
+            let steam_game_catalog = config.commands.steam_game_catalog.clone();
             let file_roots = config.file_roots.clone();
             let file_opener = config.commands.file_opener.clone();
             let progressive_files = Arc::clone(&files);
 
-            start_index_worker(
-                "bingux-search-app-index",
-                Arc::clone(&applications),
-                APPLICATION_INDEX_REFRESH_INTERVAL,
-                move || index_applications(&application_directories, &application_launcher),
-            )
+            start_application_index_worker(Arc::clone(&applications), move || {
+                index_applications(&application_launcher, &steam_game_catalog)
+            })
             .context("could not start the application search index worker")?;
             start_index_worker(
                 "bingux-search-file-index",
@@ -406,6 +414,7 @@ fn query_os_index(query: &SearchQuery, roots: &[PathBuf], opener: &[String]) -> 
             candidates.push(Candidate {
                 provider_id: "files".to_owned(),
                 result,
+                desktop_id: None,
                 activation: append_activation(opener, &path_text),
             });
         }
@@ -441,6 +450,7 @@ fn engine_candidate(
             .to_owned(),
             score: 0.1,
         },
+        desktop_id: None,
         activation: append_activation(opener, &engine.search_url(query)),
     };
     candidate.result.validate().ok()?;
@@ -459,6 +469,7 @@ fn quick_chat_candidate(query: &str) -> Option<Candidate> {
             icon: "dialog-question-symbolic".to_owned(),
             score: 1.0,
         },
+        desktop_id: None,
         activation: Activation::Chat { prompt },
     })
 }
@@ -490,6 +501,60 @@ fn start_index_worker(
             }
         })?;
     Ok(())
+}
+
+fn start_application_index_worker(
+    index: Arc<RwLock<Vec<IndexedCandidate>>>,
+    indexer: impl Fn() -> Vec<IndexedCandidate> + Send + Sync + 'static,
+) -> Result<()> {
+    let indexer: Arc<dyn Fn() -> Vec<IndexedCandidate> + Send + Sync> = Arc::new(indexer);
+    thread::Builder::new()
+        .name("bingux-search-app-index".to_owned())
+        .spawn(move || {
+            let fallback_index = Arc::clone(&index);
+            let fallback_indexer = Arc::clone(&indexer);
+            let context = gio::glib::MainContext::new();
+            let result = context.with_thread_default(|| {
+                let monitor = AppInfoMonitor::get();
+                let changed_index = Arc::clone(&index);
+                let changed_indexer = Arc::clone(&indexer);
+                let _monitor_handler = monitor.connect_changed(move |_| {
+                    publish_application_index(&changed_index, changed_indexer.as_ref());
+                });
+
+                let periodic_index = Arc::clone(&index);
+                let periodic_indexer = Arc::clone(&indexer);
+                let refresh_seconds = APPLICATION_INDEX_REFRESH_INTERVAL.as_secs() as u32;
+                let _refresh_source =
+                    gio::glib::timeout_add_seconds_local(refresh_seconds, move || {
+                        publish_application_index(&periodic_index, periodic_indexer.as_ref());
+                        gio::glib::ControlFlow::Continue
+                    });
+
+                // Subscribe before taking the initial snapshot so app installs
+                // racing daemon startup are picked up by the monitor.
+                publish_application_index(&index, indexer.as_ref());
+                gio::glib::MainLoop::new(Some(&context), false).run();
+            });
+            if let Err(error) = result {
+                eprintln!("[bingux-searchd] application monitor failed: {error}");
+                loop {
+                    publish_application_index(&fallback_index, fallback_indexer.as_ref());
+                    thread::sleep(APPLICATION_INDEX_REFRESH_INTERVAL);
+                }
+            }
+        })?;
+    Ok(())
+}
+
+fn publish_application_index(
+    index: &Arc<RwLock<Vec<IndexedCandidate>>>,
+    indexer: &(dyn Fn() -> Vec<IndexedCandidate> + Send + Sync),
+) {
+    let indexed = indexer();
+    if let Ok(mut current) = index.write() {
+        *current = indexed;
+    }
 }
 
 fn scored_index_candidates(
@@ -572,11 +637,17 @@ fn rank_and_limit(candidates: &mut Vec<Candidate>, limit: usize) {
     candidates.retain(|candidate| {
         let count = counts.entry(candidate.provider_id.clone()).or_insert(0);
         *count += 1;
-        *count <= 5
+        *count
+            <= if candidate.provider_id == "applications" {
+                limit
+            } else {
+                5
+            }
     });
     candidates.truncate(limit);
 }
 
+#[cfg(test)]
 fn xdg_application_directories() -> Vec<PathBuf> {
     let mut directories = Vec::new();
     if let Some(data_home) = env::var_os("XDG_DATA_HOME").filter(|value| !value.is_empty()) {
@@ -606,6 +677,7 @@ fn xdg_application_directories() -> Vec<PathBuf> {
     directories
 }
 
+#[cfg(test)]
 fn filtered_walk(root: &Path) -> ignore::Walk {
     let mut builder = WalkBuilder::new(root);
     builder
@@ -615,6 +687,190 @@ fn filtered_walk(root: &Path) -> ignore::Walk {
 }
 
 fn index_applications(
+    application_launcher: &[String],
+    steam_game_catalog: &[String],
+) -> Vec<IndexedCandidate> {
+    let mut desktop_apps: Vec<_> = gio::AppInfo::all()
+        .into_iter()
+        .filter(|app| app.should_show())
+        .filter_map(|app| app.downcast::<DesktopAppInfo>().ok())
+        .collect();
+    desktop_apps.sort_by(|left, right| left.id().cmp(&right.id()));
+
+    let mut applications = BTreeMap::new();
+    let mut steam_app_ids = BTreeSet::new();
+    for app in desktop_apps {
+        if applications.len() >= MAX_APPLICATION_INDEX_ENTRIES {
+            break;
+        }
+        let Some(desktop_id) = app.id().map(|id| id.to_string()) else {
+            continue;
+        };
+        let application_key = format!("desktop:{desktop_id}");
+        if !is_safe_desktop_id(&desktop_id) || applications.contains_key(&application_key) {
+            continue;
+        }
+
+        let title = app.name().to_string();
+        if title.is_empty() || !safe_display_text(&title) {
+            continue;
+        }
+        let comment = app
+            .description()
+            .map(|value| value.to_string())
+            .unwrap_or_default();
+        let icon = app
+            .string("Icon")
+            .map(|value| value.to_string())
+            .unwrap_or_default();
+        let exec = app
+            .string("Exec")
+            .map(|value| value.to_string())
+            .unwrap_or_default();
+        let steam_app_id = steam_app_id_from_exec(&exec);
+        let mut search_fields = vec![title.clone(), desktop_id.clone(), comment.clone(), exec];
+        if let Some(generic_name) = app.generic_name() {
+            search_fields.push(generic_name.to_string());
+        }
+        search_fields.extend(
+            app.keywords()
+                .into_iter()
+                .map(|keyword| keyword.to_string()),
+        );
+        if let Some(full_name) = app.locale_string("X-GNOME-FullName") {
+            search_fields.push(full_name.to_string());
+        }
+        let normalized_title = title.to_lowercase();
+        let normalized_search = search_fields.join(" ").to_lowercase();
+        let result_id = format!("app-{:04}", applications.len());
+        let candidate = Candidate {
+            provider_id: "applications".to_owned(),
+            result: ProviderResult {
+                result_id,
+                kind: ResultKind::Application,
+                title,
+                subtitle: if safe_display_text(&comment) {
+                    comment
+                } else {
+                    String::new()
+                },
+                icon: if safe_display_text(&icon) {
+                    icon
+                } else {
+                    String::new()
+                },
+                score: 0.0,
+            },
+            desktop_id: Some(desktop_id.clone()),
+            activation: append_activation(application_launcher, &desktop_id),
+        };
+        if candidate.result.validate().is_ok() {
+            if let Some(app_id) = steam_app_id {
+                steam_app_ids.insert(app_id);
+            }
+            applications.insert(
+                application_key,
+                IndexedCandidate {
+                    candidate,
+                    normalized_title,
+                    normalized_search,
+                },
+            );
+        }
+    }
+
+    for game in installed_steam_games(steam_game_catalog) {
+        if applications.len() >= MAX_APPLICATION_INDEX_ENTRIES {
+            break;
+        }
+        if steam_app_ids.contains(&game.app_id)
+            || !game.app_id.bytes().all(|byte| byte.is_ascii_digit())
+            || game.name.trim().is_empty()
+            || !safe_display_text(&game.name)
+        {
+            continue;
+        }
+        let result_id = format!("steam_app_{}", game.app_id);
+        let icon = if safe_display_text(&game.icon_path) && !game.icon_path.is_empty() {
+            game.icon_path
+        } else {
+            "steam".to_owned()
+        };
+        let normalized_title = game.name.to_lowercase();
+        let normalized_search = format!(
+            "{} steam game steam://rungameid/{}",
+            normalized_title, game.app_id
+        );
+        let candidate = Candidate {
+            provider_id: "applications".to_owned(),
+            result: ProviderResult {
+                result_id: result_id.clone(),
+                kind: ResultKind::Application,
+                title: game.name,
+                subtitle: "Steam game".to_owned(),
+                icon,
+                score: 0.0,
+            },
+            desktop_id: None,
+            activation: append_activation(application_launcher, &result_id),
+        };
+        if candidate.result.validate().is_ok() {
+            steam_app_ids.insert(game.app_id.clone());
+            applications.insert(
+                format!("steam:{result_id}"),
+                IndexedCandidate {
+                    candidate,
+                    normalized_title,
+                    normalized_search,
+                },
+            );
+        }
+    }
+
+    applications.into_values().collect()
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SteamGameEntry {
+    app_id: String,
+    name: String,
+    #[serde(default)]
+    icon_path: String,
+}
+
+fn installed_steam_games(command: &[String]) -> Vec<SteamGameEntry> {
+    let Some(program) = command.first() else {
+        return Vec::new();
+    };
+    let Ok(output) = Command::new(program).args(&command[1..]).output() else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    serde_json::from_slice(&output.stdout).unwrap_or_default()
+}
+
+fn steam_app_id_from_exec(exec: &str) -> Option<String> {
+    let lower = exec.to_ascii_lowercase();
+    let start = lower.find("steam://rungameid/")? + "steam://rungameid/".len();
+    let digits: String = lower[start..]
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    (!digits.is_empty()).then_some(digits)
+}
+
+fn is_safe_desktop_id(desktop_id: &str) -> bool {
+    !desktop_id.is_empty()
+        && desktop_id.len() <= 512
+        && !desktop_id.contains('/')
+        && !desktop_id.chars().any(char::is_control)
+}
+
+#[cfg(test)]
+fn index_applications_from_files(
     directories: &[PathBuf],
     application_launcher: &[String],
 ) -> Vec<IndexedCandidate> {
@@ -670,6 +926,7 @@ fn index_applications(
                     icon: entry.icon,
                     score: 0.0,
                 },
+                desktop_id: Some(desktop_id.clone()),
                 activation: append_activation(application_launcher, &desktop_id),
             };
             if candidate.result.validate().is_ok() {
@@ -688,6 +945,7 @@ fn index_applications(
     applications.into_values().collect()
 }
 
+#[cfg(test)]
 fn parse_desktop_entry(contents: &str) -> Option<DesktopEntry> {
     let mut in_desktop_entry = false;
     let mut name = None;
@@ -743,6 +1001,7 @@ fn parse_desktop_entry(contents: &str) -> Option<DesktopEntry> {
     })
 }
 
+#[cfg(test)]
 fn desktop_id_from_relative_path(path: &Path) -> Option<String> {
     let path = path.to_str()?;
     let stem = path.strip_suffix(".desktop")?;
@@ -849,6 +1108,7 @@ fn index_files_with_progress(
                     },
                     score: 0.0,
                 },
+                desktop_id: None,
                 activation: append_activation(file_opener, path_text),
             };
             if candidate.result.validate().is_ok() {
@@ -1031,6 +1291,7 @@ fn query_sqlite_source(
                 icon: "database".to_owned(),
                 score,
             },
+            desktop_id: None,
             activation: sqlite_activation(&source.activation_command, &result_id),
         };
         if candidate.result.validate().is_ok() {
@@ -1102,6 +1363,7 @@ fn calculation_candidate(query: &str) -> Option<Candidate> {
             icon: "accessories-calculator".to_owned(),
             score: 1.0,
         },
+        desktop_id: None,
         activation: Activation::Copy { text: value },
     };
     candidate.result.validate().ok()?;
@@ -1248,6 +1510,7 @@ impl<'a> ArithmeticParser<'a> {
         self.input.get(self.position).copied()
     }
 }
+#[cfg(test)]
 fn read_bounded_text(path: &Path, max_bytes: u64) -> Option<String> {
     let mut file = File::open(path).ok()?;
     let mut contents = String::new();
@@ -1285,7 +1548,7 @@ mod tests {
     use super::{
         Activation, Candidate, append_activation, bounded_sqlite_optional_text,
         bounded_sqlite_text, calculation_candidate, desktop_id_from_relative_path,
-        evaluate_calculation, file_icon, index_applications, parse_desktop_entry,
+        evaluate_calculation, file_icon, index_applications_from_files, parse_desktop_entry,
         quick_chat_candidate, rank_and_limit, sqlite_activation, web_candidate,
     };
     use crate::protocol::{ProviderResult, ResultKind};
@@ -1303,6 +1566,7 @@ mod tests {
                 icon: String::new(),
                 score,
             },
+            desktop_id: None,
             activation: Activation::None,
         }
     }
@@ -1497,7 +1761,7 @@ mod tests {
         symlink(&source, application_directory.join("exported.desktop"))
             .expect("create desktop entry symlink");
 
-        let indexed = index_applications(
+        let indexed = index_applications_from_files(
             std::slice::from_ref(&application_directory),
             &["/usr/bin/gtk-launch".to_owned()],
         );
@@ -1773,6 +2037,7 @@ fn conversion_candidate(query: &str) -> Option<Candidate> {
             icon: "accessories-calculator".into(),
             score: 1.0,
         },
+        desktop_id: None,
         activation: Activation::Copy { text },
     })
 }

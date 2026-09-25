@@ -108,6 +108,7 @@ def migrate_legacy_search_launcher(prefix):
             str(path),
             str(Path(sys.executable)),
             str(prefix / "share/bingux/shell/launch-application.py"),
+            str(prefix / "share/bingux/shell/steam-games.py"),
         ],
         check=True,
     )
@@ -169,10 +170,6 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
             # guaranteed to be present in the compositor's PATH.
             generated = path.read_text()
             generated = generated.replace('"binguxctl"', json.dumps(str(prefix / "bin/binguxctl")))
-            generated = generated.replace(
-                '"/usr/local/libexec/bingux/bingux-frame"',
-                json.dumps(str(prefix / "libexec/bingux/bingux-frame")),
-            )
             destination_path = target(destination)
             destination_path.parent.mkdir(parents=True, exist_ok=True)
             destination_path.write_text(generated)
@@ -222,6 +219,7 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         "bingux-lock": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "LockShell.qml")) + ' "$@"\n',
         "bingux-settings": "exec " + shlex.quote(str(prefix / "libexec/bingux/bingux-settings")) + ' "$@"\n',
         "binguxctl": "exec python3 " + shlex.quote(str(prefix / "libexec/bingux/binguxctl.py")) + ' "$@"\n',
+        "bingux-frame": "exec " + shlex.quote(str(prefix / "libexec/bingux/bingux-frame")) + ' "$@"\n',
     }
     if managed:
         wrappers["bingux-uninstall"] = (
@@ -247,6 +245,7 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
                     # Use the interpreter that ran this installer so the command
                     # remains valid when the user does not have python3 on PATH.
                     "applicationLauncher": [str(Path(sys.executable)), str(shell / "launch-application.py")],
+                    "steamGameCatalog": [str(Path(sys.executable)), str(shell / "steam-games.py"), "--search"],
                     "fileOpener": ["/usr/bin/xdg-open"],
                     "clipboard": ["/usr/bin/wl-copy"],
                 },
@@ -260,6 +259,7 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     search_service = target(prefix / "libexec/bingux/search-service")
     search_migrator = prefix / "share/bingux/shell/migrate-search-config.py"
     application_launcher = prefix / "share/bingux/shell/launch-application.py"
+    steam_game_catalog = prefix / "share/bingux/shell/steam-games.py"
     write_launcher(
         search_service,
         "#!/bin/sh\nset -eu\n"
@@ -274,6 +274,8 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         + shlex.quote(str(Path(sys.executable)))
         + " "
         + shlex.quote(str(application_launcher))
+        + " "
+        + shlex.quote(str(steam_game_catalog))
         + "\n"
         + "exec "
         + shlex.quote(str(prefix / "bin/bingux-searchd"))
@@ -301,9 +303,10 @@ def integration_paths(prefix, managed=False):
         "bingux-switcher-ui",
         "bingux-emoji-ui",
         "bingux-capture-ui",
-        "bingux-settings",
         "bingux-lock",
+        "bingux-settings",
         "binguxctl",
+        "bingux-frame",
         "bingux-clipboard-paste",
     )
     if managed:

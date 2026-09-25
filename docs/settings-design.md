@@ -77,3 +77,12 @@ DesktopSettings owns the Desktop overview, Top Bar, Sidebar and Control Centre
 pages. Optional controls use the existing desktop.controlCentre schema. Sidebar
 panel changes preserve the rest of the layout and require one panel to remain.
 Search providers and website engines have separate pages under Search.
+
+## Shell messages
+
+Operational failures use `ShellNotifications.send(title, body, options)` and the
+standard desktop notification server. Do not create a separate error window or
+reopen a closed panel only to display a message. App-launch notifications can
+include `retryDesktopId` to retain a Retry action. Capture errors include the
+path of any preserved recording. Field validation stays beside its field;
+permission prompts, file choosers and other dialogs requiring input remain dialogs.

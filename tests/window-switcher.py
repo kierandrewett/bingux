@@ -17,8 +17,6 @@ repo = bingux.parent / "gnoblin"
 qs = os.environ.get("QUICKSHELL_BIN", "qs")
 scripts = Path(os.environ["XDG_CONFIG_HOME"]) / "gnoblin/scripts"
 scripts.mkdir(parents=True, exist_ok=True)
-shutil.copy2(repo / "src/scripts/compositor-bridge.js", scripts)
-shutil.copytree(repo / "src/scripts/lib", scripts / "lib", dirs_exist_ok=True)
 (scripts / "switcher-test.js").write_text("""
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -69,7 +67,7 @@ export default function enable(api) {
  });
  impl.export(Gio.DBus.session, '/org/gnoblin/SwitcherTest');
  const name = Gio.bus_own_name(Gio.BusType.SESSION, 'org.gnoblin.SwitcherTest', Gio.BusNameOwnerFlags.NONE, null, null, null);
- api._disposers.push(() => {
+ api.addCleanup(() => {
   global.display.disconnect(focus); impl.unexport(); Gio.bus_unown_name(name);
  });
 }
@@ -77,7 +75,7 @@ export default function enable(api) {
 
 
 def reload():
-    subprocess.run([str(repo / "src/tools/gnoblinctl"), "script", "reload"], check=True)
+    subprocess.run([str(repo / "src/tools/gnoblinctl"), "reload"], check=True)
 
 
 def call(method, *args):

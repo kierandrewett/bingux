@@ -18,7 +18,7 @@ Emoji accepts input at the compositor anchor while accessibility caret lookup
 runs separately. The capture toolbar has no entrance fade; its fresh frozen
 preview still requires compositor readback before it can open.
 
-Gnoblin's `src/scripts/lib/window-switcher-fallback.js` keeps Alt+Tab and
+Gnoblin's built-in compositor fallback keeps Alt+Tab and
 Super+Tab registered when no UI client is connected. It keeps a window list
 and selection for each gesture. On modifier release, a working UI can commit
 its selection immediately. If it does not respond within 80 ms, the script
@@ -116,24 +116,21 @@ to 500. Invalid settings retain the last valid configuration. The native
 package installs this file with these defaults; copy it to
 `$XDG_CONFIG_HOME/bingux/switcher.json` to change them.
 
-The Gnoblin package also installs the compositor's `compositor-bridge.js` script and clears
-the four GNOME `switch-applications` / `switch-windows` forward and backward
-bindings. For a manual installation, link the bridge into
-`~/.config/gnoblin/scripts/`, run `gnoblinctl reload`, and clear these
-keys in Gnoblin's Lua configuration:
+The compositor bridge is built into Gnoblin and starts with the session. Bingux
+does not install a bridge script. Clear the four GNOME switcher bindings in
+Gnoblin's Lua configuration so they do not compete with Bingux:
 
 ```lua
-local g = require("gnoblin")
-g.set({
+gnoblin.configure {
     keybindings = {
         wm = {
-            ["switch-applications"] = {},
-            ["switch-applications-backward"] = {},
-            ["switch-windows"] = {},
-            ["switch-windows-backward"] = {},
+            switch_applications = {},
+            switch_applications_backward = {},
+            switch_windows = {},
+            switch_windows_backward = {},
         },
     },
-})
+}
 ```
 
 Use the same backdrop blur as Bingux popouts, with compositor animations
@@ -141,21 +138,22 @@ disabled so shortcut presentation remains immediate. The switcher publishes
 its panel bounds through `BlurRegion` to limit the blur work:
 
 ```lua
-local g = require("gnoblin")
-g.set({
-    ["window-rules"] = {{
+gnoblin.configure {
+    window_rules = {{
         match = { layer = "^bingux-switcher$" },
         animation = "none",
         opacity = 1.0,
-        ["blur-ignore-shadows"] = true,
+        blur_ignore_shadows = true,
         blur = 24,
     }},
-})
+}
 ```
 
 `ShortcutSession.qml` is reusable by other Quickshell components. It maintains
 a persistent socket, registers accelerators, forwards input events, and
-reconnects after script reload. It contains no switcher ordering or UI.
+reconnects after a compositor restart or disconnect. The built-in bridge stays
+available during a user-script soft reload. The component contains no switcher
+ordering or UI.
 
 ## Validation
 

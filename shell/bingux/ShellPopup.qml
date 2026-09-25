@@ -75,6 +75,7 @@ Scope {
     property real preferredY: anchorItem ? (anchorAbove ? anchorTop - popupHeight - Theme.gap : anchorPosition.y + Theme.gap) : Theme.barHeight + Theme.gap
     property bool surfaceVisible: true
     property color surfaceColor: Theme.popupSurface
+    property color outlineColor: Theme.outline
     property real cornerRadius: Theme.cardRadius
     property int contentPadding: Theme.popupPadding
     property real revealOriginX: card.width / 2
@@ -93,6 +94,9 @@ Scope {
     property bool retained: false
     readonly property bool compositorClose: !hostItem && !keepWindowAlive && !motionSource && PopupTransitions.matches(closeMotion, closeEasing)
     readonly property bool compositorOpen: !hostItem && !keepWindowAlive && PopupTransitions.fadesIn()
+
+    onKeyboardInteractiveChanged: if (visible)
+        dismissWindow.visible = !hostItem && keyboardInteractive
 
     onVisibleChanged: {
         reveal.stop();
@@ -273,7 +277,7 @@ Scope {
                     height: card.height
                     radius: root.cornerRadius
                     color: root.surfaceVisible ? root.surfaceColor : "transparent"
-                    border.color: Theme.outline
+                    border.color: root.outlineColor
                     border.width: root.surfaceVisible ? 1 : 0
                     PanelOutline {
                         surface: material

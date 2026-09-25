@@ -237,8 +237,7 @@ ShellPopup {
         inserting = false;
         keyboardInteractive = true;
         error = message;
-        visible = true;
-        focusInput.restart();
+        ShellNotifications.send("Could not insert emoji", message);
     }
     function insertionFinished() {
         pendingText = "";

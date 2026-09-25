@@ -258,8 +258,7 @@ ShellPopup {
         desktopId: "org.gnome.Calendar"
         onLaunchStarted: desktopId => root.applicationLaunchStarted(desktopId)
         onFailed: message => {
-            root.eventSource.error = message;
-            root.visible = true;
+            ShellNotifications.send("Could not open Calendar", message, {retryDesktopId: calendarLauncher.desktopId});
         }
     }
     function eventCommand(event) {

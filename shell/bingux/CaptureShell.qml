@@ -26,13 +26,14 @@ ShellRoot {
             }
         }
         state: ({
-                visible: capture.opened,
+                visible: capture.opened && !capture.pickingFolder,
                 surface: "bingux-capture",
                 companions: ["bingux-capture-controls"],
                 companionsAbove: true,
                 state: capture.state,
                 busy: capture.busy,
                 recording: capture.recording,
+                cleanStop: !!capture.capabilities.cleanStop,
                 elapsedText: capture.elapsedText,
                 countdown: capture.countdown
             })
@@ -42,7 +43,7 @@ ShellRoot {
             else if (command.action === "close")
                 capture.close();
             else if (command.action === "stop")
-                capture.stop();
+                capture.stop(command.hoveredAt || 0);
         }
     }
     CaptureTool {

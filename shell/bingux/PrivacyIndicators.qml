@@ -58,6 +58,7 @@ Item {
             trailingIcon: "screencast-stop-symbolic"
             interactive: root.screenSharing && root.privacyState.available
             tooltip: root.screenSharing ? "Stop screen sharing" : "Screen sharing ended"
+            tooltipDetails: root.screenSharing ? root.privacyState.screenSharingDetails : []
             onClicked: root.privacyState.stopSharing()
         }
         Indicator {

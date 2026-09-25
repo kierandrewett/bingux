@@ -16,6 +16,35 @@ spec.loader.exec_module(capture)
 
 
 class CapturePolicy(unittest.TestCase):
+    def test_stop_only_trims_a_valid_hover_in_this_recording(self):
+        capture.Gst.init(None)
+        for hovered, expected in ((103000, 3), (0, None), (99000, None), (111000, None), (float("nan"), None)):
+            with self.subTest(hovered=hovered):
+                worker = capture.Capture.__new__(capture.Capture)
+                worker.job = {"kind": "recording", "startedAt": 100}
+                worker.pipeline = Mock()
+                worker.stopping = False
+                worker.emit = Mock()
+                with (
+                    patch.object(capture.time, "time", return_value=110),
+                    patch.object(capture.shutil, "which", return_value="/usr/bin/ffmpeg"),
+                    patch.object(capture.GLib, "timeout_add_seconds", return_value=1),
+                ):
+                    worker.stop(hovered)
+                    worker.stop(104000)
+                self.assertEqual(worker.job.get("trimDuration"), expected)
+                self.assertEqual(worker.pipeline.send_event.call_count, 1)
+
+    def test_failed_trim_preserves_original_and_removes_partial_export(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "recording.mp4"
+            path.write_bytes(b"original recording")
+            with patch.object(capture.subprocess, "run", side_effect=OSError("encoder unavailable")):
+                with self.assertRaises(OSError):
+                    capture.trim_recording(path, 2)
+            self.assertEqual(path.read_bytes(), b"original recording")
+            self.assertEqual(list(Path(directory).iterdir()), [path])
+
     def worker(self, available, usable):
         worker = capture.Capture.__new__(capture.Capture)
         worker.encoders = available

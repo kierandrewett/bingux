@@ -307,6 +307,7 @@ ShellRoot {
         readonly property string state: status.state || "idle"
         readonly property bool busy: status.busy || false
         readonly property bool recording: status.recording || false
+        readonly property bool cleanStop: status.cleanStop || false
         readonly property string elapsedText: status.elapsedText || "0:00"
         readonly property int countdown: status.countdown || 0
         onOpenedChanged: if (opened) {
@@ -323,9 +324,10 @@ ShellRoot {
                 action: "close"
             });
         }
-        function stop() {
+        function stop(hoveredAt = 0) {
             popouts.command("capture", {
-                action: "stop"
+                action: "stop",
+                hoveredAt: hoveredAt
             });
         }
     }
@@ -349,8 +351,13 @@ ShellRoot {
         }
     }
 
+    SessionActivity {
+        id: sessionActivity
+    }
+
     NotificationState {
         id: notificationState
+        isAfk: sessionActivity.isAfk
         doNotDisturb: ControlCentreServices.doNotDisturb
         dockView: dock
     }
@@ -799,7 +806,7 @@ ShellRoot {
         }
         function chosen(item) {
             const name = item.widgetId || controlNames[defaultControls.indexOf(item)];
-            return customLayout ? DesktopLayout.placement(DesktopEditing.desktop, name) !== "" : !DesktopLayout.widget(name)?.panel && !name.startsWith("control-") && !name.startsWith("controls-");
+            return customLayout ? DesktopLayout.placement(DesktopEditing.desktop, name) !== "" : name !== "workspaces" && !DesktopLayout.widget(name)?.panel && !name.startsWith("control-") && !name.startsWith("controls-");
         }
         function zoneFor(item) {
             const name = item.widgetId || controlNames[defaultControls.indexOf(item)];
@@ -831,8 +838,8 @@ ShellRoot {
         }
         readonly property real controlsBudget: Math.max(0, (width - clockPill.implicitWidth) / 2 - Theme.gap)
         // Display order is independent of overflow priority and reparenting order.
-        readonly property var defaultControls: [captureStatus, trayContainer, privacyContainer, metricsPill, inputSourceSelector, overflowButton, systemPill, notificationButton, searchPill, clockPill].concat(controlCentre.movableWidgets, spacingWidgets, decorationWidgets, terminalSidebar.panelWidgets, extensionWidgets)
-        readonly property var controlNames: ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "search", "clock"].concat(controlCentre.movableWidgets.map(item => item.widgetId), spacingWidgets.map(item => item.widgetId), decorationWidgets.map(item => item.widgetId), terminalSidebar.panelWidgets.map(item => item.widgetId), extensionWidgets.map(item => item.widgetId))
+        readonly property var defaultControls: [captureStatus, trayContainer, privacyContainer, metricsPill, inputSourceSelector, overflowButton, systemPill, notificationButton, searchPill, clockPill, workspaceControl].concat(controlCentre.movableWidgets, spacingWidgets, decorationWidgets, terminalSidebar.panelWidgets, extensionWidgets)
+        readonly property var controlNames: ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "search", "clock", "workspaces"].concat(controlCentre.movableWidgets.map(item => item.widgetId), spacingWidgets.map(item => item.widgetId), decorationWidgets.map(item => item.widgetId), terminalSidebar.panelWidgets.map(item => item.widgetId), extensionWidgets.map(item => item.widgetId))
         Settings {
             id: barPreferences
             location: "file://" + (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/bingux/top-bar.ini"
@@ -946,7 +953,7 @@ ShellRoot {
             easing.type: Easing.OutCubic
             onFinished: topBar.completeReorder()
         }
-        readonly property var availableControls: [[captureStatus, captureStatus.active], [trayContainer, tray.implicitWidth > 0], [privacyContainer, privacyContainer.active], [metricsPill, profileSettings.metricsEnabled], [inputSourceSelector, metrics.desktopStateAvailable], [systemPill, true], [notificationButton, true], [searchPill, true], [clockPill, true]].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat(controlCentre.movableWidgets.filter(item => chosen(item)), spacingWidgets.filter(item => chosen(item)), decorationWidgets.filter(item => chosen(item)), terminalSidebar.panelWidgets.filter(item => item.placed), extensionWidgets.filter(item => chosen(item)))
+        readonly property var availableControls: [[captureStatus, captureStatus.active], [trayContainer, tray.implicitWidth > 0], [privacyContainer, privacyContainer.active], [metricsPill, profileSettings.metricsEnabled], [inputSourceSelector, metrics.desktopStateAvailable], [systemPill, true], [notificationButton, true], [searchPill, true], [clockPill, true], [workspaceControl, customLayout || WorkspaceState.available]].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat(controlCentre.movableWidgets.filter(item => chosen(item)), spacingWidgets.filter(item => chosen(item)), decorationWidgets.filter(item => chosen(item)), terminalSidebar.panelWidgets.filter(item => item.placed), extensionWidgets.filter(item => chosen(item)))
         readonly property var overflowItems: {
             if (customLayout && !nativeTopBarLayout) {
                 const hidden = [];
@@ -1155,6 +1162,15 @@ ShellRoot {
                     hoverEnabled: true
                     onClicked: calendarPopup.visible = !calendarPopup.visible
                 }
+            }
+            WorkspaceWidget {
+                id: workspaceControl
+                barStyle: !["control-centre", "sidebar"].includes(topBar.zoneFor(workspaceControl))
+                barWindow: topBar.windowFor(workspaceControl)
+                parent: topBar.hostFor(workspaceControl)
+                Layout.column: topBar.controlColumn(workspaceControl)
+                Layout.row: topBar.controlRow(workspaceControl)
+                visible: topBar.chosen(workspaceControl)
             }
             Item {
                 anchors.right: parent.right

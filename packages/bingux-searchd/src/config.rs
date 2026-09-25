@@ -73,6 +73,8 @@ pub struct AiConfig {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SearchCommands {
     pub application_launcher: Vec<String>,
+    #[serde(default)]
+    pub steam_game_catalog: Vec<String>,
     pub file_opener: Vec<String>,
     pub clipboard: Vec<String>,
 }
@@ -237,6 +239,9 @@ impl AiConfig {
 impl SearchCommands {
     fn validate(&self) -> Result<()> {
         validate_command(&self.application_launcher, "application launcher")?;
+        if !self.steam_game_catalog.is_empty() {
+            validate_command(&self.steam_game_catalog, "Steam game catalog")?;
+        }
         validate_command(&self.file_opener, "file opener")?;
         validate_command(&self.clipboard, "clipboard command")
     }
@@ -571,6 +576,7 @@ mod tests {
             protocol_version: 1,
             commands: SearchCommands {
                 application_launcher: vec!["/usr/bin/gtk-launch".to_owned()],
+                steam_game_catalog: Vec::new(),
                 file_opener: vec!["/usr/bin/xdg-open".to_owned()],
                 clipboard: vec!["/usr/bin/wl-copy".to_owned()],
             },

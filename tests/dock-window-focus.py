@@ -48,7 +48,7 @@ export default function () {
         .replace("REPORT", json.dumps(str(report)))
         .replace("SEQUENCE", str(sequence))
     )
-    subprocess.run(["gnoblinctl", "script", "reload"], check=True, capture_output=True)
+    subprocess.run(["gnoblinctl", "reload"], check=True, capture_output=True)
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline:
         try:

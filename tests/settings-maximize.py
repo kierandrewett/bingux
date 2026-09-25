@@ -41,7 +41,7 @@ export default function () {
 """.replace("REPORT", json.dumps(str(report)))
 )
 try:
-    subprocess.run(["gnoblinctl", "script", "reload"], check=True)
+    subprocess.run(["gnoblinctl", "reload"], check=True)
     for direction in ("maximise", "restore"):
         report.unlink(missing_ok=True)
         subprocess.run([qs, "ipc", "-p", str(qml), "call", "settings", "maximise"], check=True)
@@ -61,4 +61,4 @@ try:
         print(f"PASS {direction}: {animated} native animation samples")
 finally:
     probe.unlink(missing_ok=True)
-    subprocess.run(["gnoblinctl", "script", "reload"], check=True)
+    subprocess.run(["gnoblinctl", "reload"], check=True)

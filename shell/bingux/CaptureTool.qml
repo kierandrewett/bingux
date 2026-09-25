@@ -17,6 +17,7 @@ Scope {
     property int previewRequest: 0
     property bool regionDragging: false
     property Item previewItem: null
+    property Item selectionItem: null
     property var capabilities: ({})
     property var captureWindows: []
     property var selectedWindow: null
@@ -45,13 +46,17 @@ Scope {
     property string savedPath: ""
     property string partialPath: ""
     property bool optionsOpen: false
+    property bool pickingFolder: false
     property double startedAt: 0
     property int elapsed: 0
     property int countdown: 0
+    property rect recordingRegion: Qt.rect(0, 0, 0, 0)
+    property string recordingTarget: ""
     readonly property bool recording: state === "recording"
     readonly property bool busy: ["countdown", "starting", "recording", "finalizing"].includes(state)
     readonly property string elapsedText: Math.floor(elapsed / 60).toString() + ":" + (elapsed % 60).toString().padStart(2, "0")
     signal opening
+    property alias settings: preferences
 
     PersistentProperties {
         id: captureSession
@@ -59,6 +64,7 @@ Scope {
         property bool requested: false
         property rect region: Qt.rect(200, 200, 800, 500)
         property bool hasRegion: false
+        property string lastNotifiedError: ""
         onLoaded: if (requested)
             Qt.callLater(() => root.open())
     }
@@ -160,7 +166,7 @@ Scope {
             close();
             return;
         }
-        feedback.visible = false;
+        captureSession.lastNotifiedError = "";
         captureSession.requested = true;
         message = "";
         selectedWindow = null;
@@ -194,6 +200,19 @@ Scope {
         hasRegion = true;
         region = Qt.rect(Math.round(activeScreen.width * .2), Math.round(activeScreen.height * .2), Math.round(activeScreen.width * .6), Math.round(activeScreen.height * .5));
     }
+    function backOrClose() {
+        if (optionsOpen)
+            optionsOpen = false;
+        else
+            close();
+    }
+    function notifyError() {
+        const detail = message + (partialPath ? "\nPartial recording preserved: " + partialPath : "");
+        if (!detail || detail === captureSession.lastNotifiedError)
+            return;
+        captureSession.lastNotifiedError = detail;
+        ShellNotifications.send("Capture failed", detail);
+    }
     function close() {
         captureSession.requested = false;
         opened = false;
@@ -207,9 +226,10 @@ Scope {
             });
         }
     }
-    function stop() {
+    function stop(hoveredAt = 0) {
         send({
-            command: "stop"
+            command: "stop",
+            hoveredAt: hoveredAt
         });
     }
     function take() {
@@ -273,8 +293,11 @@ Scope {
         } else if (event.event === "starting") {
             state = "starting";
         } else if (event.event === "recording") {
-            feedback.visible = false;
+            captureSession.lastNotifiedError = "";
             state = "recording";
+            recordingTarget = event.target || "";
+            if (event.region)
+                recordingRegion = Qt.rect(event.region.x, event.region.y, event.region.width, event.region.height);
             startedAt = Number.isFinite(event.started) ? event.started * 1000 : Date.now();
             elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
         } else if (event.event === "finalizing") {
@@ -284,7 +307,6 @@ Scope {
             savedPath = event.path;
             partialPath = "";
             message = (event.kind === "recording" ? "Recording saved" : "Screenshot saved") + (event.copied ? " · Copied to clipboard" : "");
-            feedback.visible = false;
             if (!event.notified)
                 console.warn("Capture saved; desktop notification acknowledgement pending or unavailable");
         } else if (event.event === "error") {
@@ -292,7 +314,7 @@ Scope {
             state = "error";
             message = event.message;
             partialPath = event.partial || "";
-            feedback.visible = true;
+            notifyError();
         } else if (event.event === "cancelled" && state !== "preparing") {
             state = "idle";
         }
@@ -319,7 +341,7 @@ Scope {
                 root.message = "Capture connection stopped. Open Capture to reconnect to the recorder.";
             }
             if (wasActive)
-                feedback.visible = true;
+                root.notifyError();
         }
     }
     IpcHandler {
@@ -439,13 +461,20 @@ Scope {
         }
     }
 
+    RecordingRegion {
+        active: root.recording && root.recordingTarget === "region"
+        region: root.recordingRegion
+    }
+
     Variants {
         model: Quickshell.screens
         PanelWindow {
             id: overlay
             required property var modelData
             screen: modelData
-            visible: root.opened
+            visible: root.opened && !root.pickingFolder
+            onVisibleChanged: if (visible && active)
+                root.selectionItem = overlay.contentItem
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.layer: WlrLayer.Overlay
@@ -466,6 +495,7 @@ Scope {
             Image {
                 anchors.fill: parent
                 source: root.previews[overlay.modelData.name]?.plain || ""
+                visible: preferences.kind === "screenshot"
                 fillMode: Image.Stretch
                 cache: false
             }
@@ -474,13 +504,14 @@ Scope {
                 source: root.previews[overlay.modelData.name]?.cursor || ""
                 fillMode: Image.Stretch
                 cache: false
-                visible: preferences.cursor
+                visible: preferences.kind === "screenshot" && preferences.cursor
             }
             Shortcut {
                 sequence: "Escape"
                 context: Qt.ApplicationShortcut
-                enabled: root.opened && overlay.active
-                onActivated: root.close()
+                autoRepeat: false
+                enabled: root.opened && overlay.active && !root.pickingFolder
+                onActivated: root.backOrClose()
             }
             Shortcut {
                 sequences: ["Return", "Enter"]
@@ -628,7 +659,7 @@ Scope {
                     anchors.fill: parent
                     preventStealing: true
                     enabled: preferences.target === "region"
-                    cursorShape: Qt.SizeAllCursor
+                    cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                     property point origin
                     property rect initial
                     onPressed: mouse => {
@@ -682,23 +713,50 @@ Scope {
                             y: .5
                         }
                     ] : []
-                    Rectangle {
+                    Item {
+                        id: resizeHandle
                         required property var modelData
-                        width: modelData.x === .5 ? 24 : modelData.y === .5 ? 4 : 8
-                        height: modelData.y === .5 ? 24 : modelData.x === .5 ? 4 : 8
-                        radius: 4
-                        color: "white"
+                        readonly property bool horizontalEdge: modelData.x === .5
+                        readonly property bool verticalEdge: modelData.y === .5
+                        readonly property bool corner: !horizontalEdge && !verticalEdge
+                        readonly property bool active: resizeMouse.containsMouse || resizeMouse.pressed
+                        width: horizontalEdge ? Math.max(0, selectionBorder.width - 32) : 32
+                        height: verticalEdge ? Math.max(0, selectionBorder.height - 32) : 32
                         x: modelData.x * selectionBorder.width - width / 2
                         y: modelData.y * selectionBorder.height - height / 2
+                        z: corner ? 2 : 1
+                        // Edge hit targets cover the whole line, not only its handle.
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: resizeHandle.horizontalEdge ? parent.width : 2
+                            height: resizeHandle.verticalEdge ? parent.height : 2
+                            visible: !resizeHandle.corner
+                            color: Theme.accent
+                            opacity: resizeHandle.active ? 1 : 0
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: Theme.reducedMotion ? 0 : 100
+                                }
+                            }
+                        }
+                        CaptureRegionMarker {
+                            anchors.centerIn: parent
+                            horizontalEdge: resizeHandle.horizontalEdge
+                            verticalEdge: resizeHandle.verticalEdge
+                            active: resizeHandle.active
+                        }
                         MouseArea {
+                            id: resizeMouse
                             objectName: "captureRegionResize" + modelData.x + "_" + modelData.y
                             anchors.fill: parent
-                            anchors.margins: -8
+                            hoverEnabled: true
                             preventStealing: true
-                            cursorShape: modelData.x === .5 ? Qt.SizeVerCursor : modelData.y === .5 ? Qt.SizeHorCursor : modelData.x === modelData.y ? Qt.SizeFDiagCursor : Qt.SizeBDiagCursor
+                            cursorShape: resizeHandle.horizontalEdge ? Qt.SizeVerCursor : resizeHandle.verticalEdge ? Qt.SizeHorCursor : modelData.x === modelData.y ? Qt.SizeFDiagCursor : Qt.SizeBDiagCursor
                             property rect initial
-                            onPressed: {
+                            property point origin
+                            onPressed: mouse => {
                                 initial = root.region;
+                                origin = mapToItem(overlay.contentItem, mouse.x, mouse.y);
                                 root.regionDragging = true;
                             }
                             onReleased: root.regionDragging = false
@@ -707,11 +765,15 @@ Scope {
                                 if (!pressed)
                                     return;
                                 const position = mapToItem(overlay.contentItem, mouse.x, mouse.y);
-                                const p = Qt.point(overlay.edgeCoordinate(position.x, overlay.width), overlay.edgeCoordinate(position.y, overlay.height));
+                                const dx = position.x - origin.x, dy = position.y - origin.y;
                                 const right = initial.x + initial.width, bottom = initial.y + initial.height;
-                                const left = modelData.x === 0 ? Math.max(0, Math.min(right - 2, p.x)) : initial.x;
-                                const top = modelData.y === 0 ? Math.max(0, Math.min(bottom - 2, p.y)) : initial.y;
-                                root.region = Qt.rect(left, top, modelData.x === 1 ? Math.max(2, Math.min(overlay.width, p.x) - left) : right - left, modelData.y === 1 ? Math.max(2, Math.min(overlay.height, p.y) - top) : bottom - top);
+                                const edgeX = modelData.x === 0 ? initial.x + dx : right + dx;
+                                const edgeY = modelData.y === 0 ? initial.y + dy : bottom + dy;
+                                const px = position.x <= 1 ? 0 : position.x >= overlay.width - 1 ? overlay.width : edgeX;
+                                const py = position.y <= 1 ? 0 : position.y >= overlay.height - 1 ? overlay.height : edgeY;
+                                const left = modelData.x === 0 ? Math.max(0, Math.min(right - 2, px)) : initial.x;
+                                const top = modelData.y === 0 ? Math.max(0, Math.min(bottom - 2, py)) : initial.y;
+                                root.region = Qt.rect(left, top, modelData.x === 1 ? Math.max(2, Math.min(overlay.width, px) - left) : right - left, modelData.y === 1 ? Math.max(2, Math.min(overlay.height, py) - top) : bottom - top);
                             }
                         }
                     }
@@ -770,10 +832,7 @@ Scope {
                 mask: Region {
                     item: toolbar
                     Region {
-                        x: optionsPanel.x
-                        y: optionsPanel.y
-                        width: optionsPanel.visible ? optionsPanel.width : 0
-                        height: optionsPanel.visible ? optionsPanel.height : 0
+                        item: closeCapture
                     }
                 }
                 // The preview is a separate buffer below this surface, so the
@@ -782,20 +841,19 @@ Scope {
                     target: toolbar
                     radius: toolbar.radius
                 }
-                BackgroundEffect {
-                    target: optionsPanel
-                    radius: optionsPanel.radius
-                    requested: optionsPanel.visible
-                }
                 BlurRegion {
                     window: controls
                     surfaceNamespace: "bingux-capture-controls"
-                    region: optionsPanel.visible ? Qt.rect(Math.min(toolbar.x, optionsPanel.x), Math.min(toolbar.y, optionsPanel.y), Math.max(toolbar.x + toolbar.width, optionsPanel.x + optionsPanel.width) - Math.min(toolbar.x, optionsPanel.x), Math.max(toolbar.y + toolbar.height, optionsPanel.y + optionsPanel.height) - Math.min(toolbar.y, optionsPanel.y)) : Qt.rect(toolbar.x, toolbar.y, toolbar.width, toolbar.height)
+                    region: Qt.rect(toolbar.x, toolbar.y, toolbar.width, toolbar.height)
                 }
                 Item {
                     anchors.fill: parent
                     focus: overlay.visible && overlay.active
-                    Keys.onEscapePressed: root.close()
+                    Keys.onEscapePressed: event => {
+                        if (!event.isAutoRepeat)
+                            root.backOrClose();
+                        event.accepted = true;
+                    }
                     Keys.onPressed: event => {
                         const delta = event.modifiers & Qt.ShiftModifier ? 10 : 1;
                         if (preferences.target === "region" && [Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down].includes(event.key)) {
@@ -824,356 +882,256 @@ Scope {
                     }
                     property real movedX: -1
                     property real movedY: -1
-                    x: movedX < 0 ? (overlay.width - width) / 2 : Math.max(8, Math.min(overlay.width - width - 8, movedX))
-                    y: movedY < 0 ? overlay.height - height - Theme.padding * 2 : Math.max(8, Math.min(overlay.height - height - 8, movedY))
-                    width: toolbarRow.implicitWidth + 16
-                    height: 56
+                    readonly property real compactX: movedX < 0 ? (overlay.width - 320) / 2 : Math.max(24, Math.min(overlay.width - 344, movedX))
+                    readonly property real compactY: movedY < 0 ? overlay.height - 200 : Math.max(24, Math.min(overlay.height - 200, movedY))
+                    readonly property real expandedX: movedX < 0 ? (overlay.width - 360) / 2 : Math.max(24, Math.min(overlay.width - 384, movedX))
+                    readonly property real expandedY: movedY < 0 ? overlay.height - settingsHeight - 24 : Math.max(24, Math.min(overlay.height - settingsHeight - 24, movedY))
+                    x: compactX + (expandedX - compactX) * resizeProgress
+                    y: compactY + (expandedY - compactY) * resizeProgress
+                    property real settingsProgress: root.optionsOpen ? 1 : 0
+                    property real resizeProgress: root.optionsOpen ? 1 : 0
+                    property real settingsHeight: Math.min(optionsPanel.implicitHeight, overlay.height - 64)
+                    width: 320 + 40 * resizeProgress
+                    height: 176 + (settingsHeight - 176) * resizeProgress
+                    clip: true
+                    Behavior on settingsProgress {
+                        NumberAnimation { duration: Theme.reducedMotion ? 0 : 160; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on resizeProgress {
+                        NumberAnimation { duration: Theme.reducedMotion ? 0 : 180; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on settingsHeight {
+                        NumberAnimation { duration: Theme.reducedMotion ? 0 : 180; easing.type: Easing.OutCubic }
+                    }
                     radius: Theme.cardRadius
-                    color: Theme.popupSurface
+                    color: Theme.surface
+                    border.width: 1
                     border.color: Theme.outline
+                    PanelOutline {
+                        surface: toolbar
+                    }
                     MouseArea {
+                        id: dragHandle
+                        objectName: "captureToolbarHandle"
                         anchors.fill: parent
-                    } // Controls must not start a region drag.
-                    RowLayout {
-                        id: toolbarRow
-                        anchors.centerIn: parent
-                        spacing: Theme.gap
-                        Item {
-                            Layout.preferredWidth: 20
-                            Layout.preferredHeight: 40
-                            Grid {
-                                anchors.centerIn: parent
-                                columns: 2
-                                spacing: 4
-                                Repeater {
-                                    model: 6
-                                    Rectangle {
-                                        width: 3
-                                        height: 3
-                                        radius: 1.5
-                                        color: dragHandle.containsMouse ? Theme.text : Theme.muted
-                                    }
-                                }
-                            }
-                            MouseArea {
-                                id: dragHandle
-                                objectName: "captureToolbarHandle"
-                                anchors.fill: parent
-                                preventStealing: true
-                                hoverEnabled: true
-                                cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-                                property point origin
-                                property point start
-                                onPressed: mouse => {
-                                    origin = mapToItem(controls.contentItem, mouse.x, mouse.y);
-                                    start = Qt.point(toolbar.x, toolbar.y);
-                                }
-                                onPositionChanged: mouse => {
-                                    if (!pressed)
-                                        return;
-                                    const point = mapToItem(controls.contentItem, mouse.x, mouse.y);
-                                    toolbar.movedX = start.x + point.x - origin.x;
-                                    toolbar.movedY = start.y + point.y - origin.y;
-                                }
-                            }
-                            ShellTooltip {
-                                visible: dragHandle.containsMouse && !dragHandle.pressed
-                                text: "Drag to move toolbar"
+                        preventStealing: true
+                        cursorShape: pressed ? Qt.ClosedHandCursor : Qt.ArrowCursor
+                        property point origin
+                        property point start
+                        onPressed: mouse => {
+                            origin = mapToItem(controls.contentItem, mouse.x, mouse.y);
+                            start = Qt.point(toolbar.x, toolbar.y);
+                        }
+                        onPositionChanged: mouse => {
+                            if (!pressed)
+                                return;
+                            const point = mapToItem(controls.contentItem, mouse.x, mouse.y);
+                            toolbar.movedX = start.x + point.x - origin.x;
+                            toolbar.movedY = start.y + point.y - origin.y;
+                        }
+                    }
+                    CaptureButton {
+                        id: closeCapture
+                        parent: controls.contentItem
+                        x: toolbar.x + toolbar.width - width / 2
+                        y: toolbar.y - height / 2
+                        z: 1
+                        visible: toolbar.visible
+                        opacity: toolbar.opacity
+                        width: 32
+                        height: 32
+                        iconSource: Qt.resolvedUrl("icons/capture-close.svg")
+                        description: "Cancel (Esc)"
+                        background: Rectangle {
+                            id: closeSurface
+                            radius: width / 2
+                            color: closeCapture.down ? "#424242" : closeCapture.hovered ? "#363636" : "#242424"
+                            border.width: 1
+                            border.color: closeCapture.visualFocus ? Theme.accent : Theme.outline
+                            PanelOutline {
+                                surface: closeSurface
                             }
                         }
-                        SegmentedControl {
-                            implicitWidth: 84
-                            implicitHeight: 44
-                            options: ["screenshot", "recording"]
-                            currentValue: preferences.kind
-                            accessiblePrefix: "Capture mode: "
-                            onSelected: value => preferences.kind = value
-                            segmentContent: Component {
-                                Item {
-                                    SymbolicIcon {
-                                        anchors.centerIn: parent
-                                        implicitSize: 18
-                                        source: Quickshell.iconPath(parent.parent.segmentValue === "screenshot" ? "camera-photo-symbolic" : "camera-video-symbolic")
-                                        color: parent.parent.segmentSelected ? Theme.text : Theme.muted
+                        onClicked: root.close()
+                    }
+                    ColumnLayout {
+                        visible: opacity > 0
+                        enabled: !root.optionsOpen
+                        // Hand off between pages without ghosted controls.
+                        opacity: Math.max(0, 1 - toolbar.settingsProgress * 2)
+                        width: 288
+                        height: 144
+                        x: toolbar.compactX - toolbar.x + 16 - toolbar.settingsProgress * 12
+                        y: toolbar.compactY - toolbar.y + 16
+                        spacing: 16
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 80
+                            Layout.minimumHeight: 80
+                            Layout.maximumHeight: 80
+                            spacing: 8
+                            Repeater {
+                                model: ["region", "screen", "window"]
+                                AbstractButton {
+                                    id: targetButton
+                                    required property string modelData
+                                    Layout.fillWidth: true
+                                    Layout.preferredWidth: 0
+                                    Layout.fillHeight: true
+                                    hoverEnabled: true
+                                    checkable: true
+                                    checked: preferences.target === modelData
+                                    enabled: modelData !== "window" || !root.ready || !!root.capabilities.window
+                                    objectName: "captureTarget" + modelData
+                                    Accessible.name: modelData === "region" ? "Selection" : modelData === "screen" ? "Screen" : "Window"
+                                    onClicked: preferences.target = modelData
+                                    background: ControlCentreButtonSurface {
+                                        control: targetButton
+                                        radius: 12
+                                        baseColor: targetButton.checked ? Theme.hover : "transparent"
                                     }
-                                }
-                            }
-                        }
-                        SegmentedControl {
-                            implicitWidth: overlay.width < 720 ? 128 : 320
-                            implicitHeight: 44
-                            options: ["region", "window", "screen"]
-                            currentValue: preferences.target
-                            disabledOptions: root.ready && !root.capabilities.window ? ["window"] : []
-                            accessiblePrefix: "Capture "
-                            onSelected: value => preferences.target = value
-                            segmentContent: Component {
-                                Item {
-                                    id: targetContent
-                                    readonly property string value: parent.segmentValue
-                                    RowLayout {
-                                        anchors.centerIn: parent
-                                        spacing: Theme.gap
+                                    contentItem: ColumnLayout {
+                                        spacing: 8
+                                        Item {
+                                            Layout.fillHeight: true
+                                        }
                                         SymbolicIcon {
-                                            implicitSize: 18
-                                            source: Quickshell.iconPath(targetContent.value === "region" ? "screenshot-selection-symbolic" : targetContent.value === "window" ? "screenshot-window-symbolic" : "video-display-symbolic", "video-display-symbolic")
-                                            color: targetContent.parent.segmentSelected ? Theme.text : Theme.muted
+                                            Layout.alignment: Qt.AlignHCenter
+                                            implicitSize: 24
+                                            source: Qt.resolvedUrl("icons/capture-" + (targetButton.modelData === "region" ? "selection" : targetButton.modelData) + ".svg")
+                                            color: targetButton.enabled ? Theme.text : Theme.muted
                                         }
                                         Text {
-                                            visible: overlay.width >= 720
-                                            text: targetContent.value.charAt(0).toUpperCase() + targetContent.value.slice(1)
-                                            color: targetContent.parent.segmentSelected ? Theme.text : Theme.muted
+                                            Layout.alignment: Qt.AlignHCenter
+                                            text: targetButton.Accessible.name
+                                            color: targetButton.enabled ? Theme.text : Theme.muted
                                             font.family: Theme.fontFamily
                                             font.pixelSize: Theme.fontSmall
                                         }
-                                    }
-                                }
-                            }
-                        }
-                        CaptureButton {
-                            objectName: "captureCursorToggle"
-                            iconName: "input-mouse-symbolic"
-                            chosen: preferences.cursor
-                            description: preferences.cursor ? "Mouse cursor included" : "Mouse cursor hidden"
-                            onClicked: preferences.cursor = !preferences.cursor
-                        }
-                        CaptureButton {
-                            objectName: "captureSettingsToggle"
-                            iconName: "preferences-system-symbolic"
-                            description: "Capture settings"
-                            chosen: root.optionsOpen
-                            onClicked: root.optionsOpen = !root.optionsOpen
-                        }
-                        CaptureButton {
-                            text: preferences.kind === "recording" ? "Record" : "Capture"
-                            iconName: preferences.kind === "recording" ? "media-record-symbolic" : ""
-                            description: !root.ready ? "Preparing capture…" : preferences.target === "window" ? (root.directWindowPicker ? "Capture selected window (Enter)" : "Choose window and capture") : "Capture (Enter)"
-                            primary: true
-                            enabled: root.ready && (preferences.target !== "window" || (!!root.capabilities.window && (!root.directWindowPicker || root.selectedWindow !== null)))
-                            onClicked: root.take()
-                        }
-                        CaptureButton {
-                            iconName: "window-close-symbolic"
-                            description: "Cancel (Esc)"
-                            onClicked: root.close()
-                        }
-                    }
-                }
-                Rectangle {
-                    id: optionsPanel
-                    visible: overlay.active && root.optionsOpen
-                    width: Math.min(440, overlay.width - 32)
-                    height: Math.min(optionsColumn.implicitHeight + 32, overlay.height - toolbar.height - 48)
-                    x: Math.min(overlay.width - width - 16, toolbar.x + toolbar.width - width)
-                    y: toolbar.y > height + 20 ? toolbar.y - height - 12 : Math.min(overlay.height - height - 8, toolbar.y + toolbar.height + 12)
-                    radius: Theme.cardRadius
-                    color: Theme.popupSurface
-                    border.color: Theme.outline
-                    MouseArea {
-                        anchors.fill: parent
-                    }
-                    Flickable {
-                        anchors.fill: parent
-                        anchors.margins: 16
-                        contentHeight: optionsColumn.implicitHeight
-                        clip: true
-                        boundsBehavior: Flickable.StopAtBounds
-                        ScrollBar.vertical: ScrollBar {}
-                        ColumnLayout {
-                            id: optionsColumn
-                            width: parent.width
-                            spacing: 12
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 8
-                                Text {
-                                    text: "Capture settings"
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: 14
-                                    font.weight: Font.DemiBold
-                                    color: Theme.text
-                                }
-                                Item {
-                                    Layout.fillWidth: true
-                                }
-                                CaptureButton {
-                                    iconName: "window-close-symbolic"
-                                    compact: true
-                                    description: "Close settings"
-                                    onClicked: root.optionsOpen = false
-                                }
-                            }
-                            GridLayout {
-                                Layout.fillWidth: true
-                                columns: 2
-                                columnSpacing: 12
-                                rowSpacing: 12
-                                CaptureChoice {
-                                    label: "Quality"
-                                    choices: ["Compact", "Balanced", "High"]
-                                    values: ["compact", "balanced", "high"]
-                                    value: preferences.quality
-                                    onChosen: value => preferences.quality = value
-                                }
-                                CaptureChoice {
-                                    label: "Delay"
-                                    choices: ["None", "3 seconds", "5 seconds", "10 seconds"]
-                                    values: [0, 3, 5, 10]
-                                    value: preferences.delay
-                                    onChosen: value => preferences.delay = value
-                                }
-                                CaptureChoice {
-                                    visible: preferences.kind === "recording"
-                                    label: "Frame rate"
-                                    choices: ["15 fps", "30 fps", "60 fps"]
-                                    values: [15, 30, 60]
-                                    value: preferences.fps
-                                    onChosen: value => preferences.fps = value
-                                }
-                                CaptureChoice {
-                                    visible: preferences.kind === "recording"
-                                    label: "Resolution limit"
-                                    choices: ["720p", "1080p", "1440p", "2160p", "Original"]
-                                    values: [720, 1080, 1440, 2160, 0]
-                                    value: preferences.maxHeight
-                                    onChosen: value => preferences.maxHeight = value
-                                }
-                                CaptureChoice {
-                                    visible: preferences.kind === "recording"
-                                    label: "Audio"
-                                    choices: ["None", "System audio", "Microphone", "Both"]
-                                    values: ["none", "system", "microphone", "both"]
-                                    value: preferences.audio
-                                    enabled: !!root.capabilities.audio
-                                    onChosen: value => preferences.audio = value
-                                }
-                                CaptureChoice {
-                                    visible: preferences.kind === "recording"
-                                    label: "Encoding"
-                                    choices: ["Automatic (CPU fallback)", "Software / CPU"]
-                                    values: ["auto", "cpu"]
-                                    value: preferences.encoder
-                                    onChosen: value => preferences.encoder = value
-                                }
-                                CaptureChoice {
-                                    visible: preferences.kind === "screenshot"
-                                    label: "Image format"
-                                    choices: ["PNG · lossless", "JPEG · smaller"]
-                                    values: ["png", "jpeg"]
-                                    value: preferences.format
-                                    onChosen: value => preferences.format = value
-                                }
-                                CaptureChoice {
-                                    label: "Capture backend"
-                                    choices: ["Automatic", "Desktop portal"]
-                                    values: ["auto", "portal"]
-                                    value: preferences.backend
-                                    onChosen: value => preferences.backend = value
-                                }
-                                ColumnLayout {
-                                    Layout.columnSpan: 2
-                                    Layout.fillWidth: true
-                                    Text {
-                                        text: "Save folder"
-                                        color: Theme.muted
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 12
-                                    }
-                                    TextField {
-                                        selectionColor: Theme.textSelection
-                                        selectedTextColor: Theme.text
-                                        Layout.fillWidth: true
-                                        text: preferences.directory
-                                        placeholderText: "Default: Pictures/Screenshots or Videos/Recordings"
-                                        color: Theme.text
-                                        placeholderTextColor: Theme.muted
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: 13
-                                        onEditingFinished: preferences.directory = text.trim()
-                                        padding: Theme.gap
-                                        background: Rectangle {
-                                            color: Theme.elevated
-                                            radius: Theme.radius
-                                            border.color: parent.activeFocus ? Theme.accent : "transparent"
+                                        Item {
+                                            Layout.fillHeight: true
                                         }
                                     }
                                 }
                             }
-                            CaptureButton {
-                                visible: preferences.kind === "screenshot"
-                                text: "Copy to clipboard"
-                                iconName: "edit-copy-symbolic"
-                                chosen: preferences.copy
-                                onClicked: preferences.copy = !preferences.copy
+                        }
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 48
+                            Layout.minimumHeight: 48
+                            Layout.maximumHeight: 48
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: 76
+                                height: 32
+                                radius: 16
+                                color: Theme.elevated
+                                Row {
+                                    anchors.fill: parent
+                                    anchors.margins: 3
+                                    Repeater {
+                                        model: ["screenshot", "recording"]
+                                        AbstractButton {
+                                            id: modeButton
+                                            required property string modelData
+                                            width: 35
+                                            height: 26
+                                            hoverEnabled: true
+                                            checkable: true
+                                            checked: preferences.kind === modelData
+                                            objectName: "captureMode" + modelData
+                                            Accessible.name: modelData === "screenshot" ? "Screenshot" : "Recording"
+                                            onClicked: preferences.kind = modelData
+                                            background: Rectangle {
+                                                radius: 13
+                                                color: modeButton.checked ? Theme.text : modeButton.hovered ? Theme.hover : "transparent"
+                                                border.width: modeButton.visualFocus ? 2 : 0
+                                                border.color: Theme.accent
+                                            }
+                                            contentItem: Item {
+                                                SymbolicIcon {
+                                                    anchors.centerIn: parent
+                                                    implicitSize: 16
+                                                    source: Qt.resolvedUrl("icons/capture-" + (modeButton.modelData === "screenshot" ? "camera" : "video") + ".svg")
+                                                    color: modeButton.checked ? Theme.background : Theme.text
+                                                }
+                                            }
+                                            ShellTooltip {
+                                                visible: modeButton.hovered || modeButton.visualFocus
+                                                text: modeButton.Accessible.name
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            AbstractButton {
+                                id: shutter
+                                objectName: "captureShutter"
+                                anchors.centerIn: parent
+                                width: 48
+                                height: 48
+                                hoverEnabled: true
+                                Accessible.name: preferences.kind === "recording" ? "Start recording" : "Take screenshot"
+                                enabled: root.ready && (preferences.target !== "window" || (!!root.capabilities.window && (!root.directWindowPicker || root.selectedWindow !== null)))
+                                onClicked: root.take()
+                                background: Rectangle {
+                                    radius: width / 2
+                                    color: "transparent"
+                                    border.width: 2
+                                    border.color: shutter.visualFocus ? Theme.accent : Theme.text
+                                    opacity: shutter.enabled ? 1 : 0.4
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        anchors.margins: 5
+                                        radius: width / 2
+                                        color: preferences.kind === "recording" ? Theme.recordingIndicator : Theme.text
+                                        opacity: shutter.down ? 0.65 : shutter.hovered ? 0.85 : 1
+                                    }
+                                }
+                                ShellTooltip {
+                                    visible: shutter.hovered || shutter.visualFocus
+                                    text: !root.ready ? "Preparing capture…" : shutter.Accessible.name + " (Enter)"
+                                }
+                            }
+                            RowLayout {
+                                anchors.right: parent.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 4
+                                CaptureButton {
+                                    objectName: "captureCursorToggle"
+                                    iconSource: Qt.resolvedUrl("icons/capture-cursor.svg")
+                                    chosen: preferences.cursor
+                                    description: preferences.cursor ? "Mouse cursor included" : "Mouse cursor hidden"
+                                    onClicked: preferences.cursor = !preferences.cursor
+                                }
+                                CaptureButton {
+                                    objectName: "captureSettingsToggle"
+                                    iconSource: Qt.resolvedUrl("icons/capture-settings.svg")
+                                    description: "Capture settings"
+                                    chosen: root.optionsOpen
+                                    onClicked: root.optionsOpen = !root.optionsOpen
+                                }
                             }
                         }
                     }
                 }
-            }
-        }
-    }
-
-    PanelWindow {
-        id: feedback
-        visible: false
-        screen: root.screen
-        anchors {
-            bottom: true
-            right: true
-        }
-        margins {
-            bottom: 112
-            right: 24
-        }
-        implicitWidth: 420
-        implicitHeight: feedbackContents.implicitHeight + 32
-        color: "transparent"
-        exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.namespace: "bingux-capture-feedback"
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        Rectangle {
-            anchors.fill: parent
-            color: Theme.popupSurface
-            radius: 20
-            border.color: Theme.outline
-        }
-        ColumnLayout {
-            id: feedbackContents
-            anchors {
-                left: parent.left
-                right: parent.right
-                top: parent.top
-                margins: 16
-            }
-            spacing: 10
-            Text {
-                Layout.fillWidth: true
-                text: root.message
-                wrapMode: Text.Wrap
-                textFormat: Text.PlainText
-                color: Theme.text
-                font.family: Theme.fontFamily
-                font.pixelSize: 14
-                font.weight: Font.DemiBold
-            }
-            Text {
-                visible: root.partialPath !== ""
-                Layout.fillWidth: true
-                text: "Partial recording preserved: " + root.partialPath
-                wrapMode: Text.Wrap
-                textFormat: Text.PlainText
-                color: Theme.muted
-                font.family: Theme.fontFamily
-                font.pixelSize: 12
-            }
-            RowLayout {
-                Item {
-                    Layout.fillWidth: true
-                }
-                CaptureButton {
-                    text: "Dismiss"
-                    onClicked: feedback.visible = false
+                CaptureSettings {
+                    id: optionsPanel
+                    parent: toolbar
+                    width: 360
+                    // Keep the page laid out at its destination. The card
+                    // reveals it; its rows must not ride the moving top edge.
+                    height: toolbar.settingsHeight
+                    x: toolbar.expandedX - toolbar.x + (1 - toolbar.settingsProgress) * 12
+                    y: toolbar.expandedY - toolbar.y
+                    visible: opacity > 0
+                    enabled: root.optionsOpen
+                    opacity: Math.max(0, toolbar.settingsProgress * 2 - 1)
+                    preferences: root.settings
+                    audioAvailable: !!root.capabilities.audio
+                    onPickingFolderChanged: root.pickingFolder = pickingFolder
+                    onBack: root.optionsOpen = false
                 }
             }
         }
@@ -1182,6 +1140,7 @@ Scope {
     component CaptureButton: ActionButton {
         id: button
         property string description: text
+        property url iconSource: ""
         property bool chosen: false
         property bool primary: false
         property bool compact: false
@@ -1191,11 +1150,10 @@ Scope {
         horizontalPadding: 0
         hoverEnabled: true
         Accessible.name: description
-        background: Rectangle {
+        background: ControlCentreButtonSurface {
+            control: button
             radius: Theme.radius - Theme.spaceSmall
-            color: button.primary ? (button.down ? Qt.darker(Theme.accent, 1.1) : button.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent) : button.down ? Theme.pressed : button.chosen ? Theme.hover : button.hovered ? Theme.elevated : "transparent"
-            border.color: button.activeFocus ? Theme.accent : "transparent"
-            border.width: button.visualFocus ? 2 : 0
+            baseColor: button.primary ? Theme.accent : button.chosen ? Theme.hover : "transparent"
             opacity: button.enabled ? 1 : .4
         }
         contentItem: RowLayout {
@@ -1205,9 +1163,9 @@ Scope {
                 Layout.fillWidth: true
             }
             SymbolicIcon {
-                visible: button.iconName !== ""
+                visible: button.iconName !== "" || button.iconSource.toString() !== ""
                 implicitSize: button.compact ? 14 : 18
-                source: Quickshell.iconPath(button.iconName, "application-x-executable-symbolic")
+                source: button.iconSource.toString() !== "" ? button.iconSource : Quickshell.iconPath(button.iconName, "application-x-executable-symbolic")
                 color: button.primary ? "#17212c" : button.enabled ? Theme.text : Theme.muted
             }
             Text {
@@ -1225,144 +1183,6 @@ Scope {
         ShellTooltip {
             visible: (button.hovered || button.visualFocus) && button.description !== ""
             text: button.description
-        }
-    }
-    component CaptureChoice: ColumnLayout {
-        id: choice
-        property string label
-        property var choices
-        property var values
-        property var value
-        readonly property alias popup: choiceMenu
-        signal chosen(var value)
-        Layout.fillWidth: true
-        spacing: 5
-        Text {
-            text: choice.label
-            color: Theme.muted
-            font.family: Theme.fontFamily
-            font.pixelSize: 12
-        }
-        ActionButton {
-            id: choiceButton
-            objectName: "captureChoice" + choice.label
-            Layout.fillWidth: true
-            text: choice.choices[Math.max(0, choice.values.indexOf(choice.value))]
-            Accessible.name: choice.label + ": " + text
-            onClicked: choiceMenu.visible = !choiceMenu.visible
-            contentItem: RowLayout {
-                spacing: Theme.gap
-                Text {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: Theme.gap
-                    text: choiceButton.text
-                    textFormat: Text.PlainText
-                    elide: Text.ElideRight
-                    color: Theme.text
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSmall
-                }
-                SymbolicIcon {
-                    Layout.rightMargin: Theme.gap
-                    implicitSize: 14
-                    source: Quickshell.iconPath("pan-down-symbolic")
-                }
-            }
-        }
-        ShellPopup {
-            id: choiceMenu
-            hostItem: choice.Window.window ? choice.Window.window.contentItem : null
-            popupWidth: choiceButton.width
-            popupHeight: choiceEntries.contentHeight + contentPadding * 2
-            contentPadding: Theme.gap
-            onAboutToOpen: {
-                if (!hostItem)
-                    return;
-                const anchor = choiceButton.mapToItem(hostItem, 0, 0);
-                preferredX = anchor.x;
-                const below = anchor.y + choiceButton.height + Theme.spaceSmall;
-                preferredY = below + popupHeight <= hostItem.height - Theme.gap ? below : anchor.y - popupHeight - Theme.spaceSmall;
-            }
-            onVisibleChanged: if (visible)
-                Qt.callLater(() => choiceNavigation.focusMenu())
-            Connections {
-                target: root
-                function onOptionsOpenChanged() {
-                    if (!root.optionsOpen)
-                        choiceMenu.visible = false;
-                }
-                function onOpenedChanged() {
-                    if (!root.opened)
-                        choiceMenu.visible = false;
-                }
-            }
-            MenuNavigator {
-                id: choiceNavigation
-                entries: choice.choices.map((text, index) => ({
-                            text,
-                            index,
-                            enabled: true
-                        }))
-                view: choiceEntries
-                focusTarget: choiceEntries
-                onEscapeRequested: choiceMenu.visible = false
-                onActivateRequested: entry => {
-                    choice.chosen(choice.values[entry.index]);
-                    choiceMenu.visible = false;
-                    choiceButton.forceActiveFocus();
-                }
-            }
-            ListView {
-                id: choiceEntries
-                objectName: "captureChoiceMenu" + choice.label
-                anchors.fill: parent
-                model: choice.choices
-                spacing: 2
-                clip: true
-                boundsBehavior: Flickable.StopAtBounds
-                Keys.onDownPressed: choiceNavigation.move(1)
-                Keys.onUpPressed: choiceNavigation.move(-1)
-                Keys.onReturnPressed: choiceNavigation.activateCurrent()
-                Keys.onSpacePressed: choiceNavigation.activateCurrent()
-                Keys.onEscapePressed: choiceMenu.visible = false
-                delegate: ActionButton {
-                    id: optionButton
-                    required property string modelData
-                    required property int index
-                    width: choiceEntries.width
-                    height: 38
-                    text: modelData
-                    flat: true
-                    cornerRadius: choiceMenu.contentRadius
-                    onClicked: {
-                        choice.chosen(choice.values[index]);
-                        choiceMenu.visible = false;
-                        choiceButton.forceActiveFocus();
-                    }
-                    background: Rectangle {
-                        radius: optionButton.cornerRadius
-                        color: optionButton.down ? Theme.pressed : optionButton.hovered || (choiceNavigation.keyboardNavigation && choiceEntries.currentIndex === optionButton.index) ? Theme.hover : "transparent"
-                    }
-                    contentItem: RowLayout {
-                        spacing: Theme.gap
-                        SymbolicIcon {
-                            Layout.leftMargin: Theme.gap
-                            implicitSize: 16
-                            opacity: choice.values[optionButton.index] === choice.value ? 1 : 0
-                            source: Quickshell.iconPath("object-select-symbolic")
-                            color: Theme.accent
-                        }
-                        Text {
-                            Layout.fillWidth: true
-                            text: optionButton.text
-                            textFormat: Text.PlainText
-                            color: Theme.text
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSize
-                        }
-                    }
-                }
-            }
         }
     }
 }

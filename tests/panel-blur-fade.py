@@ -17,14 +17,12 @@ config = Path(os.environ["XDG_CONFIG_HOME"])
 root = config / "gnoblin"
 scripts = root / "scripts"
 scripts.mkdir(parents=True, exist_ok=True)
-shutil.copy2(gnoblin / "src/scripts/compositor-bridge.js", scripts)
-shutil.copytree(gnoblin / "src/scripts/lib", scripts / "lib", dirs_exist_ok=True)
 (scripts / "slow-panels.js").write_text("""import St from 'gi://St';
 export default function(api) {
     const settings = St.Settings.get();
     const previous = settings.slow_down_factor;
     settings.slow_down_factor = 10;
-    api._disposers.push(() => settings.slow_down_factor = previous);
+    api.addCleanup(() => settings.slow_down_factor = previous);
 }
 """)
 (root / "init.lua").write_text("""local g = require("gnoblin")
@@ -38,7 +36,7 @@ g.set({
     },
 })
 """)
-subprocess.run([str(gnoblin / "src/tools/gnoblinctl"), "script", "reload"], check=True)
+subprocess.run([str(gnoblin / "src/tools/gnoblinctl"), "reload"], check=True)
 fixture = config / "panel-blur-fade.qml"
 fixture.write_text(source.with_suffix(".qml").read_text().replace("../shell/bingux", (repo / "shell/bingux").as_uri()))
 qs = os.environ.get("QS_TEST_BIN", "qs")

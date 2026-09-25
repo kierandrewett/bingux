@@ -9,6 +9,8 @@ CalendarEvents 1.0 CalendarEvents.qml
 CalendarMonthGrid 1.0 CalendarMonthGrid.qml
 ControlCentre 1.0 ControlCentre.qml
 Dock 1.0 Dock.qml
+DockFolderIcon 1.0 DockFolderIcon.qml
+DockFolderPopup 1.0 DockFolderPopup.qml
 DockTooltip 1.0 DockTooltip.qml
 TooltipBubble 1.0 TooltipBubble.qml
 ShellTooltip 1.0 ShellTooltip.qml
@@ -16,6 +18,7 @@ InputSourceSelector 1.0 InputSourceSelector.qml
 Metrics 1.0 Metrics.qml
 MenuNavigator 1.0 MenuNavigator.qml
 NotificationState 1.0 NotificationState.qml
+SessionActivity 1.0 SessionActivity.qml
 NotificationSurface 1.0 NotificationSurface.qml
 NotificationTestButton 1.0 NotificationTestButton.qml
 OsdState 1.0 OsdState.qml
@@ -27,6 +30,7 @@ PrivacyIndicators 1.0 PrivacyIndicators.qml
 ProfileSettings 1.0 ProfileSettings.qml
 SearchOverlay 1.0 SearchOverlay.qml
 CaptureTool 1.0 CaptureTool.qml
+CaptureSettings 1.0 CaptureSettings.qml
 BrowserFocus 1.0 BrowserFocus.qml
 SearchResult 1.0 SearchResult.qml
 OsIconImage 1.0 OsIconImage.qml
@@ -78,6 +82,8 @@ BarTooltip 1.0 BarTooltip.qml
 NotificationIndicator 1.0 NotificationIndicator.qml
 
 singleton PreviewService 1.0 PreviewService.qml
+singleton WorkspaceState 1.0 WorkspaceState.qml
+WorkspaceWidget 1.0 WorkspaceWidget.qml
 
 ControlCentreExtras 1.0 ControlCentreExtras.qml
 TailscalePage 1.0 TailscalePage.qml
@@ -107,6 +113,8 @@ NotesContextMenu 1.0 NotesContextMenu.qml
 
 ActivityIndicator 1.0 ActivityIndicator.qml
 RecordingIndicator 1.0 RecordingIndicator.qml
+RecordingRegion 1.0 RecordingRegion.qml
+CaptureRegionMarker 1.0 CaptureRegionMarker.qml
 PrivacyState 1.0 PrivacyState.qml
 
 ProcessorDetails 1.0 ProcessorDetails.qml
@@ -123,12 +131,12 @@ TableRowSurface 1.0 TableRowSurface.qml
 ShellCommands 1.0 ShellCommands.qml
 
 singleton BinguxPreferences 1.0 BinguxPreferences.qml
-singleton LockTheme 1.0 LockTheme.qml
-LockAuthentication 1.0 LockAuthentication.qml
-LockScreen 1.0 LockScreen.qml
 BinguxSettings 1.0 BinguxSettings.qml
 
 singleton CompositorEnvironment 1.0 CompositorEnvironment.qml
+singleton LockTheme 1.0 LockTheme.qml
+LockAuthentication 1.0 LockAuthentication.qml
+LockScreen 1.0 LockScreen.qml
 NotesSlashMenu 1.0 NotesSlashMenu.qml
 SettingsGroup 1.0 SettingsGroup.qml
 SettingsHeading 1.0 SettingsHeading.qml
@@ -168,7 +176,7 @@ PanelOutline 1.0 PanelOutline.qml
 PopupShadow 1.0 PopupShadow.qml
 
 singleton PopupTransitions 1.0 PopupTransitions.qml
-LaunchErrorDialog 1.0 LaunchErrorDialog.qml
+singleton ShellNotifications 1.0 ShellNotifications.qml
 
 UiSession 1.0 UiSession.qml
 

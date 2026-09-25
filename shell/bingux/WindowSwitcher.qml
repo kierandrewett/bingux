@@ -26,6 +26,11 @@ Scope {
     property real revealProgress: 0
     readonly property bool compositorClose: PopupTransitions.matches(100, Easing.OutCubic, "bingux-switcher")
     property var history: []
+    property var historyOrderIds: []
+    property bool historyLoaded: false
+    property bool windowsLoaded: false
+    property var pendingWindowSnapshot: null
+    readonly property string orderStateDirectory: Quickshell.statePath("window-switcher")
     property var liveWindows: []
     property string focusedWindowId: ""
     property var windows: []
@@ -50,6 +55,45 @@ Scope {
         return cards.itemAt(selected)?.appIcon ?? null;
     }
     signal opening
+    function restoreHistory(text) {
+        try {
+            const state = JSON.parse(text);
+            if (!state || state.version !== 1 || !Array.isArray(state.windows) || state.windows.length > 512 || state.windows.some(id => typeof id !== "string" || id.length === 0 || id.length > 64))
+                throw new Error("Invalid saved window order");
+            historyOrderIds = [...new Set(state.windows)];
+        } catch (error) {
+            historyOrderIds = [];
+            console.warn("bingux-switcher: unable to restore window order:", error);
+        }
+        historyLoaded = true;
+        if (pendingWindowSnapshot !== null) {
+            const snapshot = pendingWindowSnapshot;
+            pendingWindowSnapshot = null;
+            refresh(snapshot);
+        }
+    }
+    function persistHistory(olderIds) {
+        const ids = history.slice(0, 512).map(window => String(window.id));
+        for (const id of olderIds)
+            if (ids.length < 512 && !ids.includes(id))
+                ids.push(id);
+        if (JSON.stringify(ids) === JSON.stringify(historyOrderIds))
+            return;
+        historyOrderIds = ids;
+        historyOrderFile.setText(JSON.stringify({version: 1, windows: ids}));
+    }
+    Process {
+        command: ["mkdir", "-p", "-m", "700", root.orderStateDirectory]
+        running: true
+        onExited: code => {
+            if (code === 0)
+                historyOrderFile.path = root.orderStateDirectory + "/order.json";
+            else {
+                console.warn("bingux-switcher: unable to create window-order state directory");
+                root.restoreHistory("{\"version\":1,\"windows\":[]}");
+            }
+        }
+    }
     onShownChanged: {
         if (shown)
             shownAt = Date.now();
@@ -67,6 +111,11 @@ Scope {
             root.windows = []
     }
     function refresh(snapshot) {
+        if (!historyLoaded) {
+            pendingWindowSnapshot = snapshot;
+            return;
+        }
+        windowsLoaded = true;
         const live = snapshot;
         const retainedPreviews = {};
         const retainedTimes = {};
@@ -82,8 +131,13 @@ Scope {
         for (const window of live)
             OsIcons.resolve(iconFor(window));
         liveWindows = live;
-        const previousIds = history.map(window => window.id);
-        history = history.map(window => live.find(next => next.id === window.id)).filter(Boolean).concat(live.filter(window => previousIds.indexOf(window.id) < 0).sort((a, b) => (b.lastUserTime || 0) - (a.lastUserTime || 0)));
+        const liveIds = new Set(live.map(window => String(window.id)));
+        const orderMatchesLive = historyOrderIds.some(id => liveIds.has(id));
+        const savedIds = live.length === 0 || orderMatchesLive ? historyOrderIds : [];
+        const remembered = savedIds.map(id => live.find(window => String(window.id) === id)).filter(Boolean);
+        const rememberedIds = new Set(remembered.map(window => String(window.id)));
+        const newWindows = live.filter(window => !rememberedIds.has(String(window.id))).sort((a, b) => (b.lastUserTime || 0) - (a.lastUserTime || 0));
+        history = remembered.concat(newWindows);
         const focused = live.find(window => window.focused);
         const focusedId = focused ? focused.id : "";
         if (focusedId !== focusedWindowId) {
@@ -92,6 +146,7 @@ Scope {
         }
         if (focused)
             history = [focused].concat(history.filter(window => window.id !== focused.id));
+        persistHistory(savedIds.filter(id => !liveIds.has(id)));
         if (!active)
             return;
         const previous = selectedWindow;
@@ -295,7 +350,7 @@ Scope {
                 });
             }
         }
-        enabled: root.enabled
+        enabled: root.enabled && root.historyLoaded && root.windowsLoaded
         bindings: [
             {
                 id: "switcher-forward",
@@ -364,6 +419,14 @@ Scope {
             else if (key === 65363 || key === 65289)
                 root.step(key === 65289 && (modifiers & 1) !== 0);
         }
+    }
+    FileView {
+        id: historyOrderFile
+        path: ""
+        atomicWrites: true
+        printErrors: false
+        onLoaded: root.restoreHistory(text())
+        onLoadFailed: root.restoreHistory("{\"version\":1,\"windows\":[]}")
     }
     FileView {
         path: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/bingux/switcher.json"

@@ -45,6 +45,7 @@ DEFAULTS = {
         "sidebarEdge": None,
         "layoutVersion": 0,
         "dockApps": None,
+        "dockFolders": [],
         "controlCentre": None,
         "controlOrder": None,
         "controlLayout": None,
@@ -207,6 +208,30 @@ def validate_desktop(desktop, previous=None):
                 or len(items) != len(set(items))
             ):
                 raise ValueError("Invalid dock application identifiers.")
+    folders = desktop["dockFolders"]
+    if not isinstance(folders, list) or len(folders) > 64:
+        raise ValueError("Invalid dock folders.")
+    folder_ids, member_ids = set(), set()
+    for folder in folders:
+        if not isinstance(folder, dict) or set(folder) != {"id", "name", "color", "apps"}:
+            raise ValueError("Invalid dock folder.")
+        folder_id, name, color, members = (folder[key] for key in ("id", "name", "color", "apps"))
+        if not isinstance(folder_id, str) or not re.fullmatch(r"folder:[a-z0-9]+", folder_id) or folder_id in folder_ids:
+            raise ValueError("Invalid dock folder identifier.")
+        if not isinstance(name, str) or not 1 <= len(name) <= 64 or any(ord(c) < 32 for c in name):
+            raise ValueError("Invalid dock folder name.")
+        if not isinstance(color, str) or color not in {"blue", "teal", "green", "yellow", "orange", "red", "pink", "purple", "slate"}:
+            raise ValueError("Invalid dock folder colour.")
+        if (
+            not isinstance(members, list)
+            or len(members) > 256
+            or any(not isinstance(item, str) or not item or len(item) > 256 or any(ord(c) < 32 for c in item) for item in members)
+            or len(members) != len(set(members))
+            or member_ids.intersection(members)
+        ):
+            raise ValueError("Invalid dock folder members.")
+        folder_ids.add(folder_id)
+        member_ids.update(members)
     controls = desktop["controlCentre"]
     control_order = desktop["controlOrder"]
     validate_control_layout(desktop["controlLayout"])

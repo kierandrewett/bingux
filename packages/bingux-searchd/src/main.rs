@@ -527,6 +527,7 @@ impl Runtime {
                 candidates.push(Candidate {
                     provider_id: "weather".to_owned(),
                     result,
+                    desktop_id: None,
                     activation: Activation::None,
                 });
             }
@@ -676,6 +677,7 @@ impl Runtime {
                         },
                         provider_id: provider_id.clone(),
                         result,
+                        desktop_id: None,
                     })
                     .collect();
                 let result_limit = tracker.reserve_result_slots(candidates.len());
@@ -808,9 +810,7 @@ impl Runtime {
             let result_id = format!("r{}", self.next_result_id.fetch_add(1, Ordering::Relaxed));
             let result = DaemonResult {
                 result_id: result_id.clone(),
-                desktop_id: (candidate.provider_id == "applications"
-                    && candidate.result.kind == bingux_searchd::protocol::ResultKind::Application)
-                    .then(|| candidate.result.result_id.clone()),
+                desktop_id: candidate.desktop_id,
                 provider_id: candidate.provider_id,
                 kind: candidate.result.kind,
                 title: candidate.result.title,
@@ -1899,6 +1899,7 @@ mod tests {
             protocol_version: 1,
             commands: SearchCommands {
                 application_launcher: vec!["/bin/true".to_owned()],
+                steam_game_catalog: Vec::new(),
                 file_opener: vec!["/bin/true".to_owned()],
                 clipboard: vec!["/bin/true".to_owned()],
             },
@@ -2329,6 +2330,7 @@ mod tests {
                 icon: String::new(),
                 score: 1.0,
             },
+            desktop_id: Some("org.example.App.desktop".into()),
             activation: Activation::None,
         }];
         let results = runtime.register_candidates(1, "q-app", candidates, 20);

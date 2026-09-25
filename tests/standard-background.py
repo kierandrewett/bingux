@@ -42,10 +42,10 @@ export default function(api) {
   GLib.file_set_contents(GLib.build_filenamev([GLib.get_user_config_dir(),'standard-state.json']), JSON.stringify(result));
   return GLib.SOURCE_CONTINUE;
  });
- api._disposers.push(() => GLib.source_remove(timer));
+ api.addCleanup(() => GLib.source_remove(timer));
 }
 """)
-subprocess.run([str(gnoblin / "src/tools/gnoblinctl"), "script", "reload"], check=True)
+subprocess.run([str(gnoblin / "src/tools/gnoblinctl"), "reload"], check=True)
 # Inspection aliases leave the production dock behaviour and input path intact.
 components = config / "components"
 components.mkdir()

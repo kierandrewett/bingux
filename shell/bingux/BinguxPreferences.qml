@@ -40,6 +40,7 @@ Singleton {
                 "sidebarEdge": null,
                 "layoutVersion": 0,
                 "dockApps": null,
+                "dockFolders": [],
                 "controlCentre": null,
                 "controlLayout": null,
                 "containers": {},

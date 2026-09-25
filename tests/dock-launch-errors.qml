@@ -4,6 +4,9 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
+    NotificationState { id: notifications }
+    NotificationSurface { id: notificationSurface; state: notifications }
+    CaptureTool { id: capture; screen: Quickshell.screens[0] }
     Timer {
         id: finish
         interval: 200
@@ -34,6 +37,7 @@ ShellRoot {
             finish.start();
         }
         function test_failures() {
+            report.setText("FAIL: initial launch\n");
             wait(300);
             const id = "bingux-missing-launch-test";
             const group = {
@@ -49,23 +53,27 @@ ShellRoot {
             dock.launch(group, false);
             tryVerify(() => !!dock.launchFailures[id], 10000);
             const dialog = findChild(dock, "launchErrorDialog");
-            verify(dialog !== null);
-            verify(dialog.visible);
-            verify(dialog.message.includes("could not be found"));
+            report.setText("FAIL: notification delivery " + JSON.stringify(notifications.allEntries.map(entry => ({summary:entry.summary, body:entry.body}))) + "\n");
+            verify(dialog === null, "Launch errors must not create a modal popup");
+            tryVerify(() => notifications.allEntries.some(entry => entry.summary === "Could not open Launch test"), 5000);
+            const notice = notifications.allEntries.find(entry => entry.summary === "Could not open Launch test");
+            verify(notice.body.includes("could not be found"));
+            compare(notice.actions[0].action.identifier, "retry");
+            report.setText("FAIL: failed icon appearance\n");
             verify(!dock.launchAttempts[id]);
             const icon = findChild(dock.contentItem, "dockApplicationIcon");
             verify(icon !== null);
             compare(icon.opacity, 0.5);
             verify(icon.layer.enabled);
+            report.setText("FAIL: notification screenshot\n");
             let captured = false;
-            dialog.contentItem.children[0].grabToImage(result => {
+            notificationSurface.viewport.grabToImage(result => {
                 result.saveToFile("/tmp/bingux-launch-error.png");
                 captured = true;
             });
             tryVerify(() => captured, 2000);
-            dialog.dismissCurrent();
-            verify(!dialog.visible);
             verify(!!dock.launchFailures[id]);
+            report.setText("FAIL: concurrent launches\n");
             dock.launchAttempts = {
                 first: {
                     serial: 100,
@@ -83,10 +91,8 @@ ShellRoot {
             dock.failLaunch("first", 100, "First failure");
             verify(!!dock.launchAttempts.second);
             dock.failLaunch("second", 101, "Second failure");
-            compare(dialog.applicationId, "first");
-            dialog.dismissCurrent();
-            compare(dialog.applicationId, "second");
-            dialog.dismissCurrent();
+            tryVerify(() => notifications.allEntries.some(entry => entry.body === "First failure"), 5000);
+            tryVerify(() => notifications.allEntries.some(entry => entry.body === "Second failure"), 5000);
             dock.appGroups = [
                 {
                     id: id,
@@ -94,6 +100,7 @@ ShellRoot {
                     windows: [lateWindow]
                 }
             ];
+            report.setText("FAIL: late recovery\n");
             tryVerify(() => !dock.launchFailures[id], 1000);
             compare(icon.opacity, 1);
             dock.launchAttempts = {
@@ -103,18 +110,26 @@ ShellRoot {
                     deadline: Date.now() - 1
                 }
             };
+            report.setText("FAIL: timeout notification\n");
             tryVerify(() => !!dock.launchFailures.timeout, 1000);
-            verify(dialog.visible);
-            verify(dialog.message.includes("may still be starting"));
-            dialog.dismissCurrent();
+            tryVerify(() => notifications.allEntries.some(entry => entry.body.includes("may still be starting")), 5000);
             dock.launchFailures = Object.assign({}, dock.launchFailures, {
                 timeout: Object.assign({}, dock.launchFailures.timeout, {
                     expiresAt: Date.now() - 1
                 })
             });
             tryVerify(() => !dock.launchFailures.timeout, 1000);
-            verify(!dialog.visible);
-            report.setText("FAILURES 0\nMissing entry, visible error, grey icon, late recovery, timeout and concurrent launches verified\n");
+            report.setText("FAIL: capture error notification\n");
+            capture.handle({event: "error", message: "The recording worker stopped unexpectedly.", partial: "/tmp/preserved-recording.mp4"});
+            capture.handle({event: "error", message: "The recording worker stopped unexpectedly.", partial: "/tmp/preserved-recording.mp4"});
+            tryVerify(() => notifications.allEntries.some(entry => entry.summary === "Capture failed"), 5000);
+            const captureErrors = notifications.allEntries.filter(entry => entry.summary === "Capture failed");
+            compare(captureErrors.length, 1, "Replayed error is not notified twice");
+            verify(captureErrors[0].body.includes("/tmp/preserved-recording.mp4"));
+            report.setText("FAIL: retry action\n");
+            // Retry dispatch itself is unit-tested without launching into the
+            // real host user manager from this isolated notification session.
+            report.setText("FAILURES 0\nNormal notifications: missing entry, Retry button, capture error and partial path, deduplication, grey icon, late recovery, timeout and concurrent launches verified\n");
             finish.start();
         }
     }

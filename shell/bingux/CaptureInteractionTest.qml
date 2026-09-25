@@ -4,6 +4,10 @@ import Quickshell
 import Quickshell.Io
 
 ShellRoot {
+    UiSession {
+        sessionName: "capture-interaction-test"
+        state: ({visible: capture.opened, surface: "bingux-capture", companions: ["bingux-capture-controls"], companionsAbove: true})
+    }
     property bool frozenBeforeDismiss: false
     FileView {
         id: report
@@ -32,7 +36,7 @@ ShellRoot {
     TestCase {
         name: "CaptureInteractions"
         parent: capture.previewItem
-        when: capture.opened && capture.previewItem !== null
+        when: capture.opened && capture.previewItem !== null && capture.previewItem.width > 0 && capture.selectionItem !== null
         function find(item, name) {
             if (item.objectName === name)
                 return item;
@@ -48,10 +52,11 @@ ShellRoot {
             report.setText("FAIL: menus dismissed before frozen frame=" + !frozenBeforeDismiss + "\n");
             verify(frozenBeforeDismiss, "Freeze menus before requesting their dismissal");
             const surface = capture.previewItem;
+            const selection = capture.selectionItem;
             const toolbar = find(surface, "captureToolbar");
             verify(toolbar !== null);
             tryCompare(toolbar, "opacity", 1, 1000);
-            compare(toolbar.height, 56);
+            compare(toolbar.height, 176);
             verify(capture.previewToken !== "", "Preview is frozen, not live");
             const images = capture.previews[capture.activeScreen.name];
             verify(images.plain !== images.cursor, "Cursor variants are separate frozen images");
@@ -59,21 +64,21 @@ ShellRoot {
             const before = cursor.chosen;
             mouseClick(cursor);
             compare(cursor.chosen, !before, "Cursor switch changes preview mode");
-            mousePress(surface, 30, 80);
-            mouseMove(surface, surface.width - 1, surface.height - 1);
+            mousePress(selection, 30, 80);
+            mouseMove(selection, surface.width - 1, surface.height - 1);
             report.setText("FAIL: edge selection " + capture.region + " screen " + surface.width + "x" + surface.height + "\n");
             compare(capture.region.x + capture.region.width, surface.width, "Drawing reaches the last screen column");
             compare(capture.region.y + capture.region.height, surface.height, "Drawing reaches the last screen row");
-            mouseRelease(surface, surface.width - 1, surface.height - 1);
+            mouseRelease(selection, surface.width - 1, surface.height - 1);
             capture.resetRegion();
-            const resize = find(surface, "captureRegionResize1_1");
+            const resize = find(selection, "captureRegionResize1_1");
             mousePress(resize, resize.width / 2, resize.height / 2);
-            mouseMove(surface, surface.width - 1, surface.height - 1);
+            mouseMove(selection, surface.width - 1, surface.height - 1);
             compare(capture.region.x + capture.region.width, surface.width, "Resize reaches right edge");
             compare(capture.region.y + capture.region.height, surface.height, "Resize reaches bottom edge");
-            mouseRelease(surface, surface.width - 1, surface.height - 1);
+            mouseRelease(selection, surface.width - 1, surface.height - 1);
             capture.resetRegion();
-            const region = find(surface, "captureRegionMove");
+            const region = find(selection, "captureRegionMove");
             report.setText("FAIL: move/drag fade\n");
             mousePress(region, region.width / 2, region.height / 2);
             mouseMove(region, region.width / 2 + 20, region.height / 2 + 20);
@@ -83,13 +88,13 @@ ShellRoot {
             for (const point of [Qt.point(0, 0), Qt.point(surface.width - 1, surface.height - 1)]) {
                 mousePress(region, region.width / 2, region.height / 2);
                 const width = capture.region.width, height = capture.region.height;
-                mouseMove(surface, point.x, point.y);
+                mouseMove(selection, point.x, point.y);
                 verify(capture.regionDragging, "Moving keeps ownership at the screen edge");
                 compare(capture.region.x, point.x === 0 ? 0 : surface.width - width);
                 compare(capture.region.y, point.y === 0 ? 0 : surface.height - height);
                 compare(capture.region.width, width);
                 compare(capture.region.height, height);
-                mouseRelease(surface, point.x, point.y);
+                mouseRelease(selection, point.x, point.y);
             }
             capture.resetRegion();
             const handle = find(surface, "captureToolbarHandle");
@@ -99,26 +104,21 @@ ShellRoot {
             mouseMove(surface, toolbar.x + 20, toolbar.y - 80);
             mouseRelease(handle);
             verify(toolbar.y < oldY - 40, "Toolbar moves with its handle");
+            verify(capture.configureOptions(JSON.stringify({kind: "recording", audio: "none"})).ok);
             report.setText("FAIL: settings toggle or menu lookup\n");
             mouseClick(find(surface, "captureSettingsToggle"));
             report.setText("FAIL: settings opened=" + capture.optionsOpen + "\n");
             verify(capture.optionsOpen);
             waitForPolish(surface);
-            wait(20);
-            const qualityField = find(surface, "captureChoiceQuality");
-            mouseClick(qualityField);
-            waitForPolish(surface);
-            wait(20);
-            const qualityMenu = qualityField.parent.popup;
-            report.setText("FAIL: dropdown visible=" + qualityMenu.visible + " x=" + qualityMenu.panelX + " field x=" + qualityField.mapToItem(surface, 0, 0).x + " widths=" + qualityMenu.popupWidth + "/" + qualityField.width + "\n");
-            verify(qualityMenu.visible);
-            compare(qualityMenu.popupWidth, qualityField.width, "Dropdown matches field width");
-            compare(qualityMenu.panelX, qualityField.mapToItem(surface, 0, 0).x, "Dropdown aligns after toolbar moves");
-            keyClick(Qt.Key_Down);
-            keyClick(Qt.Key_Return);
+            tryCompare(toolbar, "settingsProgress", 1, 1000);
+            const quality = find(surface, "captureChoiceQualityHigh");
+            mouseClick(quality);
+            compare(capture.optionsSnapshot().quality, "high");
+            mouseClick(find(surface, "captureSettingsBack"));
+            compare(capture.optionsOpen, false);
             keyClick(Qt.Key_Escape);
             tryCompare(capture, "opened", false, 500);
-            report.setText("PASS: exact drawing/resizing/moving screen edges, frozen cursor preview, drag fade, toolbar drag, custom menu, Escape after focused controls\n");
+            report.setText("PASS: exact drawing/resizing/moving screen edges, frozen cursor preview, drag fade, toolbar drag, inline settings, Escape after focused controls\n");
             finish.start();
         }
     }

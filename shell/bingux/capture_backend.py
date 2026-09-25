@@ -2,6 +2,7 @@
 """Bingux capture worker: portal/PipeWire, optional compositor fast paths, H.264."""
 
 import json
+import math
 import ctypes
 import os
 from pathlib import Path
@@ -27,6 +28,26 @@ from gi.repository import Gio, GLib, Gst, GdkPixbuf, GstVideo  # noqa: E402 - Se
 PORTAL = "org.freedesktop.portal.Desktop"
 PORTAL_PATH = "/org/freedesktop/portal/desktop"
 MUTTER = "org.gnome.Mutter.ScreenCast"
+
+
+def trim_recording(path, duration):
+    """Remove the stop interaction without re-encoding; retain the original on failure."""
+    fd, name = tempfile.mkstemp(prefix=".bingux-trim-", suffix=".mp4", dir=path.parent)
+    os.close(fd)
+    trimmed = Path(name)
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-nostdin", "-v", "error", "-y", "-i", str(path),
+                "-t", str(duration), "-map", "0", "-c", "copy", "-movflags", "+faststart", str(trimmed),
+            ],
+            check=True, capture_output=True, timeout=120,
+        )
+        if trimmed.stat().st_size == 0:
+            raise ValueError("Trim produced no output")
+        os.replace(trimmed, path)
+    finally:
+        trimmed.unlink(missing_ok=True)
 
 
 class VideoCropMeta(ctypes.Structure):
@@ -238,6 +259,7 @@ class Capture:
             windowPicker=self.window_picker,
             encoders=self.encoders,
             audio=bool(Gst.ElementFactory.find("pulsesrc") and Gst.ElementFactory.find("avenc_aac")),
+            cleanStop=bool(shutil.which("ffmpeg")),
         )
         try:
             self.loop.run()
@@ -268,7 +290,7 @@ class Capture:
                 elif command == "capture":
                     self.capture(record)
                 elif command == "stop":
-                    self.stop()
+                    self.stop(record.get("hoveredAt", 0))
                 elif command == "cancel":
                     self.cancel()
             except (ValueError, TypeError, OSError, GLib.Error, subprocess.SubprocessError) as error:
@@ -284,7 +306,15 @@ class Capture:
 
     def preview(self, record):
         self.clear_preview()
-        windows = capture_windows() if self.window_picker else []
+        windows = []
+        if self.window_picker:
+            try:
+                windows = capture_windows()
+            except (OSError, ValueError, KeyError):
+                # The compositor bridge can disappear after startup. Keep the
+                # region/screen preview working and let the portal handle a
+                # window selection instead of failing the whole capture UI.
+                self.window_picker = False
         token = uuid.uuid4().hex
         tasks = []
         for index, screen in enumerate(record.get("screens", [])[:16]):
@@ -730,12 +760,28 @@ class Capture:
             if state == Gst.State.PLAYING and not self.started:
                 self.started = True
                 if self.job["kind"] == "recording":
-                    self.emit("recording", path=str(self.final), encoder=self.encoder, started=time.time())
+                    clock = self.pipeline.get_clock()
+                    running = (clock.get_time() - self.pipeline.get_base_time()) / Gst.SECOND if clock else 0
+                    self.job["startedAt"] = time.time() - running
+                    self.emit(
+                        "recording", path=str(self.final), encoder=self.encoder, started=self.job["startedAt"],
+                        target=self.job["target"], region=self.job.get("region"),
+                    )
 
-    def stop(self):
+    def stop(self, hovered_at=0):
         if self.pipeline and self.job and self.job["kind"] == "recording":
             if self.stopping:
                 return
+            # A pointer exit clears the UI mark. Keyboard/shortcut stops send zero.
+            # Invalid or stale marks must never discard the whole recording.
+            started = self.job.get("startedAt", 0)
+            if (
+                isinstance(hovered_at, (int, float)) and not isinstance(hovered_at, bool)
+                and math.isfinite(hovered_at) and started > 0
+                and started + 0.25 <= hovered_at / 1000 <= time.time()
+                and shutil.which("ffmpeg")
+            ):
+                self.job["trimDuration"] = hovered_at / 1000 - started
             self.stopping = True
             self.emit("finalizing")
             self.pipeline.send_event(Gst.Event.new_eos())
@@ -753,6 +799,12 @@ class Capture:
         if not temporary or not temporary.exists() or temporary.stat().st_size == 0:
             self.emit("error", message="Capture produced no output")
             return
+        if job.get("trimDuration"):
+            try:
+                trim_recording(temporary, job["trimDuration"])
+            except (OSError, ValueError, subprocess.SubprocessError):
+                self.emit("error", message="Could not trim the ending. The full recording was preserved.", partial=str(temporary))
+                return
         os.replace(temporary, output)
         copied = False
         if job["kind"] == "screenshot" and job["copy"]:

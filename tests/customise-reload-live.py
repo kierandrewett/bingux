@@ -10,7 +10,7 @@ import signal
 import subprocess
 import tempfile
 import time
-from private_shell import stage_compositor_bridge
+from private_shell import private_script_dir
 
 
 if not os.environ.get("WAYLAND_DISPLAY", "").startswith("gnoblin-gs-"):
@@ -121,7 +121,7 @@ with tempfile.TemporaryDirectory(prefix="bingux-editor-reload-") as directory:
             time.sleep(0.15)
         raise AssertionError(f"Shell did not reach the expected state: {last_response}")
 
-    stage_compositor_bridge(repo, os.environ["XDG_CONFIG_HOME"])
+    private_script_dir(os.environ["XDG_CONFIG_HOME"])
     subprocess.run(["python3", str(input_helper), "--prepare"], env=environment, check=True)
     with (fixture / "runtime.log").open("w+") as log:
         process = subprocess.Popen(

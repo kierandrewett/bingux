@@ -27,8 +27,8 @@ def display_state():
     ).unpack()
 
 
-def stage_compositor_bridge(repo, config):
-    """Stage the current bridge before the private input service reloads scripts."""
+def private_script_dir(config):
+    """Create the custom-script directory in a private test session."""
     config = Path(config).resolve()
     if (
         not str(config).startswith("/tmp/gnoblin-gs.")
@@ -38,9 +38,6 @@ def stage_compositor_bridge(repo, config):
         raise RuntimeError("Only a private Gnoblin session can receive the test bridge")
     scripts = config / "gnoblin/scripts"
     scripts.mkdir(parents=True, exist_ok=True)
-    source = Path(repo).parent / "gnoblin/src/scripts"
-    shutil.copy2(source / "compositor-bridge.js", scripts)
-    shutil.copytree(source / "lib", scripts / "lib", dirs_exist_ok=True)
     return scripts
 
 
