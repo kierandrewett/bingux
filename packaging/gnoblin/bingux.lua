@@ -44,28 +44,58 @@ return {
             corners = {
                 mode = "force",
                 radius = 12,
-                smoothing = 0.5,
+                smoothing = 1.0,
+                ["remove-csd"] = true,
+                ["keep-maximized"] = true,
+                ["keep-fullscreen"] = true,
+                ["keep-tiled"] = true,
                 ["shadow-animation"] = { duration = 180, easing = "ease-out-cubic" },
                 shadow = {
-                    { x = 0, y = 8, blur = 24, spread = 0, opacity = 0.14 },
-                    { x = 0, y = 2, blur = 5, spread = 0, opacity = 0.18 },
+                    { x = 0, y = 8, blur = 42, spread = 4, opacity = 0.22 },
+                    { x = 0, y = 3, blur = 14, spread = 1, opacity = 0.18 },
+                    { x = 0, y = 1, blur = 4, spread = 0, opacity = 0.22 },
                 },
             },
             borders = {
                 ["inner-width"] = 1,
-                ["inner-color"] = "#505050bf",
+                ["inner-color"] = "#9aa0a6a8",
                 ["outer-width"] = 1,
-                ["outer-color"] = "#00000080",
+                ["outer-color"] = "#252a31a8",
             },
         },
         {
             match = { type = "window", focused = true },
             corners = {
                 shadow = {
-                    { x = 0, y = 10, blur = 36, spread = 0, opacity = 0.22 },
-                    { x = 0, y = 2, blur = 5, spread = 0, opacity = 0.28 },
+                    { x = 0, y = 18, blur = 64, spread = 8, opacity = 0.38 },
+                    { x = 0, y = 8, blur = 24, spread = 2, opacity = 0.26 },
+                    { x = 0, y = 2, blur = 6, spread = 0, opacity = 0.32 },
                 },
             },
+        },
+        {
+            match = { type = "layer" },
+            blur = 24,
+            opacity = 0.2,
+        },
+        {
+            match = {
+                layer = "^(bingux-top-bar|bingux-dock|bingux-search|gnoblin-shell-popup)$",
+            },
+            blur = 24,
+            opacity = 0.9,
+        },
+        {
+            match = {
+                layer = "^(bingux-top-bar|bingux-terminal-sidebar|bingux-sidebar-corner|bingux-panel-outline|bingux-dock|bingux-search|gnoblin-shell-popup|bingux-bar-tooltip|gnoblin-dock-tooltip|bingux-notifications|bingux-capture-feedback|bingux-capture-controls)$",
+            },
+            ["blur-ignore-shadows"] = true,
+            blur = 24,
+            opacity = 1.0,
+        },
+        {
+            match = { layer = "^bingux-dock$" },
+            blur = 48,
         },
         {
             match = {
