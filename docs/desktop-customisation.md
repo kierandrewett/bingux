@@ -8,6 +8,8 @@ The open centre palette has Widgets and Apps views. Drag an installed app into t
 
 The palette uses shared widget components with sample content. It does not continuously capture live widgets. The item you pick up follows the cursor, and a line marks its insertion position. Fixed Space and Flexible space items can be added more than once to the top bar. Flexible spaces share the available width in their section. Fixed spaces have an adjustable width from 8 to 160 pixels.
 
+The **Workspaces** widget shows the active workspace's number and display name. Open it to switch by workspace; Bingux addresses the target by its stable Gnoblin workspace ID. Add it to the top bar, dock, sidebar, or control centre from the Widgets palette. It is available when Bingux can connect to Gnoblin's compositor bridge.
+
 Label and Icon tiles create independent items in the top bar or dock. Edit their text or choose a symbol from the icon grid. They follow the container display mode unless you set an override. Removing an instance clears its options; Undo restores both the item and its appearance.
 
 A popped-out sidebar uses its saved desktop edge while the editor is open. The

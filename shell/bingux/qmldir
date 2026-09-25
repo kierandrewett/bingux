@@ -78,6 +78,8 @@ BarTooltip 1.0 BarTooltip.qml
 NotificationIndicator 1.0 NotificationIndicator.qml
 
 singleton PreviewService 1.0 PreviewService.qml
+singleton WorkspaceState 1.0 WorkspaceState.qml
+WorkspaceWidget 1.0 WorkspaceWidget.qml
 
 ControlCentreExtras 1.0 ControlCentreExtras.qml
 TailscalePage 1.0 TailscalePage.qml

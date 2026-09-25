@@ -81,6 +81,7 @@ FocusScope {
                     "control-customise": customiseButton
                 })[root.widgetId] || headerButton : root.panelWidget ? panel : root.spec.decoration ? decoration : root.spec.layoutItem ? space : root.widgetId.startsWith("control-") ? control : ({
                     search,
+                    workspaces,
                     clock,
                     controls: indicators,
                     notifications,
@@ -98,6 +99,14 @@ FocusScope {
         ExtensionWidget {
             widgetId: root.widgetId
             preview: true
+        }
+    }
+    Component {
+        id: workspaces
+        WorkspaceWidget {
+            preview: true
+            barStyle: root.barLayout
+            barWindow: DesktopEditing.editor?.nativeWindow
         }
     }
     Component {

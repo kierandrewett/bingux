@@ -1,5 +1,6 @@
 const externalIds = [
     "search",
+    "workspaces",
     "clock",
     "capture",
     "tray",

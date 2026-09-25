@@ -2,6 +2,7 @@
 
 const widgets = [
     { id: "search", label: "Search", icon: "system-search-symbolic" },
+    { id: "workspaces", label: "Workspaces", icon: "view-grid-symbolic" },
     { id: "clock", label: "Date and time", icon: "x-office-calendar-symbolic" },
     { id: "controls", label: "Control centre", icon: "preferences-system-symbolic" },
     { id: "notifications", label: "Notifications", icon: "preferences-system-notifications-symbolic" },
