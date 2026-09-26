@@ -45,6 +45,9 @@ return {
                 mode = "force",
                 radius = 12,
                 smoothing = 0.5,
+                -- Reconstruct client-drawn rounded corners before applying
+                -- Bingux's shared shape, using each window's own pixels.
+                ["remove-csd"] = true,
                 ["shadow-animation"] = { duration = 180, easing = "ease-out-cubic" },
                 shadow = {
                     { x = 0, y = 8, blur = 24, spread = 0, opacity = 0.14 },
