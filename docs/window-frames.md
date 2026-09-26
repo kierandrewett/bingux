@@ -35,9 +35,16 @@ It is not automatically enabled. Add to your Gnoblin Lua config (adjust PREFIX):
     { match = { ["app-id"] = "^spotify$" },
       frame = { mode = "prefer-server", renderer = "bingux",
                 extents = { 36, 0, 0, 0 } },
-      corners = { mode = "force", radius = 12 } },
+      corners = { mode = "force", radius = 12, remove_csd = true } },
 },
 ```
+
+The packaged Bingux rule enables `remove_csd` by default. Gnoblin samples each
+client-drawn corner and fills the transparent gap from nearby window pixels
+before applying the shared rounded shape. This keeps CSD windows aligned with
+Bingux's server-drawn frame and avoids a wallpaper-coloured fringe around the
+window. If Gnoblin cannot find a safe, even background to sample, it preserves
+the client's original corner.
 
 Service registration reloads with `gnoblinctl config reload`. After rebuilding
 `bingux-frame`, use the same `gnoblinctl config reload` command. Watched config

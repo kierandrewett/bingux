@@ -45,6 +45,8 @@ return {
                 mode = "force",
                 radius = 12,
                 smoothing = 1.0,
+                -- Reconstruct client-drawn rounded corners before applying
+                -- Bingux's shared shape, using each window's own pixels.
                 ["remove-csd"] = true,
                 ["keep-maximized"] = true,
                 ["keep-fullscreen"] = true,
@@ -76,7 +78,6 @@ return {
         {
             match = { type = "layer" },
             blur = 24,
-            opacity = 0.2,
         },
         {
             match = {
