@@ -8,6 +8,8 @@ QtObject {
     property var bindings: []
     property bool enabled: true
     property int bindingRetries: 0
+    property int reconnectDelay: 250
+    property double lastStatusAt: 0
     property int boundCount: 0
     property int sessionSerial: 0
     property var capabilities: []
@@ -95,6 +97,13 @@ QtObject {
                     op: "bind"
                 }, binding));
     }
+    function reconnect(reason) {
+        console.warn("bingux-shortcuts: " + reason + "; reconnecting");
+        root.failed(reason);
+        if (root.socket.connected)
+            root.socket.connected = false;
+        root.retry.restart();
+    }
     onReadyChanged: if (ready) {
         bindingRetries = 0;
         bindingRetry.stop();
@@ -117,15 +126,21 @@ QtObject {
             root.boundCount = 0;
             root.capabilities = [];
             root.bindingRetries = 0;
-            bindingRetry.stop();
+            root.bindingRetry.stop();
             if (!connected) {
+                root.healthCheck.stop();
+                root.lastStatusAt = 0;
                 root.cancelled();
-                retry.restart();
+                root.retry.restart();
             }
         }
         onError: {
             root.cancelled();
-            retry.restart();
+            // QLocalSocket may report an error while its requested connected
+            // state remains true. Drop that state so retry forces a new connect.
+            if (connected)
+                connected = false;
+            root.retry.restart();
         }
         parser: SplitParser {
             onRead: function (data) {
@@ -133,7 +148,20 @@ QtObject {
                     const record = JSON.parse(data);
                     if (record.event === "hello") {
                         root.capabilities = record.features || [];
+                        root.reconnectDelay = 250;
+                        root.lastStatusAt = Date.now();
+                        root.retry.stop();
                         root.registerBindings();
+                        root.healthCheck.start();
+                    } else if (record.event === "status") {
+                        root.lastStatusAt = Date.now();
+                        const activeBindings = record.bindings || [];
+                        const missing = root.enabled ? root.bindings.filter(binding => !activeBindings.includes(binding.id)) : [];
+                        if (missing.length > 0 && !root.bindingRetry.running) {
+                            const ids = missing.map(binding => binding.id).join(", ");
+                            console.warn("bingux-shortcuts: compositor lost bindings " + ids + "; registering again");
+                            root.registerBindings();
+                        }
                     } else if (record.event === "ui-state")
                         root.uiState(record.name, record.state);
                     else if (record.event === "ui-command")
@@ -171,8 +199,8 @@ QtObject {
                         root.previewReceived(record.window, record.source, record.message || "");
                     else if (record.event === "error") {
                         root.failed(record.message);
-                        if (String(record.message).startsWith("shortcut already claimed:") && root.bindingRetries < 8)
-                            bindingRetry.restart();
+                        if (String(record.message).startsWith("shortcut already claimed:") && !root.ready)
+                            root.bindingRetry.restart();
                     }
                 } catch (error) {
                     root.failed(String(error));
@@ -181,8 +209,35 @@ QtObject {
         }
     }
     property var retry: Timer {
-        interval: 500
-        onTriggered: if (CompositorEnvironment.gnoblin && !socket.connected)
-            socket.connected = true
+        interval: root.reconnectDelay
+        onTriggered: {
+            if (!CompositorEnvironment.gnoblin)
+                return;
+            root.reconnectDelay = Math.min(5000, root.reconnectDelay * 2);
+            if (root.socket.connected) {
+                root.socket.connected = false;
+                Qt.callLater(() => {
+                    if (CompositorEnvironment.gnoblin)
+                        root.socket.connected = true;
+                });
+            } else {
+                root.socket.connected = true;
+            }
+        }
+    }
+    property var healthCheck: Timer {
+        interval: 5000
+        repeat: true
+        onTriggered: {
+            if (!root.socket.connected)
+                return;
+            if (Date.now() - root.lastStatusAt > 15000) {
+                root.reconnect("compositor status heartbeat timed out");
+                return;
+            }
+            root.send({
+                op: "status"
+            });
+        }
     }
 }
