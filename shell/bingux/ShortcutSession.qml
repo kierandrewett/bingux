@@ -45,6 +45,8 @@ QtObject {
     signal pointerPressed(real x, real y, int button)
     signal previewReceived(string windowId, string source, string error)
     signal textInserted(string windowId)
+    signal textTargetReceived(var target, string error, string requestTag)
+    signal textInsertionFinished(string windowId, bool succeeded, string error, string requestTag)
     signal inputAnchor(var anchor)
 
     function nextRequestId() {
@@ -117,14 +119,25 @@ QtObject {
         if (handleThumbnailCompletion(record))
             return true;
         const operationId = String(record.operation_id || "");
-        const method = operationRequests[operationId];
-        if (!method)
+        const pending = operationRequests[operationId];
+        if (!pending)
             return false;
         const requests = Object.assign({}, operationRequests);
         delete requests[operationId];
-        operationRequests = requests;
-        if (record.ok !== true)
-            failed(record.error?.message || method + " failed");
+        if (pending.purpose === "text-target") {
+            if (record.ok === true)
+                textTargetReceived(record.value || {}, "", pending.requestTag);
+            else
+                textTargetReceived(null, record.error?.message || "Could not identify the focused text field", pending.requestTag);
+        } else if (pending.purpose === "text-insert") {
+            const succeeded = record.ok === true && record.value?.inserted === true;
+            const error = succeeded ? "" : (record.error?.message || "The app did not accept the text");
+            textInsertionFinished(pending.windowId || "", succeeded, error, pending.requestTag || "");
+            if (!succeeded)
+                failed(error);
+        } else if (record.ok !== true) {
+            failed(record.error?.message || pending.method + " failed");
+        }
         return true;
     }
 
@@ -146,7 +159,9 @@ QtObject {
                 return;
             }
             operationRequests = Object.assign({}, operationRequests, {
-                [String(operationId)]: method
+                [String(operationId)]: {
+                    method
+                }
             });
         });
         if (!requestId)
@@ -347,7 +362,71 @@ QtObject {
         });
     }
 
-    function insertText(windowId, text) {
+    function requestTextTarget(focusContext, requestTag) {
+        if (!nativeProtocol) {
+            requestInputAnchor();
+            return;
+        }
+        if (apiMinor < 28 || !focusContext) {
+            textTargetReceived(null, "Text insertion needs a fresh shortcut context and Gnoblin API 1.28", requestTag || "");
+            return;
+        }
+        const requestId = requestApi("input.text_target", {
+            focus_context: focusContext
+        }, (result, error) => {
+            if (error) {
+                textTargetReceived(null, error, requestTag || "");
+                return;
+            }
+            const operationId = Number(result.operation_id ?? result.request_id);
+            if (!Number.isSafeInteger(operationId) || operationId <= 0) {
+                textTargetReceived(null, "Gnoblin returned no operation ID for input.text_target", requestTag || "");
+                return;
+            }
+            operationRequests = Object.assign({}, operationRequests, {
+                [String(operationId)]: {
+                    method: "input.text_target",
+                    purpose: "text-target",
+                    requestTag: requestTag || ""
+                }
+            });
+        });
+        if (!requestId)
+            textTargetReceived(null, "Gnoblin is not ready for input.text_target", requestTag || "");
+    }
+
+    function insertText(windowId, text, target, requestTag) {
+        if (nativeProtocol) {
+            if (apiMinor < 28 || !target) {
+                textInsertionFinished(windowId || "", false, "No valid Gnoblin text target is available", requestTag || "");
+                return;
+            }
+            const requestId = requestApi("input.insert_text", {
+                target,
+                text
+            }, (result, error) => {
+                if (error) {
+                    textInsertionFinished(windowId || "", false, error, requestTag || "");
+                    return;
+                }
+                const operationId = Number(result.operation_id ?? result.request_id);
+                if (!Number.isSafeInteger(operationId) || operationId <= 0) {
+                    textInsertionFinished(windowId || "", false, "Gnoblin returned no operation ID for input.insert_text", requestTag || "");
+                    return;
+                }
+                operationRequests = Object.assign({}, operationRequests, {
+                    [String(operationId)]: {
+                        method: "input.insert_text",
+                        purpose: "text-insert",
+                        requestTag: requestTag || "",
+                        windowId: windowId || ""
+                    }
+                });
+            });
+            if (!requestId)
+                textInsertionFinished(windowId || "", false, "Gnoblin is not ready for input.insert_text", requestTag || "");
+            return;
+        }
         send({
             op: "bingux.type-text",
             window: windowId,
