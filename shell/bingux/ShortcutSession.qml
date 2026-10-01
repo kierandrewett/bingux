@@ -24,6 +24,10 @@ QtObject {
     property int requestSequence: 0
     property var ownedBindings: []
     property bool bindingRequestPending: false
+    property string activeSessionBindingId: ""
+    property string activeSessionId: ""
+    property string pendingEndSessionId: ""
+    property var endingSessionIds: []
     property var apiRequests: ({})
     property var thumbnailRequests: ({})
     property var operationRequests: ({})
@@ -293,6 +297,17 @@ QtObject {
         return bindings.map(normaliseBinding);
     }
 
+    function resumePendingEnd() {
+        if (!pendingEndSessionId)
+            return false;
+        const sessionId = pendingEndSessionId;
+        pendingEndSessionId = "";
+        if (sessionId !== activeSessionId)
+            return false;
+        end();
+        return true;
+    }
+
     function reconcileNativeBindings() {
         if (!nativeProtocol || !apiReady || bindingRequestPending)
             return;
@@ -319,6 +334,8 @@ QtObject {
                     failed(error);
                 ownedBindings = ownedBindings.filter(binding => binding.id !== stale.id);
                 boundCount = ownedBindings.length;
+                if (resumePendingEnd())
+                    return;
                 reconcileNativeBindings();
             });
             return;
@@ -336,6 +353,8 @@ QtObject {
                     ownedBindings = ownedBindings.concat([missing]);
                     boundCount = ownedBindings.length;
                 }
+                if (resumePendingEnd())
+                    return;
                 reconcileNativeBindings();
             });
             return;
@@ -469,7 +488,39 @@ QtObject {
     }
 
     function end() {
-        if (!nativeProtocol) {
+        if (nativeProtocol) {
+            const bindingId = activeSessionBindingId;
+            const sessionId = activeSessionId;
+            if (!bindingId || !sessionId)
+                return;
+            if (bindingRequestPending) {
+                pendingEndSessionId = sessionId;
+                return;
+            }
+            endingSessionIds = endingSessionIds.concat([sessionId]);
+            bindingRequestPending = true;
+            const requestId = requestApi("shortcut.unbind", {
+                id: bindingId
+            }, (result, error) => {
+                bindingRequestPending = false;
+                if (error) {
+                    endingSessionIds = endingSessionIds.filter(id => id !== sessionId);
+                    failed(error);
+                    return;
+                }
+                ownedBindings = ownedBindings.filter(binding => binding.id !== bindingId);
+                boundCount = ownedBindings.length;
+                activeSessionBindingId = "";
+                activeSessionId = "";
+                sessionSerial = 0;
+                reconcileNativeBindings();
+            });
+            if (!requestId) {
+                bindingRequestPending = false;
+                endingSessionIds = endingSessionIds.filter(id => id !== sessionId);
+                failed("Gnoblin is not ready to end the shortcut session");
+            }
+        } else {
             send({
                 op: "end",
                 session: sessionSerial
@@ -578,6 +629,10 @@ QtObject {
             root.helloReceived = false;
             root.apiReady = false;
             root.nativeProtocol = false;
+            root.activeSessionBindingId = "";
+            root.activeSessionId = "";
+            root.pendingEndSessionId = "";
+            root.endingSessionIds = [];
             root.apiMajor = 0;
             root.apiMinor = 0;
             root.capabilities = [];
@@ -699,15 +754,33 @@ QtObject {
                         root.previewReceived(record.window, record.source, record.message || "");
                     else if (root.nativeProtocol && record.event === "gnoblin.shortcut.binding-activated") {
                         root.sessionSerial = record.session_id || 0;
+                        if (root.sessionSerial) {
+                            root.activeSessionBindingId = record.id;
+                            root.activeSessionId = String(root.sessionSerial);
+                        }
                         root.activated(record.id, record.first !== false, record.modifiers || 0, record.focus_context || "");
                     } else if (root.nativeProtocol && record.event === "gnoblin.shortcut.session.activated") {
+                        root.sessionSerial = record.session_id || 0;
+                        root.activeSessionBindingId = record.id;
+                        root.activeSessionId = String(root.sessionSerial);
                         if (record.first === false)
                             root.activated(record.id, false, record.modifiers || 0, "");
                     } else if (root.nativeProtocol && record.event === "gnoblin.shortcut.session.key") {
                         if (record.phase === "press")
                             root.keyPressed(record.keyval, record.modifiers || 0);
                     } else if (root.nativeProtocol && record.event === "gnoblin.shortcut.session.ended") {
-                        if (record.reason === "released")
+                        const sessionId = String(record.session_id || "");
+                        const endedExplicitly = root.endingSessionIds.includes(sessionId);
+                        if (endedExplicitly)
+                            root.endingSessionIds = root.endingSessionIds.filter(id => id !== sessionId);
+                        if (root.activeSessionId === sessionId) {
+                            root.activeSessionBindingId = "";
+                            root.activeSessionId = "";
+                            root.sessionSerial = 0;
+                        }
+                        if (endedExplicitly) {
+                            // The caller already chose whether to finish or cancel.
+                        } else if (record.reason === "released")
                             root.released();
                         else
                             root.cancelled();
