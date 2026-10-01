@@ -124,20 +124,8 @@ QtObject {
             return false;
         const requests = Object.assign({}, operationRequests);
         delete requests[operationId];
-        if (pending.purpose === "text-target") {
-            if (record.ok === true)
-                textTargetReceived(record.value || {}, "", pending.requestTag);
-            else
-                textTargetReceived(null, record.error?.message || "Could not identify the focused text field", pending.requestTag);
-        } else if (pending.purpose === "text-insert") {
-            const succeeded = record.ok === true && record.value?.inserted === true;
-            const error = succeeded ? "" : (record.error?.message || "The app did not accept the text");
-            textInsertionFinished(pending.windowId || "", succeeded, error, pending.requestTag || "");
-            if (!succeeded)
-                failed(error);
-        } else if (record.ok !== true) {
+        if (record.ok !== true)
             failed(record.error?.message || pending.method + " failed");
-        }
         return true;
     }
 
@@ -159,9 +147,7 @@ QtObject {
                 return;
             }
             operationRequests = Object.assign({}, operationRequests, {
-                [String(operationId)]: {
-                    method
-                }
+                [String(operationId)]: method
             });
         });
         if (!requestId)
@@ -378,18 +364,7 @@ QtObject {
                 textTargetReceived(null, error, requestTag || "");
                 return;
             }
-            const operationId = Number(result.operation_id ?? result.request_id);
-            if (!Number.isSafeInteger(operationId) || operationId <= 0) {
-                textTargetReceived(null, "Gnoblin returned no operation ID for input.text_target", requestTag || "");
-                return;
-            }
-            operationRequests = Object.assign({}, operationRequests, {
-                [String(operationId)]: {
-                    method: "input.text_target",
-                    purpose: "text-target",
-                    requestTag: requestTag || ""
-                }
-            });
+            textTargetReceived(result, "", requestTag || "");
         });
         if (!requestId)
             textTargetReceived(null, "Gnoblin is not ready for input.text_target", requestTag || "");
@@ -409,19 +384,9 @@ QtObject {
                     textInsertionFinished(windowId || "", false, error, requestTag || "");
                     return;
                 }
-                const operationId = Number(result.operation_id ?? result.request_id);
-                if (!Number.isSafeInteger(operationId) || operationId <= 0) {
-                    textInsertionFinished(windowId || "", false, "Gnoblin returned no operation ID for input.insert_text", requestTag || "");
-                    return;
-                }
-                operationRequests = Object.assign({}, operationRequests, {
-                    [String(operationId)]: {
-                        method: "input.insert_text",
-                        purpose: "text-insert",
-                        requestTag: requestTag || "",
-                        windowId: windowId || ""
-                    }
-                });
+                const succeeded = result.inserted === true;
+                const message = succeeded ? "" : "Gnoblin did not confirm text insertion";
+                textInsertionFinished(windowId || "", succeeded, message, requestTag || "");
             });
             if (!requestId)
                 textInsertionFinished(windowId || "", false, "Gnoblin is not ready for input.insert_text", requestTag || "");
