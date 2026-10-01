@@ -314,6 +314,8 @@ QtObject {
 
     function registerNativeSubscriptions() {
         const events = ["gnoblin.shortcut.binding-activated", "gnoblin.shortcut.session.activated", "gnoblin.shortcut.session.key", "gnoblin.shortcut.session.ended", "gnoblin.operation.completed"];
+        if (trackPrivacy)
+            events.push("gnoblin.privacy.changed");
         send({
             op: "events",
             api_version: {
@@ -329,6 +331,13 @@ QtObject {
                     major: apiMajor,
                     minor: Math.min(apiMinor, 1)
                 }
+            });
+        if (trackPrivacy)
+            requestApi("privacy.state", {}, (state, error) => {
+                if (error)
+                    failed(error);
+                else
+                    privacySnapshot(state);
             });
     }
 
@@ -438,6 +447,8 @@ QtObject {
                         }
                     } else if (root.nativeProtocol && record.event === "gnoblin.operation.completed") {
                         root.handleThumbnailCompletion(record);
+                    } else if (root.nativeProtocol && record.event === "gnoblin.privacy.changed") {
+                        root.privacySnapshot(record.state || {});
                     } else if (record.event === "status") {
                         root.lastStatusAt = Date.now();
                         const activeBindings = record.bindings || [];

@@ -85,6 +85,21 @@ Scope {
         });
     }
     function apply(state) {
+        if (state?.available && typeof state.screen_sharing === "boolean" && typeof state.recording === "boolean") {
+            const wasRecording = recording;
+            available = true;
+            screenSharing = state.screen_sharing;
+            recording = state.recording;
+            recordingCount = recording ? Math.max(1, recordingCount) : 0;
+            if (!recording) {
+                elapsed = 0;
+                recordingOrigin = 0;
+            } else if (!wasRecording) {
+                elapsed = 0;
+                recordingOrigin = Date.now();
+            }
+            return;
+        }
         if (!state || [state.screenSharing, state.cameraInUse, state.recording].some(value => typeof value !== "boolean") || !Number.isInteger(state.recordingElapsed) || state.recordingElapsed < 0 || !Number.isInteger(state.recordingCount) || state.recordingCount < 0)
             return;
         available = true;
