@@ -27,6 +27,9 @@ ShellPopup {
     property string lastFocusedWindow: ""
     property string lastFocusedTitle: ""
     property string targetWindow: ""
+    property string pendingNativeText: ""
+    property string nativeInsertText: ""
+    property string nativeInsertRequestTag: ""
     property string pendingText: ""
     property bool inserting: false
     property string stateDirectory: Quickshell.statePath("emoji")
@@ -122,7 +125,10 @@ ShellPopup {
             caretResult = null;
             anchorSource = "fallback";
             anchorDeadline.restart();
-            shortcut.requestInputAnchor();
+            if (shortcut.nativeProtocol)
+                finishPlacement();
+            else
+                shortcut.requestInputAnchor();
         } else
             showPicker();
     }
@@ -190,7 +196,11 @@ ShellPopup {
         if (!selectedEmoji)
             return;
         const emoji = selectedEmoji.emoji;
-        if (insertOnSelect && (!targetWindow || !shortcut.connected)) {
+        if (insertOnSelect && !shortcut.connected) {
+            error = "The compositor connection is not ready.";
+            return;
+        }
+        if (insertOnSelect && !shortcut.nativeProtocol && !targetWindow) {
             error = "Focus an app's text field, then open the picker.";
             return;
         }
@@ -201,8 +211,14 @@ ShellPopup {
             history.setText(JSON.stringify(recent));
         chosen(emoji);
         if (insertOnSelect) {
-            pendingText = emoji;
-            beginInsertion();
+            if (shortcut.nativeProtocol) {
+                pendingNativeText = emoji;
+                visible = false;
+                ShellNotifications.send("Emoji selected", "Press Super+. again to insert it into the focused text field.");
+            } else {
+                pendingText = emoji;
+                beginInsertion();
+            }
         }
     }
     onRetainedChanged: if (!retained && pendingText && !inserting)
@@ -214,7 +230,8 @@ ShellPopup {
         // Release the popup's keyboard grab while the compositor commits the
         // text to the original input. The picker stays mapped and visible.
         keyboardInteractive = false;
-        shortcut.activateWindow(targetWindow);
+        if (!shortcut.nativeProtocol)
+            shortcut.activateWindow(targetWindow);
         insertDelay.restart();
     }
     Timer {
@@ -228,7 +245,12 @@ ShellPopup {
     Timer {
         id: insertTimeout
         interval: 5000
-        onTriggered: root.insertionFailed("The app did not accept the insertion request. Please try again.")
+        onTriggered: {
+            if (root.shortcut.nativeProtocol)
+                root.nativeInsertionFailed("The app did not accept the insertion request. Please try again.");
+            else
+                root.insertionFailed("The app did not accept the insertion request. Please try again.");
+        }
     }
     function insertionFailed(message) {
         insertDelay.stop();
@@ -245,6 +267,36 @@ ShellPopup {
         inserting = false;
         keyboardInteractive = true;
         focusInput.restart();
+    }
+    function insertStagedEmoji(focusContext) {
+        if (!pendingNativeText || !focusContext || inserting)
+            return;
+        inserting = true;
+        nativeInsertText = pendingNativeText;
+        nativeInsertRequestTag = Date.now().toString(36) + "-" + activationCount;
+        insertTimeout.restart();
+        shortcut.requestTextTarget(focusContext, nativeInsertRequestTag);
+    }
+    function nativeInsertionFailed(message) {
+        insertTimeout.stop();
+        inserting = false;
+        nativeInsertText = "";
+        nativeInsertRequestTag = "";
+        ShellNotifications.send("Could not insert emoji", message || "Focus a text field and try again.");
+    }
+    function nativeInsertionFinished(windowId, succeeded, message, requestTag) {
+        if (!inserting || requestTag !== nativeInsertRequestTag)
+            return;
+        if (!succeeded) {
+            nativeInsertionFailed(message);
+            return;
+        }
+        insertTimeout.stop();
+        inserting = false;
+        pendingNativeText = "";
+        nativeInsertText = "";
+        nativeInsertRequestTag = "";
+        ShellNotifications.send("Emoji inserted", "");
     }
     function moveSelection(delta) {
         selectedIndex = Math.max(0, Math.min(results.length - 1, selectedIndex + delta));
@@ -300,6 +352,33 @@ ShellPopup {
     }
     ShortcutSession {
         id: shortcut
+        bindings: [
+            {
+                id: "bingux-emoji",
+                accelerator: "<Super>period"
+            }
+        ]
+        onActivated: function (id, first, modifiers, focusContext) {
+            if (!first)
+                return;
+            if (root.pendingNativeText)
+                root.insertStagedEmoji(focusContext);
+            else
+                root.open();
+        }
+        onTextTargetReceived: function (target, message, requestTag) {
+            if (requestTag !== root.nativeInsertRequestTag)
+                return;
+            if (message || !target?.target) {
+                root.nativeInsertionFailed(message || "Gnoblin returned no text target");
+                return;
+            }
+            root.targetWindow = target.window_id || "";
+            shortcut.insertText(root.targetWindow, root.nativeInsertText, target.target, requestTag);
+        }
+        onTextInsertionFinished: function (windowId, succeeded, message, requestTag) {
+            root.nativeInsertionFinished(windowId, succeeded, message, requestTag);
+        }
         onInputAnchor: anchor => {
             if (!root.locating)
                 return;
@@ -313,7 +392,7 @@ ShellPopup {
             root.finishPlacement();
         }
         enabled: root.shortcutEnabled
-        trackWindows: root.insertOnSelect
+        trackWindows: root.insertOnSelect && !shortcut.nativeProtocol
         onWindowSnapshot: windows => {
             if (!root.visible && !root.pendingText) {
                 const focused = windows.find(window => window.focused);
@@ -323,8 +402,8 @@ ShellPopup {
         }
         onTextInserted: if (root.inserting)
             root.insertionFinished()
-        // Popup commands are registered in init.lua through binguxctl.
-        // Keep this transport for window tracking, caret lookup and insertion.
+        // Gnoblin's text target is created only after the picker gives focus
+        // back to the application, then consumed immediately.
         onFailed: message => {
             if (root.pendingText)
                 root.insertionFailed(message);
