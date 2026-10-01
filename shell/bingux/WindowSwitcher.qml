@@ -80,7 +80,10 @@ Scope {
         if (JSON.stringify(ids) === JSON.stringify(historyOrderIds))
             return;
         historyOrderIds = ids;
-        historyOrderFile.setText(JSON.stringify({version: 1, windows: ids}));
+        historyOrderFile.setText(JSON.stringify({
+            version: 1,
+            windows: ids
+        }));
     }
     Process {
         command: ["mkdir", "-p", "-m", "700", root.orderStateDirectory]
@@ -355,22 +358,26 @@ Scope {
             {
                 id: "switcher-forward",
                 accelerator: "<Alt>Tab",
-                hold: 8
+                hold: 8,
+                modal: true
             },
             {
                 id: "switcher-backward",
                 accelerator: "<Alt><Shift>Tab",
-                hold: 8
+                hold: 8,
+                modal: true
             },
             {
                 id: "switcher-super-forward",
                 accelerator: "<Super>Tab",
-                hold: 67108864
+                hold: 67108864,
+                modal: true
             },
             {
                 id: "switcher-super-backward",
                 accelerator: "<Super><Shift>Tab",
-                hold: 67108864
+                hold: 67108864,
+                modal: true
             }
         ]
         onActivated: function (id, first, modifiers) {
