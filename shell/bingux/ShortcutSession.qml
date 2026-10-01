@@ -16,6 +16,7 @@ QtObject {
     property bool trackWindows: false
     property bool trackPrivacy: false
     property bool trackWindowDrag: false
+    property bool helloReceived: false
     property bool nativeProtocol: false
     property bool apiReady: false
     property int apiMajor: 0
@@ -25,6 +26,7 @@ QtObject {
     property bool bindingRequestPending: false
     property var apiRequests: ({})
     property var thumbnailRequests: ({})
+    property var operationRequests: ({})
     signal uiState(string name, var state)
     signal uiCommand(string name, var command)
     signal windowDrag(var state)
@@ -32,7 +34,7 @@ QtObject {
     signal snapContext(var state)
     signal snapCompleted(var state)
     signal privacySnapshot(var state)
-    readonly property bool ready: socket.connected && (nativeProtocol ? apiReady && ownedBindings.length === (enabled ? bindings.length : 0) : boundCount === bindings.length)
+    readonly property bool ready: socket.connected && helloReceived && (nativeProtocol ? apiReady && ownedBindings.length === (enabled ? bindings.length : 0) : boundCount === bindings.length)
     readonly property bool connected: socket.connected
     signal activated(string id, bool first, int modifiers, string focusContext)
     signal keyPressed(int key, int modifiers)
@@ -109,6 +111,54 @@ QtObject {
         else
             previewReceived(windowId, "", record.error?.message || "Gnoblin could not capture this window");
         return true;
+    }
+
+    function handleOperationCompletion(record) {
+        if (handleThumbnailCompletion(record))
+            return true;
+        const operationId = String(record.operation_id || "");
+        const method = operationRequests[operationId];
+        if (!method)
+            return false;
+        const requests = Object.assign({}, operationRequests);
+        delete requests[operationId];
+        operationRequests = requests;
+        if (record.ok !== true)
+            failed(record.error?.message || method + " failed");
+        return true;
+    }
+
+    function stopPrivacySessions(method, legacyOperation) {
+        if (!nativeProtocol) {
+            send({
+                op: legacyOperation
+            });
+            return;
+        }
+        const requestId = requestApi(method, {}, (result, error) => {
+            if (error) {
+                failed(error);
+                return;
+            }
+            const operationId = Number(result.operation_id ?? result.request_id);
+            if (!Number.isSafeInteger(operationId) || operationId <= 0) {
+                failed("Gnoblin returned no operation ID for " + method);
+                return;
+            }
+            operationRequests = Object.assign({}, operationRequests, {
+                [String(operationId)]: method
+            });
+        });
+        if (!requestId)
+            failed("Gnoblin is not ready for " + method);
+    }
+
+    function stopSharing() {
+        stopPrivacySessions("privacy.stop_sharing", "stop-sharing");
+    }
+
+    function stopRecording() {
+        stopPrivacySessions("privacy.stop_recording", "stop-recording");
     }
 
     function normaliseBinding(binding) {
@@ -383,6 +433,8 @@ QtObject {
             root.bindingRequestPending = false;
             root.apiRequests = ({});
             root.thumbnailRequests = ({});
+            root.operationRequests = ({});
+            root.helloReceived = false;
             root.apiReady = false;
             root.nativeProtocol = false;
             root.apiMajor = 0;
@@ -428,6 +480,7 @@ QtObject {
                         }
                         root.registerBindings();
                         root.healthCheck.start();
+                        root.helloReceived = true;
                     } else if (record.event === "windows") {
                         root.windowSnapshot(record.windows || []);
                     } else if (record.event === "reply" || record.event === "error") {
@@ -446,7 +499,7 @@ QtObject {
                                 root.bindingRetry.restart();
                         }
                     } else if (root.nativeProtocol && record.event === "gnoblin.operation.completed") {
-                        root.handleThumbnailCompletion(record);
+                        root.handleOperationCompletion(record);
                     } else if (root.nativeProtocol && record.event === "gnoblin.privacy.changed") {
                         root.privacySnapshot(record.state || {});
                     } else if (record.event === "status") {

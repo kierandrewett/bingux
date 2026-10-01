@@ -75,14 +75,10 @@ Scope {
     property double recordingOrigin: 0
     readonly property string elapsedText: Math.floor(elapsed / 60) + ":" + String(elapsed % 60).padStart(2, "0")
     function stopSharing() {
-        connection.send({
-            op: "stop-sharing"
-        });
+        connection.stopSharing();
     }
     function stopRecording() {
-        connection.send({
-            op: "stop-recording"
-        });
+        connection.stopRecording();
     }
     function apply(state) {
         if (state?.available && typeof state.screen_sharing === "boolean" && typeof state.recording === "boolean") {
