@@ -24,6 +24,7 @@ QtObject {
     property var ownedBindings: []
     property bool bindingRequestPending: false
     property var apiRequests: ({})
+    property var thumbnailRequests: ({})
     signal uiState(string name, var state)
     signal uiCommand(string name, var command)
     signal windowDrag(var state)
@@ -91,6 +92,22 @@ QtObject {
             if (pending.method === "shortcut.bind")
                 bindingRetry.restart();
         }
+        return true;
+    }
+
+    function handleThumbnailCompletion(record) {
+        const operationId = String(record.operation_id || "");
+        const windowId = thumbnailRequests[operationId];
+        if (!windowId)
+            return false;
+        const requests = Object.assign({}, thumbnailRequests);
+        delete requests[operationId];
+        thumbnailRequests = requests;
+        const image = record.value?.data;
+        if (record.ok === true && typeof image === "string" && image.length > 0)
+            previewReceived(windowId, "data:image/png;base64," + image, "");
+        else
+            previewReceived(windowId, "", record.error?.message || "Gnoblin could not capture this window");
         return true;
     }
 
@@ -196,6 +213,33 @@ QtObject {
     }
 
     function requestPreview(id, width, height) {
+        if (nativeProtocol) {
+            if (!apiReady || apiMinor < 23) {
+                previewReceived(id, "", "Window thumbnails require Gnoblin API 1.23 or newer");
+                return;
+            }
+            const requestId = requestApi("window.thumbnail", {
+                id,
+                width,
+                height
+            }, (result, error) => {
+                if (error) {
+                    previewReceived(id, "", error);
+                    return;
+                }
+                const operationId = Number(result.operation_id ?? result.request_id);
+                if (!Number.isSafeInteger(operationId) || operationId <= 0) {
+                    previewReceived(id, "", "Gnoblin returned no thumbnail operation ID");
+                    return;
+                }
+                thumbnailRequests = Object.assign({}, thumbnailRequests, {
+                    [String(operationId)]: id
+                });
+            });
+            if (!requestId)
+                previewReceived(id, "", "Gnoblin is not ready for thumbnail requests");
+            return;
+        }
         send({
             op: "preview",
             window: id,
@@ -253,7 +297,7 @@ QtObject {
     }
 
     function registerNativeSubscriptions() {
-        const events = ["gnoblin.shortcut.binding-activated", "gnoblin.shortcut.session.activated", "gnoblin.shortcut.session.key", "gnoblin.shortcut.session.ended"];
+        const events = ["gnoblin.shortcut.binding-activated", "gnoblin.shortcut.session.activated", "gnoblin.shortcut.session.key", "gnoblin.shortcut.session.ended", "gnoblin.operation.completed"];
         send({
             op: "events",
             api_version: {
@@ -313,6 +357,7 @@ QtObject {
             root.ownedBindings = [];
             root.bindingRequestPending = false;
             root.apiRequests = ({});
+            root.thumbnailRequests = ({});
             root.apiReady = false;
             root.nativeProtocol = false;
             root.apiMajor = 0;
@@ -375,6 +420,8 @@ QtObject {
                             if (String(message).startsWith("shortcut already claimed:") && !root.ready)
                                 root.bindingRetry.restart();
                         }
+                    } else if (root.nativeProtocol && record.event === "gnoblin.operation.completed") {
+                        root.handleThumbnailCompletion(record);
                     } else if (record.event === "status") {
                         root.lastStatusAt = Date.now();
                         const activeBindings = record.bindings || [];
