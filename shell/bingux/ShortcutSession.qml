@@ -34,7 +34,7 @@ QtObject {
     signal privacySnapshot(var state)
     readonly property bool ready: socket.connected && (nativeProtocol ? apiReady && ownedBindings.length === (enabled ? bindings.length : 0) : boundCount === bindings.length)
     readonly property bool connected: socket.connected
-    signal activated(string id, bool first, int modifiers)
+    signal activated(string id, bool first, int modifiers, string focusContext)
     signal keyPressed(int key, int modifiers)
     signal released
     signal cancelled
@@ -248,7 +248,23 @@ QtObject {
         });
     }
 
-    function activateWindow(id) {
+    function activateWindow(id, focusContext) {
+        if (nativeProtocol) {
+            if (!focusContext) {
+                failed("Window focus requires a recent shortcut activation");
+                return;
+            }
+            const requestId = requestApi("window.focus", {
+                id: String(id),
+                focus_context: focusContext
+            }, (result, error) => {
+                if (error)
+                    failed(error);
+            });
+            if (!requestId)
+                failed("Gnoblin is not ready to focus a window");
+            return;
+        }
         send({
             op: "activate",
             window: id,
@@ -441,7 +457,7 @@ QtObject {
                         root.boundCount++;
                     else if (record.event === "activated") {
                         root.sessionSerial = record.session || 0;
-                        root.activated(record.id, record.first, record.modifiers);
+                        root.activated(record.id, record.first, record.modifiers, record.focus_context || "");
                     } else if (record.event === "key")
                         root.keyPressed(record.key, record.modifiers);
                     else if (record.event === "released")
@@ -466,10 +482,10 @@ QtObject {
                         root.previewReceived(record.window, record.source, record.message || "");
                     else if (root.nativeProtocol && record.event === "gnoblin.shortcut.binding-activated") {
                         root.sessionSerial = record.session_id || 0;
-                        root.activated(record.id, record.first !== false, record.modifiers || 0);
+                        root.activated(record.id, record.first !== false, record.modifiers || 0, record.focus_context || "");
                     } else if (root.nativeProtocol && record.event === "gnoblin.shortcut.session.activated") {
                         if (record.first === false)
-                            root.activated(record.id, false, record.modifiers || 0);
+                            root.activated(record.id, false, record.modifiers || 0, "");
                     } else if (root.nativeProtocol && record.event === "gnoblin.shortcut.session.key") {
                         if (record.phase === "press")
                             root.keyPressed(record.keyval, record.modifiers || 0);

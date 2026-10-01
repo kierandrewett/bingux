@@ -15,6 +15,7 @@ Scope {
     property double shownAt: 0
     property var activeStreams: []
     property var notifications: []
+    property string focusContext: ""
     property var previews: ({})
     property bool previewPending: false
     property var previewTimes: ({})
@@ -186,6 +187,7 @@ Scope {
         reveal.stop();
         active = false;
         shown = false;
+        focusContext = "";
         if (revealProgress === 0)
             windows = [];
     }
@@ -197,9 +199,10 @@ Scope {
         if (!active)
             return;
         const window = selectedWindow;
+        const context = focusContext;
         cancel();
         if (window && liveWindows.some(live => live.id === window.id))
-            shortcuts.activateWindow(window.id);
+            shortcuts.activateWindow(window.id, context);
     }
     function appFor(window) {
         if (!window || !window.appId)
@@ -380,8 +383,9 @@ Scope {
                 modal: true
             }
         ]
-        onActivated: function (id, first, modifiers) {
-            if (first)
+        onActivated: function (id, first, modifiers, context) {
+            if (first) {
+                root.focusContext = context;
                 shortcuts.send({
                     op: "ui-session",
                     action: "command",
@@ -390,6 +394,7 @@ Scope {
                         action: "close"
                     }
                 });
+            }
             root.step(id.indexOf("backward") >= 0);
         }
         onReleased: root.finish()
