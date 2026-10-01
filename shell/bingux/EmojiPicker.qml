@@ -28,6 +28,7 @@ ShellPopup {
     property string lastFocusedTitle: ""
     property string targetWindow: ""
     property string pendingNativeText: ""
+    property bool nativeInsertReady: false
     property string nativeInsertText: ""
     property string nativeInsertRequestTag: ""
     property string pendingText: ""
@@ -213,16 +214,22 @@ ShellPopup {
         if (insertOnSelect) {
             if (shortcut.nativeProtocol) {
                 pendingNativeText = emoji;
+                nativeInsertReady = false;
                 visible = false;
-                ShellNotifications.send("Emoji selected", "Press Super+. again to insert it into the focused text field.");
             } else {
                 pendingText = emoji;
                 beginInsertion();
             }
         }
     }
-    onRetainedChanged: if (!retained && pendingText && !inserting)
-        beginInsertion()
+    onRetainedChanged: if (!retained) {
+        if (pendingText && !inserting)
+            beginInsertion();
+        if (pendingNativeText) {
+            nativeInsertReady = true;
+            ShellNotifications.send("Emoji selected", "Press Super+. again to insert it into the focused text field.");
+        }
+    }
     function beginInsertion() {
         if (!pendingText || !targetWindow || !shortcut.connected)
             return;
@@ -269,7 +276,7 @@ ShellPopup {
         focusInput.restart();
     }
     function insertStagedEmoji(focusContext) {
-        if (!pendingNativeText || !focusContext || inserting)
+        if (!pendingNativeText || !nativeInsertReady || !focusContext || inserting)
             return;
         inserting = true;
         nativeInsertText = pendingNativeText;
@@ -294,6 +301,7 @@ ShellPopup {
         insertTimeout.stop();
         inserting = false;
         pendingNativeText = "";
+        nativeInsertReady = false;
         nativeInsertText = "";
         nativeInsertRequestTag = "";
         ShellNotifications.send("Emoji inserted", "");
