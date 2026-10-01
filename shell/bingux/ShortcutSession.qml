@@ -147,7 +147,9 @@ QtObject {
                 return;
             }
             operationRequests = Object.assign({}, operationRequests, {
-                [String(operationId)]: method
+                [String(operationId)]: {
+                    method
+                }
             });
         });
         if (!requestId)
