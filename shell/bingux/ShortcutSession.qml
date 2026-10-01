@@ -161,6 +161,99 @@ QtObject {
         stopPrivacySessions("privacy.stop_recording", "stop-recording");
     }
 
+    function nativeDragRecord(record, active) {
+        const pointer = record.pointer || {};
+        const modifiers = record.modifiers || {};
+        return {
+            nativeDrag: true,
+            active,
+            serial: record.id || record.drag_id,
+            drag_id: record.id || record.drag_id,
+            drag_token: record.drag_token || "",
+            window: record.window_id || "",
+            monitor: Object.assign({
+                id: record.monitor_id || ""
+            }, record.monitor || {}),
+            area: record.work_area || {},
+            x: pointer.x ?? record.pointer_x ?? 0,
+            y: pointer.y ?? record.pointer_y ?? 0,
+            modifiers: (modifiers.control ? 4 : 0) | (modifiers.shift ? 1 : 0),
+            maximized: record.maximized === true
+        };
+    }
+
+    function offerSnap(dragId, dragToken, targets) {
+        if (!nativeProtocol) {
+            send({
+                op: "snap-offer",
+                serial: dragId,
+                regions: targets
+            });
+            return;
+        }
+        if (!Array.isArray(targets) || targets.length === 0)
+            return;
+        requestApi("window.snap.offer", {
+            drag_id: Number(dragId),
+            drag_token: String(dragToken || ""),
+            targets
+        }, (result, error) => {
+            if (error)
+                failed(error);
+        });
+    }
+
+    function requestSnapContext(focusContext) {
+        if (!nativeProtocol) {
+            send({
+                op: "snap-context"
+            });
+            return;
+        }
+        if (apiMinor < 28 || !focusContext) {
+            failed("Keyboard snapping requires a recent shortcut context and Gnoblin API 1.28");
+            return;
+        }
+        requestApi("window.snap_context", {
+            focus_context: focusContext
+        }, (result, error) => {
+            if (error)
+                failed(error);
+            else {
+                snapContext(Object.assign({}, result, {
+                    window: result.window_id,
+                    monitor: Object.assign({
+                        id: result.monitor_id
+                    }, result.monitor || {}),
+                    area: result.work_area,
+                    nativeContext: true
+                }));
+            }
+        });
+    }
+
+    function commitSnap(context, monitorId, frame, legacyWindow) {
+        if (!nativeProtocol) {
+            send({
+                op: "snap-window",
+                window: legacyWindow,
+                monitor: monitorId,
+                target: frame
+            });
+            return;
+        }
+        requestApi("window.snap", {
+            context,
+            monitor_id: monitorId,
+            frame
+        }, (result, error) => {
+            if (error)
+                failed(error);
+            else
+                snapCompleted(result);
+        });
+    }
+
     function normaliseBinding(binding) {
         let hold = binding.hold === undefined ? 0 : binding.hold;
         if (hold === 0)
@@ -366,6 +459,8 @@ QtObject {
         const events = ["gnoblin.shortcut.binding-activated", "gnoblin.shortcut.session.activated", "gnoblin.shortcut.session.key", "gnoblin.shortcut.session.ended", "gnoblin.operation.completed"];
         if (trackPrivacy)
             events.push("gnoblin.privacy.changed");
+        if (trackWindowDrag)
+            events.push("gnoblin.window.drag.started", "gnoblin.window.drag.updated", "gnoblin.window.drag.ended");
         send({
             op: "events",
             api_version: {
@@ -473,6 +568,11 @@ QtObject {
                                 root.socket.connected = false;
                                 return;
                             }
+                            if (root.trackWindowDrag && (record.api_minor < 28 || !record.methods.includes("window.snap_context") || !record.methods.includes("window.snap") || !record.methods.includes("window.snap.offer"))) {
+                                root.failed("Gnoblin API 1.28 or newer with snap methods is required for snapping");
+                                root.socket.connected = false;
+                                return;
+                            }
                             root.apiMajor = 1;
                             root.apiMinor = Math.min(record.api_minor, 63);
                             root.apiReady = true;
@@ -502,6 +602,13 @@ QtObject {
                         root.handleOperationCompletion(record);
                     } else if (root.nativeProtocol && record.event === "gnoblin.privacy.changed") {
                         root.privacySnapshot(record.state || {});
+                    } else if (root.nativeProtocol && record.event === "gnoblin.window.drag.started") {
+                        root.windowDrag(root.nativeDragRecord(record, true));
+                    } else if (root.nativeProtocol && record.event === "gnoblin.window.drag.updated") {
+                        root.windowDrag(root.nativeDragRecord(record, true));
+                    } else if (root.nativeProtocol && record.event === "gnoblin.window.drag.ended") {
+                        root.windowDrag(root.nativeDragRecord(record, false));
+                        root.snapCompleted(record);
                     } else if (record.event === "status") {
                         root.lastStatusAt = Date.now();
                         const activeBindings = record.bindings || [];
