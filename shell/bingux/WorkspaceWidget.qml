@@ -1,9 +1,8 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "DesktopLayout.js" as DesktopLayout
-
-pragma ComponentBehavior: Bound
 
 Item {
     id: root
@@ -13,25 +12,34 @@ Item {
     property bool enabledForInteraction: true
     readonly property string widgetId: "workspaces"
     readonly property var sampleWorkspaces: [
-        { id: "code", number: 1, name: "Code", active: true, windows: 2 },
-        { id: "web", number: 2, name: "Web", active: false, windows: 1 },
-        { id: "mail", number: 3, name: "Mail", active: false, windows: 0 }
+        {
+            id: "code",
+            number: 1,
+            name: "Code",
+            active: true,
+            windows: 2
+        },
+        {
+            id: "web",
+            number: 2,
+            name: "Web",
+            active: false,
+            windows: 1
+        },
+        {
+            id: "mail",
+            number: 3,
+            name: "Mail",
+            active: false,
+            windows: 0
+        }
     ]
     readonly property var workspaces: preview ? sampleWorkspaces : WorkspaceState.workspaces
     readonly property var activeWorkspace: workspaces.find(workspace => workspace.active) || null
-    readonly property string buttonLabel: activeWorkspace ? activeWorkspace.number + " · " + activeWorkspace.name :
-        preview ? "1 · Code" : WorkspaceState.errorMessage ? "Workspaces unavailable" :
-        WorkspaceState.connectionState === "connecting" || WorkspaceState.requestState === "workspace-list" ? "Loading workspaces…" :
-        WorkspaceState.connectionState === "ready" ? "No workspaces" : "Workspaces unavailable"
-    readonly property var presentation: Object.assign(DesktopLayout.presentation(
-        DesktopEditing.desktop,
-        widgetId,
-        DesktopLayout.placement(DesktopEditing.desktop, widgetId) || "top-right",
-        buttonLabel,
-        "view-grid-symbolic",
-        true,
-        true
-    ), { custom: true })
+    readonly property string buttonLabel: activeWorkspace ? activeWorkspace.number + " · " + activeWorkspace.name : preview ? "1 · Code" : WorkspaceState.errorMessage ? "Workspaces unavailable" : WorkspaceState.connectionState === "connecting" || WorkspaceState.requestState === "workspace.list" ? "Loading workspaces…" : WorkspaceState.connectionState === "ready" ? "No workspaces" : "Workspaces unavailable"
+    readonly property var presentation: Object.assign(DesktopLayout.presentation(DesktopEditing.desktop, widgetId, DesktopLayout.placement(DesktopEditing.desktop, widgetId) || "top-right", buttonLabel, "view-grid-symbolic", true, true), {
+        custom: true
+    })
     implicitWidth: button.implicitWidth
     implicitHeight: button.implicitHeight
     Accessible.role: Accessible.Grouping
@@ -59,7 +67,8 @@ Item {
         anchorItem: button
         popupWidth: 240
         popupHeight: Math.min(480, choicesScroll.height + contentPadding * 2)
-        onVisibleChanged: if (visible && !root.preview && !WorkspaceState.available) visible = false
+        onVisibleChanged: if (visible && !root.preview && !WorkspaceState.available)
+            visible = false
 
         Flickable {
             id: choicesScroll
