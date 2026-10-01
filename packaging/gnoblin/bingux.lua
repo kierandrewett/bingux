@@ -9,13 +9,6 @@ return {
         -- The installer exposes bingux-frame as a command on the user's PATH.
         bingux = { "bingux-frame", "--compact" },
     },
-    shortcuts = {
-        {
-            name = "bingux-emoji",
-            binding = "<Super>period",
-            command = { "binguxctl", "emoji", "open" },
-        },
-    },
     shell = {
         -- Bingux renders the OSD surface and consumes Gnoblin's OSD records.
         osd = false,
