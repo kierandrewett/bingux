@@ -74,11 +74,20 @@ application launching also needs an applicationLauncher command in search.json.
 The control centre uses PipeWire for volume and the existing system settings
 applications for network and display configuration.
 
-Win+Period opens the emoji picker through Gnoblin's persistent shortcut bridge.
-The desktop module leaves IBus's inline picker on Win+Semicolon so it cannot
-intercept Win+Period; Ctrl+Shift+U Unicode entry is unchanged.
+Super+Period opens the emoji picker through Bingux's persistent shortcut
+connection. The desktop module leaves IBus's inline picker on Super+Semicolon
+so it cannot intercept Super+Period; Ctrl+Shift+U Unicode entry is unchanged.
 Search by name, category or aliases such as `lol`; arrows select, Enter/click
-copies, and Escape/outside-click dismisses. The last 32 choices are stored locally.
+chooses, and Escape/outside-click dismisses. The last 32 choices are stored
+locally.
+
+In a standalone Gnoblin session, choosing an emoji stages it and closes the
+picker. Press Super+Period again to insert it into the focused Wayland text
+field. This second action obtains a fresh focus context after the picker gives
+focus back to the application. Insertion requires an active text-input-v3
+session; X11 and applications without one cannot receive inserted text. GNOME
+session compatibility keeps its existing insertion behavior.
+
 `qs ipc -p shell/bingux call emoji open` is also available. The bundled Unicode
 17.0 catalogue works offline; regenerate it with `scripts/generate-emoji-data.py`
 using Unicode's `emoji-test.txt`. Its licence is `emoji-data.LICENSE`.
