@@ -28,7 +28,7 @@ QtObject {
     readonly property bool desktopStateAvailable: available && latest.desktopStateAvailable
     readonly property var inputSources: desktopStateAvailable ? latest.inputSources : []
     readonly property var currentInputSource: desktopStateAvailable ? latest.currentInputSource : null
-    readonly property bool privacyAvailable: desktopStateAvailable && (latest.privacyAvailable === undefined || latest.privacyAvailable)
+    readonly property bool privacyAvailable: available && (latest.privacyAvailable === undefined ? typeof latest.screenSharing === "boolean" || typeof latest.microphoneInUse === "boolean" || typeof latest.locationInUse === "boolean" : latest.privacyAvailable)
     readonly property bool screenSharingAvailable: privacyAvailable && (latest.screenSharingAvailable === undefined || latest.screenSharingAvailable)
     readonly property bool microphoneAvailable: privacyAvailable && (latest.microphoneAvailable === undefined || latest.microphoneAvailable)
     readonly property bool locationAvailable: privacyAvailable && (latest.locationAvailable === undefined || latest.locationAvailable)
