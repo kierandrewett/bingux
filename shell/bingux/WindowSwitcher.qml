@@ -165,7 +165,7 @@ Scope {
             windows = history.slice();
             if (!windows.length) {
                 shortcuts.end();
-                return;
+                return false;
             }
             active = true;
             warmPreview.stop();
@@ -182,6 +182,7 @@ Scope {
             selected = (selected + (backwards ? -1 : 1) + windows.length) % windows.length;
             previewPump.restart();
         }
+        return true;
     }
     function cancel() {
         reveal.stop();
@@ -194,6 +195,20 @@ Scope {
     function close() {
         cancel();
         shortcuts.end();
+    }
+    function handleShortcutKey(key, modifiers, context) {
+        if (context)
+            root.focusContext = context;
+        if (key === 65307) {
+            root.cancel();
+            shortcuts.end();
+        } else if (key === 65293 || key === 65421) {
+            root.finish();
+            shortcuts.end();
+        } else if (key === 65361 || key === 65056)
+            root.step(true);
+        else if (key === 65363 || key === 65289)
+            root.step(key === 65289 && (modifiers & 1) !== 0);
     }
     function finish() {
         if (!active)
@@ -398,6 +413,10 @@ Scope {
             root.step(id.indexOf("backward") >= 0);
         }
         onReleased: root.finish()
+        onKeyReleased: function (key, modifiers, context) {
+            if (context)
+                root.focusContext = context;
+        }
         onCancelled: root.cancel()
         onFailed: function (message) {
             console.warn("bingux-switcher: " + message);
@@ -419,18 +438,7 @@ Scope {
             } else
                 root.close();
         }
-        onKeyPressed: function (key, modifiers) {
-            if (key === 65307) {
-                root.cancel();
-                shortcuts.end();
-            } else if (key === 65293 || key === 65421) {
-                root.finish();
-                shortcuts.end();
-            } else if (key === 65361 || key === 65056)
-                root.step(true);
-            else if (key === 65363 || key === 65289)
-                root.step(key === 65289 && (modifiers & 1) !== 0);
-        }
+        onKeyPressed: (key, modifiers, context) => root.handleShortcutKey(key, modifiers, context)
     }
     FileView {
         id: historyOrderFile
