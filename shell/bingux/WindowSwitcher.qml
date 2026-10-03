@@ -15,6 +15,7 @@ Scope {
     property double shownAt: 0
     property var activeStreams: []
     property var notifications: []
+    property string focusContext: ""
     property var previews: ({})
     property bool previewPending: false
     property var previewTimes: ({})
@@ -80,7 +81,10 @@ Scope {
         if (JSON.stringify(ids) === JSON.stringify(historyOrderIds))
             return;
         historyOrderIds = ids;
-        historyOrderFile.setText(JSON.stringify({version: 1, windows: ids}));
+        historyOrderFile.setText(JSON.stringify({
+            version: 1,
+            windows: ids
+        }));
     }
     Process {
         command: ["mkdir", "-p", "-m", "700", root.orderStateDirectory]
@@ -161,7 +165,7 @@ Scope {
             windows = history.slice();
             if (!windows.length) {
                 shortcuts.end();
-                return;
+                return false;
             }
             active = true;
             warmPreview.stop();
@@ -178,11 +182,13 @@ Scope {
             selected = (selected + (backwards ? -1 : 1) + windows.length) % windows.length;
             previewPump.restart();
         }
+        return true;
     }
     function cancel() {
         reveal.stop();
         active = false;
         shown = false;
+        focusContext = "";
         if (revealProgress === 0)
             windows = [];
     }
@@ -190,13 +196,28 @@ Scope {
         cancel();
         shortcuts.end();
     }
+    function handleShortcutKey(key, modifiers, context) {
+        if (context)
+            root.focusContext = context;
+        if (key === 65307) {
+            root.cancel();
+            shortcuts.end();
+        } else if (key === 65293 || key === 65421) {
+            root.finish();
+            shortcuts.end();
+        } else if (key === 65361 || key === 65056)
+            root.step(true);
+        else if (key === 65363 || key === 65289)
+            root.step(key === 65289 && (modifiers & 1) !== 0);
+    }
     function finish() {
         if (!active)
             return;
         const window = selectedWindow;
+        const context = focusContext;
         cancel();
         if (window && liveWindows.some(live => live.id === window.id))
-            shortcuts.activateWindow(window.id);
+            shortcuts.activateWindow(window.id, context);
     }
     function appFor(window) {
         if (!window || !window.appId)
@@ -355,26 +376,31 @@ Scope {
             {
                 id: "switcher-forward",
                 accelerator: "<Alt>Tab",
-                hold: 8
+                hold: 8,
+                modal: true
             },
             {
                 id: "switcher-backward",
                 accelerator: "<Alt><Shift>Tab",
-                hold: 8
+                hold: 8,
+                modal: true
             },
             {
                 id: "switcher-super-forward",
                 accelerator: "<Super>Tab",
-                hold: 67108864
+                hold: 67108864,
+                modal: true
             },
             {
                 id: "switcher-super-backward",
                 accelerator: "<Super><Shift>Tab",
-                hold: 67108864
+                hold: 67108864,
+                modal: true
             }
         ]
-        onActivated: function (id, first, modifiers) {
-            if (first)
+        onActivated: function (id, first, modifiers, context) {
+            if (first) {
+                root.focusContext = context;
                 shortcuts.send({
                     op: "ui-session",
                     action: "command",
@@ -383,9 +409,14 @@ Scope {
                         action: "close"
                     }
                 });
+            }
             root.step(id.indexOf("backward") >= 0);
         }
         onReleased: root.finish()
+        onKeyReleased: function (key, modifiers, context) {
+            if (context)
+                root.focusContext = context;
+        }
         onCancelled: root.cancel()
         onFailed: function (message) {
             console.warn("bingux-switcher: " + message);
@@ -407,18 +438,7 @@ Scope {
             } else
                 root.close();
         }
-        onKeyPressed: function (key, modifiers) {
-            if (key === 65307) {
-                root.cancel();
-                shortcuts.end();
-            } else if (key === 65293 || key === 65421) {
-                root.finish();
-                shortcuts.end();
-            } else if (key === 65361 || key === 65056)
-                root.step(true);
-            else if (key === 65363 || key === 65289)
-                root.step(key === 65289 && (modifiers & 1) !== 0);
-        }
+        onKeyPressed: (key, modifiers, context) => root.handleShortcutKey(key, modifiers, context)
     }
     FileView {
         id: historyOrderFile

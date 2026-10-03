@@ -3,7 +3,8 @@ import Quickshell
 import Quickshell.Wayland
 
 // Launching an application must not wait for its long-lived process to exit.
-// Wait for its window, dispatch any follow-up action, then hand over focus.
+// Wait for its window and dispatch any follow-up action. The compositor uses
+// the application's activation request to decide whether that window gets focus.
 Item {
     id: root
     required property string desktopId
@@ -40,7 +41,18 @@ Item {
                     Quickshell.execDetached(root.pendingCommand);
                     root.pendingCommand = [];
                 }
-                if (nativeWindow && compositor.connected) {
+                if (nativeWindow && compositor.nativeProtocol) {
+                    if (nativeWindow.focused) {
+                        stop();
+                        return;
+                    }
+                    // This client has no activation context from the launch
+                    // request, so a direct window.focus call would be denied.
+                    // Keep observing the app while its own activation request
+                    // is handled by Gnoblin.
+                } else if (nativeWindow && compositor.connected) {
+                    // GNOME compatibility sessions still use the legacy
+                    // shell activation request.
                     if (nativeWindow.focused) {
                         stop();
                         return;

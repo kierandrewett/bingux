@@ -12,8 +12,8 @@ ShellRoot {
     UiSession {
         id: session
         sessionName: "emoji"
-        // Super+Period is registered by Gnoblin's native command-shortcut
-        // integration. This client remains the IPC target for that command.
+        // ShortcutSession inside the picker owns Super+Period. This session
+        // remains the IPC target for explicit open/close commands.
         bindings: []
         state: ({
                 visible: picker.visible
