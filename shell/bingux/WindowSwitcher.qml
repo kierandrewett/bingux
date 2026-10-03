@@ -15,6 +15,7 @@ Scope {
     property double shownAt: 0
     property var activeStreams: []
     property var notifications: []
+    property string focusContext: ""
     property var previews: ({})
     property bool previewPending: false
     property var previewTimes: ({})
@@ -80,7 +81,10 @@ Scope {
         if (JSON.stringify(ids) === JSON.stringify(historyOrderIds))
             return;
         historyOrderIds = ids;
-        historyOrderFile.setText(JSON.stringify({version: 1, windows: ids}));
+        historyOrderFile.setText(JSON.stringify({
+            version: 1,
+            windows: ids
+        }));
     }
     Process {
         command: ["mkdir", "-p", "-m", "700", root.orderStateDirectory]
@@ -183,6 +187,7 @@ Scope {
         reveal.stop();
         active = false;
         shown = false;
+        focusContext = "";
         if (revealProgress === 0)
             windows = [];
     }
@@ -194,9 +199,10 @@ Scope {
         if (!active)
             return;
         const window = selectedWindow;
+        const context = focusContext;
         cancel();
         if (window && liveWindows.some(live => live.id === window.id))
-            shortcuts.activateWindow(window.id);
+            shortcuts.activateWindow(window.id, context);
     }
     function appFor(window) {
         if (!window || !window.appId)
@@ -355,26 +361,31 @@ Scope {
             {
                 id: "switcher-forward",
                 accelerator: "<Alt>Tab",
-                hold: 8
+                hold: 8,
+                modal: true
             },
             {
                 id: "switcher-backward",
                 accelerator: "<Alt><Shift>Tab",
-                hold: 8
+                hold: 8,
+                modal: true
             },
             {
                 id: "switcher-super-forward",
                 accelerator: "<Super>Tab",
-                hold: 67108864
+                hold: 67108864,
+                modal: true
             },
             {
                 id: "switcher-super-backward",
                 accelerator: "<Super><Shift>Tab",
-                hold: 67108864
+                hold: 67108864,
+                modal: true
             }
         ]
-        onActivated: function (id, first, modifiers) {
-            if (first)
+        onActivated: function (id, first, modifiers, context) {
+            if (first) {
+                root.focusContext = context;
                 shortcuts.send({
                     op: "ui-session",
                     action: "command",
@@ -383,6 +394,7 @@ Scope {
                         action: "close"
                     }
                 });
+            }
             root.step(id.indexOf("backward") >= 0);
         }
         onReleased: root.finish()

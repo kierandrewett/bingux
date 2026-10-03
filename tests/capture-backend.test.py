@@ -1,6 +1,8 @@
 """Pure capture policy regressions; no screen or microphone access."""
 
 import importlib.util
+import io
+import json
 from pathlib import Path
 import sys
 import unittest
@@ -16,6 +18,35 @@ spec.loader.exec_module(capture)
 
 
 class CapturePolicy(unittest.TestCase):
+    def test_capture_windows_uses_negotiated_lua_api(self):
+        request_id = "bingux-capture-test"
+        responses = (
+            b"\n".join(
+                json.dumps(record).encode()
+                for record in (
+                    {"event": "hello", "api_major": 1, "api_minor": 63},
+                    {"event": "reply", "id": request_id, "result": {"windows": [{"id": "window-1"}]}},
+                )
+            )
+            + b"\n"
+        )
+        connection = Mock()
+        connection.__enter__ = Mock(return_value=connection)
+        connection.__exit__ = Mock(return_value=False)
+        connection.makefile.return_value.__enter__ = Mock(return_value=io.BytesIO(responses))
+        connection.makefile.return_value.__exit__ = Mock(return_value=False)
+        with (
+            patch.object(capture.socket, "socket", return_value=connection),
+            patch.object(capture.uuid, "uuid4", return_value=Mock(hex="test")),
+        ):
+            self.assertEqual(capture.capture_windows(), [{"id": "window-1"}])
+
+        request = json.loads(connection.sendall.call_args.args[0])
+        self.assertEqual(request["op"], "api")
+        self.assertEqual(request["api_version"], {"major": 1, "minor": 63})
+        self.assertEqual(request["method"], "window.list")
+        self.assertEqual(request["arguments"], {})
+
     def test_stop_only_trims_a_valid_hover_in_this_recording(self):
         capture.Gst.init(None)
         for hovered, expected in ((103000, 3), (0, None), (99000, None), (111000, None), (float("nan"), None)):

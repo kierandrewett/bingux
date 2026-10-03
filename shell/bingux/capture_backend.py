@@ -38,10 +38,26 @@ def trim_recording(path, duration):
     try:
         subprocess.run(
             [
-                "ffmpeg", "-nostdin", "-v", "error", "-y", "-i", str(path),
-                "-t", str(duration), "-map", "0", "-c", "copy", "-movflags", "+faststart", str(trimmed),
+                "ffmpeg",
+                "-nostdin",
+                "-v",
+                "error",
+                "-y",
+                "-i",
+                str(path),
+                "-t",
+                str(duration),
+                "-map",
+                "0",
+                "-c",
+                "copy",
+                "-movflags",
+                "+faststart",
+                str(trimmed),
             ],
-            check=True, capture_output=True, timeout=120,
+            check=True,
+            capture_output=True,
+            timeout=120,
         )
         if trimmed.stat().st_size == 0:
             raise ValueError("Trim produced no output")
@@ -110,17 +126,40 @@ def capture_windows():
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
         connection.settimeout(2)
         connection.connect(path)
-        connection.sendall(b'{"op":"command","id":"capture-windows","command":"capture-windows"}\n')
         with connection.makefile("rb") as stream:
-            for _ in range(8):
+            hello = json.loads(stream.readline(1024 * 1024))
+            if hello.get("event") != "hello" or hello.get("api_major") != 1:
+                raise ValueError("Unsupported Gnoblin compositor API")
+            api_minor = hello.get("api_minor")
+            if not isinstance(api_minor, int) or api_minor < 53:
+                raise ValueError("Window selection requires Gnoblin compositor API 1.53 or newer")
+
+            request_id = "bingux-capture-" + uuid.uuid4().hex
+            request = {
+                "op": "api",
+                "api_version": {"major": 1, "minor": min(api_minor, 63)},
+                "id": request_id,
+                "method": "window.list",
+                "arguments": {},
+            }
+            connection.sendall((json.dumps(request) + "\n").encode())
+            while True:
                 line = stream.readline(1024 * 1024)
                 if not line:
                     break
                 reply = json.loads(line)
-                if reply.get("id") == "capture-windows":
-                    if reply.get("event") == "error":
-                        raise ValueError(reply.get("message", "Window picker unavailable"))
-                    return reply["result"]["windows"]
+                if reply.get("id") != request_id:
+                    continue
+                if reply.get("event") == "error":
+                    raise ValueError(reply.get("message", "Window picker unavailable"))
+                result = reply.get("result")
+                if (
+                    reply.get("event") != "reply"
+                    or not isinstance(result, dict)
+                    or not isinstance(result.get("windows"), list)
+                ):
+                    raise ValueError("Invalid window list from Gnoblin")
+                return result["windows"]
     raise ValueError("Window picker did not respond")
 
 
@@ -764,8 +803,12 @@ class Capture:
                     running = (clock.get_time() - self.pipeline.get_base_time()) / Gst.SECOND if clock else 0
                     self.job["startedAt"] = time.time() - running
                     self.emit(
-                        "recording", path=str(self.final), encoder=self.encoder, started=self.job["startedAt"],
-                        target=self.job["target"], region=self.job.get("region"),
+                        "recording",
+                        path=str(self.final),
+                        encoder=self.encoder,
+                        started=self.job["startedAt"],
+                        target=self.job["target"],
+                        region=self.job.get("region"),
                     )
 
     def stop(self, hovered_at=0):
@@ -776,8 +819,10 @@ class Capture:
             # Invalid or stale marks must never discard the whole recording.
             started = self.job.get("startedAt", 0)
             if (
-                isinstance(hovered_at, (int, float)) and not isinstance(hovered_at, bool)
-                and math.isfinite(hovered_at) and started > 0
+                isinstance(hovered_at, (int, float))
+                and not isinstance(hovered_at, bool)
+                and math.isfinite(hovered_at)
+                and started > 0
                 and started + 0.25 <= hovered_at / 1000 <= time.time()
                 and shutil.which("ffmpeg")
             ):
@@ -803,7 +848,11 @@ class Capture:
             try:
                 trim_recording(temporary, job["trimDuration"])
             except (OSError, ValueError, subprocess.SubprocessError):
-                self.emit("error", message="Could not trim the ending. The full recording was preserved.", partial=str(temporary))
+                self.emit(
+                    "error",
+                    message="Could not trim the ending. The full recording was preserved.",
+                    partial=str(temporary),
+                )
                 return
         os.replace(temporary, output)
         copied = False

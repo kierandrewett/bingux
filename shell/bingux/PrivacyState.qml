@@ -75,16 +75,27 @@ Scope {
     property double recordingOrigin: 0
     readonly property string elapsedText: Math.floor(elapsed / 60) + ":" + String(elapsed % 60).padStart(2, "0")
     function stopSharing() {
-        connection.send({
-            op: "stop-sharing"
-        });
+        connection.stopSharing();
     }
     function stopRecording() {
-        connection.send({
-            op: "stop-recording"
-        });
+        connection.stopRecording();
     }
     function apply(state) {
+        if (state?.available && typeof state.screen_sharing === "boolean" && typeof state.recording === "boolean") {
+            const wasRecording = recording;
+            available = true;
+            screenSharing = state.screen_sharing;
+            recording = state.recording;
+            recordingCount = recording ? Math.max(1, recordingCount) : 0;
+            if (!recording) {
+                elapsed = 0;
+                recordingOrigin = 0;
+            } else if (!wasRecording) {
+                elapsed = 0;
+                recordingOrigin = Date.now();
+            }
+            return;
+        }
         if (!state || [state.screenSharing, state.cameraInUse, state.recording].some(value => typeof value !== "boolean") || !Number.isInteger(state.recordingElapsed) || state.recordingElapsed < 0 || !Number.isInteger(state.recordingCount) || state.recordingCount < 0)
             return;
         available = true;
