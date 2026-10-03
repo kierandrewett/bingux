@@ -16,6 +16,7 @@ QtObject {
     property bool trackWindows: false
     property bool trackPrivacy: false
     property bool trackWindowDrag: false
+    property bool trackWindowMenu: false
     property bool helloReceived: false
     property bool nativeProtocol: false
     property bool apiReady: false
@@ -41,11 +42,13 @@ QtObject {
     readonly property bool ready: socket.connected && helloReceived && (nativeProtocol ? apiReady && ownedBindings.length === (enabled ? bindings.length : 0) : boundCount === bindings.length)
     readonly property bool connected: socket.connected
     signal activated(string id, bool first, int modifiers, string focusContext)
-    signal keyPressed(int key, int modifiers)
+    signal keyPressed(int key, int modifiers, string focusContext)
+    signal keyReleased(int key, int modifiers, string focusContext)
     signal released
     signal cancelled
     signal failed(string message)
     signal windowSnapshot(var windows)
+    signal windowMenuRequested(var request)
     signal pointerPressed(real x, real y, int button)
     signal previewReceived(string windowId, string source, string error)
     signal textInserted(string windowId)
@@ -480,6 +483,84 @@ QtObject {
         });
     }
 
+    function requestWindowMenuAction(action, windowId, menuContext, edge) {
+        if (!nativeProtocol || !apiReady) {
+            failed("Gnoblin is not ready to handle this window menu action");
+            return false;
+        }
+        let method = "";
+        let arguments_ = {};
+        if (action === "interactive-move" || action === "interactive-resize") {
+            if (apiMinor < 30 || !menuContext) {
+                failed("Interactive move and resize require a WM menu request from Gnoblin API 1.30 or newer");
+                return false;
+            }
+            method = action === "interactive-move" ? "window.begin_move" : "window.begin_resize";
+            arguments_ = {
+                menu_context: menuContext
+            };
+            if (action === "interactive-resize")
+                arguments_.edge = edge || "south_east";
+        } else {
+            const methods = {
+                close: ["window.close",
+                    {}
+                ],
+                minimize: ["window.minimize",
+                    {}
+                ],
+                maximize: ["window.set_maximized",
+                    {
+                        enabled: true
+                    }
+                ],
+                unmaximize: ["window.set_maximized",
+                    {
+                        enabled: false
+                    }
+                ],
+                above: ["window.set_above",
+                    {
+                        enabled: true
+                    }
+                ],
+                unabove: ["window.set_above",
+                    {
+                        enabled: false
+                    }
+                ],
+                stick: ["window.set_sticky",
+                    {
+                        enabled: true
+                    }
+                ],
+                unstick: ["window.set_sticky",
+                    {
+                        enabled: false
+                    }
+                ]
+            };
+            const call = methods[action];
+            if (!call) {
+                failed("Unknown window menu action: " + action);
+                return false;
+            }
+            method = call[0];
+            arguments_ = Object.assign({
+                id: String(windowId)
+            }, call[1]);
+        }
+        const requestId = requestApi(method, arguments_, (result, error) => {
+            if (error)
+                failed(error);
+        });
+        if (!requestId) {
+            failed("Gnoblin is not ready to handle this window menu action");
+            return false;
+        }
+        return true;
+    }
+
     function send(record) {
         if (!socket.connected)
             return;
@@ -558,6 +639,8 @@ QtObject {
             events.push("gnoblin.privacy.changed");
         if (trackWindowDrag)
             events.push("gnoblin.window.drag.started", "gnoblin.window.drag.updated", "gnoblin.window.drag.ended");
+        if (trackWindowMenu && apiMinor >= 27)
+            events.push("gnoblin.window.menu-requested");
         send({
             op: "events",
             api_version: {
@@ -674,8 +757,13 @@ QtObject {
                                 root.socket.connected = false;
                                 return;
                             }
+                            if (root.trackWindowMenu && record.api_minor < 27) {
+                                root.failed("Gnoblin API 1.27 or newer is required for native window menus");
+                                root.socket.connected = false;
+                                return;
+                            }
                             root.apiMajor = 1;
-                            root.apiMinor = Math.min(record.api_minor, 63);
+                            root.apiMinor = Math.min(record.api_minor, 68);
                             root.apiReady = true;
                             root.registerNativeSubscriptions();
                         }
@@ -703,6 +791,8 @@ QtObject {
                         root.handleOperationCompletion(record);
                     } else if (root.nativeProtocol && record.event === "gnoblin.privacy.changed") {
                         root.privacySnapshot(record.state || {});
+                    } else if (root.nativeProtocol && record.event === "gnoblin.window.menu-requested") {
+                        root.windowMenuRequested(record);
                     } else if (root.nativeProtocol && record.event === "gnoblin.window.drag.started") {
                         root.windowDrag(root.nativeDragRecord(record, true));
                     } else if (root.nativeProtocol && record.event === "gnoblin.window.drag.updated") {
@@ -731,7 +821,7 @@ QtObject {
                         root.sessionSerial = record.session || 0;
                         root.activated(record.id, record.first, record.modifiers, record.focus_context || "");
                     } else if (record.event === "key")
-                        root.keyPressed(record.key, record.modifiers);
+                        root.keyPressed(record.key, record.modifiers, "");
                     else if (record.event === "released")
                         root.released();
                     else if (record.event === "typed")
@@ -767,7 +857,9 @@ QtObject {
                             root.activated(record.id, false, record.modifiers || 0, "");
                     } else if (root.nativeProtocol && record.event === "gnoblin.shortcut.session.key") {
                         if (record.phase === "press")
-                            root.keyPressed(record.keyval, record.modifiers || 0);
+                            root.keyPressed(record.keyval, record.modifiers || 0, record.focus_context || "");
+                        else if (record.phase === "release")
+                            root.keyReleased(record.keyval, record.modifiers || 0, record.focus_context || "");
                     } else if (root.nativeProtocol && record.event === "gnoblin.shortcut.session.ended") {
                         const sessionId = String(record.session_id || "");
                         const endedExplicitly = root.endingSessionIds.includes(sessionId);
