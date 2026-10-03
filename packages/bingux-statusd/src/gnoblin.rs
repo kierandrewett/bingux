@@ -69,11 +69,15 @@ fn subscribe_to_gnoblin(
     let hello = read_json_line(&mut reader)?
         .ok_or_else(|| "Gnoblin closed the socket before sending its greeting".to_owned())?;
     let api_minor = validate_hello(&hello)?;
-    *reconnect_delay = INITIAL_RECONNECT_DELAY;
     let methods = string_set(hello.get("methods"));
     let events = string_set(hello.get("events"));
 
     let subscribed_events = supported_events(api_minor, &events);
+    let mut initial_subscriptions = BTreeSet::new();
+    let expected_events: BTreeSet<String> = subscribed_events
+        .iter()
+        .map(|event| (*event).to_owned())
+        .collect();
     if api_minor >= EVENTS_API_MINOR && !subscribed_events.is_empty() {
         send_json(
             &mut writer,
@@ -83,6 +87,7 @@ fn subscribe_to_gnoblin(
                 "events": subscribed_events,
             }),
         )?;
+        initial_subscriptions.insert("events");
     }
 
     if api_minor >= MONITORS_API_MINOR {
@@ -93,6 +98,7 @@ fn subscribe_to_gnoblin(
                 "api_version": {"major": API_MAJOR, "minor": MONITORS_API_MINOR},
             }),
         )?;
+        initial_subscriptions.insert("monitors");
     }
 
     let mut requested_reads = BTreeSet::new();
@@ -124,8 +130,12 @@ fn subscribe_to_gnoblin(
         requested_reads.insert("privacy-state");
     }
 
+    let input_state_available = api_minor >= INPUT_API_MINOR
+        && methods.contains("input.sources")
+        && methods.contains("input.current_source");
+    let can_reset_backoff = input_state_available;
     let mut state = StateSnapshot {
-        available: true,
+        available: input_state_available,
         ..StateSnapshot::default()
     };
     if requested_reads.is_empty() {
@@ -175,12 +185,16 @@ fn subscribe_to_gnoblin(
                 }
                 _ => {}
             }
+            if can_reset_backoff && requested_reads.is_empty() && initial_subscriptions.is_empty() {
+                *reconnect_delay = INITIAL_RECONNECT_DELAY;
+            }
             continue;
         }
 
         match event {
             "monitors" => {
                 monitors = parse_monitor_snapshot(&record);
+                initial_subscriptions.remove("monitors");
             }
             "gnoblin.monitor.added" | "gnoblin.monitor.changed" => {
                 if let Some(monitor) = record.get("monitor").and_then(parse_monitor) {
@@ -219,7 +233,22 @@ fn subscribe_to_gnoblin(
                         .map_err(|_| "OSD receiver stopped".to_owned())?;
                 }
             }
+            "subscribed" => {
+                if initial_subscriptions.contains("events") {
+                    let accepted = string_set(record.get("events"));
+                    if !expected_events.is_subset(&accepted) {
+                        return Err(
+                            "Gnoblin accepted only part of the statusd event subscription"
+                                .to_owned(),
+                        );
+                    }
+                    initial_subscriptions.remove("events");
+                }
+            }
             _ => {}
+        }
+        if can_reset_backoff && requested_reads.is_empty() && initial_subscriptions.is_empty() {
+            *reconnect_delay = INITIAL_RECONNECT_DELAY;
         }
     }
 }
@@ -429,19 +458,36 @@ impl StateSnapshot {
         if revision < self.privacy_revision {
             return Ok(());
         }
-        let available = value.get("available").and_then(Value::as_object);
-        let is_available = |key: &str| {
+        let available = value
+            .get("available")
+            .and_then(Value::as_object)
+            .ok_or_else(|| "Gnoblin sent privacy state without availability details".to_owned())?;
+        let is_available = |key: &str| -> Result<bool, String> {
             available
-                .and_then(|map| map.get(key))
+                .get(key)
                 .and_then(Value::as_bool)
-                == Some(true)
+                .ok_or_else(|| format!("Gnoblin omitted privacy availability for {key}"))
         };
-        let read_bool =
-            |key: &str| is_available(key) && value.get(key).and_then(Value::as_bool) == Some(true);
+        let read_bool = |key: &str, available: bool| -> Result<bool, String> {
+            if !available {
+                return Ok(false);
+            }
+            value
+                .get(key)
+                .and_then(Value::as_bool)
+                .ok_or_else(|| format!("Gnoblin omitted available privacy state for {key}"))
+        };
+        let screen_sharing_available = is_available("screen_sharing")?;
+        let microphone_available = is_available("microphone_in_use")?;
+        let location_available = is_available("location_in_use")?;
         self.privacy = PrivacyState {
-            screen_sharing: read_bool("screen_sharing"),
-            microphone_in_use: read_bool("microphone_in_use"),
-            location_in_use: read_bool("location_in_use"),
+            available: true,
+            screen_sharing_available,
+            screen_sharing: read_bool("screen_sharing", screen_sharing_available)?,
+            microphone_available,
+            microphone_in_use: read_bool("microphone_in_use", microphone_available)?,
+            location_available,
+            location_in_use: read_bool("location_in_use", location_available)?,
         };
         self.privacy_revision = revision;
         Ok(())
