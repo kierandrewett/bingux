@@ -9,11 +9,6 @@ return {
         -- The installer exposes bingux-frame as a command on the user's PATH.
         bingux = { "bingux-frame", "--compact" },
     },
-    shell = {
-        -- Bingux renders the OSD surface and consumes Gnoblin's OSD records.
-        osd = false,
-        ["window-menu"] = { "binguxctl", "ipc", "shell", "windowMenu" },
-    },
     protocols = {
         -- These protocols are used by Bingux panels and capture/search surfaces.
         ["wlr-layer-shell"] = true,

@@ -78,18 +78,15 @@ reconnects with bounded backoff. A metrics failure must not stop the top bar, tr
 
 ## OSD socket protocol v2
 
-Gnoblin emits a standard on-screen-display request only when its native OSD is
-disabled for the session or for that OSD type. `bingux-statusd` is the sole
-consumer of this D-Bus signal. It validates the request and publishes one
-newline-delimited UTF-8 JSON record to
-`$XDG_RUNTIME_DIR/bingux/osd-v2.sock`.
+In a standalone Gnoblin session, `bingux-statusd` subscribes to the native
+`gnoblin.osd.requested` compositor event and publishes one newline-delimited
+UTF-8 JSON record to `$XDG_RUNTIME_DIR/bingux/osd-v2.sock`. Gnoblin does not
+draw an OSD surface, so no `shell.osd` setting is needed.
 
-Bingux sets `shell.osd = false` through its Gnoblin Lua drop-in as well as the session's
-disabled-features setting. `osd-bridge.js` supplies the same signal on older
-running Gnoblin builds which can suppress their OSD but cannot emit the event.
-It checks the native interface first and stays inactive when native support is
-present. Monitor connectors come from Mutter DisplayConfig, and unloading the
-script restores the original OSD handler.
+`osd-bridge.js` is a separate GNOME Shell compatibility adapter. It remains
+for GNOME Shell sessions, including older Gnoblin builds that do not publish
+the native event. It checks for native support before patching the Shell OSD
+manager, and unloading the script restores the original handler.
 
 OSD records are transient. The daemon does not cache them. A new socket client
 receives only requests that arrive after its connection. The socket directory
