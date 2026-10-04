@@ -1,7 +1,17 @@
 use crate::Event;
 use bingux_statusd::{DesktopState, InputSource, OSD_PROTOCOL_VERSION, OsdRequest, PrivacyState};
 use futures_util::{FutureExt, StreamExt};
-use std::{sync::mpsc::SyncSender, thread, time::Duration};
+use serde_json::Value;
+use std::{
+    collections::HashMap,
+    env,
+    io::{self, BufRead, BufReader, Write},
+    os::unix::net::UnixStream,
+    path::PathBuf,
+    sync::mpsc::SyncSender,
+    thread,
+    time::Duration,
+};
 use zbus::{Connection, Proxy};
 
 const BUS_NAME: &str = "org.gnoblin.Shell";
@@ -16,16 +26,298 @@ const MAX_INPUT_SOURCE_FIELD_BYTES: usize = 128;
 const MAX_INPUT_SOURCE_TOTAL_BYTES: usize = 4 * 1024;
 const MAX_INPUT_SOURCE_BODY_BYTES: usize = 64 * 1024;
 const MAX_OSD_SIGNAL_BODY_BYTES: u32 = 4 * 1024;
+const GNOBLIN_COMPOSITOR_SOCKET_ENV: &str = "GNOBLIN_COMPOSITOR_SOCKET";
+const COMPOSITOR_SOCKET_NAME: &str = "compositor-v1.sock";
+const MAX_COMPOSITOR_RECORD_BYTES: usize = 64 * 1024;
+const OSD_REQUEST_EVENT: &str = "gnoblin.osd.requested";
+const OSD_REQUEST_API_MINOR: i64 = 27;
+const MAX_MONITOR_ID_BYTES: usize = 128;
+const MAX_ACTIVE_MONITORS: usize = 64;
 
 type InputSourceTuple = (String, String, String, String);
 // Gnoblin org.gnoblin.Shell.OsdRequested payload: (uissddas).
 type OsdRequestTuple = (u32, i32, String, String, f64, f64, Vec<String>);
+
+#[derive(Clone, Debug)]
+struct MonitorRoute {
+    index: i32,
+    output_names: Vec<String>,
+}
 
 /// Start the session-bus subscriber for Gnoblin desktop state and OSD requests.
 pub fn start_state_subscriber(sender: SyncSender<Event>) {
     thread::spawn(move || {
         async_io::block_on(run_state_subscriber(sender));
     });
+}
+
+/// Start the native compositor-socket subscriber for standalone Gnoblin OSDs.
+pub fn start_osd_event_subscriber(sender: SyncSender<Event>) {
+    thread::spawn(move || {
+        let mut reconnect_delay = INITIAL_RECONNECT_DELAY;
+
+        loop {
+            match subscribe_to_compositor_osd(&sender) {
+                Ok(()) => return,
+                Err(error) => eprintln!("[bingux-statusd] Gnoblin OSD events unavailable: {error}"),
+            }
+
+            thread::sleep(reconnect_delay);
+            reconnect_delay = std::cmp::min(reconnect_delay * 2, MAX_RECONNECT_DELAY);
+        }
+    });
+}
+
+fn subscribe_to_compositor_osd(sender: &SyncSender<Event>) -> Result<(), String> {
+    let socket_path = compositor_socket_path()?;
+    subscribe_to_compositor_osd_at(&socket_path, sender)
+}
+
+fn subscribe_to_compositor_osd_at(
+    socket_path: &std::path::Path,
+    sender: &SyncSender<Event>,
+) -> Result<(), String> {
+    let stream = UnixStream::connect(socket_path)
+        .map_err(|error| format!("cannot connect to {}: {error}", socket_path.display()))?;
+    let mut reader = BufReader::new(
+        stream
+            .try_clone()
+            .map_err(|error| format!("cannot clone compositor socket: {error}"))?,
+    );
+    let mut writer = stream;
+    let mut monitor_routes = HashMap::new();
+    let mut hello_received = false;
+    let mut osd_subscription_ready = false;
+
+    loop {
+        let record = read_compositor_record(&mut reader)
+            .map_err(|error| format!("cannot read compositor socket: {error}"))?
+            .ok_or_else(|| "compositor socket closed".to_owned())?;
+        let event = record.get("event").and_then(Value::as_str).unwrap_or("");
+
+        if !hello_received {
+            if event != "hello" {
+                return Err("compositor did not send a hello record".to_owned());
+            }
+            if !native_api_supports_osd_event(&record) {
+                eprintln!(
+                    "[bingux-statusd] compositor has no native OSD event API; keeping the compatibility OSD path"
+                );
+                loop {
+                    match read_compositor_record(&mut reader) {
+                        Ok(Some(_)) => {}
+                        Ok(None) => return Err("legacy compositor socket closed".to_owned()),
+                        Err(error) => {
+                            return Err(format!("cannot read legacy compositor socket: {error}"));
+                        }
+                    }
+                }
+            }
+
+            writer
+                .write_all(b"{\"op\":\"monitors\",\"api_version\":{\"major\":1,\"minor\":27}}\n")
+                .and_then(|()| {
+                    writer.write_all(
+                        b"{\"op\":\"events\",\"api_version\":{\"major\":1,\"minor\":27},\"events\":[\"gnoblin.osd.requested\"]}\n",
+                    )
+                })
+                .map_err(|error| format!("cannot subscribe to compositor OSD events: {error}"))?;
+            hello_received = true;
+            continue;
+        }
+
+        match event {
+            "monitors" => {
+                monitor_routes = monitor_routes_from_snapshot(&record)
+                    .ok_or_else(|| "compositor returned an invalid monitor snapshot".to_owned())?;
+            }
+            "subscribed" => {
+                osd_subscription_ready = record
+                    .get("events")
+                    .and_then(Value::as_array)
+                    .is_some_and(|events| {
+                        events
+                            .iter()
+                            .any(|name| name.as_str() == Some(OSD_REQUEST_EVENT))
+                    });
+                if !osd_subscription_ready {
+                    return Err("compositor did not subscribe to OSD request events".to_owned());
+                }
+            }
+            OSD_REQUEST_EVENT if osd_subscription_ready => {
+                if let Some(request) = osd_request_from_event(&record, &monitor_routes) {
+                    sender
+                        .send(Event::OsdRequest(request))
+                        .map_err(|_| "OSD receiver stopped".to_owned())?;
+                }
+            }
+            "error" => {
+                let message = record
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .unwrap_or("compositor socket request failed");
+                return Err(message.to_owned());
+            }
+            _ => {}
+        }
+    }
+}
+
+fn compositor_socket_path() -> Result<PathBuf, String> {
+    if let Some(path) = env::var_os(GNOBLIN_COMPOSITOR_SOCKET_ENV) {
+        let path = PathBuf::from(path);
+        if path.is_absolute() {
+            return Ok(path);
+        }
+        return Err(format!(
+            "{GNOBLIN_COMPOSITOR_SOCKET_ENV} must be an absolute path"
+        ));
+    }
+
+    let runtime_directory = env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .ok_or_else(|| "XDG_RUNTIME_DIR is not set".to_owned())?;
+    if !runtime_directory.is_absolute() {
+        return Err("XDG_RUNTIME_DIR must be an absolute path".to_owned());
+    }
+
+    Ok(runtime_directory
+        .join("gnoblin")
+        .join(COMPOSITOR_SOCKET_NAME))
+}
+
+fn read_compositor_record(reader: &mut impl BufRead) -> io::Result<Option<Value>> {
+    let mut line = Vec::with_capacity(1024);
+    loop {
+        let available = reader.fill_buf()?;
+        if available.is_empty() {
+            if line.is_empty() {
+                return Ok(None);
+            }
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "truncated compositor socket record",
+            ));
+        }
+
+        let newline = available.iter().position(|byte| *byte == b'\n');
+        let consumed = newline.map_or(available.len(), |index| index + 1);
+        if line.len().saturating_add(consumed) > MAX_COMPOSITOR_RECORD_BYTES {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "compositor socket record exceeds 64 KiB",
+            ));
+        }
+        line.extend_from_slice(&available[..consumed]);
+        reader.consume(consumed);
+
+        if newline.is_some() {
+            break;
+        }
+    }
+
+    line.pop();
+    if line.last() == Some(&b'\r') {
+        line.pop();
+    }
+    serde_json::from_slice(&line)
+        .map(Some)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+}
+
+fn native_api_supports_osd_event(hello: &Value) -> bool {
+    hello.get("api_major").and_then(Value::as_i64) == Some(1)
+        && hello
+            .get("api_minor")
+            .and_then(Value::as_i64)
+            .is_some_and(|minor| minor >= OSD_REQUEST_API_MINOR)
+        && hello
+            .get("events")
+            .and_then(Value::as_array)
+            .is_some_and(|events| {
+                events
+                    .iter()
+                    .any(|name| name.as_str() == Some(OSD_REQUEST_EVENT))
+            })
+}
+
+fn monitor_routes_from_snapshot(snapshot: &Value) -> Option<HashMap<String, MonitorRoute>> {
+    if snapshot.get("event").and_then(Value::as_str) != Some("monitors") {
+        return None;
+    }
+    let monitors = snapshot.get("monitors")?.as_array()?;
+    if monitors.len() > MAX_ACTIVE_MONITORS {
+        return None;
+    }
+
+    let mut routes = HashMap::with_capacity(monitors.len());
+    for monitor in monitors {
+        let Some(id) = monitor.get("id").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(index) = monitor
+            .get("index")
+            .and_then(Value::as_i64)
+            .and_then(|index| i32::try_from(index).ok())
+            .filter(|index| *index >= 0)
+        else {
+            continue;
+        };
+        if id.is_empty() || id.len() > MAX_MONITOR_ID_BYTES || id.chars().any(char::is_control) {
+            continue;
+        }
+
+        let output_names = match monitor.get("output_names") {
+            Some(names) => names
+                .as_array()?
+                .iter()
+                .map(|name| name.as_str().map(str::to_owned))
+                .collect::<Option<Vec<_>>>()?,
+            None => vec![id.to_owned()],
+        };
+        routes.insert(
+            id.to_owned(),
+            MonitorRoute {
+                index,
+                output_names,
+            },
+        );
+    }
+
+    Some(routes)
+}
+
+fn osd_request_from_event(
+    record: &Value,
+    monitor_routes: &HashMap<String, MonitorRoute>,
+) -> Option<OsdRequest> {
+    if record.get("event").and_then(Value::as_str) != Some(OSD_REQUEST_EVENT) {
+        return None;
+    }
+    let monitor_id = record.get("monitor_id").and_then(Value::as_str)?;
+    let route = monitor_routes.get(monitor_id)?;
+    let output_names = match record.get("output_names") {
+        Some(names) => names
+            .as_array()?
+            .iter()
+            .map(|name| name.as_str().map(str::to_owned))
+            .collect::<Option<Vec<_>>>()?,
+        None => route.output_names.clone(),
+    };
+    let icon = optional_event_string(record, "icon")?;
+    let label = optional_event_string(record, "label")?;
+
+    // Mutter's show-osd event contains icon and text but no numeric level.
+    // Keep the level unavailable so Bingux does not render a fabricated meter.
+    OsdRequest::new(route.index, output_names, icon, label, -1.0, -1.0)
+}
+
+fn optional_event_string(record: &Value, name: &str) -> Option<String> {
+    match record.get(name) {
+        None => Some(String::new()),
+        Some(Value::String(value)) => Some(value.clone()),
+        Some(_) => None,
+    }
 }
 
 async fn run_state_subscriber(sender: SyncSender<Event>) {
@@ -260,9 +552,21 @@ fn is_desktop_state_signal_name(name: Option<&str>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        InputSourceTuple, input_source_or_none, input_source_tuple_is_valid,
-        input_sources_are_valid, is_desktop_state_signal_name, is_osd_signal_name,
-        osd_request_from_tuple,
+        InputSourceTuple, OSD_REQUEST_API_MINOR, OSD_REQUEST_EVENT, input_source_or_none,
+        input_source_tuple_is_valid, input_sources_are_valid, is_desktop_state_signal_name,
+        is_osd_signal_name, monitor_routes_from_snapshot, native_api_supports_osd_event,
+        osd_request_from_event, osd_request_from_tuple, subscribe_to_compositor_osd_at,
+    };
+    use crate::Event;
+    use bingux_statusd::osd_json;
+    use serde_json::json;
+    use std::{
+        io::{BufRead, BufReader, Write},
+        net::Shutdown,
+        os::unix::net::UnixListener,
+        sync::mpsc,
+        thread,
+        time::{Duration, SystemTime, UNIX_EPOCH},
     };
 
     #[test]
@@ -316,6 +620,162 @@ mod tests {
             ))
             .is_none()
         );
+    }
+
+    #[test]
+    fn native_osd_event_uses_connector_names_without_fabricating_a_level() {
+        let routes = monitor_routes_from_snapshot(&json!({
+            "event": "monitors",
+            "monitors": [{ "id": "DP-1", "index": 2 }]
+        }))
+        .unwrap();
+        let request = osd_request_from_event(
+            &json!({
+                "event": "gnoblin.osd.requested",
+                "monitor_id": "DP-1",
+                "output_names": ["DP-1", "DP-2"],
+                "icon": "audio-volume-high-symbolic",
+                "label": "Volume"
+            }),
+            &routes,
+        )
+        .unwrap();
+
+        let record: serde_json::Value = serde_json::from_str(&osd_json(&request).unwrap()).unwrap();
+        assert_eq!(record["monitorIndex"], 2);
+        assert_eq!(record["outputNames"], json!(["DP-1", "DP-2"]));
+        assert_eq!(record["level"], -1.0);
+        assert_eq!(record["maxLevel"], -1.0);
+    }
+
+    #[test]
+    fn native_osd_event_uses_monitor_snapshot_when_connector_names_are_omitted() {
+        let routes = monitor_routes_from_snapshot(&json!({
+            "event": "monitors",
+            "monitors": [{
+                "id": "DP-1",
+                "index": 1,
+                "output_names": ["DP-1", "DP-2"]
+            }]
+        }))
+        .unwrap();
+        let request = osd_request_from_event(
+            &json!({
+                "event": "gnoblin.osd.requested",
+                "monitor_id": "DP-1"
+            }),
+            &routes,
+        )
+        .unwrap();
+
+        let record: serde_json::Value = serde_json::from_str(&osd_json(&request).unwrap()).unwrap();
+        assert_eq!(record["monitorIndex"], 1);
+        assert_eq!(record["outputNames"], json!(["DP-1", "DP-2"]));
+        assert_eq!(record["icon"], "");
+        assert_eq!(record["label"], "");
+    }
+
+    #[test]
+    fn rejects_native_osd_events_for_unknown_monitors() {
+        let routes = monitor_routes_from_snapshot(&json!({
+            "event": "monitors",
+            "monitors": [{ "id": "DP-1", "index": 0 }]
+        }))
+        .unwrap();
+        assert!(
+            osd_request_from_event(
+                &json!({
+                    "event": "gnoblin.osd.requested",
+                    "monitor_id": "HDMI-1",
+                    "output_names": ["HDMI-1"]
+                }),
+                &routes
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn requires_the_advertised_native_osd_event_version() {
+        assert!(native_api_supports_osd_event(&json!({
+            "api_major": 1,
+            "api_minor": 27,
+            "events": ["gnoblin.osd.requested"]
+        })));
+        assert!(!native_api_supports_osd_event(&json!({
+            "api_major": 1,
+            "api_minor": 26,
+            "events": ["gnoblin.osd.requested"]
+        })));
+        assert!(!native_api_supports_osd_event(&json!({
+            "api_major": 1,
+            "api_minor": 27,
+            "events": []
+        })));
+    }
+
+    #[test]
+    fn subscribes_to_native_osd_events_and_forwards_a_request() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let socket_path = std::env::temp_dir().join(format!(
+            "bingux-statusd-osd-{}-{nonce}.sock",
+            std::process::id()
+        ));
+        let listener = UnixListener::bind(&socket_path).unwrap();
+        let (sender, receiver) = mpsc::sync_channel(4);
+        let subscriber =
+            thread::spawn(move || subscribe_to_compositor_osd_at(&socket_path, &sender));
+
+        let (mut peer, _) = listener.accept().unwrap();
+        let mut reader = BufReader::new(peer.try_clone().unwrap());
+        peer.write_all(
+            b"{\"event\":\"hello\",\"api_major\":1,\"api_minor\":73,\"events\":[\"gnoblin.osd.requested\"]}\n",
+        )
+        .unwrap();
+        let mut monitors_request = String::new();
+        let mut events_request = String::new();
+        reader.read_line(&mut monitors_request).unwrap();
+        reader.read_line(&mut events_request).unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&monitors_request).unwrap()["op"],
+            "monitors"
+        );
+        let events_request: serde_json::Value = serde_json::from_str(&events_request).unwrap();
+        assert_eq!(events_request["op"], "events");
+        assert_eq!(
+            events_request["api_version"]["minor"],
+            OSD_REQUEST_API_MINOR
+        );
+        assert_eq!(events_request["events"], json!([OSD_REQUEST_EVENT]));
+
+        peer.write_all(
+            b"{\"event\":\"monitors\",\"monitors\":[{\"id\":\"DP-1\",\"index\":1}]}\n{\"event\":\"subscribed\",\"events\":[\"gnoblin.osd.requested\"]}\n{\"event\":\"gnoblin.osd.requested\",\"monitor_id\":\"DP-1\",\"output_names\":[\"DP-1\"],\"icon\":\"audio-volume-high-symbolic\",\"label\":\"Volume\"}\n",
+        )
+        .unwrap();
+        peer.shutdown(Shutdown::Write).unwrap();
+
+        let event = receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("native OSD event was not forwarded");
+        let Event::OsdRequest(request) = event else {
+            panic!("received a non-OSD event");
+        };
+        let record: serde_json::Value = serde_json::from_str(&osd_json(&request).unwrap()).unwrap();
+        assert_eq!(record["monitorIndex"], 1);
+        assert_eq!(record["level"], -1.0);
+        assert_eq!(record["maxLevel"], -1.0);
+
+        assert!(subscriber.join().unwrap().is_err());
+        drop(reader);
+        drop(listener);
+        let socket_path = std::env::temp_dir().join(format!(
+            "bingux-statusd-osd-{}-{nonce}.sock",
+            std::process::id()
+        ));
+        std::fs::remove_file(socket_path).unwrap();
     }
 
     #[test]
