@@ -1,10 +1,11 @@
 # GTK window frames
 
-Right-click window menus are rendered by Bingux's shared Quickshell `TrayMenu`
-with compact rows matching the keyboard layout selector. The integration drop-in
-sets `shell["window-menu"] = { "binguxctl", "ipc", "shell", "windowMenu" }`.
-Gnoblin supplies the original window ID and actions; `gnoblinctl window menu ID`
-also opens it, suitable for a configurable shortcut. Reload via `gnoblinctl config reload`.
+The shared Quickshell `TrayMenu` window-menu surface is retained, but the old
+`shell["window-menu"]` Gnoblin setting was removed with the GNOME Shell bridge.
+Standalone Bingux does not currently connect this surface to
+`gnoblin.window.menu-requested`; titlebar right-click menus are therefore not
+available in standalone sessions. Do not add the removed `shell` setting to
+`init.lua`.
 
 `bingux-frame` draws **actual GTK4/libadwaita widgets**, not a lookalike. It snapshots
 an `AdwHeaderBar`, `AdwWindowTitle` and GTK's title buttons into Gnoblin's private
