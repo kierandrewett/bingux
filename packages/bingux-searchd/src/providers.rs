@@ -1863,14 +1863,14 @@ mod tests {
     }
 
     #[test]
-    fn crowded_source_leaves_room_for_other_groups() {
+    fn crowded_file_source_leaves_room_for_other_groups() {
         let mut candidates: Vec<_> = (0..20)
-            .map(|index| candidate("applications", &format!("app-{index}"), "App", 0.9))
+            .map(|index| candidate("files", &format!("file-{index}"), "File", 0.9))
             .collect();
-        candidates.push(candidate("files", "document", "Document", 0.5));
+        candidates.push(candidate("applications", "app", "Application", 0.5));
         rank_and_limit(&mut candidates, 20);
         assert_eq!(candidates.len(), 6);
-        assert_eq!(candidates.last().unwrap().provider_id, "files");
+        assert_eq!(candidates.last().unwrap().provider_id, "applications");
     }
 
     #[test]

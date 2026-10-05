@@ -5,21 +5,19 @@
 -- Source installs use their installed share/gnoblin/conf.d path instead.
 
 return {
+    -- Bingux owns Alt+Tab and Super+Tab in its switcher. Clear Mutter's
+    -- defaults so these accelerators can be registered by the shell.
+    keybindings = {
+        wm = {
+            switch_applications = {},
+            switch_applications_backward = {},
+            switch_windows = {},
+            switch_windows_backward = {},
+        },
+    },
     ["frame-renderers"] = {
         -- The installer exposes bingux-frame as a command on the user's PATH.
         bingux = { "bingux-frame", "--compact" },
-    },
-    shortcuts = {
-        {
-            name = "bingux-emoji",
-            binding = "<Super>period",
-            command = { "binguxctl", "emoji", "open" },
-        },
-    },
-    shell = {
-        -- Bingux renders the OSD surface and consumes Gnoblin's OSD records.
-        osd = false,
-        ["window-menu"] = { "binguxctl", "ipc", "shell", "windowMenu" },
     },
     protocols = {
         -- These protocols are used by Bingux panels and capture/search surfaces.
@@ -44,7 +42,9 @@ return {
             corners = {
                 mode = "force",
                 radius = 12,
-                smoothing = 1.0,
+                smoothing = 0.5,
+                border_width = 1,
+                border_color = "#505050bf",
                 -- Reconstruct client-drawn rounded corners before applying
                 -- Bingux's shared shape, using each window's own pixels.
                 ["remove-csd"] = true,
@@ -57,12 +57,6 @@ return {
                     { x = 0, y = 3, blur = 14, spread = 1, opacity = 0.18 },
                     { x = 0, y = 1, blur = 4, spread = 0, opacity = 0.22 },
                 },
-            },
-            borders = {
-                ["inner-width"] = 1,
-                ["inner-color"] = "#9aa0a6a8",
-                ["outer-width"] = 1,
-                ["outer-color"] = "#252a31a8",
             },
         },
         {

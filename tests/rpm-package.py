@@ -60,8 +60,8 @@ class RpmPackageTest(unittest.TestCase):
         self.assertNotIn("Requires:       quickshell\n", self.spec)
 
     def test_gnoblin_fragment_is_in_the_payload(self):
-        self.assertTrue((ROOT / "packaging/gnoblin/bingux.toml").is_file())
-        self.assertIn("/usr/share/bingux/", self.spec)
+        self.assertTrue((ROOT / "packaging/gnoblin/bingux.lua").is_file())
+        self.assertIn("/usr/share/gnoblin/conf.d/bingux.lua", self.spec)
 
 
 if __name__ == "__main__":

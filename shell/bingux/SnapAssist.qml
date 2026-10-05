@@ -84,12 +84,46 @@ Scope {
         return list;
     }
     readonly property var selected: keyboardMode ? regions[keyboardSelection] || null : dragging && state && dragAssistAllowed ? regions.find(region => Layouts.contains(region.hit, state.x, state.y)) || null : null
-    onRegionsChanged: if (dragging && state)
-        connection.send({
-            op: "snap-offer",
-            serial: state.serial,
-            regions
-        })
+    function nativeTargets(regions) {
+        if (!area)
+            return [];
+        return regions.map(region => {
+            const hit = region.hit;
+            const left = Math.max(hit.x, area.x);
+            const top = Math.max(hit.y, area.y);
+            const right = Math.min(hit.x + hit.width, area.x + area.width);
+            const bottom = Math.min(hit.y + hit.height, area.y + area.height);
+            if (right <= left || bottom <= top)
+                return null;
+            const target = {
+                id: String(region.id),
+                hit: {
+                    x: left,
+                    y: top,
+                    width: right - left,
+                    height: bottom - top
+                },
+                frame: region.target
+            };
+            if (region.maximize)
+                target.maximize = true;
+            if (region.control)
+                target.required_modifiers = ["control"];
+            else
+                target.forbidden_modifiers = ["control"];
+            return target;
+        }).filter(Boolean);
+    }
+    onRegionsChanged: if (dragging && state) {
+        if (state.nativeDrag)
+            connection.offerSnap(state.drag_id, state.drag_token, nativeTargets(regions));
+        else
+            connection.send({
+                op: "snap-offer",
+                serial: state.serial,
+                regions
+            });
+    }
 
     Settings {
         id: preferences
@@ -160,12 +194,7 @@ Scope {
     function commit(region) {
         if (!region || !state)
             return;
-        connection.send({
-            op: "snap-window",
-            window: state.window,
-            monitor: monitor.id,
-            target: region.target
-        });
+        connection.commitSnap(state.context || "", state.monitor_id || monitor.id, region.target, state.window_id || state.window);
         if (region.layout >= 0)
             preferences.activeLayout = region.layout;
         close();
@@ -183,12 +212,15 @@ Scope {
         ]
         onWindowDrag: record => root.update(record)
         onSnapCompleted: record => {
-            if (Number.isInteger(record.layout) && record.layout >= 0 && record.layout < root.layouts.length)
-                preferences.activeLayout = record.layout;
+            const target = String(record.target_id || "").split(":")[0];
+            const layout = Number.isInteger(record.layout) ? record.layout : Number.parseInt(target, 10);
+            if (record.committed !== false && Number.isInteger(layout) && layout >= 0 && layout < root.layouts.length)
+                preferences.activeLayout = layout;
         }
-        onActivated: connection.send({
-            op: "snap-context"
-        })
+        onActivated: function (id, first, modifiers, focusContext) {
+            if (first)
+                connection.requestSnapContext(focusContext);
+        }
         onSnapContext: record => {
             root.state = record;
             root.updateGeometry(record);
@@ -209,9 +241,7 @@ Scope {
     IpcHandler {
         target: "snapping"
         function open(): void {
-            connection.send({
-                op: "snap-context"
-            });
+            connection.requestSnapContext("");
         }
         function close(): void {
             root.close();

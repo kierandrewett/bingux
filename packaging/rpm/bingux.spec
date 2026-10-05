@@ -93,6 +93,7 @@ install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bin
 %{_libdir}/bingux/
 %{_libexecdir}/bingux/
 %{_datadir}/bingux/
+%{_datadir}/gnoblin/conf.d/bingux.lua
 %{_datadir}/gnoblin/scripts/bingux-text-input.js
 %{_userunitdir}/bingux*.service
 %{_userunitdir}/bingux.target

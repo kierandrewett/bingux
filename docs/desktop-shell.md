@@ -36,11 +36,11 @@ binguxctl -> Quickshell IPC -> Bingux popup
                           bingux-searchd
 ```
 
-Search, emoji, capture and the window switcher receive shortcuts over persistent compositor connections. Bare Super toggles search on release without another key or pointer action. Keep duplicate command bindings out of `init.lua`. `bingux-statusd` owns the Gnoblin OSD and desktop-state signal subscription. The QML process does not parse Gnoblin D-Bus output or start long-lived daemon monitors. It connects to local Unix sockets and renders typed records from the daemons. `SystemIndicators` also runs a bounded `nmcli` probe to identify the current NetworkManager connection type; the probe is killed after two seconds and is retried every five seconds.
+Search, emoji, capture and the window switcher receive shortcuts over persistent compositor connections. Bare Super toggles search on release without another key or pointer action. Keep duplicate command bindings out of `init.lua`. `bingux-statusd` subscribes to Gnoblin's versioned compositor socket for input-source, privacy and OSD events. It publishes desktop state and OSD requests through its local sockets. The QML process does not parse compositor messages or start long-lived daemon monitors. It connects to local Unix sockets and renders typed records from the daemons. `SystemIndicators` also runs a bounded `nmcli` probe to identify the current NetworkManager connection type; the probe is killed after two seconds and is retried every five seconds.
 
 The shell and daemon run as the profile user. The socket directory has mode `0700`. The socket has mode `0600`. The service does not listen on TCP or another network transport.
 
-A missing or unsupported Gnoblin D-Bus service is an unavailable integration point. The daemon must retry with bounded backoff and report an unavailable state to the shell. It must not emulate the Super key or subscribe to the development-only Mutter key signal.
+A missing or unsupported Gnoblin compositor socket is an unavailable integration point. The daemon retries with bounded backoff and reports an unavailable state to the shell. It must not emulate the Super key or subscribe to the development-only Mutter key signal.
 
 ## Metrics socket protocol v1
 
@@ -76,20 +76,28 @@ directory has mode `0700`, and the socket has mode `0600`.
 must retain a received sample for no more than three seconds. It must then show the metric as unavailable while it
 reconnects with bounded backoff. A metrics failure must not stop the top bar, tray, or search interface.
 
+Gnoblin builds add `desktopStateAvailable`, `inputSources`, `currentInputSource`,
+`privacyAvailable`, `screenSharingAvailable`, `screenSharing`,
+`microphoneAvailable`, `microphoneInUse`, `locationAvailable`, and
+`locationInUse`. `desktopStateAvailable` reports whether the compositor exposes
+the input state API used by Bingux. The three activity fields report whether
+screen sharing, microphone use, or location use is active. Their corresponding
+availability fields distinguish an inactive source from one the compositor
+cannot report; `privacyAvailable` reports whether any privacy state is
+available. Clients should show an activity only when its availability field
+and activity field are both true. These fields extend protocol v1. For older
+statusd records that omit the availability fields, clients treat privacy state
+as available when `desktopStateAvailable` is true.
+
 ## OSD socket protocol v2
 
-Gnoblin emits a standard on-screen-display request only when its native OSD is
-disabled for the session or for that OSD type. `bingux-statusd` is the sole
-consumer of this D-Bus signal. It validates the request and publishes one
-newline-delimited UTF-8 JSON record to
-`$XDG_RUNTIME_DIR/bingux/osd-v2.sock`.
-
-Bingux sets `shell.osd = false` through its Gnoblin Lua drop-in as well as the session's
-disabled-features setting. `osd-bridge.js` supplies the same signal on older
-running Gnoblin builds which can suppress their OSD but cannot emit the event.
-It checks the native interface first and stays inactive when native support is
-present. Monitor connectors come from Mutter DisplayConfig, and unloading the
-script restores the original OSD handler.
+Gnoblin API 1.27 emits `gnoblin.osd.requested` when Mutter requests an OSD.
+`bingux-statusd` subscribes to that compositor event, resolves its monitor ID
+against the current monitor snapshot, and publishes one newline-delimited UTF-8
+JSON record to `$XDG_RUNTIME_DIR/bingux/osd-v2.sock`. Gnoblin does not draw an
+OSD surface, so Bingux needs no OSD-disable setting. The compositor event
+contains no level value, so statusd sends `-1` for the level and maximum; the
+shell displays a status-only OSD without a level bar.
 
 OSD records are transient. The daemon does not cache them. A new socket client
 receives only requests that arrive after its connection. The socket directory
