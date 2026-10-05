@@ -1,15 +1,15 @@
 # GTK window frames
 
-Right-click window menus are rendered by Bingux's shared Quickshell `TrayMenu`
-with compact rows matching the keyboard layout selector. In a native Gnoblin
-session, Bingux subscribes to Mutter's window-menu requests and sends actions
-through its compositor connection. Move and resize are available for WM menus
-when the compositor provides the one-use menu context (API 1.30 or newer).
-App-menu requests do not grant move or resize authority. The legacy GNOME
-integration drop-in still uses `shell["window-menu"] = { "binguxctl", "ipc",
-"shell", "windowMenu" }`; it shows only the noninteractive actions supplied by
-that integration. `gnoblinctl window menu ID` can also open that menu, suitable
-for a configurable shortcut. Reload via `gnoblinctl config reload`.
+Standalone Bingux opens its Quickshell window menu for Gnoblin's native
+`gnoblin.window.menu-requested` WM event. It reads the current window record,
+then targets actions by that stable window ID over the same compositor
+connection, so opening the menu does not redirect actions to the newly focused
+window. Move and resize use the event's one-use `menu_context`; those actions
+are available with Gnoblin API 1.30 or newer, and the context expires after five
+seconds. Application-menu requests are informational and are ignored because
+Bingux does not expose arbitrary application menus.
+
+Do not restore the removed `shell["window-menu"]` setting to `init.lua`.
 
 `bingux-frame` draws **actual GTK4/libadwaita widgets**, not a lookalike. It snapshots
 an `AdwHeaderBar`, `AdwWindowTitle` and GTK's title buttons into Gnoblin's private
