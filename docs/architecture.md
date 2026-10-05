@@ -25,9 +25,9 @@ require a machine-specific configuration.
 ## Process boundaries
 
 Bingux does not replace compositor or system services. It calls system APIs and
-uses user-systemd for long-running helper processes. Gnoblin's D-Bus and
-Wayland interfaces are optional integrations; the shell can still render its
-general UI when those interfaces are absent.
+uses user-systemd for long-running helper processes. Gnoblin's compositor
+socket, D-Bus portal APIs and Wayland protocols are optional integrations; the
+shell can still render its general UI when they are absent.
 
 Tailscale, NetworkManager, MPRIS, PipeWire and notification services are
 detected at runtime. Missing integrations remove only their controls. They do
@@ -43,7 +43,8 @@ Gnoblin supplies the compositor and session. The stable integration points are:
 
 - `zwlr_layer_shell_v1` for top bar, dock, sidebar and popup surfaces.
 - `zwlr_foreign_toplevel_manager_v1` for dock window listing and actions.
-- `org.gnoblin.Shell` for shell commands, OSD forwarding and session state.
+- The versioned Gnoblin compositor socket for window, workspace, input, privacy,
+  and OSD state and operations.
 - The local search, status and OSD sockets for long-running helper data.
 
 The shell owns its own layer-shell surfaces. It does not patch or depend on

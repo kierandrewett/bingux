@@ -126,3 +126,7 @@ machines.
 
 For extension development, read [Extensions](extensions.md). For isolated
 testing, use [portable testing](portable-testing.md).
+
+The packaged Gnoblin defaults enable blur for layer surfaces and set opacity
+only on named Bingux panels. Other layer surfaces keep their own opacity, so a
+wallpaper is not faded by the shell defaults.

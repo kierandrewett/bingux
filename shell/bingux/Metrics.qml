@@ -28,9 +28,13 @@ QtObject {
     readonly property bool desktopStateAvailable: available && latest.desktopStateAvailable
     readonly property var inputSources: desktopStateAvailable ? latest.inputSources : []
     readonly property var currentInputSource: desktopStateAvailable ? latest.currentInputSource : null
-    readonly property bool screenSharing: desktopStateAvailable && latest.screenSharing
-    readonly property bool microphoneInUse: desktopStateAvailable && latest.microphoneInUse
-    readonly property bool locationInUse: desktopStateAvailable && latest.locationInUse
+    readonly property bool privacyAvailable: available && (latest.privacyAvailable === undefined ? typeof latest.screenSharing === "boolean" || typeof latest.microphoneInUse === "boolean" || typeof latest.locationInUse === "boolean" : latest.privacyAvailable)
+    readonly property bool screenSharingAvailable: privacyAvailable && (latest.screenSharingAvailable === undefined || latest.screenSharingAvailable)
+    readonly property bool microphoneAvailable: privacyAvailable && (latest.microphoneAvailable === undefined || latest.microphoneAvailable)
+    readonly property bool locationAvailable: privacyAvailable && (latest.locationAvailable === undefined || latest.locationAvailable)
+    readonly property bool screenSharing: screenSharingAvailable && latest.screenSharing
+    readonly property bool microphoneInUse: microphoneAvailable && latest.microphoneInUse
+    readonly property bool locationInUse: locationAvailable && latest.locationInUse
     readonly property string inputSourceLabel: {
         const source = currentInputSource;
 
@@ -85,12 +89,16 @@ QtObject {
         return true;
     }
 
+    function isOptionalBoolean(value) {
+        return typeof value === "undefined" || typeof value === "boolean";
+    }
+
     function isDesktopStateRecord(record) {
         if (typeof record.desktopStateAvailable === "undefined") {
             return true;
         }
 
-        return typeof record.desktopStateAvailable === "boolean" && isInputSourceList(record.inputSources) && (record.currentInputSource === null || isInputSource(record.currentInputSource)) && typeof record.screenSharing === "boolean" && typeof record.microphoneInUse === "boolean" && typeof record.locationInUse === "boolean";
+        return typeof record.desktopStateAvailable === "boolean" && isInputSourceList(record.inputSources) && (record.currentInputSource === null || isInputSource(record.currentInputSource)) && typeof record.screenSharing === "boolean" && typeof record.microphoneInUse === "boolean" && typeof record.locationInUse === "boolean" && isOptionalBoolean(record.privacyAvailable) && isOptionalBoolean(record.screenSharingAvailable) && isOptionalBoolean(record.microphoneAvailable) && isOptionalBoolean(record.locationAvailable);
     }
 
     function isHardwareRecord(hardware) {
