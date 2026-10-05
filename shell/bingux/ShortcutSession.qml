@@ -578,23 +578,31 @@ QtObject {
                 pendingEndSessionId = sessionId;
                 return;
             }
+            const endMethod = apiMinor >= 64 ? "shortcut.session.end" : "shortcut.unbind";
+            const endArguments = apiMinor >= 64 ? {
+                id: bindingId,
+                session_id: Number(sessionId)
+            } : {
+                id: bindingId
+            };
             endingSessionIds = endingSessionIds.concat([sessionId]);
             bindingRequestPending = true;
-            const requestId = requestApi("shortcut.unbind", {
-                id: bindingId
-            }, (result, error) => {
+            const requestId = requestApi(endMethod, endArguments, (result, error) => {
                 bindingRequestPending = false;
                 if (error) {
                     endingSessionIds = endingSessionIds.filter(id => id !== sessionId);
                     failed(error);
                     return;
                 }
-                ownedBindings = ownedBindings.filter(binding => binding.id !== bindingId);
-                boundCount = ownedBindings.length;
+                if (endMethod === "shortcut.unbind") {
+                    ownedBindings = ownedBindings.filter(binding => binding.id !== bindingId);
+                    boundCount = ownedBindings.length;
+                }
                 activeSessionBindingId = "";
                 activeSessionId = "";
                 sessionSerial = 0;
-                reconcileNativeBindings();
+                if (endMethod === "shortcut.unbind")
+                    reconcileNativeBindings();
             });
             if (!requestId) {
                 bindingRequestPending = false;
@@ -749,6 +757,11 @@ QtObject {
                         if (root.nativeProtocol) {
                             if (record.api_major !== 1 || record.api_minor < 22 || !Array.isArray(record.methods) || !record.methods.includes("shortcut.bind") || !record.methods.includes("shortcut.unbind")) {
                                 root.failed("Gnoblin API 1.22 or newer is required for held shortcuts");
+                                root.socket.connected = false;
+                                return;
+                            }
+                            if (record.api_minor >= 64 && !record.methods.includes("shortcut.session.end")) {
+                                root.failed("Gnoblin API 1.64 requires the shortcut.session.end method");
                                 root.socket.connected = false;
                                 return;
                             }

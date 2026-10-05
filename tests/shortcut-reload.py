@@ -87,8 +87,8 @@ with tempfile.TemporaryDirectory(prefix="shortcut-native-end-") as d:
                             "event": "hello",
                             "version": 1,
                             "api_major": 1,
-                            "api_minor": 63,
-                            "methods": ["shortcut.bind", "shortcut.unbind"],
+                            "api_minor": 64,
+                            "methods": ["shortcut.bind", "shortcut.unbind", "shortcut.session.end"],
                             "events": [],
                             "capabilities": [],
                         }
@@ -131,14 +131,14 @@ with tempfile.TemporaryDirectory(prefix="shortcut-native-end-") as d:
                                     ).encode()
                                     + b"\n"
                                 )
-                        elif method == "shortcut.unbind":
+                        elif method == "shortcut.session.end":
                             c.sendall(
                                 json.dumps(
                                     {
                                         "event": "gnoblin.shortcut.session.ended",
                                         "id": "switcher",
                                         "session_id": 7,
-                                        "reason": "unbound",
+                                        "reason": "cancelled",
                                     }
                                 ).encode()
                                 + b"\n"
@@ -148,7 +148,7 @@ with tempfile.TemporaryDirectory(prefix="shortcut-native-end-") as d:
                                     {
                                         "event": "reply",
                                         "id": record["id"],
-                                        "result": {"unbound": True},
+                                        "result": {"ended": True},
                                     }
                                 ).encode()
                                 + b"\n"
@@ -198,16 +198,22 @@ ShellRoot {
         (item["arguments"] for item in requests if item.get("method") == "shortcut.bind"),
         {},
     )
+    native_end = next(
+        (item["arguments"] for item in requests if item.get("method") == "shortcut.session.end"),
+        {},
+    )
     native_events = next(
         (item["events"] for item in requests if item.get("op") == "events"),
         [],
     )
     assert (
         r.returncode == 0
-        and native_methods == ["shortcut.bind", "shortcut.bind", "shortcut.unbind", "shortcut.bind"]
+        and native_methods == ["shortcut.bind", "shortcut.bind", "shortcut.session.end"]
         and native_bind["hold"] == "alt"
+        and native_end == {"id": "switcher", "session_id": 7}
+        and len([item for item in requests if item.get("method") == "shortcut.bind"]) == 2
         and "gnoblin.shortcut.session.ended" in native_events
         and any(item.get("id") == "ready-check" for item in requests)
         and not server_errors
     ), (r.stdout, r.stderr, requests, server_errors)
-    print("PASS: native shortcut end unbinds, suppresses cancellation, and rebinds")
+    print("PASS: native shortcut end preserves its binding and suppresses expected cancellation")
