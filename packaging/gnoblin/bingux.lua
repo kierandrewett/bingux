@@ -5,6 +5,16 @@
 -- Source installs use their installed share/gnoblin/conf.d path instead.
 
 return {
+    -- Bingux owns Alt+Tab and Super+Tab in its switcher. Clear Mutter's
+    -- defaults so these accelerators can be registered by the shell.
+    keybindings = {
+        wm = {
+            switch_applications = {},
+            switch_applications_backward = {},
+            switch_windows = {},
+            switch_windows_backward = {},
+        },
+    },
     ["frame-renderers"] = {
         -- The installer exposes bingux-frame as a command on the user's PATH.
         bingux = { "bingux-frame", "--compact" },
