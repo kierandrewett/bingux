@@ -4,6 +4,7 @@ TrayMenu {
     id: root
 
     property string windowId: ""
+    property string lastMenuRequestType: ""
     property point requestedPosition: Qt.point(0, 0)
     property int requestGeneration: 0
     signal requestFailed(string message)
@@ -111,6 +112,7 @@ TrayMenu {
 
     function openNativeRequest(request) {
         const generation = ++requestGeneration;
+        lastMenuRequestType = request && typeof request.menu_type === "string" ? request.menu_type : "";
         visible = false;
         windowId = "";
         actions = [];
