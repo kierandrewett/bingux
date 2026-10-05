@@ -50,7 +50,9 @@ check: doctor-build native daemons
 	cd $(BUILD_DIR)/text && $(QMAKE) $(ROOT)/packages/bingux-text-layout/spacing-test.pro -o Makefile.tests && $(MAKE) -f Makefile.tests
 	QT_QPA_PLATFORM=offscreen $(BUILD_DIR)/text/spacing-test
 	$(CARGO) test --locked --manifest-path packages/bingux-searchd/Cargo.toml --lib
-	$(CARGO) test --locked --manifest-path packages/bingux-statusd/Cargo.toml --lib
+	$(CARGO) test --locked --manifest-path packages/bingux-statusd/Cargo.toml
+	python3 tests/gnoblin-menu-focus.py
+	BINGUX_STATUSD_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-statusd python3 tests/osd-event-bridge.py
 	python3 tests/install-dependencies.py
 	$(MAKE) rpm-package
 	python3 tests/standalone-install.py

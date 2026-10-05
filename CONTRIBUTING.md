@@ -22,6 +22,32 @@ make check
 `make check` builds both Rust daemons, runs their library tests, checks the
 native text layout test and verifies a staged install.
 
+To verify native OSD event routing and status-only rendering in a nested
+Gnoblin session, build the status daemon and run:
+
+```sh
+BINGUX_STATUSD_BIN="$PWD/build/cargo/release/bingux-statusd" \
+GNOBLIN_PREFIX=/path/to/gnoblin/install \
+GNOBLIN_DEVKIT_EXEC="python3 $PWD/tests/osd-native-event.py" \
+/path/to/gnoblin/scripts/run-gnoblin-devkit.sh
+```
+
+The check uses a test compositor peer to send a Mutter-shaped OSD event. It
+exercises the production status daemon and OSD surface in a real nested
+Gnoblin session; it does not trigger Mutter's hardware event producer.
+
+To verify native window-menu events in the same nested session, run:
+
+```sh
+GNOBLIN_PREFIX=/path/to/gnoblin/install \
+GNOBLIN_DEVKIT_EXEC="python3 $PWD/tests/window-menu-native-event.py" \
+/path/to/gnoblin/scripts/run-gnoblin-devkit.sh
+```
+
+This check uses a test compositor peer to cover event subscription, stale
+window rejection, actions bound to the requested window, and action failures.
+It does not generate a real title-bar click in Mutter.
+
 When the full Qt development set is unavailable, run the checks that do not
 need it and state that limitation in the change description. Useful focused
 checks include:
