@@ -1,11 +1,15 @@
 # GTK window frames
 
-The shared Quickshell `TrayMenu` window-menu surface is retained, but the old
-`shell["window-menu"]` Gnoblin setting was removed with the GNOME Shell bridge.
-Standalone Bingux does not currently connect this surface to
-`gnoblin.window.menu-requested`; titlebar right-click menus are therefore not
-available in standalone sessions. Do not add the removed `shell` setting to
-`init.lua`.
+Standalone Bingux opens its Quickshell window menu for Gnoblin's native
+`gnoblin.window.menu-requested` WM event. It reads the current window record,
+then targets actions by that stable window ID over the same compositor
+connection, so opening the menu does not redirect actions to the newly focused
+window. Move and resize use the event's one-use `menu_context`; those actions
+are available with Gnoblin API 1.30 or newer, and the context expires after five
+seconds. Application-menu requests are informational and are ignored because
+Bingux does not expose arbitrary application menus.
+
+Do not restore the removed `shell["window-menu"]` setting to `init.lua`.
 
 `bingux-frame` draws **actual GTK4/libadwaita widgets**, not a lookalike. It snapshots
 an `AdwHeaderBar`, `AdwWindowTitle` and GTK's title buttons into Gnoblin's private
