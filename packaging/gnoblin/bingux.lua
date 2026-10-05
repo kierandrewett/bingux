@@ -43,6 +43,8 @@ return {
                 mode = "force",
                 radius = 12,
                 smoothing = 0.5,
+                border_width = 1,
+                border_color = "#505050bf",
                 -- Reconstruct client-drawn rounded corners before applying
                 -- Bingux's shared shape, using each window's own pixels.
                 ["remove-csd"] = true,
@@ -51,12 +53,6 @@ return {
                     { x = 0, y = 8, blur = 24, spread = 0, opacity = 0.14 },
                     { x = 0, y = 2, blur = 5, spread = 0, opacity = 0.18 },
                 },
-            },
-            borders = {
-                ["inner-width"] = 1,
-                ["inner-color"] = "#505050bf",
-                ["outer-width"] = 1,
-                ["outer-color"] = "#00000080",
             },
         },
         {
