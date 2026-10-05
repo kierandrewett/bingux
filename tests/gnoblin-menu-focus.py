@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix="gnoblin-menu-focus-") as directory:
                             "event": "hello",
                             "api_major": 1,
                             "api_minor": 68,
-                            "methods": ["shortcut.bind", "shortcut.unbind"],
+                            "methods": ["shortcut.bind", "shortcut.unbind", "shortcut.session.end"],
                             "events": [],
                             "capabilities": [],
                         }
@@ -161,18 +161,19 @@ ShellRoot {
   property int actionsSent: 0
   onWindowMenuRequested: function (request) {
    menuCount++;
-   const action = menuCount === 1 ? "interactive-move" : "interactive-resize";
-   if (requestWindowMenuAction(action, request.window_id, request.menu_context, "north_west"))
+   const method = menuCount === 1 ? "window.begin_move" : "window.begin_resize";
+   const arguments_ = menuCount === 1 ? {menu_context: request.menu_context} : {menu_context: request.menu_context, edge: "north_west"};
+   if (compositor.requestApi(method, arguments_, function (result, error) {}))
     actionsSent++;
   }
   onKeyPressed: function (key, modifiers, context) {
-   if (context) keyContext = context;
+   keyContext = context || "";
    if (key === 65293 || key === 65421) {
     enterHandled = true;
     activateWindow("42", keyContext);
    }
   }
-  onKeyReleased: function (key, modifiers, context) { if (context) keyContext = context; }
+  onKeyReleased: function (key, modifiers, context) { keyContext = context || ""; }
   onReleased: { sawRelease = true; activateWindow("42", keyContext); }
  }
  Timer {
@@ -215,7 +216,7 @@ ShellRoot {
         and resize.get("arguments") == {"menu_context": "menu-resize-once", "edge": "north_west"}
         and [call.get("arguments", {}).get("focus_context") for call in focuses]
         == ["fresh-release-focus", "fresh-enter-focus"]
-        and key_handler.index("if (context)") < key_handler.index("key === 65293")
+        and key_handler.index('focusContext = context || "";') < key_handler.index("key === 65293")
         and any(record.get("id") == "finished" for record in requests)
         and not server_errors
     ), (result.stdout, result.stderr, requests, server_errors)
