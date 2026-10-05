@@ -497,23 +497,31 @@ QtObject {
                 pendingEndSessionId = sessionId;
                 return;
             }
+            const endMethod = apiMinor >= 64 ? "shortcut.session.end" : "shortcut.unbind";
+            const endArguments = apiMinor >= 64 ? {
+                id: bindingId,
+                session_id: Number(sessionId)
+            } : {
+                id: bindingId
+            };
             endingSessionIds = endingSessionIds.concat([sessionId]);
             bindingRequestPending = true;
-            const requestId = requestApi("shortcut.unbind", {
-                id: bindingId
-            }, (result, error) => {
+            const requestId = requestApi(endMethod, endArguments, (result, error) => {
                 bindingRequestPending = false;
                 if (error) {
                     endingSessionIds = endingSessionIds.filter(id => id !== sessionId);
                     failed(error);
                     return;
                 }
-                ownedBindings = ownedBindings.filter(binding => binding.id !== bindingId);
-                boundCount = ownedBindings.length;
+                if (endMethod === "shortcut.unbind") {
+                    ownedBindings = ownedBindings.filter(binding => binding.id !== bindingId);
+                    boundCount = ownedBindings.length;
+                }
                 activeSessionBindingId = "";
                 activeSessionId = "";
                 sessionSerial = 0;
-                reconcileNativeBindings();
+                if (endMethod === "shortcut.unbind")
+                    reconcileNativeBindings();
             });
             if (!requestId) {
                 bindingRequestPending = false;
@@ -669,13 +677,18 @@ QtObject {
                                 root.socket.connected = false;
                                 return;
                             }
+                            if (record.api_minor >= 64 && !record.methods.includes("shortcut.session.end")) {
+                                root.failed("Gnoblin API 1.64 requires the shortcut.session.end method");
+                                root.socket.connected = false;
+                                return;
+                            }
                             if (root.trackWindowDrag && (record.api_minor < 28 || !record.methods.includes("window.snap_context") || !record.methods.includes("window.snap") || !record.methods.includes("window.snap.offer"))) {
                                 root.failed("Gnoblin API 1.28 or newer with snap methods is required for snapping");
                                 root.socket.connected = false;
                                 return;
                             }
                             root.apiMajor = 1;
-                            root.apiMinor = Math.min(record.api_minor, 63);
+                            root.apiMinor = Math.min(record.api_minor, 64);
                             root.apiReady = true;
                             root.registerNativeSubscriptions();
                         }
