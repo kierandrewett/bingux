@@ -145,7 +145,7 @@ class InstallTest(unittest.TestCase):
             self.assertIn('layer = "^bingux-capture-controls$"', integration)
             self.assertIn('bingux = { "bingux-frame", "--compact" }', integration)
             self.assertIn('mode = "auto"', integration)
-            self.assertNotIn('["remove-csd"] = true', integration)
+            self.assertIn('["remove-csd"] = true', integration)
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Text/qmldir").is_file())
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Effects/libbinguxeffects.so").is_file())
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Wayland/libbinguxwaylandsync.so").is_file())
@@ -221,7 +221,7 @@ class InstallTest(unittest.TestCase):
             user_integration = (prefix / "share/gnoblin/conf.d/bingux.lua").read_text()
             self.assertIn('bingux = { "bingux-frame", "--compact" }', user_integration)
             self.assertIn('mode = "auto"', user_integration)
-            self.assertNotIn('["remove-csd"] = true', user_integration)
+            self.assertIn('["remove-csd"] = true', user_integration)
             init = config / "gnoblin/init.lua"
             dropin = config / "gnoblin/conf.d/bingux.lua"
             self.assertTrue(init.is_file())

@@ -91,17 +91,13 @@ as available when `desktopStateAvailable` is true.
 
 ## OSD socket protocol v2
 
-Gnoblin API 1.27 emits `gnoblin.osd.requested` only when its native OSD is
-disabled for the session or for that OSD type. `bingux-statusd` subscribes to
-that compositor event, resolves its monitor ID against the current monitor
-snapshot, and publishes one newline-delimited UTF-8 JSON record to
-`$XDG_RUNTIME_DIR/bingux/osd-v2.sock`.
-
-Bingux sets `shell.osd = false` through its Gnoblin Lua drop-in as well as the session's
-disabled-features setting. Requests without an output-name list use the monitor
-ID as their output name. The compositor event contains no level value, so
-statusd sends `-1` for the level and maximum; the shell displays a status-only
-OSD without a level bar.
+Gnoblin API 1.27 emits `gnoblin.osd.requested` when Mutter requests an OSD.
+`bingux-statusd` subscribes to that compositor event, resolves its monitor ID
+against the current monitor snapshot, and publishes one newline-delimited UTF-8
+JSON record to `$XDG_RUNTIME_DIR/bingux/osd-v2.sock`. Gnoblin does not draw an
+OSD surface, so Bingux needs no OSD-disable setting. The compositor event
+contains no level value, so statusd sends `-1` for the level and maximum; the
+shell displays a status-only OSD without a level bar.
 
 OSD records are transient. The daemon does not cache them. A new socket client
 receives only requests that arrive after its connection. The socket directory
