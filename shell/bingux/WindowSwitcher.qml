@@ -165,7 +165,7 @@ Scope {
             windows = history.slice();
             if (!windows.length) {
                 shortcuts.end();
-                return;
+                return false;
             }
             active = true;
             warmPreview.stop();
@@ -182,6 +182,7 @@ Scope {
             selected = (selected + (backwards ? -1 : 1) + windows.length) % windows.length;
             previewPump.restart();
         }
+        return true;
     }
     function cancel() {
         reveal.stop();
@@ -416,6 +417,10 @@ Scope {
             root.step(id.indexOf("backward") >= 0);
         }
         onReleased: root.finish()
+        onKeyReleased: function (key, modifiers, context) {
+            if (context)
+                root.focusContext = context;
+        }
         onCancelled: root.cancel()
         onFailed: function (message) {
             console.warn("bingux-switcher: " + message);

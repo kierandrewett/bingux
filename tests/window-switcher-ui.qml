@@ -191,7 +191,8 @@ ShellRoot {
                 test.check(test.selection && test.findChild(test.selection, "switcherPreview"), "Selected cards contain a preview below the header");
                 test.check(chooser.cardCount === chooser.windows.length, "The grid has one card per window, without carousel copies");
                 const previousSelection = test.selection;
-                chooser.step(false);
+                chooser.handleShortcutKey(65363, 0, "fresh-navigation-context");
+                test.check(chooser.focusContext === "fresh-navigation-context", "Real navigation key events refresh the focus context used on release");
                 test.check(test.findChild(test.presentation, "switcherSelection") !== previousSelection, "Selection changes cards directly without sliding the grid");
             } else if (test.phase === 2) {
                 test.selection = test.findChild(test.presentation, "switcherSelection");

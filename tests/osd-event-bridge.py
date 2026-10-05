@@ -134,13 +134,15 @@ def main():
             if peer_errors:
                 raise AssertionError(f"fake compositor failed: {peer_errors[0]}")
             requests = peer_state.get("requests")
-            if not requests or [request.get("op") for request in requests] != ["monitors", "events"]:
+            if not requests or [request.get("op") for request in requests] != ["events", "monitors"]:
                 raise AssertionError(f"unexpected compositor requests: {requests!r}")
-            subscription = requests[1]
+            subscription = requests[0]
             if subscription.get("api_version") != {"major": 1, "minor": 27}:
                 raise AssertionError(f"unexpected event API version: {subscription!r}")
             if subscription.get("events") != [EVENT_NAME]:
                 raise AssertionError(f"unexpected event subscription: {subscription!r}")
+            if requests[1].get("api_version") != {"major": 1, "minor": 1}:
+                raise AssertionError(f"unexpected monitor snapshot version: {requests[1]!r}")
 
             expected = {
                 "protocolVersion": 2,

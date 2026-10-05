@@ -160,8 +160,12 @@ pub struct InputSource {
 /// The three privacy states exposed by the Gnoblin control interface.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct PrivacyState {
+    pub available: bool,
+    pub screen_sharing_available: bool,
     pub screen_sharing: bool,
+    pub microphone_available: bool,
     pub microphone_in_use: bool,
+    pub location_available: bool,
     pub location_in_use: bool,
 }
 
@@ -202,7 +206,7 @@ pub fn metrics_with_desktop_state_json(
 
     Ok(with_extra(
         format!(
-            "{{\"protocolVersion\":1,\"type\":\"metrics\",\"cpuPercent\":{},\"memoryTotalBytes\":{},\"memoryUsedBytes\":{},\"networkReceiveBytesPerSecond\":{},\"networkTransmitBytesPerSecond\":{},\"desktopStateAvailable\":{},\"inputSources\":{},\"currentInputSource\":{},\"screenSharing\":{},\"microphoneInUse\":{},\"locationInUse\":{}}}\n",
+            "{{\"protocolVersion\":1,\"type\":\"metrics\",\"cpuPercent\":{},\"memoryTotalBytes\":{},\"memoryUsedBytes\":{},\"networkReceiveBytesPerSecond\":{},\"networkTransmitBytesPerSecond\":{},\"desktopStateAvailable\":{},\"inputSources\":{},\"currentInputSource\":{},\"privacyAvailable\":{},\"screenSharingAvailable\":{},\"screenSharing\":{},\"microphoneAvailable\":{},\"microphoneInUse\":{},\"locationAvailable\":{},\"locationInUse\":{}}}\n",
             format_optional_number(metrics.cpu_percent),
             metrics.memory_total_bytes,
             metrics.memory_used_bytes,
@@ -211,8 +215,12 @@ pub fn metrics_with_desktop_state_json(
             desktop_state.available,
             input_sources,
             current_input_source,
+            desktop_state.privacy.available,
+            desktop_state.privacy.screen_sharing_available,
             desktop_state.privacy.screen_sharing,
+            desktop_state.privacy.microphone_available,
             desktop_state.privacy.microphone_in_use,
+            desktop_state.privacy.location_available,
             desktop_state.privacy.location_in_use,
         ),
         metrics.extra,
@@ -650,8 +658,12 @@ mod tests {
                     display_name: "English \"United Kingdom\"".to_owned(),
                 }),
                 privacy: PrivacyState {
+                    available: true,
+                    screen_sharing_available: true,
                     screen_sharing: true,
+                    microphone_available: false,
                     microphone_in_use: false,
+                    location_available: true,
                     location_in_use: true,
                 },
             },
@@ -660,7 +672,7 @@ mod tests {
 
         assert_eq!(
             record,
-            "{\"protocolVersion\":1,\"type\":\"metrics\",\"cpuPercent\":12.50,\"memoryTotalBytes\":16777216,\"memoryUsedBytes\":12582912,\"networkReceiveBytesPerSecond\":1234.00,\"networkTransmitBytesPerSecond\":null,\"desktopStateAvailable\":true,\"inputSources\":[{\"type\":\"xkb\",\"id\":\"gb\",\"shortName\":\"en\",\"displayName\":\"English \\\"United Kingdom\\\"\"}],\"currentInputSource\":{\"type\":\"xkb\",\"id\":\"gb\",\"shortName\":\"en\",\"displayName\":\"English \\\"United Kingdom\\\"\"},\"screenSharing\":true,\"microphoneInUse\":false,\"locationInUse\":true}\n",
+            "{\"protocolVersion\":1,\"type\":\"metrics\",\"cpuPercent\":12.50,\"memoryTotalBytes\":16777216,\"memoryUsedBytes\":12582912,\"networkReceiveBytesPerSecond\":1234.00,\"networkTransmitBytesPerSecond\":null,\"desktopStateAvailable\":true,\"inputSources\":[{\"type\":\"xkb\",\"id\":\"gb\",\"shortName\":\"en\",\"displayName\":\"English \\\"United Kingdom\\\"\"}],\"currentInputSource\":{\"type\":\"xkb\",\"id\":\"gb\",\"shortName\":\"en\",\"displayName\":\"English \\\"United Kingdom\\\"\"},\"privacyAvailable\":true,\"screenSharingAvailable\":true,\"screenSharing\":true,\"microphoneAvailable\":false,\"microphoneInUse\":false,\"locationAvailable\":true,\"locationInUse\":true}\n",
         );
     }
 

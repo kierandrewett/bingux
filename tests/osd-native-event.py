@@ -74,10 +74,14 @@ def main():
                     },
                 )
                 requests = [json.loads(reader.readline()), json.loads(reader.readline())]
-                if [request.get("op") for request in requests] != ["monitors", "events"]:
+                if [request.get("op") for request in requests] != ["events", "monitors"]:
                     raise AssertionError(f"unexpected compositor requests: {requests!r}")
-                if requests[1].get("events") != [EVENT_NAME]:
-                    raise AssertionError(f"unexpected event subscription: {requests[1]!r}")
+                if requests[0].get("events") != [EVENT_NAME]:
+                    raise AssertionError(f"unexpected event subscription: {requests[0]!r}")
+                if requests[0].get("api_version") != {"major": 1, "minor": 27}:
+                    raise AssertionError(f"unexpected event API version: {requests[0]!r}")
+                if requests[1].get("api_version") != {"major": 1, "minor": 1}:
+                    raise AssertionError(f"unexpected monitor snapshot version: {requests[1]!r}")
                 send_record(
                     connection,
                     {

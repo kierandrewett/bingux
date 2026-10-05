@@ -124,7 +124,6 @@ fn run() -> io::Result<()> {
         OSD_SOCKET_NAME,
         Event::OsdClient,
     );
-    gnoblin::start_osd_event_subscriber(sender.clone());
     gnoblin::start_state_subscriber(sender);
 
     let mut sampler = Sampler::new();
