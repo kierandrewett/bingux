@@ -43,7 +43,8 @@ QtObject {
     readonly property bool ready: socket.connected && helloReceived && (nativeProtocol ? apiReady && ownedBindings.length === (enabled ? bindings.length : 0) : boundCount === bindings.length)
     readonly property bool connected: socket.connected
     signal activated(string id, bool first, int modifiers, string focusContext)
-    signal keyPressed(int key, int modifiers)
+    signal keyPressed(int key, int modifiers, string focusContext)
+    signal keyReleased(int key, int modifiers, string focusContext)
     signal released
     signal cancelled
     signal failed(string message)
@@ -696,7 +697,7 @@ QtObject {
                                 return;
                             }
                             root.apiMajor = 1;
-                            root.apiMinor = Math.min(record.api_minor, 64);
+                            root.apiMinor = Math.min(record.api_minor, 68);
                             root.apiReady = true;
                             root.registerNativeSubscriptions();
                         }
@@ -754,7 +755,7 @@ QtObject {
                         root.sessionSerial = record.session || 0;
                         root.activated(record.id, record.first, record.modifiers, record.focus_context || "");
                     } else if (record.event === "key")
-                        root.keyPressed(record.key, record.modifiers);
+                        root.keyPressed(record.key, record.modifiers, "");
                     else if (record.event === "released")
                         root.released();
                     else if (record.event === "typed")
@@ -789,8 +790,11 @@ QtObject {
                         if (record.first === false)
                             root.activated(record.id, false, record.modifiers || 0, "");
                     } else if (root.nativeProtocol && record.event === "gnoblin.shortcut.session.key") {
+                        const focusContext = record.focus_context || "";
                         if (record.phase === "press")
-                            root.keyPressed(record.keyval, record.modifiers || 0);
+                            root.keyPressed(record.keyval, record.modifiers || 0, focusContext);
+                        else if (record.phase === "release")
+                            root.keyReleased(record.keyval, record.modifiers || 0, focusContext);
                     } else if (root.nativeProtocol && record.event === "gnoblin.shortcut.session.ended") {
                         const sessionId = String(record.session_id || "");
                         const endedExplicitly = root.endingSessionIds.includes(sessionId);
