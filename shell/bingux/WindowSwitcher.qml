@@ -195,6 +195,24 @@ Scope {
         cancel();
         shortcuts.end();
     }
+    function handleShortcutKey(key, modifiers, context) {
+        // Each real modal key event may grant a fresh, one-use focus token.
+        // Do not fall back to an older token when the event carries none.
+        root.focusContext = context || "";
+        if (key === 65307) {
+            root.cancel();
+            shortcuts.end();
+        } else if (key === 65293 || key === 65421) {
+            root.finish();
+            shortcuts.end();
+        } else if (key === 65361 || key === 65056)
+            root.step(true);
+        else if (key === 65363 || key === 65289)
+            root.step(key === 65289 && (modifiers & 1) !== 0);
+    }
+    function handleShortcutKeyReleased(key, modifiers, context) {
+        root.focusContext = context || "";
+    }
     function finish() {
         if (!active)
             return;
@@ -419,18 +437,8 @@ Scope {
             } else
                 root.close();
         }
-        onKeyPressed: function (key, modifiers) {
-            if (key === 65307) {
-                root.cancel();
-                shortcuts.end();
-            } else if (key === 65293 || key === 65421) {
-                root.finish();
-                shortcuts.end();
-            } else if (key === 65361 || key === 65056)
-                root.step(true);
-            else if (key === 65363 || key === 65289)
-                root.step(key === 65289 && (modifiers & 1) !== 0);
-        }
+        onKeyPressed: (key, modifiers, context) => root.handleShortcutKey(key, modifiers, context)
+        onKeyReleased: (key, modifiers, context) => root.handleShortcutKeyReleased(key, modifiers, context)
     }
     FileView {
         id: historyOrderFile
