@@ -19,8 +19,8 @@ make
 make check
 ```
 
-`make check` builds both Rust daemons, runs their library tests, checks the
-native text layout test and verifies a staged install.
+`make check` builds both Rust daemons, runs their library and QML socket tests,
+checks native text layout and OSD event routing, and verifies a staged install.
 
 To verify native OSD event routing and status-only rendering in a nested
 Gnoblin session, build the status daemon and run:
