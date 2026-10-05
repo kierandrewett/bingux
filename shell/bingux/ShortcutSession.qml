@@ -39,6 +39,7 @@ QtObject {
     signal snapContext(var state)
     signal snapCompleted(var state)
     signal privacySnapshot(var state)
+    signal windowMenuRequested(var request)
     readonly property bool ready: socket.connected && helloReceived && (nativeProtocol ? apiReady && ownedBindings.length === (enabled ? bindings.length : 0) : boundCount === bindings.length)
     readonly property bool connected: socket.connected
     signal activated(string id, bool first, int modifiers, string focusContext)
@@ -48,7 +49,6 @@ QtObject {
     signal cancelled
     signal failed(string message)
     signal windowSnapshot(var windows)
-    signal windowMenuRequested(var request)
     signal pointerPressed(real x, real y, int button)
     signal previewReceived(string windowId, string source, string error)
     signal textInserted(string windowId)
@@ -569,8 +569,12 @@ QtObject {
             events.push("gnoblin.privacy.changed");
         if (trackWindowDrag)
             events.push("gnoblin.window.drag.started", "gnoblin.window.drag.updated", "gnoblin.window.drag.ended");
-        if (trackWindowMenu && apiMinor >= 27)
-            events.push("gnoblin.window.menu-requested");
+        if (trackWindowMenu) {
+            if (apiMinor >= 27)
+                events.push("gnoblin.window.menu-requested");
+            else
+                failed("Native window menus require Gnoblin API 1.27 or newer");
+        }
         send({
             op: "events",
             api_version: {
@@ -692,11 +696,6 @@ QtObject {
                                 root.socket.connected = false;
                                 return;
                             }
-                            if (root.trackWindowMenu && record.api_minor < 27) {
-                                root.failed("Gnoblin API 1.27 or newer is required for native window menus");
-                                root.socket.connected = false;
-                                return;
-                            }
                             root.apiMajor = 1;
                             root.apiMinor = Math.min(record.api_minor, 68);
                             root.apiReady = true;
@@ -791,10 +790,11 @@ QtObject {
                         if (record.first === false)
                             root.activated(record.id, false, record.modifiers || 0, "");
                     } else if (root.nativeProtocol && record.event === "gnoblin.shortcut.session.key") {
+                        const focusContext = record.focus_context || "";
                         if (record.phase === "press")
-                            root.keyPressed(record.keyval, record.modifiers || 0, record.focus_context || "");
+                            root.keyPressed(record.keyval, record.modifiers || 0, focusContext);
                         else if (record.phase === "release")
-                            root.keyReleased(record.keyval, record.modifiers || 0, record.focus_context || "");
+                            root.keyReleased(record.keyval, record.modifiers || 0, focusContext);
                     } else if (root.nativeProtocol && record.event === "gnoblin.shortcut.session.ended") {
                         const sessionId = String(record.session_id || "");
                         const endedExplicitly = root.endingSessionIds.includes(sessionId);

@@ -99,6 +99,11 @@ OSD surface, so Bingux needs no OSD-disable setting. The compositor event
 contains no level value, so statusd sends `-1` for the level and maximum; the
 shell displays a status-only OSD without a level bar.
 
+`osd-bridge.js` is a separate GNOME Shell compatibility adapter. It remains
+for GNOME Shell sessions, including older Gnoblin builds that do not publish
+the native event. It checks for native support before patching the Shell OSD
+manager, and unloading the script restores the original handler.
+
 OSD records are transient. The daemon does not cache them. A new socket client
 receives only requests that arrive after its connection. The socket directory
 has mode `0700`, and the socket has mode `0600`.
