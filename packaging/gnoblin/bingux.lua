@@ -4,6 +4,32 @@
 --   g.load("/usr/share/gnoblin/conf.d/*.lua")
 -- Source installs use their installed share/gnoblin/conf.d path instead.
 
+-- Window open and close follow macOS: a slight scale from the centre with a
+-- quick fade. Minimize and restore keep Gnoblin's dock-aware presets, which
+-- travel to and from the dock icon.
+gnoblin.animation({
+    name = "bingux-open",
+    event = "open",
+    duration = 280,
+    origin = "center",
+    ease = "ease-out-expo",
+    keyframes = {
+        { at = 0, scale = 0.9, opacity = 0 },
+        { at = 0.45, opacity = 1 },
+        { at = 1, scale = 1, opacity = 1 },
+    },
+})
+
+gnoblin.animation({
+    name = "bingux-close",
+    event = "close",
+    duration = 180,
+    origin = "center",
+    ease = "ease-out-quad",
+    from = { scale = 1, opacity = 1 },
+    to = { scale = 0.94, opacity = 0 },
+})
+
 return {
     window_management = {
         -- Drag a window to a screen edge to tile it, as in GNOME.
@@ -47,8 +73,8 @@ return {
             -- supplied only when the client explicitly requests one.
             match = { type = "window" },
             animation = {
-                open = "gnome-open",
-                close = "gnome-close",
+                open = "bingux-open",
+                close = "bingux-close",
                 ["dialog-open"] = "gnome-dialog-open",
                 ["dialog-close"] = "gnome-dialog-close",
                 minimize = "gnome-minimize",
