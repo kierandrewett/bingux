@@ -38,6 +38,8 @@ ShellRoot {
         }
     }
 
+    // The wallpaper is created first so it is the first surface the shell maps.
+    Wallpaper {}
     SnapAssist {}
 
     readonly property var commandNotifications: notificationState
