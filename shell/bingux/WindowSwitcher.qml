@@ -56,6 +56,7 @@ Scope {
         return cards.itemAt(selected)?.appIcon ?? null;
     }
     signal opening
+    signal closeRequested(string name)
     function restoreHistory(text) {
         try {
             const state = JSON.parse(text);
@@ -235,7 +236,7 @@ Scope {
     }
     function iconFor(window) {
         const app = appFor(window);
-        return Quickshell.iconPath(app && app.icon ? app.icon : "application-x-executable", "application-x-executable");
+        return AdwaitaIcons.source(app && app.icon ? app.icon : "application-x-executable", "application-x-executable");
     }
     function previewAspect(window) {
         const geometry = window?.geometry;
@@ -405,14 +406,7 @@ Scope {
         onActivated: function (id, first, modifiers, context) {
             if (first) {
                 root.focusContext = context;
-                shortcuts.send({
-                    op: "ui-session",
-                    action: "command",
-                    name: "search",
-                    command: {
-                        action: "close"
-                    }
-                });
+                root.closeRequested("search");
             }
             root.step(id.indexOf("backward") >= 0);
         }
@@ -420,6 +414,7 @@ Scope {
         onKeyReleased: function (key, modifiers, context) {
             if (context)
                 root.focusContext = context;
+            root.handleShortcutKeyReleased(key, modifiers, context);
         }
         onCancelled: root.cancel()
         onFailed: function (message) {
@@ -443,7 +438,6 @@ Scope {
                 root.close();
         }
         onKeyPressed: (key, modifiers, context) => root.handleShortcutKey(key, modifiers, context)
-        onKeyReleased: (key, modifiers, context) => root.handleShortcutKeyReleased(key, modifiers, context)
     }
     FileView {
         id: historyOrderFile
@@ -583,6 +577,10 @@ Scope {
                                 }
                                 radius: Theme.insetRadius(Theme.cardRadius, root.cardPadding)
                                 baseColor: Theme.hover
+                                // The switcher selection must remain visible against a
+                                // thumbnail without inheriting the desktop accent.
+                                // Accents such as yellow otherwise read as a frame.
+                                selectedColor: Qt.rgba(0.72, 0.74, 0.78, 0.20)
                                 opacity: selectedCard ? 1 : 0
                                 Behavior on opacity {
                                     enabled: root.shown && !Theme.reducedMotion
