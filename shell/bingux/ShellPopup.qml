@@ -202,7 +202,7 @@ Scope {
             enabled: root.visible && root.dismissOnOutsideClick
             z: 5 + root.popupDepth * 2
             acceptedButtons: Qt.AllButtons
-            onClicked: root.visible = false
+            onPressed: root.visible = false
         }
     }
 

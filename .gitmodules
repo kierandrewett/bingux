@@ -1,0 +1,3 @@
+[submodule "subprojects/adwaita-icon-theme"]
+	path = subprojects/adwaita-icon-theme
+	url = https://github.com/GNOME/adwaita-icon-theme

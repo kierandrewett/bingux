@@ -5,6 +5,19 @@
 -- Source installs use their installed share/gnoblin/conf.d path instead.
 
 return {
+    window_management = {
+        -- Drag a window to a screen edge to tile it, as in GNOME.
+        edge_tiling = true,
+    },
+    autostart = {
+        bingux = { command = { "bingux", "--no-color" } },
+        -- Shell surfaces are session children. They stay tied to the Gnoblin
+        -- configuration and are stopped when this module is removed.
+        ["bingux-search-ui"] = { command = { "bingux-search-ui" } },
+        ["bingux-switcher-ui"] = { command = { "bingux-switcher-ui" } },
+        ["bingux-capture-ui"] = { command = { "bingux-capture-ui" } },
+        ["bingux-emoji-ui"] = { command = { "bingux-emoji-ui" } },
+    },
     -- Bingux owns Alt+Tab and Super+Tab in its switcher. Clear Mutter's
     -- defaults so these accelerators can be registered by the shell.
     keybindings = {
@@ -30,10 +43,19 @@ return {
     },
     ["window-rules"] = {
         {
-            -- Give every ordinary application the same outer treatment. The
-            -- compositor also reconstructs client-side decoration corners so
-            -- CSD and Bingux's server frame have the same silhouette.
+            -- Keep client-drawn decorations intact. A compositor frame is
+            -- supplied only when the client explicitly requests one.
             match = { type = "window" },
+            animation = {
+                open = "gnome-open",
+                close = "gnome-close",
+                ["dialog-open"] = "gnome-dialog-open",
+                ["dialog-close"] = "gnome-dialog-close",
+                minimize = "gnome-minimize",
+                restore = "gnome-restore",
+                ["workspace-switch"] = "gnome-workspace-switch",
+                resize = "gnome-resize",
+            },
             frame = {
                 mode = "auto",
                 renderer = "bingux",
@@ -45,11 +67,13 @@ return {
                 smoothing = 0.5,
                 border_width = 1,
                 border_color = "#505050bf",
-                -- Reconstruct client-drawn rounded corners before applying
-                -- Bingux's shared shape, using each window's own pixels.
+                -- Reconstruct only detected client-drawn rounded corners
+                -- before applying Bingux's outer shape.
                 ["remove-csd"] = true,
-                ["keep-maximized"] = true,
-                ["keep-fullscreen"] = true,
+                -- Fullscreen and maximised windows skip the rounded-clip pass,
+                -- so video can be scanned out directly and does not drop frames.
+                ["keep-maximized"] = false,
+                ["keep-fullscreen"] = false,
                 ["keep-tiled"] = true,
                 ["shadow-animation"] = { duration = 180, easing = "ease-out-cubic" },
                 shadow = {
@@ -69,28 +93,21 @@ return {
                 },
             },
         },
-        {
-            match = { type = "layer" },
-            blur = 24,
-        },
+        -- Bingux layer surfaces publish their own ext-background-effect
+        -- regions. Do not add rule blur to them: the rule blurs the whole
+        -- layer buffer whenever the client clears its region, which blurs
+        -- the screen behind hidden full-screen popups and the wallpaper.
         {
             match = {
                 layer = "^(bingux-top-bar|bingux-dock|bingux-search|gnoblin-shell-popup)$",
             },
-            blur = 24,
             opacity = 0.9,
         },
         {
             match = {
                 layer = "^(bingux-top-bar|bingux-terminal-sidebar|bingux-sidebar-corner|bingux-panel-outline|bingux-dock|bingux-search|gnoblin-shell-popup|bingux-bar-tooltip|gnoblin-dock-tooltip|bingux-notifications|bingux-capture-feedback|bingux-capture-controls)$",
             },
-            ["blur-ignore-shadows"] = true,
-            blur = 24,
             opacity = 1.0,
-        },
-        {
-            match = { layer = "^bingux-dock$" },
-            blur = 48,
         },
         {
             match = {
@@ -108,20 +125,12 @@ return {
             match = {
                 layer = "^(bingux-terminal-sidebar|bingux-sidebar-corner)$",
             },
-            -- Keep the sidebar and its rounded corner on the same blur path.
-            ["blur-ignore-shadows"] = true,
-            blur = 24,
             opacity = 1.0,
         },
         {
             match = {
                 layer = "^(bingux-bar-tooltip|gnoblin-dock-tooltip|gnoblin-shell-popup)$",
             },
-            -- Tooltips and the small calendar/control-centre popups are
-            -- translucent materials; keep their compositor blur enabled even
-            -- when the user's config has no per-surface rule yet.
-            ["blur-ignore-shadows"] = true,
-            blur = 24,
             opacity = 1.0,
         },
         {
@@ -132,9 +141,6 @@ return {
         },
         {
             match = { layer = "^bingux-capture-controls$" },
-            -- Blur only the toolbar/settings region published by BlurRegion.
-            ["blur-ignore-shadows"] = true,
-            blur = 24,
             opacity = 1.0,
         },
     },

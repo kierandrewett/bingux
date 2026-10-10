@@ -43,7 +43,7 @@ ColumnLayout {
         if (!selected || busy)
             return;
         error = "";
-        request.command = pending === "logout" ? ["gnome-session-quit", "--logout", "--no-prompt"] : ["systemctl", pending];
+        request.command = ["gnoblinctl", "session", pending];
         recovery.interval = 10000;
         transitioning = true;
         fadeOut.start();
