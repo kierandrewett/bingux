@@ -76,6 +76,11 @@ ShellRoot {
                 return true;
         return false;
     }
+    // Lazy popups are created on first use; this returns the live object.
+    function lazyPopup(loader) {
+        loader.active = true;
+        return loader.item;
+    }
     function closePanelsExcept(panel) {
         if (panel !== windowMenuPopup)
             windowMenuPopup.visible = false;
@@ -90,16 +95,16 @@ ShellRoot {
             searchOverlay.closeSearch();
         if (panel !== emojiPicker && emojiPicker.visible)
             emojiPicker.close();
-        if (panel !== calendarPopup)
-            calendarPopup.visible = false;
+        if (calendarLoader.item && panel !== calendarLoader.item)
+            calendarLoader.item.visible = false;
         if (!editingContainers && panel !== controlCentre && !anchoredInPopup(panel, controlCentre))
             controlCentre.visible = false;
-        if (panel !== metricsPopup)
-            metricsPopup.visible = false;
+        if (metricsLoader.item && panel !== metricsLoader.item)
+            metricsLoader.item.visible = false;
         if (!editingContainers && panel !== barOverflow && !anchoredInPopup(panel, barOverflow))
             barOverflow.visible = false;
-        if (panel !== notificationCentre)
-            notificationCentre.visible = false;
+        if (notificationCentreLoader.item && panel !== notificationCentreLoader.item)
+            notificationCentreLoader.item.visible = false;
         if (panel !== inputSourceSelector)
             inputSourceSelector.menuOpen = false;
         if (panel !== captureTool && captureTool.opened)
@@ -370,7 +375,7 @@ ShellRoot {
         leftInset: terminalSidebar.leftInset
         rightInset: terminalSidebar.rightInset
         inputSuspended: captureTool.opened || DesktopEditing.active
-        notificationCentre: notificationCentre
+        notificationCentre: notificationCentreLoader.item
         screen: topBar.screen
         state: notificationState
     }
@@ -475,10 +480,10 @@ ShellRoot {
         function status(): string {
             return JSON.stringify({
                 search: searchOverlay.visible,
-                calendar: calendarPopup.visible,
+                calendar: calendarLoader.item?.visible ?? false,
                 controls: controlCentre.visible,
-                notifications: notificationCentre.visible,
-                metrics: metricsPopup.visible,
+                notifications: notificationCentreLoader.item?.visible ?? false,
+                metrics: metricsLoader.item?.visible ?? false,
                 keyboard: inputSourceSelector.menuOpen,
                 capture: captureTool.state,
                 sidebar: terminalSidebar.opened,
@@ -496,10 +501,10 @@ ShellRoot {
         function panel(name: string, action: string): string {
             const panels = {
                 settings: root.settingsObject,
-                calendar: calendarPopup,
+                calendar: calendarLoader,
                 controls: controlCentre,
-                notifications: notificationCentre,
-                metrics: metricsPopup,
+                notifications: notificationCentreLoader,
+                metrics: metricsLoader,
                 search: searchOverlay
             };
             if (!(name in panels) && name !== "keyboard")
@@ -512,7 +517,7 @@ ShellRoot {
                     ok: false,
                     error: "Unknown panel action: " + action
                 });
-            const current = name === "keyboard" ? inputSourceSelector.menuOpen : name === "settings" ? !!root.settingsObject?.visible : panels[name].visible;
+            const current = name === "keyboard" ? inputSourceSelector.menuOpen : name === "settings" ? !!root.settingsObject?.visible : ["calendar", "notifications", "metrics"].includes(name) ? !!panels[name].item?.visible : panels[name].visible;
             if (action === "status")
                 return JSON.stringify({
                     open: current
@@ -531,6 +536,9 @@ ShellRoot {
             } else if (name === "settings") {
                 if (show || root.settingsObject)
                     root.settingsItem().visible = show;
+            } else if (["calendar", "notifications", "metrics"].includes(name)) {
+                if (show || panels[name].item)
+                    root.lazyPopup(panels[name]).visible = show;
             } else
                 panels[name].visible = show;
             return JSON.stringify({
@@ -564,7 +572,7 @@ ShellRoot {
             });
         }
         function calendar(): void {
-            calendarPopup.visible = !calendarPopup.visible;
+            root.lazyPopup(calendarLoader).visible = !(calendarLoader.item?.visible ?? false);
         }
         function search(): void {
             root.openSearch();
@@ -576,8 +584,8 @@ ShellRoot {
             return JSON.stringify({
                 count: notificationState.allEntries.length,
                 ready: notificationState.historyReady,
-                open: notificationCentre.visible,
-                retained: notificationCentre.retained,
+                open: notificationCentreLoader.item?.visible ?? false,
+                retained: notificationCentreLoader.item?.retained ?? false,
                 surface: notificationSurface.visible,
                 suspended: notificationSurface.inputSuspended,
                 x: notificationSurface.viewport.x,
@@ -588,7 +596,7 @@ ShellRoot {
             });
         }
         function notifications(): void {
-            notificationCentre.visible = !notificationCentre.visible;
+            root.lazyPopup(notificationCentreLoader).visible = !(notificationCentreLoader.item?.visible ?? false);
         }
         function keyboard(): void {
             inputSourceSelector.openMenu();
@@ -621,24 +629,34 @@ ShellRoot {
             root.closePanelsExcept(controlCentre)
     }
 
-    SystemMetricsPopup {
-        id: metricsPopup
-        anchorWindow: topBar.windowFor(metricsPill)
-        anchorItem: metricsPill
-        anchorAlignment: Qt.AlignHCenter
-        monitorWidget: metricsPill
-        screen: topBar.screen
-        onVisibleChanged: if (visible)
-            root.closePanelsExcept(metricsPopup)
+    LazyLoader {
+        id: metricsLoader
+        // Built once the desktop is up, or earlier if it is opened first.
+        active: Startup.settled
+        SystemMetricsPopup {
+            id: metricsPopup
+            anchorWindow: topBar.windowFor(metricsPill)
+            anchorItem: metricsPill
+            anchorAlignment: Qt.AlignHCenter
+            monitorWidget: metricsPill
+            screen: topBar.screen
+            onVisibleChanged: if (visible)
+                root.closePanelsExcept(metricsPopup)
+        }
     }
 
-    NotificationHistoryPopup {
-        id: notificationCentre
-        notificationSurface: notificationSurface
-        screen: topBar.screen
-        dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom)
-        onVisibleChanged: if (visible)
-            root.closePanelsExcept(notificationCentre)
+    LazyLoader {
+        id: notificationCentreLoader
+        // Built once the desktop is up, or earlier if it is opened first.
+        active: Startup.settled
+        NotificationHistoryPopup {
+            id: notificationCentre
+            notificationSurface: notificationSurface
+            screen: topBar.screen
+            dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom)
+            onVisibleChanged: if (visible)
+                root.closePanelsExcept(notificationCentre)
+        }
     }
 
     ShellPopup {
@@ -717,15 +735,20 @@ ShellRoot {
         }
     }
 
-    CalendarPopup {
-        id: calendarPopup
-        onApplicationLaunchStarted: desktopId => dock.beginExternalLaunch(desktopId, "Calendar")
-        screen: topBar.screen
-        anchorWindow: topBar.windowFor(clockPill)
-        anchorItem: clockPill
-        anchorAlignment: Qt.AlignHCenter
-        onVisibleChanged: if (visible)
-            root.closePanelsExcept(calendarPopup)
+    LazyLoader {
+        id: calendarLoader
+        // Built once the desktop is up, or earlier if it is opened first.
+        active: Startup.settled
+        CalendarPopup {
+            id: calendarPopup
+            onApplicationLaunchStarted: desktopId => dock.beginExternalLaunch(desktopId, "Calendar")
+            screen: topBar.screen
+            anchorWindow: topBar.windowFor(clockPill)
+            anchorItem: clockPill
+            anchorAlignment: Qt.AlignHCenter
+            onVisibleChanged: if (visible)
+                root.closePanelsExcept(calendarPopup)
+        }
     }
 
     PanelWindow {
@@ -1184,13 +1207,13 @@ ShellRoot {
                 interactive: true
                 hovered: clockMouse.containsMouse
                 pressed: clockMouse.pressed
-                selected: calendarPopup.visible
+                selected: calendarLoader.item?.visible ?? false
                 activeFocusOnTab: true
-                Accessible.onPressAction: calendarPopup.visible = !calendarPopup.visible
+                Accessible.onPressAction: root.lazyPopup(calendarLoader).visible = !(calendarLoader.item?.visible ?? false)
                 Accessible.name: "Calendar, " + clockLabel.text + " " + timeLabel.text
                 Accessible.role: Accessible.Button
-                Keys.onReturnPressed: calendarPopup.visible = !calendarPopup.visible
-                Keys.onSpacePressed: calendarPopup.visible = !calendarPopup.visible
+                Keys.onReturnPressed: root.lazyPopup(calendarLoader).visible = !(calendarLoader.item?.visible ?? false)
+                Keys.onSpacePressed: root.lazyPopup(calendarLoader).visible = !(calendarLoader.item?.visible ?? false)
                 RollingNumber {
                     id: clockLabel
                     text: root.currentTime.toLocaleDateString(Qt.locale(), "ddd d MMM")
@@ -1212,7 +1235,7 @@ ShellRoot {
                     parent: clockPill
                     anchors.fill: parent
                     hoverEnabled: true
-                    onClicked: calendarPopup.visible = !calendarPopup.visible
+                    onClicked: root.lazyPopup(calendarLoader).visible = !(calendarLoader.item?.visible ?? false)
                 }
             }
             WorkspaceWidget {
@@ -1291,18 +1314,18 @@ ShellRoot {
                         Layout.row: topBar.controlRow(metricsPill)
                         systemMetrics: metrics
                         visible: topBar.chosen(metricsPill) && profileSettings.metricsEnabled
-                        selected: metricsPopup.visible
+                        selected: metricsLoader.item?.visible ?? false
                         onConfigureRequested: {
-                            metricsPopup.showPage(true);
+                            root.lazyPopup(metricsLoader).showPage(true);
                         }
                         onPerformanceRequested: {
-                            metricsPopup.showPage(false);
+                            root.lazyPopup(metricsLoader).showPage(false);
                         }
                         BarTooltip {
                             reorderable: true
                             anchorItem: metricsPill
                             barWindow: topBar.windowFor(metricsPill)
-                            requested: metricsPill.pointerHovered && !metricsPopup.visible
+                            requested: metricsPill.pointerHovered && !(metricsLoader.item?.visible ?? false)
                             text: "System monitors"
                             supportingText: metricsPill.description
                         }
@@ -1377,9 +1400,9 @@ ShellRoot {
                         Layout.row: topBar.controlRow(notificationButton)
                         visible: topBar.chosen(notificationButton)
                         count: notificationState.allEntries.length
-                        selected: notificationCentre.visible
+                        selected: notificationCentreLoader.item?.visible ?? false
                         barWindow: topBar.windowFor(notificationButton)
-                        onClicked: notificationCentre.visible = !notificationCentre.visible
+                        onClicked: root.lazyPopup(notificationCentreLoader).visible = !(notificationCentreLoader.item?.visible ?? false)
                         Connections {
                             target: notificationSurface.viewport
                             function onToastArchived() {
