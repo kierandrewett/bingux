@@ -11,6 +11,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
 import "DesktopLayout.js" as DesktopLayout
+import "ControlLayout.js" as ControlLayout
 
 ShellRoot {
     id: root
@@ -23,7 +24,7 @@ ShellRoot {
                 root,
                 topBar,
                 dock,
-                controlCentre,
+                controlCentre: root.controlCentre,
                 sidebar: terminalSidebar
             })
     }
@@ -50,7 +51,7 @@ ShellRoot {
             desktop: BinguxPreferences.data.desktop,
             dock: dock.snapshotLayout(),
             controlCentre: ControlCentreServices.effectiveControls,
-            controlLayout: controlCentre.snapshotLayout(),
+            controlLayout: controlCentre ? controlCentre.snapshotLayout() : JSON.parse(JSON.stringify(BinguxPreferences.data.desktop.controlLayout || ControlLayout.defaults())),
             sidebar: {
                 edge: terminalSidebar.edge,
                 opened: terminalSidebar.opened,
@@ -76,6 +77,22 @@ ShellRoot {
                 return true;
         return false;
     }
+    readonly property var controlCentre: controlCentreLoader.item
+    // A name the lazy popup cannot shadow with its own property.
+    readonly property var notificationSurfaceItem: notificationSurface
+    // True when a saved bar layout holds one of Control Centre's own widgets.
+    readonly property bool controlCentreNeeded: {
+        if (DesktopEditing.active)
+            return true;
+        const layout = BinguxPreferences.data.desktop.layout;
+        if (!layout || typeof layout !== "object")
+            return false;
+        return Object.keys(layout).some(zone => Array.isArray(layout[zone]) && layout[zone].some(id => typeof id === "string" && /^controls?-/.test(id)));
+    }
+    function lazyControlCentre() {
+        controlCentreLoader.active = true;
+        return controlCentreLoader.item;
+    }
     // Lazy popups are created on first use; this returns the live object.
     function lazyPopup(loader) {
         loader.active = true;
@@ -84,7 +101,7 @@ ShellRoot {
     function closePanelsExcept(panel) {
         if (panel !== windowMenuPopup)
             windowMenuPopup.visible = false;
-        const editingContainers = DesktopEditing.active && (panel === barOverflow || panel === controlCentre);
+        const editingContainers = DesktopEditing.active && (panel === barOverflow || (controlCentre && panel === controlCentre));
         for (const widget of terminalSidebar.panelWidgets) {
             if (panel !== widget.popup)
                 widget.popup.visible = false;
@@ -97,7 +114,7 @@ ShellRoot {
             emojiPicker.close();
         if (calendarLoader.item && panel !== calendarLoader.item)
             calendarLoader.item.visible = false;
-        if (!editingContainers && panel !== controlCentre && !anchoredInPopup(panel, controlCentre))
+        if (controlCentre && !editingContainers && panel !== controlCentre && !anchoredInPopup(panel, controlCentre))
             controlCentre.visible = false;
         if (metricsLoader.item && panel !== metricsLoader.item)
             metricsLoader.item.visible = false;
@@ -174,10 +191,12 @@ ShellRoot {
             if (DesktopEditing.active) {
                 root.closePanelsExcept(null);
                 widgetMenu.visible = false;
-                controlCentre.detailOpen = false;
-                Qt.callLater(() => controlCentre.visible = DesktopEditing.active);
+                const panel = root.lazyControlCentre();
+                panel.detailOpen = false;
+                Qt.callLater(() => panel.visible = DesktopEditing.active);
             } else {
-                controlCentre.visible = false;
+                if (controlCentre)
+                    controlCentre.visible = false;
                 barOverflow.visible = false;
             }
         }
@@ -419,7 +438,7 @@ ShellRoot {
     ShellCommands {
         inputSelector: inputSourceSelector
         indicators: systemIndicators
-        mediaControls: controlCentre
+        mediaControls: () => root.lazyControlCentre()
         notificationState: root.commandNotifications
         dockView: dock
     }
@@ -481,7 +500,7 @@ ShellRoot {
             return JSON.stringify({
                 search: searchOverlay.visible,
                 calendar: calendarLoader.item?.visible ?? false,
-                controls: controlCentre.visible,
+                controls: controlCentre?.visible ?? false,
                 notifications: notificationCentreLoader.item?.visible ?? false,
                 metrics: metricsLoader.item?.visible ?? false,
                 keyboard: inputSourceSelector.menuOpen,
@@ -502,7 +521,7 @@ ShellRoot {
             const panels = {
                 settings: root.settingsObject,
                 calendar: calendarLoader,
-                controls: controlCentre,
+                controls: name === "controls" ? root.lazyControlCentre() : null,
                 notifications: notificationCentreLoader,
                 metrics: metricsLoader,
                 search: searchOverlay
@@ -608,25 +627,32 @@ ShellRoot {
             inputSourceSelector.cycleSource(true);
         }
         function controls(): void {
-            controlCentre.visible = !controlCentre.visible;
+            const panel = root.lazyControlCentre();
+            panel.visible = !panel.visible;
         }
         function capture(): void {
             captureTool.open();
         }
     }
 
-    ControlCentre {
-        id: controlCentre
-        widgetLayout: topBar
-        onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, item.editWindow || item.barWindow || controlCentre)
-        onCustomiseRequested: root.settingsItem().openCustomise("", "")
-        anchorWindow: DesktopEditing.active ? topBar : controlCentre.movedAnchor?.barWindow || (topBar.zoneFor(systemPill) === "control-centre" ? topBar : topBar.windowFor(controlCentre.movedAnchor || systemPill))
-        anchorItem: DesktopEditing.active ? null : controlCentre.movedAnchor || (topBar.zoneFor(systemPill) === "control-centre" ? null : systemPill)
-        dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom)
-        indicators: systemIndicators
-        screen: topBar.screen
-        onVisibleChanged: if (visible)
-            root.closePanelsExcept(controlCentre)
+    // Control Centre is built once the desktop has settled, or at once when the
+    // saved layout puts one of its widgets in the bar or while editing.
+    LazyLoader {
+        id: controlCentreLoader
+        active: root.controlCentreNeeded || Startup.settled
+        ControlCentre {
+            id: controlCentre
+            widgetLayout: topBar
+            onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, item.editWindow || item.barWindow || controlCentre)
+            onCustomiseRequested: root.settingsItem().openCustomise("", "")
+            anchorWindow: DesktopEditing.active ? topBar : controlCentre.movedAnchor?.barWindow || (topBar.zoneFor(systemPill) === "control-centre" ? topBar : topBar.windowFor(controlCentre.movedAnchor || systemPill))
+            anchorItem: DesktopEditing.active ? null : controlCentre.movedAnchor || (topBar.zoneFor(systemPill) === "control-centre" ? null : systemPill)
+            dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom)
+            indicators: systemIndicators
+            screen: topBar.screen
+            onVisibleChanged: if (visible)
+                root.closePanelsExcept(controlCentre)
+        }
     }
 
     LazyLoader {
@@ -651,7 +677,7 @@ ShellRoot {
         active: Startup.settled
         NotificationHistoryPopup {
             id: notificationCentre
-            notificationSurface: notificationSurface
+            notificationSurface: root.notificationSurfaceItem
             screen: topBar.screen
             dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom)
             onVisibleChanged: if (visible)
@@ -895,19 +921,19 @@ ShellRoot {
             if (zone === "dock")
                 return dock;
             if (zone === "control-centre")
-                return controlCentre.hostItem ? controlCentre.anchorWindow : controlCentre.nativeWindow;
+                return controlCentre?.hostItem ? controlCentre.anchorWindow : controlCentre?.nativeWindow;
             return topBar;
         }
         function hostFor(item) {
             if (overflows(item))
                 return overflowColumn;
             const zone = zoneFor(item);
-            return zone === "sidebar" ? terminalSidebar.widgetHost : zone === "control-centre" ? controlCentre.widgetHost : zone === "dock" ? dock.widgetHost : zone === "top-left" ? leftControls : zone === "top-center" ? centerControls : rightControls;
+            return zone === "sidebar" ? terminalSidebar.widgetHost : zone === "control-centre" ? controlCentre?.widgetHost : zone === "dock" ? dock.widgetHost : zone === "top-left" ? leftControls : zone === "top-center" ? centerControls : rightControls;
         }
         readonly property real controlsBudget: Math.max(0, (width - clockPill.implicitWidth) / 2 - Theme.gap)
         // Display order is independent of overflow priority and reparenting order.
-        readonly property var defaultControls: [captureStatus, trayContainer, privacyContainer, metricsPill, inputSourceSelector, overflowButton, systemPill, notificationButton, searchPill, clockPill, workspaceControl].concat(controlCentre.movableWidgets, spacingWidgets, decorationWidgets, terminalSidebar.panelWidgets, extensionWidgets)
-        readonly property var controlNames: ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "search", "clock", "workspaces"].concat(controlCentre.movableWidgets.map(item => item.widgetId), spacingWidgets.map(item => item.widgetId), decorationWidgets.map(item => item.widgetId), terminalSidebar.panelWidgets.map(item => item.widgetId), extensionWidgets.map(item => item.widgetId))
+        readonly property var defaultControls: [captureStatus, trayContainer, privacyContainer, metricsPill, inputSourceSelector, overflowButton, systemPill, notificationButton, searchPill, clockPill, workspaceControl].concat((controlCentre?.movableWidgets ?? []), spacingWidgets, decorationWidgets, terminalSidebar.panelWidgets, extensionWidgets)
+        readonly property var controlNames: ["capture", "tray", "privacy", "metrics", "keyboard", "overflow", "controls", "notifications", "search", "clock", "workspaces"].concat((controlCentre?.movableWidgets ?? []).map(item => item.widgetId), spacingWidgets.map(item => item.widgetId), decorationWidgets.map(item => item.widgetId), terminalSidebar.panelWidgets.map(item => item.widgetId), extensionWidgets.map(item => item.widgetId))
         Settings {
             id: barPreferences
             location: "file://" + (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/bingux/top-bar.ini"
@@ -1021,7 +1047,7 @@ ShellRoot {
             easing.type: Easing.OutCubic
             onFinished: topBar.completeReorder()
         }
-        readonly property var availableControls: [[captureStatus, captureStatus.active], [trayContainer, tray.implicitWidth > 0], [privacyContainer, privacyContainer.active], [metricsPill, profileSettings.metricsEnabled], [inputSourceSelector, metrics.desktopStateAvailable], [systemPill, true], [notificationButton, true], [searchPill, true], [clockPill, true], [workspaceControl, customLayout || WorkspaceState.available]].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat(controlCentre.movableWidgets.filter(item => chosen(item)), spacingWidgets.filter(item => chosen(item)), decorationWidgets.filter(item => chosen(item)), terminalSidebar.panelWidgets.filter(item => item.placed), extensionWidgets.filter(item => chosen(item)))
+        readonly property var availableControls: [[captureStatus, captureStatus.active], [trayContainer, tray.implicitWidth > 0], [privacyContainer, privacyContainer.active], [metricsPill, profileSettings.metricsEnabled], [inputSourceSelector, metrics.desktopStateAvailable], [systemPill, true], [notificationButton, true], [searchPill, true], [clockPill, true], [workspaceControl, customLayout || WorkspaceState.available]].filter(entry => entry[1] && chosen(entry[0])).map(entry => entry[0]).concat((controlCentre?.movableWidgets ?? []).filter(item => chosen(item)), spacingWidgets.filter(item => chosen(item)), decorationWidgets.filter(item => chosen(item)), terminalSidebar.panelWidgets.filter(item => item.placed), extensionWidgets.filter(item => chosen(item)))
         readonly property var overflowItems: {
             if (customLayout && !nativeTopBarLayout) {
                 const hidden = [];
@@ -1087,7 +1113,7 @@ ShellRoot {
             if (zoneFor(item) === "sidebar")
                 return terminalSidebar.widgetRow(nameFor(item));
             if (zoneFor(item) === "control-centre")
-                return controlCentre.sectionRow(nameFor(item));
+                return controlCentre?.sectionRow(nameFor(item));
             return overflows(item) ? overflowItems.indexOf(item) : 0;
         }
         onOverflowItemsChanged: if (overflowItems.length === 0)
@@ -1256,7 +1282,7 @@ ShellRoot {
                     id: rightControls
                     width: topBar.hasSpring("top-right") ? topBar.zoneBudget("top-right") : implicitWidth
                     Instantiator {
-                        model: topBar.defaultControls.filter(item => !controlCentre.movableWidgets.includes(item) && !terminalSidebar.panelWidgets.includes(item))
+                        model: topBar.defaultControls.filter(item => !(controlCentre?.movableWidgets ?? []).includes(item) && !terminalSidebar.panelWidgets.includes(item))
                         delegate: WidgetEditHandle {
                             required property var modelData
                             control: modelData
@@ -1353,14 +1379,14 @@ ShellRoot {
                         interactive: true
                         hovered: systemMouse.containsMouse
                         pressed: systemMouse.pressed
-                        selected: controlCentre.visible
+                        selected: controlCentre?.visible ?? false
                         activeFocusOnTab: true
-                        Accessible.onPressAction: controlCentre.visible = !controlCentre.visible
+                        Accessible.onPressAction: root.lazyControlCentre().visible = !(controlCentre?.visible ?? false)
                         Accessible.name: "Control Centre"
                         Accessible.description: systemIndicators.extraStatusDescription
                         Accessible.role: Accessible.Button
-                        Keys.onReturnPressed: controlCentre.visible = !controlCentre.visible
-                        Keys.onSpacePressed: controlCentre.visible = !controlCentre.visible
+                        Keys.onReturnPressed: root.lazyControlCentre().visible = !(controlCentre?.visible ?? false)
+                        Keys.onSpacePressed: root.lazyControlCentre().visible = !(controlCentre?.visible ?? false)
                         SystemIndicators {
                             id: systemIndicators
                             timeoutPath: profileSettings.timeoutPath
@@ -1378,7 +1404,7 @@ ShellRoot {
                             parent: systemPill
                             anchors.fill: parent
                             hoverEnabled: true
-                            onClicked: controlCentre.visible = !controlCentre.visible
+                            onClicked: root.lazyControlCentre().visible = !(controlCentre?.visible ?? false)
                         }
                     }
                     BarOverflowButton {
