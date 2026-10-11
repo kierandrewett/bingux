@@ -16,6 +16,10 @@ PanelWindow {
     readonly property real stackHeight: stack.stackHeight
     readonly property int notificationCount: state.allEntries.length
     readonly property int renderedNotificationCount: stack.renderedNotificationCount
+    readonly property bool presented: renderedNotificationCount > 0 || inHistory
+    property bool nativeWindowRequested: false
+    onPresentedChanged: if (presented)
+        nativeWindowRequested = true
     readonly property alias viewport: stack
     property bool preparingHistory: false
     function prepareForHistory() {
@@ -38,10 +42,12 @@ PanelWindow {
         }
     }
     color: "transparent"
-    focusable: inHistory && notificationCentre.visible
-    // Retain history in QML, but unmap its full-screen buffer when no cards
-    // are shown. An invisible mapped surface still pays compositor blur costs.
-    visible: !inputSuspended && (renderedNotificationCount > 0 || inHistory)
+    // The explicit layershell keyboard mode below owns focus. PanelWindow's
+    // focusable setter would replace Exclusive with OnDemand on every opening.
+    // Reuse the first native window; empty history draws nothing, has no input
+    // region or focus, and clears its fallback blur region.
+    visible: !inputSuspended && (presented || nativeWindowRequested)
+    contentItem.enabled: !inputSuspended && presented
     exclusionMode: ExclusionMode.Ignore
     surfaceFormat.opaque: false
     WlrLayershell.layer: WlrLayer.Overlay
@@ -49,6 +55,7 @@ PanelWindow {
     BlurRegion {
         window: root
         surfaceNamespace: "bingux-notifications"
+        enabled: !root.inputSuspended && root.presented
         // Include the footer and shadow margin. Sliding cards remain inside
         // this final-position rectangle until the desktop clips them away.
         region: root.inHistory ? Qt.rect(desktopArea.x + root.notificationCentre.panelX - Theme.padding, Math.max(0, root.notificationCentre.panelY - Theme.padding), root.notificationCentre.popupWidth + Theme.padding * 2, root.notificationCentre.popupHeight + Theme.padding * 2) : Qt.rect(desktopArea.x + stack.x - Theme.padding, Math.max(0, stack.y - Theme.padding), stack.width + Theme.padding * 2, stack.height + Theme.padding * 2)
@@ -66,6 +73,7 @@ PanelWindow {
     Item {
         id: desktopArea
         objectName: "notificationDesktopArea"
+        visible: root.presented || root.preparingHistory
         x: root.hasSidebar ? root.leftInset : 0
         // Before the first map the native window has no configured size yet.
         // Prepare the slide from screen geometry, not a zero-width viewport.

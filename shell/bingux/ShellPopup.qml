@@ -4,14 +4,17 @@ import QtQuick.Window
 import Quickshell
 import Quickshell.Wayland
 
-// `visible` is the requested state. The layer window stays mapped only long
-// enough to finish closing, with input released as soon as closing starts.
+// Native windows are created on first use and reused. Hidden cards clear their
+// drawing, blur and input without recreating Qt's graphics contexts on reopen.
 Scope {
     id: root
     property bool windowShadow: false
     default property alias contents: body.data
     property bool visible: false
     property bool keepWindowAlive: false
+    property bool nativeWindowsRequested: false
+    onHostItemChanged: if (visible && !hostItem)
+        nativeWindowsRequested = true
     // Keep the card and its delegates resident while hidden. The input mask
     // still drops to zero when invisible, so this is a presentation cache only.
     property bool keepContentAlive: false
@@ -92,15 +95,12 @@ Scope {
     property int popupHeight: body.childrenRect.height + contentPadding * 2
     signal aboutToOpen
     property bool retained: false
-    readonly property bool compositorClose: !hostItem && !keepWindowAlive && !motionSource && PopupTransitions.matches(closeMotion, closeEasing)
-    readonly property bool compositorOpen: !hostItem && !keepWindowAlive && PopupTransitions.fadesIn()
-
-    onKeyboardInteractiveChanged: if (visible)
-        dismissWindow.visible = !hostItem && keyboardInteractive
 
     onVisibleChanged: {
         reveal.stop();
         dismiss.stop();
+        if (visible && !hostItem)
+            nativeWindowsRequested = true;
         if (motionSource) {
             retained = visible || motionSource.retained;
             return;
@@ -110,22 +110,14 @@ Scope {
             aboutToOpen();
             if (!retained) {
                 revealScale = Theme.reducedMotion ? 1 : root.initialRevealScale;
-                card.opacity = Theme.reducedMotion || compositorOpen ? 1 : 0;
+                card.opacity = Theme.reducedMotion ? 1 : 0;
             }
-            dismissWindow.visible = !root.hostItem && root.keyboardInteractive;
             retained = true;
             reveal.start();
             if (keyboardInteractive)
                 contentItem.forceActiveFocus();
         } else if (retained) {
-            // The last committed buffer already contains the current entrance
-            // opacity and scale. Freeze it, then let the compositor fade it once.
-            if (compositorClose) {
-                retained = false;
-                dismissWindow.visible = false;
-            } else {
-                dismiss.start();
-            }
+            dismiss.start();
         }
     }
     function setRevealOrigin(x, y) {
@@ -160,7 +152,6 @@ Scope {
         onFinished: if (!root.visible) {
             if (!root.keepContentAlive)
                 root.retained = false;
-            dismissWindow.visible = false;
         }
     }
 
@@ -169,7 +160,7 @@ Scope {
     PanelWindow {
         id: dismissWindow
         screen: window.screen
-        visible: false
+        visible: !root.hostItem && (root.nativeWindowsRequested || root.keepWindowAlive)
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
@@ -182,8 +173,8 @@ Scope {
             right: true
         }
         mask: Region {
-            width: root.visible ? dismissWindow.width : 0
-            height: root.visible ? dismissWindow.height : 0
+            width: root.visible && root.keyboardInteractive ? dismissWindow.width : 0
+            height: root.visible && root.keyboardInteractive ? dismissWindow.height : 0
             // Pointer entry can raise the dismissal surface above the card.
             // Its input region must never include the menu, regardless of stacking.
             Region {
@@ -209,7 +200,7 @@ Scope {
     // A layer surface avoids native xdg-popup grabs on layer-shell parents.
     PanelWindow {
         id: window
-        visible: (root.retained || root.keepWindowAlive) && !root.hostItem
+        visible: (root.retained || root.nativeWindowsRequested || root.keepWindowAlive) && !root.hostItem
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
@@ -236,7 +227,7 @@ Scope {
             BackgroundEffect {
                 target: card
                 radius: root.cornerRadius
-                requested: root.surfaceVisible
+                requested: root.surfaceVisible && root.retained
             }
             SurfaceFade {
                 target: card

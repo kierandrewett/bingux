@@ -42,6 +42,12 @@ from application activation, keeping the underlying window and dock indicator
 active while menus receive keys. This requires the compositor's menu keyboard
 routing support; installing a new compositor build takes effect at next login.
 The outside-click surface excludes the card so pointer re-entry remains usable.
+Native card and dismissal windows are created on first use and reused when the
+menu reopens. Closing clears their drawing, blur, pointer regions and keyboard
+focus. This avoids accumulating renderer shader allocations on repeated opens.
+Menus embedded in another window keep using that window. Notification toasts
+and history also reuse their first native window; empty history draws nothing
+and accepts no input.
 
 Use `ShellPopup` for new shell context menus and popovers. Put the contents in
 its default slot and set `popupWidth`, `popupHeight`, and `preferredX/Y` as needed.
@@ -58,6 +64,32 @@ window, pointer, keyboard, interruption, and reopening checks. Repeat with
 `BINGUX_REDUCED_MOTION=1` for immediate transitions. For unattended checks, run
 the script through Gnoblin's `GNOBLIN_TEST_DBUS_CLIENT` launcher so desktop input
 cannot dismiss the test menus.
+
+For real-seat regression checks in a disposable Gnoblin VM, run:
+
+```sh
+python3 tests/popup-cache-live.py /path/to/gnoblin/scripts/qemu-e2e /path/to/vm-run \
+  --quickshell /guest/path/to/quickshell \
+  --import-path /guest/prefix/lib/bingux/qml
+```
+
+This checks native-window reuse, real pointer and keyboard input, closed-menu
+click-through, nested menus, blur fading, interrupted closing, notification
+history and moving a popup between screens. It saves comparison frames in the
+VM run's `popup-cache-proof` directory. Run it while no other test is operating
+the VM's input or opening panels.
+
+Inside that VM, measure repeated installed-panel openings separately:
+
+```sh
+python3 tests/panel-lifecycle-live.py --cycles 30 --warmup-cycles 3 \
+  --max-growth-mib 16 --report /tmp/panel-memory.json
+```
+
+The memory check counts proportional resident and swapped memory for the main
+shell and its descendants. The limit applies to peak growth after warm-up;
+first-use panel loading is measured separately. Use `--expect-unopened` after
+a fresh shell start with the default layout to check lazy loading too.
 
 Tray submenus use the same surface, provide a Back action, and slide between
 pages with the same eased horizontal transition as Control Centre. `DockTooltip.qml` provides a non-interactive

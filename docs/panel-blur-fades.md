@@ -1,36 +1,35 @@
-# Panel blur fade coverage
+# Panel blur during fades
 
-`SurfaceFade` sends animation opacity with the rendered Wayland buffer. Its
-optional native plugin is `Bingux.Effects`. A missing protocol leaves the UI
-usable, but independent buffer fades require a compositor with this protocol
-for correct blur. Build the plugin with the same Qt version as Quickshell.
+Gnoblin follows the alpha in each rendered surface automatically. Blur reaches
+full strength at about 80% surface opacity and disappears as the surface fades
+out. Shells need no blur-fade protocol for this behavior. See
+[Gnoblin's blur guidance](https://gnoblin.org/blur-fades).
 
-The helper enables a temporary Qt layer only during a visible fade. This
-applies opacity once to overlapping children. At rest it restores the original
-layer setting. Shadowed panels use a padded composition item so the shadow and
-card share the fade without clipping the normal shadow extent.
+Bingux's `SurfaceFade` helper enables a temporary Qt layer during a visible
+fade. This applies opacity once to overlapping children. At rest it restores
+the original layer setting. Shadowed panels use a padded composition item so
+the shadow and card share the fade without clipping the shadow.
 
-| Surface family                                                               | Fade path                                                                             |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Calendar, controls, metrics, keyboard, tray, menus, overflow                 | Shared `ShellPopup`; compositor owns whole-window transitions when policy matches     |
-| Inline menus in floating windows                                             | `ShellPopup` buffer metadata, with decoration-coordinate correction                   |
-| Emoji picker                                                                 | Shadowed `ShellPopup`; card and shadow share the composition                          |
-| Bar and dock tooltips                                                        | Compositor fade when policy matches; `TooltipBubble` metadata for inline/fallback use |
-| Search and file preview                                                      | Separate fade regions and grouped shadows in the shared search buffer                 |
-| Window switcher                                                              | Compositor close fade; metadata for client-side fallback                              |
-| Notification cards and group backgrounds                                     | Independent regions in `NotificationStack`                                            |
-| Sidebar corners                                                              | Shared `ShellCorner` helper                                                           |
-| Capture toolbar                                                              | Toolbar opacity metadata; capture options use `ShellPopup` where applicable           |
-| Settings, bar, dock, attached sidebar, detached sidebar and capture feedback | No whole-item client fade; retain compositor animation and geometry paths             |
+`ShellPopup` owns its opening and closing animations. Its native card and
+dismissal windows are created on first use and reused on subsequent openings.
+Closed cards draw nothing, disable blur and accept no pointer or keyboard
+input. Inline menus keep using their host window. Notification history and
+toasts also reuse their native window after first use.
 
-The protocol accepts 32 visible regions per window. The plugin excludes
-off-window and ancestor-clipped regions and reports capacity overflow. Do not
-register an ancestor and a child for the same opacity. Do not register ordinary
-icon, text or hover opacity as a panel fade.
+An empty notification scene draws
+nothing and releases input.
 
-`tests/panel-blur-fade.py` checks whole-window close frames.
-`tests/shared-buffer-fades.py` checks independent fade values and reversal on
-real components, including a decorated floating host and shadowed panels.
-Run them in the Gnoblin private-compositor harness, not Qt's offscreen platform.
-`tests/popup-fade-input.py` also checks button input through native, inline and
-shadowed popup compositions at full and partial opacity.
+Tooltips and the window switcher can still use compositor transitions when
+policy matches. Search, notification cards and other items in a shared buffer
+use their own item animations.
+
+The optional `Bingux.Effects` plugin supplies standard background-effect
+regions and still sends older blur-fade metadata for compatibility. Current
+Gnoblin accepts that metadata but does not use it to calculate blur opacity.
+Build the plugin with the same Qt version as Quickshell. Without standard
+regions, blur depends on the compositor's rules and alpha-mask support.
+
+For a disposable Gnoblin VM, `tests/popup-cache-live.py` checks real input,
+window reuse, closed pixels, automatic blur fading and notification reopening.
+`tests/panel-lifecycle-live.py` measures memory growth over repeated openings.
+See the [desktop contributor guide](https://github.com/kierandrewett/bingux/blob/main/shell/bingux/README.md) for commands.

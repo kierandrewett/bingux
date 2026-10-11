@@ -72,9 +72,15 @@ def main():
         "--expect-unopened", action="store_true", help="Use after a fresh shell start with the default layout"
     )
     parser.add_argument("--cycles", type=int, default=8)
+    parser.add_argument("--panels", nargs="+", choices=PANELS, default=list(PANELS))
+    parser.add_argument("--warmup-cycles", type=int, default=3)
+    parser.add_argument("--max-growth-mib", type=float, help="Fail if post-warmup memory exceeds this growth")
     parser.add_argument("--report", type=Path)
     args = parser.parse_args()
     assert 1 <= args.cycles <= 100
+    if args.max_growth_mib is not None:
+        assert 0 <= args.warmup_cycles < args.cycles
+        assert args.max_growth_mib >= 0
     status = ctl("status")
     assert not any(status[name] for name in PANELS), "Start with popups closed"
     measurements = [{"phase": "unopened", **memory()}]
@@ -87,7 +93,7 @@ def main():
         assert not any(ctl("status")["loadedPanels"].values()), "Reading or closing an unused panel must not load it"
     try:
         for cycle in range(args.cycles):
-            for panel in PANELS:
+            for panel in args.panels:
                 assert ctl("panel", panel, "open")["ok"]
                 wait_open(panel, True)
                 assert ctl("status")["loadedPanels"][panel]
@@ -102,6 +108,12 @@ def main():
             ctl("panel", panel, "close")
         if args.report:
             args.report.write_text(json.dumps(measurements, indent=2) + "\n")
+    if args.max_growth_mib is not None:
+        steady = measurements[args.warmup_cycles :]
+        growth = max(row["totalMiB"] for row in steady) - steady[0]["totalMiB"]
+        assert growth <= args.max_growth_mib, (
+            f"Popup memory grew {growth:.1f} MiB after warmup; limit {args.max_growth_mib:.1f} MiB"
+        )
     print(
         "PASS: all panels open and close repeatedly" + ("; unused panels stay unloaded" if args.expect_unopened else "")
     )

@@ -3,6 +3,7 @@ import QtQuick.Window
 import QtTest
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 
 ShellRoot {
     property string checks: ""
@@ -45,7 +46,10 @@ ShellRoot {
         function finishClose() {
             wait(Theme.popupCloseMotion + 80);
             check(card().opacity === 0, "Closing reaches zero opacity");
-            check(!mapped(), "Transparent window is unmapped");
+            check(mapped() && !card().visible, "Cached window stops drawing the closed card");
+            check(popup.nativeWindow.mask.width === 0 && popup.nativeWindow.mask.height === 0, "Closed card has no pointer region");
+            check(popup.testDismissWindow.mask.width === 0 && popup.testDismissWindow.mask.height === 0, "Closed dismissal window has no pointer region");
+            check(popup.nativeWindow.WlrLayershell.keyboardFocus === WlrKeyboardFocus.None, "Closed popup releases keyboard focus");
         }
         function cleanup() {
             popup.visible = false;
@@ -61,6 +65,16 @@ ShellRoot {
                 check(popup.revealScale === 1, "Closing never changes scale");
             }
             finishClose();
+        }
+        function test_nativeWindowsAreReused() {
+            openSettled();
+            const nativeCard = popup.contentItem.Window.window;
+            const nativeDismiss = popup.testDismissContentItem.Window.window;
+            popup.visible = false;
+            finishClose();
+            openSettled();
+            check(popup.contentItem.Window.window === nativeCard, "Reopening reuses the native card window");
+            check(popup.testDismissContentItem.Window.window === nativeDismiss, "Reopening reuses the native dismissal window");
         }
         function test_open() {
             popup.visible = true;
