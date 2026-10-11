@@ -56,6 +56,7 @@ def _owner_binary():
     candidates += [
         Path("/usr/libexec/bingux/bingux-image-clipboard"),
         Path("/usr/local/libexec/bingux/bingux-image-clipboard"),
+        Path(__file__).resolve().parents[3] / "libexec/bingux/bingux-image-clipboard",
         Path(__file__).resolve().parents[2] / "build/bingux-image-clipboard",
     ]
     for candidate in candidates:

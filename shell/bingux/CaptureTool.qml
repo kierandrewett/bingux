@@ -477,7 +477,10 @@ Scope {
                 root.selectionItem = overlay.contentItem
             color: "transparent"
             exclusionMode: ExclusionMode.Ignore
-            WlrLayershell.layer: WlrLayer.Overlay
+            // Keep the frozen full-screen preview below the toolbar surface.
+            // Both windows use Overlay and the preview can be stacked above
+            // the controls, covering the capture UI with its opaque image.
+            WlrLayershell.layer: WlrLayer.Top
             WlrLayershell.namespace: "bingux-capture"
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
             anchors {
@@ -829,11 +832,13 @@ Scope {
                 WlrLayershell.layer: WlrLayer.Overlay
                 WlrLayershell.namespace: "bingux-capture-controls"
                 WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+                // The margin keeps the close button, which overhangs the
+                // toolbar's top-right corner, inside the input region.
                 mask: Region {
-                    item: toolbar
-                    Region {
-                        item: closeCapture
-                    }
+                    x: toolbar.x
+                    y: toolbar.y - 16
+                    width: toolbar.width + 16
+                    height: toolbar.height + 16
                 }
                 // The preview is a separate buffer below this surface, so the
                 // compositor can blur it behind the translucent controls.
@@ -882,26 +887,35 @@ Scope {
                     }
                     property real movedX: -1
                     property real movedY: -1
-                    readonly property real compactX: movedX < 0 ? (overlay.width - 320) / 2 : Math.max(24, Math.min(overlay.width - 344, movedX))
-                    readonly property real compactY: movedY < 0 ? overlay.height - 200 : Math.max(24, Math.min(overlay.height - 200, movedY))
-                    readonly property real expandedX: movedX < 0 ? (overlay.width - 360) / 2 : Math.max(24, Math.min(overlay.width - 384, movedX))
-                    readonly property real expandedY: movedY < 0 ? overlay.height - settingsHeight - 24 : Math.max(24, Math.min(overlay.height - settingsHeight - 24, movedY))
+                    readonly property real compactX: movedX < 0 ? (controls.screen.width - 320) / 2 : Math.max(24, Math.min(controls.screen.width - 344, movedX))
+                    readonly property real compactY: movedY < 0 ? controls.screen.height - 200 : Math.max(24, Math.min(controls.screen.height - 200, movedY))
+                    readonly property real expandedX: movedX < 0 ? (controls.screen.width - 360) / 2 : Math.max(24, Math.min(controls.screen.width - 384, movedX))
+                    readonly property real expandedY: movedY < 0 ? controls.screen.height - settingsHeight - 24 : Math.max(24, Math.min(controls.screen.height - settingsHeight - 24, movedY))
                     x: compactX + (expandedX - compactX) * resizeProgress
                     y: compactY + (expandedY - compactY) * resizeProgress
                     property real settingsProgress: root.optionsOpen ? 1 : 0
                     property real resizeProgress: root.optionsOpen ? 1 : 0
-                    property real settingsHeight: Math.min(optionsPanel.implicitHeight, overlay.height - 64)
+                    property real settingsHeight: Math.min(optionsPanel.implicitHeight, controls.screen.height - 64)
                     width: 320 + 40 * resizeProgress
                     height: 176 + (settingsHeight - 176) * resizeProgress
                     clip: true
                     Behavior on settingsProgress {
-                        NumberAnimation { duration: Theme.reducedMotion ? 0 : 160; easing.type: Easing.OutCubic }
+                        NumberAnimation {
+                            duration: Theme.reducedMotion ? 0 : 160
+                            easing.type: Easing.OutCubic
+                        }
                     }
                     Behavior on resizeProgress {
-                        NumberAnimation { duration: Theme.reducedMotion ? 0 : 180; easing.type: Easing.OutCubic }
+                        NumberAnimation {
+                            duration: Theme.reducedMotion ? 0 : 180
+                            easing.type: Easing.OutCubic
+                        }
                     }
                     Behavior on settingsHeight {
-                        NumberAnimation { duration: Theme.reducedMotion ? 0 : 180; easing.type: Easing.OutCubic }
+                        NumberAnimation {
+                            duration: Theme.reducedMotion ? 0 : 180
+                            easing.type: Easing.OutCubic
+                        }
                     }
                     radius: Theme.cardRadius
                     color: Theme.surface
