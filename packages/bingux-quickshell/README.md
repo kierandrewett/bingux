@@ -40,3 +40,20 @@ with the shell. Without it, a killed or restarted shell left its audio meter,
 idle tracker, camera and microphone watchers and the appearance monitor
 running, and each restart added another set. Execute-and-detach commands are
 not affected.
+
+`ipc-connection-lifetime.patch` releases each server-side IPC connection after
+its local socket disconnects. Status clients open short-lived sockets, so
+retaining their parented connection objects also retains their socket buffers
+until Quickshell exits. The patch includes a bounded QTest that connects one
+local socket, disconnects it, and waits for the connection object to be
+destroyed.
+
+Apply the patch to the pinned Quickshell source before rebuilding the runtime:
+
+```sh
+git -C /path/to/quickshell apply /path/to/bingux/packages/bingux-quickshell/ipc-connection-lifetime.patch
+```
+
+Applying it changes the source only. Rebuild and install Quickshell, then
+restart Bingux to use it. With `BUILD_TESTING=ON`, run the `ipcconnection` CTest
+to verify that disconnecting destroys the server-side connection and its socket.

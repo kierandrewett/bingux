@@ -1,0 +1,87 @@
+diff --git a/src/ipc/CMakeLists.txt b/src/ipc/CMakeLists.txt
+--- a/src/ipc/CMakeLists.txt
++++ b/src/ipc/CMakeLists.txt
+@@ -7,3 +7,7 @@
+ target_link_libraries(quickshell-ipc PRIVATE Qt::Quick Qt::Network)
+ 
+ target_link_libraries(quickshell PRIVATE quickshell-ipc)
++
++if (BUILD_TESTING)
++	add_subdirectory(test)
++endif()
+diff --git a/src/ipc/ipc.cpp b/src/ipc/ipc.cpp
+--- a/src/ipc/ipc.cpp
++++ b/src/ipc/ipc.cpp
+@@ -60,6 +60,7 @@
+ 
+ void IpcServerConnection::onDisconnected() {
+ 	qCInfo(logIpc) << "IPC connection disconnected" << this;
++	this->deleteLater();
+ }
+ 
+ void IpcServerConnection::onReadyRead() {
+diff --git a/src/ipc/test/CMakeLists.txt b/src/ipc/test/CMakeLists.txt
+new file mode 100644
+--- /dev/null
++++ b/src/ipc/test/CMakeLists.txt
+@@ -0,0 +1,7 @@
++function(qs_test name)
++	add_executable(${name} ${ARGN})
++	target_link_libraries(${name} PRIVATE Qt::Test Qt::Network Qt::Quick quickshell-ipc quickshell-core quickshell-window quickshell-ui quickshell-io)
++	add_test(NAME ${name} WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" COMMAND $<TARGET_FILE:${name}>)
++endfunction()
++
++qs_test(ipcconnection ipcconnection.cpp)
+diff --git a/src/ipc/test/ipcconnection.cpp b/src/ipc/test/ipcconnection.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/ipc/test/ipcconnection.cpp
+@@ -0,0 +1,48 @@
++#include <qlocalsocket.h>
++#include <qsignalspy.h>
++#include <qtemporarydir.h>
++#include <QtTest/QtTest>
++
++#include "../ipc.hpp"
++
++namespace {
++
++class TestIpcConnection: public QObject {
++	Q_OBJECT;
++
++private slots:
++	void disconnectDeletesConnection();
++};
++
++void TestIpcConnection::disconnectDeletesConnection() {
++	QTemporaryDir directory;
++	QVERIFY(directory.isValid());
++
++	qs::ipc::IpcServer server(directory.filePath("ipc.sock"));
++	QLocalSocket client;
++	client.connectToServer(directory.filePath("ipc.sock"));
++	QVERIFY(client.waitForConnected());
++
++	QTRY_VERIFY(server.findChild<qs::ipc::IpcServerConnection*>() != nullptr);
++	auto* connection = server.findChild<qs::ipc::IpcServerConnection*>();
++	QSignalSpy destroyed(connection, &QObject::destroyed);
++	QVERIFY(destroyed.isValid());
++	auto* socket = connection->findChild<QLocalSocket*>();
++	QVERIFY(socket != nullptr);
++	QSignalSpy socketDestroyed(socket, &QObject::destroyed);
++	QVERIFY(socketDestroyed.isValid());
++
++	client.disconnectFromServer();
++	if (client.state() != QLocalSocket::UnconnectedState) {
++		QVERIFY(client.waitForDisconnected());
++	}
++	QTRY_COMPARE(destroyed.count(), 1);
++	QCOMPARE(socketDestroyed.count(), 1);
++	QTRY_VERIFY(server.findChild<qs::ipc::IpcServerConnection*>() == nullptr);
++}
++
++} // namespace
++
++QTEST_MAIN(TestIpcConnection)
++
++#include "ipcconnection.moc"
