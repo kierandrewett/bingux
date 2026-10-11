@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import re
 import os
 from pathlib import Path
 import shlex
@@ -229,9 +230,13 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
                 "bingux-emoji-ui",
                 "bingux-wallpaper",
             ):
-                generated = generated.replace(
-                    f"command = {{{json.dumps(command)}",
-                    f"command = {{{json.dumps(str(prefix / 'bin' / command))}",
+                # Match the formatter's spacing: `{"name"` and `{ "name"` both occur.
+                generated = re.sub(
+                    r"command = \{(\s*)" + re.escape(json.dumps(command)),
+                    lambda match, command=command: (
+                        "command = {" + match.group(1) + json.dumps(str(prefix / "bin" / command))
+                    ),
+                    generated,
                 )
             generated = generated.replace(
                 '{ "bingux-frame",',
