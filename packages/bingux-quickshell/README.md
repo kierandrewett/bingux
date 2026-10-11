@@ -26,3 +26,11 @@ Run `tests/layershell-focus-live.py` as `GNOBLIN_TEST_DBUS_CLIENT` in Gnoblin's
 private session, with `QS_TEST_BIN` pointing to the matching Quickshell runtime.
 The test reads actual Wayland requests. Before the patch it receives only
 `OnDemand` (2); after the patch it also receives `None` (0).
+
+`local-files.patch` loads a config folder as ordinary files when every directory
+in it ships its own qmldir. Quickshell otherwise serves every file through its
+`qs:` network scheme, and Qt keeps its compiled-unit disk cache only for local
+files, so the whole shell recompiled on each start. Bingux ships a qmldir, so the
+shell loads from the cache after its first start. Set `QS_NO_LOCAL_FILES=1` to
+use the old behaviour. In the test VM the main shell loaded about 0.3 to 0.5 s
+faster; VM noise is about 1 s, so treat that as an estimate.
