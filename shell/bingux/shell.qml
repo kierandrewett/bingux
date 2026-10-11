@@ -387,11 +387,28 @@ ShellRoot {
         rightInset: terminalSidebar.rightInset
     }
 
+    // Without seconds the clock wakes once a minute. Redrawing the bar every
+    // second keeps the compositor re-rendering a blurred surface around the clock.
     Timer {
-        interval: 1000
+        id: clockTimer
+        function schedule() {
+            interval = profileSettings.clockSeconds ? 1000 : 60020 - Date.now() % 60000;
+        }
+        Component.onCompleted: schedule()
         repeat: true
         running: true
-        onTriggered: root.currentTime = new Date()
+        onTriggered: {
+            root.currentTime = new Date();
+            schedule();
+        }
+    }
+    Connections {
+        target: profileSettings
+        function onClockSecondsChanged() {
+            root.currentTime = new Date();
+            clockTimer.schedule();
+            clockTimer.restart();
+        }
     }
 
     ShellCommands {
@@ -1184,7 +1201,7 @@ ShellRoot {
                 }
                 RollingNumber {
                     id: timeLabel
-                    text: root.currentTime.toLocaleTimeString(Qt.locale(), "hh:mm:ss")
+                    text: root.currentTime.toLocaleTimeString(Qt.locale(), profileSettings.clockSeconds ? "hh:mm:ss" : "hh:mm")
                     value: root.currentTime.getTime()
                     pixelSize: Theme.fontSize
                     fontWeight: Font.DemiBold

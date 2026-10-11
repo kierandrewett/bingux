@@ -30,6 +30,7 @@ Singleton {
                 "dock": true,
                 "sidebar": true,
                 "metrics": true,
+                "clockSeconds": false,
                 "wallpaper": "",
                 "layout": null,
                 "dockSize": 56,

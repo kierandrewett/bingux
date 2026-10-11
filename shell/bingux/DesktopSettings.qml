@@ -184,6 +184,11 @@ ColumnLayout {
             }
         }
         SettingsGroup {
+            ToggleRow {
+                title: "Show seconds in the clock"
+                toggleChecked: root.desktop.clockSeconds === true
+                onToggleRequested: root.settings.update("desktop", "clockSeconds", !toggleChecked)
+            }
             SettingsRow {
                 title: "Arrange top bar widgets"
                 navigation: true
