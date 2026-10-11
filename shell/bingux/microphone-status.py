@@ -3,8 +3,26 @@
 
 import json
 import os
+import signal
 import subprocess
+import sys
 import time
+from functools import partial
+
+
+def die_with_watcher(watcher):
+    """Arm a Linux child to exit if the watcher dies, including fork races."""
+    if sys.platform != "linux":
+        return
+    import ctypes
+
+    if watcher <= 1:
+        os._exit(1)
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(1, signal.SIGTERM, 0, 0, 0) != 0:
+        os._exit(1)
+    if os.getppid() != watcher:
+        os.kill(os.getpid(), signal.SIGTERM)
 
 
 def captures(sources, outputs):
@@ -62,8 +80,13 @@ def watch():
     while True:
         process = None
         try:
+            watcher = os.getpid()
             process = subprocess.Popen(
-                ["pactl", "subscribe"], stdout=subprocess.PIPE, text=True, env={**os.environ, "LC_ALL": "C"}
+                ["pactl", "subscribe"],
+                stdout=subprocess.PIPE,
+                text=True,
+                env={**os.environ, "LC_ALL": "C"},
+                preexec_fn=partial(die_with_watcher, watcher),
             )
             previous = snapshot()
             print(json.dumps(previous), flush=True)

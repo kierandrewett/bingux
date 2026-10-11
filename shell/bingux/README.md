@@ -171,6 +171,10 @@ The standalone install supplies `BINGUX_AUDIO_METER` through the compiled helper
 on PATH. Source sessions can set the variable to an explicit helper path. The
 helper reconnects after an audio-server restart.
 
+On Linux, the microphone watcher's `pactl` subscription exits with its watcher,
+including when the shell is reloaded or forcibly stopped. Reloading does not
+leave extra audio-event subscriptions running.
+
 Validation:
 
 - `node --test tests/media-match.test.mjs` checks app attribution.
@@ -183,6 +187,9 @@ Validation:
 - `python3 tests/audio-meter.py /path/to/bingux-audio-meter` creates and removes
   an owned null sink to verify silence, short pulses, debounce and release
   timing without playing test audio through the speakers.
+- `python3 tests/microphone-lifecycle-live.py shell/bingux/microphone-status.py`
+  uses a private `pactl` replacement to verify that the microphone watcher's
+  subscription child exits when the watcher receives either SIGTERM or SIGKILL.
 
 ## Sidebar
 
