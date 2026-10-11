@@ -37,7 +37,7 @@ return {
     },
     autostart = {
         -- The wallpaper is a tiny separate process listed first, so it maps before the shell loads.
-        ["bingux-wallpaper"] = { command = { "bingux-wallpaper" } },
+        ["bingux-background"] = { command = { "bingux-wallpaper" } },
         bingux = { command = { "bingux", "--no-color" } },
         -- Shell surfaces are session children. They stay tied to the Gnoblin
         -- configuration and are stopped when this module is removed.
