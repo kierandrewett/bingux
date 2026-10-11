@@ -13,6 +13,10 @@ NOTIFICATION_PATH = "/org/freedesktop/Notifications"
 PORTAL = "org.freedesktop.portal.Desktop"
 
 
+# How long a capture notification's actions keep working.
+LIFETIME_SECONDS = 600
+
+
 class CaptureNotification:
     def __init__(self, path, kind="screenshot"):
         if kind not in ("screenshot", "recording"):
@@ -174,7 +178,17 @@ class CaptureNotification:
             # A slow server may accept after the capture worker's acknowledgement timeout.
             # Keep the notification actions alive even if the worker moved on.
             sys.stdout = None
+        # A resident notification stays in the history until it is dismissed, so no
+        # close signal may ever arrive. Without a limit every screenshot leaves a
+        # process behind for the whole session.
+        GLib.timeout_add_seconds(LIFETIME_SECONDS, self.expire)
         self.loop.run()
+
+    def expire(self):
+        if self.chooser_subscription:
+            return GLib.SOURCE_CONTINUE
+        self.loop.quit()
+        return GLib.SOURCE_REMOVE
 
 
 if __name__ == "__main__":
