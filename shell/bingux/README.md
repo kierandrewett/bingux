@@ -74,6 +74,12 @@ application launching also needs an applicationLauncher command in search.json.
 The control centre uses PipeWire for volume and the existing system settings
 applications for network and display configuration.
 
+Calendar, metrics, notification history and Control Centre load when first
+opened and stay available for subsequent openings. Control Centre also loads
+when its widgets are placed outside the panel or desktop editing needs them.
+Reading a closed panel's status does not load it. To inspect which panels have
+loaded, run `binguxctl ipc shell status` and read the `loadedPanels` flags.
+
 Super+Period opens the emoji picker through Bingux's persistent shortcut
 connection. The desktop module leaves IBus's inline picker on Super+Semicolon
 so it cannot intercept Super+Period; Ctrl+Shift+U Unicode entry is unchanged.

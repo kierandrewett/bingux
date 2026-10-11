@@ -78,6 +78,7 @@ ShellRoot {
         return false;
     }
     readonly property var controlCentre: controlCentreLoader.item
+    property bool controlCentreRequested: false
     // A name the lazy popup cannot shadow with its own property.
     readonly property var notificationSurfaceItem: notificationSurface
     // True when a saved bar layout holds one of Control Centre's own widgets.
@@ -90,7 +91,7 @@ ShellRoot {
         return Object.keys(layout).some(zone => Array.isArray(layout[zone]) && layout[zone].some(id => typeof id === "string" && /^controls?-/.test(id)));
     }
     function lazyControlCentre() {
-        controlCentreLoader.active = true;
+        controlCentreRequested = true;
         return controlCentreLoader.item;
     }
     // Lazy popups are created on first use; this returns the live object.
@@ -508,6 +509,12 @@ ShellRoot {
                 sidebar: terminalSidebar.opened,
                 doNotDisturb: ControlCentreServices.doNotDisturb,
                 liveReload: Quickshell.watchFiles,
+                loadedPanels: {
+                    controls: controlCentre !== null,
+                    calendar: calendarLoader.item !== null,
+                    notifications: notificationCentreLoader.item !== null,
+                    metrics: metricsLoader.item !== null
+                },
                 iconCache: OsIcons.cacheStats
             });
         }
@@ -521,7 +528,7 @@ ShellRoot {
             const panels = {
                 settings: root.settingsObject,
                 calendar: calendarLoader,
-                controls: name === "controls" ? root.lazyControlCentre() : null,
+                controls: controlCentre,
                 notifications: notificationCentreLoader,
                 metrics: metricsLoader,
                 search: searchOverlay
@@ -536,7 +543,7 @@ ShellRoot {
                     ok: false,
                     error: "Unknown panel action: " + action
                 });
-            const current = name === "keyboard" ? inputSourceSelector.menuOpen : name === "settings" ? !!root.settingsObject?.visible : ["calendar", "notifications", "metrics"].includes(name) ? !!panels[name].item?.visible : panels[name].visible;
+            const current = name === "keyboard" ? inputSourceSelector.menuOpen : name === "settings" ? !!root.settingsObject?.visible : ["calendar", "notifications", "metrics"].includes(name) ? !!panels[name].item?.visible : !!panels[name]?.visible;
             if (action === "status")
                 return JSON.stringify({
                     open: current
@@ -558,6 +565,9 @@ ShellRoot {
             } else if (["calendar", "notifications", "metrics"].includes(name)) {
                 if (show || panels[name].item)
                     root.lazyPopup(panels[name]).visible = show;
+            } else if (name === "controls") {
+                if (show || controlCentre)
+                    root.lazyControlCentre().visible = show;
             } else
                 panels[name].visible = show;
             return JSON.stringify({
@@ -635,11 +645,10 @@ ShellRoot {
         }
     }
 
-    // Control Centre is built once the desktop has settled, or at once when the
-    // saved layout puts one of its widgets in the bar or while editing.
+    // Create on first use, or when the saved layout needs its movable widgets.
     LazyLoader {
         id: controlCentreLoader
-        active: root.controlCentreNeeded || Startup.settled
+        active: root.controlCentreNeeded || root.controlCentreRequested
         ControlCentre {
             id: controlCentre
             widgetLayout: topBar
@@ -657,8 +666,7 @@ ShellRoot {
 
     LazyLoader {
         id: metricsLoader
-        // Built once the desktop is up, or earlier if it is opened first.
-        active: Startup.settled
+        active: false
         SystemMetricsPopup {
             id: metricsPopup
             anchorWindow: topBar.windowFor(metricsPill)
@@ -673,8 +681,7 @@ ShellRoot {
 
     LazyLoader {
         id: notificationCentreLoader
-        // Built once the desktop is up, or earlier if it is opened first.
-        active: Startup.settled
+        active: false
         NotificationHistoryPopup {
             id: notificationCentre
             notificationSurface: root.notificationSurfaceItem
@@ -763,8 +770,7 @@ ShellRoot {
 
     LazyLoader {
         id: calendarLoader
-        // Built once the desktop is up, or earlier if it is opened first.
-        active: Startup.settled
+        active: false
         CalendarPopup {
             id: calendarPopup
             onApplicationLaunchStarted: desktopId => dock.beginExternalLaunch(desktopId, "Calendar")
