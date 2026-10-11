@@ -25,7 +25,7 @@ TextField {
         x: 10
         anchors.verticalCenter: parent.verticalCenter
         implicitSize: 14
-        source: Quickshell.iconPath("system-search-symbolic")
+        source: AdwaitaIcons.source("system-search-symbolic")
         color: Theme.muted
     }
     IconButton {

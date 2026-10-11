@@ -316,7 +316,7 @@ FocusScope {
                     id: "mail",
                     title: "Mail",
                     tooltipTitle: "Mail",
-                    icon: Quickshell.iconPath("mail-unread-symbolic"),
+                    icon: AdwaitaIcons.source("mail-unread-symbolic"),
                     menu: null,
                     onlyMenu: false,
                     hasMenu: false
@@ -325,7 +325,7 @@ FocusScope {
                     id: "vpn",
                     title: "VPN",
                     tooltipTitle: "VPN",
-                    icon: Quickshell.iconPath("network-vpn-symbolic"),
+                    icon: AdwaitaIcons.source("network-vpn-symbolic"),
                     menu: null,
                     onlyMenu: false,
                     hasMenu: false
@@ -334,7 +334,7 @@ FocusScope {
                     id: "drive",
                     title: "Files",
                     tooltipTitle: "Files",
-                    icon: Quickshell.iconPath("drive-harddisk-symbolic"),
+                    icon: AdwaitaIcons.source("drive-harddisk-symbolic"),
                     menu: null,
                     onlyMenu: false,
                     hasMenu: false

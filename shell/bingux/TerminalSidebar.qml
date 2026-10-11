@@ -1116,7 +1116,7 @@ Scope {
                         Item {
                             SymbolicIcon {
                                 anchors.centerIn: parent
-                                source: Quickshell.iconPath("sidebar-show-symbolic")
+                                source: AdwaitaIcons.source("sidebar-show-symbolic")
                                 rotation: parent.parent.segmentValue === "top" ? 90 : parent.parent.segmentValue === "right" ? 180 : 0
                                 implicitSize: 16
                                 color: parent.parent.segmentSelected ? Theme.text : Theme.muted

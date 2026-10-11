@@ -142,7 +142,7 @@ QtObject {
                                 anchors.centerIn: parent
                                 implicitSize: Theme.osdIconSize
                                 color: osdWindow.presentedRequest?.icon.includes("muted") ? Theme.muted : Theme.accent
-                                source: Quickshell.iconPath(osdWindow.presentedRequest ? osdWindow.presentedRequest.icon : "dialog-information-symbolic", "dialog-information-symbolic")
+                                source: AdwaitaIcons.source(osdWindow.presentedRequest ? osdWindow.presentedRequest.icon : "dialog-information-symbolic", "dialog-information-symbolic")
                             }
                         }
                         ColumnLayout {

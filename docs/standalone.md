@@ -43,23 +43,44 @@ For a normal source install, use the managed user target:
 make install-user
 ```
 
-This builds the native pieces if needed, installs the complete Bingux payload
-under `$XDG_DATA_HOME/bingux` (normally `~/.local/share/bingux`), enables
-`bingux.target` for the Gnoblin session, and loads the installed Gnoblin
-drop-in automatically. The only files outside that root are symlinks in
-`$XDG_BIN_HOME` (normally `~/.local/bin`), `$XDG_CONFIG_HOME/systemd/user`,
-`$XDG_CONFIG_HOME/gnoblin/conf.d`, and `$XDG_DATA_HOME/gnoblin/scripts`; they
-are recorded in
-`.bingux-install.json` and are removed safely by the matching uninstall command.
-The installer may also create or extend `$XDG_CONFIG_HOME/gnoblin/init.lua` to
-load `conf.d`; existing settings are preserved.
-Make sure `~/.local/bin` is on `PATH` if you want to run `binguxctl` and the
-other convenience commands directly. The installer detects `qs` or
-`quickshell`; set `BINGUX_QUICKSHELL=/path/to/qs` when the matching Quickshell
-build is not on `PATH`. It also installs `bingux-uninstall`, so the source
-checkout is not needed later to remove the managed installation. If an
-`init.lua` does not already load `conf.d`, the installer creates or extends it
-without replacing existing personal settings.
+The installer builds native pieces when needed and puts the Bingux payload in
+`$XDG_DATA_HOME/bingux`, normally `~/.local/share/bingux`.
+
+Gnoblin starts the shell and its layer-shell clients from Lua. The helper-service
+target starts the search and status helpers.
+
+The installer records the following managed links in `.bingux-install.json`:
+
+- `$XDG_BIN_HOME`, normally `~/.local/bin`, for convenience commands.
+- `$XDG_CONFIG_HOME/systemd/user` for optional helper units.
+- `$XDG_CONFIG_HOME/gnoblin/conf.d` for the Bingux Gnoblin module.
+- `$XDG_DATA_HOME/gnoblin/scripts` for the text-input integration.
+
+The matching uninstall command removes those links safely. Existing personal
+settings stay in place. The installer puts the `gnoblin.load(...)` loader at
+the end of `init.lua`, after generic frame and window rules, without replacing
+the rest of the file.
+Installed autostart commands use absolute paths; convenience commands still
+need the PATH entry below.
+
+Add `~/.local/bin` to `PATH` to use Bingux convenience commands.
+
+The installer disables and backs up the historical Bingux `quickshell.service`.
+That stops an old session target from starting a second desktop shell. Search and
+status helpers remain attached to `bingux.target`, which follows
+`gnoblin-session.target`.
+
+Bingux bundles its symbolic Adwaita icons. Launch it through the installed
+`bingux` command so its asset paths and QML plugins are available. Application
+icons use the system theme; an unavailable icon uses a bundled generic icon.
+
+The installer prefers Gnoblin's matching Quickshell runtime when it is
+installed below `$XDG_DATA_HOME/gnoblin`.
+
+Otherwise it detects `gnoblin-quickshell`, `qs`, or `quickshell`. Set
+`BINGUX_QUICKSHELL` to select a matching executable explicitly. The
+`bingux-uninstall` command removes the managed installation without the source
+checkout.
 
 Remove the managed install with:
 
@@ -88,20 +109,21 @@ Use a staging directory when creating a package or testing an install:
 make install PREFIX=/usr DESTDIR="$PWD/dist/root"
 ```
 
-The package-oriented installer writes only below `DESTDIR`. It installs shell files under
-`share/bingux/shell`, native QML plugins under `lib/bingux/qml`, helper programs
-under `bin` and `libexec/bingux`, the optional Gnoblin Lua module under
-`share/gnoblin/conf.d/bingux.lua`, and user-systemd units under
-`lib/systemd/user`. It does not enable a service or change an existing user
-configuration. This layout is for RPM and other package builders; source users
-should prefer the managed `make install-user` flow above.
+The package-oriented installer writes only below `DESTDIR`. It installs:
 
-Enable the target after a package install:
+- Shell files in `share/bingux/shell`.
+- Native QML plugins in `lib/bingux/qml`.
+- Helper programs in `bin` and `libexec/bingux`.
+- The Gnoblin module in `share/gnoblin/conf.d/bingux.lua`.
+- User systemd units in `lib/systemd/user`.
 
-```sh
-systemctl --user daemon-reload
-systemctl --user enable --now bingux.target
-```
+It does not enable services or change user configuration. Use the managed
+`make install-user` flow for a source installation.
+
+The optional systemd target starts only the search and status helper services.
+Gnoblin's Lua autostart starts the Bingux desktop, search, switcher, capture,
+and emoji layer-shell clients. Removing the Bingux module from the Gnoblin
+configuration stops those session-owned clients on the next reload.
 
 The shell launcher clears core dumps. Services restart after a failure and use
 the same QML import path as the shell.
@@ -109,10 +131,11 @@ the same QML import path as the shell.
 ## Runtime requirements
 
 The full shell uses Qt 6, Quickshell, PipeWire or PulseAudio, NetworkManager,
-systemd user services, GNOME settings helpers, `wl-clipboard`, `xdg-utils`,
-PyGObject and the Python libraries used by document previews. GTK 3 is used by
-the emoji text-entry helper for XWayland clients. The terminal sidebar
-additionally needs a Qt 6 QMLTermWidget build that matches Quickshell.
+a systemd user manager for search and status helpers, GNOME settings helpers,
+`wl-clipboard`, `xdg-utils`, PyGObject and the Python libraries used by document
+previews. GTK 3 is used by the emoji text-entry helper for XWayland clients.
+The terminal sidebar additionally needs a Qt 6 QMLTermWidget build that
+matches Quickshell.
 
 The terminal plugin is optional. If it is absent, the rest of the shell stays
 available and the sidebar shows a retry message.
@@ -130,3 +153,9 @@ testing, use [portable testing](portable-testing.md).
 The packaged Gnoblin defaults enable blur for layer surfaces and set opacity
 only on named Bingux panels. Other layer surfaces keep their own opacity, so a
 wallpaper is not faded by the shell defaults.
+
+Set `desktop.wallpaper` in `$XDG_CONFIG_HOME/bingux/settings.json` through
+**Bingux Settings > Desktop > Wallpaper**. The value is an absolute image path.
+An empty or unreadable path leaves Gnoblin's black background visible. Bingux
+creates one background layer-shell surface per screen and converts image formats
+that Qt cannot decode into a cached PNG.

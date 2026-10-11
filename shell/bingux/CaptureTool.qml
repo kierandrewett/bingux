@@ -627,7 +627,7 @@ Scope {
                         anchors.horizontalCenter: parent.horizontalCenter
                         implicitSize: 64
                         readonly property var entry: root.selectedWindow ? (DesktopEntries.byId(root.selectedWindow.appId) || DesktopEntries.byId(root.selectedWindow.appId.replace(/\.desktop$/, ""))) : null
-                        source: Quickshell.iconPath(entry?.icon || "application-x-executable", "application-x-executable")
+                        source: AdwaitaIcons.source(entry?.icon || "application-x-executable", "application-x-executable")
                     }
                     Text {
                         width: parent.width
@@ -1179,7 +1179,7 @@ Scope {
             SymbolicIcon {
                 visible: button.iconName !== "" || button.iconSource.toString() !== ""
                 implicitSize: button.compact ? 14 : 18
-                source: button.iconSource.toString() !== "" ? button.iconSource : Quickshell.iconPath(button.iconName, "application-x-executable-symbolic")
+                source: button.iconSource.toString() !== "" ? button.iconSource : AdwaitaIcons.source(button.iconName, "application-x-executable-symbolic")
                 color: button.primary ? "#17212c" : button.enabled ? Theme.text : Theme.muted
             }
             Text {

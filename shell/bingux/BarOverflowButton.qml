@@ -42,7 +42,7 @@ AbstractButton {
             anchors.centerIn: parent
             visible: !root.presentation?.custom
             implicitSize: Theme.iconSize
-            source: Quickshell.iconPath("view-more-symbolic")
+            source: AdwaitaIcons.source("view-more-symbolic")
         }
     }
     BarTooltip {

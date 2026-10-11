@@ -53,14 +53,14 @@ Rectangle {
     SymbolicIcon {
         anchors.centerIn: parent
         visible: !!root.iconName && root.symbolicIcon
-        source: root.iconName ? Quickshell.iconPath(root.iconName) : ""
+        source: root.iconName ? AdwaitaIcons.source(root.iconName) : ""
         implicitSize: root.effectiveIconSize
         color: root.foreground
     }
     IconImage {
         anchors.centerIn: parent
         visible: !!root.iconName && !root.symbolicIcon
-        source: root.iconName ? Quickshell.iconPath(root.iconName) : ""
+        source: root.iconName ? AdwaitaIcons.source(root.iconName) : ""
         width: root.effectiveIconSize
         height: root.effectiveIconSize
         mipmap: true

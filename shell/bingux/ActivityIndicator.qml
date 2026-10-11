@@ -60,7 +60,7 @@ Item {
         SymbolicIcon {
             visible: root.iconName !== ""
             implicitSize: Theme.iconSize
-            source: root.iconName ? Quickshell.iconPath(root.iconName) : ""
+            source: root.iconName ? AdwaitaIcons.source(root.iconName) : ""
             color: root.filled ? Theme.text : root.activityColor
         }
         Text {
@@ -92,7 +92,7 @@ Item {
                 anchors.fill: parent
                 visible: root.trailingIcon !== "screencast-stop-symbolic"
                 implicitSize: Theme.iconSize
-                source: visible && root.trailingIcon ? Quickshell.iconPath(root.trailingIcon) : ""
+                source: visible && root.trailingIcon ? AdwaitaIcons.source(root.trailingIcon) : ""
                 color: root.filled ? Theme.text : root.activityColor
             }
         }

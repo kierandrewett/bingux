@@ -304,7 +304,7 @@ Item {
         spacing: 8
         SymbolicIcon {
             implicitSize: 16
-            source: Quickshell.iconPath(header.iconName)
+            source: AdwaitaIcons.source(header.iconName)
             color: Theme.muted
         }
         Caption {

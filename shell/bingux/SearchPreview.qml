@@ -649,7 +649,7 @@ Item {
                         easing.type: Easing.OutCubic
                     }
                 }
-                source: Quickshell.iconPath(previewControl.iconName)
+                source: AdwaitaIcons.source(previewControl.iconName)
                 color: Theme.muted
                 opacity: previewControl.enabled ? 1 : 0.4
             }

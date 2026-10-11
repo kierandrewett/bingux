@@ -98,7 +98,7 @@ AbstractButton {
             SymbolicIcon {
                 anchors.centerIn: parent
                 implicitSize: 18
-                source: root.displayedIcon ? Quickshell.iconPath(root.displayedIcon) : ""
+                source: root.displayedIcon ? AdwaitaIcons.source(root.displayedIcon) : ""
                 color: root.selected ? Theme.accent : Theme.muted
             }
         }
@@ -187,7 +187,7 @@ AbstractButton {
                     }
                 }
                 color: root.navigation ? Theme.muted : Theme.accent
-                source: Quickshell.iconPath(root.navigation ? "go-next-symbolic" : "object-select-symbolic")
+                source: AdwaitaIcons.source(root.navigation ? "go-next-symbolic" : "object-select-symbolic")
             }
             IconButton {
                 objectName: root.objectName + "Navigation"

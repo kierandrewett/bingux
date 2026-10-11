@@ -13,7 +13,7 @@ Item {
     property bool mipmap: false
     implicitWidth: implicitSize
     implicitHeight: implicitSize
-    readonly property string normalizedSource: !source || source.startsWith("/") || /^[a-z][a-z0-9+.-]*:/i.test(source) ? source : Quickshell.iconPath(source, "application-x-executable")
+    readonly property string normalizedSource: !source || source.startsWith("/") || /^[a-z][a-z0-9+.-]*:/i.test(source) ? source : AdwaitaIcons.source(source, "application-x-executable")
     readonly property bool liveImage: normalizedSource.startsWith("data:") || (normalizedSource.startsWith("image://") && !normalizedSource.startsWith("image://icon/"))
     readonly property string requestedSource: {
         if (!normalizedSource || liveImage || rasterSize <= 0 || normalizedSource.startsWith("file-preview:"))

@@ -884,7 +884,7 @@ Flickable {
                         const icon = notificationCard.entry.appIcon;
                         if (icon.startsWith("/") || icon.startsWith("file:") || icon.startsWith("image:"))
                             return icon;
-                        return Quickshell.iconPath(icon, "application-x-executable");
+                        return AdwaitaIcons.source(icon, "application-x-executable");
                     }
                 }
 
@@ -998,7 +998,7 @@ Flickable {
                             SymbolicIcon {
                                 anchors.centerIn: parent
                                 implicitSize: 16
-                                source: Quickshell.iconPath("window-close-symbolic", "edit-clear-symbolic")
+                                source: AdwaitaIcons.source("window-close-symbolic", "edit-clear-symbolic")
                             }
 
                             MouseArea {
@@ -1060,7 +1060,7 @@ Flickable {
                         height: !visible ? 0 : largePreview && implicitWidth > 0 ? Math.min(width * implicitHeight / implicitWidth, 240) : 40
                         visible: source.toString() !== "" && status !== Image.Error
                         readonly property string imageSource: notificationCard.entry.image || ""
-                        readonly property string normalizedImage: !imageSource || imageSource.startsWith("/") || /^[a-z][a-z0-9+.-]*:/i.test(imageSource) ? imageSource : Quickshell.iconPath(imageSource)
+                        readonly property string normalizedImage: !imageSource || imageSource.startsWith("/") || /^[a-z][a-z0-9+.-]*:/i.test(imageSource) ? imageSource : AdwaitaIcons.source(imageSource)
                         readonly property bool nativePixels: normalizedImage.startsWith("data:") || (normalizedImage.startsWith("image://") && !normalizedImage.startsWith("image://icon/"))
                         property string retainedImage: ""
                         function retainImage() {
@@ -1163,7 +1163,7 @@ Flickable {
                                 anchors.rightMargin: 10
                                 anchors.verticalCenter: parent.verticalCenter
                                 implicitSize: 12
-                                source: Quickshell.iconPath("pan-down-symbolic", "go-down-symbolic")
+                                source: AdwaitaIcons.source("pan-down-symbolic", "go-down-symbolic")
                                 color: groupLabel.color
                                 rotation: notificationCard.groupExpanded ? 180 : 0
                                 Behavior on rotation {
