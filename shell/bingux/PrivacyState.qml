@@ -41,7 +41,7 @@ Scope {
     readonly property string locationTooltip: "Location in use"
     Process {
         command: ["python3", Qt.resolvedUrl("microphone-status.py").toString().replace("file://", "")]
-        running: true
+        running: Startup.settled
         stdout: SplitParser {
             onRead: data => {
                 try {
@@ -56,7 +56,7 @@ Scope {
     }
     Process {
         command: ["python3", Qt.resolvedUrl("camera-status.py").toString().replace("file://", "")]
-        running: true
+        running: Startup.settled
         stdout: SplitParser {
             onRead: data => {
                 try {

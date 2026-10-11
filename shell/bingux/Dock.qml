@@ -60,7 +60,12 @@ PanelWindow {
     property real dragRailX: 0
     property real dragRailY: 0
     property real dragLift: 0
-    Behavior on dragLift { NumberAnimation { duration: Theme.reducedMotion ? 0 : 115; easing.type: Easing.OutCubic } }
+    Behavior on dragLift {
+        NumberAnimation {
+            duration: Theme.reducedMotion ? 0 : 115
+            easing.type: Easing.OutCubic
+        }
+    }
     readonly property var folderColors: ["blue", "teal", "green", "yellow", "orange", "red", "pink", "purple", "slate"]
     function folderById(id) {
         return folders.find(folder => folder.id === id) || null;
@@ -70,7 +75,11 @@ PanelWindow {
         if (existing)
             return existing;
         const entry = desktopEntryFor(normaliseAppId(id));
-        return entry ? {id: normaliseAppId(entry.startupClass || entry.id), desktopEntry: entry, windows: []} : null;
+        return entry ? {
+            id: normaliseAppId(entry.startupClass || entry.id),
+            desktopEntry: entry,
+            windows: []
+        } : null;
     }
     function folderIcon(id) {
         const entry = memberGroup(id)?.desktopEntry;
@@ -81,23 +90,37 @@ PanelWindow {
         return DesktopLayout.presentation(preferences, "app:" + pinIdentity(id), "dock", entry?.name || id, entry?.icon || "application-x-executable", true, false).label;
     }
     function folderAppState(id) {
-        if (!id) return {active: false, running: false, windows: 0};
+        if (!id)
+            return {
+                active: false,
+                running: false,
+                windows: 0
+            };
         const group = memberGroup(id);
         const windows = group?.windows || [];
         let active = false;
         for (const window of windows)
-            if (window?.activated || window === lastActiveWindow) active = true;
-        return {active, running: windows.length > 0, windows: windows.length};
+            if (window?.activated || window === lastActiveWindow)
+                active = true;
+        return {
+            active,
+            running: windows.length > 0,
+            windows: windows.length
+        };
     }
     function activeFolderApp(id) {
         const folder = folderById(id);
-        if (!folder) return "";
+        if (!folder)
+            return "";
         for (const app of folder.apps)
-            if (folderAppState(app).active) return app;
+            if (folderAppState(app).active)
+                return app;
         return "";
     }
     function saveFolders(next) {
-        BinguxPreferences.saveDesktop({dockFolders: next});
+        BinguxPreferences.saveDesktop({
+            dockFolders: next
+        });
         refreshAppGroups();
     }
     function updateFolder(id, changes) {
@@ -111,13 +134,16 @@ PanelWindow {
         const identity = pinIdentity(group.desktopEntry.id);
         const apps = [];
         for (const app of folder.apps) {
-            if (app === identity) return false;
+            if (app === identity)
+                return false;
             apps.push(app);
         }
         apps.splice(Math.max(0, Math.min(apps.length, destination ?? apps.length)), 0, identity);
         if (!isPinned(group))
             updatePinPreference(group, true);
-        updateFolder(folderId, {apps});
+        updateFolder(folderId, {
+            apps
+        });
         return true;
     }
     function createFolder(sourceId, targetId) {
@@ -137,14 +163,26 @@ PanelWindow {
         order.push(...appOrder.filter(id => !order.includes(id) && id !== sourceId && id !== targetId));
         const pins = [...new Set(pinnedApps.concat(apps))];
         if (preferences.dockApps)
-            BinguxPreferences.saveDesktop({dockApps: {pinnedApps: pins, order}});
+            BinguxPreferences.saveDesktop({
+                dockApps: {
+                    pinnedApps: pins,
+                    order
+                }
+            });
         else {
             dockState.pinnedApps = [...new Set(dockState.pinnedApps.concat(apps))];
             dockState.unpinnedApps = dockState.unpinnedApps.filter(id => !apps.includes(pinIdentity(id)));
             dockState.order = order;
             dockState.sync();
         }
-        saveFolders(folders.concat([{id: folderId, name: "Folder", color: Theme.gnomeAccentName, apps}]));
+        saveFolders(folders.concat([
+            {
+                id: folderId,
+                name: "Folder",
+                color: Theme.gnomeAccentName,
+                apps
+            }
+        ]));
         openFolderId = folderId;
         return true;
     }
@@ -153,13 +191,21 @@ PanelWindow {
         if (!folder)
             return;
         const apps = folder.apps.filter(id => id !== appId);
-        const nextFolders = folders.map(item => item.id === folderId ? Object.assign({}, item, {apps}) : item);
+        const nextFolders = folders.map(item => item.id === folderId ? Object.assign({}, item, {
+                apps
+            }) : item);
         const identity = pinIdentity(appId);
         const order = appOrder.filter(id => pinIdentity(id) !== identity);
         const folderIndex = order.indexOf(folderId);
         order.splice(folderIndex < 0 ? order.length : folderIndex + 1, 0, identity);
         if (preferences.dockApps)
-            BinguxPreferences.saveDesktop({dockFolders: nextFolders, dockApps: {pinnedApps, order}});
+            BinguxPreferences.saveDesktop({
+                dockFolders: nextFolders,
+                dockApps: {
+                    pinnedApps,
+                    order
+                }
+            });
         else {
             dockState.order = order;
             dockState.sync();
@@ -176,7 +222,12 @@ PanelWindow {
         const order = appOrder.filter(id => id !== folderId && !folder.apps.includes(id));
         order.splice(index >= 0 ? Math.min(index, order.length) : order.length, 0, ...folder.apps);
         if (preferences.dockApps)
-            BinguxPreferences.saveDesktop({dockApps: {pinnedApps, order}});
+            BinguxPreferences.saveDesktop({
+                dockApps: {
+                    pinnedApps,
+                    order
+                }
+            });
         else {
             dockState.order = order;
             dockState.sync();
@@ -209,9 +260,11 @@ PanelWindow {
     property bool startupReady: false
     property string startupLayoutKey: ""
     visible: startupReady
+    onStartupReadyChanged: if (startupReady)
+        Startup.dockMapped()
     Timer {
         id: startupSettle
-        interval: 150
+        interval: 60
         onTriggered: if (BinguxPreferences.loaded)
             root.finishStartup()
     }
@@ -219,6 +272,14 @@ PanelWindow {
         id: startupDeadline
         interval: 1500
         onTriggered: root.finishStartup()
+    }
+    // Preferences are read synchronously, so they may be ready before this
+    // connection exists.
+    property QtObject initialPreferences: QtObject {
+        Component.onCompleted: if (!root.startupReady && BinguxPreferences.loaded) {
+            root.refreshAppGroups();
+            startupSettle.restart();
+        }
     }
     Connections {
         target: BinguxPreferences
@@ -312,8 +373,7 @@ PanelWindow {
             function onTitleChanged() {
                 const appId = root.normaliseAppId(modelData.appId || "");
                 const desktopEntry = appId ? DesktopEntries.byId(appId) || DesktopEntries.byId(appId + ".desktop") || DesktopEntries.heuristicLookup(appId) : null;
-                const steamMatch = SteamApplications.entryForWindow(DesktopEntries.applications.values, appId, modelData.title, desktopEntry)
-                    || SteamApplications.gameForWindow(root.installedSteamGames, appId, modelData.title, desktopEntry);
+                const steamMatch = SteamApplications.entryForWindow(DesktopEntries.applications.values, appId, modelData.title, desktopEntry) || SteamApplications.gameForWindow(root.installedSteamGames, appId, modelData.title, desktopEntry);
                 if (!appId || steamMatch || (!desktopEntry && !root.steamDesktopEntryCache.has(appId)))
                     root.refreshAppGroups();
             }
@@ -354,11 +414,8 @@ PanelWindow {
 
     Process {
         id: steamGameCatalog
-        command: [
-            "python3",
-            decodeURIComponent(Qt.resolvedUrl("steam-games.py").toString().replace(/^file:\/\//, ""))
-        ]
-        running: true
+        command: ["python3", decodeURIComponent(Qt.resolvedUrl("steam-games.py").toString().replace(/^file:\/\//, ""))]
+        running: Startup.settled
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -372,7 +429,7 @@ PanelWindow {
         }
         stderr: StdioCollector {
             onStreamFinished: if (text.trim())
-                console.warn("Steam game discovery:", text.trim());
+                console.warn("Steam game discovery:", text.trim())
         }
     }
     Timer {
@@ -414,7 +471,12 @@ PanelWindow {
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "bingux-dock-folder-drag"
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        anchors { top: true; bottom: true; left: true; right: true }
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
         mask: Region {}
         OsIconImage {
             x: root.dragRailX + (root.dragPointerX - root.dragRailX) * root.dragLift - width / 2
@@ -679,7 +741,8 @@ PanelWindow {
         dragPointerY = (screen ? screen.height : 0) - root.height - root.margins.bottom + point.y;
         for (let index = 0; index < dockItems.count; index++) {
             const source = dockItems.itemAt(index);
-            if (source?.currentGroup.id !== draggedId) continue;
+            if (source?.currentGroup.id !== draggedId)
+                continue;
             const centre = source.mapToItem(root.contentItem, source.width / 2, source.height / 2);
             dragRailX = centre.x + root.margins.left;
             dragRailY = (screen ? screen.height : 0) - root.height - root.margins.bottom + centre.y;
@@ -715,9 +778,7 @@ PanelWindow {
             folderDropId = folder.id;
             folderDropIndex = folderPopup.dropIndexAt(dragPointerX - left, dragPointerY - top);
             folderPopup.dragPageAt(dragPointerX - left);
-        } else if (Math.abs(dragPointerX - folderPopup.anchorX) < root.iconSize * 0.8
-                   && dragPointerY > top + folderPopup.popupHeight
-                   && dragPointerY < folderPopup.originY + root.iconSize / 2) {
+        } else if (Math.abs(dragPointerX - folderPopup.anchorX) < root.iconSize * 0.8 && dragPointerY > top + folderPopup.popupHeight && dragPointerY < folderPopup.originY + root.iconSize / 2) {
             // Bridge the short gap between the dock tile and its popup.
             folderDropId = folder.id;
             folderDropIndex = folder.apps.length;
@@ -782,7 +843,9 @@ PanelWindow {
         launchAttempts = attempts;
         if (pendingLaunchGroupId === id)
             pendingLaunchGroupId = "";
-        ShellNotifications.send("Could not open " + (group?.desktopEntry?.name || attempt.name || id), message, {retryDesktopId: id});
+        ShellNotifications.send("Could not open " + (group?.desktopEntry?.name || attempt.name || id), message, {
+            retryDesktopId: id
+        });
     }
 
     function animateLaunchFor(groupId) {
@@ -1124,7 +1187,14 @@ PanelWindow {
             const windows = [];
             for (const id of folder.apps || [])
                 windows.push(...(memberGroups[root.pinIdentity(id)]?.windows || []));
-            groups.push({id: folder.id, desktopEntry: null, windows, entering: false, exiting: false, folder: true});
+            groups.push({
+                id: folder.id,
+                desktopEntry: null,
+                windows,
+                entering: false,
+                exiting: false,
+                folder: true
+            });
             discoveryIndexes[folder.id] = groups.length - 1;
             groupIndexes[folder.id] = groups.length - 1;
         }
@@ -1462,8 +1532,14 @@ PanelWindow {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
             hoverEnabled: true
-            onPositionChanged: mouse => { if (root.draggedId) root.updateFolderDrag(dragCaptureMouse, mouse); }
-            onReleased: mouse => { root.updateFolderDrag(dragCaptureMouse, mouse); root.finishDrag(); }
+            onPositionChanged: mouse => {
+                if (root.draggedId)
+                    root.updateFolderDrag(dragCaptureMouse, mouse);
+            }
+            onReleased: mouse => {
+                root.updateFolderDrag(dragCaptureMouse, mouse);
+                root.finishDrag();
+            }
             onCanceled: root.cancelDrag()
         }
     }
@@ -1886,8 +1962,14 @@ PanelWindow {
                                 SequentialAnimation on pulse {
                                     running: root.draggedId && root.folderHoverId === dockButton.currentGroup.id && !dockButton.currentGroup.folder && !Theme.reducedMotion
                                     loops: Animation.Infinite
-                                    NumberAnimation { to: 0.3; duration: 170 }
-                                    NumberAnimation { to: 1; duration: 170 }
+                                    NumberAnimation {
+                                        to: 0.3
+                                        duration: 170
+                                    }
+                                    NumberAnimation {
+                                        to: 1
+                                        duration: 170
+                                    }
                                 }
                             }
 
@@ -2004,7 +2086,8 @@ PanelWindow {
                                 } else
                                     root.cancelDrag();
                             }
-                            onCanceled: if (!dragCaptureMouse.pressed) root.cancelDrag()
+                            onCanceled: if (!dragCaptureMouse.pressed)
+                                root.cancelDrag()
                             onClicked: function (mouse) {
                                 if (moved)
                                     return;

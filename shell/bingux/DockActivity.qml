@@ -8,7 +8,7 @@ Scope {
     Process {
         id: meter
         command: [Quickshell.env("BINGUX_AUDIO_METER") || "bingux-audio-meter"]
-        running: true
+        running: Startup.settled
         stdout: SplitParser {
             onRead: data => {
                 try {
@@ -26,6 +26,6 @@ Scope {
     Timer {
         id: reconnect
         interval: 3000
-        onTriggered: meter.running = true
+        onTriggered: meter.running = Startup.settled
     }
 }

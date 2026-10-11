@@ -16,12 +16,12 @@ spec.loader.exec_module(ctl)
 
 
 class ControlCommands(unittest.TestCase):
-    def test_popouts_use_independent_configs(self):
+    def test_popouts_share_one_process(self):
         for target, filename in (
-            ("search", "SearchShell.qml"),
-            ("switcher", "SwitcherShell.qml"),
-            ("capture", "CaptureShell.qml"),
-            ("emoji", "EmojiShell.qml"),
+            ("search", "PopoutsShell.qml"),
+            ("switcher", "PopoutsShell.qml"),
+            ("capture", "PopoutsShell.qml"),
+            ("emoji", "PopoutsShell.qml"),
         ):
             for words, path in (
                 (["--path", "/desktop/shell.qml"], "/desktop/" + filename),

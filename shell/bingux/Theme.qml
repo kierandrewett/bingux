@@ -215,16 +215,28 @@ QtObject {
         }
     }
 
-    property Timer accentPoll: Timer {
-        id: accentPoll
-        interval: 1000
-        repeat: true
+    // One long-lived monitor replaces re-reading both keys every second.
+    property Process appearanceMonitor: Process {
+        command: ["gsettings", "monitor", "org.gnome.desktop.interface"]
         running: true
+        stdout: SplitParser {
+            onRead: line => {
+                if (line.startsWith("accent-color:"))
+                    root.updateGnomeAccent(line.slice(line.indexOf(":") + 1));
+                else if (line.startsWith("color-scheme:"))
+                    root.updateGnomeColorScheme(line.slice(line.indexOf(":") + 1));
+            }
+        }
+        onExited: monitorRestart.restart()
+    }
+
+    property Timer monitorRestart: Timer {
+        id: monitorRestart
+        interval: 5000
         onTriggered: {
-            if (!accentReader.running)
-                accentReader.running = true;
-            if (!colorSchemeReader.running)
-                colorSchemeReader.running = true;
+            appearanceMonitor.running = true;
+            accentReader.running = true;
+            colorSchemeReader.running = true;
         }
     }
 }

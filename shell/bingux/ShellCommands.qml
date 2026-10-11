@@ -87,7 +87,7 @@ Scope {
     }
     function controlCommand(action, identity) {
         const service = mediaControls.services;
-        const choices = mediaControls.controlChoices;
+        const choices = mediaControls.controlChoices();
         if (action === "list")
             return ok({
                 ready: service.preferencesReady,
@@ -159,7 +159,7 @@ Scope {
         });
     }
     function deviceCommand(action, input, identity) {
-        const details = mediaControls.deviceControls;
+        const details = mediaControls.deviceControls();
         const nodes = input ? details.audioInputs : details.audioOutputs;
         const selected = input ? details.inputNode : details.outputNode;
         if (action === "list")
@@ -239,7 +239,7 @@ Scope {
         });
     }
     function networkCommand(action, identity) {
-        const details = mediaControls.deviceControls;
+        const details = mediaControls.deviceControls();
         if (action === "status")
             return ok({
                 ready: details.networkUpdatedAt > 0,
@@ -288,7 +288,7 @@ Scope {
                 return fail("Scan requires on or off");
             if (!adapter.enabled && identity === "on")
                 return fail("Enable Bluetooth before scanning");
-            mediaControls.deviceControls.scanForCommand(identity === "on");
+            mediaControls.deviceControls().scanForCommand(identity === "on");
         } else if (action === "connect" || action === "disconnect") {
             if (!adapter.enabled)
                 return fail("Bluetooth is off");
@@ -433,8 +433,7 @@ Scope {
                 dockView.openFolder(group.id);
             else
                 dockView.launch(group, true);
-        }
-        else if (action === "activate") {
+        } else if (action === "activate") {
             if (group.folder) {
                 dockView.openFolder(group.id);
                 return ok();

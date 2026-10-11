@@ -1,13 +1,15 @@
 # Window switcher
 
-Bingux runs the chooser in `bingux-switcher-ui.service`, separate from the
-main desktop and `bingux-search-ui.service`. Neither shortcut waits for the
-main UI process. Both services restart independently when they exit.
-
-Capture and emoji also run in separate services: `bingux-capture-ui.service`
-and `bingux-emoji-ui.service`. `binguxctl capture` and `binguxctl emoji` address
-`CaptureShell.qml` and `EmojiShell.qml` directly. Their processes stay available
-while their layer surfaces are hidden, as Search and the switcher do.
+Bingux runs the chooser, search, capture and the emoji picker together in one
+process, started by the `bingux-popouts` Gnoblin autostart entry. It is separate
+from the main desktop, so none of these shortcuts waits for the main UI process,
+and it starts after the dock is mapped so it never competes with the bar and
+dock while they load. Until it starts, Alt+Tab and Super+Tab use the
+compositor fallback below. `binguxctl search`, `switcher`, `capture` and
+`emoji` address `PopoutsShell.qml`. The process stays available while its
+layer surfaces are hidden. The older `bingux-search-ui`, `bingux-switcher-ui`,
+`bingux-capture-ui` and `bingux-emoji-ui` commands still run each popout in its
+own process for testing.
 The desktop subscribes to capture state for the recording indicator and sends
 Stop through `UiSession`. Opening a companion closes the other companions. Capture and emoji register
 Alt+S and Super+Period through the persistent compositor connection, so keyboard
@@ -30,7 +32,7 @@ The fallback runs in the compositor, outside every Bingux process. It requires
 a responsive compositor. It does not provide a visual chooser while the
 switcher UI is unavailable.
 
-Super release invokes `SearchShell.qml` through the persistent compositor connection.
+Super release invokes search in `PopoutsShell.qml` through the persistent compositor connection.
 The compositor buffers typing until the search field acknowledges keyboard focus. While search is
 open, the compositor raises the existing top bar and dock buffers above
 fullscreen windows. It restores their order when the reveal ends or the search

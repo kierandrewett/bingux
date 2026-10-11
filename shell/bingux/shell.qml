@@ -239,6 +239,7 @@ ShellRoot {
                 groups[key].count++;
             }
             return {
+                ready: dock.startupReady,
                 pinnedApps: dock.pinnedApps,
                 dockSafeInset: dock.visible ? Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom) : 0,
                 activeStreams: dock.activity.activeStreams,

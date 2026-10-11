@@ -39,12 +39,10 @@ return {
         -- The wallpaper is a tiny separate process listed first, so it maps before the shell loads.
         ["bingux-background"] = { command = { "bingux-wallpaper" } },
         bingux = { command = { "bingux", "--no-color" } },
-        -- Shell surfaces are session children. They stay tied to the Gnoblin
-        -- configuration and are stopped when this module is removed.
-        ["bingux-search-ui"] = { command = { "bingux-search-ui" } },
-        ["bingux-switcher-ui"] = { command = { "bingux-switcher-ui" } },
-        ["bingux-capture-ui"] = { command = { "bingux-capture-ui" } },
-        ["bingux-emoji-ui"] = { command = { "bingux-emoji-ui" } },
+        -- Search, the window switcher, capture and emoji share one process that
+        -- starts after the dock is mapped. It is a session child, tied to the
+        -- Gnoblin configuration and stopped when this module is removed.
+        ["bingux-popouts"] = { command = { "bingux-popouts" } },
     },
     -- Bingux owns Alt+Tab and Super+Tab in its switcher. Clear Mutter's
     -- defaults so these accelerators can be registered by the shell.

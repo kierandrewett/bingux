@@ -228,6 +228,7 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
                 "bingux-switcher-ui",
                 "bingux-capture-ui",
                 "bingux-emoji-ui",
+                "bingux-popouts",
                 "bingux-wallpaper",
             ):
                 # Match the formatter's spacing: `{"name"` and `{ "name"` both occur.
@@ -293,6 +294,9 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         + ' "$@"\n',
         "bingux-capture-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
         + shlex.quote(str(shell / "CaptureShell.qml"))
+        + ' "$@"\n',
+        "bingux-popouts": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
+        + shlex.quote(str(shell / "PopoutsShell.qml"))
         + ' "$@"\n',
         "bingux-wallpaper": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
         + shlex.quote(str(shell / "WallpaperShell.qml"))
@@ -391,6 +395,7 @@ def integration_paths(prefix, managed=False):
         "bingux-switcher-ui",
         "bingux-emoji-ui",
         "bingux-capture-ui",
+        "bingux-popouts",
         "bingux-wallpaper",
         "bingux-lock",
         "bingux-settings",
