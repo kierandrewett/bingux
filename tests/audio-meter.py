@@ -23,6 +23,19 @@ def pactl(*arguments):
     return subprocess.check_output(["pactl", *arguments], text=True).strip()
 
 
+def meter_outputs(pid):
+    outputs = json.loads(pactl("-f", "json", "list", "source-outputs"))
+    return [output for output in outputs if output.get("properties", {}).get("application.process.id") == str(pid)]
+
+
+def sink_input_object(app_id):
+    inputs = json.loads(pactl("-f", "json", "list", "sink-inputs"))
+    for stream in inputs:
+        if stream.get("properties", {}).get("application.id") == app_id:
+            return str(stream["index"])
+    return None
+
+
 name = "bingux_meter_test_" + uuid.uuid4().hex[:8]
 previous = pactl("get-default-sink")
 module = pactl("load-module", "module-null-sink", "sink_name=" + name)
@@ -55,6 +68,21 @@ try:
         started = time.monotonic()
         playback = subprocess.Popen(["paplay", "--device=" + name, "--property=application.id=" + name, str(sound)])
         processes.append(playback)
+        deadline = time.monotonic() + 5
+        properties = None
+        while time.monotonic() < deadline:
+            target = sink_input_object(name)
+            outputs = meter_outputs(meter.pid)
+            output = next((item for item in outputs if item.get("properties", {}).get("target.object") == target), None)
+            if output:
+                properties = output["properties"]
+                break
+            time.sleep(0.05)
+        assert properties, "meter did not create a fixture monitor"
+        maximum = int(properties.get("pulse.attr.maxlength", "0"))
+        assert 4 <= maximum <= 4096, properties
+        assert properties.get("application.id") == "bingux-audio-meter", properties
+        assert properties.get("media.role") is None, properties
         playback.wait(timeout=12)
         time.sleep(0.3)
         records = []

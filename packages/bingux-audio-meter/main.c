@@ -12,6 +12,7 @@
 #define RELEASE_MS 1200
 #define ENTER_LEVEL 0.0031623f // -50 dBFS
 #define HOLD_LEVEL 0.001f      // -60 dBFS
+#define PEAK_BUFFER_BYTES 4096
 
 typedef struct Meter {
     uint32_t id, sink;
@@ -93,8 +94,8 @@ static void sink_info(pa_context* ctx, const pa_sink_info* info, int eol, void* 
         return;
     pa_sample_spec spec = {PA_SAMPLE_FLOAT32NE, 20, 1};
     pa_proplist* properties = pa_proplist_new();
+    pa_proplist_sets(properties, PA_PROP_APPLICATION_ID, "bingux-audio-meter");
     pa_proplist_sets(properties, PA_PROP_APPLICATION_NAME, "Bingux audio activity");
-    pa_proplist_sets(properties, PA_PROP_MEDIA_ROLE, "event");
     pa_proplist_sets(properties, "stream.monitor", "true");
     meter->stream =
         pa_stream_new_with_proplist(ctx, "Application peak meter", &spec, NULL, properties);
@@ -103,7 +104,10 @@ static void sink_info(pa_context* ctx, const pa_sink_info* info, int eol, void* 
         return;
     meter->sampled = now_ms();
     pa_stream_set_read_callback(meter->stream, read_peak, meter);
-    pa_buffer_attr buffer = {(uint32_t)-1, (uint32_t)-1, (uint32_t)-1, (uint32_t)-1, sizeof(float)};
+    // Peak detection receives one float per sample. Keep each monitor well below
+    // PipeWire-Pulse's oversized default record queue.
+    pa_buffer_attr buffer = {PEAK_BUFFER_BYTES, (uint32_t)-1, (uint32_t)-1, (uint32_t)-1,
+                             sizeof(float)};
     if (pa_stream_set_monitor_stream(meter->stream, meter->id) < 0 ||
         pa_stream_connect_record(meter->stream, info->monitor_source_name, &buffer,
                                  PA_STREAM_PEAK_DETECT | PA_STREAM_ADJUST_LATENCY |
