@@ -2,7 +2,7 @@ Name:           bingux
 Version:        0.1.0
 Release:        1%{?dist}
 Summary:        Wayland desktop shell for Gnoblin and other layer-shell compositors
-License:        GPL-3.0-or-later
+License:        GPL-3.0-or-later AND LGPL-3.0-or-later AND CC-BY-SA-3.0
 URL:            https://github.com/kierandrewett/bingux
 Source0:        %{name}-%{version}.tar.xz
 
@@ -66,21 +66,24 @@ done
 install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bingux-lock
 
 %post
-%systemd_user_post bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service
-
+%systemd_user_post bingux.target
 %preun
-%systemd_user_preun bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service
+%systemd_user_preun bingux.target bingux-searchd.service bingux-statusd.service
 
 %postun
-%systemd_user_postun_with_restart bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service
+%systemd_user_postun_with_restart bingux.target bingux-searchd.service bingux-statusd.service
 
 %files
 %license COPYING
+%license %{_datadir}/licenses/adwaita-icon-theme/COPYING
+%license %{_datadir}/licenses/adwaita-icon-theme/COPYING_CCBYSA3
+%license %{_datadir}/licenses/adwaita-icon-theme/COPYING_LGPL
 %doc README.md docs/extensions.md docs/locking.md
 %{_bindir}/bingux
 %{_bindir}/bingux-capture-ui
 %{_bindir}/bingux-lock
 %{_bindir}/bingux-emoji-ui
+%{_bindir}/bingux-wallpaper
 %{_bindir}/bingux-search-ui
 %{_bindir}/bingux-settings
 %{_bindir}/bingux-switcher-ui
@@ -89,10 +92,12 @@ install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bin
 %{_bindir}/bingux-frame
 %{_bindir}/bingux-clipboard-paste
 %{_bindir}/bingux-searchd
+%{_bindir}/bingux-search-service
 %{_bindir}/bingux-statusd
 %{_libdir}/bingux/
 %{_libexecdir}/bingux/
 %{_datadir}/bingux/
+%{_datadir}/icons/Adwaita/
 %{_datadir}/gnoblin/conf.d/bingux.lua
 %{_datadir}/gnoblin/scripts/bingux-text-input.js
 %{_userunitdir}/bingux*.service

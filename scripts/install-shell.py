@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 
 def install(source, destination, executable=False):
@@ -37,6 +38,14 @@ def write_launcher(path, contents):
 
 
 def resolve_quickshell(no_systemd):
+    """Find a Quickshell binary compatible with the selected Gnoblin runtime.
+
+    A source-installed Gnoblin can ship a matching Quickshell under its XDG
+    data directory.  Prefer it to a distribution `qs`: it is built with the
+    same Qt stack that Gnoblin starts for the user.  An explicit environment
+    override always wins, so distributions and shell developers remain free to
+    provide their own runtime.
+    """
     configured = os.environ.get("BINGUX_QUICKSHELL")
     if configured:
         if shutil.which(configured):
@@ -44,7 +53,11 @@ def resolve_quickshell(no_systemd):
         if not no_systemd:
             raise ValueError(f"BINGUX_QUICKSHELL is not executable: {configured}")
         return configured
-    for candidate in ("qs", "quickshell"):
+    data_home = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
+    gnoblin_runtime = data_home / "gnoblin/quickshell-fedora/bin/quickshell"
+    if gnoblin_runtime.is_file() and os.access(gnoblin_runtime, os.X_OK):
+        return str(gnoblin_runtime)
+    for candidate in ("gnoblin-quickshell", "qs", "quickshell"):
         resolved = shutil.which(candidate)
         if resolved:
             return resolved
@@ -89,10 +102,26 @@ def release_gnome_input_source_bindings():
             pass
 
 
-def enable_bingux_target():
-    """Enable Bingux for Gnoblin without starting it in another desktop."""
+def configure_bingux_units():
+    """Keep helper daemons in systemd and surfaces in Gnoblin autostart."""
+    systemctl_user(
+        [
+            "disable",
+            # Older source installs used this generic unit for every Bingux
+            # surface. Keep it from starting a second shell after the Lua
+            # autostart migration; the caller keeps an already-running shell
+            # alive until its Gnoblin-owned replacement is ready.
+            "quickshell.service",
+            "bingux.service",
+            "bingux-search-ui.service",
+            "bingux-switcher-ui.service",
+            "bingux-capture-ui.service",
+            "bingux-emoji-ui.service",
+        ],
+        check=False,
+    )
     systemctl_user(["enable", "bingux.target"])
-    if systemctl_user(["is-active", "--quiet", "gnome-session@gnoblin.target"], check=False).returncode == 0:
+    if systemctl_user(["is-active", "--quiet", "gnoblin-session.target"], check=False).returncode == 0:
         systemctl_user(["start", "bingux.target"])
 
 
@@ -147,6 +176,30 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
             # QMLDIR is allowed to be outside PREFIX for package builders.
             installed.append(destination)
 
+    adwaita_source = source / "subprojects/adwaita-icon-theme"
+    adwaita_assets = adwaita_source / "Adwaita"
+    adwaita_index = adwaita_source / "index.theme"
+    if not adwaita_index.is_file() or not (adwaita_assets / "symbolic").is_dir():
+        raise ValueError(
+            "Adwaita icon theme submodule is missing; run git submodule update --init subprojects/adwaita-icon-theme"
+        )
+    adwaita_install = prefix / "share/icons/Adwaita"
+    copy(adwaita_index, adwaita_install / "index.theme")
+    for path in adwaita_assets.rglob("*"):
+        if path.is_file():
+            copy(path, adwaita_install / path.relative_to(adwaita_assets))
+    for license_name in ("COPYING", "COPYING_CCBYSA3", "COPYING_LGPL"):
+        copy(
+            adwaita_source / license_name,
+            prefix / "share/licenses/adwaita-icon-theme" / license_name,
+        )
+    folder_open = adwaita_install / "scalable/status/folder-open.svg"
+    if not folder_open.is_file():
+        copy(
+            adwaita_assets / "scalable/places/folder.svg",
+            folder_open,
+        )
+
     shell = prefix / "share/bingux/shell"
     for path in (source / "shell/bingux").rglob("*"):
         if not path.is_file() or "__pycache__" in path.parts or path.suffix == ".pyc":
@@ -165,11 +218,25 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
             prefix / "libexec/bingux/bingux-frame",
         )
         if path == source / "packaging/gnoblin/bingux.lua":
-            # The Gnoblin bridge spawns this command directly. A user install
-            # puts binguxctl in ~/.local/share/bingux/bin, which is not
-            # guaranteed to be present in the compositor's PATH.
+            # GDM does not necessarily include the user's command-link folder
+            # in PATH. Use this install's wrappers and frame command directly.
             generated = path.read_text()
-            generated = generated.replace('"binguxctl"', json.dumps(str(prefix / "bin/binguxctl")))
+            for command in (
+                "bingux",
+                "bingux-search-ui",
+                "bingux-switcher-ui",
+                "bingux-capture-ui",
+                "bingux-emoji-ui",
+                "bingux-wallpaper",
+            ):
+                generated = generated.replace(
+                    f"command = {{{json.dumps(command)}",
+                    f"command = {{{json.dumps(str(prefix / 'bin' / command))}",
+                )
+            generated = generated.replace(
+                '{ "bingux-frame",',
+                "{ " + json.dumps(str(prefix / "bin/bingux-frame")) + ",",
+            )
             destination_path = target(destination)
             destination_path.parent.mkdir(parents=True, exist_ok=True)
             destination_path.write_text(generated)
@@ -199,6 +266,12 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     common = "#!/bin/sh\nset -eu\nulimit -c 0\n"
     common += "export BINGUX_QUICKSHELL=${BINGUX_QUICKSHELL:-" + shlex.quote(quickshell) + "}\n"
     common += "export QML_IMPORT_PATH=" + shlex.quote(str(qml)) + "${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}\n"
+    common += (
+        "export XDG_DATA_DIRS="
+        + shlex.quote(str(prefix / "share"))
+        + ":${XDG_DATA_DIRS:-/usr/local/share:/usr/share}\n"
+    )
+    common += "export BINGUX_ADWAITA_ICON_DIR=" + shlex.quote(str(prefix / "share/icons/Adwaita")) + "\n"
     common += "export BINGUX_CONFIG_PATH=" + shlex.quote(str(shell)) + "\n"
     common += "export BINGUX_AUDIO_METER=" + shlex.quote(str(prefix / "bin/bingux-audio-meter")) + "\n"
     common += "export BINGUX_SETTINGS_QML=" + shlex.quote(str(shell / "settings.qml")) + "\n"
@@ -215,6 +288,9 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         + ' "$@"\n',
         "bingux-capture-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
         + shlex.quote(str(shell / "CaptureShell.qml"))
+        + ' "$@"\n',
+        "bingux-wallpaper": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
+        + shlex.quote(str(shell / "WallpaperShell.qml"))
         + ' "$@"\n',
         "bingux-lock": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "LockShell.qml")) + ' "$@"\n',
         "bingux-settings": "exec " + shlex.quote(str(prefix / "libexec/bingux/bingux-settings")) + ' "$@"\n',
@@ -281,7 +357,13 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         + shlex.quote(str(prefix / "bin/bingux-searchd"))
         + ' --config "$config"\n',
     )
+    search_command = target(prefix / "bin/bingux-search-service")
+    write_launcher(
+        search_command,
+        "#!/bin/sh\nset -eu\nexec " + shlex.quote(str(search_service)) + ' "$@"\n',
+    )
     installed.append(Path("libexec/bingux/search-service"))
+    installed.append(Path("bin/bingux-search-service"))
     unit_sources = sorted((source / "packaging/systemd").glob("bingux*.service"))
     unit_sources.append(source / "packaging/systemd/bingux.target")
     for unit_source in unit_sources:
@@ -299,10 +381,12 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
 def integration_paths(prefix, managed=False):
     names = (
         "bingux",
+        "bingux-search-service",
         "bingux-search-ui",
         "bingux-switcher-ui",
         "bingux-emoji-ui",
         "bingux-capture-ui",
+        "bingux-wallpaper",
         "bingux-lock",
         "bingux-settings",
         "binguxctl",
@@ -341,18 +425,88 @@ def ensure_integration_is_safe(paths):
             raise ValueError(f"refusing to replace existing file: {link}")
 
 
+def migrate_legacy_bingux_paths(paths):
+    """Back up only the obsolete pre-managed-install Bingux files.
+
+    Earlier source installs wrote regular unit files which were tied to the
+    removed org.gnoblin.Shell.target. The managed installer now owns symlinks
+    for these same names. Preserve those exact legacy files beside the unit
+    before checking whether the managed links are safe to create.
+    """
+    marker = "org.gnoblin.Shell.target"
+    timestamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
+    for link, target_path in paths:
+        if not link.name.startswith("bingux") or link.is_symlink() or not link.exists():
+            continue
+        if not link.is_file():
+            continue
+        if link.parent.name == "user":
+            try:
+                contents = link.read_text()
+            except UnicodeDecodeError:
+                continue
+            if marker not in contents:
+                continue
+        elif link.parent.name != "bin":
+            continue
+        backup = link.with_name(link.name + f".legacy-{timestamp}.bak")
+        if backup.exists():
+            raise ValueError(f"legacy Bingux unit backup already exists: {backup}")
+        link.rename(backup)
+        print(f"Backed up legacy Bingux path: {backup}")
+
+
+def migrate_legacy_quickshell_unit():
+    """Retire the old all-in-one Bingux shell service without losing it.
+
+    A disabled unit can still be pulled in by an old session target, which
+    leaves two complete Bingux shells mapped at once. Only migrate the exact
+    historical Bingux unit shape; an unrelated user Quickshell service stays
+    untouched.
+    """
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    unit = config_home / "systemd/user/quickshell.service"
+    if unit.is_symlink() or not unit.is_file():
+        return
+    try:
+        contents = unit.read_text()
+    except UnicodeDecodeError:
+        return
+    markers = (
+        "Description=Bingux Quickshell desktop",
+        "PartOf=org.gnoblin.Shell.target",
+        "--path ",
+        "/bingux",
+    )
+    if not all(marker in contents for marker in markers):
+        return
+    timestamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
+    backup = unit.with_name(unit.name + f".legacy-{timestamp}.bak")
+    if backup.exists():
+        raise ValueError(f"legacy Quickshell unit backup already exists: {backup}")
+    unit.rename(backup)
+    print(f"Backed up legacy Quickshell unit: {backup}")
+
+
 def ensure_gnoblin_dropin_loader():
-    """Create or extend init.lua so the managed conf.d drop-in is loaded."""
+    """Create or extend init.lua so the managed drop-in is loaded last."""
     config_dir = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
     init = config_dir / "gnoblin/init.lua"
-    include = 'g.load("conf.d/**/*.lua")'
-    user_include = f'g.load("{config_dir / "gnoblin/conf.d"}'
+    include = 'gnoblin.load("conf.d/**/*.lua")'
     if init.exists():
         if not init.is_file():
             raise ValueError(f"refusing to replace existing Gnoblin config: {init}")
         contents = init.read_text()
-        if include in contents or user_include in contents:
-            return
+        # Repair the exact loader fragment appended by older installers. It
+        # assumed a local `g` variable that many valid configs did not define.
+        legacy = '\n-- Load installed and personal Gnoblin drop-ins.\ng.load("conf.d/**/*.lua")\n'
+        if legacy in contents:
+            contents = contents.replace(legacy, "\n")
+        # This loader is installer-owned. Always place it after the user's
+        # base rules: Bingux supplies the final frame and layer-shell rules.
+        # Removing only this exact call leaves other explicit module ordering
+        # untouched.
+        contents = "\n".join(line for line in contents.split("\n") if line.strip() != include).rstrip()
         suffix = "" if contents.endswith("\n") else "\n"
         init.write_text(contents + suffix + "\n-- Load installed and personal Gnoblin drop-ins.\n" + include + "\n")
         return
@@ -367,16 +521,20 @@ def install_user(source, build, prefix, qml, no_systemd):
     manifest_path = prefix / ".bingux-install.json"
     if prefix.is_symlink():
         raise ValueError(f"refusing to install through symlink: {prefix}")
-    if prefix.exists() and any(prefix.iterdir()) and not manifest_path.is_file():
-        raise ValueError(f"refusing to use existing unmanaged directory: {prefix}")
+    preserved_entries = {"extensions"}
+    if prefix.exists() and not manifest_path.is_file():
+        unmanaged_entries = [entry.name for entry in prefix.iterdir() if entry.name not in preserved_entries]
+        if unmanaged_entries:
+            raise ValueError(f"refusing to use existing unmanaged directory: {prefix}")
     prefix.parent.mkdir(parents=True, exist_ok=True)
     links = integration_paths(prefix, managed=True)
+    migrate_legacy_bingux_paths(links)
+    migrate_legacy_quickshell_unit()
     ensure_integration_is_safe(links)
     quickshell = resolve_quickshell(no_systemd)
     staging = Path(tempfile.mkdtemp(prefix=f".{prefix.name}.install-", dir=prefix.parent))
     backup = None
     committed = False
-    was_active = False
     try:
         installed = build_payload(
             source,
@@ -394,12 +552,6 @@ def install_user(source, build, prefix, qml, no_systemd):
             "links": [{"path": str(link), "target": str(target_path)} for link, target_path in links],
         }
         (staging / ".bingux-install.json").write_text(json.dumps(manifest, indent=2) + "\n")
-        if not no_systemd:
-            was_active = systemctl_user(["is-active", "--quiet", "bingux.target"], check=False).returncode == 0
-            systemctl_user(["stop", "bingux.target"], check=False)
-            # disable removes the old unit symlink as well as its wants
-            # links, so do it before recreating the integration links.
-            systemctl_user(["disable", "bingux.target"], check=False)
         if prefix.exists():
             backup = Path(tempfile.mkdtemp(prefix=f".{prefix.name}.old-", dir=prefix.parent))
             backup.rmdir()
@@ -413,11 +565,13 @@ def install_user(source, build, prefix, qml, no_systemd):
             link.symlink_to(target_path)
         ensure_gnoblin_dropin_loader()
         release_gnome_input_source_bindings()
-        committed = True
         migrate_legacy_search_launcher(prefix)
         if not no_systemd:
             systemctl_user(["daemon-reload"])
-            enable_bingux_target()
+            # The target must be visible through its freshly-created unit link
+            # before systemd can enable it.
+            configure_bingux_units()
+        committed = True
     except Exception:
         if staging is not None and staging.exists():
             shutil.rmtree(staging)
@@ -426,21 +580,19 @@ def install_user(source, build, prefix, qml, no_systemd):
                 shutil.rmtree(prefix)
             if backup is not None and backup.exists():
                 backup.rename(prefix)
-            if was_active and not no_systemd:
-                enable_bingux_target()
         elif not no_systemd:
-            # The payload is complete, but recover the desktop if systemd
-            # rejected the reload/start operation after the swap.
-            enable_bingux_target()
+            configure_bingux_units()
         raise
     finally:
         if backup is not None and backup.exists():
             shutil.rmtree(backup)
     print(f"Installed Bingux under {prefix}")
     print("  command links: " + str(Path(os.environ.get("XDG_BIN_HOME") or Path.home() / ".local/bin")))
-    print(
-        "  service links: " + str(Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd/user")
-    )
+    if no_systemd:
+        print("  helper services: systemd setup skipped (--no-systemd)")
+    else:
+        print("  helper services: enabled through the systemd user target")
+    print("  shell surfaces: launched by Gnoblin Lua autostart")
     print("  Gnoblin integration: config drop-in and compositor script installed under XDG data/config directories")
     print("  remove with: make uninstall-user USER_PREFIX=" + str(prefix))
 
