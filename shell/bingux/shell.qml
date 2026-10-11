@@ -141,20 +141,20 @@ ShellRoot {
                 text: "Customise…",
                 enabled: true,
                 icon: "preferences-system-symbolic",
-                triggered: () => binguxSettings.openCustomise(widgetId, "Widget")
+                triggered: () => root.settingsItem().openCustomise(widgetId, "Widget")
             },
             {
                 text: "Move…",
                 enabled: true,
                 icon: "transform-move-symbolic",
-                triggered: () => binguxSettings.openCustomise(widgetId, "Move")
+                triggered: () => root.settingsItem().openCustomise(widgetId, "Move")
             }
         ], application ? [] : [
             {
                 text: "Remove",
                 enabled: true,
                 icon: "list-remove-symbolic",
-                triggered: () => binguxSettings.openCustomise(widgetId, "Remove")
+                triggered: () => root.settingsItem().openCustomise(widgetId, "Remove")
             }
         ]).map(action => Object.assign({
                 isSeparator: false,
@@ -187,9 +187,9 @@ ShellRoot {
         onWidgetEditRequested: (id, item, window) => root.openWidgetMenu(id, item, window)
         onCustomiseRequested: {
             if (DesktopEditing.active)
-                desktopCustomiser.selectContainer("sidebar");
+                root.customiserItem().selectContainer("sidebar");
             else
-                binguxSettings.openCustomise("", "Sidebar");
+                root.settingsItem().openCustomise("", "Sidebar");
         }
         systemMetrics: metrics
         widgetLayout: topBar
@@ -240,13 +240,14 @@ ShellRoot {
             }
             return {
                 pinnedApps: dock.pinnedApps,
+                dockSafeInset: dock.visible ? Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom) : 0,
                 activeStreams: dock.activity.activeStreams,
                 notificationGroups: Object.values(groups)
             };
         }
         onCommandReceived: command => {
             if (command.action === "settings")
-                binguxSettings.visible = true;
+                root.settingsItem().visible = true;
             else if (command.action === "pin" && typeof command.id === "string") {
                 const entry = dock.desktopEntryFor(dock.normaliseAppId(command.id));
                 if (entry)
@@ -400,22 +401,45 @@ ShellRoot {
         dockView: dock
     }
 
-    DesktopCustomise {
-        id: desktopCustomiser
-        settings: binguxSettings
-        screen: topBar.screen
-        onSidebarPanelRequested: id => terminalSidebar.selectContent(id)
+    // Settings and the desktop editor are large and rarely open. Their sources compile the
+    // first time something asks for them; declaring them inline compiled both on every start
+    // and cost about 0.6 seconds of shell startup.
+    property var settingsObject: null
+    property var customiserObject: null
+    function customiserItem() {
+        if (!customiserObject)
+            settingsItem();
+        return customiserObject;
     }
-    BinguxSettings {
-        id: binguxSettings
-        customiser: desktopCustomiser
-        shellHosted: true
-        systemMetrics: metrics
-        dockView: dock
-        currentLayout: topBar.snapshotLayout()
-        currentSidebarEdge: terminalSidebar.edge
-        onVisibleChanged: if (visible)
-            root.closePanelsExcept(null)
+    function settingsItem() {
+        if (settingsObject)
+            return settingsObject;
+        const settingsComponent = Qt.createComponent("BinguxSettings.qml");
+        const customiserComponent = Qt.createComponent("DesktopCustomise.qml");
+        if (settingsComponent.status !== Component.Ready || customiserComponent.status !== Component.Ready) {
+            console.warn("Settings failed to load:", settingsComponent.errorString(), customiserComponent.errorString());
+            return null;
+        }
+        const settings = settingsComponent.createObject(root, {
+            shellHosted: true,
+            systemMetrics: metrics,
+            dockView: dock
+        });
+        settings.currentLayout = Qt.binding(() => topBar.snapshotLayout());
+        settings.currentSidebarEdge = Qt.binding(() => terminalSidebar.edge);
+        settings.visibleChanged.connect(() => {
+            if (settings.visible)
+                root.closePanelsExcept(null);
+        });
+        settingsObject = settings;
+        const customiser = customiserComponent.createObject(root, {
+            settings: settings,
+            screen: topBar.screen
+        });
+        customiser.sidebarPanelRequested.connect(id => terminalSidebar.selectContent(id));
+        customiserObject = customiser;
+        settings.customiser = customiser;
+        return settings;
     }
 
     IpcHandler {
@@ -425,10 +449,10 @@ ShellRoot {
             windowMenuPopup.showRequest(payload);
         }
         function customise(): void {
-            binguxSettings.openCustomise("", "");
+            root.settingsItem().openCustomise("", "");
         }
         function customiseContainer(container: string): void {
-            binguxSettings.openContainerCustomise(container);
+            root.settingsItem().openContainerCustomise(container);
         }
         function status(): string {
             return JSON.stringify({
@@ -453,7 +477,7 @@ ShellRoot {
         }
         function panel(name: string, action: string): string {
             const panels = {
-                settings: binguxSettings,
+                settings: root.settingsObject,
                 calendar: calendarPopup,
                 controls: controlCentre,
                 notifications: notificationCentre,
@@ -470,7 +494,7 @@ ShellRoot {
                     ok: false,
                     error: "Unknown panel action: " + action
                 });
-            const current = name === "keyboard" ? inputSourceSelector.menuOpen : panels[name].visible;
+            const current = name === "keyboard" ? inputSourceSelector.menuOpen : name === "settings" ? !!root.settingsObject?.visible : panels[name].visible;
             if (action === "status")
                 return JSON.stringify({
                     open: current
@@ -486,6 +510,9 @@ ShellRoot {
                     inputSourceSelector.openMenu();
                 else
                     inputSourceSelector.menuOpen = false;
+            } else if (name === "settings") {
+                if (show || root.settingsObject)
+                    root.settingsItem().visible = show;
             } else
                 panels[name].visible = show;
             return JSON.stringify({
@@ -566,7 +593,7 @@ ShellRoot {
         id: controlCentre
         widgetLayout: topBar
         onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, item.editWindow || item.barWindow || controlCentre)
-        onCustomiseRequested: binguxSettings.openCustomise("", "")
+        onCustomiseRequested: root.settingsItem().openCustomise("", "")
         anchorWindow: DesktopEditing.active ? topBar : controlCentre.movedAnchor?.barWindow || (topBar.zoneFor(systemPill) === "control-centre" ? topBar : topBar.windowFor(controlCentre.movedAnchor || systemPill))
         anchorItem: DesktopEditing.active ? null : controlCentre.movedAnchor || (topBar.zoneFor(systemPill) === "control-centre" ? null : systemPill)
         dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom)
@@ -1039,8 +1066,15 @@ ShellRoot {
         }
 
         Rectangle {
+            id: barSurface
             anchors.fill: parent
             color: Theme.barBackground
+            // The layer rule supplies the blur policy. Request the matching
+            // material region so the compositor limits blur to this bar.
+            BackgroundEffect {
+                target: barSurface
+                requested: topBar.visible
+            }
             Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
