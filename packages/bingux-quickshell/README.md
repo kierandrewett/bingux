@@ -34,3 +34,9 @@ files, so the whole shell recompiled on each start. Bingux ships a qmldir, so th
 shell loads from the cache after its first start. Set `QS_NO_LOCAL_FILES=1` to
 use the old behaviour. In the test VM the main shell loaded about 0.3 to 0.5 s
 faster; VM noise is about 1 s, so treat that as an estimate.
+
+`child-pdeathsig.patch` starts every Process child with PR_SET_PDEATHSIG, so helpers die
+with the shell. Without it, a killed or restarted shell left its audio meter,
+idle tracker, camera and microphone watchers and the appearance monitor
+running, and each restart added another set. Execute-and-detach commands are
+not affected.
