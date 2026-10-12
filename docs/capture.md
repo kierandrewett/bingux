@@ -153,6 +153,7 @@ python3 tests/capture-backend.test.py
 python3 tests/capture-notify.test.py
 python3 tests/capture-launch.test.py
 python3 tests/capture-reload.py
+PYTHONDONTWRITEBYTECODE=1 python3 tests/capture-pipeline-lifecycle.test.py
 # Isolated notification server; only its generated test image is trashed:
 dbus-run-session -- python3 tests/capture-notify-live.py
 # Opt-in real keyboard/pointer checks on an idle desktop:
@@ -183,6 +184,11 @@ speech quality.
 
 Portal window selection, mixed-DPI, and other compositors need interactive platform
 coverage. Pure tests cover HiDPI crop arithmetic and unavailable-hardware fallback.
+
+The pipeline lifecycle check checks capture bus-watch cleanup with a bounded
+CPU pipeline. It can test either the checkout or an installed backend without
+recording the desktop. See `tests/capture-pipeline-lifecycle.md` in the checkout
+for the installed-backend command and coverage limits.
 
 ## Compositor support
 
