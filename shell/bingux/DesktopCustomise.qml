@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
@@ -116,12 +117,12 @@ Scope {
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "gnoblin-shell-popup"
-        WlrLayershell.keyboardFocus: root.visible && root.optionsPage !== "" ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: root.inspectorReady ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         mask: Region {
             x: optionsPopover.x
             y: optionsPopover.y
-            width: root.visible && root.optionsPage ? optionsPopover.width : 0
-            height: root.visible && root.optionsPage ? optionsPopover.height : 0
+            width: root.inspectorReady ? optionsPopover.width : 0
+            height: root.inspectorReady ? optionsPopover.height : 0
         }
         contentItem.Keys.onEscapePressed: root.optionsPage = ""
     }
@@ -212,7 +213,25 @@ Scope {
         }
         return paletteSelection.width ? paletteSelection : Qt.rect(palette.x, palette.y + 100, 160, 100);
     }
+    // A lazy container must submit its first frame before the inspector rises
+    // above it. Keep a missing panel pending instead of using a timing delay.
+    property bool inspectorReady: false
+    readonly property var inspectionRenderWindow: inspectionSurface?.window.contentItem.Window.window ?? (["control-centre", "sidebar"].includes(inspectedZone) ? null : editWindow.contentItem.Window.window)
+    function prepareInspector() {
+        inspectorReady = false;
+        if (visible && optionsPage && inspectionRenderWindow)
+            inspectionRenderWindow.update();
+    }
+    onInspectionRenderWindowChanged: prepareInspector()
+    Connections {
+        target: root.inspectionRenderWindow
+        enabled: root.visible && root.optionsPage !== "" && !root.inspectorReady
+        function onFrameSwapped() {
+            root.inspectorReady = true;
+        }
+    }
     onOptionsPageChanged: {
+        prepareInspector();
         iconsExpanded = false;
         behaviourExpanded = false;
     }
@@ -289,9 +308,12 @@ Scope {
     property point pointer: Qt.point(0, 0)
     property string wallpaper: ""
     property bool restoreSettings: false
-    onVisibleChanged: if (!visible && restoreSettings) {
-        restoreSettings = false;
-        settings.visible = true;
+    onVisibleChanged: {
+        prepareInspector();
+        if (!visible && restoreSettings) {
+            restoreSettings = false;
+            settings.visible = true;
+        }
     }
     property bool applying: false
     property var originalDesktop: ({})
@@ -926,7 +948,7 @@ Scope {
             id: optionsPopover
             objectName: "customiseInspector"
             parent: inspectorWindow.contentItem
-            visible: root.visible && root.optionsPage !== ""
+            visible: root.inspectorReady
             readonly property rect target: root.inspectionAnchor
             readonly property bool beside: ["sidebar", "control-centre"].includes(root.inspectedZone)
             readonly property real desiredX: beside ? (target.x > canvas.width / 2 ? target.x - width - 12 : target.x + target.width + 12) : target.x + target.width / 2 - width / 2

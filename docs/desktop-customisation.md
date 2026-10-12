@@ -20,6 +20,12 @@ On Gnoblin, the editor stays above fullscreen apps and below its real containers
 Closing it restores their previous stacking order without changing the app's
 fullscreen state.
 
+On Gnoblin, the editor stays above fullscreen apps and below its containers.
+Closing it releases companion ordering without changing the app's fullscreen
+state. Options for a newly loaded container appear after its first frame is ready.
+Closing options returns keyboard input to the editor and keeps its containers
+visible, including after a background click.
+
 Click a container to open its settings beside it. Right-click a placed widget, double-click its palette preview, or focus the preview and press Enter to open widget options. Move and Remove are in those options. The icon grid and dock pointer settings expand on request. Undo and Redo reverse complete drops and individual settings changes.
 
 Changes stay in the preview until **Done**. Cancel discards the preview. Escape closes the current options panel first, then the editor. Restore defaults resets the top-bar and sidebar widget arrangement in the preview. Existing settings changes are also saved when applying the desktop.
