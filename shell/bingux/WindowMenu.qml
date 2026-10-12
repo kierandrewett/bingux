@@ -9,9 +9,8 @@ TrayMenu {
     property int requestGeneration: 0
     signal requestFailed(string message)
 
-    // Keep the popup surface and its delegates warm between openings.
-    keepWindowAlive: true
-    keepContentAlive: true
+    // ShellPopup keeps quick reopenings warm and expires idle native windows.
+    // The action model remains available without permanently mapped surfaces.
     revealOriginX: 0
     revealOriginY: 0
     openMotion: 80

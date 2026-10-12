@@ -21,6 +21,9 @@ parser.add_argument("--import-path", required=True, help="Installed Bingux QML p
 parser.add_argument("--runtime", default="/run/user/1000")
 parser.add_argument("--display", default="wayland-0")
 parser.add_argument("--cycles", type=int, default=12)
+parser.add_argument("--expiry", action="store_true", help="check idle native-window release and cold reopen")
+parser.add_argument("--allow-separate-dismiss-window", action="store_true", help="compare input against the old popup")
+parser.add_argument("--input-modes", action="store_true", help="probe menu-to-editing and passive input transitions")
 args = parser.parse_args()
 assert 1 <= args.cycles <= 100
 repo = Path(__file__).resolve().parents[1]
@@ -48,12 +51,21 @@ with tarfile.open(fileobj=payload, mode="w") as archive:
         if source.name == "shell.qml":
             data = (repo / "tests/popup-cache.qml").read_bytes()
         elif source.name == "ShellPopup.qml":
-            data = source.read_bytes().replace(
-                b"    id: root\n",
-                b"    id: root\n"
-                b"    property alias testDismissContentItem: dismissWindow.contentItem\n"
-                b"    property alias testDismissWindow: dismissWindow\n",
-                1,
+            dismiss_window = b"dismissWindow" if b"id: dismissWindow" in source.read_bytes() else b"window"
+            data = (
+                source.read_bytes()
+                .replace(
+                    b"    id: root\n",
+                    b"    id: root\n"
+                    b"    property alias testDismissContentItem: " + dismiss_window + b".contentItem\n"
+                    b"    property alias testDismissWindow: " + dismiss_window + b"\n"
+                    b"    property point testDismissPosition: Qt.point(-1, -1)\n",
+                    1,
+                )
+                .replace(
+                    b"onPressed: root.visible = false",
+                    b"onPressed: mouse => { root.testDismissPosition = Qt.point(mouse.x, mouse.y); root.visible = false; }",
+                )
             )
         elif source.name in ("DesktopEditing.qml", "PopupTransitions.qml"):
             data = (repo / "tests/fixtures" / source.name).read_bytes()
@@ -68,6 +80,16 @@ guest("tar", "-C", fixture, "-xf", "-", payload=payload.getvalue())
 def ctl(*command):
     result = guest(args.quickshell, "-p", fixture, "ipc", "call", "fixture", *command).decode().strip()
     return json.loads(result) if result else None
+
+
+def wait_status(predicate, message, timeout=3):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        state = ctl("status")
+        if predicate(state):
+            return state
+        time.sleep(0.05)
+    raise AssertionError(f"{message}: {state}")
 
 
 sock = socket.socket(socket.AF_UNIX)
@@ -94,7 +116,14 @@ width = max(m["x"] + m["width"] for m in monitors)
 height = max(m["y"] + m["height"] for m in monitors)
 
 
-def click(x, y):
+def move(x, y):
+    # A new compositor starts with its own pointer position. The virtual mouse
+    # may still hold the target from the previous session and suppress an
+    # unchanged absolute event, so move one pixel away before placing it.
+    qmp(
+        "input-send-event",
+        events=[{"type": "abs", "data": {"axis": "x", "value": int((x + 1) / width * 32767)}}],
+    )
     qmp(
         "input-send-event",
         events=[
@@ -103,6 +132,10 @@ def click(x, y):
         ],
     )
     time.sleep(0.15)
+
+
+def click(x, y):
+    move(x, y)
     for down in (True, False):
         qmp("input-send-event", events=[{"type": "btn", "data": {"down": down, "button": "left"}}])
         time.sleep(0.05)
@@ -137,6 +170,7 @@ def pattern_gain(frame, background, region):
 try:
     guest(args.quickshell, "-d", "-p", fixture, "--no-color")
     time.sleep(0.5)
+    assert not ctl("status")["windowMenuNativeVisible"], "Unused window menu maps native graphics windows"
     baseline = capture()
     artifact = args.run / "popup-cache-proof"
     artifact.mkdir(exist_ok=True)
@@ -147,9 +181,16 @@ try:
             ctl("remember")
         state = ctl("status")
         assert state["open"] and state["opacity"] == 1 and state["sameCard"] and state["sameDismiss"], state
+        if not args.allow_separate_dismiss_window:
+            assert state["singleNativeWindow"], "Popup creates a second graphics window just for outside clicks"
         count = state["cardPresses"]
+        if cycle == 0:
+            capture().save(artifact / "first-open.png")
         click(250, 220)
-        assert ctl("status")["cardPresses"] == count + 1, "Cached card missed a real click"
+        state = ctl("status")
+        if state["cardPresses"] != count + 1:
+            capture().save(artifact / "missed-click.png")
+        assert state["cardPresses"] == count + 1, f"Cached card missed a real click: {state}"
         escape()
         state = ctl("status")
         assert not any(
@@ -160,8 +201,33 @@ try:
         assert ctl("status")["backgroundPresses"] == count + 1, "Closed popup blocked click-through"
         ctl("open", "other")
         time.sleep(0.3)
+        move(1100, 500)
+        qmp("input-send-event", events=[{"type": "btn", "data": {"down": True, "button": "left"}}])
+        try:
+            wait_status(lambda state: not state["other"], "Outside press did not dismiss the other popup")
+        finally:
+            qmp("input-send-event", events=[{"type": "btn", "data": {"down": False, "button": "left"}}])
+    if args.input_modes:
+        ctl("inputMode", "editor")
+        ctl("open", "main")
+        time.sleep(0.4)
+        state = ctl("status")
+        count = state["backgroundPresses"]
         click(1100, 500)
-        assert not ctl("status")["other"], "Outside press did not dismiss the other popup"
+        state = ctl("status")
+        assert state["open"] and state["backgroundPresses"] == count + 1, "Editing popup blocked outside input"
+        count = state["cardPresses"]
+        click(250, 220)
+        state = ctl("status")
+        if state["cardPresses"] != count + 1:
+            capture().save(artifact / "editing-missed-click.png")
+        assert state["cardPresses"] == count + 1, f"Editing popup lost card input: {state}"
+        ctl("inputMode", "passive")
+        count = ctl("status")["backgroundPresses"]
+        click(250, 220)
+        assert ctl("status")["backgroundPresses"] == count + 1, "Passive popup blocked underlying input"
+        ctl("close")
+        ctl("inputMode", "menu")
     ctl("open", "main")
     ctl("open", "child")
     time.sleep(0.4)
@@ -243,8 +309,7 @@ try:
     ctl("open", "history")
     time.sleep(0.6)
     ctl("clear")
-    time.sleep(0.6)
-    state = ctl("status")
+    state = wait_status(lambda state: not state["historyRetained"], "Empty history did not finish closing")
     assert not any(
         state[key]
         for key in (
@@ -262,6 +327,50 @@ try:
     ctl("clear")
     time.sleep(0.6)
     print("PASS: first empty history, Escape, toast, clear and new toast", flush=True)
+    if args.expiry:
+        ctl("open", "window")
+        state = wait_status(lambda state: state["windowMenuOpen"], "Cold window menu did not open")
+        time.sleep(0.4)
+        state = ctl("status")
+        click(state["windowMenuX"] + state["windowMenuWidth"] / 2, state["windowMenuY"] + 20)
+        assert ctl("status")["windowMenuPresses"] == 1, "Cold window menu missed its action click"
+        ctl("open", "window")
+        time.sleep(0.3)
+        escape()
+        assert not ctl("status")["windowMenuOpen"], "Warm window menu missed Escape"
+        ctl("close")
+        time.sleep(32)
+        state = ctl("status")
+        assert not state["nativeVisible"] and not state["dismissVisible"], f"Idle windows stayed mapped: {state}"
+        assert not state["notificationNativeVisible"], "Empty notification window stayed mapped"
+        assert not state["windowMenuNativeVisible"] and not state["windowMenuRetained"], (
+            "Window menu never released its graphics cache"
+        )
+        ctl("open", "window")
+        time.sleep(0.4)
+        state = ctl("status")
+        click(state["windowMenuX"] + state["windowMenuWidth"] / 2, state["windowMenuY"] + 20)
+        assert ctl("status")["windowMenuPresses"] == 2, "Expired window menu missed its action click"
+        ctl("notify")
+        time.sleep(0.6)
+        assert ctl("status")["renderedNotifications"] == 1, "Expired notification window missed a new toast"
+        ctl("clear")
+        time.sleep(0.6)
+        ctl("open", "main")
+        time.sleep(1.4)
+        state = ctl("status")
+        assert state["open"] and state["drawn"] and state["opacity"] == 1, state
+        count = state["cardPresses"]
+        click(250, 220)
+        assert ctl("status")["cardPresses"] == count + 1, "Cold reopened card missed a click"
+        ctl("keep", "1")
+        ctl("remember")
+        escape()
+        time.sleep(32)
+        state = ctl("status")
+        assert state["nativeVisible"] and state["sameCard"], "Pinned native window expired"
+        ctl("keep", "0")
+        print("PASS: idle release, cold reopen input, and pinned-window retention", flush=True)
     baseline.save(artifact / "before.png")
     closed.save(artifact / "closed.png")
     print(

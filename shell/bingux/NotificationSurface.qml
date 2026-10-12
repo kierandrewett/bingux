@@ -20,6 +20,11 @@ PanelWindow {
     property bool nativeWindowRequested: false
     onPresentedChanged: if (presented)
         nativeWindowRequested = true
+    Timer {
+        interval: 30000
+        running: root.nativeWindowRequested && !root.presented && !root.preparingHistory
+        onTriggered: root.nativeWindowRequested = false
+    }
     readonly property alias viewport: stack
     property bool preparingHistory: false
     function prepareForHistory() {
@@ -44,8 +49,8 @@ PanelWindow {
     color: "transparent"
     // The explicit layershell keyboard mode below owns focus. PanelWindow's
     // focusable setter would replace Exclusive with OnDemand on every opening.
-    // Reuse the first native window; empty history draws nothing, has no input
-    // region or focus, and clears its fallback blur region.
+    // Reuse the native window while warm. Empty history drops drawing, input,
+    // focus and blur immediately; the window unmaps after its idle timeout.
     visible: !inputSuspended && (presented || nativeWindowRequested)
     contentItem.enabled: !inputSuspended && presented
     exclusionMode: ExclusionMode.Ignore

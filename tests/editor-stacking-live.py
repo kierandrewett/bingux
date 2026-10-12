@@ -23,6 +23,7 @@ parser.add_argument("--report", type=Path, required=True)
 parser.add_argument("--cycles", type=int, default=3)
 parser.add_argument("--fullscreen", action="store_true")
 parser.add_argument("--keyboard-first", action="store_true", help="Close cold options with Escape before clicking")
+parser.add_argument("--expiry", action="store_true", help="Check closed container surfaces expire after editing")
 args = parser.parse_args()
 assert 1 <= args.cycles <= 20
 args.report.mkdir(parents=True, exist_ok=False)
@@ -37,6 +38,7 @@ rows = []
 unit = "editor-stack-" + str(time.time_ns())
 unit_started = False
 backup = "/tmp/" + unit + ".qml"
+tray_backup = "/tmp/" + unit + "-tray.qml"
 sock = None
 stream = None
 
@@ -76,19 +78,50 @@ assert not initial_shell["loadedPanels"]["controls"], "Control Centre must be co
 # Restore its source on exit; no diagnostic IPC is shipped to users.
 probe = r"""
     IpcHandler {
+        id: editorExpiryProbe
         target: "editor-stack-test"
+        property int overflowPresses: 0
+        function find(item, match) {
+            if (!item) return null;
+            if (match(item)) return item;
+            for (const child of item.children || []) { const found = find(child, match); if (found) return found; }
+            return null;
+        }
+        function primeOverflow(): void {
+            tray.serviceEnabled = false;
+            tray.trayItems = Array.from({length: 18}, (_, index) => ({
+                id: "expiry-" + index, title: "Application " + index,
+                tooltipTitle: "Application " + index, icon: Quickshell.iconPath("applications-other"),
+                menu: null, hasMenu: true, onlyMenu: true}));
+        }
+        function configureOverflowAction(): void {
+            const button = find(tray, item => item.objectName === "trayItem-expiry-0");
+            const menu = button.testMenu;
+            menu.actions = [{text: "Test action", enabled: true, isSeparator: false,
+                hasChildren: false, checkState: Qt.Unchecked, icon: "",
+                triggered: () => editorExpiryProbe.overflowPresses++}];
+        }
         function status(): string {
             const editor = root.customiserObject;
-            function find(item, match) {
-                if (match(item)) return item;
-                for (const child of item.children || []) { const found = find(child, match); if (found) return found; }
-                return null;
-            }
             const inspector = editor ? find(editor.optionsContentItem, item => item.objectName === "customiseInspector") : null;
             const button = inspector ? find(inspector, item => item.label === "Close options") : null;
+            const trayButton = find(tray, item => item.objectName === "trayItem-expiry-0");
+            const trayMenu = trayButton?.testMenu ?? null;
+            const action = trayMenu ? find(trayMenu.body, item => item.objectName === "trayMenuEntry0") : null;
             return JSON.stringify({visible: editor?.visible ?? false, options: editor?.optionsPage ?? "",
                 inspectorReady: editor?.inspectorReady ?? false,
                 mainMapped: editor?.nativeWindow.visible ?? false, inspectorMapped: editor?.optionsWindow.visible ?? false,
+                containers: [root.controlCentre, barOverflow].filter(panel => panel !== null).map(panel => ({
+                    mapped: panel.nativeWindow.visible, requested: panel.nativeWindowsRequested,
+                    visible: panel.visible, retained: panel.retained, keepAlive: panel.keepWindowAlive})),
+                overflow: {visible: barOverflow.visible, mapped: barOverflow.nativeWindow.visible,
+                    trigger: DesktopEditing.point(overflowButton, topBar.windowFor(overflowButton), overflowButton.width / 2, overflowButton.height / 2),
+                    trayPlaced: topBar.overflows(trayContainer), presses: overflowPresses,
+                    button: trayButton ? DesktopEditing.point(trayButton, barOverflow.nativeWindow, trayButton.width / 2, trayButton.height / 2) : null,
+                    menu: trayMenu?.visible ?? false,
+                    hasMenu: trayMenu?.hasMenuItems ?? false,
+                    host: trayMenu?.anchorWindow === barOverflow.nativeWindow,
+                    action: action ? DesktopEditing.point(action, trayMenu.hostItem ? trayMenu.anchorWindow : trayMenu.nativeWindow, action.width / 2, action.height / 2) : null},
                 inspector: inspector ? {visible: inspector.visible, x: inspector.x, y: inspector.y, width: inspector.width, height: inspector.height} : null,
                 closeHovered: button?.hovered ?? false, close: button ? DesktopEditing.point(button, editor.optionsWindow, button.width / 2, button.height / 2) : null});
         }
@@ -183,6 +216,18 @@ def inspector_closed():
 
 primary_failure = None
 try:
+    if args.expiry:
+        guest(
+            "python3",
+            "-c",
+            "from pathlib import Path; p=Path("
+            + repr(args.shell + "/Tray.qml")
+            + "); b=Path("
+            + repr(tray_backup)
+            + "); b.write_bytes(p.read_bytes()); "
+            + "s=p.read_text(); assert s.count('id: trayButton')==1; "
+            + "p.write_text(s.replace('id: trayButton', 'id: trayButton\\n                    property alias testMenu: trayMenu'))",
+        )
     guest(
         "python3",
         "-c",
@@ -204,6 +249,25 @@ try:
     stream = sock.makefile("rw")
     stream.readline()
     qmp("qmp_capabilities")
+    if args.expiry:
+        ipc("editor-stack-test", "primeOverflow")
+        wait(lambda: ipc("editor-stack-test", "status")["overflow"]["trayPlaced"], "Test tray did not enter More")
+        wait(lambda: ipc("editor-stack-test", "status")["overflow"]["button"], "Test tray delegate did not load")
+        ipc("editor-stack-test", "configureOverflowAction")
+        trigger = ipc("editor-stack-test", "status")["overflow"]["trigger"]
+        click(trigger["x"], trigger["y"])
+        wait(lambda: ipc("editor-stack-test", "status")["overflow"]["visible"], "More trigger missed its click")
+        time.sleep(0.5)
+        ipc("editor-stack-test", "configureOverflowAction")
+        capture("overflow-warm")
+        state = ipc("editor-stack-test", "status")
+        print("Warm overflow state: " + json.dumps(state["overflow"]), flush=True)
+        point = state["overflow"]["button"]
+        click(point["x"], point["y"])
+        wait(lambda: ipc("editor-stack-test", "status")["overflow"]["menu"], "Warm tray button missed its click")
+        key("esc")
+        key("esc")
+        wait(lambda: not ipc("editor-stack-test", "status")["overflow"]["visible"], "Warm More did not close")
     if args.fullscreen:
         guest(
             "systemd-run",
@@ -228,6 +292,13 @@ try:
         state = ipc("editor-stack-test", "status")
         assert state["visible"] and state["options"] and state["inspector"]["visible"], state
         assert state["close"], "Inspector close control was not laid out"
+        if args.expiry and cycle == 0:
+            time.sleep(32)
+            active = ipc("editor-stack-test", "status")
+            assert len(active["containers"]) == 2 and all(
+                panel["mapped"] and panel["requested"] and panel["keepAlive"] for panel in active["containers"]
+            ), "Active editor lost a container surface: " + str(active["containers"])
+            print("PASS active editor keeps its container surfaces mapped", flush=True)
         # Closing the options surface must return keyboard input without raising
         # the editor wallpaper over the already-mapped sidebar and card.
         keyboard_close = bool(cycle % 2 or (args.keyboard_first and cycle == 0))
@@ -275,6 +346,52 @@ try:
             "companion pixels and cancellation",
             flush=True,
         )
+    if args.expiry:
+        if args.fullscreen:
+            # Each editor cycle above preserves fullscreen. Return the fixture
+            # to windowed mode so the normal bar's More launcher is clickable.
+            ctl("window", "unfullscreen", fullscreen_window()["id"])
+            wait(lambda: not fullscreen_window()["fullscreen"], "Fixture did not leave fullscreen")
+        # The editor object remains cached. Its existence must not permanently
+        # pin the closed Control Centre and overflow graphics surfaces.
+        time.sleep(32)
+        state = ipc("editor-stack-test", "status")
+        assert state["containers"] and all(
+            not panel["mapped"] and not panel["requested"] and not panel["keepAlive"] for panel in state["containers"]
+        ), "Closed editor pinned container surfaces: " + str(state["containers"])
+        ipc("shell", "panel", "controls", "open")
+        wait(lambda: ipc("shell", "status")["controls"], "Expired Control Centre did not reopen")
+        key("esc")
+        wait(lambda: not ipc("shell", "status")["controls"], "Reopened Control Centre did not accept Escape")
+        trigger = ipc("editor-stack-test", "status")["overflow"]["trigger"]
+        click(trigger["x"], trigger["y"])
+        state = wait(
+            lambda: (state := ipc("editor-stack-test", "status"))["overflow"]["mapped"] and state,
+            "Expired More menu did not remap",
+        )
+        time.sleep(0.5)
+        state = ipc("editor-stack-test", "status")
+        capture("overflow-cold")
+        ipc("editor-stack-test", "configureOverflowAction")
+        state = ipc("editor-stack-test", "status")
+        print("Cold overflow state: " + json.dumps(state["overflow"]), flush=True)
+        point = state["overflow"]["button"]
+        click(point["x"], point["y"])
+        state = wait(
+            lambda: (state := ipc("editor-stack-test", "status"))["overflow"]["menu"] and state,
+            "Cold overflow tray button missed its click",
+        )
+        time.sleep(0.4)
+        point = ipc("editor-stack-test", "status")["overflow"]["action"]
+        click(point["x"], point["y"])
+        wait(
+            lambda: ipc("editor-stack-test", "status")["overflow"]["presses"] == 1,
+            "Cold overflow child menu missed its action click",
+        )
+        key("esc")
+        wait(lambda: not ipc("editor-stack-test", "status")["overflow"]["visible"], "Cold More menu missed Escape")
+        print("PASS closed editor containers expire and Control Centre reopens with keyboard input", flush=True)
+        print("PASS cold More menu retains its tray button, child menu action and Escape", flush=True)
 except BaseException as error:
     primary_failure = error
     raise
@@ -301,6 +418,18 @@ finally:
             + repr(args.shell + "/shell.qml")
             + "); b=Path("
             + repr(backup)
+            + ");\nif b.exists():\n p.write_bytes(b.read_bytes())\n b.unlink()",
+        ),
+    )
+    cleanup(
+        "tray source restore",
+        lambda: guest(
+            "python3",
+            "-c",
+            "from pathlib import Path; p=Path("
+            + repr(args.shell + "/Tray.qml")
+            + "); b=Path("
+            + repr(tray_backup)
             + ");\nif b.exists():\n p.write_bytes(b.read_bytes())\n b.unlink()",
         ),
     )

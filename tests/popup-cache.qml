@@ -10,6 +10,7 @@ ShellRoot {
     property int backgroundPresses: 0
     property int cardPresses: 0
     property int childPresses: 0
+    property int windowMenuPresses: 0
     property var firstCardWindow: null
     property var firstDismissWindow: null
     property int motionDuration: Theme.popupOpenMotion
@@ -73,6 +74,18 @@ ShellRoot {
         popupWidth: 280
         popupHeight: 180
     }
+    WindowMenu {
+        id: windowMenu
+        screen: popup.screen
+        requestedPosition: Qt.point(700, 160)
+        actions: [
+            {
+                text: "Close test window",
+                enabled: true,
+                triggered: () => root.windowMenuPresses++
+            }
+        ]
+    }
     ShellPopup {
         id: child
         hostItem: popup.contentItem
@@ -132,6 +145,8 @@ ShellRoot {
                 other.visible = true;
             else if (which === "history")
                 history.visible = true;
+            else if (which === "window")
+                windowMenu.visible = true;
             else
                 popup.visible = true;
         }
@@ -140,6 +155,7 @@ ShellRoot {
             popup.visible = false;
             other.visible = false;
             history.visible = false;
+            windowMenu.visible = false;
         }
         function slow(): void {
             root.motionDuration = 1200;
@@ -155,6 +171,14 @@ ShellRoot {
             firstCardWindow = popup.contentItem.Window.window;
             firstDismissWindow = popup.testDismissContentItem.Window.window;
         }
+        function keep(value: int): void {
+            popup.keepWindowAlive = value !== 0;
+        }
+        function inputMode(mode: string): void {
+            popup.keyboardInteractive = mode === "menu";
+            popup.pointerInteractive = mode !== "passive";
+            popup.dismissOnOutsideClick = mode === "menu";
+        }
         function screen(index: int): void {
             popup.screen = Quickshell.screens[index];
         }
@@ -166,6 +190,8 @@ ShellRoot {
                 opacity: popup.presentationOpacity,
                 materialAlpha: popup.surfaceColor.a,
                 retained: popup.retained,
+                nativeVisible: popup.nativeWindow.visible,
+                dismissVisible: popup.testDismissWindow.visible,
                 drawn: popup.body.parent.visible,
                 inputWidth: popup.nativeWindow.mask.width,
                 inputHeight: popup.nativeWindow.mask.height,
@@ -173,14 +199,28 @@ ShellRoot {
                 keyboard: popup.nativeWindow.WlrLayershell.keyboardFocus,
                 sameCard: firstCardWindow === popup.contentItem.Window.window,
                 sameDismiss: firstDismissWindow === popup.testDismissContentItem.Window.window,
+                singleNativeWindow: popup.contentItem.Window.window === popup.testDismissContentItem.Window.window,
                 backgroundPresses: root.backgroundPresses,
                 cardPresses: root.cardPresses,
+                cardX: popup.panelX,
+                cardY: popup.panelY,
+                inputX: popup.nativeWindow.mask.x,
+                inputY: popup.nativeWindow.mask.y,
+                dismissPress: popup.testDismissPosition,
                 childPresses: root.childPresses,
+                windowMenuOpen: windowMenu.visible,
+                windowMenuNativeVisible: windowMenu.nativeWindow.visible,
+                windowMenuRetained: windowMenu.retained,
+                windowMenuX: windowMenu.panelX,
+                windowMenuY: windowMenu.panelY,
+                windowMenuWidth: windowMenu.popupWidth,
+                windowMenuPresses: root.windowMenuPresses,
                 history: history.visible,
                 historyRetained: history.retained,
                 notifications: notificationsWindow.notificationCount,
                 renderedNotifications: notificationsWindow.renderedNotificationCount,
                 notificationPresented: notificationsWindow.presented,
+                notificationNativeVisible: notificationsWindow.visible,
                 notificationDrawn: notificationsWindow.desktopViewport.visible,
                 notificationInput: notificationsWindow.mask.height,
                 notificationKeyboard: notificationsWindow.WlrLayershell.keyboardFocus,

@@ -694,7 +694,7 @@ ShellRoot {
 
     ShellPopup {
         id: barOverflow
-        keepWindowAlive: DesktopEditing.editor !== null
+        keepWindowAlive: DesktopEditing.active
         dismissOnOutsideClick: !DesktopEditing.active
         keyboardInteractive: !DesktopEditing.active
         anchorWindow: topBar.windowFor(overflowButton)

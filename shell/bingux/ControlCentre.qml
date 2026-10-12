@@ -10,7 +10,7 @@ import "ControlLayout.js" as ControlLayout
 
 ShellPopup {
     id: root
-    keepWindowAlive: DesktopEditing.editor !== null
+    keepWindowAlive: DesktopEditing.active
     readonly property var groupedLayout: controls.groupedLayout
     function snapshotLayout() {
         return JSON.parse(JSON.stringify(BinguxPreferences.data.desktop.controlLayout || ControlLayout.defaults()));
