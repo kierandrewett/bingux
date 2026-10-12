@@ -2,6 +2,9 @@
 
 Open **Bingux Settings > Desktop > Customise Desktop**. This opens a full-screen layer-shell editor on the Settings window's screen. It shows the current wallpaper behind the existing top bar, dock, sidebar and control centre. These containers keep their actual widget instances and actions.
 
+The editor scales its wallpaper preview to the display's physical resolution.
+Portrait and landscape images keep their proportions and crop to fill the preview.
+
 Closing the editor unmaps its full-screen editor and options windows. Bingux keeps the editor state for reopening without keeping those graphics surfaces mapped.
 
 ## Arrange widgets

@@ -757,10 +757,13 @@ Scope {
                 root.cancel();
         }
         Image {
+            id: editorWallpaper
             anchors.fill: parent
-            source: root.wallpaper
+            source: canvas.width > 0 && canvas.height > 0 ? root.wallpaper : ""
+            sourceSize: Qt.size(Math.ceil(canvas.width * Screen.devicePixelRatio), Math.ceil(canvas.height * Screen.devicePixelRatio))
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
+            retainWhileLoading: true
         }
         Rectangle {
             anchors.fill: parent
