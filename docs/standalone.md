@@ -88,6 +88,18 @@ Otherwise it detects `gnoblin-quickshell`, `qs`, or `quickshell`. Set
 `bingux-uninstall` command removes the managed installation without the source
 checkout.
 
+### Reclaim unused memory
+
+When built with jemalloc, the patched Quickshell runtime reclaims unused
+allocator pages asynchronously after panels close. It keeps the existing decay
+intervals and respects an explicit `MALLOC_CONF` environment value.
+
+See jemalloc's [configuration reference](https://jemalloc.net/jemalloc.3.html#tuning)
+for its option format. Other Quickshell builds retain their own memory behavior;
+installing Bingux alone does not patch that executable.
+
+### Uninstall Bingux
+
 Remove the managed install with:
 
 ```sh

@@ -1,0 +1,49 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 880b9ca..fcfe865 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -147,6 +147,8 @@ if (USE_JEMALLOC)
+ 	# IMPORTED_TARGET not working for some reason
+ 	pkg_check_modules(JEMALLOC REQUIRED jemalloc)
+ 	target_link_libraries(quickshell PRIVATE ${JEMALLOC_LIBRARIES})
++	target_compile_definitions(quickshell-launch PRIVATE QS_USE_JEMALLOC)
++	target_include_directories(quickshell-launch PRIVATE ${JEMALLOC_INCLUDE_DIRS})
+ endif()
+ 
+ install(CODE "
+diff --git a/src/launch/launch.cpp b/src/launch/launch.cpp
+index fd6a0af..6cbd3c1 100644
+--- a/src/launch/launch.cpp
++++ b/src/launch/launch.cpp
+@@ -27,6 +27,10 @@
+ #include "build.hpp"
+ #include "launch_p.hpp"
+ 
++#ifdef QS_USE_JEMALLOC
++#include <jemalloc/jemalloc.h>
++#endif
++
+ #if CRASH_REPORTER
+ #include "../crash/handler.hpp"
+ #endif
+@@ -228,6 +232,20 @@ int launch(const LaunchArgs& args, char** argv, QCoreApplication* coreApplicatio
+ 
+ 	QGuiApplication::setDesktopFileName("org.quickshell");
+ 
++#ifdef QS_USE_JEMALLOC
++	// Retired rendering threads can leave unused pages in idle arenas. Enable
++	// asynchronous decay after application initialization, rather than through
++	// malloc_conf during allocator startup. Preserve MALLOC_CONF environment overrides.
++	if (!qEnvironmentVariableIsSet("MALLOC_CONF")) {
++		bool enabled = true;
++		if (auto error = mallctl("background_thread", nullptr, nullptr, &enabled, sizeof(enabled));
++		    error != 0)
++		{
++			qWarning() << "Could not enable allocator background reclamation:" << error;
++		}
++	}
++#endif
++
+ 	if (args.debugPort != -1) {
+ 		QQmlDebuggingEnabler::enableDebugging(true);
+ 		auto wait = args.waitForDebug ? QQmlDebuggingEnabler::WaitForClient

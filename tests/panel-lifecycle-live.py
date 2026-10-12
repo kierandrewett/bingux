@@ -75,9 +75,13 @@ def main():
     parser.add_argument("--panels", nargs="+", choices=PANELS, default=list(PANELS))
     parser.add_argument("--warmup-cycles", type=int, default=3)
     parser.add_argument("--max-growth-mib", type=float, help="Fail if post-warmup memory exceeds this growth")
+    parser.add_argument(
+        "--settle-seconds", type=float, default=0, help="Wait after each cycle; use 35 to include native-window expiry"
+    )
     parser.add_argument("--report", type=Path)
     args = parser.parse_args()
     assert 1 <= args.cycles <= 100
+    assert 0 <= args.settle_seconds <= 60
     if args.max_growth_mib is not None:
         assert 0 <= args.warmup_cycles < args.cycles
         assert args.max_growth_mib >= 0
@@ -101,6 +105,7 @@ def main():
                 assert ctl("panel", panel, "close")["ok"]
                 wait_open(panel, False)
                 time.sleep(0.2)
+            time.sleep(args.settle_seconds)
             measurements.append({"phase": f"cycle-{cycle + 1}", **memory()})
             print(json.dumps({key: value for key, value in measurements[-1].items() if key != "processes"}), flush=True)
     finally:

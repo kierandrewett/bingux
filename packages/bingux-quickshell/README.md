@@ -3,7 +3,9 @@
 A layer surface must record the settings sent when it is created. Quickshell
 0.2.1 through 0.3.1 leave that snapshot at its default values. If a setting
 returns to its default before the next commit, the compositor keeps the old
-value. In Customise UI, this can leave the sidebar accepting keyboard focus,
+value.
+
+In Customise UI, this can leave the sidebar accepting keyboard focus,
 so a mouse press takes focus from the editor and the return of focus cancels
 the button click.
 
@@ -30,9 +32,13 @@ The test reads actual Wayland requests. Before the patch it receives only
 `local-files.patch` loads a config folder as ordinary files when every directory
 in it ships its own qmldir. Quickshell otherwise serves every file through its
 `qs:` network scheme, and Qt keeps its compiled-unit disk cache only for local
-files, so the whole shell recompiled on each start. Bingux ships a qmldir, so the
+files, so the whole shell recompiled on each start.
+
+Bingux ships a qmldir, so the
 shell loads from the cache after its first start. Set `QS_NO_LOCAL_FILES=1` to
-use the old behaviour. In the test VM the main shell loaded about 0.3 to 0.5 s
+use the old behaviour.
+
+In the test VM the main shell loaded about 0.3 to 0.5 s
 faster; VM noise is about 1 s, so treat that as an estimate.
 
 `child-pdeathsig.patch` starts every Process child with PR_SET_PDEATHSIG, so helpers die
@@ -57,3 +63,36 @@ git -C /path/to/quickshell apply /path/to/bingux/packages/bingux-quickshell/ipc-
 Applying it changes the source only. Rebuild and install Quickshell, then
 restart Bingux to use it. With `BUILD_TESTING=ON`, run the `ipcconnection` CTest
 to verify that disconnecting destroys the server-side connection and its socket.
+
+## Reclaim unused memory
+
+`allocator-background-reclaim.patch` enables jemalloc's asynchronous page
+reclamation after the graphical application initializes. Without background
+reclamation, retired rendering threads can leave unused dirty pages resident
+in idle arenas after popup windows close.
+
+The patch keeps the allocator's
+existing decay intervals and skips this default when `MALLOC_CONF` is set.
+Builds with `USE_JEMALLOC=OFF` keep their existing allocator behavior. IPC and
+other command-only clients do not start background workers.
+
+Apply it to the pinned Quickshell source:
+
+```sh
+git -C /path/to/quickshell apply /path/to/bingux/packages/bingux-quickshell/allocator-background-reclaim.patch
+```
+
+Rebuild Quickshell and restart Bingux to use it. Do not enable `background_thread` through a startup environment
+override: jemalloc recommends dynamic control to avoid initialization
+dependencies. See the [jemalloc manual](https://jemalloc.net/jemalloc.3.html#background_thread).
+
+For an installed desktop in a disposable VM, check repeated popup expiry with:
+
+```sh
+python3 tests/panel-lifecycle-live.py --panels controls calendar notifications \
+  --cycles 4 --warmup-cycles 1 --settle-seconds 35 --max-growth-mib 30 \
+  --report /path/to/popup-memory.json
+```
+
+This measures the shell and its owned helpers after idle expiry. It does not
+attribute GPU memory or prove a long session is free of leaks.
