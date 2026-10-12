@@ -134,6 +134,13 @@ configuration stops those session-owned clients on the next reload.
 The shell launcher clears core dumps. Services restart after a failure and use
 the same QML import path as the shell.
 
+## Application scheduling
+
+The default desktop-entry launcher drops an inherited negative nice value to
+0 before directly starting an app, including the dock's fallback when the user
+manager rejects a launch. It preserves positive nice values and scheduler
+policy. External scheduling rules can change an app's priority afterwards.
+
 ## Runtime requirements
 
 The full shell uses Qt 6, Quickshell, PipeWire or PulseAudio, NetworkManager,

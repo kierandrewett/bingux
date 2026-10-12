@@ -137,6 +137,14 @@ def launch_and_watch(entry, context):
 
 def launch_local(args):
     refresh_graphical_environment()
+    # This is a dedicated launcher process, not the shell or a shared worker.
+    # Ordinary apps must not inherit a shell's negative nice. Preserve deliberate
+    # positive nice and scheduler policy; later external rules can still override.
+    try:
+        if os.getpriority(os.PRIO_PROCESS, 0) < 0:
+            os.setpriority(os.PRIO_PROCESS, 0, 0)
+    except OSError as error:
+        print(f"Could not reset inherited application priority: {error}", file=sys.stderr)
     identity = args.desktop_id
     if "/" in identity or not identity:
         raise ValueError("Expected a desktop entry ID")
