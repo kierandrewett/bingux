@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import Quickshell
 import Quickshell.Wayland
 
@@ -35,6 +36,10 @@ Variants {
             readonly property Image front: frontIsA ? layerA : layerB
             readonly property Image back: frontIsA ? layerB : layerA
             readonly property url wanted: BinguxPreferences.wallpaperUrl
+            // Raster sourceSize is in pixels, not logical screen coordinates.
+            // Reserve the largest login zoom without changing the decode size
+            // on every animation frame.
+            readonly property size decodeSize: Qt.size(Math.ceil(width * Screen.devicePixelRatio * 1.06), Math.ceil(height * Screen.devicePixelRatio * 1.06))
 
             function show(image) {
                 const first = firstShow;
@@ -50,16 +55,27 @@ Variants {
             }
 
             function ready(image) {
-                if (image.status === Image.Ready && image.source === wanted && back === image)
+                if (!reveal.running && image.status === Image.Ready && image.source === wanted && back === image)
                     show(image);
             }
 
             function load() {
                 if (wanted.toString() === "") {
+                    reveal.stop();
+                    layerA.opacity = 0;
+                    layerB.opacity = 0;
+                    layerA.scale = 1;
+                    layerB.scale = 1;
                     layerA.source = "";
                     layerB.source = "";
                     return;
                 }
+                if (width <= 0 || height <= 0)
+                    return;
+                // Keep both images intact until their current fade ends. The
+                // wanted binding retains the latest choice without a third layer.
+                if (reveal.running)
+                    return;
                 if (front.source === wanted && front.status !== Image.Null)
                     return;
                 back.source = wanted;
@@ -68,6 +84,8 @@ Variants {
             }
 
             onWantedChanged: load()
+            onWidthChanged: load()
+            onHeightChanged: load()
             Component.onCompleted: load()
 
             Image {
@@ -75,6 +93,8 @@ Variants {
                 anchors.fill: parent
                 asynchronous: true
                 cache: true
+                sourceSize: stage.decodeSize
+                retainWhileLoading: true
                 fillMode: Image.PreserveAspectCrop
                 opacity: 0
                 onStatusChanged: stage.ready(layerA)
@@ -85,6 +105,8 @@ Variants {
                 anchors.fill: parent
                 asynchronous: true
                 cache: true
+                sourceSize: stage.decodeSize
+                retainWhileLoading: true
                 fillMode: Image.PreserveAspectCrop
                 opacity: 0
                 onStatusChanged: stage.ready(layerB)
@@ -111,7 +133,9 @@ Variants {
                 onFinished: {
                     const old = stage.back;
                     old.opacity = 0;
-                    old.source = "";
+                    if (old.source !== stage.wanted)
+                        old.source = "";
+                    stage.load();
                 }
             }
         }
