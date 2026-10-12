@@ -1,5 +1,6 @@
 pub mod extra;
 pub mod hardware;
+pub mod microphone;
 use serde::Serialize;
 use std::time::Duration;
 
@@ -200,13 +201,15 @@ pub fn metrics_json(metrics: Metrics) -> String {
 pub fn metrics_with_desktop_state_json(
     metrics: Metrics,
     desktop_state: &DesktopState,
+    microphone: &microphone::CaptureSnapshot,
 ) -> Result<String, serde_json::Error> {
     let input_sources = serde_json::to_string(&desktop_state.input_sources)?;
     let current_input_source = serde_json::to_string(&desktop_state.current_input_source)?;
+    let microphone_captures = serde_json::to_string(&microphone.captures)?;
 
     Ok(with_extra(
         format!(
-            "{{\"protocolVersion\":1,\"type\":\"metrics\",\"cpuPercent\":{},\"memoryTotalBytes\":{},\"memoryUsedBytes\":{},\"networkReceiveBytesPerSecond\":{},\"networkTransmitBytesPerSecond\":{},\"desktopStateAvailable\":{},\"inputSources\":{},\"currentInputSource\":{},\"privacyAvailable\":{},\"screenSharingAvailable\":{},\"screenSharing\":{},\"microphoneAvailable\":{},\"microphoneInUse\":{},\"locationAvailable\":{},\"locationInUse\":{}}}\n",
+            "{{\"protocolVersion\":1,\"type\":\"metrics\",\"cpuPercent\":{},\"memoryTotalBytes\":{},\"memoryUsedBytes\":{},\"networkReceiveBytesPerSecond\":{},\"networkTransmitBytesPerSecond\":{},\"desktopStateAvailable\":{},\"inputSources\":{},\"currentInputSource\":{},\"privacyAvailable\":{},\"screenSharingAvailable\":{},\"screenSharing\":{},\"microphoneAvailable\":{},\"microphoneInUse\":{},\"locationAvailable\":{},\"locationInUse\":{},\"microphoneCapturesAvailable\":{},\"microphoneCaptures\":{}}}\n",
             format_optional_number(metrics.cpu_percent),
             metrics.memory_total_bytes,
             metrics.memory_used_bytes,
@@ -222,6 +225,8 @@ pub fn metrics_with_desktop_state_json(
             desktop_state.privacy.microphone_in_use,
             desktop_state.privacy.location_available,
             desktop_state.privacy.location_in_use,
+            microphone.available,
+            microphone_captures,
         ),
         metrics.extra,
     ))
@@ -667,12 +672,21 @@ mod tests {
                     location_in_use: true,
                 },
             },
+            &crate::microphone::CaptureSnapshot {
+                available: true,
+                captures: vec![crate::microphone::Capture {
+                    app: "Recorder".to_owned(),
+                    app_id: "org.example.Recorder".to_owned(),
+                    device: "Built-in Mic".to_owned(),
+                    muted: false,
+                }],
+            },
         )
         .unwrap();
 
         assert_eq!(
             record,
-            "{\"protocolVersion\":1,\"type\":\"metrics\",\"cpuPercent\":12.50,\"memoryTotalBytes\":16777216,\"memoryUsedBytes\":12582912,\"networkReceiveBytesPerSecond\":1234.00,\"networkTransmitBytesPerSecond\":null,\"desktopStateAvailable\":true,\"inputSources\":[{\"type\":\"xkb\",\"id\":\"gb\",\"shortName\":\"en\",\"displayName\":\"English \\\"United Kingdom\\\"\"}],\"currentInputSource\":{\"type\":\"xkb\",\"id\":\"gb\",\"shortName\":\"en\",\"displayName\":\"English \\\"United Kingdom\\\"\"},\"privacyAvailable\":true,\"screenSharingAvailable\":true,\"screenSharing\":true,\"microphoneAvailable\":false,\"microphoneInUse\":false,\"locationAvailable\":true,\"locationInUse\":true}\n",
+            "{\"protocolVersion\":1,\"type\":\"metrics\",\"cpuPercent\":12.50,\"memoryTotalBytes\":16777216,\"memoryUsedBytes\":12582912,\"networkReceiveBytesPerSecond\":1234.00,\"networkTransmitBytesPerSecond\":null,\"desktopStateAvailable\":true,\"inputSources\":[{\"type\":\"xkb\",\"id\":\"gb\",\"shortName\":\"en\",\"displayName\":\"English \\\"United Kingdom\\\"\"}],\"currentInputSource\":{\"type\":\"xkb\",\"id\":\"gb\",\"shortName\":\"en\",\"displayName\":\"English \\\"United Kingdom\\\"\"},\"privacyAvailable\":true,\"screenSharingAvailable\":true,\"screenSharing\":true,\"microphoneAvailable\":false,\"microphoneInUse\":false,\"locationAvailable\":true,\"locationInUse\":true,\"microphoneCapturesAvailable\":true,\"microphoneCaptures\":[{\"app\":\"Recorder\",\"appId\":\"org.example.Recorder\",\"device\":\"Built-in Mic\",\"muted\":false}]}\n",
         );
     }
 

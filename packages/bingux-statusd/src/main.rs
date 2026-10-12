@@ -2,7 +2,7 @@ mod gnoblin;
 
 use bingux_statusd::{
     DesktopState, Metrics, OsdRequest, byte_rate, cpu_percent, metrics_with_desktop_state_json,
-    osd_json, parse_cpu_stat, parse_meminfo, parse_network_totals,
+    microphone::CaptureSnapshot, osd_json, parse_cpu_stat, parse_meminfo, parse_network_totals,
 };
 use std::{
     env,
@@ -33,6 +33,7 @@ pub(crate) enum Event {
     MetricsClient(UnixStream),
     OsdClient(UnixStream),
     DesktopState(DesktopState),
+    Microphone(CaptureSnapshot),
     OsdRequest(OsdRequest),
 }
 
@@ -124,12 +125,16 @@ fn run() -> io::Result<()> {
         OSD_SOCKET_NAME,
         Event::OsdClient,
     );
-    gnoblin::start_state_subscriber(sender);
+    gnoblin::start_state_subscriber(sender.clone());
+    bingux_statusd::microphone::start(move |snapshot| {
+        sender.send(Event::Microphone(snapshot)).is_ok()
+    });
 
     let mut sampler = Sampler::new();
     let mut latest_metrics = sampler.sample()?;
     let mut desktop_state = DesktopState::default();
-    let mut latest_record = record_json(latest_metrics.clone(), &desktop_state)?;
+    let mut microphone = CaptureSnapshot::default();
+    let mut latest_record = record_json(latest_metrics.clone(), &desktop_state, &microphone)?;
     let mut metrics_clients = Vec::new();
     let mut osd_clients = Vec::new();
     let mut next_sample = Instant::now() + SAMPLE_INTERVAL;
@@ -140,6 +145,7 @@ fn run() -> io::Result<()> {
                 &mut sampler,
                 &mut latest_metrics,
                 &desktop_state,
+                &microphone,
                 &mut latest_record,
                 &mut metrics_clients,
             )?;
@@ -172,7 +178,12 @@ fn run() -> io::Result<()> {
             }
             Ok(Event::DesktopState(state)) => {
                 desktop_state = state;
-                latest_record = record_json(latest_metrics.clone(), &desktop_state)?;
+                latest_record = record_json(latest_metrics.clone(), &desktop_state, &microphone)?;
+                publish_record(&mut metrics_clients, &latest_record);
+            }
+            Ok(Event::Microphone(snapshot)) => {
+                microphone = snapshot;
+                latest_record = record_json(latest_metrics.clone(), &desktop_state, &microphone)?;
                 publish_record(&mut metrics_clients, &latest_record);
             }
             Ok(Event::OsdRequest(request)) => {
@@ -192,11 +203,12 @@ fn publish_sample(
     sampler: &mut Sampler,
     latest_metrics: &mut Metrics,
     desktop_state: &DesktopState,
+    microphone: &CaptureSnapshot,
     latest_record: &mut String,
     clients: &mut Vec<UnixStream>,
 ) -> io::Result<()> {
     *latest_metrics = sampler.sample()?;
-    *latest_record = record_json(latest_metrics.clone(), desktop_state)?;
+    *latest_record = record_json(latest_metrics.clone(), desktop_state, microphone)?;
     publish_record(clients, latest_record);
     Ok(())
 }
@@ -205,8 +217,12 @@ fn publish_record(clients: &mut Vec<UnixStream>, record: &str) {
     clients.retain_mut(|client| write_record(client, record));
 }
 
-fn record_json(metrics: Metrics, desktop_state: &DesktopState) -> io::Result<String> {
-    metrics_with_desktop_state_json(metrics, desktop_state)
+fn record_json(
+    metrics: Metrics,
+    desktop_state: &DesktopState,
+    microphone: &CaptureSnapshot,
+) -> io::Result<String> {
+    metrics_with_desktop_state_json(metrics, desktop_state, microphone)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
 }
 

@@ -325,6 +325,7 @@ ShellRoot {
 
     PrivacyState {
         id: privacySession
+        metrics: metrics
     }
 
     QtObject {

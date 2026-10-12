@@ -1,0 +1,42 @@
+# Bingux status service
+
+`bingux-statusd` publishes desktop metrics through
+`$XDG_RUNTIME_DIR/bingux/metrics-v1.sock`. A managed Bingux installation starts
+it through `bingux.target` in the Gnoblin session.
+
+The service also reports microphone capture owners through PulseAudio or
+PipeWire's PulseAudio interface. It uses `pactl subscribe` to follow changes
+and bounded JSON snapshots to identify applications and input devices.
+Sink monitors, peak meters and corked streams do not count as microphone
+captures. Muted capture streams remain listed with `muted: true`.
+
+The capture fields supplement the compositor's privacy booleans:
+
+| Field                         | Type                     | Meaning                                                                                |
+| ----------------------------- | ------------------------ | -------------------------------------------------------------------------------------- |
+| `microphoneCapturesAvailable` | Boolean                  | `true` after a successful audio query; `false` before initialization or after failure. |
+| `microphoneCaptures`          | Array, up to 32 captures | Current owners; empty when unavailable or when no stream captures audio.               |
+| `app`                         | String                   | Application name; defaults to `Unknown application`.                                   |
+| `appId`                       | String                   | Application ID or executable name; empty if unknown.                                   |
+| `device`                      | String                   | Input description or name; defaults to `Audio input`.                                  |
+| `muted`                       | Boolean                  | `true` when the stream or source is muted; otherwise `false`.                          |
+
+Capture strings contain at most 128 bytes and no control characters. Inspect
+the audio server's application and device properties with
+`pactl -f json list source-outputs` and `pactl -f json list sources`.
+For example, an active recorder can produce:
+
+```json
+{
+    "microphoneCapturesAvailable": true,
+    "microphoneCaptures": [
+        { "app": "Recorder", "appId": "org.example.Recorder", "device": "Built-in microphone", "muted": false }
+    ]
+}
+```
+
+When a compatible status service sends the capture feed, Bingux uses it and stops its Python
+microphone watcher. Older status services and installations without an
+active status service retain the Python watcher. If the status feed becomes
+stale, Bingux starts that fallback again. An audio-server failure reports
+unavailable capture data through the status service while it reconnects.

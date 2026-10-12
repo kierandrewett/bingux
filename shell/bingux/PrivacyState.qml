@@ -9,8 +9,12 @@ Scope {
     property var screenSharingCaptures: []
     property bool cameraInUse: false
     property var cameraCaptures: []
-    property bool microphoneAvailable: false
-    property var microphoneCaptures: []
+    property var metrics: null
+    property bool legacyMicrophoneAvailable: false
+    property var legacyMicrophoneCaptures: []
+    readonly property bool nativeMicrophoneFeedPresent: metrics?.microphoneCaptureFeedPresent === true
+    readonly property bool microphoneAvailable: nativeMicrophoneFeedPresent ? metrics.microphoneCapturesAvailable : legacyMicrophoneAvailable
+    readonly property var microphoneCaptures: nativeMicrophoneFeedPresent ? metrics.microphoneCaptures : legacyMicrophoneCaptures
     property var locationCaptures: []
     readonly property bool microphoneInUse: microphoneCaptures.length > 0
     function desktopEntryForCapture(capture) {
@@ -40,14 +44,21 @@ Scope {
     readonly property var locationDetails: locationCaptures.map(detailForCapture)
     readonly property string locationTooltip: "Location in use"
     Process {
+        id: microphoneFallback
         command: ["python3", Qt.resolvedUrl("microphone-status.py").toString().replace("file://", "")]
-        running: Startup.settled
+        running: Startup.settled && !root.nativeMicrophoneFeedPresent
+        onRunningChanged: if (!running) {
+            root.legacyMicrophoneAvailable = false;
+            root.legacyMicrophoneCaptures = [];
+        }
         stdout: SplitParser {
             onRead: data => {
                 try {
                     const state = JSON.parse(data);
-                    root.microphoneAvailable = state.available === true;
-                    root.microphoneCaptures = state.captures || [];
+                    if (!root.nativeMicrophoneFeedPresent) {
+                        root.legacyMicrophoneAvailable = state.available === true;
+                        root.legacyMicrophoneCaptures = state.captures || [];
+                    }
                 } catch (error) {
                     console.warn("Microphone state:", error);
                 }
