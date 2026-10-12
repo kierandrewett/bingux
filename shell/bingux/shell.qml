@@ -94,10 +94,26 @@ ShellRoot {
         controlCentreRequested = true;
         return controlCentreLoader.item;
     }
-    // Lazy popups are created on first use; this returns the live object.
+    // Compile each popup source on its first synchronous use, with its live
+    // bindings installed before the popup completes construction.
+    component RetainedPopup: Loader {
+        active: false
+        asynchronous: false
+        required property url popupSource
+        required property var initialProperties
+        function load() {
+            if (source.toString() === "")
+                setSource(popupSource, initialProperties);
+            active = true;
+            return item;
+        }
+    }
+    // Keep the live references used by shell integration fixtures.
+    readonly property var metricsPopup: metricsLoader.item
+    readonly property var notificationCentre: notificationCentreLoader.item
+    readonly property var calendarPopup: calendarLoader.item
     function lazyPopup(loader) {
-        loader.active = true;
-        return loader.item;
+        return loader.load();
     }
     function closePanelsExcept(panel) {
         if (panel !== windowMenuPopup)
@@ -665,31 +681,39 @@ ShellRoot {
         }
     }
 
-    LazyLoader {
+    RetainedPopup {
         id: metricsLoader
-        active: false
-        SystemMetricsPopup {
-            id: metricsPopup
-            anchorWindow: topBar.windowFor(metricsPill)
-            anchorItem: metricsPill
-            anchorAlignment: Qt.AlignHCenter
-            monitorWidget: metricsPill
-            screen: topBar.screen
-            onVisibleChanged: if (visible)
-                root.closePanelsExcept(metricsPopup)
+        popupSource: Qt.resolvedUrl("SystemMetricsPopup.qml")
+        initialProperties: ({
+                anchorWindow: Qt.binding(() => topBar.windowFor(metricsPill)),
+                anchorItem: Qt.binding(() => metricsPill),
+                anchorAlignment: Qt.AlignHCenter,
+                monitorWidget: Qt.binding(() => metricsPill),
+                screen: Qt.binding(() => topBar.screen)
+            })
+        Connections {
+            target: metricsLoader.item
+            function onVisibleChanged() {
+                if (metricsLoader.item.visible)
+                    root.closePanelsExcept(metricsLoader.item);
+            }
         }
     }
 
-    LazyLoader {
+    RetainedPopup {
         id: notificationCentreLoader
-        active: false
-        NotificationHistoryPopup {
-            id: notificationCentre
-            notificationSurface: root.notificationSurfaceItem
-            screen: topBar.screen
-            dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom)
-            onVisibleChanged: if (visible)
-                root.closePanelsExcept(notificationCentre)
+        popupSource: Qt.resolvedUrl("NotificationHistoryPopup.qml")
+        initialProperties: ({
+                notificationSurface: Qt.binding(() => root.notificationSurfaceItem),
+                screen: Qt.binding(() => topBar.screen),
+                dockSafeInset: Qt.binding(() => Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom))
+            })
+        Connections {
+            target: notificationCentreLoader.item
+            function onVisibleChanged() {
+                if (notificationCentreLoader.item.visible)
+                    root.closePanelsExcept(notificationCentreLoader.item);
+            }
         }
     }
 
@@ -769,18 +793,24 @@ ShellRoot {
         }
     }
 
-    LazyLoader {
+    RetainedPopup {
         id: calendarLoader
-        active: false
-        CalendarPopup {
-            id: calendarPopup
-            onApplicationLaunchStarted: desktopId => dock.beginExternalLaunch(desktopId, "Calendar")
-            screen: topBar.screen
-            anchorWindow: topBar.windowFor(clockPill)
-            anchorItem: clockPill
-            anchorAlignment: Qt.AlignHCenter
-            onVisibleChanged: if (visible)
-                root.closePanelsExcept(calendarPopup)
+        popupSource: Qt.resolvedUrl("CalendarPopup.qml")
+        initialProperties: ({
+                screen: Qt.binding(() => topBar.screen),
+                anchorWindow: Qt.binding(() => topBar.windowFor(clockPill)),
+                anchorItem: Qt.binding(() => clockPill),
+                anchorAlignment: Qt.AlignHCenter
+            })
+        Connections {
+            target: calendarLoader.item
+            function onVisibleChanged() {
+                if (calendarLoader.item.visible)
+                    root.closePanelsExcept(calendarLoader.item);
+            }
+            function onApplicationLaunchStarted(desktopId) {
+                dock.beginExternalLaunch(desktopId, "Calendar");
+            }
         }
     }
 
