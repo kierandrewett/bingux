@@ -8,13 +8,30 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
-import Quickshell.Services.Mpris
 import "MediaMatch.js" as MediaMatch
 import "SteamApplications.js" as SteamApplications
 import "DesktopLayout.js" as DesktopLayout
 
 PanelWindow {
     id: root
+    // Compile menu code once, on first use. Each opened menu belongs to its
+    // button, so removing a dock group also destroys its menu and delegates.
+    property var appMenuComponent: null
+    function createAppMenu(button, icon) {
+        if (!appMenuComponent)
+            appMenuComponent = Qt.createComponent("DockAppMenu.qml");
+        if (appMenuComponent.status !== Component.Ready) {
+            console.warn("Dock menu failed to load:", appMenuComponent.errorString());
+            if (appMenuComponent.status === Component.Error)
+                appMenuComponent = null;
+            return null;
+        }
+        return appMenuComponent.createObject(button, {
+            dock: root,
+            button,
+            appIcon: icon
+        });
+    }
     signal applicationInteracted
     signal widgetEditRequested(string widgetId, var control)
 
@@ -1797,7 +1814,20 @@ PanelWindow {
                             windows: []
                         }
                         required property int index
-                        property alias menuOpen: appMenu.visible
+                        property var appMenu: null
+                        property bool menuOpen: false
+                        function ensureMenu() {
+                            if (!appMenu)
+                                appMenu = root.createAppMenu(dockButton, dockIcon);
+                            return appMenu;
+                        }
+                        onMenuOpenChanged: {
+                            const menu = menuOpen ? ensureMenu() : appMenu;
+                            if (menu)
+                                menu.visible = menuOpen;
+                            else if (menuOpen)
+                                menuOpen = false;
+                        }
                         property bool entering: false
                         readonly property bool exiting: currentGroup.exiting === true
                         readonly property real animatedReorderShift: reorderTransform.x
@@ -1828,7 +1858,7 @@ PanelWindow {
                             presenceAnimation.start();
                         }
                         function publishRectangle() {
-                            if (appMenu.visible)
+                            if (appMenu && appMenu.visible)
                                 appMenu.updateAnchor();
                             const position = dockIcon.mapToItem(root.contentItem, 0, 0);
                             const rect = root.visible ? Qt.rect(Math.round(position.x), Math.round(position.y), dockIcon.width, dockIcon.height) : Qt.rect(0, 0, 0, 0);
@@ -2051,7 +2081,6 @@ PanelWindow {
                             preventStealing: true
                             onEntered: {
                                 root.tooltipEntered(dockButton);
-                                notificationPreview.prepare();
                             }
                             onExited: {
                                 tooltipDelay.stop();
@@ -2124,8 +2153,11 @@ PanelWindow {
                                         menuPrepare.stop();
                                         dockButton.menuOpen = false;
                                     } else {
-                                        notificationPreview.prepare();
-                                        menuPrepare.restart();
+                                        const menu = dockButton.ensureMenu();
+                                        if (menu) {
+                                            menu.prepareCards();
+                                            menuPrepare.restart();
+                                        }
                                     }
                                 }
                             }
@@ -2155,244 +2187,9 @@ PanelWindow {
                             id: menuPrepare
                             interval: 32
                             onTriggered: if (!dockButton.exiting && !root.draggedId) {
-                                notificationPreview.layoutCards();
+                                if (dockButton.appMenu)
+                                    dockButton.appMenu.layoutCards();
                                 dockButton.menuOpen = true;
-                            }
-                        }
-
-                        ShellPopup {
-                            id: appMenu
-                            objectName: "dockAppMenu"
-                            Timer {
-                                id: closeClickGuard
-                                interval: 350
-                                onTriggered: appMenu.dismissOnOutsideClick = true
-                            }
-                            readonly property var mediaPlayers: Mpris.players.values.filter(player => MediaMatch.matches(player, dockButton.currentGroup))
-                            readonly property bool mediaArtworkAnimating: {
-                                for (let index = 0; index < mediaControls.count; index++) {
-                                    if (mediaControls.itemAt(index)?.artworkAnimating)
-                                        return true;
-                                }
-                                return false;
-                            }
-                            revealOriginY: popupHeight
-                            popupWidth: mediaPlayers.length > 0 || dockButton.notificationCount > 0 || notificationPreview.renderedNotificationCount > 0 ? 320 : 280
-                            Behavior on popupWidth {
-                                enabled: appMenu.visible
-                                NumberAnimation {
-                                    duration: Theme.reducedMotion ? 0 : 240
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
-                            contentPadding: Theme.gap
-                            popupHeight: menuColumn.implicitHeight + contentPadding * 2
-                            Behavior on popupHeight {
-                                enabled: appMenu.visible && notificationPreview.activeCollapses === 0 && !appMenu.mediaArtworkAnimating
-                                NumberAnimation {
-                                    duration: Theme.reducedMotion ? 0 : 240
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
-                            screen: root.screen
-                            property real dockCentreX: 0
-                            function updateAnchor() {
-                                dockCentreX = dockButton.mapToItem(root.contentItem, dockButton.width / 2, 0).x;
-                            }
-                            preferredX: root.margins.left + dockCentreX - popupWidth / 2
-                            preferredY: height - root.dockTopFromBottom - popupHeight - Theme.gap
-                            onVisibleChanged: {
-                                if (visible) {
-                                    updateAnchor();
-                                    menuNavigation.focusMenu();
-                                }
-                            }
-
-                            MenuNavigator {
-                                id: menuNavigation
-                                entries: menuColumn.children
-                                focusTarget: menuColumn
-                                onEscapeRequested: dockButton.menuOpen = false
-                                onActivateRequested: entry => entry.triggered()
-                            }
-
-                            Rectangle {
-                                id: menuSurface
-
-                                width: parent.width
-                                height: implicitHeight
-                                implicitHeight: menuColumn.implicitHeight + 12
-                                color: "transparent"
-
-                                ColumnLayout {
-                                    id: menuColumn
-
-                                    // Keep the container keyboard-active when the
-                                    // menu opens. Once an action is focused its
-                                    // own handlers delegate to the same navigator.
-                                    Keys.priority: Keys.BeforeItem
-                                    Keys.onDownPressed: function (event) {
-                                        menuNavigation.move(1);
-                                        event.accepted = true;
-                                    }
-                                    Keys.onUpPressed: function (event) {
-                                        menuNavigation.move(-1);
-                                        event.accepted = true;
-                                    }
-                                    Keys.onReturnPressed: function (event) {
-                                        menuNavigation.activateCurrent();
-                                        event.accepted = true;
-                                    }
-                                    Keys.onSpacePressed: function (event) {
-                                        menuNavigation.activateCurrent();
-                                        event.accepted = true;
-                                    }
-                                    Keys.onEscapePressed: function (event) {
-                                        menuNavigation.escapeRequested();
-                                        event.accepted = true;
-                                    }
-
-                                    spacing: 2
-
-                                    anchors {
-                                        left: parent.left
-                                        right: parent.right
-                                    }
-
-                                    Repeater {
-                                        id: mediaControls
-                                        model: appMenu.mediaPlayers
-                                        delegate: DockMediaControls {
-                                            accent: dockIcon.accentColor
-                                            accentForeground: dockIcon.accentForeground
-                                            required property var modelData
-                                            Layout.fillWidth: true
-                                            player: modelData
-                                            menuActive: appMenu.visible || appMenu.closing
-                                            cornerRadius: appMenu.contentRadius
-                                        }
-                                    }
-                                    MenuSeparator {
-                                        visible: appMenu.mediaPlayers.length > 0
-                                    }
-
-                                    DockNotifications {
-                                        id: notificationPreview
-                                        Layout.fillWidth: true
-                                        visible: entries.length > 0 || renderedNotificationCount > 0
-                                        state: root.notificationStore
-                                        menuActive: appMenu.visible
-                                        entries: dockButton.appNotifications
-                                    }
-                                    MenuSeparator {
-                                        visible: notificationPreview.visible
-                                        implicitHeight: Theme.gap * notificationPreview.presence
-                                    }
-
-                                    MenuAction {
-                                        objectName: "dockPinAction"
-                                        cornerRadius: appMenu.contentRadius
-                                        navigation: menuNavigation
-                                        label: root.isPinned(dockButton.currentGroup) ? "Unpin from dock" : "Pin to dock"
-                                        // Keep pinning in the same plain action group as
-                                        // Launch new…; this action intentionally has no icon.
-                                        iconSource: ""
-                                        enabled: dockButton.currentGroup.desktopEntry !== null || root.isPinned(dockButton.currentGroup)
-                                        onTriggered: {
-                                            dockButton.menuOpen = false;
-                                            root.setPinned(dockButton.currentGroup, !root.isPinned(dockButton.currentGroup));
-                                        }
-                                    }
-
-                                    MenuAction {
-                                        cornerRadius: appMenu.contentRadius
-                                        navigation: menuNavigation
-                                        label: "Launch new..."
-                                        visible: dockButton.currentGroup.desktopEntry !== null
-                                        onTriggered: {
-                                            root.launch(dockButton.currentGroup, true);
-                                            dockButton.menuOpen = false;
-                                        }
-                                    }
-
-                                    MenuSeparator {
-                                        visible: desktopActions.count > 0
-                                    }
-
-                                    MenuSection {
-                                        label: dockButton.currentGroup.desktopEntry?.name || dockButton.currentGroup.id
-                                        visible: desktopActions.count > 0
-                                    }
-
-                                    Repeater {
-                                        id: desktopActions
-
-                                        model: dockButton.currentGroup.windows.length > 0 && dockButton.currentGroup.desktopEntry ? dockButton.currentGroup.desktopEntry.actions : []
-
-                                        delegate: MenuAction {
-                                            cornerRadius: appMenu.contentRadius
-                                            navigation: menuNavigation
-                                            required property var modelData
-
-                                            label: root.menuLabel(modelData.name, "Application action")
-                                            onTriggered: {
-                                                modelData.execute();
-                                                dockButton.menuOpen = false;
-                                            }
-                                        }
-                                    }
-
-                                    MenuSeparator {
-                                        visible: dockButton.currentGroup.windows.length > 0 || !!root.launchAttempts[dockButton.currentGroup.id]
-                                    }
-
-                                    MenuSection {
-                                        label: "Open windows"
-                                        visible: dockButton.currentGroup.windows.length > 0 || !!root.launchAttempts[dockButton.currentGroup.id]
-                                    }
-
-                                    Repeater {
-                                        model: ScriptModel {
-                                            values: dockButton.currentGroup.windows.concat(root.launchAttempts[dockButton.currentGroup.id] ? [
-                                                {
-                                                    loading: true
-                                                }
-                                            ] : [])
-                                        }
-
-                                        delegate: MenuAction {
-                                            cornerRadius: appMenu.contentRadius
-                                            navigation: menuNavigation
-                                            required property var modelData
-                                            readonly property bool isLoading: !!modelData?.loading
-
-                                            label: isLoading ? "Loading..." : root.menuLabel(modelData && modelData.title, dockButton.currentGroup.id)
-                                            iconSource: dockIcon.source
-                                            loading: isLoading
-                                            closable: isLoading || !!modelData
-                                            selectedWindow: !isLoading && !!modelData && (modelData.activated || (appMenu.visible && !ToplevelManager.activeToplevel && root.lastActiveWindow === modelData))
-                                            onCloseRequested: {
-                                                if (isLoading) {
-                                                    root.cancelLaunch(dockButton.currentGroup.id);
-                                                } else if (modelData) {
-                                                    appMenu.dismissOnOutsideClick = false;
-                                                    closeClickGuard.restart();
-                                                    const window = modelData;
-                                                    Qt.callLater(() => {
-                                                        if (window)
-                                                            window.close();
-                                                    });
-                                                }
-                                            }
-                                            onTriggered: {
-                                                if (!isLoading && modelData)
-                                                    modelData.activate();
-                                                if (!isLoading)
-                                                    dockButton.menuOpen = false;
-                                            }
-                                        }
-                                    }
-                                }
                             }
                         }
                     }
@@ -2447,169 +2244,5 @@ PanelWindow {
         }
 
         target: DesktopEntries
-    }
-
-    component MenuAction: ActionButton {
-        id: action
-        readonly property bool menuEntry: true
-        property url iconSource: ""
-        property bool loading: false
-        property bool closable: false
-        property bool closing: false
-        Timer {
-            id: closeRetry
-            interval: 10000
-            onTriggered: action.closing = false
-        }
-        property bool selectedWindow: false
-        signal closeRequested
-        property var navigation: null
-        showFocusRing: navigation !== null && navigation.keyboardNavigation && activeFocus
-        flat: true
-        required property string label
-        signal triggered
-        text: label
-        leftPadding: Theme.padding
-        rightPadding: closable ? Theme.spaceSmall : Theme.padding
-        Layout.fillWidth: true
-        implicitHeight: 38
-        Keys.priority: Keys.BeforeItem
-        Keys.onDownPressed: function (event) {
-            if (navigation) {
-                navigation.move(1);
-                event.accepted = true;
-            }
-        }
-        Keys.onUpPressed: function (event) {
-            if (navigation) {
-                navigation.move(-1);
-                event.accepted = true;
-            }
-        }
-        Keys.onEscapePressed: function (event) {
-            if (navigation) {
-                navigation.escapeRequested();
-                event.accepted = true;
-            }
-        }
-        onClicked: {
-            if (navigation)
-                navigation.pointerActivate();
-            triggered();
-        }
-        contentItem: Item {
-            RowLayout {
-                anchors.fill: parent
-                spacing: Theme.gap
-                OsIconImage {
-                    visible: !action.loading && action.iconSource.toString().length > 0
-                    source: action.iconSource
-                    implicitSize: Theme.iconSize
-                    Layout.alignment: Qt.AlignVCenter
-                }
-                PreviewSpinner {
-                    visible: action.loading
-                    implicitWidth: Theme.iconSize
-                    implicitHeight: Theme.iconSize
-                    loading: action.loading
-                    colour: Theme.accent
-                    Layout.alignment: Qt.AlignVCenter
-                }
-                Text {
-                    Layout.fillWidth: true
-                    text: action.label
-                    textFormat: Text.PlainText
-                    elide: Text.ElideRight
-                    color: action.selectedWindow ? Theme.accent : action.loading ? Theme.muted : Theme.text
-                    font.weight: action.selectedWindow ? Font.Medium : Font.Normal
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize
-                    verticalAlignment: Text.AlignVCenter
-                }
-                ActionButton {
-                    id: closeWindow
-                    objectName: "closeWindowButton"
-                    horizontalPadding: Theme.spaceSmall
-                    visible: action.closable
-                    Layout.preferredWidth: 28
-                    Layout.preferredHeight: 28
-                    Layout.alignment: Qt.AlignVCenter
-                    flat: true
-                    hoverEnabled: true
-                    enabled: !action.closing
-                    contentItem: Item {
-                        Text {
-                            anchors.centerIn: parent
-                            visible: !action.closing
-                            text: "\u00d7"
-                            color: Theme.text
-                            font.pixelSize: 22
-                        }
-                        PreviewSpinner {
-                            anchors.centerIn: parent
-                            implicitWidth: 22
-                            implicitHeight: 22
-                            loading: action.closing
-                            colour: Theme.text
-                            Accessible.name: "Closing " + action.label
-                        }
-                    }
-                    Accessible.name: action.loading ? "Cancel loading" : (action.closing ? "Closing " : "Close ") + action.label
-                    showFocusRing: action.navigation !== null && action.navigation.keyboardNavigation
-                    background: Rectangle {
-                        radius: closeWindow.cornerRadius
-                        // The menu row is already hovered underneath this
-                        // button, so use a brighter surface for its own state.
-                        color: closeWindow.down ? Qt.lighter(Theme.pressed, 1.2) : closeWindow.hovered ? Theme.pressed : "transparent"
-                        border.width: closeWindow.showFocusRing && closeWindow.activeFocus ? 2 : 0
-                        border.color: Theme.accent
-                    }
-                    onClicked: {
-                        if (action.navigation)
-                            action.navigation.pointerActivate();
-                        action.closing = true;
-                        closeRetry.restart();
-                        action.closeRequested();
-                    }
-                }
-            }
-        }
-    }
-
-    component MenuSection: Item {
-        required property string label
-        implicitHeight: sectionLabel.implicitHeight + Theme.spaceSmall
-        Layout.fillWidth: true
-
-        Text {
-            id: sectionLabel
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            leftPadding: Theme.padding
-            rightPadding: Theme.padding
-            text: parent.label
-            color: Theme.muted
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSmall
-            font.weight: Font.DemiBold
-            elide: Text.ElideRight
-        }
-    }
-
-    component MenuSeparator: Item {
-        implicitHeight: Theme.gap
-        Layout.fillWidth: true
-
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: Theme.padding
-            anchors.rightMargin: Theme.padding
-            height: 1
-            color: Theme.outline
-            opacity: 0.8
-        }
     }
 }

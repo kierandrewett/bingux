@@ -11,7 +11,7 @@ from pathlib import Path
 import sys
 p = Path(sys.argv[1])
 s = p.read_text().replace('id: root', 'id: root\n    property alias testItems: dockItems', 1)
-s = s.replace('id: dockButton', 'id: dockButton\n                    property alias testMenuEntries: menuColumn', 1)
+s = s.replace('id: dockButton', 'id: dockButton\n                    property var testMenuEntries: appMenu ? appMenu.menuEntries : null', 1)
 p.write_text(s)
 PY
 cat >"$fixture/launcher" <<EOF2
