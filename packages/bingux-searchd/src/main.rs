@@ -1744,7 +1744,16 @@ fn reap_launched_programs(receiver: Receiver<ReapedChild>) {
     let mut children = Vec::with_capacity(MAX_REAPED_PROGRAMS);
     let mut disconnected = false;
     loop {
-        if disconnected {
+        if children.is_empty() {
+            // No child can exit: sleep until work arrives or the sender closes.
+            if disconnected {
+                return;
+            }
+            match receiver.recv() {
+                Ok(child) => children.push(child),
+                Err(_) => return,
+            }
+        } else if disconnected {
             thread::sleep(PROGRAM_REAPER_POLL_INTERVAL);
         } else {
             match receiver.recv_timeout(PROGRAM_REAPER_POLL_INTERVAL) {
