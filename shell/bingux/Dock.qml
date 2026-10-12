@@ -2118,11 +2118,14 @@ PanelWindow {
                                 const offset = mouse.x - pressX + (root.draggedId === dockButton.currentGroup.id ? root.dragOffset : 0);
                                 if (!moved && Math.hypot(offset, mouse.y - pressY) < 8)
                                     return;
+                                // The icon moves when dragOffset changes. Save the
+                                // event's dock position before changing its transform.
+                                const point = dockMouse.mapToItem(root.contentItem, mouse.x, mouse.y);
                                 moved = true;
                                 root.draggedId = dockButton.currentGroup.id;
                                 root.dragOffset = offset;
                                 root.dropIndex = root.dragDestination(dockButton.currentGroup.id, offset);
-                                root.updateFolderDrag(dockMouse, mouse);
+                                root.updateFolderDrag(root.contentItem, point);
                             }
                             onReleased: function (mouse) {
                                 if (moved) {

@@ -203,17 +203,20 @@ try:
         hover = poll(lambda v: v["dragged"] and v["popup"]["visible"])
         rows.append({"hover": hover})
         p = hover["popup"]
-        # Native pointer hover opened the popup. Call unchanged production coordinate
-        # handler to check paging/drop algorithms; native outside-dock pointer motion
-        # does not reach this fixture on the original build either.
-        ipc("dragPoint", str(p["x"] + p["width"] - 10), str(p["y"] + 100))
-        paged = poll(lambda v: v["popup"]["page"] == 1)
-        rows.append({"algorithm_paged": paged})
-        ipc("dragPoint", str(p["x"] + 70), str(p["y"] + 130))
+        # Keep the actual pointer pressed while it leaves the dock surface.
+        for i in range(1, 13):
+            pointer(
+                folder["x"] + (p["x"] + p["width"] - 10 - folder["x"]) * i / 12,
+                folder["y"] + (p["y"] + 100 - folder["y"]) * i / 12,
+            )
+            time.sleep(0.05)
+        paged = poll(lambda v: v["popup"]["page"] == 1 and v["drop"] == "folder:fixture")
+        rows.append({"native_paged": paged})
+        pointer(p["x"] + 70, p["y"] + 130)
         drop = poll(lambda v: v["drop"] == "folder:fixture")
-        rows.append({"algorithm_drop": drop})
+        rows.append({"native_drop": drop})
     finally:
-        pointer(folder["x"], folder["y"] - 10, False)
+        pointer(p["x"] + 70, p["y"] + 130, False)
     added = poll(lambda v: len(v["folders"][0]["apps"]) == 12 and not v["dragged"])
     rows.append({"added": added})
     assert added["popup"]["identity"] == first["popup"]["identity"]

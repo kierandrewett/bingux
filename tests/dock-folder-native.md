@@ -21,11 +21,11 @@ opening, outside mousedown, Escape, retained reopening, hover opening, folder
 creation, deletion and three engine reload states. The original build fails
 the cold-absence assertion. Captures show the first opening and created folder.
 
-Native pointer motion outside the dock does not reach this fixture on the
-original build. The paging and drop-coordinate checks call the unchanged
-production handler through `dragPoint`; they do not prove the complete native
-drag-to-folder path. No multi-monitor, high-DPI, installed-main editor or
-hardware frame-pacing claim follows from this fixture.
+The paging and insertion checks keep a QMP pointer button pressed while moving
+outside the dock and into the real popup. They do not call a simulated
+coordinate handler. The earlier transform-order bug sent an incorrect X
+coordinate and fails this native paging check. This fixture does not prove
+multi-monitor, high-DPI, installed-main editor or hardware frame pacing.
 
 For source compilation evidence, use a complete cold trace:
 

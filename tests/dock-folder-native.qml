@@ -41,6 +41,8 @@ ShellRoot {
                 buttons,
                 folders: dock.folders,
                 dragged: dock.draggedId,
+                pointerX: dock.dragPointerX,
+                pointerY: dock.dragPointerY,
                 hover: dock.folderHoverId,
                 ready: dock.folderHoverReady,
                 drop: dock.folderDropId,
@@ -94,12 +96,6 @@ ShellRoot {
             dock.draggedId = app.id;
             dock.folderHoverId = 'folder:fixture';
             dock.finishDrag();
-        }
-        function dragPoint(x: real, y: real): void {
-            dock.updateFolderDrag(dock.contentItem, {
-                x: x - dock.margins.left,
-                y: y - (dock.screen.height - dock.height - dock.margins.bottom)
-            });
         }
         function close(): void {
             if (dock.testFolderPopup)

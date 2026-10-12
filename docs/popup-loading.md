@@ -15,8 +15,12 @@ for their content retention behavior.
 ## Open a dock folder
 
 Click a dock folder to show its apps. Bingux prepares the folder popup on its
-first opening and keeps it ready after closing. Dragging an app over a folder
-also prepares the popup. A saved folder stays closed at login.
+first opening and keeps it ready after closing. A saved folder stays closed
+at login.
+
+Drag an app from the dock over a folder to open its popup, then move it into
+the grid to insert it. Hold it near the popup's left or right edge to change
+pages.
 
 Escape or a press outside dismisses the popup. Reloading the shell discards
 its loaded content; the next opening prepares it again.
