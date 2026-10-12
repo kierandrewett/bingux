@@ -32,6 +32,7 @@ PanelWindow {
             appIcon: icon
         });
     }
+    readonly property var folderPopup: folderPopupLoader.item
     signal applicationInteracted
     signal widgetEditRequested(string widgetId, var control)
 
@@ -471,13 +472,25 @@ PanelWindow {
         screen: root.screen
         anchorBottom: root.dockTopFromBottom
     }
-    DockFolderPopup {
-        id: folderPopup
-        objectName: "dockFolderPopup"
-        dock: root
-        folderId: root.openFolderId
-        screen: root.screen
-        anchorBottom: root.dockTopFromBottom
+    Loader {
+        id: folderPopupLoader
+        active: false
+        asynchronous: false
+    }
+    function ensureFolderPopup() {
+        if (!folderPopup) {
+            folderPopupLoader.setSource(Qt.resolvedUrl("DockFolderPopup.qml"), {
+                objectName: "dockFolderPopup",
+                dock: root,
+                folderId: Qt.binding(() => root.openFolderId),
+                screen: Qt.binding(() => root.screen),
+                anchorBottom: Qt.binding(() => root.dockTopFromBottom)
+            });
+            folderPopupLoader.active = true;
+            if (!folderPopup)
+                console.warn("Dock folder popup failed to load:", folderPopupLoader.source.toString());
+        }
+        return folderPopup;
     }
     PanelWindow {
         id: folderDragOverlay
@@ -503,12 +516,12 @@ PanelWindow {
             implicitSize: root.iconSize
             source: root.draggedId ? root.folderIcon(root.draggedId) : "application-x-executable"
             scale: 1.08
-            opacity: root.dragLift * (folderPopup.visible ? 0 : 1)
+            opacity: root.dragLift * (folderPopup?.visible ? 0 : 1)
         }
     }
     function openFolder(id) {
         const folder = folderById(id);
-        if (!folder)
+        if (!folder || !ensureFolderPopup())
             return;
         closeMenus();
         for (let index = 0; index < dockItems.count; index++) {
@@ -787,7 +800,7 @@ PanelWindow {
         folderDropId = "";
         folderDropIndex = -1;
         const folder = folderById(openFolderId);
-        if (!folder || !folderPopup.visible)
+        if (!folder || !folderPopup || !folderPopup.visible)
             return;
         const left = folderPopup.panelX;
         const top = folderPopup.panelY;
@@ -812,7 +825,8 @@ PanelWindow {
             root.folderHoverReady = true;
             if (root.folderById(target)) {
                 root.openFolder(target);
-                folderPopup.page = 0;
+                if (folderPopup)
+                    folderPopup.page = 0;
             }
         }
     }
@@ -1572,7 +1586,8 @@ PanelWindow {
             const insertIndex = root.folderDropIndex < 0 ? folder.apps.length : root.folderDropIndex;
             if (root.addToFolder(id, folderTarget, insertIndex)) {
                 root.cancelDrag();
-                folderPopup.page = Math.floor(insertIndex / 9);
+                if (folderPopup)
+                    folderPopup.page = Math.floor(insertIndex / 9);
                 return;
             }
         }
@@ -1629,7 +1644,8 @@ PanelWindow {
 
     function cancelDrag() {
         folderHoverDelay.stop();
-        folderPopup.stopDragPaging();
+        if (folderPopup)
+            folderPopup.stopDragPaging();
         root.folderHoverId = "";
         root.folderHoverReady = false;
         root.folderDropId = "";
@@ -2031,7 +2047,7 @@ PanelWindow {
                                 iconSize: root.iconSize
                                 dock: root
                                 folder: root.folderById(dockButton.currentGroup.id)
-                                contentsHidden: folderPopup.previewHidden && root.openFolderId === dockButton.currentGroup.id
+                                contentsHidden: !!folderPopup && folderPopup.previewHidden && root.openFolderId === dockButton.currentGroup.id
                                 activeAppId: root.activeFolderApp(dockButton.currentGroup.id)
                                 highlighted: (root.folderHoverId === dockButton.currentGroup.id || root.folderDropId === dockButton.currentGroup.id) && root.draggedId.length > 0
                             }

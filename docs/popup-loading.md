@@ -11,3 +11,12 @@ for reopening. Escape or a press outside the panel dismisses it.
 Reloading the shell closes these panels and discards their loaded content. The
 next opening prepares the content again. See [sidebar panels](sidebar-loading.md)
 for their content retention behavior.
+
+## Open a dock folder
+
+Click a dock folder to show its apps. Bingux prepares the folder popup on its
+first opening and keeps it ready after closing. Dragging an app over a folder
+also prepares the popup. A saved folder stays closed at login.
+
+Escape or a press outside dismisses the popup. Reloading the shell discards
+its loaded content; the next opening prepares it again.
