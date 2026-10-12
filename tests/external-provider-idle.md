@@ -4,12 +4,17 @@ Run these checks after changing the external provider worker loop:
 
 ```sh
 cargo test --locked --manifest-path packages/bingux-searchd/Cargo.toml external::tests::
+python3 tests/external-provider-lifecycle.py --binary ~/.local/share/bingux/bin/bingux-searchd
 ```
 
 The Linux idle-worker check samples voluntary thread context switches before
 sending shutdown. The command lifecycle check wakes an unused lazy worker with
 a query, an activation, and shutdown. The deadline check verifies that pending
 requests still expire while the provider is unavailable.
+
+The installed-daemon fixture uses private runtime and configuration directories.
+It checks successful lazy-provider queries and activation, idle waiting,
+eager-provider retries, and process cleanup without changing desktop services.
 
 In a disposable desktop session, start the installed search daemon with a
 configuration containing an unused lazy provider. Record the running binary's
