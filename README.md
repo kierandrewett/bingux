@@ -54,6 +54,8 @@ a fresh install test pass.
 For an isolated source run, see [portable testing](docs/portable-testing.md).
 
 See [dock application menus](docs/dock-menus.md) for window and application actions.
+
+See [sidebar panels](docs/sidebar-loading.md) for loading and retained content.
 For shell behaviour and configuration, see the [shell guide](shell/bingux/README.md).
 
 ## Source layout
