@@ -22,6 +22,7 @@ parser.add_argument("--shell", default="/home/luna/.local/share/bingux/share/bin
 parser.add_argument("--report", type=Path, required=True)
 parser.add_argument("--cycles", type=int, default=3)
 parser.add_argument("--fullscreen", action="store_true")
+parser.add_argument("--keyboard-first", action="store_true", help="Close cold options with Escape before clicking")
 args = parser.parse_args()
 assert 1 <= args.cycles <= 20
 args.report.mkdir(parents=True, exist_ok=False)
@@ -87,6 +88,7 @@ probe = r"""
             const button = inspector ? find(inspector, item => item.label === "Close options") : null;
             return JSON.stringify({visible: editor?.visible ?? false, options: editor?.optionsPage ?? "",
                 inspectorReady: editor?.inspectorReady ?? false,
+                mainMapped: editor?.nativeWindow.visible ?? false, inspectorMapped: editor?.optionsWindow.visible ?? false,
                 inspector: inspector ? {visible: inspector.visible, x: inspector.x, y: inspector.y, width: inspector.width, height: inspector.height} : null,
                 closeHovered: button?.hovered ?? false, close: button ? DesktopEditing.point(button, editor.optionsWindow, button.width / 2, button.height / 2) : null});
         }
@@ -203,7 +205,18 @@ try:
     stream.readline()
     qmp("qmp_capabilities")
     if args.fullscreen:
-        guest("systemd-run", "--user", "--unit=" + unit, "--collect", "/usr/bin/foot", "-T", unit, "--", "sleep", "180")
+        guest(
+            "systemd-run",
+            "--user",
+            "--unit=" + unit,
+            "--collect",
+            "/usr/bin/foot",
+            "-T",
+            unit,
+            "--",
+            "sleep",
+            str(max(180, args.cycles * 30 + 30)),
+        )
         unit_started = True
         window = wait(fullscreen_window, "Fullscreen fixture did not map")
         ctl("window", "fullscreen", window["id"])
@@ -217,7 +230,8 @@ try:
         assert state["close"], "Inspector close control was not laid out"
         # Closing the options surface must return keyboard input without raising
         # the editor wallpaper over the already-mapped sidebar and card.
-        if cycle % 2:
+        keyboard_close = bool(cycle % 2 or (args.keyboard_first and cycle == 0))
+        if keyboard_close:
             key("esc")
         else:
             print(f"Inspector close geometry: {state['close']}", flush=True)
@@ -249,10 +263,18 @@ try:
             lambda: not ipc("editor-stack-test", "status")["visible"], "Escape did not return to the editor and cancel"
         )
         assert not ipc("shell", "status")["controls"]
+        hidden = ipc("editor-stack-test", "status")
+        assert not hidden["mainMapped"] and not hidden["inspectorMapped"], (
+            "Closed editor retained mapped fullscreen surfaces: " + str(hidden)
+        )
         capture(f"{cycle}-cancelled")
         if args.fullscreen:
             assert fullscreen_window()["fullscreen"], "Editing changed the application fullscreen state"
-        print(f"PASS cycle {cycle + 1}: real inspector click, companion pixels, Escape and cancellation", flush=True)
+        print(
+            f"PASS cycle {cycle + 1}: {'Escape' if keyboard_close else 'mouse'} options close, "
+            "companion pixels and cancellation",
+            flush=True,
+        )
 except BaseException as error:
     primary_failure = error
     raise

@@ -31,10 +31,11 @@ Scope {
                 companions: DesktopEditing.surfaces.map(surface => surface.window.WlrLayershell.namespace).concat(["gnoblin-shell-popup", "bingux-sidebar-corner", "bingux-panel-outline"])
             })
     }
-    // Reuse the render window after the first open so previews retain their scene.
+    // Keep editor state between opens, but release the mapped backing surface
+    // while closed. A transparent fullscreen window still owns GPU resources.
     PanelWindow {
         id: editWindow
-        visible: root.initialised
+        visible: root.visible
         color: "transparent"
         anchors {
             top: true
@@ -105,7 +106,7 @@ Scope {
     }
     PanelWindow {
         id: inspectorWindow
-        visible: root.initialised
+        visible: root.visible && root.optionsPage !== ""
         screen: editWindow.screen
         color: "transparent"
         anchors {
@@ -118,6 +119,7 @@ Scope {
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "gnoblin-shell-popup"
         WlrLayershell.keyboardFocus: root.inspectorReady ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        contentItem.focus: root.inspectorReady
         mask: Region {
             x: optionsPopover.x
             y: optionsPopover.y
