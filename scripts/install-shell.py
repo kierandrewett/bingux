@@ -240,8 +240,8 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
                     generated,
                 )
             generated = generated.replace(
-                '{ "bingux-frame",',
-                "{ " + json.dumps(str(prefix / "bin/bingux-frame")) + ",",
+                '"/usr/local/libexec/bingux/bingux-frame"',
+                json.dumps(str(prefix / "libexec/bingux/bingux-frame")),
             )
             destination_path = target(destination)
             destination_path.parent.mkdir(parents=True, exist_ok=True)

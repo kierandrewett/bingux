@@ -63,6 +63,12 @@ the rest of the file.
 Installed autostart commands use absolute paths; convenience commands still
 need the PATH entry below.
 
+The installed Gnoblin module also starts `bingux-frame` by its absolute path
+inside the Bingux prefix: `$XDG_DATA_HOME/bingux/libexec/bingux/bingux-frame`
+for a managed user install, or `/usr/libexec/bingux/bingux-frame` for a system
+package. This works when GDM does not include `$XDG_BIN_HOME` in the session
+`PATH`.
+
 Add `~/.local/bin` to `PATH` to use Bingux convenience commands.
 
 The installer disables and backs up the historical Bingux `quickshell.service`.

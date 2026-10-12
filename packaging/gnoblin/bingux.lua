@@ -55,8 +55,9 @@ return {
         },
     },
     ["frame-renderers"] = {
-        -- The installer exposes bingux-frame as a command on the user's PATH.
-        bingux = { "bingux-frame", "--compact" },
+        -- The installer rewrites this packaged path for its selected prefix.
+        -- GDM does not promise the user's command-link directory on PATH.
+        bingux = { "/usr/local/libexec/bingux/bingux-frame", "--compact" },
     },
     protocols = {
         -- These protocols are used by Bingux panels and capture/search surfaces.
