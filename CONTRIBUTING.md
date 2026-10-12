@@ -84,6 +84,9 @@ python3 tests/extensions.test.py
 node --test tests/desktop-layout.test.mjs tests/control-layout.test.mjs
 ```
 
+For the packaged Gnoblin autostart integration, see
+[`tests/bingux-autostart-config.md`](tests/bingux-autostart-config.md).
+
 ## Packaging
 
 Builds use `packaging/rpm/bingux.spec` and the source archive produced by
