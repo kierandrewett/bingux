@@ -578,6 +578,7 @@ PanelWindow {
         }
         SearchLaunchEffect {
             id: dockLaunchEffect
+            scaleOrigin: Item.Bottom
             onFinished: launchOverlay.visible = false
         }
     }
