@@ -52,7 +52,7 @@ Item {
             property: "offset"
             from: 0
             to: root.travel
-            duration: Math.max(1000, root.travel / 32 * 1000)
+            duration: Theme.reducedMotion ? 0 : (Math.max(1000, root.travel / 32 * 1000))
             easing.type: Easing.Linear
         }
         ScriptAction {
@@ -75,7 +75,7 @@ Item {
         id: edgeMask
         anchors.fill: parent
         visible: false
-        layer.enabled: root.revealed && root.overflow > 0
+        layer.enabled: root.revealed && root.overflow > 0 && !Theme.softwareRendering
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop {
@@ -98,7 +98,7 @@ Item {
     }
     Item {
         anchors.fill: parent
-        layer.enabled: root.revealed && root.overflow > 0
+        layer.enabled: root.revealed && root.overflow > 0 && !Theme.softwareRendering
         layer.effect: MultiEffect {
             maskEnabled: true
             maskSource: edgeMask

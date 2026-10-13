@@ -273,14 +273,14 @@ Scope {
             target: root
             property: "hintStrength"
             to: 1
-            duration: 120
+            duration: Theme.reducedMotion ? 0 : (120)
             easing.type: Easing.OutCubic
         }
         NumberAnimation {
             target: root
             property: "hintStrength"
             to: 0
-            duration: 260
+            duration: Theme.reducedMotion ? 0 : (260)
             easing.type: Easing.InOutCubic
         }
         onStopped: dismiss.restart()
@@ -670,7 +670,7 @@ Scope {
         WlrLayershell.namespace: "bingux-terminal-sidebar"
         BlurRegion {
             window: panel
-            enabled: !sidebarBackground.available
+            enabled: !Theme.softwareRendering && !sidebarBackground.available
             surfaceNamespace: "bingux-terminal-sidebar"
             region: root.edge === "top" ? Qt.rect(0, 0, panel.width, panel.extent) : Qt.rect(root.edge === "right" ? panel.width - panel.extent : 0, 0, panel.extent, panel.height)
         }

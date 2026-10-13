@@ -39,7 +39,7 @@ Item {
         id: imageShadow
         anchors.fill: parent
         anchors.bottomMargin: root.presentation?.showText && root.presentation?.showIcon ? 16 : 0
-        layer.enabled: root.shadowed
+        layer.enabled: root.shadowed && !Theme.softwareRendering
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Theme.contentShadow
@@ -51,7 +51,7 @@ Item {
             visible: root.presentation?.showIcon ?? true
             anchors.fill: parent
             implicitSize: root.implicitSize
-            layer.enabled: root.hasBadges
+            layer.enabled: root.hasBadges && !Theme.softwareRendering
             layer.effect: MultiEffect {
                 maskEnabled: true
                 maskSource: badgeMaskTexture

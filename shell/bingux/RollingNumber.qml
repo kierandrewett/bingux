@@ -131,7 +131,7 @@ Item {
         property: "progress"
         from: 0
         to: 1
-        duration: root.duration
+        duration: Theme.reducedMotion ? 0 : (root.duration)
         easing.type: Easing.OutCubic
         onFinished: {
             root.displayedText = root.incomingText;

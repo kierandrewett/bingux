@@ -505,7 +505,7 @@ Scope {
             height: 0
         }
         BlurRegion {
-            enabled: !standardBlur.available
+            enabled: !Theme.softwareRendering && !standardBlur.available
             window: window
             surfaceNamespace: "bingux-switcher"
             region: Qt.rect(presentation.x - 1, presentation.y - 1, presentation.width + 2, presentation.height + 2)
@@ -585,7 +585,7 @@ Scope {
                                 Behavior on opacity {
                                     enabled: root.shown && !Theme.reducedMotion
                                     NumberAnimation {
-                                        duration: 80
+                                        duration: Theme.reducedMotion ? 0 : (80)
                                         easing.type: Easing.OutCubic
                                     }
                                 }

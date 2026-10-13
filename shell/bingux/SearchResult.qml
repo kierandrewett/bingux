@@ -380,7 +380,7 @@ Item {
             objectName: "searchPreviewLabel"
             Behavior on x {
                 NumberAnimation {
-                    duration: Theme.previewMotion
+                    duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                     easing.type: Easing.OutCubic
                 }
             }
@@ -391,7 +391,7 @@ Item {
                 property: "opacity"
                 from: 0
                 to: 1
-                duration: Theme.previewMotion
+                duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
             }
             text: root.previewOpen ? "Hide" : "Preview"
             color: Theme.muted
@@ -407,13 +407,13 @@ Item {
             rotation: root.previewOpen && root.previewAvailable ? 180 : 0
             Behavior on x {
                 NumberAnimation {
-                    duration: Theme.previewMotion
+                    duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                     easing.type: Easing.OutCubic
                 }
             }
             Behavior on rotation {
                 NumberAnimation {
-                    duration: Theme.previewMotion
+                    duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                     easing.type: Easing.OutCubic
                 }
             }
@@ -435,7 +435,7 @@ Item {
                 property: "opacity"
                 from: 0
                 to: 1
-                duration: 230
+                duration: Theme.reducedMotion ? 0 : (230)
                 easing.type: Easing.OutCubic
             }
             NumberAnimation {
@@ -443,7 +443,7 @@ Item {
                 property: "x"
                 from: -24
                 to: 0
-                duration: 230
+                duration: Theme.reducedMotion ? 0 : (230)
                 easing.type: Easing.OutCubic
             }
         }

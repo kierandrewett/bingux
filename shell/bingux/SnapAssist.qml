@@ -473,7 +473,7 @@ Scope {
             Behavior on bounds {
                 enabled: highlight.animateGeometry && !Theme.reducedMotion
                 PropertyAnimation {
-                    duration: 220
+                    duration: Theme.reducedMotion ? 0 : (220)
                     easing.type: Easing.OutCubic
                 }
             }

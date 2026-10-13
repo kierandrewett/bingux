@@ -810,14 +810,14 @@ PanelWindow {
             property: "opacity"
             from: 1
             to: 1
-            duration: 0
+            duration: Theme.reducedMotion ? 0 : (0)
         }
         NumberAnimation {
             target: surface
             property: "scale"
             from: 1
             to: 1
-            duration: 0
+            duration: Theme.reducedMotion ? 0 : (0)
             easing.type: Easing.OutCubic
         }
     }
@@ -828,14 +828,14 @@ PanelWindow {
             target: surface
             property: "opacity"
             to: 0
-            duration: Theme.searchExitMotion
+            duration: Theme.reducedMotion ? 0 : (Theme.searchExitMotion)
             easing.type: Easing.OutCubic
         }
         NumberAnimation {
             target: surface
             property: "scale"
             to: 0.99
-            duration: Theme.searchExitMotion
+            duration: Theme.reducedMotion ? 0 : (Theme.searchExitMotion)
             easing.type: Easing.OutCubic
         }
         onFinished: root.finishClose()
@@ -882,7 +882,7 @@ PanelWindow {
             enabled: root.acceptingKeyboard && !root.closing
             NumberAnimation {
                 id: surfaceHeightAnimation
-                duration: Theme.searchMotion
+                duration: Theme.reducedMotion ? 0 : (Theme.searchMotion)
                 easing.type: Easing.OutCubic
             }
         }
@@ -890,7 +890,7 @@ PanelWindow {
             enabled: root.acceptingKeyboard && !root.closing
             NumberAnimation {
                 id: surfaceYAnimation
-                duration: Theme.searchMotion
+                duration: Theme.reducedMotion ? 0 : (Theme.searchMotion)
                 easing.type: Easing.OutCubic
             }
         }
@@ -1271,7 +1271,7 @@ PanelWindow {
                             id: keyboardScroll
                             target: resultsList
                             property: "contentY"
-                            duration: 150
+                            duration: Theme.reducedMotion ? 0 : (150)
                             easing.type: Easing.OutCubic
                         }
                         onMovementStarted: keyboardScroll.stop()
@@ -1408,7 +1408,7 @@ PanelWindow {
         property real reveal: root.previewOpen && root.previewResult !== null ? 1 : 0
         Behavior on reveal {
             NumberAnimation {
-                duration: root.previewOpen ? Theme.previewOpenMotion : Theme.previewCloseMotion
+                duration: Theme.reducedMotion ? 0 : (root.previewOpen ? Theme.previewOpenMotion : Theme.previewCloseMotion)
                 easing.type: Easing.OutCubic
             }
         }

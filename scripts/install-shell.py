@@ -269,7 +269,9 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     if managed:
         copy(source / "scripts/install-shell.py", prefix / "libexec/bingux/install-shell.py", True)
 
-    common = "#!/bin/sh\nset -eu\nulimit -c 0\n"
+    common = (
+        "#!/bin/sh\nset -eu\nulimit -c 0\n# Optional: BINGUX_SOFTWARE_RENDERING=1|0 selects the shell rendering mode.\n"
+    )
     common += "export BINGUX_QUICKSHELL=${BINGUX_QUICKSHELL:-" + shlex.quote(quickshell) + "}\n"
     common += "export QML_IMPORT_PATH=" + shlex.quote(str(qml)) + "${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}\n"
     common += (

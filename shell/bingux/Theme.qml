@@ -5,35 +5,113 @@ import Quickshell.Io
 
 QtObject {
     id: root
+    readonly property string softwareRenderingOverride: Quickshell.env("BINGUX_SOFTWARE_RENDERING")
+    property bool softwareRenderingValue: softwareRenderingOverride === "1"
+    readonly property bool softwareRendering: softwareRenderingValue
+    property bool rendererDetectionComplete: softwareRenderingOverride === "1" || softwareRenderingOverride === "0"
+    property var sceneGraphSoftware: null
+    property bool outputRendererFinished: false
+    property bool outputRendererKnown: false
+    property bool graphicsRendererKnown: false
+    property bool rendererStringProbeStarted: false
+    function setDetectedSoftwareRendering(value) {
+        if (rendererDetectionComplete || value === null)
+            return;
+        softwareRenderingValue = value;
+        rendererDetectionComplete = true;
+    }
+    function finishRendererDetection() {
+        outputRendererFinished = true;
+        if (rendererDetectionComplete || outputRendererKnown)
+            return;
+        if (sceneGraphSoftware === true) {
+            setDetectedSoftwareRendering(true);
+            return;
+        }
+        // Only the main shell window reports GraphicsInfo; the search, popout,
+        // lock and capture shells are separate Quickshell processes that share
+        // this singleton but never see it. Probe the renderer string in every
+        // process rather than waiting for a report that may never come.
+        if (!rendererStringProbeStarted) {
+            rendererStringProbeStarted = true;
+            rendererStringReader.running = true;
+        }
+    }
+    function reportGraphicsApi(api) {
+        if (rendererDetectionComplete || api === GraphicsInfo.Unknown)
+            return;
+        sceneGraphSoftware = api === GraphicsInfo.Software;
+        graphicsRendererKnown = true;
+        if (outputRendererFinished)
+            finishRendererDetection();
+    }
+    function parseRendererString(value) {
+        return /llvmpipe|softpipe|swrast|software rasterizer/i.test(value);
+    }
+    function finishRendererStringProbe(value) {
+        if (rendererDetectionComplete || outputRendererKnown)
+            return;
+        setDetectedSoftwareRendering(parseRendererString(value));
+    }
+    function outputRendererResult(value) {
+        const result = parseOutputRenderer(value);
+        if (result !== null) {
+            outputRendererKnown = true;
+            setDetectedSoftwareRendering(result);
+        }
+    }
+    function parseOutputRenderer(value) {
+        try {
+            const parsed = JSON.parse(value);
+            const outputs = Array.isArray(parsed) ? parsed : parsed.outputs;
+            if (!Array.isArray(outputs) || outputs.length === 0)
+                return null;
+            let known = false;
+            for (const output of outputs) {
+                if (typeof output?.renderer?.accelerated !== "boolean")
+                    continue;
+                known = true;
+                if (!output.renderer.accelerated)
+                    return true;
+            }
+            return known ? false : null;
+        } catch (error) {
+            return null;
+        }
+    }
+    readonly property bool flatSurfaces: softwareRendering
+    function flatten(foreground, backdrop) {
+        return Qt.rgba(foreground.r * foreground.a + backdrop.r * (1 - foreground.a), foreground.g * foreground.a + backdrop.g * (1 - foreground.a), foreground.b * foreground.a + backdrop.b * (1 - foreground.a), 1);
+    }
     function insetRadius(outerRadius, padding) {
         return Math.max(0, outerRadius - padding);
     }
 
-    readonly property color background: "#f5161616"
-    readonly property color surface: "#f0303030"
+    readonly property color background: flatSurfaces ? "#ff161616" : "#f5161616"
+    readonly property color surface: flatSurfaces ? "#ff303030" : "#f0303030"
     // Keep surface tint and transition opacity separate. These values make
     // the panel readable while letting the blurred backdrop remain visible.
     readonly property real shellSurfaceOpacity: 0.5
     readonly property real popupSurfaceOpacity: 0.8
     readonly property real overlaySurfaceOpacity: 0.55
-    readonly property color shellSurface: Qt.rgba(0.106, 0.106, 0.106, shellSurfaceOpacity)
-    readonly property color popupSurface: Qt.rgba(0.188, 0.188, 0.188, popupSurfaceOpacity)
-    readonly property color overlaySurface: Qt.rgba(0.188, 0.188, 0.188, overlaySurfaceOpacity)
+    readonly property color shellSurface: flatSurfaces ? flatten(Qt.rgba(0.106, 0.106, 0.106, shellSurfaceOpacity), Qt.rgba(0.086, 0.086, 0.086, 1)) : Qt.rgba(0.106, 0.106, 0.106, shellSurfaceOpacity)
+    readonly property color popupSurface: flatSurfaces ? flatten(Qt.rgba(0.188, 0.188, 0.188, popupSurfaceOpacity), Qt.rgba(0.106, 0.106, 0.106, 1)) : Qt.rgba(0.188, 0.188, 0.188, popupSurfaceOpacity)
+    readonly property color overlaySurface: flatSurfaces ? flatten(Qt.rgba(0.188, 0.188, 0.188, overlaySurfaceOpacity), Qt.rgba(0.106, 0.106, 0.106, 1)) : Qt.rgba(0.188, 0.188, 0.188, overlaySurfaceOpacity)
     readonly property int shellRadius: cardRadius + 4
     // Nested cards sit on translucent popup surfaces; keep their tint light
     // enough that the wallpaper and compositor blur remain perceptible.
-    readonly property color elevated: Qt.rgba(0.25, 0.25, 0.27, 0.28)
+    readonly property color elevated: flatSurfaces ? flatten(Qt.rgba(0.25, 0.25, 0.27, 0.28), Qt.rgba(0.188, 0.188, 0.188, 1)) : Qt.rgba(0.25, 0.25, 0.27, 0.28)
     readonly property color menuWidgetBackground: elevated
     readonly property int menuWidgetRadius: insetRadius(cardRadius, gap)
-    readonly property color hover: Qt.rgba(0.42, 0.42, 0.44, 0.34)
-    readonly property color pressed: Qt.rgba(0.52, 0.52, 0.54, 0.46)
-    readonly property color selection: Qt.rgba(accent.r, accent.g, accent.b, 0.28)
+    readonly property color hover: flatSurfaces ? flatten(Qt.rgba(0.42, 0.42, 0.44, 0.34), popupSurface) : Qt.rgba(0.42, 0.42, 0.44, 0.34)
+    readonly property color pressed: flatSurfaces ? flatten(Qt.rgba(0.52, 0.52, 0.54, 0.46), popupSurface) : Qt.rgba(0.52, 0.52, 0.54, 0.46)
+    readonly property color selection: flatSurfaces ? flatten(Qt.rgba(accent.r, accent.g, accent.b, 0.28), popupSurface) : Qt.rgba(accent.r, accent.g, accent.b, 0.28)
     readonly property color border: "#ffffff"
-    readonly property color panelOuterOutline: Qt.rgba(0, 0, 0, 0.5)
+    readonly property color panelOuterOutline: flatSurfaces ? "#ff0b0b0b" : Qt.rgba(0, 0, 0, 0.5)
     // Shared inner edge used by bars, cards, dock/sidebar surfaces, and
     // controls. Match Gnoblin's native window border at 75% opacity.
-    readonly property color outline: Qt.rgba(0.314, 0.314, 0.314, 0.75)
-    readonly property color contentShadow: Qt.rgba(0, 0, 0, 0.34)
+    readonly property color outline: flatSurfaces ? flatten(Qt.rgba(0.314, 0.314, 0.314, 0.75), popupSurface) : Qt.rgba(0.314, 0.314, 0.314, 0.75)
+    readonly property color contentShadow: flatSurfaces ? "transparent" : Qt.rgba(0, 0, 0, 0.34)
     readonly property color text: "#fafafa"
     readonly property color muted: "#b0b0b0"
     // Follow the same accent choices exposed by GNOME Settings. The setting
@@ -43,7 +121,7 @@ QtObject {
     property string gnomeAccentName: "blue"
     property string gnomeColorScheme: "prefer-dark"
     readonly property color accent: accentColorFor(gnomeAccentName)
-    readonly property color textSelection: Qt.rgba(accent.r, accent.g, accent.b, 0.28)
+    readonly property color textSelection: flatSurfaces ? flatten(Qt.rgba(accent.r, accent.g, accent.b, 0.28), popupSurface) : Qt.rgba(accent.r, accent.g, accent.b, 0.28)
     readonly property color success: "#8ff0a4"
     readonly property color warning: "#f9f06b"
     readonly property color danger: "#ff7b63"
@@ -62,7 +140,7 @@ QtObject {
     readonly property int barHeight: 32
     // Keep the bar, sidebar, and joining corners identical over any wallpaper.
     readonly property color barBackground: shellSurface
-    readonly property color barDivider: "#20ffffff"
+    readonly property color barDivider: flatSurfaces ? flatten(Qt.rgba(1, 1, 1, 0.125), shellSurface) : "#20ffffff"
     readonly property int barControlPadding: 6
     readonly property int activityIndicatorPadding: 12
     readonly property int barPrimaryPadding: 16
@@ -101,8 +179,8 @@ QtObject {
     }
     readonly property int tooltipMotion: reducedMotion ? 0 : 160
     readonly property real tooltipHiddenScale: 0.96
-    readonly property color tooltipSurface: Qt.rgba(0.12, 0.12, 0.13, 0.82)
-    readonly property color tooltipOutline: Qt.rgba(1, 1, 1, 0.16)
+    readonly property color tooltipSurface: flatSurfaces ? flatten(Qt.rgba(0.12, 0.12, 0.13, 0.82), Qt.rgba(0.106, 0.106, 0.106, 1)) : Qt.rgba(0.12, 0.12, 0.13, 0.82)
+    readonly property color tooltipOutline: flatSurfaces ? flatten(Qt.rgba(1, 1, 1, 0.16), popupSurface) : Qt.rgba(1, 1, 1, 0.16)
     readonly property int tooltipRadius: 12
     readonly property int tooltipHorizontalPadding: 12
     readonly property int tooltipVerticalPadding: 10
@@ -118,8 +196,8 @@ QtObject {
     readonly property int dockIconSize: 56
     readonly property int dockBadgeSize: 24
     readonly property int audioBadgeFadeOut: 2000
-    readonly property int mediaArtMotion: 220
-    readonly property int mediaActionMotion: 180
+    readonly property int mediaArtMotion: reducedMotion ? 0 : 220
+    readonly property int mediaActionMotion: reducedMotion ? 0 : 180
     readonly property color recordingIndicator: "#c01c28"
     readonly property color privacyIndicator: "#ff7800"
     readonly property color notificationBadge: "#e52f3c"
@@ -129,7 +207,7 @@ QtObject {
     readonly property int notificationIconSize: 32
     readonly property int notificationHeaderHeight: 32
     readonly property int notificationSpacing: 4
-    readonly property bool reducedMotion: Quickshell.env("BINGUX_REDUCED_MOTION") === "1"
+    readonly property bool reducedMotion: Quickshell.env("BINGUX_REDUCED_MOTION") === "1" || softwareRendering
     readonly property int notificationMotion: reducedMotion ? 0 : 420
     readonly property int notificationGroupMotion: reducedMotion ? 0 : 260
     readonly property int notificationStackMotion: reducedMotion ? 0 : 320
@@ -138,7 +216,7 @@ QtObject {
     readonly property int popupOpenMotion: reducedMotion ? 0 : 160
     readonly property int popupCloseMotion: reducedMotion ? 0 : 120
     readonly property real popupInitialScale: 0.9
-    readonly property int motion: 120
+    readonly property int motion: reducedMotion ? 0 : 120
     readonly property int statusIndicatorMotion: reducedMotion ? 0 : 180
     readonly property int osdWidth: 360
     readonly property int osdPadding: 16
@@ -212,6 +290,30 @@ QtObject {
         running: true
         stdout: StdioCollector {
             onStreamFinished: root.updateGnomeColorScheme(text)
+        }
+    }
+
+    // Probe Gnoblin after QML startup. Missing/old compositor APIs leave the
+    // decision to the shell's own GraphicsInfo renderer report.
+    property Process outputRendererReader: Process {
+        command: ["gnoblinctl", "--json", "output", "list"]
+        running: root.softwareRenderingOverride !== "1" && root.softwareRenderingOverride !== "0"
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.outputRendererResult(text);
+                root.finishRendererDetection();
+            }
+        }
+    }
+
+    // GraphicsInfo distinguishes Qt's pure software backend, but OpenGL can
+    // still be backed by Mesa's llvmpipe. Query Xwayland asynchronously in
+    // that case; an unavailable optional glxinfo leaves rendering unchanged.
+    property Process rendererStringReader: Process {
+        command: ["sh", "-c", "display=\"${DISPLAY:-}\"; auth=\"${XAUTHORITY:-}\"; if pid=$(pgrep -x Xwayland 2>/dev/null | head -n 1); then cmd=$(tr '\\0' '\\n' < /proc/$pid/cmdline 2>/dev/null); [ -n \"$display\" ] || display=$(printf '%s\\n' \"$cmd\" | awk '/^:[0-9]+$/{print;exit}'); [ -n \"$auth\" ] || auth=$(printf '%s\\n' \"$cmd\" | awk 'previous==\"-auth\"{print;exit}{previous=$0}'); fi; [ -n \"$display\" ] || exit 0; DISPLAY=\"$display\" XAUTHORITY=\"$auth\" timeout 3s glxinfo -B 2>/dev/null"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: root.finishRendererStringProbe(text)
         }
     }
 

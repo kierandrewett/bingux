@@ -20,7 +20,7 @@ Item {
     Behavior on reveal {
         enabled: root.ready
         NumberAnimation {
-            duration: Theme.statusIndicatorMotion
+            duration: Theme.reducedMotion ? 0 : (Theme.statusIndicatorMotion)
             easing.type: Easing.OutCubic
         }
     }

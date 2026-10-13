@@ -15,14 +15,14 @@ Controls.ToolTip {
             property: "opacity"
             from: 0
             to: 1
-            duration: root.revealDuration
+            duration: Theme.reducedMotion ? 0 : (root.revealDuration)
             easing.type: Easing.OutCubic
         }
         NumberAnimation {
             property: "scale"
             from: Theme.tooltipHiddenScale
             to: 1
-            duration: root.revealDuration
+            duration: Theme.reducedMotion ? 0 : (root.revealDuration)
             easing.type: Easing.OutCubic
         }
     }
@@ -30,13 +30,13 @@ Controls.ToolTip {
         NumberAnimation {
             property: "opacity"
             to: 0
-            duration: Theme.tooltipMotion
+            duration: Theme.reducedMotion ? 0 : (Theme.tooltipMotion)
             easing.type: Easing.OutCubic
         }
         NumberAnimation {
             property: "scale"
             to: Theme.tooltipHiddenScale
-            duration: Theme.tooltipMotion
+            duration: Theme.reducedMotion ? 0 : (Theme.tooltipMotion)
             easing.type: Easing.OutCubic
         }
     }

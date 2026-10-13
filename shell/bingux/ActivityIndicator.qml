@@ -50,7 +50,7 @@ Item {
         visible: !root.presentation?.custom
         anchors.centerIn: parent
         spacing: Theme.spaceSmall
-        layer.enabled: true
+        layer.enabled: !Theme.softwareRendering
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Theme.contentShadow

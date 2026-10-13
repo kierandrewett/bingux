@@ -136,14 +136,14 @@ Scope {
             target: root
             property: "revealScale"
             to: 1
-            duration: root.openMotion
+            duration: Theme.reducedMotion ? 0 : (root.openMotion)
             easing.type: Easing.OutCubic
         }
         NumberAnimation {
             target: card
             property: "opacity"
             to: 1
-            duration: root.openMotion
+            duration: Theme.reducedMotion ? 0 : (root.openMotion)
             easing.type: Easing.OutCubic
         }
     }
@@ -152,7 +152,7 @@ Scope {
         target: card
         property: "opacity"
         to: 0
-        duration: root.closeMotion
+        duration: Theme.reducedMotion ? 0 : (root.closeMotion)
         easing.type: root.closeEasing
         onFinished: if (!root.visible) {
             if (!root.keepContentAlive)

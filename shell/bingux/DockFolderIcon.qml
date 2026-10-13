@@ -13,9 +13,11 @@ Item {
     readonly property real miniGap: Math.max(3, iconSize * 0.09)
     readonly property real miniIconInset: Math.max(1, iconSize * 0.022)
     readonly property bool activeOutsidePreview: {
-        if (!activeAppId) return false;
+        if (!activeAppId)
+            return false;
         for (let index = 0; index < Math.min(4, folder?.apps?.length || 0); index++)
-            if (folder.apps[index] === activeAppId) return false;
+            if (folder.apps[index] === activeAppId)
+                return false;
         return true;
     }
     readonly property color folderColor: Theme.accentColorFor(folder?.color || Theme.gnomeAccentName)
@@ -25,17 +27,27 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: Math.max(12, root.iconSize * 0.25)
-        color: Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, root.contentsHidden ? 0.38 : 0.28)
+        color: Theme.softwareRendering ? Theme.flatten(Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, root.contentsHidden ? 0.38 : 0.28), Theme.popupSurface) : Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, root.contentsHidden ? 0.38 : 0.28)
         property real pulse: 1
         opacity: root.highlighted ? pulse : 1
         border.width: 1
         border.color: root.highlighted ? Qt.rgba(1, 1, 1, 0.48) : Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, 0.32)
-        Behavior on color { ColorAnimation { duration: Theme.reducedMotion ? 0 : 170 } }
+        Behavior on color {
+            ColorAnimation {
+                duration: Theme.reducedMotion ? 0 : 170
+            }
+        }
         SequentialAnimation on pulse {
             running: root.highlighted && !Theme.reducedMotion
             loops: Animation.Infinite
-            NumberAnimation { to: 0.68; duration: 170 }
-            NumberAnimation { to: 1; duration: 170 }
+            NumberAnimation {
+                to: 0.68
+                duration: Theme.reducedMotion ? 0 : 170
+            }
+            NumberAnimation {
+                to: 1
+                duration: Theme.reducedMotion ? 0 : 170
+            }
         }
     }
 
@@ -56,7 +68,7 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: Math.max(4, parent.width * 0.22)
-                    color: Qt.rgba(1, 1, 1, 0.24)
+                    color: Theme.softwareRendering ? Theme.flatten(Qt.rgba(1, 1, 1, 0.24), Theme.popupSurface) : Qt.rgba(1, 1, 1, 0.24)
                     border.width: parent.active ? 1 : 0
                     border.color: Qt.rgba(1, 1, 1, 0.7)
                     visible: parent.active
@@ -82,7 +94,7 @@ Item {
                 width: root.iconSize * 0.15
                 height: width
                 radius: Math.max(3, width * 0.24)
-                color: Qt.rgba(0.03, 0.03, 0.05, 0.13)
+                color: Theme.softwareRendering ? Theme.flatten(Qt.rgba(0.03, 0.03, 0.05, 0.13), Theme.popupSurface) : Qt.rgba(0.03, 0.03, 0.05, 0.13)
             }
         }
     }

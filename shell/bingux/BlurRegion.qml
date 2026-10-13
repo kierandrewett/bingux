@@ -6,7 +6,7 @@ QtObject {
     required property var window
     required property string surfaceNamespace
     required property rect region
-    property bool enabled: true
+    property bool enabled: !Theme.softwareRendering
     onEnabledChanged: Qt.callLater(BlurRegions.flush)
     property var published: null
     onRegionChanged: Qt.callLater(BlurRegions.flush)

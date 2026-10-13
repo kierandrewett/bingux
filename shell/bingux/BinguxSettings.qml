@@ -636,7 +636,7 @@ Window {
     MultiEffect {
         source: shadowShape
         anchors.fill: shadowShape
-        visible: !root.maximised
+        visible: !root.maximised && !Theme.softwareRendering
         shadowEnabled: true
         shadowBlur: 0.65
         shadowOpacity: root.active ? 0.3 : 0.16
@@ -785,7 +785,7 @@ Window {
                             property: "pageOffset"
                             from: root.slideDirection * 42
                             to: 0
-                            duration: 200
+                            duration: Theme.reducedMotion ? 0 : (200)
                             easing.type: Easing.OutCubic
                         }
                         NumberAnimation {
@@ -793,7 +793,7 @@ Window {
                             property: "opacity"
                             from: 0.35
                             to: 1
-                            duration: 160
+                            duration: Theme.reducedMotion ? 0 : (160)
                             easing.type: Easing.OutCubic
                         }
                     }

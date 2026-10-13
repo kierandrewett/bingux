@@ -22,7 +22,7 @@ AbstractButton {
             id: face
             anchors.centerIn: parent
             spacing: Theme.gap
-            layer.enabled: true
+            layer.enabled: !Theme.softwareRendering
             layer.effect: MultiEffect {
                 shadowEnabled: true
                 shadowColor: Theme.contentShadow

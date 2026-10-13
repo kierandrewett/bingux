@@ -217,6 +217,16 @@ Set `BINGUX_REDUCED_MOTION=1` in the shell environment to make these transitions
 instant. Notification cards do not request keyboard focus. Their pointer mask contains
 only the visible card stack.
 
+On software-rendered sessions, Bingux disables motion, backdrop blur, and
+decorative shadows, and uses opaque versions of its panel and popup colours.
+Detection checks `BINGUX_SOFTWARE_RENDERING=1|0` first, then Gnoblin's
+`gnoblinctl --json output list` renderer data, then the shell's Qt renderer.
+When Qt reports OpenGL, Bingux checks the session's Xwayland renderer with
+`glxinfo -B` when that command is available. Unknown renderer information keeps
+the normal appearance. Set
+`BINGUX_SOFTWARE_RENDERING=1` or `0` in the shell launch environment to force a
+mode. `BINGUX_REDUCED_MOTION=1` continues to disable motion independently.
+
 ## Desktop UI rules
 
 - The top bar is a top-layer surface with a positive exclusive zone.

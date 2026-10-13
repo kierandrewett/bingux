@@ -37,7 +37,7 @@ Item {
     width: surface.width
     height: surface.height
     z: surface.z - 0.01
-    visible: enabledShadow && surface.visible
+    visible: enabledShadow && surface.visible && !Theme.softwareRendering
     opacity: surface.opacity
     scale: surface.scale
     rotation: surface.rotation

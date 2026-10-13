@@ -50,7 +50,7 @@ Item {
         opacity: root.switching ? 0 : 1
         Behavior on opacity {
             NumberAnimation {
-                duration: Theme.previewCloseMotion
+                duration: Theme.reducedMotion ? 0 : (Theme.previewCloseMotion)
                 easing.type: Easing.OutCubic
             }
         }
@@ -66,7 +66,7 @@ Item {
             property real zoomFocusY: 0
             Behavior on zoom {
                 NumberAnimation {
-                    duration: Theme.previewMotion
+                    duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                     easing.type: Easing.OutCubic
                 }
             }
@@ -85,7 +85,7 @@ Item {
             }
             Behavior on entrance {
                 NumberAnimation {
-                    duration: Theme.previewMotion
+                    duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                     easing.type: Easing.OutCubic
                 }
             }
@@ -264,7 +264,7 @@ Item {
                         opacity: body.lightBackground ? 0 : 1
                         Behavior on opacity {
                             NumberAnimation {
-                                duration: Theme.previewMotion
+                                duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                             }
                         }
                     }
@@ -275,7 +275,7 @@ Item {
                         opacity: body.lightBackground ? 1 : 0
                         Behavior on opacity {
                             NumberAnimation {
-                                duration: Theme.previewMotion
+                                duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                             }
                         }
                     }
@@ -330,7 +330,7 @@ Item {
                                     opacity: revealed ? 1 : 0
                                     Behavior on opacity {
                                         NumberAnimation {
-                                            duration: Theme.previewMotion
+                                            duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                                             easing.type: Easing.OutCubic
                                         }
                                     }
@@ -365,7 +365,7 @@ Item {
                         opacity: visible ? 1 : 0
                         Behavior on opacity {
                             NumberAnimation {
-                                duration: Theme.previewMotion
+                                duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                                 easing.type: Easing.OutCubic
                             }
                         }
@@ -502,7 +502,7 @@ Item {
                     }
                     Behavior on expansion {
                         NumberAnimation {
-                            duration: Theme.previewMotion
+                            duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                             easing.type: Easing.OutCubic
                         }
                     }
@@ -564,7 +564,7 @@ Item {
                                         }
                                         Behavior on opacity {
                                             NumberAnimation {
-                                                duration: Theme.previewMotion
+                                                duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                                                 easing.type: Easing.OutCubic
                                             }
                                         }
@@ -628,7 +628,7 @@ Item {
         scale: down ? 0.9 : 1
         Behavior on scale {
             NumberAnimation {
-                duration: Theme.previewMotion
+                duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                 easing.type: Easing.OutCubic
             }
         }
@@ -645,7 +645,7 @@ Item {
                 rotation: previewControl.iconRotation
                 Behavior on rotation {
                     NumberAnimation {
-                        duration: Theme.previewMotion
+                        duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                         easing.type: Easing.OutCubic
                     }
                 }

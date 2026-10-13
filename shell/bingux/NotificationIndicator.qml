@@ -34,7 +34,7 @@ Item {
             property: "scale"
             from: 1
             to: 2.4
-            duration: 300
+            duration: Theme.reducedMotion ? 0 : (300)
             easing.type: Easing.OutCubic
         }
         NumberAnimation {
@@ -42,7 +42,7 @@ Item {
             property: "opacity"
             from: 0.75
             to: 0
-            duration: 300
+            duration: Theme.reducedMotion ? 0 : (300)
             easing.type: Easing.OutCubic
         }
         SequentialAnimation {
@@ -51,14 +51,14 @@ Item {
                 property: "scale"
                 from: 1
                 to: 1.15
-                duration: 100
+                duration: Theme.reducedMotion ? 0 : (100)
                 easing.type: Easing.OutCubic
             }
             NumberAnimation {
                 target: badge
                 property: "scale"
                 to: 1
-                duration: 200
+                duration: Theme.reducedMotion ? 0 : (200)
                 easing.type: Easing.OutCubic
             }
         }

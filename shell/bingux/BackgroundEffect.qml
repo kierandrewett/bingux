@@ -11,6 +11,6 @@ Loader {
     onLoaded: {
         item.target = Qt.binding(() => root.target);
         item.radius = Qt.binding(() => root.radius);
-        item.enabled = Qt.binding(() => root.requested);
+        item.enabled = Qt.binding(() => root.requested && !Theme.softwareRendering);
     }
 }

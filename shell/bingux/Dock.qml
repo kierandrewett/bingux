@@ -1569,7 +1569,7 @@ PanelWindow {
     }
 
     BlurRegion {
-        enabled: !standardDockBlur.available
+        enabled: !Theme.softwareRendering && !standardDockBlur.available
         window: root
         surfaceNamespace: "bingux-dock"
         region: dockSurface.visible ? Qt.rect(dockSurface.x, dockSurface.y, dockSurface.width, dockSurface.height) : Qt.rect(0, 0, 0, 0)
@@ -1696,7 +1696,7 @@ PanelWindow {
         id: settleAnimation
         target: root
         property: "settleOffset"
-        duration: 180
+        duration: Theme.reducedMotion ? 0 : (180)
         easing.type: Easing.OutCubic
         onFinished: root.completeDrag()
     }
@@ -1949,7 +1949,7 @@ PanelWindow {
                         Behavior on scale {
                             enabled: !dockButton.entering && !dockButton.exiting
                             NumberAnimation {
-                                duration: Theme.motion
+                                duration: Theme.reducedMotion ? 0 : (Theme.motion)
                                 easing.type: Easing.OutCubic
                             }
                         }
@@ -1960,7 +1960,7 @@ PanelWindow {
                         Behavior on opacity {
                             enabled: !dockButton.entering && !dockButton.exiting && root.draggedId !== dockButton.currentGroup.id
                             NumberAnimation {
-                                duration: Theme.motion
+                                duration: Theme.reducedMotion ? 0 : (Theme.motion)
                                 easing.type: Easing.OutCubic
                             }
                         }
@@ -2041,11 +2041,11 @@ PanelWindow {
                                     loops: Animation.Infinite
                                     NumberAnimation {
                                         to: 0.3
-                                        duration: 170
+                                        duration: Theme.reducedMotion ? 0 : (170)
                                     }
                                     NumberAnimation {
                                         to: 1
-                                        duration: 170
+                                        duration: Theme.reducedMotion ? 0 : (170)
                                     }
                                 }
                             }
@@ -2059,7 +2059,7 @@ PanelWindow {
                                 presentation: DesktopLayout.presentation(root.preferences, "app:" + root.pinIdentity(dockButton.currentGroup.desktopEntry?.id || dockButton.currentGroup.id), "dock", dockButton.currentGroup.desktopEntry?.name || dockButton.currentGroup.id, dockButton.currentGroup.desktopEntry?.icon || "application-x-executable", true, false)
                                 implicitSize: root.iconSize
                                 opacity: root.launchFailures[dockButton.currentGroup.id] ? 0.5 : 1
-                                layer.enabled: !!root.launchFailures[dockButton.currentGroup.id]
+                                layer.enabled: !!root.launchFailures[dockButton.currentGroup.id] && !Theme.softwareRendering
                                 layer.effect: MultiEffect {
                                     saturation: -1
                                 }

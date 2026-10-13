@@ -22,7 +22,7 @@ Item {
     opacity: reveal
     Behavior on reveal {
         NumberAnimation {
-            duration: Theme.previewMotion
+            duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
         }
     }
     function timestamp(milliseconds) {
@@ -69,7 +69,7 @@ Item {
         scale: down ? 0.9 : 1
         Behavior on scale {
             NumberAnimation {
-                duration: Theme.previewMotion
+                duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                 easing.type: Easing.OutCubic
             }
         }
@@ -123,7 +123,7 @@ Item {
                 opacity: status === Image.Ready ? 1 : 0
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: Theme.previewMotion
+                        duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                     }
                 }
             }
@@ -136,7 +136,7 @@ Item {
                 opacity: root.animation ? (gif.status === Image.Ready ? 0 : 1) : (player.position > 0 ? 0 : 1)
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: Theme.previewMotion
+                        duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                     }
                 }
             }
@@ -179,7 +179,7 @@ Item {
         width: root.animation ? 46 : parent.width - 20
         height: 42
         radius: 10
-        color: "#e6202227"
+        color: Theme.softwareRendering ? "#ff25272b" : "#e6202227"
         border.width: 1
         border.color: "#25ffffff"
         opacity: root.controlsShown ? 1 : 0
@@ -188,7 +188,7 @@ Item {
         }
         Behavior on opacity {
             NumberAnimation {
-                duration: Theme.previewMotion
+                duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                 easing.type: Easing.OutCubic
             }
         }
@@ -263,7 +263,7 @@ Item {
                     scale: seek.pressed ? 1.25 : seek.hovered ? 1 : 0.7
                     Behavior on scale {
                         NumberAnimation {
-                            duration: Theme.previewMotion
+                            duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                         }
                     }
                 }

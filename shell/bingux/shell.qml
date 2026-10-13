@@ -830,6 +830,15 @@ ShellRoot {
 
     PanelWindow {
         id: topBar
+        // GraphicsInfo is attached to an item in the actual shell window so
+        // its fallback reflects the renderer used by this Quickshell process.
+        Item {
+            width: 0
+            height: 0
+            property int graphicsApi: GraphicsInfo.api
+            onGraphicsApiChanged: Theme.reportGraphicsApi(graphicsApi)
+            Component.onCompleted: Theme.reportGraphicsApi(graphicsApi)
+        }
         function snapshotLayout() {
             if (customLayout)
                 return customLayout;
