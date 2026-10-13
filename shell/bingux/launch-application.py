@@ -29,6 +29,23 @@ class LaunchTimeout(RuntimeError):
     pass
 
 
+class LaunchContext(Gio.AppLaunchContext):
+    def __init__(self, token):
+        super().__init__()
+        self.token = token or None
+        # Shells and user managers are long-lived. Only the explicit per-gesture
+        # token belongs to this launch; inherited startup state must not be reused.
+        self.unsetenv("XDG_ACTIVATION_TOKEN")
+        self.unsetenv("DESKTOP_STARTUP_ID")
+        if self.token:
+            self.setenv("XDG_ACTIVATION_TOKEN", self.token)
+
+    def do_get_startup_notify_id(self, _info, _files):
+        # GIO uses this for both Exec startup notification and D-Bus platform
+        # data when the desktop entry opts in with StartupNotify=true.
+        return self.token
+
+
 def refresh_graphical_environment():
     """Use the current session display even when the caller started before it."""
     try:
@@ -163,7 +180,7 @@ def launch_local(args):
             handler = Gio.AppInfo.get_default_for_uri_scheme("steam")
             if handler is None:
                 return report_failure(identity, "Steam's URI handler is not installed.", args.notify_errors)
-            accepted = handler.launch_uris([uri], Gio.AppLaunchContext())
+            accepted = handler.launch_uris([uri], LaunchContext(args.activation_token))
             if not accepted:
                 return report_failure(identity, "Steam did not accept the launch request.", args.notify_errors)
         except GLib.Error as error:
@@ -202,7 +219,7 @@ def launch_local(args):
             True,
         )
     try:
-        context = Gio.AppLaunchContext()
+        context = LaunchContext(args.activation_token)
         if args.action is not None:
             if args.action not in entry.list_actions():
                 return report_failure(
@@ -225,6 +242,7 @@ def main(argv=None):
     parser.add_argument("--feedback-file", help=argparse.SUPPRESS)
     parser.add_argument("--dock-feedback", action="store_true")
     parser.add_argument("--host-launch", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--activation-token", help=argparse.SUPPRESS)
     parser.add_argument("--report-timeout", action="store_true")
     parser.add_argument("--notify-errors", action="store_true")
     action = parser.add_mutually_exclusive_group()
@@ -232,6 +250,8 @@ def main(argv=None):
     action.add_argument("--action", help="Desktop action ID from the entry's Actions list (not its display name)")
     parser.add_argument("desktop_id")
     args = parser.parse_args(argv)
+    os.environ.pop("XDG_ACTIVATION_TOKEN", None)
+    os.environ.pop("DESKTOP_STARTUP_ID", None)
     global FEEDBACK_PATH
     FEEDBACK_PATH = args.feedback_file
     # A development runtime may use a private user namespace. Flatpak must
