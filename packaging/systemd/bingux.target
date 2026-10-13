@@ -1,10 +1,11 @@
 [Unit]
-Description=Bingux desktop shell
-# Bingux uses Gnoblin's layer-shell and compositor shortcut protocols. It is
-# enabled under the Gnoblin session target, never under generic graphical use.
+Description=Bingux helper services
+# Gnoblin's standalone session activates gnoblin-session.target and does not use
+# gnome-session, so that is the target this hangs off. The shell and its surfaces
+# are started by Gnoblin's Lua autostart; only the helper daemons belong here.
 PartOf=graphical-session.target
 After=graphical-session.target
-Wants=bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service
+Wants=bingux-searchd.service bingux-statusd.service
 
 [Install]
-WantedBy=gnome-session@gnoblin.target
+WantedBy=gnoblin-session.target

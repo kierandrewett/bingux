@@ -168,8 +168,13 @@ class InstallTest(unittest.TestCase):
             searchd_unit = (stage / "usr/lib/systemd/user/bingux-searchd.service").read_text()
             self.assertIn("ExecStart=/usr/libexec/bingux/search-service", searchd_unit)
             target_unit = (stage / "usr/lib/systemd/user/bingux.target").read_text()
-            self.assertIn("WantedBy=gnome-session@gnoblin.target", target_unit)
+            self.assertIn("WantedBy=gnoblin-session.target", target_unit)
+            self.assertNotIn("gnome-session@gnoblin.target", target_unit)
             self.assertNotIn("WantedBy=graphical-session.target", target_unit)
+            # Only the helper daemons are pulled in. The shell and its surfaces come from
+            # Gnoblin's Lua autostart, so wanting them here would start a second copy.
+            wants = next(line for line in target_unit.splitlines() if line.startswith("Wants="))
+            self.assertEqual(set(wants[len("Wants=") :].split()), {"bingux-searchd.service", "bingux-statusd.service"})
 
     def test_missing_build_fails_before_install(self):
         with tempfile.TemporaryDirectory() as name:
@@ -362,7 +367,7 @@ class InstallTest(unittest.TestCase):
             self.assertIn("enable bingux.target", log.read_text())
             self.assertIn("is-active --quiet gnoblin-session.target", log.read_text())
             self.assertIn("start bingux.target", log.read_text())
-            wants = config / "systemd/user/gnome-session@gnoblin.target.wants"
+            wants = config / "systemd/user/gnoblin-session.target.wants"
             wants.mkdir(parents=True)
             enabled_target = wants / "bingux.target"
             enabled_target.symlink_to(prefix / "lib/systemd/user/bingux.target")
