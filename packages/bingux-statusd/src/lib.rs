@@ -190,16 +190,17 @@ pub fn metrics_json(metrics: Metrics) -> String {
             format_optional_number(metrics.receive_bytes_per_second),
             format_optional_number(metrics.transmit_bytes_per_second),
         ),
-        metrics.extra,
+        &metrics.extra,
     )
 }
 
 /// Encode metrics and GNOME Shell state in one newline-delimited socket record.
 ///
 /// This uses a separate serializer for the text-bearing state so an input
-/// source name cannot corrupt the JSON stream.
+/// source name cannot corrupt the JSON stream. The cached sample is borrowed
+/// so encoding does not copy its process list and argument strings.
 pub fn metrics_with_desktop_state_json(
-    metrics: Metrics,
+    metrics: &Metrics,
     desktop_state: &DesktopState,
     microphone: &microphone::CaptureSnapshot,
 ) -> Result<String, serde_json::Error> {
@@ -228,15 +229,15 @@ pub fn metrics_with_desktop_state_json(
             microphone.available,
             microphone_captures,
         ),
-        metrics.extra,
+        &metrics.extra,
     ))
 }
 
-fn with_extra(mut record: String, extra: extra::ExtraMetrics) -> String {
-    if extra != extra::ExtraMetrics::default() {
+fn with_extra(mut record: String, extra: &extra::ExtraMetrics) -> String {
+    if *extra != extra::ExtraMetrics::default() {
         record.truncate(record.len() - 2);
         record.push_str(",\"extra\":");
-        record.push_str(&serde_json::to_string(&extra).expect("optional metrics are serializable"));
+        record.push_str(&serde_json::to_string(extra).expect("optional metrics are serializable"));
         record.push_str("}\n");
     }
     record
@@ -640,7 +641,7 @@ mod tests {
     #[test]
     fn serialises_gnoblin_state_with_a_metrics_record() {
         let record = metrics_with_desktop_state_json(
-            Metrics {
+            &Metrics {
                 extra: Default::default(),
                 cpu_percent: Some(12.5),
                 memory_total_bytes: 16_777_216,

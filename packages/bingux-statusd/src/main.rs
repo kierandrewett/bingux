@@ -1,5 +1,9 @@
 mod gnoblin;
 
+#[cfg(test)]
+#[path = "../tests/record-allocation/mod.rs"]
+mod record_allocation;
+
 use bingux_statusd::{
     DesktopState, Metrics, OsdRequest, byte_rate, cpu_percent, metrics_with_desktop_state_json,
     microphone::CaptureSnapshot, osd_json, parse_cpu_stat, parse_meminfo, parse_network_totals,
@@ -134,7 +138,7 @@ fn run() -> io::Result<()> {
     let mut latest_metrics = sampler.sample()?;
     let mut desktop_state = DesktopState::default();
     let mut microphone = CaptureSnapshot::default();
-    let mut latest_record = record_json(latest_metrics.clone(), &desktop_state, &microphone)?;
+    let mut latest_record = record_json(&latest_metrics, &desktop_state, &microphone)?;
     let mut metrics_clients = Vec::new();
     let mut osd_clients = Vec::new();
     let mut next_sample = Instant::now() + SAMPLE_INTERVAL;
@@ -178,12 +182,12 @@ fn run() -> io::Result<()> {
             }
             Ok(Event::DesktopState(state)) => {
                 desktop_state = state;
-                latest_record = record_json(latest_metrics.clone(), &desktop_state, &microphone)?;
+                latest_record = record_json(&latest_metrics, &desktop_state, &microphone)?;
                 publish_record(&mut metrics_clients, &latest_record);
             }
             Ok(Event::Microphone(snapshot)) => {
                 microphone = snapshot;
-                latest_record = record_json(latest_metrics.clone(), &desktop_state, &microphone)?;
+                latest_record = record_json(&latest_metrics, &desktop_state, &microphone)?;
                 publish_record(&mut metrics_clients, &latest_record);
             }
             Ok(Event::OsdRequest(request)) => {
@@ -208,7 +212,7 @@ fn publish_sample(
     clients: &mut Vec<UnixStream>,
 ) -> io::Result<()> {
     *latest_metrics = sampler.sample()?;
-    *latest_record = record_json(latest_metrics.clone(), desktop_state, microphone)?;
+    *latest_record = record_json(latest_metrics, desktop_state, microphone)?;
     publish_record(clients, latest_record);
     Ok(())
 }
@@ -218,7 +222,7 @@ fn publish_record(clients: &mut Vec<UnixStream>, record: &str) {
 }
 
 fn record_json(
-    metrics: Metrics,
+    metrics: &Metrics,
     desktop_state: &DesktopState,
     microphone: &CaptureSnapshot,
 ) -> io::Result<String> {
