@@ -10,9 +10,13 @@ Item {
     property string source: ""
     property bool symbolic: false
     readonly property real maximumScale: 4
+    // The point the icon grows from. The search launcher grows from the icon's centre;
+    // the dock grows from the bottom centre, like GNOME's launch animation.
+    property int scaleOrigin: Item.Center
     readonly property bool running: launch.running
     signal finished
     visible: running
+    transformOrigin: scaleOrigin
     z: 100
 
     function play(icon, iconSource, isSymbolic, clickPosition) {
