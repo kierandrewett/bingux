@@ -144,13 +144,13 @@ FocusScope {
     Accessible.name: player ? player.identity + " playback" : "Media playback"
 
     FrameAnimation {
-        running: root.menuActive && root.visible && root.hasPosition && root.player.isPlaying && !seek.pressed && !seek.wheelActive && !Theme.reducedMotion
+        running: root.menuActive && seek.visible && root.hasPosition && root.player.isPlaying && !seek.pressed && !seek.wheelActive && !Theme.reducedMotion
         onTriggered: root.playheadFrame = (root.playheadFrame + 1) % 1000000
     }
     Timer {
         interval: 1000
         repeat: true
-        running: root.menuActive && root.visible && root.hasPosition && root.player.isPlaying && !seek.pressed && Theme.reducedMotion
+        running: root.menuActive && seek.visible && root.hasPosition && root.player.isPlaying && !seek.pressed && Theme.reducedMotion
         onTriggered: root.playheadFrame = (root.playheadFrame + 1) % 1000000
     }
     // Reparented controls must stay above the card when they return from the bar.
@@ -344,6 +344,10 @@ FocusScope {
         }
         SeekSlider {
             id: seek
+            // The inline bar keeps this panel hidden. Resume at the current
+            // position on reveal, including paused players and reduced motion.
+            onVisibleChanged: if (visible)
+                root.playheadFrame = (root.playheadFrame + 1) % 1000000
             Layout.row: 1
             accent: root.accent
             trackPreviewVisible: seek.previewVisible
