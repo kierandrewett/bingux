@@ -43,3 +43,17 @@ for 720p, 1080p and 4K canvases. Maximum-radius guards substantially reduce
 the earlier strips-only savings; use these measured bytes rather than a
 fixed speedup claim. Timings depend on the renderer and theme. This check
 does not establish compositor frame pacing or session memory lifetime.
+
+## Check title-button layouts
+
+```sh
+bash packages/bingux-frame/test-button-layout.sh /tmp/frame-button-layout
+```
+
+This starts a private headless Weston display and an isolated settings bus.
+It exercises the production painter with GTK layout changes on the same frame:
+three buttons, close only, no buttons, and buttons on both sides. It checks
+pixels, semantic click regions, redraw requests, and the explicit
+`--button-layout=:close` override. It needs GTK4, libadwaita, Weston, a C
+compiler, and D-Bus. It does not change desktop settings or use the active
+session. Native compositor input and configuration reload still need a VM check.
