@@ -55,6 +55,14 @@ Changes stay in the preview until **Done**. Cancel discards the preview. Escape 
 
 The live shell uses the same widget instances after reparenting. Menus follow their controls, including controls moved to the dock. Crowded top-bar sections move controls into the existing More menu. Live top-bar reordering remains persistent after using the editor.
 
+## Tray menus
+
+Right-click a tray icon to open its application menu. Bingux creates menus
+when you hover, focus or activate an icon, and reuses them on later opens.
+
+If an application supplies its menu after the first click, Bingux waits up to four seconds for
+the entries. Press Escape or click away to cancel the request.
+
 ## Search providers
 
 Open **Settings > Search** to manage website engines and built-in providers. Choose Add to create an engine; the new form starts with empty fields.

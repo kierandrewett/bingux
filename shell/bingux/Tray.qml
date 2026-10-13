@@ -75,13 +75,21 @@ Item {
                     objectName: "trayItem-" + modelData.id
                     property real transitionProgress: 0
                     property int slideDirection: 1
+                    property bool trayMenuRetained: false
+                    property bool trayMenuOpenRequested: false
+                    property var trayMenuRequestHandle: null
+                    readonly property var trayMenuHandle: modelData.menu
                     readonly property real slideOffset: slideDirection * (width + Theme.spaceSmall) * (1 - transitionProgress)
                     function revealFocus() {
                         if (!activeFocus || root.panelLayout)
                             return;
                         trayRow.contentX = Math.max(0, Math.min(trayRow.contentWidth - trayRow.width, Math.max(x + width - trayRow.width, Math.min(trayRow.contentX, x))));
                     }
-                    onActiveFocusChanged: revealFocus()
+                    onActiveFocusChanged: {
+                        revealFocus();
+                        if (!activeFocus && trayMenuOpenRequested)
+                            cancelTrayMenuOpen();
+                    }
                     onXChanged: if (activeFocus)
                         Qt.callLater(revealFocus)
                     NumberAnimation {
@@ -109,11 +117,39 @@ Item {
                     Keys.onPressed: function (event) {
                         if (event.key === Qt.Key_Return || event.key === Qt.Key_Space) {
                             if (modelData.onlyMenu && modelData.hasMenu)
-                                trayMenu.open();
+                                trayButton.openTrayMenu();
                             else
                                 modelData.activate();
                             event.accepted = true;
+                        } else if (event.key === Qt.Key_Escape && trayButton.trayMenuOpenRequested) {
+                            trayButton.cancelTrayMenuOpen();
+                            event.accepted = true;
                         }
+                    }
+                    onTrayMenuHandleChanged: cancelTrayMenuOpen()
+                    function cancelTrayMenuOpen() {
+                        trayMenuOpenTimeout.stop();
+                        trayMenuOpenRequested = false;
+                        trayMenuRequestHandle = null;
+                    }
+                    function openTrayMenu() {
+                        trayMenuRequestHandle = trayMenuHandle;
+                        trayMenuOpenRequested = true;
+                        trayMenuOpenTimeout.restart();
+                        forceActiveFocus();
+                        trayMenuRetained = true;
+                        tryOpenRequestedTrayMenu();
+                    }
+                    function tryOpenRequestedTrayMenu() {
+                        if (!trayMenuOpenRequested || trayMenuRequestHandle !== trayMenuHandle || !trayMenuLoader.item?.hasMenuItems)
+                            return;
+                        cancelTrayMenuOpen();
+                        trayMenuLoader.item.visible = true;
+                    }
+                    Timer {
+                        id: trayMenuOpenTimeout
+                        interval: 4000
+                        onTriggered: trayButton.cancelTrayMenuOpen()
                     }
                     readonly property bool isTailscaleItem: {
                         const id = typeof modelData.id === "string" ? modelData.id : "";
@@ -145,14 +181,14 @@ Item {
                     BarTooltip {
                         anchorItem: trayButton
                         barWindow: root.parentWindow
-                        requested: !DesktopEditing.active && (trayMouse.containsMouse || trayButton.activeFocus) && !trayMenu.visible
+                        requested: !DesktopEditing.active && (trayMouse.containsMouse || trayButton.activeFocus) && !(trayMenuLoader.item?.visible ?? false)
                         text: trayButton.Accessible.name || "Tray application"
                     }
 
                     BarControlSurface {
                         hovered: trayMouse.containsMouse
                         pressed: trayMouse.pressed
-                        selected: trayMenu.visible
+                        selected: trayMenuLoader.item?.visible ?? false
                         focused: trayButton.activeFocus
                     }
 
@@ -224,16 +260,28 @@ Item {
                             color: Theme.accent
                         }
                     }
-                    TrayMenu {
-                        id: trayMenu
-                        objectName: "trayItemMenu"
-                        menu: trayButton.modelData.menu
-                        screen: root.parentWindow.screen
-                        anchorWindow: root.parentWindow
-                        anchorItem: trayButton
-                        function open() {
-                            if (hasMenuItems)
-                                visible = true;
+                    Loader {
+                        id: trayMenuLoader
+                        active: trayButton.trayMenuRetained || trayMouse.containsMouse || trayButton.activeFocus
+                        asynchronous: true
+                        sourceComponent: Component {
+                            TrayMenu {
+                                objectName: "trayItemMenu"
+                                menu: trayButton.trayMenuHandle
+                                screen: root.parentWindow.screen
+                                anchorWindow: root.parentWindow
+                                anchorItem: trayButton
+                            }
+                        }
+                        onLoaded: {
+                            trayButton.trayMenuRetained = true;
+                            trayButton.tryOpenRequestedTrayMenu();
+                        }
+                    }
+                    Connections {
+                        target: trayMenuLoader.item
+                        function onHasMenuItemsChanged() {
+                            trayButton.tryOpenRequestedTrayMenu();
                         }
                     }
                     MouseArea {
@@ -246,14 +294,14 @@ Item {
                         onClicked: function (mouse) {
                             if (mouse.button === Qt.LeftButton) {
                                 if (trayButton.modelData.onlyMenu && trayButton.modelData.hasMenu) {
-                                    trayMenu.open();
+                                    trayButton.openTrayMenu();
                                 } else {
                                     trayButton.modelData.activate();
                                 }
                             } else if (mouse.button === Qt.MiddleButton) {
                                 trayButton.modelData.secondaryActivate();
                             } else if (mouse.button === Qt.RightButton && trayButton.modelData.hasMenu) {
-                                trayMenu.open();
+                                trayButton.openTrayMenu();
                             }
                         }
 
@@ -266,6 +314,8 @@ Item {
                                 trayButton.modelData.scroll(wheel.angleDelta.y, false);
                             }
                         }
+                        onExited: if (trayButton.trayMenuOpenRequested)
+                            trayButton.cancelTrayMenuOpen()
                     }
                 }
             }

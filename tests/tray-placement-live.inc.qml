@@ -54,6 +54,8 @@
                 tryVerify(() => findChild(tray, "trayItem-sample-17") !== null);
                 const first = findChild(tray, "trayItem-sample-0");
                 const last = findChild(tray, "trayItem-sample-17");
+                mouseMove(last, last.width / 2, last.height / 2);
+                tryVerify(() => findChild(last, "trayItemMenu") !== null, 1000);
                 const menu = findChild(last, "trayItemMenu");
                 menu.actions = [
                     {

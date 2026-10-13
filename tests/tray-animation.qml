@@ -74,9 +74,11 @@ ShellRoot {
                 empty.onlyMenu = true;
                 tray.trayItems = [empty];
                 tryVerify(() => item("empty-menu") !== null, 1000);
+                item("empty-menu").forceActiveFocus();
+                tryVerify(() => findChild(item("empty-menu"), "trayItemMenu") !== null, 1000);
                 const menu = findChild(item("empty-menu"), "trayItemMenu");
                 verify(!menu.hasMenuItems, "A menu-less tray item has no menu rows");
-                menu.open();
+                item("empty-menu").openTrayMenu();
                 wait(50);
                 verify(!menu.visible, "A menu-less tray item does not show an empty popup");
             }
