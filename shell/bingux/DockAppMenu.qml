@@ -203,7 +203,9 @@ ShellPopup {
                     navigation: menuNavigation
 
                     onTriggered: {
-                        modelData.execute();
+                        const helper = Quickshell.env("BINGUX_APP_LAUNCHER_HELPER");
+                        const command = helper ? [helper] : ["python3", decodeURIComponent(Qt.resolvedUrl("launch-application.py").toString().replace(/^file:\/\//, ""))];
+                        Quickshell.execDetached(command.concat(["--notify-errors", "--action=" + modelData.id, "--", button.currentGroup.desktopEntry.id]));
                         button.menuOpen = false;
                     }
                 }

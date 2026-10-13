@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch a desktop entry through GIO, including its optional new-window action."""
+"""Launch a desktop entry or one of its actions through GIO."""
 
 import argparse
 import json
@@ -150,6 +150,8 @@ def launch_local(args):
         raise ValueError("Expected a desktop entry ID")
     steam_game = re.fullmatch(r"steam_app_([0-9]+)", identity)
     if steam_game:
+        if args.action is not None:
+            return report_failure(identity, "Steam shortcuts do not provide desktop actions.", args.notify_errors)
         if args.report_timeout:
             return report_failure(
                 identity,
@@ -201,7 +203,15 @@ def launch_local(args):
         )
     try:
         context = Gio.AppLaunchContext()
-        if args.new_window and "new-window" in entry.list_actions():
+        if args.action is not None:
+            if args.action not in entry.list_actions():
+                return report_failure(
+                    entry.get_display_name(),
+                    f"The desktop action {args.action!r} is not available.",
+                    args.notify_errors,
+                )
+            call_with_timeout(lambda: entry.launch_action(args.action, context))
+        elif args.new_window and "new-window" in entry.list_actions():
             call_with_timeout(lambda: entry.launch_action("new-window", context))
         else:
             launch_and_watch(entry, context)
@@ -217,7 +227,9 @@ def main(argv=None):
     parser.add_argument("--host-launch", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--report-timeout", action="store_true")
     parser.add_argument("--notify-errors", action="store_true")
-    parser.add_argument("--new-window", action="store_true")
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument("--new-window", action="store_true")
+    action.add_argument("--action", help="Desktop action ID from the entry's Actions list (not its display name)")
     parser.add_argument("desktop_id")
     args = parser.parse_args(argv)
     global FEEDBACK_PATH

@@ -153,6 +153,17 @@ The default desktop-entry launcher drops an inherited negative nice value to
 manager rejects a launch. It preserves positive nice values and scheduler
 policy. External scheduling rules can change an app's priority afterwards.
 
+Calendar launches from the top bar and Settings launches from the control
+centre also drop inherited negative nice. Calendar's date and event commands
+use the same rule. If a priority reset fails, the helper writes a diagnostic
+to stderr and continues launching. Custom search launcher and file-opener
+commands retain their own launch behavior.
+
+Dock menu application actions use the desktop entry's action ID through GIO.
+This preserves field-code expansion, the entry's working directory and D-Bus
+activation. An unavailable action reports an error instead of starting the
+entry's default command.
+
 ## Runtime requirements
 
 The full shell uses Qt 6, Quickshell, PipeWire or PulseAudio, NetworkManager,

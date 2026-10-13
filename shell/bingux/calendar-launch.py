@@ -6,9 +6,9 @@ import datetime
 import locale
 import os
 from pathlib import Path
-import subprocess
 import time
 from gi.repository import Gio, GLib
+from application_spawn import spawn_detached
 
 
 def calendar_locale(bus):
@@ -45,12 +45,8 @@ def main():
         locale.setlocale(locale.LC_TIME, "")
     # Calendar's CLI uses EDS's locale date parser, not ISO 8601.
     date_format = locale.nl_langinfo(locale.D_FMT).replace("%y", "%Y")
-    subprocess.Popen(
+    spawn_detached(
         ["gnome-calendar", "--date", date.strftime(date_format)],
-        start_new_session=True,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
     )
     if not args.uuid:
         return
@@ -70,12 +66,8 @@ def main():
         if reply.unpack()[0]:
             # Let the date command reach the application before the event action.
             time.sleep(0.2)
-            subprocess.Popen(
+            spawn_detached(
                 ["gnome-calendar", "--uuid", args.uuid],
-                start_new_session=True,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
             )
             return
         time.sleep(0.1)
