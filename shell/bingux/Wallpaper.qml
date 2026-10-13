@@ -113,6 +113,16 @@ Variants {
                 onStatusChanged: stage.ready(layerB)
             }
 
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.RightButton
+                onPressed: mouse => {
+                    const shellPath = Quickshell.shellPath("shell.qml");
+                    const quickshell = Quickshell.env("BINGUX_QUICKSHELL") || "qs";
+                    Quickshell.execDetached([quickshell, "-p", shellPath, "ipc", "call", "shell", "desktopMenu", window.screen.name, String(mouse.x), String(mouse.y)]);
+                }
+            }
+
             ParallelAnimation {
                 id: reveal
                 property Item target
