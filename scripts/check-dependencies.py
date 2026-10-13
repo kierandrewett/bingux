@@ -2,10 +2,12 @@
 """Check the prerequisites needed to build and install Bingux."""
 
 import argparse
+import json
 import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 
@@ -60,6 +62,99 @@ def check_quickshell_qt(quickshell):
             f"Quickshell Qt mismatch ({quickshell}): built against Qt {build[1]}, loads Qt {runtime[1]}; "
             "rebuild or reinstall this Quickshell for the loaded Qt, or set BINGUX_QUICKSHELL to a matching build"
         )
+    return None
+
+
+def check_quickshell_actions(quickshell):
+    """Read the selected runtime's real desktop-action model, without a session."""
+    remedy = (
+        "use a Quickshell build with the desktop-action parser fix, or set BINGUX_QUICKSHELL to one; "
+        "see https://github.com/kierandrewett/gnoblin/tree/main/patches/quickshell"
+    )
+    expected = {
+        "id": "org.bingux.ActionIdentity",
+        "actions": [
+            {"id": "proof", "name": "Open proof"},
+            {"id": "x", "name": "Single character"},
+            {"id": "aproof", "name": "Same label"},
+            {"id": "bproof", "name": "Same label"},
+        ],
+    }
+    expected["actions"].sort(key=lambda action: action["id"])
+    with tempfile.TemporaryDirectory(prefix="bingux-quickshell-actions-") as temporary:
+        root = Path(temporary)
+        for name in ("home", "data/applications", "empty", "config", "cache", "runtime"):
+            (root / name).mkdir(parents=True, mode=0o700)
+        desktop = (
+            "[Desktop Entry]\nType=Application\nName=Bingux dependency probe\nExec=/bin/false\n"
+            "Actions=proof;x;aproof;bproof;\n"
+        )
+        for action in expected["actions"]:
+            desktop += f"\n[Desktop Action {action['id']}]\nName={action['name']}\nExec=/bin/false\n"
+        (root / "data/applications/org.bingux.ActionIdentity.desktop").write_text(desktop)
+        shutil.copyfile(Path(__file__).with_name("quickshell-actions.qml"), root / "shell.qml")
+        # Retain Qt library/plugin selection from the version check. Replace all
+        # session endpoints and config/data paths before loading our only QML file.
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key not in ("DISPLAY", "WAYLAND_DISPLAY", "WAYLAND_SOCKET", "SESSION_MANAGER")
+            and not key.startswith("QS_")
+        }
+        environment.update(
+            HOME=str(root / "home"),
+            XDG_DATA_HOME=str(root / "data"),
+            XDG_DATA_DIRS=str(root / "empty"),
+            XDG_CONFIG_HOME=str(root / "config"),
+            XDG_CONFIG_DIRS=str(root / "empty"),
+            XDG_CACHE_HOME=str(root / "cache"),
+            XDG_STATE_HOME=str(root / "state"),
+            XDG_RUNTIME_DIR=str(root / "runtime"),
+            DBUS_SESSION_BUS_ADDRESS=f"unix:path={root}/no-session-bus",
+            DBUS_SYSTEM_BUS_ADDRESS=f"unix:path={root}/no-system-bus",
+            QT_QPA_PLATFORM="offscreen",
+            QT_QUICK_BACKEND="software",
+            QSG_RHI_BACKEND="software",
+            LANG="C.UTF-8",
+            LC_ALL="C.UTF-8",
+        )
+        try:
+            with subprocess.Popen(
+                [quickshell, "--no-color", "--log-rules", "qml.info=true", "--path", str(root / "shell.qml")],
+                env=environment,
+                # Keep relative executable/library paths identical to the Qt
+                # version check; the QML config and all XDG paths are private.
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True,
+            ) as process:
+                try:
+                    stdout, stderr = process.communicate(timeout=10)
+                finally:
+                    # Also clean up wrapper/crash-handler children on timeout.
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return f"Cannot verify Quickshell desktop-action IDs ({quickshell}): {error}; {remedy}"
+        if process.returncode != 0:
+            detail = (stderr or stdout).strip().splitlines()
+            detail = detail[-1][:500] if detail else f"exit status {process.returncode}"
+            return f"Cannot verify Quickshell desktop-action IDs ({quickshell}): {detail}; {remedy}"
+        marker = "BINGUX_ACTION_IDENTITY="
+        try:
+            results = [
+                json.loads(line.split(marker, 1)[1]) for line in (stdout + stderr).splitlines() if marker in line
+            ]
+        except json.JSONDecodeError:
+            results = []
+        if not results:
+            return f"Cannot verify Quickshell desktop-action IDs ({quickshell}): no valid probe result; {remedy}"
+        if results != [expected]:
+            return f"Quickshell desktop-action IDs are incorrect ({quickshell}); {remedy}"
     return None
 
 
@@ -123,6 +218,8 @@ def main():
             qt_failure = check_quickshell_qt(quickshell)
             if qt_failure:
                 failures.append(qt_failure)
+            elif action_failure := check_quickshell_actions(quickshell):
+                failures.append(action_failure)
         elif configured := os.environ.get("BINGUX_QUICKSHELL"):
             failures.append(f"BINGUX_QUICKSHELL is not executable: {configured}")
         else:

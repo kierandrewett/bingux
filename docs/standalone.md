@@ -36,6 +36,19 @@ and runtime Qt versions differ, it reports both versions and the executable.
 Rebuild or reinstall that runtime for your Qt version, or set `BINGUX_QUICKSHELL`
 to a matching executable before running `make doctor` again.
 
+`make doctor` also checks the selected Quickshell's desktop-action IDs through
+an isolated offscreen QML probe. A runtime that truncates IDs, fails to start
+the probe or does not finish within ten seconds blocks `make install-user`.
+Use a corrected Quickshell build; the
+[Gnoblin parser patch](https://github.com/kierandrewett/gnoblin/tree/main/patches/quickshell)
+includes preparation instructions. Set `BINGUX_QUICKSHELL` to select that
+executable, then rerun `make doctor`.
+
+Use `make install-user` for a checked source installation. Calling
+`scripts/install-shell.py` directly bypasses prerequisite validation and is
+not a safe way to resolve a failed doctor check. Package staging through
+`make install` does not validate the eventual desktop's Quickshell runtime.
+
 The build produces the two QML plugins, the audio meter and the Rust search and
 status daemons. Quickshell is a runtime dependency because its Qt build must
 match the shell process.
@@ -157,6 +170,20 @@ The default desktop-entry launcher drops an inherited negative nice value to
 0 before directly starting an app, including the dock's fallback when the user
 manager rejects a launch. It preserves positive nice values and scheduler
 policy. External scheduling rules can change an app's priority afterwards.
+
+Calendar launches from the top bar and Settings launches from the control
+centre also drop inherited negative nice. Calendar's date and event commands
+use the same rule. If a priority reset fails, the helper writes a diagnostic
+to stderr and continues launching. Custom search launcher and file-opener
+commands retain their own launch behavior.
+
+Settings starts with `XDG_CURRENT_DESKTOP=GNOME` in its own environment.
+The Bingux session retains its existing desktop identity.
+
+Dock menu application actions use the desktop entry's action ID through GIO.
+This preserves field-code expansion, the entry's working directory and D-Bus
+activation. An unavailable action reports an error instead of starting the
+entry's default command.
 
 ## Runtime requirements
 

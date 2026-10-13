@@ -12,6 +12,7 @@ Item {
     property var nativeWindows: []
     property var pendingCommand: []
     property int attempts: 0
+    readonly property var spawnCommand: ["python3", decodeURIComponent(Qt.resolvedUrl("application_spawn.py").toString().replace(/^file:\/\//, "")), "--"]
     signal launchStarted(string desktopId)
     signal failed(string message)
     ShortcutSession {
@@ -24,7 +25,7 @@ Item {
         attempts = 0;
         pendingCommand = prepareCommand && prepareCommand.length ? command : [];
         launchStarted(root.desktopId);
-        Quickshell.execDetached(pendingCommand.length ? prepareCommand : command);
+        Quickshell.execDetached(spawnCommand.concat(pendingCommand.length ? prepareCommand : command));
         focusRetry.start();
     }
     Timer {
@@ -38,7 +39,7 @@ Item {
             const window = root.windows.find(item => item.appId.toLowerCase().replace(/\.desktop$/, "") === id);
             if (nativeWindow || window) {
                 if (root.pendingCommand.length) {
-                    Quickshell.execDetached(root.pendingCommand);
+                    Quickshell.execDetached(root.spawnCommand.concat(root.pendingCommand));
                     root.pendingCommand = [];
                 }
                 if (nativeWindow && compositor.nativeProtocol) {
