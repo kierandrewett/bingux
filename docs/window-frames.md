@@ -71,6 +71,29 @@ The `--compact` renderer option selects GTK's short titlebar. It is the Bingux
 default and pairs with 36-pixel top extents. Omitting it selects GTK's regular
 header, whose height depends on the installed theme, fonts, and GTK version.
 
+## Titlebar buttons
+
+Bingux follows GTK's title-button layout. To choose a layout specifically for
+Bingux frames, add `--button-layout=LEFT:RIGHT` to its renderer command:
+
+```lua
+gnoblin.configure {
+    frame_renderers = {
+        bingux = {"bingux-frame", "--compact", "--button-layout=:close"},
+    },
+}
+```
+
+This example puts only Close on the right. Use
+`--button-layout=close:minimize,maximize` for Close on the left and Minimize
+and Maximize on the right. `--button-layout=:` hides all buttons. Omit the
+argument to follow GTK settings, including later changes to those settings.
+
+Gnoblin's `frame.button_layout` affects its native fallback, which may appear
+while the Bingux helper is unavailable. It does not configure the Bingux helper.
+The global `window_management.button_layout` preference does not change
+Bingux frames or application-drawn titlebars.
+
 ## Apply changes
 
 Run `gnoblinctl config reload` after editing renderer registration or window
