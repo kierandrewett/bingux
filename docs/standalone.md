@@ -196,6 +196,13 @@ entry's default command.
 
 ## Runtime requirements
 
+Camera and screen-sharing application details use a persistent PipeWire graph
+monitor. Monitoring an idle graph does not run periodic full-graph queries or
+open a camera.
+
+If the connection fails, Bingux clears those details and retries after two
+seconds. It reads a fresh graph before restoring application details.
+
 The full shell uses Qt 6, Quickshell, PipeWire or PulseAudio, NetworkManager,
 a systemd user manager for search and status helpers, GNOME settings helpers,
 `wl-clipboard`, `xdg-utils`, PyGObject and the Python libraries used by document
