@@ -36,10 +36,11 @@ Variants {
             readonly property Image front: frontIsA ? layerA : layerB
             readonly property Image back: frontIsA ? layerB : layerA
             readonly property url wanted: BinguxPreferences.wallpaperUrl
-            // Raster sourceSize is in pixels, not logical screen coordinates.
-            // Reserve the largest login zoom without changing the decode size
-            // on every animation frame.
-            readonly property size decodeSize: Qt.size(Math.ceil(width * Screen.devicePixelRatio * 1.06), Math.ceil(height * Screen.devicePixelRatio * 1.06))
+            // Decode at the settled physical size. Enlarging the decode for the
+            // login zoom resamples matching-size images twice and softens edges.
+            // Use the window ratio: the screen ratio can round fractional scales up.
+            // Keep this size fixed throughout the animation.
+            readonly property size decodeSize: Qt.size(Math.ceil(width * window.devicePixelRatio), Math.ceil(height * window.devicePixelRatio))
 
             function show(image) {
                 const first = firstShow;

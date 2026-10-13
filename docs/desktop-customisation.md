@@ -8,6 +8,10 @@ Portrait and landscape images keep their proportions and crop to fill the previe
 The wallpaper fades in with a slight zoom-out at login. Changing it crossfades
 from the old image to the new one over about 0.6 seconds.
 
+Use an image that matches the display's physical resolution for sharp detail
+after the login zoom ends. On a scaled display, use its physical pixel dimensions
+rather than the logical desktop size.
+
 If you choose another image during a crossfade, Bingux finishes that fade and
 then shows your latest choice. It keeps the background covered throughout.
 
