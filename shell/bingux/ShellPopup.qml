@@ -46,6 +46,14 @@ Scope {
     readonly property real placementLeft: !hostItem && anchorWindow ? anchorWindow.margins.left : 0
     readonly property real placementRight: width - (!hostItem && anchorWindow ? anchorWindow.margins.right : 0)
     readonly property real belowAnchorY: anchorItem ? anchorPosition.y + Theme.gap : Theme.barHeight + Theme.gap
+    // Maximum card height inside the usable area. Anchored cards use the
+    // available space on their side of the anchor; all cards stay below the
+    // top bar, above the dock-safe edge, and below 80% of the output height.
+    property real popupSafeTop: Theme.barHeight + Theme.gap
+    property real popupDockSafeBottom: height - Theme.dockExclusiveHeight - Theme.gap
+    property real popupBelowAnchorY: belowAnchorY
+    property bool popupAnchorAbove: anchorAbove
+    property real maximumPopupHeight: Math.max(0, Math.min(height * 0.8, popupAnchorAbove ? anchorTop - popupSafeTop : popupDockSafeBottom - popupBelowAnchorY))
     readonly property bool anchorAbove: !hostItem && !!anchorWindow && anchorWindow.anchors.bottom && !anchorWindow.anchors.top
     readonly property real anchorTop: anchorAbove && typeof anchorWindow.popupAnchorTop === "number" ? anchorWindow.popupAnchorTop : anchorPosition.y - (anchorItem ? anchorItem.height : 0)
     readonly property point anchorPosition: {
@@ -233,9 +241,9 @@ Scope {
             z: 6 + root.popupDepth * 2
             // Centred anchors can land between pixels; keep settled borders crisp.
             x: Math.round(Math.max(root.placementLeft + Theme.gap, Math.min(root.preferredX, root.placementRight - width - Theme.gap)))
-            y: Math.round(Math.max(Theme.gap, Math.min(root.preferredY, root.height - height - Theme.gap)))
+            y: Math.round(Math.max(root.popupSafeTop, Math.min(root.preferredY, root.popupDockSafeBottom - height)))
             width: Math.max(0, Math.min(root.popupWidth, root.placementRight - root.placementLeft - Theme.gap * 2))
-            height: Math.min(root.popupHeight, root.height - Theme.gap * 2)
+            height: Math.min(root.popupHeight, root.maximumPopupHeight, root.height - Theme.gap * 2)
             opacity: root.motionSource ? root.motionSource.presentationOpacity : 0
             MouseArea {
                 anchors.fill: parent
@@ -273,6 +281,7 @@ Scope {
                     // Reparenting can append the material after this item.
                     // Keep content above it regardless of child insertion order.
                     z: 1
+                    clip: true
                     anchors.fill: parent
                     anchors.margins: root.contentPadding
                 }

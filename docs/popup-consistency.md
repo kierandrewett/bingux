@@ -5,6 +5,10 @@ Calendar, system monitor and Control Centre inherit their outer appearance from
 shadow policy and settled pixel alignment in that parent. Full panels use
 `Theme.popupPadding`; compact menus may explicitly use smaller content insets.
 Content size and layout can differ without introducing a separate popup skin.
+The shared popup height limit keeps cards below the top bar and above the
+dock-safe edge, using the available space on the anchor's side when a popup is
+anchored. Cards never exceed 80% of the output height. Long content scrolls
+inside the card, and the card clips content at its inset.
 
 The September 13 consistency pass removed redundant appearance bindings from
 those three panels, removed notes/sidebar radius overrides and the emoji-specific

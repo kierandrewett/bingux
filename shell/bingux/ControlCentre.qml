@@ -142,10 +142,12 @@ ShellPopup {
     property var selectedMediaPlayer: null
     property var mediaPlayer: mediaPlayers.indexOf(selectedMediaPlayer) >= 0 ? selectedMediaPlayer : mediaPlayers.find(player => player.isPlaying) || mediaPlayers[0] || null
     popupWidth: Theme.notificationWidth + contentPadding * 2
-    property real dockSafeInset: Theme.dockExclusiveHeight
-    readonly property real dockSafeBottom: height - dockSafeInset - Theme.gap
     readonly property real editorTop: Theme.barHeight + 40 + (DesktopEditing.editor?.topInset || 0)
-    readonly property real maximumPopupHeight: Math.max(0, Math.min(height * 0.8, DesktopEditing.active ? dockSafeBottom - editorTop : anchorAbove ? anchorTop - Theme.barHeight - Theme.gap : dockSafeBottom - belowAnchorY))
+    property real dockSafeInset: Theme.dockExclusiveHeight
+    popupSafeTop: DesktopEditing.active ? editorTop : Theme.barHeight + Theme.gap
+    popupDockSafeBottom: height - dockSafeInset - Theme.gap
+    popupBelowAnchorY: DesktopEditing.active ? editorTop : belowAnchorY
+    popupAnchorAbove: !DesktopEditing.active && anchorAbove
     property real controlsHeight: Math.min(detailOpen ? (activeDetailView?.implicitHeight || 0) : Math.max(96, controls.implicitHeight), Math.max(0, maximumPopupHeight - contentPadding * 2))
     Behavior on controlsHeight {
         enabled: root.visible && root.revealScale === 1
