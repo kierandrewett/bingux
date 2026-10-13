@@ -159,6 +159,9 @@ use the same rule. If a priority reset fails, the helper writes a diagnostic
 to stderr and continues launching. Custom search launcher and file-opener
 commands retain their own launch behavior.
 
+Settings starts with `XDG_CURRENT_DESKTOP=GNOME` in its own environment.
+The Bingux session retains its existing desktop identity.
+
 Dock menu application actions use the desktop entry's action ID through GIO.
 This preserves field-code expansion, the entry's working directory and D-Bus
 activation. An unavailable action reports an error instead of starting the

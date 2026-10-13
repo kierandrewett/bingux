@@ -180,7 +180,7 @@ ShellPopup {
     }
 
     function settings(panel) {
-        Quickshell.execDetached(["python3", decodeURIComponent(Qt.resolvedUrl("application_spawn.py").toString().replace(/^file:\/\//, "")), "--", "gnome-control-center", panel]);
+        Quickshell.execDetached(["python3", decodeURIComponent(Qt.resolvedUrl("application_spawn.py").toString().replace(/^file:\/\//, "")), "--", "env", "XDG_CURRENT_DESKTOP=GNOME", "gnome-control-center", panel]);
         visible = false;
     }
 
