@@ -81,6 +81,15 @@ the rest of the file.
 Installed autostart commands use absolute paths; convenience commands still
 need the PATH entry below.
 
+The module enables edge snapping and applies Bingux's frame, corner and
+shortcut defaults through `gnoblin.configure`. It keeps earlier autostarts
+and window rules: autostarts merge by name, and Bingux's ordered window rules
+append after existing rules. Put personal overrides after the Bingux loader.
+
+Load the module once per configuration. Including it twice appends its window
+rules twice; named autostarts remain single entries. A configuration reload
+rebuilds the declarations, so repeated reloads do not accumulate rules.
+
 The installed Gnoblin module also starts `bingux-frame` by its absolute path
 inside the Bingux prefix: `$XDG_DATA_HOME/bingux/libexec/bingux/bingux-frame`
 for a managed user install, or `/usr/libexec/bingux/bingux-frame` for a system
