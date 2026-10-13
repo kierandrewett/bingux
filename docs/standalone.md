@@ -36,6 +36,19 @@ and runtime Qt versions differ, it reports both versions and the executable.
 Rebuild or reinstall that runtime for your Qt version, or set `BINGUX_QUICKSHELL`
 to a matching executable before running `make doctor` again.
 
+`make doctor` also checks the selected Quickshell's desktop-action IDs through
+an isolated offscreen QML probe. A runtime that truncates IDs, fails to start
+the probe or does not finish within ten seconds blocks `make install-user`.
+Use a corrected Quickshell build; the
+[Gnoblin parser patch](https://github.com/kierandrewett/gnoblin/tree/main/patches/quickshell)
+includes preparation instructions. Set `BINGUX_QUICKSHELL` to select that
+executable, then rerun `make doctor`.
+
+Use `make install-user` for a checked source installation. Calling
+`scripts/install-shell.py` directly bypasses prerequisite validation and is
+not a safe way to resolve a failed doctor check. Package staging through
+`make install` does not validate the eventual desktop's Quickshell runtime.
+
 The build produces the two QML plugins, the audio meter and the Rust search and
 status daemons. Quickshell is a runtime dependency because its Qt build must
 match the shell process.
