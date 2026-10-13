@@ -5,6 +5,7 @@
 
 #include <cerrno>
 #include <qpa/qplatformnativeinterface.h>
+#include "launch-activation.h"
 
 namespace {
 
@@ -94,6 +95,7 @@ class WaylandSyncPlugin final : public QQmlExtensionPlugin {
   public:
     void registerTypes(const char* uri) override {
         qmlRegisterType<WaylandRoundtrip>(uri, 1, 0, "WaylandRoundtrip");
+        registerLaunchActivation(uri);
     }
 };
 

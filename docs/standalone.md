@@ -185,6 +185,18 @@ This preserves field-code expansion, the entry's working directory and D-Bus
 activation. An unavailable action reports an error instead of starting the
 entry's default command.
 
+## Application focus
+
+Dock clicks, keyboard launches and dock-menu actions request activation through
+the compositor. Its focus policy still decides whether the app receives focus
+or requests attention. Scripted and IPC launches do not borrow recent clicks.
+After installing a rebuilt native plugin, start a new Bingux shell process to
+load it; reloading QML alone does not load the new native type.
+
+For D-Bus application launches, GIO includes activation data only when the
+desktop entry declares `StartupNotify=true`. Entries without that flag retain
+GIO's existing D-Bus activation behavior.
+
 ## Runtime requirements
 
 The full shell uses Qt 6, Quickshell, PipeWire or PulseAudio, NetworkManager,

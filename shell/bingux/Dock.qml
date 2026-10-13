@@ -7,6 +7,7 @@ import QtQml.Models
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Bingux.Wayland
 import Quickshell.Widgets
 import "MediaMatch.js" as MediaMatch
 import "SteamApplications.js" as SteamApplications
@@ -1350,7 +1351,35 @@ PanelWindow {
         }
     }
 
-    function launch(group, newWindow) {
+    LaunchActivation {
+        id: launchActivation
+    }
+
+    function withLaunchActivation(source, dispatch) {
+        // Only real input handlers supply their item. In particular, IPC calls
+        // must not borrow the shell's last input serial to request activation.
+        if (source)
+            launchActivation.request(source, (token, reason) => dispatch(token));
+        else
+            dispatch("");
+    }
+
+    function applicationLaunchCommand(desktopId, options, token) {
+        const helper = Quickshell.env("BINGUX_APP_LAUNCHER_HELPER");
+        const command = (helper ? [helper] : ["python3", decodeURIComponent(Qt.resolvedUrl("launch-application.py").toString().replace(/^file:\/\//, ""))]).concat(options);
+        if (token)
+            command.push("--activation-token=" + token);
+        return command.concat(["--", desktopId]);
+    }
+
+    function launchAction(group, actionId, source) {
+        const desktopId = group.desktopEntry.id;
+        root.withLaunchActivation(source, token => {
+            Quickshell.execDetached(root.applicationLaunchCommand(desktopId, ["--notify-errors", "--action=" + actionId], token));
+        });
+    }
+
+    function launch(group, newWindow, source) {
         const serial = ++root.launchSequence;
         root.clearLaunchFailure(group.id);
         root.launchAttempts = Object.assign({}, root.launchAttempts, {
@@ -1372,24 +1401,25 @@ PanelWindow {
         }
         root.pendingLaunchGroupId = group.id;
         LaunchFeedback.end(root.launchFeedbackToken);
-        root.launchFeedbackToken = LaunchFeedback.begin(group.id, () => {
-            // The menu can cancel the request while the launch-feedback call
-            // is still queued. Do not dispatch the application after that.
+        // Capture the input context before the asynchronous feedback call.
+        root.withLaunchActivation(source, token => {
             const attempt = root.launchAttempts[group.id];
             if (root.pendingLaunchGroupId !== group.id || !attempt || attempt.serial !== serial)
                 return;
-            const helper = Quickshell.env("BINGUX_APP_LAUNCHER_HELPER");
-            const command = helper ? [helper] : ["python3", decodeURIComponent(Qt.resolvedUrl("launch-application.py").toString().replace(/^file:\/\//, ""))];
-            command.push("--dock-feedback");
-            if (newWindow)
-                command.push("--new-window");
-            command.push("--", group.desktopEntry.id);
-            const process = applicationLaunchProcess.createObject(root, {
-                command: command,
-                groupId: group.id,
-                serial: serial
+            root.launchFeedbackToken = LaunchFeedback.begin(group.id, () => {
+                // The menu can cancel while either activation or feedback is
+                // queued. Do not dispatch the application after that.
+                const current = root.launchAttempts[group.id];
+                if (root.pendingLaunchGroupId !== group.id || !current || current.serial !== serial)
+                    return;
+                const options = newWindow ? ["--dock-feedback", "--new-window"] : ["--dock-feedback"];
+                const process = applicationLaunchProcess.createObject(root, {
+                    command: root.applicationLaunchCommand(group.desktopEntry.id, options, token),
+                    groupId: group.id,
+                    serial: serial
+                });
+                process.running = true;
             });
-            process.running = true;
         });
         pendingLaunchTimer.restart();
         root.dismissTooltip();
@@ -1424,11 +1454,11 @@ PanelWindow {
         return root.minimisedWindowHistory.find(candidate => candidate && candidate.minimized && group.windows.indexOf(candidate) >= 0) || group.windows.find(candidate => candidate && candidate.minimized) || null;
     }
 
-    function toggleGroup(group) {
+    function toggleGroup(group, source) {
         if (!group || !group.windows)
             return;
         if (group.windows.length === 0) {
-            root.launch(group);
+            root.launch(group, false, source);
             return;
         }
 
@@ -1937,8 +1967,8 @@ PanelWindow {
                         Accessible.role: Accessible.Button
                         Accessible.name: currentGroup.folder ? (root.folderById(currentGroup.id)?.name || "Folder") : currentGroup.desktopEntry ? currentGroup.desktopEntry.name : currentGroup.id
                         Accessible.description: (playingAudio ? "Playing audio. " : "") + (notificationCount > 0 ? notificationCount + " notifications" : "")
-                        Keys.onReturnPressed: currentGroup.folder ? root.openFolder(currentGroup.id) : root.toggleGroup(currentGroup)
-                        Keys.onSpacePressed: currentGroup.folder ? root.openFolder(currentGroup.id) : root.toggleGroup(currentGroup)
+                        Keys.onReturnPressed: currentGroup.folder ? root.openFolder(currentGroup.id) : root.toggleGroup(currentGroup, dockButton)
+                        Keys.onSpacePressed: currentGroup.folder ? root.openFolder(currentGroup.id) : root.toggleGroup(currentGroup, dockButton)
                         Keys.onLeftPressed: event => {
                             if (event.modifiers & Qt.ControlModifier)
                                 root.moveGroup(modelData.id, index - 1);
@@ -2150,20 +2180,20 @@ PanelWindow {
                                 if (mouse.button === Qt.LeftButton) {
                                     const action = root.preferences.dockClick || "toggle";
                                     if (action === "launch")
-                                        root.launch(dockButton.currentGroup, true);
+                                        root.launch(dockButton.currentGroup, true, dockMouse);
                                     else if (action === "focus") {
                                         const window = root.preferredWindow(dockButton.currentGroup);
                                         if (window) {
                                             window.minimized = false;
                                             window.activate();
                                         } else
-                                            root.launch(dockButton.currentGroup, false);
+                                            root.launch(dockButton.currentGroup, false, dockMouse);
                                     } else
-                                        root.toggleGroup(dockButton.currentGroup);
+                                        root.toggleGroup(dockButton.currentGroup, dockMouse);
                                 } else if (mouse.button === Qt.MiddleButton) {
                                     const action = root.preferences.dockMiddleClick || "launch";
                                     if (action === "launch")
-                                        root.launch(dockButton.currentGroup, true);
+                                        root.launch(dockButton.currentGroup, true, dockMouse);
                                     else if (action === "close")
                                         for (const window of dockButton.currentGroup.windows)
                                             window.close();

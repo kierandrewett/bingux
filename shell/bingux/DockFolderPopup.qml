@@ -27,7 +27,12 @@ ShellPopup {
     property var flightApps: []
     readonly property bool previewHidden: flightRunning || (visible && flightProgress >= 1)
     property real optionsHeight: optionsOpen ? 58 : 0
-    Behavior on optionsHeight { NumberAnimation { duration: Theme.reducedMotion ? 0 : 190; easing.type: Easing.OutCubic } }
+    Behavior on optionsHeight {
+        NumberAnimation {
+            duration: Theme.reducedMotion ? 0 : 190
+            easing.type: Easing.OutCubic
+        }
+    }
     readonly property int cellSize: 86
     readonly property int expandedIconSize: 50
     readonly property int gridX: 31
@@ -48,8 +53,10 @@ ShellPopup {
     keyboardInteractive: dock.draggedId.length === 0
     pointerInteractive: dock.draggedId.length === 0
     dismissOnOutsideClick: dock.draggedId.length === 0
-    onFolderChanged: if (!folder && visible) visible = false
-    onPageCountChanged: if (page >= pageCount) page = pageCount - 1
+    onFolderChanged: if (!folder && visible)
+        visible = false
+    onPageCountChanged: if (page >= pageCount)
+        page = pageCount - 1
     onPageChanged: {
         if (!visible || Theme.reducedMotion || flightRunning || page === displayPage) {
             pageSlide.stop();
@@ -74,7 +81,10 @@ ShellPopup {
         flightRunning = false;
         flightProgress = 0;
         nameField.text = folder?.name || "Folder";
-        Qt.callLater(() => { if (visible) openFlight(); });
+        Qt.callLater(() => {
+            if (visible)
+                openFlight();
+        });
     }
     function prepareFlight() {
         const apps = [];
@@ -138,7 +148,10 @@ ShellPopup {
                 root.flightRunning = false;
                 root.flightProgress = 0;
                 nameField.text = root.folder?.name || "Folder";
-                Qt.callLater(() => { if (root.visible) root.openFlight(); });
+                Qt.callLater(() => {
+                    if (root.visible)
+                        root.openFlight();
+                });
             } else {
                 root.closeFlight();
                 root.stopDragPaging();
@@ -250,7 +263,9 @@ ShellPopup {
             onEditingFinished: {
                 const name = text.trim();
                 if (root.folder && name && name !== root.folder.name)
-                    root.dock.updateFolder(root.folderId, {name});
+                    root.dock.updateFolder(root.folderId, {
+                        name
+                    });
             }
             Accessible.name: "Folder name"
         }
@@ -339,23 +354,27 @@ ShellPopup {
                             y: Math.floor(index / 3) * root.cellSize
                             width: root.cellSize
                             height: root.cellSize
-                        Rectangle {
-                            x: (cell.width - width) / 2
-                            y: 1
-                            width: 64
-                            height: 64
-                            radius: 17
+                            Rectangle {
+                                x: (cell.width - width) / 2
+                                y: 1
+                                width: 64
+                                height: 64
+                                radius: 17
                                 color: cell.appState.active ? Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, 0.18) : root.dock.folderDropId === root.folderId && root.dock.folderDropIndex === cell.appIndex ? Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, 0.26) : cellMouse.containsMouse ? Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, 0.10) : "transparent"
                                 border.width: cell.appState.active ? 1 : 0
                                 border.color: Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, 0.52)
-                                Behavior on color { ColorAnimation { duration: Theme.reducedMotion ? 0 : 120 } }
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: Theme.reducedMotion ? 0 : 120
+                                    }
+                                }
                             }
-                        OsIconImage {
-                            x: (cell.width - width) / 2
-                            y: 8
-                            width: root.expandedIconSize
-                            height: width
-                            implicitSize: width
+                            OsIconImage {
+                                x: (cell.width - width) / 2
+                                y: 8
+                                width: root.expandedIconSize
+                                height: width
+                                implicitSize: width
                                 visible: cell.occupied && root.visible && !root.flightRunning && root.flightProgress >= 1
                                 source: root.dock.folderIcon(cell.appId)
                             }
@@ -372,9 +391,9 @@ ShellPopup {
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSmall
                             }
-                        DockWindowIndicators {
-                            x: (cell.width - width) / 2
-                            y: 62
+                            DockWindowIndicators {
+                                x: (cell.width - width) / 2
+                                y: 62
                                 windows: cell.occupied ? (root.dock.memberGroup(cell.appId)?.windows || []) : []
                                 visible: cell.occupied && root.visible && width > 0
                                 opacity: Math.max(0, Math.min(1, (root.flightProgress - 0.75) * 4))
@@ -391,7 +410,7 @@ ShellPopup {
                                     } else {
                                         const group = root.dock.memberGroup(cell.appId);
                                         if (group)
-                                            root.dock.toggleGroup(group);
+                                            root.dock.toggleGroup(group, cellMouse);
                                         root.visible = false;
                                     }
                                 }
@@ -445,7 +464,10 @@ ShellPopup {
                     radius: width / 2
                     color: index === root.page ? Theme.text : Theme.muted
                     opacity: index === root.page ? 1 : 0.65
-                    MouseArea { anchors.fill: parent; onClicked: root.page = dot.index }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: root.page = dot.index
+                    }
                     Keys.onReturnPressed: root.page = index
                     Keys.onSpacePressed: root.page = index
                 }
@@ -482,10 +504,16 @@ ShellPopup {
                     border.color: Theme.text
                     MouseArea {
                         anchors.fill: parent
-                        onClicked: root.dock.updateFolder(root.folderId, {color: colourChoice.modelData})
+                        onClicked: root.dock.updateFolder(root.folderId, {
+                            color: colourChoice.modelData
+                        })
                     }
-                    Keys.onReturnPressed: root.dock.updateFolder(root.folderId, {color: modelData})
-                    Keys.onSpacePressed: root.dock.updateFolder(root.folderId, {color: modelData})
+                    Keys.onReturnPressed: root.dock.updateFolder(root.folderId, {
+                        color: modelData
+                    })
+                    Keys.onSpacePressed: root.dock.updateFolder(root.folderId, {
+                        color: modelData
+                    })
                     Accessible.name: modelData + " folder colour"
                 }
             }

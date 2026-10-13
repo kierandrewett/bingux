@@ -179,7 +179,7 @@ ShellPopup {
                 visible: button.currentGroup.desktopEntry !== null
 
                 onTriggered: {
-                    dock.launch(button.currentGroup, true);
+                    dock.launch(button.currentGroup, true, menuColumn);
                     button.menuOpen = false;
                 }
             }
@@ -203,9 +203,7 @@ ShellPopup {
                     navigation: menuNavigation
 
                     onTriggered: {
-                        const helper = Quickshell.env("BINGUX_APP_LAUNCHER_HELPER");
-                        const command = helper ? [helper] : ["python3", decodeURIComponent(Qt.resolvedUrl("launch-application.py").toString().replace(/^file:\/\//, ""))];
-                        Quickshell.execDetached(command.concat(["--notify-errors", "--action=" + modelData.id, "--", button.currentGroup.desktopEntry.id]));
+                        dock.launchAction(button.currentGroup, modelData.id, menuColumn);
                         button.menuOpen = false;
                     }
                 }

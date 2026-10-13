@@ -19,16 +19,28 @@ DESKTOP = "org.bingux.ActionFixture"
 QML = r"""
 const fs=require("fs"), vm=require("vm"), url=require("url");
 const shell=process.argv[1], commands=[];
+const dock=fs.readFileSync(shell+"/Dock.qml","utf8");
 const source=fs.readFileSync(shell+"/DockAppMenu.qml","utf8").split("id: desktopActions")[1];
 const handler=source.match(/                    onTriggered: \{\n(.*?)^                    \}/ms);
 if(!handler) throw new Error("Desktop action handler not found");
-const context={
+const root={}, menuColumn={gesture:true};
+const context={root,dock:root,menuColumn,
     modelData:{id:process.argv[2],name:"Fenêtre privée",execute:()=>commands.push(["DIRECT_EXECUTE"])},
     button:{menuOpen:true,currentGroup:{desktopEntry:{id:"org.bingux.ActionFixture"}}},
     Quickshell:{env:()=>"",execDetached:argv=>commands.push(Array.from(argv))},
-    Qt:{resolvedUrl:name=>url.pathToFileURL(shell+"/"+name)}
+    Qt:{resolvedUrl:name=>url.pathToFileURL(shell+"/"+name)},
+    launchActivation:{request:(source,callback)=>{
+        if(source!==menuColumn) throw new Error("Wrong gesture surface");
+        callback("fixture-gesture-token", "");
+    }}
 };
 vm.createContext(context);
+for (const name of ["withLaunchActivation", "applicationLaunchCommand", "launchAction"]) {
+    const method=dock.match(new RegExp("^    function "+name+"\\([^\\n]*\\) \\{\\n.*?^    \\}","ms"));
+    if(!method) throw new Error("Missing Dock handler "+name);
+    vm.runInContext(method[0],context);
+    root[name]=context[name];
+}
 vm.runInContext("(function(){"+handler[1]+"})()",context);
 console.log(JSON.stringify({commands,menuOpen:context.button.menuOpen}));
 """
@@ -89,10 +101,12 @@ def main():
             "BINGUX_TEST_RECORD": str(record),
             "BINGUX_TEST_VALUE": "unchanged",
         }
-        output = subprocess.run(["node", "-e", QML, str(SHELL), ACTION], capture_output=True, text=True, check=True)
+        output = subprocess.run(["node", "-e", QML, str(SHELL), ACTION], capture_output=True, text=True)
+        assert output.returncode == 0, output.stderr
         dispatch = json.loads(output.stdout)
         assert dispatch["menuOpen"] is False
         command = dispatch["commands"][0]
+        assert "--activation-token=fixture-gesture-token" in command
         if f"--action={ACTION}" not in command or command[-1] != DESKTOP:
             failures.append(f"QML did not dispatch the action ID and desktop ID through GIO: {command}")
 
