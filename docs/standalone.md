@@ -31,6 +31,11 @@ libraries, Qt Quick/QML, Quickshell and user-systemd prerequisites. The managed
 install target runs this check automatically and explains missing dependencies
 before starting the build.
 
+The check queries the selected Quickshell without opening the shell. If its build
+and runtime Qt versions differ, it reports both versions and the executable.
+Rebuild or reinstall that runtime for your Qt version, or set `BINGUX_QUICKSHELL`
+to a matching executable before running `make doctor` again.
+
 The build produces the two QML plugins, the audio meter and the Rust search and
 status daemons. Quickshell is a runtime dependency because its Qt build must
 match the shell process.
