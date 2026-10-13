@@ -131,14 +131,14 @@ Variants {
                     target: reveal.target
                     property: "opacity"
                     to: 1
-                    duration: reveal.zoom ? 900 : 600
+                    duration: Theme.reducedMotion ? 0 : (reveal.zoom ? 900 : 600)
                     easing.type: Easing.OutCubic
                 }
                 NumberAnimation {
                     target: reveal.target
                     property: "scale"
                     to: 1
-                    duration: 1100
+                    duration: Theme.reducedMotion ? 0 : (1100)
                     easing.type: Easing.OutCubic
                 }
                 onFinished: {

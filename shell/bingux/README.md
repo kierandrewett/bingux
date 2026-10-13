@@ -70,6 +70,14 @@ window, pointer, keyboard, interruption, and reopening checks. Repeat with
 the script through Gnoblin's `GNOBLIN_TEST_DBUS_CLIENT` launcher so desktop input
 cannot dismiss the test menus.
 
+Set `BINGUX_SOFTWARE_RENDERING=1` to use opaque panel and popup colours, disable
+blur and decorative shadows, and make transitions immediate. Set it to `0` to
+force the normal appearance. When unset, Bingux checks Gnoblin's output renderer
+API, the shell's Qt scene-graph renderer, and (for OpenGL) the session's
+Xwayland renderer through `glxinfo -B` when available. Unknown renderer
+information keeps the normal appearance. `BINGUX_REDUCED_MOTION=1` remains an
+independent override.
+
 For real-seat regression checks in a disposable Gnoblin VM, run:
 
 ```sh

@@ -67,7 +67,7 @@ Item {
             property: "scale"
             from: 1
             to: root.maximumScale
-            duration: 260
+            duration: Theme.reducedMotion ? 0 : (260)
             easing.type: Easing.OutCubic
         }
         NumberAnimation {
@@ -75,7 +75,7 @@ Item {
             property: "opacity"
             from: 1
             to: 0
-            duration: 260
+            duration: Theme.reducedMotion ? 0 : (260)
             easing.type: Easing.OutCubic
         }
         onFinished: root.finished()

@@ -30,7 +30,7 @@ Item {
     Behavior on scrollOffset {
         enabled: !Theme.reducedMotion && root.windowCount > root.visibleCount
         NumberAnimation {
-            duration: 240
+            duration: Theme.reducedMotion ? 0 : (240)
             easing.type: Easing.OutQuart
         }
     }
@@ -73,7 +73,7 @@ Item {
         NumberAnimation on phase {
             from: 0
             to: 1
-            duration: 750
+            duration: Theme.reducedMotion ? 0 : 750
             loops: Animation.Infinite
             running: root.launching && root.visible && !Theme.reducedMotion
         }

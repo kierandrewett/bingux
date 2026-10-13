@@ -162,7 +162,7 @@ ShellPopup {
         id: flightAnimation
         target: root
         property: "flightProgress"
-        duration: 260
+        duration: Theme.reducedMotion ? 0 : (260)
         easing.type: root.visible ? Easing.OutCubic : Easing.InOutCubic
         onFinished: root.flightRunning = false
     }
@@ -172,7 +172,7 @@ ShellPopup {
         property: "pageShift"
         from: 0
         to: -root.pageTravelDirection * root.cellSize * 3
-        duration: 260
+        duration: Theme.reducedMotion ? 0 : (260)
         easing.type: Easing.OutCubic
         onFinished: {
             root.displayPage = root.page;

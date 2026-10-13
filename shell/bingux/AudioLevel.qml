@@ -60,7 +60,7 @@ Item {
             Behavior on value {
                 enabled: gain.wheelActive && !gain.pressed && !Theme.reducedMotion
                 NumberAnimation {
-                    duration: Theme.mediaActionMotion
+                    duration: Theme.reducedMotion ? 0 : (Theme.mediaActionMotion)
                     easing.type: Easing.OutCubic
                 }
             }

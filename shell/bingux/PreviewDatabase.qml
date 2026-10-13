@@ -91,7 +91,7 @@ Rectangle {
                 opacity: root.loading ? 0.35 : 1
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: Theme.previewMotion
+                        duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
                     }
                 }
                 ScrollBar.vertical: ScrollBar {}

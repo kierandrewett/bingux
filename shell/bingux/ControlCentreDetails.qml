@@ -307,7 +307,7 @@ Item {
         width: deviceList.width
         height: deviceList.height
         visible: false
-        layer.enabled: true
+        layer.enabled: !Theme.softwareRendering
         gradient: Gradient {
             GradientStop {
                 position: 0
@@ -410,7 +410,7 @@ Item {
             readonly property real topFade: Math.min(1, Math.max(0, contentY - originY) / 16)
             readonly property real bottomFade: Math.min(1, Math.max(0, contentHeight - 8 - height - (contentY - originY)) / 20)
             flickableDirection: Flickable.VerticalFlick
-            layer.enabled: scrollable && (topFade > 0 || bottomFade > 0)
+            layer.enabled: scrollable && (topFade > 0 || bottomFade > 0) && !Theme.softwareRendering
             layer.effect: MultiEffect {
                 maskEnabled: true
                 maskSource: deviceListMask

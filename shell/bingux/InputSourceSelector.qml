@@ -328,7 +328,7 @@ Item {
                 Behavior on y {
                     enabled: inputMenu.visible && inputMenu.revealScale === 1 && !Theme.reducedMotion
                     NumberAnimation {
-                        duration: Theme.motion
+                        duration: Theme.reducedMotion ? 0 : (Theme.motion)
                         easing.type: Easing.OutCubic
                     }
                 }

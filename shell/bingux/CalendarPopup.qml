@@ -52,7 +52,7 @@ ShellPopup {
         target: root
         property: "periodProgress"
         to: 1
-        duration: 240
+        duration: Theme.reducedMotion ? 0 : (240)
         easing.type: Easing.OutCubic
     }
     property int browseYear: displayedMonth.getFullYear()
@@ -144,7 +144,7 @@ ShellPopup {
         target: root
         property: "monthProgress"
         to: 1
-        duration: Theme.calendarPageMotion
+        duration: Theme.reducedMotion ? 0 : (Theme.calendarPageMotion)
         easing.type: Easing.OutCubic
         onFinished: root.presentMonth()
     }
@@ -258,7 +258,9 @@ ShellPopup {
         desktopId: "org.gnome.Calendar"
         onLaunchStarted: desktopId => root.applicationLaunchStarted(desktopId)
         onFailed: message => {
-            ShellNotifications.send("Could not open Calendar", message, {retryDesktopId: calendarLauncher.desktopId});
+            ShellNotifications.send("Could not open Calendar", message, {
+                retryDesktopId: calendarLauncher.desktopId
+            });
         }
     }
     function eventCommand(event) {
@@ -659,7 +661,7 @@ ShellPopup {
                         id: agendaScroll
                         target: agenda
                         property: "contentY"
-                        duration: Theme.calendarMotion
+                        duration: Theme.reducedMotion ? 0 : (Theme.calendarMotion)
                         easing.type: Easing.OutCubic
                     }
                     ScrollBar.vertical: ScrollBar {

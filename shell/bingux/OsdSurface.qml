@@ -108,7 +108,7 @@ QtObject {
                 opacity: osdWindow.request !== null ? 1 : 0
                 Behavior on opacity {
                     NumberAnimation {
-                        duration: osdWindow.request !== null ? Theme.popupOpenMotion : Theme.osdCloseMotion
+                        duration: Theme.reducedMotion ? 0 : (osdWindow.request !== null ? Theme.popupOpenMotion : Theme.osdCloseMotion)
                         easing.type: Easing.OutCubic
                     }
                 }
@@ -117,7 +117,7 @@ QtObject {
                     target: osdCard
                     property: "scale"
                     to: 1
-                    duration: Theme.popupOpenMotion
+                    duration: Theme.reducedMotion ? 0 : (Theme.popupOpenMotion)
                     easing.type: Easing.OutCubic
                 }
                 Accessible.role: Accessible.Indicator
@@ -204,7 +204,7 @@ QtObject {
                             Behavior on width {
                                 enabled: osdCard.opacity > 0 && osdWindow.request !== null
                                 NumberAnimation {
-                                    duration: Theme.osdLevelMotion
+                                    duration: Theme.reducedMotion ? 0 : (Theme.osdLevelMotion)
                                     easing.type: Easing.OutCubic
                                 }
                             }

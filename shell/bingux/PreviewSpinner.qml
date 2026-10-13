@@ -12,7 +12,7 @@ Item {
     Accessible.name: "Loading preview"
     Behavior on opacity {
         NumberAnimation {
-            duration: Theme.previewMotion
+            duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)
         }
     }
     Canvas {

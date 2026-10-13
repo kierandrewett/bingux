@@ -25,7 +25,7 @@ AbstractButton {
     }
     contentItem: Item {
         id: overflowContent
-        layer.enabled: true
+        layer.enabled: !Theme.softwareRendering
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Theme.contentShadow

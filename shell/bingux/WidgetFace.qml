@@ -10,7 +10,7 @@ RowLayout {
     property bool colouredIcon: false
     property color iconColor: Theme.text
     property bool shadowed: true
-    layer.enabled: root.shadowed
+    layer.enabled: root.shadowed && !Theme.softwareRendering
     layer.effect: MultiEffect {
         shadowEnabled: root.shadowed
         shadowColor: Theme.contentShadow

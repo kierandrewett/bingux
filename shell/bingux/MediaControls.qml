@@ -372,7 +372,7 @@ FocusScope {
             Behavior on value {
                 enabled: seek.wheelActive && !seek.pressed && !Theme.reducedMotion
                 NumberAnimation {
-                    duration: Theme.mediaActionMotion
+                    duration: Theme.reducedMotion ? 0 : (Theme.mediaActionMotion)
                     easing.type: Easing.OutCubic
                 }
             }
@@ -598,13 +598,13 @@ FocusScope {
                     target: button
                     property: "iconOpacity"
                     to: 0
-                    duration: Theme.mediaActionMotion / 2
+                    duration: Theme.reducedMotion ? 0 : (Theme.mediaActionMotion / 2)
                 }
                 NumberAnimation {
                     target: button
                     property: "iconOffset"
                     to: button.direction * Theme.spaceSmall
-                    duration: Theme.mediaActionMotion / 2
+                    duration: Theme.reducedMotion ? 0 : (Theme.mediaActionMotion / 2)
                 }
             }
             ScriptAction {
@@ -618,13 +618,13 @@ FocusScope {
                     target: button
                     property: "iconOpacity"
                     to: 1
-                    duration: Theme.mediaActionMotion / 2
+                    duration: Theme.reducedMotion ? 0 : (Theme.mediaActionMotion / 2)
                 }
                 NumberAnimation {
                     target: button
                     property: "iconOffset"
                     to: 0
-                    duration: Theme.mediaActionMotion / 2
+                    duration: Theme.reducedMotion ? 0 : (Theme.mediaActionMotion / 2)
                 }
             }
         }

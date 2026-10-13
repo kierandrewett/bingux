@@ -347,7 +347,7 @@ Flickable {
         width: root.width
         height: root.height
         visible: false
-        layer.enabled: true
+        layer.enabled: !Theme.softwareRendering
         gradient: Gradient {
             GradientStop {
                 position: 0
@@ -371,7 +371,7 @@ Flickable {
     boundsBehavior: Flickable.StopAtBounds
     clip: true
     // Mask the viewport only while there is more content below the fold.
-    layer.enabled: bottomFade > 0
+    layer.enabled: bottomFade > 0 && !Theme.softwareRendering
     layer.effect: MultiEffect {
         maskEnabled: true
         maskSource: bottomFadeMask
@@ -397,7 +397,7 @@ Flickable {
         id: wheelMotion
         target: root
         property: "contentY"
-        duration: 110
+        duration: Theme.reducedMotion ? 0 : (110)
         easing.type: Easing.OutCubic
     }
     WheelHandler {
@@ -436,7 +436,7 @@ Flickable {
         Behavior on height {
             enabled: !root.placingHistory && notificationColumn.animateHeight
             NumberAnimation {
-                duration: root.groupMotion
+                duration: Theme.reducedMotion ? 0 : (root.groupMotion)
                 easing.type: Easing.OutCubic
             }
         }
@@ -482,14 +482,14 @@ Flickable {
                 Behavior on y {
                     enabled: !root.placingHistory
                     NumberAnimation {
-                        duration: root.groupMotion
+                        duration: Theme.reducedMotion ? 0 : (root.groupMotion)
                         easing.type: Easing.OutCubic
                     }
                 }
                 Behavior on height {
                     enabled: !root.placingHistory
                     NumberAnimation {
-                        duration: root.groupMotion
+                        duration: Theme.reducedMotion ? 0 : (root.groupMotion)
                         easing.type: Easing.OutCubic
                     }
                 }
@@ -539,7 +539,7 @@ Flickable {
                 readonly property real naturalHeight: Math.max(cardContents.implicitHeight, hasSmallImage ? Theme.notificationHeaderHeight + Theme.notificationSpacing + 40 : 0) + contentPadding * 2
                 onNaturalHeightChanged: layoutTimer.restart()
                 clip: true
-                layer.enabled: root.cardShadow && visible
+                layer.enabled: root.cardShadow && visible && !Theme.softwareRendering
                 layer.effect: MultiEffect {
                     shadowEnabled: root.cardShadow
                     shadowColor: "#000000"
@@ -554,21 +554,21 @@ Flickable {
                 Behavior on layoutInset {
                     enabled: !root.placingHistory && notificationCard.nearViewport && notificationCard.layoutReady && notificationCard.entranceComplete
                     NumberAnimation {
-                        duration: root.groupMotion
+                        duration: Theme.reducedMotion ? 0 : (root.groupMotion)
                         easing.type: Easing.OutCubic
                     }
                 }
                 Behavior on layoutY {
                     enabled: !root.placingHistory && notificationCard.nearViewport && notificationCard.layoutReady && notificationCard.entranceComplete
                     NumberAnimation {
-                        duration: root.groupMotion
+                        duration: Theme.reducedMotion ? 0 : (root.groupMotion)
                         easing.type: Easing.OutCubic
                     }
                 }
                 Behavior on layoutHeight {
                     enabled: !root.placingHistory && notificationCard.nearViewport && notificationCard.layoutReady && notificationCard.entranceComplete
                     NumberAnimation {
-                        duration: root.groupMotion
+                        duration: Theme.reducedMotion ? 0 : (root.groupMotion)
                         easing.type: Easing.OutCubic
                     }
                 }
@@ -742,7 +742,7 @@ Flickable {
                     target: notificationCard
                     property: "entranceOpacity"
                     to: 1
-                    duration: root.cardMotion
+                    duration: Theme.reducedMotion ? 0 : (root.cardMotion)
                     easing.type: Easing.OutCubic
                 }
                 NumberAnimation {
@@ -754,7 +754,7 @@ Flickable {
                     target: notificationCard
                     property: "slideOffset"
                     to: 0
-                    duration: root.cardMotion
+                    duration: Theme.reducedMotion ? 0 : (root.cardMotion)
                     easing.type: Easing.OutCubic
                 }
                 NumberAnimation {
@@ -762,7 +762,7 @@ Flickable {
                     target: notificationCard
                     property: "dragOffset"
                     to: 0
-                    duration: root.cardMotion
+                    duration: Theme.reducedMotion ? 0 : (root.cardMotion)
                     easing.type: Easing.OutCubic
                 }
                 ParallelAnimation {

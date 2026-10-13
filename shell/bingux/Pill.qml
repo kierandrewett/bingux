@@ -37,7 +37,7 @@ Item {
         anchors.centerIn: parent
         width: root.panelLayout ? Math.max(0, root.width - root.horizontalPadding * 2) : implicitWidth
         spacing: Theme.gap
-        layer.enabled: true
+        layer.enabled: !Theme.softwareRendering
         layer.effect: MultiEffect {
             shadowEnabled: true
             shadowColor: Theme.contentShadow

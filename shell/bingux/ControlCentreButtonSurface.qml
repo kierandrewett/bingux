@@ -12,6 +12,7 @@ Rectangle {
     property color hoverColor: Theme.hover
     property color pressedColor: Theme.pressed
     property color focusColor: Theme.accent
+    property color selectedColor: Theme.selection
     // Idle outlines turn lists into a grid of boxes.  Controls get their
     // boundary from the panel and state layers; only keyboard focus is lined.
     property bool outlined: false
@@ -24,7 +25,7 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: root.radius
-        color: Theme.selection
+        color: root.selectedColor
         opacity: root.selected ? 0.44 : 0
     }
     Rectangle {
