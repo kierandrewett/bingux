@@ -118,6 +118,8 @@ ShellRoot {
     function closePanelsExcept(panel) {
         if (panel !== windowMenuPopup)
             windowMenuPopup.visible = false;
+        if (panel !== desktopMenuPopup)
+            desktopMenuPopup.visible = false;
         const editingContainers = DesktopEditing.active && (panel === barOverflow || (controlCentre && panel === controlCentre));
         for (const widget of terminalSidebar.panelWidgets) {
             if (panel !== widget.popup)
@@ -159,6 +161,9 @@ ShellRoot {
     }
     WindowMenu {
         id: windowMenuPopup
+    }
+    DesktopMenu {
+        id: desktopMenuPopup
     }
     TrayMenu {
         id: widgetMenu
@@ -507,6 +512,15 @@ ShellRoot {
         function windowMenu(payload: string): void {
             root.closePanelsExcept(windowMenuPopup);
             windowMenuPopup.showRequest(payload);
+        }
+        function desktopMenu(screenName: string, x: real, y: real): void {
+            const target = Quickshell.screens.find(candidate => candidate.name === screenName);
+            if (!target || !Number.isFinite(x) || !Number.isFinite(y))
+                return;
+            root.closePanelsExcept(desktopMenuPopup);
+            desktopMenuPopup.screen = target;
+            desktopMenuPopup.requestedPosition = Qt.point(x, y);
+            desktopMenuPopup.visible = true;
         }
         function customise(): void {
             root.settingsItem().openCustomise("", "");
