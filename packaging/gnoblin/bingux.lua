@@ -30,7 +30,7 @@ gnoblin.animation({
     to = { scale = 0.94, opacity = 0 },
 })
 
-return {
+local defaults = {
     window_management = {
         -- Drag a window to a screen edge to tile it, as in GNOME.
         edge_tiling = true,
@@ -173,3 +173,16 @@ return {
         },
     },
 }
+
+-- Apply public setting names through the API, preserving earlier declarations.
+local autostart = defaults.autostart
+local window_rules = defaults["window-rules"]
+defaults.autostart = nil
+defaults["window-rules"] = nil
+gnoblin.configure(defaults)
+for _, entry in ipairs(autostart) do
+    gnoblin.configure.autostart[entry.name] = entry
+end
+for _, rule in ipairs(window_rules) do
+    gnoblin.window_rule(rule)
+end
