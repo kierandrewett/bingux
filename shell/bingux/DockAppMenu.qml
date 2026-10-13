@@ -83,13 +83,11 @@ ShellPopup {
         onActivateRequested: entry => entry.triggered()
         onEscapeRequested: button.menuOpen = false
     }
-    Rectangle {
+    PopupScroll {
         id: menuSurface
-
-        color: "transparent"
-        height: implicitHeight
-        implicitHeight: menuColumn.implicitHeight + 12
-        width: parent.width
+        anchors.fill: parent
+        contentWidth: width
+        contentHeight: menuColumn.implicitHeight + 12
 
         ColumnLayout {
             id: menuColumn

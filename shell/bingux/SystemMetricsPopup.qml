@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import QtQuick.Controls
 
 ShellPopup {
     id: root
@@ -15,24 +14,14 @@ ShellPopup {
         customising = settings;
         visible = true;
     }
-    readonly property real maximumHeight: hostItem ? Math.max(0, Math.min(640, height - Theme.gap * 2)) : Math.max(0, Math.min(640, height * 0.65, anchorAbove ? anchorTop - Theme.barHeight - Theme.gap : height - Theme.dockExclusiveHeight - Theme.gap - belowAnchorY))
+    readonly property real maximumHeight: Math.min(640, maximumPopupHeight)
     popupWidth: customising ? 336 : 520
-    popupHeight: !customising && performance.page !== "usage" ? maximumHeight : Math.min((customising ? content.implicitHeight : performance.implicitHeight) + contentPadding * 2, maximumHeight)
-    Flickable {
+    popupHeight: Math.min((customising ? content.implicitHeight : performance.implicitHeight) + contentPadding * 2, maximumHeight)
+    PopupScroll {
         id: viewport
         anchors.fill: parent
         contentWidth: width
-        visible: root.customising
-        contentHeight: content.implicitHeight
-        clip: true
-        boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: ScrollBar {
-            parent: root.body
-            x: viewport.width + 4
-            y: 0
-            height: viewport.height
-            width: 8
-        }
+        contentHeight: root.customising ? content.implicitHeight : performance.implicitHeight
         ColumnLayout {
             id: content
             visible: root.customising
@@ -69,7 +58,8 @@ ShellPopup {
     SystemPerformance {
         id: performance
         visible: !root.customising
-        anchors.fill: parent
+        width: viewport.width
+        height: implicitHeight
         monitorWidget: root.monitorWidget
         compact: true
     }

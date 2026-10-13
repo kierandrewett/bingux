@@ -41,6 +41,7 @@ singleton OsIcons 1.0 OsIcons.qml
 SearchLaunchEffect 1.0 SearchLaunchEffect.qml
 MarqueeText 1.0 MarqueeText.qml
 SearchSocket 1.0 SearchSocket.qml
+PopupScroll 1.0 PopupScroll.qml
 ShellPopup 1.0 ShellPopup.qml
 SymbolicIcon 1.0 SymbolicIcon.qml
 SystemIndicators 1.0 SystemIndicators.qml

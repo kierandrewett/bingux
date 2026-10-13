@@ -292,7 +292,7 @@ ShellPopup {
         active: root.visible && root.calendarServiceEnabled && root.eventSource === calendarEvents
         month: root.displayedMonth
     }
-    Flickable {
+    PopupScroll {
         id: calendarViewport
         objectName: "calendarViewport"
         width: parent.width
@@ -323,11 +323,7 @@ ShellPopup {
                 }
             }
         }
-        ScrollBar.vertical: ScrollBar {
-            policy: root.inlineMode ? ScrollBar.AlwaysOff : ScrollBar.AsNeeded
-            y: dateHeading.height + Theme.padding
-            height: Math.max(0, parent.height - y)
-        }
+        indicatorPolicy: root.inlineMode ? ScrollBar.AlwaysOff : ScrollBar.AsNeeded
         ColumnLayout {
             id: calendar
             width: calendarViewport.width

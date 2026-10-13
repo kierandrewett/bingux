@@ -54,6 +54,10 @@ its default slot and set `popupWidth`, `popupHeight`, and `preferredX/Y` as need
 Set `visible` to request opening or closing; the component owns window lifetime,
 input handling, surface styling, and motion. Top-bar popovers open from their top
 edge. Dock menus set `revealOriginY: popupHeight` to open from their bottom edge.
+`ShellPopup.maximumPopupHeight` limits cards to the usable space between the
+top bar and dock-safe edge, relative to the anchor, and to 80% of the output
+height. Use `PopupScroll` for content that can exceed the card; the viewport
+clips its content and shows a thin scrollbar only when needed.
 Use `MenuNavigator` for action navigation and `contentRadius` for nested controls.
 Keep data-specific menu entries in their caller; do not create another window or
 animation for each menu. Tray, keyboard, dock, calendar, and control-centre menus
