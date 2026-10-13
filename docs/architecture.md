@@ -71,9 +71,10 @@ Read [Extensions](extensions.md) for the manifest and lifecycle contract.
 
 The Rust search daemon owns provider lifecycle, search indexes and the search
 socket. The Rust status daemon owns metric and OSD socket data. The C audio
-meter reports per-stream peaks. The Qt plugins provide text layout and settings
-platform support. Each helper has a bounded protocol and can restart without
-restarting the shell.
+meter reports per-stream peaks and keeps its PulseAudio/PipeWire monitor queue
+small because it retains only current peak values. The Qt plugins provide text
+layout and settings platform support. Each helper has a bounded protocol and
+can restart without restarting the shell.
 
 ## Testing
 

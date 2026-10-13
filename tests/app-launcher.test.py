@@ -81,6 +81,24 @@ class ApplicationLaunch(unittest.TestCase):
         self.assertIn("--host-launch", command)
         self.assertEqual(command[-1], "com.spotify.Client")
 
+    def test_priority_reset_failure_does_not_block_application_launch(self):
+        spec = importlib.util.spec_from_file_location("launcher_priority_failure", launcher)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        entry = Mock()
+        entry.list_actions.return_value = []
+        entry.launch_uris_as_manager_with_fds.return_value = True
+        with (
+            patch.object(module, "refresh_graphical_environment"),
+            patch.object(module.os, "getpriority", return_value=-5),
+            patch.object(module.os, "setpriority", side_effect=PermissionError("denied")),
+            patch.object(module.GioUnix.DesktopAppInfo, "new", return_value=entry),
+            patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
+            self.assertEqual(module.main(["--host-launch", "com.example.App"]), 0)
+        entry.launch_uris_as_manager_with_fds.assert_called_once()
+        self.assertIn("Could not reset inherited application priority", stderr.getvalue())
+
     def test_host_manager_timeout_is_reported(self):
         spec = importlib.util.spec_from_file_location("launcher_host_timeout", launcher)
         module = importlib.util.module_from_spec(spec)

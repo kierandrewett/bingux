@@ -260,7 +260,7 @@ ShellPopup {
                 SymbolicIcon {
                     visible: root.compactRows && entryButton.data.checkState === Qt.Checked
                     implicitSize: 14
-                    source: Quickshell.iconPath("object-select-symbolic")
+                    source: AdwaitaIcons.source("object-select-symbolic")
                     color: Theme.accent
                 }
                 Text {

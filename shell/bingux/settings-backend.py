@@ -35,6 +35,8 @@ DEFAULTS = {
         "dock": True,
         "sidebar": True,
         "metrics": True,
+        "clockSeconds": False,
+        "wallpaper": "",
         "layout": None,
         "dockSize": 56,
         "dockAlignment": "center",
@@ -216,16 +218,33 @@ def validate_desktop(desktop, previous=None):
         if not isinstance(folder, dict) or set(folder) != {"id", "name", "color", "apps"}:
             raise ValueError("Invalid dock folder.")
         folder_id, name, color, members = (folder[key] for key in ("id", "name", "color", "apps"))
-        if not isinstance(folder_id, str) or not re.fullmatch(r"folder:[a-z0-9]+", folder_id) or folder_id in folder_ids:
+        if (
+            not isinstance(folder_id, str)
+            or not re.fullmatch(r"folder:[a-z0-9]+", folder_id)
+            or folder_id in folder_ids
+        ):
             raise ValueError("Invalid dock folder identifier.")
         if not isinstance(name, str) or not 1 <= len(name) <= 64 or any(ord(c) < 32 for c in name):
             raise ValueError("Invalid dock folder name.")
-        if not isinstance(color, str) or color not in {"blue", "teal", "green", "yellow", "orange", "red", "pink", "purple", "slate"}:
+        if not isinstance(color, str) or color not in {
+            "blue",
+            "teal",
+            "green",
+            "yellow",
+            "orange",
+            "red",
+            "pink",
+            "purple",
+            "slate",
+        }:
             raise ValueError("Invalid dock folder colour.")
         if (
             not isinstance(members, list)
             or len(members) > 256
-            or any(not isinstance(item, str) or not item or len(item) > 256 or any(ord(c) < 32 for c in item) for item in members)
+            or any(
+                not isinstance(item, str) or not item or len(item) > 256 or any(ord(c) < 32 for c in item)
+                for item in members
+            )
             or len(members) != len(set(members))
             or member_ids.intersection(members)
         ):
@@ -334,8 +353,15 @@ def validate_desktop(desktop, previous=None):
         validate_control_action_placement(desktop)
         if seen & controls and (control_order is None or any("control-" + name in seen for name in control_order)):
             raise ValueError("A control can only be placed in one container.")
-    if any(type(desktop[key]) is not bool for key in ("dock", "sidebar", "metrics")):
+    if any(type(desktop[key]) is not bool for key in ("dock", "sidebar", "metrics", "clockSeconds")):
         raise ValueError("Invalid toggle value.")
+    if (
+        not isinstance(desktop["wallpaper"], str)
+        or len(desktop["wallpaper"]) > 4096
+        or any(ord(character) < 32 for character in desktop["wallpaper"])
+        or (desktop["wallpaper"] and not Path(desktop["wallpaper"]).is_absolute())
+    ):
+        raise ValueError("Wallpaper must be an absolute file path no longer than 4096 characters.")
 
 
 def validate(data):

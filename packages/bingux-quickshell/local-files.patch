@@ -1,0 +1,56 @@
+diff --git a/src/core/generation.cpp b/src/core/generation.cpp
+index e15103a..7c724d5 100644
+--- a/src/core/generation.cpp
++++ b/src/core/generation.cpp
+@@ -45,10 +45,16 @@ EngineGeneration::EngineGeneration(const QDir& rootPath, QmlScanner scanner)
+ 	this->engine->setOutputWarningsToStandardError(false);
+ 	QObject::connect(this->engine, &QQmlEngine::warnings, this, &EngineGeneration::onEngineWarnings);
+ 
+-	this->engine->addUrlInterceptor(&this->urlInterceptor);
+-	this->engine->addImportPath("qs:@/");
+-
+-	this->engine->setNetworkAccessManagerFactory(&this->interceptNetFactory);
++	// A config folder that ships a qmldir in every directory needs none of the qs: rewriting.
++	// Loading it as ordinary files lets Qt keep its compiled-unit disk cache, which the qs:
++	// network scheme defeats. QS_NO_LOCAL_FILES=1 restores the old behaviour.
++	this->localFiles = this->scanner.fileIntercepts.isEmpty() && !qEnvironmentVariableIsSet("QS_NO_LOCAL_FILES");
++
++	if (!this->localFiles) {
++		this->engine->addUrlInterceptor(&this->urlInterceptor);
++		this->engine->addImportPath("qs:@/");
++		this->engine->setNetworkAccessManagerFactory(&this->interceptNetFactory);
++	}
+ 	this->engine->setIncubationController(&this->delayedIncubationController);
+ 
+ 	this->engine->addImageProvider("icon", new IconImageProvider());
+diff --git a/src/core/generation.hpp b/src/core/generation.hpp
+index fef8363..89329d8 100644
+--- a/src/core/generation.hpp
++++ b/src/core/generation.hpp
+@@ -57,6 +57,7 @@ public:
+ 	RootWrapper* wrapper = nullptr;
+ 	QDir rootPath;
+ 	QmlScanner scanner;
++	bool localFiles = false;
+ 	QsUrlInterceptor urlInterceptor;
+ 	QsInterceptNetworkAccessManagerFactory interceptNetFactory;
+ 	QQmlEngine* engine = nullptr;
+diff --git a/src/core/rootwrapper.cpp b/src/core/rootwrapper.cpp
+index 25c46cc..53bf01a 100644
+--- a/src/core/rootwrapper.cpp
++++ b/src/core/rootwrapper.cpp
+@@ -75,8 +75,12 @@ void RootWrapper::reloadGraph(bool hard) {
+ 	QDir::setCurrent(this->originalWorkingDirectory);
+ 
+ 	QUrl url;
+-	url.setScheme("qs");
+-	url.setPath("@/qs/" % rootFile.fileName());
++	if (generation->localFiles) {
++		url = QUrl::fromLocalFile(rootFile.absoluteFilePath());
++	} else {
++		url.setScheme("qs");
++		url.setPath("@/qs/" % rootFile.fileName());
++	}
+ 	auto component = QQmlComponent(generation->engine, url);
+ 
+ 	if (!component.isReady()) {

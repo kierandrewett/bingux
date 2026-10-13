@@ -12,7 +12,9 @@ Scope {
     property bool available: false
     property bool isAfk: false
 
-    Component.onCompleted: if (enabled)
+    // Idle tracking starts once the desktop is up.
+    readonly property bool started: Startup.settled
+    onStartedChanged: if (started && enabled)
         monitor.running = true
     onEnabledChanged: {
         if (enabled) {
@@ -28,12 +30,7 @@ Scope {
 
     Process {
         id: monitor
-        command: [
-            "python3",
-            "-u",
-            decodeURIComponent(Qt.resolvedUrl("session-activity.py").toString().replace(/^file:\/\//, "")),
-            String(root.idleThresholdMs)
-        ]
+        command: ["python3", "-u", decodeURIComponent(Qt.resolvedUrl("session-activity.py").toString().replace(/^file:\/\//, "")), String(root.idleThresholdMs)]
         stdout: SplitParser {
             onRead: data => {
                 try {
@@ -61,7 +58,7 @@ Scope {
         id: reconnect
         interval: 30000
         repeat: true
-        running: root.enabled && !monitor.running
+        running: root.enabled && root.started && !monitor.running
         onTriggered: if (!monitor.running)
             monitor.running = true
     }

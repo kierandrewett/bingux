@@ -86,8 +86,8 @@ Scope {
         });
     }
     function controlCommand(action, identity) {
-        const service = mediaControls.services;
-        const choices = mediaControls.controlChoices;
+        const service = mediaControls().services;
+        const choices = mediaControls().controlChoices();
         if (action === "list")
             return ok({
                 ready: service.preferencesReady,
@@ -115,7 +115,7 @@ Scope {
         });
     }
     function vpnCommand(action, identity) {
-        const service = mediaControls.services;
+        const service = mediaControls().services;
         if (action === "list" || action === "status")
             return ok({
                 ready: service.ready,
@@ -151,15 +151,15 @@ Scope {
             return fail("Unknown control-centre page");
         if (input && page !== "audio")
             return fail("Input selection requires the audio page");
-        mediaControls.visible = true;
-        mediaControls.openDetail(page, null, input ? "input" : "output");
+        mediaControls().visible = true;
+        mediaControls().openDetail(page, null, input ? "input" : "output");
         return ok({
             ok: true,
             page
         });
     }
     function deviceCommand(action, input, identity) {
-        const details = mediaControls.deviceControls;
+        const details = mediaControls().deviceControls();
         const nodes = input ? details.audioInputs : details.audioOutputs;
         const selected = input ? details.inputNode : details.outputNode;
         if (action === "list")
@@ -187,7 +187,7 @@ Scope {
         });
     }
     function serviceCommand(kind, action, value) {
-        const service = mediaControls.services;
+        const service = mediaControls().services;
         const state = service.state;
         if (!["power", "night-light", "awake"].includes(kind))
             return fail("Unknown desktop control");
@@ -239,7 +239,7 @@ Scope {
         });
     }
     function networkCommand(action, identity) {
-        const details = mediaControls.deviceControls;
+        const details = mediaControls().deviceControls();
         if (action === "status")
             return ok({
                 ready: details.networkUpdatedAt > 0,
@@ -264,7 +264,7 @@ Scope {
         return fail("Unknown network action");
     }
     function bluetoothCommand(action, identity) {
-        const adapter = mediaControls.bluetoothAdapter;
+        const adapter = mediaControls().bluetoothAdapter;
         if (!adapter)
             return fail("Bluetooth adapter is unavailable");
         const devices = adapter.devices.values;
@@ -288,7 +288,7 @@ Scope {
                 return fail("Scan requires on or off");
             if (!adapter.enabled && identity === "on")
                 return fail("Enable Bluetooth before scanning");
-            mediaControls.deviceControls.scanForCommand(identity === "on");
+            mediaControls().deviceControls().scanForCommand(identity === "on");
         } else if (action === "connect" || action === "disconnect") {
             if (!adapter.enabled)
                 return fail("Bluetooth is off");
@@ -331,7 +331,7 @@ Scope {
         });
     }
     function mediaCommand(action, identity, value) {
-        const players = mediaControls.mediaPlayers;
+        const players = mediaControls().mediaPlayers;
         const describe = player => ({
                     id: player.dbusName,
                     name: player.identity,
@@ -345,7 +345,7 @@ Scope {
             return ok({
                 players: players.map(describe)
             });
-        const player = identity ? players.find(candidate => candidate.dbusName === identity) : mediaControls.mediaPlayer;
+        const player = identity ? players.find(candidate => candidate.dbusName === identity) : mediaControls().mediaPlayer;
         if (!player)
             return fail(identity ? "Media player not found" : "No media player is available");
         if (action === "status")
@@ -433,8 +433,7 @@ Scope {
                 dockView.openFolder(group.id);
             else
                 dockView.launch(group, true);
-        }
-        else if (action === "activate") {
+        } else if (action === "activate") {
             if (group.folder) {
                 dockView.openFolder(group.id);
                 return ok();

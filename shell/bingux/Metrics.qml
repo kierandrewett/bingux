@@ -34,6 +34,9 @@ QtObject {
     readonly property bool locationAvailable: privacyAvailable && (latest.locationAvailable === undefined || latest.locationAvailable)
     readonly property bool screenSharing: screenSharingAvailable && latest.screenSharing
     readonly property bool microphoneInUse: microphoneAvailable && latest.microphoneInUse
+    readonly property bool microphoneCaptureFeedPresent: available && typeof latest.microphoneCapturesAvailable === "boolean"
+    readonly property bool microphoneCapturesAvailable: available && latest.microphoneCapturesAvailable === true
+    readonly property var microphoneCaptures: microphoneCapturesAvailable ? latest.microphoneCaptures : []
     readonly property bool locationInUse: locationAvailable && latest.locationInUse
     readonly property string inputSourceLabel: {
         const source = currentInputSource;
@@ -121,7 +124,14 @@ QtObject {
     }
 
     function isMetricsRecord(record) {
-        return record !== null && typeof record === "object" && record.protocolVersion === 1 && record.type === "metrics" && isOptionalNumber(record.cpuPercent) && isFiniteNumber(record.memoryTotalBytes) && isFiniteNumber(record.memoryUsedBytes) && isOptionalNumber(record.networkReceiveBytesPerSecond) && isOptionalNumber(record.networkTransmitBytesPerSecond) && record.memoryTotalBytes >= 0 && record.memoryUsedBytes >= 0 && record.memoryUsedBytes <= record.memoryTotalBytes && (record.cpuPercent === null || (record.cpuPercent >= 0 && record.cpuPercent <= 100)) && isDesktopStateRecord(record) && isExtraRecord(record.extra);
+        return record !== null && typeof record === "object" && record.protocolVersion === 1 && record.type === "metrics" && isOptionalNumber(record.cpuPercent) && isFiniteNumber(record.memoryTotalBytes) && isFiniteNumber(record.memoryUsedBytes) && isOptionalNumber(record.networkReceiveBytesPerSecond) && isOptionalNumber(record.networkTransmitBytesPerSecond) && record.memoryTotalBytes >= 0 && record.memoryUsedBytes >= 0 && record.memoryUsedBytes <= record.memoryTotalBytes && (record.cpuPercent === null || (record.cpuPercent >= 0 && record.cpuPercent <= 100)) && isDesktopStateRecord(record) && isMicrophoneCaptureRecord(record) && isExtraRecord(record.extra);
+    }
+
+    function isMicrophoneCaptureRecord(record) {
+        if (record.microphoneCapturesAvailable === undefined && record.microphoneCaptures === undefined)
+            return true;
+        const field = value => typeof value === "string" && value.length <= 128 && !/[\u0000-\u001f\u007f-\u009f]/.test(value);
+        return typeof record.microphoneCapturesAvailable === "boolean" && Array.isArray(record.microphoneCaptures) && record.microphoneCaptures.length <= 32 && record.microphoneCaptures.every(capture => capture !== null && typeof capture === "object" && field(capture.app) && field(capture.appId) && field(capture.device) && typeof capture.muted === "boolean");
     }
 
     function ingest(recordText) {
@@ -159,17 +169,24 @@ QtObject {
     function failConnection(reason) {
         console.warn("[bingux-metrics] " + reason);
         connectionState = "unavailable";
-        root.metricsSocket.connected = false;
+        dropSocket();
         scheduleReconnect();
     }
 
     function scheduleReconnect() {
+        // A failed connection can signal from inside the one-shot timer.
+        // Arm after that callback finishes so its running flag cannot hide
+        // the next retry.
+        Qt.callLater(root.armReconnect);
+    }
+
+    function armReconnect() {
         if (socketPath === "") {
             connectionState = "unavailable";
             return;
         }
 
-        if (!root.reconnectTimer.running) {
+        if ((!root.metricsSocket || !root.metricsSocket.connected) && !root.reconnectTimer.running) {
             root.reconnectTimer.interval = reconnectDelay;
             reconnectDelay = Math.min(reconnectDelay * 2, 5000);
             root.reconnectTimer.start();
@@ -181,39 +198,53 @@ QtObject {
         root.freshnessTimer.restart();
     }
 
-    property var metricsSocket: Socket {
-        path: root.socketPath
-        parser: SplitParser {
-            onRead: function (data) {
-                root.ingest(data);
-            }
-        }
-
-        onConnectedChanged: {
-            if (connected) {
-                root.connectionStartedAt = Date.now();
-                root.armFreshnessTimeout(root.latest === null ? root.connectionStartedAt : root.lastUpdatedAt);
-                root.connectionState = "ready";
-                root.reconnectDelay = 250;
-                return;
-            }
-
-            root.connectionStartedAt = 0;
-            root.connectionState = "connecting";
-            root.scheduleReconnect();
-        }
-
-        onError: function (error) {
-            root.failConnection(error);
-        }
-
-        Component.onCompleted: {
-            if (root.socketPath === "") {
-                root.connectionState = "unavailable";
-                return;
+    property var metricsSocket: null
+    function dropSocket() {
+        const socket = metricsSocket;
+        metricsSocket = null;
+        if (socket)
+            socket.destroy();
+    }
+    function connectSocket() {
+        if (socketPath === "")
+            return;
+        dropSocket();
+        metricsSocket = socketComponent.createObject(root);
+        metricsSocket.connected = true;
+    }
+    Component.onCompleted: connectSocket()
+    property Component socketComponent: Component {
+        Socket {
+            id: connection
+            path: root.socketPath
+            parser: SplitParser {
+                onRead: function (data) {
+                    if (root.metricsSocket === connection)
+                        root.ingest(data);
+                }
             }
 
-            connected = true;
+            onConnectedChanged: {
+                if (root.metricsSocket !== connection)
+                    return;
+                if (connected) {
+                    root.connectionStartedAt = Date.now();
+                    root.armFreshnessTimeout(root.connectionStartedAt);
+                    root.connectionState = "ready";
+                    root.reconnectDelay = 250;
+                    return;
+                }
+
+                root.connectionStartedAt = 0;
+                root.connectionState = "connecting";
+                root.dropSocket();
+                root.scheduleReconnect();
+            }
+
+            onError: function (error) {
+                if (root.metricsSocket === connection)
+                    root.failConnection(error);
+            }
         }
     }
 
@@ -222,7 +253,7 @@ QtObject {
 
         onTriggered: {
             root.now = Date.now();
-            if (root.metricsSocket.connected) {
+            if (root.metricsSocket && root.metricsSocket.connected) {
                 root.failConnection("metrics record is stale");
             }
         }
@@ -235,7 +266,7 @@ QtObject {
                 return;
             }
 
-            root.metricsSocket.connected = true;
+            root.connectSocket();
         }
     }
 }

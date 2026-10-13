@@ -45,6 +45,12 @@ PanelWindow {
     }
 
     property var dockView: null
+    property real dockSafeInset: Theme.dockExclusiveHeight
+    readonly property real searchTopMargin: 16
+    readonly property real searchBottomMargin: 16
+    readonly property real searchUsableBottom: Math.max(searchTopMargin, root.height - Math.max(0, dockSafeInset) - searchBottomMargin)
+    readonly property real searchUsableHeight: Math.max(0, searchUsableBottom - searchTopMargin)
+    readonly property real searchListHeight: Math.max(0, searchUsableHeight - Theme.searchInputHeight - 16)
     function openAppMenu(result, position) {
         if (!dockView || activationPending || awaitingResults || closing || !result.desktopId || result.providerId !== "applications" || result.kind !== "application")
             return;
@@ -848,7 +854,7 @@ PanelWindow {
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton
-            onClicked: if (!root.pointerBlocked)
+            onPressed: if (!root.pointerBlocked)
                 root.closeSearch(false, root.keepChromeOnOutsideClick)
         }
     }
@@ -869,9 +875,9 @@ PanelWindow {
         readonly property real contentRadius: Theme.insetRadius(radius, contentPadding)
 
         width: Math.max(0, Math.min(660, root.width - 32))
-        height: content.implicitHeight + surface.contentPadding * 2
+        height: Math.min(content.implicitHeight + surface.contentPadding * 2, root.searchUsableHeight)
         readonly property real radius: Theme.searchCardRadius
-        y: Math.max(16, Math.min(root.height * 0.38 - (Theme.searchInputHeight + 16) / 2, root.height - height - 24))
+        y: Math.max(root.searchTopMargin, Math.min(root.height * 0.38 - (Theme.searchInputHeight + 16) / 2, root.searchUsableBottom - height))
         Behavior on height {
             enabled: root.acceptingKeyboard && !root.closing
             NumberAnimation {
@@ -952,7 +958,7 @@ PanelWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             implicitSize: 20
                             color: Theme.muted
-                            source: Quickshell.iconPath("system-search-symbolic")
+                            source: AdwaitaIcons.source("system-search-symbolic")
                         }
 
                         Text {
@@ -1101,7 +1107,7 @@ PanelWindow {
                             SymbolicIcon {
                                 anchors.centerIn: parent
                                 implicitSize: 16
-                                source: Quickshell.iconPath("edit-clear-symbolic", "window-close-symbolic")
+                                source: AdwaitaIcons.source("edit-clear-symbolic", "window-close-symbolic")
                                 color: clearQueryMouse.containsMouse ? Theme.text : Theme.muted
                             }
                             MouseArea {
@@ -1137,7 +1143,7 @@ PanelWindow {
                         id: chatTranscriptList
 
                         Layout.fillWidth: true
-                        Layout.preferredHeight: visible ? Math.min(contentHeight, 360) : 0
+                        Layout.preferredHeight: visible ? Math.min(contentHeight, 360, root.searchListHeight) : 0
                         visible: root.chatMode && root.chatTranscript.length > 0
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
@@ -1272,7 +1278,7 @@ PanelWindow {
                         onModelChanged: keyboardScroll.stop()
 
                         Layout.fillWidth: true
-                        Layout.preferredHeight: visible ? Math.min(contentHeight, Math.max(64, Math.min(420, root.height - 160 - (chatTranscriptList.visible ? chatTranscriptList.height : 0)))) : 0
+                        Layout.preferredHeight: visible ? Math.min(contentHeight, 420, Math.max(0, root.searchListHeight - (chatTranscriptList.visible ? chatTranscriptList.height : 0))) : 0
                         visible: root.displayedResults.length > 0
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds

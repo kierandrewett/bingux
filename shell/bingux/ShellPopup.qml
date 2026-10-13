@@ -4,14 +4,22 @@ import QtQuick.Window
 import Quickshell
 import Quickshell.Wayland
 
-// `visible` is the requested state. The layer window stays mapped only long
-// enough to finish closing, with input released as soon as closing starts.
+// Reuse the native window for quick reopen, then unmap it when idle and unpinned.
+// Hidden cards clear drawing, blur and input before that graphics cache expires.
 Scope {
     id: root
     property bool windowShadow: false
     default property alias contents: body.data
     property bool visible: false
     property bool keepWindowAlive: false
+    property bool nativeWindowsRequested: false
+    Timer {
+        interval: 30000
+        running: root.nativeWindowsRequested && !root.visible && !root.retained && !root.keepWindowAlive
+        onTriggered: root.nativeWindowsRequested = false
+    }
+    onHostItemChanged: if (visible && !hostItem)
+        nativeWindowsRequested = true
     // Keep the card and its delegates resident while hidden. The input mask
     // still drops to zero when invisible, so this is a presentation cache only.
     property bool keepContentAlive: false
@@ -92,15 +100,12 @@ Scope {
     property int popupHeight: body.childrenRect.height + contentPadding * 2
     signal aboutToOpen
     property bool retained: false
-    readonly property bool compositorClose: !hostItem && !keepWindowAlive && !motionSource && PopupTransitions.matches(closeMotion, closeEasing)
-    readonly property bool compositorOpen: !hostItem && !keepWindowAlive && PopupTransitions.fadesIn()
-
-    onKeyboardInteractiveChanged: if (visible)
-        dismissWindow.visible = !hostItem && keyboardInteractive
 
     onVisibleChanged: {
         reveal.stop();
         dismiss.stop();
+        if (visible && !hostItem)
+            nativeWindowsRequested = true;
         if (motionSource) {
             retained = visible || motionSource.retained;
             return;
@@ -110,22 +115,14 @@ Scope {
             aboutToOpen();
             if (!retained) {
                 revealScale = Theme.reducedMotion ? 1 : root.initialRevealScale;
-                card.opacity = Theme.reducedMotion || compositorOpen ? 1 : 0;
+                card.opacity = Theme.reducedMotion ? 1 : 0;
             }
-            dismissWindow.visible = !root.hostItem && root.keyboardInteractive;
             retained = true;
             reveal.start();
             if (keyboardInteractive)
                 contentItem.forceActiveFocus();
         } else if (retained) {
-            // The last committed buffer already contains the current entrance
-            // opacity and scale. Freeze it, then let the compositor fade it once.
-            if (compositorClose) {
-                retained = false;
-                dismissWindow.visible = false;
-            } else {
-                dismiss.start();
-            }
+            dismiss.start();
         }
     }
     function setRevealOrigin(x, y) {
@@ -160,62 +157,30 @@ Scope {
         onFinished: if (!root.visible) {
             if (!root.keepContentAlive)
                 root.retained = false;
-            dismissWindow.visible = false;
         }
     }
 
-    // Outside clicks dismiss without focusing a menu that is about to close.
-    // Keep this below the card's focusable surface, which only accepts card input.
-    PanelWindow {
-        id: dismissWindow
-        screen: window.screen
-        visible: false
-        color: "transparent"
-        exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.namespace: "bingux-popup-dismiss"
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        anchors {
-            top: true
-            bottom: true
-            left: true
-            right: true
-        }
-        mask: Region {
-            width: root.visible ? dismissWindow.width : 0
-            height: root.visible ? dismissWindow.height : 0
-            // Pointer entry can raise the dismissal surface above the card.
-            // Its input region must never include the menu, regardless of stacking.
-            Region {
-                intersection: Intersection.Subtract
-                x: card.x
-                y: card.y
-                width: card.width
-                height: card.height
-            }
-        }
-        contentItem.enabled: root.visible
-        MouseArea {
-            parent: root.hostItem ? root.contentItem : dismissWindow.contentItem
-            anchors.fill: parent
-            visible: root.retained
-            enabled: root.visible && root.dismissOnOutsideClick
-            z: 5 + root.popupDepth * 2
-            acceptedButtons: Qt.AllButtons
-            onClicked: root.visible = false
-        }
+    // Catch outside presses below the card in the same scene. A separate
+    // transparent window would allocate another graphics context for no pixels.
+    MouseArea {
+        parent: root.contentItem
+        anchors.fill: parent
+        visible: root.retained
+        enabled: root.visible && root.dismissOnOutsideClick
+        z: 5 + root.popupDepth * 2
+        acceptedButtons: Qt.AllButtons
+        onPressed: root.visible = false
     }
 
     // A layer surface avoids native xdg-popup grabs on layer-shell parents.
     PanelWindow {
         id: window
-        visible: (root.retained || root.keepWindowAlive) && !root.hostItem
+        visible: (root.retained || root.nativeWindowsRequested || root.keepWindowAlive) && !root.hostItem
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "gnoblin-shell-popup"
         // Menus must receive arrows and Escape immediately, before any menu click.
-        // The separate outside-click surface never takes keyboard focus.
         WlrLayershell.keyboardFocus: root.visible && root.keyboardInteractive ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         anchors {
             top: true
@@ -228,6 +193,19 @@ Scope {
             y: card.y
             width: root.visible && root.pointerInteractive ? card.width : 0
             height: root.visible ? card.height : 0
+            // Menus accept outside presses; editing and passive overlays keep
+            // their card-only or empty input region. Inline children use theirs.
+            Region {
+                width: root.visible && root.keyboardInteractive ? window.width : 0
+                height: root.visible && root.keyboardInteractive ? window.height : 0
+                Region {
+                    intersection: Intersection.Subtract
+                    x: card.x
+                    y: card.y
+                    width: card.width
+                    height: card.height
+                }
+            }
         }
         contentItem.enabled: root.visible
         contentItem.Keys.onEscapePressed: root.visible = false
@@ -236,7 +214,7 @@ Scope {
             BackgroundEffect {
                 target: card
                 radius: root.cornerRadius
-                requested: root.surfaceVisible
+                requested: root.surfaceVisible && root.retained
             }
             SurfaceFade {
                 target: card

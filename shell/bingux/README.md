@@ -42,6 +42,12 @@ from application activation, keeping the underlying window and dock indicator
 active while menus receive keys. This requires the compositor's menu keyboard
 routing support; installing a new compositor build takes effect at next login.
 The outside-click surface excludes the card so pointer re-entry remains usable.
+Native card and dismissal windows are created on first use and reused when the
+menu reopens. Closing clears their drawing, blur, pointer regions and keyboard
+focus. This avoids accumulating renderer shader allocations on repeated opens.
+Menus embedded in another window keep using that window. Notification toasts
+and history also reuse their first native window; empty history draws nothing
+and accepts no input.
 
 Use `ShellPopup` for new shell context menus and popovers. Put the contents in
 its default slot and set `popupWidth`, `popupHeight`, and `preferredX/Y` as needed.
@@ -59,6 +65,32 @@ window, pointer, keyboard, interruption, and reopening checks. Repeat with
 the script through Gnoblin's `GNOBLIN_TEST_DBUS_CLIENT` launcher so desktop input
 cannot dismiss the test menus.
 
+For real-seat regression checks in a disposable Gnoblin VM, run:
+
+```sh
+python3 tests/popup-cache-live.py /path/to/gnoblin/scripts/qemu-e2e /path/to/vm-run \
+  --quickshell /guest/path/to/quickshell \
+  --import-path /guest/prefix/lib/bingux/qml
+```
+
+This checks native-window reuse, real pointer and keyboard input, closed-menu
+click-through, nested menus, blur fading, interrupted closing, notification
+history and moving a popup between screens. It saves comparison frames in the
+VM run's `popup-cache-proof` directory. Run it while no other test is operating
+the VM's input or opening panels.
+
+Inside that VM, measure repeated installed-panel openings separately:
+
+```sh
+python3 tests/panel-lifecycle-live.py --cycles 30 --warmup-cycles 3 \
+  --max-growth-mib 16 --report /tmp/panel-memory.json
+```
+
+The memory check counts proportional resident and swapped memory for the main
+shell and its descendants. The limit applies to peak growth after warm-up;
+first-use panel loading is measured separately. Use `--expect-unopened` after
+a fresh shell start with the default layout to check lazy loading too.
+
 Tray submenus use the same surface, provide a Back action, and slide between
 pages with the same eased horizontal transition as Control Centre. `DockTooltip.qml` provides a non-interactive
 application tooltip after a 500 ms initial hover delay. Moving to another tooltip target
@@ -73,6 +105,12 @@ and the search icon for the floating search panel. Search needs bingux-searchd;
 application launching also needs an applicationLauncher command in search.json.
 The control centre uses PipeWire for volume and the existing system settings
 applications for network and display configuration.
+
+Calendar, metrics, notification history and Control Centre load when first
+opened and stay available for subsequent openings. Control Centre also loads
+when its widgets are placed outside the panel or desktop editing needs them.
+Reading a closed panel's status does not load it. To inspect which panels have
+loaded, run `binguxctl ipc shell status` and read the `loadedPanels` flags.
 
 Super+Period opens the emoji picker through Bingux's persistent shortcut
 connection. The desktop module leaves IBus's inline picker on Super+Semicolon
@@ -165,6 +203,10 @@ The standalone install supplies `BINGUX_AUDIO_METER` through the compiled helper
 on PATH. Source sessions can set the variable to an explicit helper path. The
 helper reconnects after an audio-server restart.
 
+On Linux, the microphone watcher's `pactl` subscription exits with its watcher,
+including when the shell is reloaded or forcibly stopped. Reloading does not
+leave extra audio-event subscriptions running.
+
 Validation:
 
 - `node --test tests/media-match.test.mjs` checks app attribution.
@@ -177,6 +219,9 @@ Validation:
 - `python3 tests/audio-meter.py /path/to/bingux-audio-meter` creates and removes
   an owned null sink to verify silence, short pulses, debounce and release
   timing without playing test audio through the speakers.
+- `python3 tests/microphone-lifecycle-live.py shell/bingux/microphone-status.py`
+  uses a private `pactl` replacement to verify that the microphone watcher's
+  subscription child exits when the watcher receives either SIGTERM or SIGKILL.
 
 ## Sidebar
 

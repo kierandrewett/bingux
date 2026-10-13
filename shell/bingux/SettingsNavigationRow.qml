@@ -25,7 +25,7 @@ AbstractButton {
             x: 12
             anchors.verticalCenter: parent.verticalCenter
             implicitSize: 16
-            source: Quickshell.iconPath(root.iconName)
+            source: AdwaitaIcons.source(root.iconName)
             color: Theme.text
         }
         Text {

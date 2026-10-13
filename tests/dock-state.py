@@ -20,6 +20,7 @@ if test_name not in (
     "search-launch-cursor",
     "dock-launch-timeout",
     "dock-startup",
+    "dock-menu-lazy",
 ):
     raise SystemExit("Unknown shell test")
 if not os.environ.get("WAYLAND_DISPLAY", "").startswith("gnoblin-gs-"):
@@ -50,11 +51,13 @@ with tempfile.TemporaryDirectory(prefix="bingux-dock-test-") as directory:
     dock = dock.replace(
         "id: dockButton",
         """id: dockButton
-                    property alias testMenu: appMenu
+                    property alias testMenu: dockButton.appMenu
                     property alias testMouse: dockMouse
                     property alias testIndicators: windowIndicators""",
     )
     dock_file.write_text(dock)
+    menu_file = fixture / "DockAppMenu.qml"
+    menu_file.write_text(menu_file.read_text().replace("ToplevelManager", "dock.testManager"))
     indicators_file = fixture / "DockWindowIndicators.qml"
     indicators_file.write_text(
         indicators_file.read_text().replace("id: root", "id: root\n    property alias testView: strip", 1)

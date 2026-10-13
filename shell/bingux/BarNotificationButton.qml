@@ -38,7 +38,7 @@ AbstractButton {
                 // Keep the control discoverable with the bell in that state.
                 visible: root.count === 0
                 implicitSize: Theme.iconSize
-                source: root.presentation?.icon ? Quickshell.iconPath(root.presentation.icon) : Quickshell.iconPath("preferences-system-notifications-symbolic")
+                source: root.presentation?.icon ? AdwaitaIcons.source(root.presentation.icon) : AdwaitaIcons.source("preferences-system-notifications-symbolic")
                 color: Theme.text
             }
             NotificationIndicator {

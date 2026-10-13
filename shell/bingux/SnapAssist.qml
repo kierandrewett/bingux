@@ -87,6 +87,7 @@ Scope {
     function nativeTargets(regions) {
         if (!area)
             return [];
+        const ids = ({});
         return regions.map(region => {
             const hit = region.hit;
             const left = Math.max(hit.x, area.x);
@@ -95,8 +96,11 @@ Scope {
             const bottom = Math.min(hit.y + hit.height, area.y + area.height);
             if (right <= left || bottom <= top)
                 return null;
+            const baseId = String(region.id);
+            const duplicate = ids[baseId] || 0;
+            ids[baseId] = duplicate + 1;
             const target = {
-                id: String(region.id),
+                id: duplicate ? baseId + ":" + duplicate : baseId,
                 hit: {
                     x: left,
                     y: top,

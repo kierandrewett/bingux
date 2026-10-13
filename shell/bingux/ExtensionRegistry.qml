@@ -11,6 +11,18 @@ Scope {
     property var errors: []
     property var internals: null
     property int generation: 0
+    property bool anyEnabled: true
+    Component.onCompleted: {
+        try {
+            let text = "";
+            try {
+                text = settingsFile.text();
+            } catch (_) {}
+            anyEnabled = text.trim() ? JSON.parse(text).enabled.length > 0 : false;
+        } catch (_) {
+            anyEnabled = true;
+        }
+    }
     property var actions: ({})
     signal event(string name, var payload)
     function invoke(id, payload) {
@@ -52,7 +64,9 @@ Scope {
     Process {
         id: scan
         command: ["python3", decodeURIComponent(Qt.resolvedUrl("extensions.py").toString().replace("file://", "")), "list"]
-        running: true
+        // With nothing enabled there are no widgets to place, so the scan can
+        // wait until the desktop is up instead of delaying start-up.
+        running: root.anyEnabled || Startup.settled
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -68,6 +82,8 @@ Scope {
         }
     }
     FileView {
+        id: settingsFile
+        blockLoading: true
         path: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/bingux/extensions.json"
         watchChanges: true
         onFileChanged: root.reload()

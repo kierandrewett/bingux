@@ -41,7 +41,7 @@ AbstractButton {
                 Layout.preferredHeight: Theme.iconSize
                 Layout.alignment: Qt.AlignVCenter
                 implicitSize: Theme.iconSize
-                source: root.displayedIcon ? Quickshell.iconPath(root.displayedIcon) : ""
+                source: root.displayedIcon ? AdwaitaIcons.source(root.displayedIcon) : ""
                 color: root.enabled ? Theme.text : Theme.muted
             }
             Text {
@@ -65,7 +65,7 @@ AbstractButton {
                 Layout.preferredHeight: Theme.iconSize
                 Layout.alignment: Qt.AlignVCenter
                 implicitSize: Theme.iconSize
-                source: root.trailingIconName ? Quickshell.iconPath(root.trailingIconName) : ""
+                source: root.trailingIconName ? AdwaitaIcons.source(root.trailingIconName) : ""
                 color: root.enabled ? Theme.text : Theme.muted
             }
         }

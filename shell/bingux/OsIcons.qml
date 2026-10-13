@@ -9,6 +9,9 @@ Singleton {
     property var sources: ({})
     property var palettes: ({})
     property var requested: ({})
+    // The renderer starts on the first icon request. Each shell surface runs its own
+    // engine, and most never show an OS icon, so an eager helper wastes ~50 MB apiece.
+    property bool wanted: false
     property bool ready: false
     property bool unavailable: false
     property var cache: IconCache.create()
@@ -44,6 +47,7 @@ Singleton {
     function resolve(source) {
         if (!source)
             return;
+        wanted = true;
         IconCache.touch(cache, source);
         if (requested[source])
             return;
@@ -63,7 +67,7 @@ Singleton {
     Process {
         id: worker
         command: Quickshell.env("BINGUX_ICON_HELPER") ? [Quickshell.env("BINGUX_ICON_HELPER")] : ["python3", "-u", decodeURIComponent(Qt.resolvedUrl("render-os-icons.py").toString().replace(/^file:\/\//, ""))]
-        running: true
+        running: root.wanted
         stdinEnabled: true
         stdout: SplitParser {
             onRead: data => {

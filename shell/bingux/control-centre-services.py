@@ -423,7 +423,8 @@ class Controls:
             error = str(failure) if isinstance(failure, ValueError) else "The service could not complete this change."
         self.emit({"actionDone": True, "error": error})
         self.changed()
-        self.refresh()
+        if self.active:
+            self.refresh()
         return False
 
 
@@ -469,7 +470,6 @@ def main():
     GLib.io_add_watch(sys.stdin, GLib.IO_IN | GLib.IO_HUP, read)
     GLib.timeout_add_seconds(4, tick)
     controls.emit({"ready": True, "state": controls.settings_state()})
-    controls.refresh()
     loop.run()
     controls.executor.shutdown(wait=False, cancel_futures=True)
 

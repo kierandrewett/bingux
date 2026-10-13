@@ -50,8 +50,8 @@ ShellRoot {
         }
         function test_controls() {
             tryVerify(() => Mpris.players.values.length === 2 && dock.testItems.count === 2, 4000);
-            const menu = dock.testItems.itemAt(0).testMenu;
-            const unrelated = dock.testItems.itemAt(1).testMenu;
+            const menu = dock.testItems.itemAt(0).ensureMenu();
+            const unrelated = dock.testItems.itemAt(1).ensureMenu();
             tryVerify(() => menu.mediaPlayers.length === 1, 2000);
             check(unrelated.mediaPlayers.length === 0, "Unrelated app has no media controls");
             menu.visible = true;
@@ -183,13 +183,13 @@ ShellRoot {
             tryCompare(notificationSurface, "renderedNotificationCount", 0);
             check(notificationState.allEntries.length === 2, "Closing the control centre hides history without clearing it");
             tryCompare(number, "displayedValue", 2);
-            const menu = app.testMenu;
+            const menu = app.ensureMenu();
             menu.visible = true;
             tryCompare(menu, "revealScale", 1);
             test.parent = menu.contentItem;
             const previews = findChild(menu.body, "dockNotifications");
             check(previews.visible && previews.entries.length === 2, "Dock menu previews retained notifications for its app");
-            const otherPreviews = findChild(other.testMenu.body, "dockNotifications");
+            const otherPreviews = findChild(other.ensureMenu().body, "dockNotifications");
             check(!otherPreviews.visible && otherPreviews.entries.length === 0, "Other apps do not show notification previews");
             waitForRendering(previews);
             wait(150);

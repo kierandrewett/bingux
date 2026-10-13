@@ -42,7 +42,7 @@ Item {
             objectName: "statusIcon"
             anchors.centerIn: parent
             implicitSize: Theme.iconSize
-            source: root.retainedIcon ? Quickshell.iconPath(root.retainedIcon) : ""
+            source: root.retainedIcon ? AdwaitaIcons.source(root.retainedIcon) : ""
             color: Theme.text
         }
     }

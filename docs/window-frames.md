@@ -1,92 +1,96 @@
-# GTK window frames
+# Bingux window frames
 
-Standalone Bingux opens its Quickshell window menu for Gnoblin's native
-`gnoblin.window.menu-requested` WM event. It reads the current window record,
-then targets actions by that stable window ID over the same compositor
-connection, so opening the menu does not redirect actions to the newly focused
-window. Move and resize use the event's one-use `menu_context`; those actions
-are available with Gnoblin API 1.30 or newer, and the context expires after five
-seconds. Application-menu requests are informational and are ignored because
-Bingux does not expose arbitrary application menus.
+Bingux enables the `bingux-frame` renderer for ordinary app windows. Its
+`auto` mode keeps an application's client-side decorations and supplies a
+compositor-drawn titlebar only when the application requests one.
 
-Do not restore the removed `shell["window-menu"]` setting to `init.lua`.
+The frame helper uses GTK4/libadwaita widgets and follows GTK's theme, fonts,
+and title-button layout. Its GTK background also supplies the rounded bottom
+frame corners; Gnoblin owns the frame geometry and clipping.
 
-`bingux-frame` draws **actual GTK4/libadwaita widgets**, not a lookalike. It snapshots
-an `AdwHeaderBar`, `AdwWindowTitle` and GTK's title buttons into Gnoblin's private
-frame surface. GTK supplies typography, symbolic icons, theme colors, button
-layout and state styling. Gnoblin still owns geometry, radius, input and recovery.
+The `frame.mode` values are:
 
-Snapshots are rendered by the GTK root's `GskRenderer`, then downloaded to the
-shared-memory frame buffer. Do not replace this with `gsk_render_node_draw()`:
-its Cairo fallback changes text rasterization even at 100% display scale.
-`bash packages/bingux-frame/test-title-rendering.sh OUTPUT_DIR` compares the
-actual painter's title pixels with GTK's renderer at odd/even widths and in
-focused/unfocused states. Run it on the nested session's display and settings;
-it also writes the old Cairo path for visual comparison. This test covers 1x
-rasterization, not mixed-DPI buffer negotiation.
+| Value           | Effect                                                                      |
+| --------------- | --------------------------------------------------------------------------- |
+| `off`           | Leave the titlebar to the application.                                      |
+| `auto`          | Draw a Bingux frame only after the application requests server decorations. |
+| `prefer-server` | Request a Bingux frame from apps that can negotiate decorations.            |
+| `replace`       | Replace the matching application's titlebar with a Bingux frame.            |
 
-Build just this renderer: `make build/bingux-frame`. Normal builds/package installs
-include it at `PREFIX/libexec/bingux/bingux-frame`. It requires GTK4, libadwaita and
-Wayland, but no JavaScript, QML or running Bingux panels. The vendored MIT transport
-comes from Gnoblin's `src/tools/frame-renderer` and its private protocol XML.
+See [Gnoblin's frame mode reference](https://gnoblin.org/guides/window_frames#choose-a-mode) for
+details. Apps that cannot negotiate server decorations keep their own titlebar.
+Gnoblin clips buffer pixels outside an app's declared visible bounds and draws
+Bingux's configured border and shadow around those bounds. This removes
+invisible CSD shadow margins without guessing their size or hiding controls.
 
-It is not automatically enabled. Add to your Gnoblin Lua config (adjust PREFIX):
+Bingux also enables `remove_csd` on app windows. This handles rounded corner
+cutouts inside the visible bounds: Gnoblin fills those pixels when it can
+sample a safe background, then applies Bingux's shared rounded shape and
+border. If corner detection is uncertain, it preserves the app's original
+corner.
+
+## Configure a frame in Gnoblin
+
+To use Bingux's renderer for a selected app, add this after the
+`gnoblin.load(...)` lines in `~/.config/gnoblin/init.lua`:
 
 ```lua
-["frame-renderers"] = {
-    bingux = { "bingux-frame", "--compact" },
-},
-["window-rules"] = {
-    { match = { ["app-id"] = "^spotify$" },
-      frame = { mode = "prefer-server", renderer = "bingux",
-                extents = { 36, 0, 0, 0 } },
-      corners = { mode = "force", radius = 12, remove_csd = true } },
-},
+gnoblin.configure {
+    frame_renderers = {
+        bingux = {"bingux-frame", "--compact"},
+    },
+}
+
+gnoblin.window_rule {
+    match = {app_id = "^org%.gnome%.Nautilus$"},
+    frame = {
+        mode = "auto",
+        renderer = "bingux",
+        extents = {36, 0, 0, 0},
+    },
+    corners = {
+        mode = "force",
+        radius = 12,
+        border_width = 1,
+        border_color = "#505050bf",
+        remove_csd = true,
+    },
+}
 ```
 
-The packaged Bingux rule enables `remove_csd` by default. Gnoblin samples each
-client-drawn corner and fills the transparent gap from nearby window pixels
-before applying the shared rounded shape. This keeps CSD windows aligned with
-Bingux's server-drawn frame and avoids a wallpaper-coloured fringe around the
-window. If Gnoblin cannot find a safe, even background to sample, it preserves
-the client's original corner.
+`app_id` is a regular expression matched against the app ID; use
+`gnoblinctl window list` to find it. The example matches Files.
+The `bingux` renderer name points to the `bingux-frame` command.
 
-Service registration reloads with `gnoblinctl config reload`. After rebuilding
-`bingux-frame`, use the same `gnoblinctl config reload` command. Watched config
-edits also restart the renderer; windows remain open during the
-renderer replacement. Updating Gnoblin's compositor code itself still needs one
-new session. Follow GTK's configured
-decoration layout, or pass `--button-layout=:minimize,maximize,close` explicitly.
-The renderer uses an ordinary `AdwHeaderBar` with GTK's `titlebar` class.
-Its natural height is 46px with the installed libadwaita theme, matching the
-header in a normal GTK4/libadwaita application. Theme/version/font changes can alter
-that minimum. Existing native border/radius rules are separate.
-For the shorter title-only header, pass `--compact` and use 36px top extents.
-This adds GTK's `default-decoration` class; it keeps the same GTK frame-clock
-animations. The user's current desktop selects this compact variant.
+`extents` are logical pixels in top, right, bottom, left order. This example
+reserves 36 pixels above the client area. Each extent accepts an integer from
+0 to 256. See [Gnoblin's frame options](https://gnoblin.org/guides/window_frames#frame-options)
+for defaults and the other rule fields.
 
-These metrics come from libadwaita's own
-[headerbar stylesheet](https://github.com/GNOME/libadwaita/blob/1.8.7/src/stylesheet/widgets/_header-bar.scss),
-not a Bingux CSS recreation. The compositor rounds the bottom content hole using
-the outer radius minus the side/bottom extents, so the inner frame corners do not
-remain square.
+The `--compact` renderer option selects GTK's short titlebar. It is the Bingux
+default and pairs with 36-pixel top extents. Omitting it selects GTK's regular
+header, whose height depends on the installed theme, fonts, and GTK version.
 
-The GTK root is a snapshot host: it never presents an application window. Its
-show/map paths bypass GtkWindow presentation; per-frame state must not call
-GtkWindow APIs that present a toplevel. Tests reject extra managed windows.
-The native surface has a working `GdkFrameClock` even without being presented.
-The widget tree remains alive so GTK retains its CSS transition history. GTK's
-main context and the frame protocol connection share one poll; after-paint
-requests a redraw of that window. Hover, press, leave and backdrop transitions
-are GTK's own colors and timing, and follow GTK's animation setting. There are
-no custom tint overlays or fixed animation timers. Accessibility and mixed-scale
-buffer negotiation are not implemented by this transport.
+## Apply changes
 
-Run `bash packages/bingux-frame/test-gtk-comparison.sh OUTPUT_DIR` on the
-normal-config nested display. It presents a normal GTK window with an
-`AdwHeaderBar` and compares its rendered header with the actual SSD painter.
-All six settled states must match byte-for-byte; animated reference transitions
-must also produce multiple SSD frames. `render-gtk-comparison.py OUTPUT_DIR`
-assembles the captures into a labelled PNG and animation.
-Pass `--compact` after OUTPUT_DIR to compare the compact variant against GTK's
-own compact decoration. Both variants must meet the same pixel/transition checks.
+Run `gnoblinctl config reload` after editing renderer registration or window
+rules. Reload restarts the frame renderer while keeping app windows open.
+Apps must update their Wayland surface to apply decoration changes; reopen
+an app if its titlebar stays unchanged.
+
+An update to Gnoblin's compositor code requires a new session.
+
+Source builds can build the renderer with `make build/bingux-frame`. It requires
+GTK4, libadwaita, and Wayland development packages. Bingux packages include the
+renderer and its default Gnoblin integration.
+
+## Renderer readback
+
+For opaque GTK snapshots with supported frame extents, the helper reads the
+decoration strips and bottom-corner guards. The guards preserve pixels inside
+Gnoblin's rounded mask, and filtering margins include adjacent body pixels.
+
+Translucent snapshots, clamped extents, and extreme unequal side extents use
+full readback to preserve their pixels. The guard size covers Gnoblin's maximum
+corner radius. For renderer development and coverage checks, see the
+[frame helper guide](https://github.com/kierandrewett/bingux/blob/main/packages/bingux-frame/README.md).

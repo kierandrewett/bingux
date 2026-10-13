@@ -33,7 +33,7 @@ ShellRoot {
 
         property int nextSerial: 0
 
-        function pose(x, y, maximized, newDrag) {
+        function pose(x, y, maximized, newDrag, nativeDrag) {
             const screen = {
                 x: 0,
                 y: 0,
@@ -43,6 +43,9 @@ ShellRoot {
             snap.update({
                 active: true,
                 serial: newDrag ? ++nextSerial : nextSerial,
+                nativeDrag: nativeDrag === true,
+                drag_id: nextSerial,
+                drag_token: "test-token",
                 window: "test-window",
                 x,
                 y,
@@ -72,6 +75,17 @@ ShellRoot {
             pose(640, 400, true, true);
             compare(snap.dragAssistAllowed, false, "maximized titlebar drags suppress snap assist");
             compare(snap.regions.length, 0, "maximized titlebar drags publish no hidden snap targets");
+        }
+
+        function test_native_right_edge_offer_has_unique_targets() {
+            pose(640, 400, false, true, true);
+            pose(1279, 400, false, false, true);
+
+            const targets = snap.nativeTargets(snap.regions);
+            const right = targets.filter(target => target.id === "edge:right");
+            compare(right.length, 1, "the right-edge target is offered exactly once");
+            verify(right[0].hit.x + right[0].hit.width === snap.area.x + snap.area.width, "the right-edge hit reaches the work-area edge");
+            compare(new Set(targets.map(target => target.id)).size, targets.length, "native snap offers have no duplicate target IDs");
         }
 
         function test_picker_requires_entering_pill_area_and_shares_motion() {

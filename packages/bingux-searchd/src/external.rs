@@ -533,7 +533,14 @@ impl Worker {
                 thread::sleep(TICK);
                 continue;
             }
-            match self.commands.recv_timeout(self.wake(Instant::now())) {
+            let command = if self.child.is_none() && !self.needed() {
+                self.commands
+                    .recv()
+                    .map_err(|_| mpsc::RecvTimeoutError::Disconnected)
+            } else {
+                self.commands.recv_timeout(self.wake(Instant::now()))
+            };
+            match command {
                 Ok(WorkerCommand::Query {
                     query_id,
                     query,
@@ -1167,6 +1174,138 @@ fn fail_all(provider_id: &str, pending: &mut Pending) -> Vec<ExternalEvent> {
 mod tests {
     use super::*;
     use crate::protocol::{ProviderResponse, ProviderResult, ResultKind, parse_provider_manifest};
+
+    #[cfg(target_os = "linux")]
+    fn voluntary_context_switches(thread_name: &str) -> u64 {
+        let tasks = std::fs::read_dir("/proc/self/task").expect("list process threads");
+        for task in tasks {
+            let task = task.expect("thread entry");
+            let comm = std::fs::read_to_string(task.path().join("comm")).expect("read thread name");
+            if comm.trim() != thread_name {
+                continue;
+            }
+            let status =
+                std::fs::read_to_string(task.path().join("status")).expect("read thread status");
+            return status
+                .lines()
+                .find_map(|line| line.strip_prefix("voluntary_ctxt_switches:\t"))
+                .expect("voluntary context switches")
+                .parse()
+                .expect("numeric voluntary context switches");
+        }
+        panic!("worker thread {thread_name} was not found");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn idle_lazy_worker_blocks_between_commands() {
+        let (commands, command_receiver) = mpsc::sync_channel(1);
+        let (events, _event_receiver) = mpsc::sync_channel(1);
+        let worker = Worker::new(
+            manifest(),
+            command_receiver,
+            events,
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(Mutex::new(CancelledRequests::default())),
+        );
+        let (started, ready) = mpsc::sync_channel(1);
+        let thread_name = "bingux-idle-01";
+        let handle = thread::Builder::new()
+            .name(thread_name.into())
+            .spawn(move || {
+                started.send(()).expect("announce worker start");
+                worker.run();
+            })
+            .expect("start worker");
+        ready.recv().expect("worker started");
+
+        thread::sleep(Duration::from_millis(20));
+        let before = voluntary_context_switches(thread_name);
+        thread::sleep(Duration::from_millis(180));
+        let after = voluntary_context_switches(thread_name);
+
+        commands.send(WorkerCommand::Shutdown).expect("wake worker");
+        handle.join().expect("worker stopped");
+        assert!(
+            after <= before + 1,
+            "idle worker made {} voluntary switches",
+            after - before
+        );
+    }
+
+    #[test]
+    fn idle_lazy_worker_wakes_for_query_activation_and_shutdown() {
+        let (commands, command_receiver) = mpsc::sync_channel(3);
+        let (events, event_receiver) = mpsc::sync_channel(3);
+        let worker = Worker::new(
+            manifest(),
+            command_receiver,
+            events,
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(Mutex::new(CancelledRequests::default())),
+        );
+        let handle = thread::spawn(move || worker.run());
+
+        commands
+            .send(WorkerCommand::Query {
+                query_id: "query-1".into(),
+                query: "notes".into(),
+                limit: 10,
+            })
+            .expect("wake query");
+        let query_event = event_receiver.recv_timeout(Duration::from_secs(1));
+
+        commands
+            .send(WorkerCommand::Activate {
+                activation_id: "activation-1".into(),
+                result_id: "note-1".into(),
+            })
+            .expect("wake activation");
+        let activation_event = event_receiver.recv_timeout(Duration::from_secs(1));
+
+        commands
+            .send(WorkerCommand::Shutdown)
+            .expect("wake shutdown");
+        handle.join().expect("worker stopped");
+        assert!(matches!(
+            query_event.expect("query failure"),
+            ExternalEvent::QueryFailed { query_id, .. } if query_id == "query-1"
+        ));
+        assert!(matches!(
+            activation_event.expect("activation failure"),
+            ExternalEvent::ActivationFailed { activation_id, .. } if activation_id == "activation-1"
+        ));
+    }
+
+    #[test]
+    fn pending_worker_keeps_polling_for_its_deadline() {
+        let (commands, command_receiver) = mpsc::sync_channel(1);
+        let (events, event_receiver) = mpsc::sync_channel(1);
+        let mut worker = Worker::new(
+            manifest(),
+            command_receiver,
+            events,
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(Mutex::new(CancelledRequests::default())),
+        );
+        assert!(worker.pending.query(
+            "expired-query".into(),
+            "notes".into(),
+            10,
+            Instant::now() + Duration::from_millis(20),
+        ));
+        worker.next_start = Instant::now() + Duration::from_secs(1);
+        let handle = thread::spawn(move || worker.run());
+
+        let deadline_event = event_receiver.recv_timeout(Duration::from_secs(1));
+        commands.send(WorkerCommand::Shutdown).expect("stop worker");
+        handle.join().expect("worker stopped");
+        assert!(matches!(
+            deadline_event.expect("deadline failure"),
+            ExternalEvent::QueryFailed { query_id, .. } if query_id == "expired-query"
+        ));
+    }
+
     fn manifest() -> ProviderManifest {
         parse_provider_manifest(br#"{"kind":"bingux.search-provider","protocolVersion":1,"id":"notes","displayName":"Notes","command":["/usr/libexec/bingux/notes","--serve"],"startup":"lazy","priority":100,"timeoutMs":250}"#).expect("valid manifest")
     }

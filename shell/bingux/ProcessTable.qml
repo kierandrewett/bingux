@@ -303,7 +303,7 @@ ColumnLayout {
                         x: 6
                         anchors.verticalCenter: parent.verticalCenter
                         implicitSize: 18
-                        source: Quickshell.iconPath(row.desktopEntry?.icon || (root.mode === "services" ? "system-run-symbolic" : "application-x-executable"), "application-x-executable")
+                        source: AdwaitaIcons.source(row.desktopEntry?.icon || (root.mode === "services" ? "system-run-symbolic" : "application-x-executable"), "application-x-executable")
                     }
                     Column {
                         x: 30

@@ -234,6 +234,8 @@ class Capture:
         self.preview_token = ""
         self.pending = bytearray()
         self.pipeline = None
+        self.pipeline_bus = None
+        self.pipeline_bus_handler = 0
         self.session = ""
         self.portal_session = False
         self.remote_fd = -1
@@ -676,9 +678,9 @@ class Capture:
                 self.pipeline.get_by_name("windowcrop" if window_source else "capture").get_static_pad("src").add_probe(
                     Gst.PadProbeType.EVENT_DOWNSTREAM, self.size_probe
                 )
-            bus = self.pipeline.get_bus()
-            bus.add_signal_watch()
-            bus.connect("message", self.message)
+            self.pipeline_bus = self.pipeline.get_bus()
+            self.pipeline_bus.add_signal_watch()
+            self.pipeline_bus_handler = self.pipeline_bus.connect("message", self.message)
             if self.pipeline.set_state(Gst.State.PLAYING) == Gst.StateChangeReturn.FAILURE:
                 raise ValueError("Could not start the video encoder")
         except (GLib.Error, ValueError, TypeError, OSError, subprocess.SubprocessError) as error:
@@ -889,6 +891,13 @@ class Capture:
             if timer:
                 GLib.source_remove(timer)
         self.timer = self.stop_timer = 0
+        if self.pipeline_bus:
+            # The watch owns a bus reference independently of the pipeline.
+            # Detach it even when cleanup runs inside its EOS/error callback.
+            self.pipeline_bus.disconnect(self.pipeline_bus_handler)
+            self.pipeline_bus_handler = 0
+            self.pipeline_bus.remove_signal_watch()
+            self.pipeline_bus = None
         if self.pipeline:
             self.pipeline.set_state(Gst.State.NULL)
             self.pipeline = None

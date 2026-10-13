@@ -9,38 +9,5 @@ ShellRoot {
             Quickshell.inhibitReloadPopup();
         }
     }
-    UiSession {
-        id: session
-        sessionName: "emoji"
-        // ShortcutSession inside the picker owns Super+Period. This session
-        // remains the IPC target for explicit open/close commands.
-        bindings: []
-        state: ({
-                visible: picker.visible
-            })
-        onCommandReceived: command => {
-            if (command.action === "open")
-                picker.open();
-            else if (command.action === "close")
-                picker.close();
-        }
-    }
-    EmojiPicker {
-        id: picker
-        screen: Quickshell.screens[0]
-        // Quickshell keys state by the MD5 of the entry point path. Keep the
-        // original desktop location so splitting the UI preserves preferences.
-        stateDirectory: Quickshell.statePath("../" + Qt.md5(Quickshell.shellPath("shell.qml")) + "/emoji")
-        onOpening: {
-            session.command("search", {
-                action: "close"
-            });
-            session.command("switcher", {
-                action: "close"
-            });
-            session.command("capture", {
-                action: "close"
-            });
-        }
-    }
+    EmojiHost {}
 }

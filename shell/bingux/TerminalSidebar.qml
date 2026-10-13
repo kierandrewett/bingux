@@ -121,8 +121,8 @@ Scope {
     function panelFor(id) {
         return ({
                 terminal: terminalLoader.item,
-                notes,
-                monitor,
+                notes: notesPanel.item,
+                monitor: monitorPanel.item,
                 calendar: calendarPanel.item,
                 media: mediaPanel.item,
                 tasks: tasksPanel.item
@@ -144,13 +144,16 @@ Scope {
         required property string panelId
         readonly property var hostWidget: root.panelWidget(panelId)
         readonly property bool selected: hostWidget.contentVisible
+        // A saved selection is not a request to create closed sidebar content.
+        // Include the initial drag and the native panel's closing reveal.
+        readonly property bool loadRequested: selected && (!hostWidget.sidebarMode || root.opened || root.dragging || DesktopEditing.active || (!root.floating && slide.running && panel.reveal > 0))
         parent: hostWidget.contentHost
         anchors.fill: parent
         visible: selected
         active: false
-        onSelectedChanged: if (selected)
+        onLoadRequestedChanged: if (loadRequested)
             active = true
-        Component.onCompleted: if (selected)
+        Component.onCompleted: if (loadRequested)
             active = true
         onLoaded: {
             DesktopEditing.registerSource(panelId, item);
@@ -480,7 +483,8 @@ Scope {
 
     function popOut() {
         contentMenu.visible = false;
-        notes.closeContextMenu();
+        if (notesPanel.item)
+            notesPanel.item.closeContextMenu();
         detachedWindow.implicitWidth = Math.max(320, Math.min(panelSurface.width, 640));
         detachedWindow.implicitHeight = Math.max(360, Math.min(panelSurface.height, 720));
         saved.detached = true;
@@ -495,7 +499,8 @@ Scope {
     }
     function dockBack() {
         contentMenu.visible = false;
-        notes.closeContextMenu();
+        if (notesPanel.item)
+            notesPanel.item.closeContextMenu();
         saved.detached = false;
         saved.setValue("detached", false);
         saved.sync();
@@ -874,23 +879,21 @@ Scope {
                                     onClicked: root.restartTerminal()
                                 }
                             }
-                            SidebarNotes {
-                                id: notes
-                                menuWindow: root.widgetWindow
-                                Component.onCompleted: DesktopEditing.registerSource("notes", notes)
-                                parent: notesWidget.contentHost
-                                menuHost: notesWidget.sidebarMode ? (root.floating ? detachedWindow.contentItem : null) : notesWidget.inlinePanel ? notesWidget.barWindow?.contentItem : notesWidget.popup.contentItem
-                                screen: notesWidget.sidebarMode ? (root.floating ? detachedWindow.screen : root.screen) : notesWidget.barWindow?.screen
-                                anchors.fill: parent
-                                visible: notesWidget.contentVisible
+                            RetainedPanel {
+                                id: notesPanel
+                                panelId: "notes"
+                                source: "SidebarNotes.qml"
+                                onLoaded: {
+                                    item.menuWindow = Qt.binding(() => root.widgetWindow);
+                                    item.menuHost = Qt.binding(() => notesWidget.sidebarMode ? (root.floating ? detachedWindow.contentItem : null) : notesWidget.inlinePanel ? notesWidget.barWindow?.contentItem : notesWidget.popup.contentItem);
+                                    item.screen = Qt.binding(() => notesWidget.sidebarMode ? (root.floating ? detachedWindow.screen : root.screen) : notesWidget.barWindow?.screen);
+                                }
                             }
-                            SidebarMonitor {
-                                id: monitor
-                                parent: monitorWidget.contentHost
-                                Component.onCompleted: DesktopEditing.registerSource("monitor", monitor)
-                                anchors.fill: parent
-                                visible: monitorWidget.contentVisible
-                                metrics: root.systemMetrics
+                            RetainedPanel {
+                                id: monitorPanel
+                                panelId: "monitor"
+                                source: "SidebarMonitor.qml"
+                                onLoaded: item.metrics = Qt.binding(() => root.systemMetrics)
                             }
                             RetainedPanel {
                                 id: calendarPanel
@@ -1116,7 +1119,7 @@ Scope {
                         Item {
                             SymbolicIcon {
                                 anchors.centerIn: parent
-                                source: Quickshell.iconPath("sidebar-show-symbolic")
+                                source: AdwaitaIcons.source("sidebar-show-symbolic")
                                 rotation: parent.parent.segmentValue === "top" ? 90 : parent.parent.segmentValue === "right" ? 180 : 0
                                 implicitSize: 16
                                 color: parent.parent.segmentSelected ? Theme.text : Theme.muted

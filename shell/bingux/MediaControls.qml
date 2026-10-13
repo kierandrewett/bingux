@@ -255,7 +255,7 @@ FocusScope {
             objectName: "mediaOverrideIcon"
             anchors.centerIn: parent
             visible: root.inlineControls && !!root.presentation?.iconOverridden
-            source: visible ? Quickshell.iconPath(root.presentation.icon) : ""
+            source: visible ? AdwaitaIcons.source(root.presentation.icon) : ""
             color: Theme.text
         }
         MouseArea {
@@ -657,7 +657,7 @@ FocusScope {
                 anchors.centerIn: parent
                 anchors.horizontalCenterOffset: button.iconOffset
                 opacity: button.iconOpacity
-                source: Quickshell.iconPath(button.displayedIcon)
+                source: AdwaitaIcons.source(button.displayedIcon)
                 color: button.primary ? root.accentForeground : button.enabled ? Theme.text : Theme.muted
                 implicitSize: Theme.iconSize
             }

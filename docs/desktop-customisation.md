@@ -2,33 +2,78 @@
 
 Open **Bingux Settings > Desktop > Customise Desktop**. This opens a full-screen layer-shell editor on the Settings window's screen. It shows the current wallpaper behind the existing top bar, dock, sidebar and control centre. These containers keep their actual widget instances and actions.
 
+The editor scales its wallpaper preview to the display's physical resolution.
+Portrait and landscape images keep their proportions and crop to fill the preview.
+
+The wallpaper fades in with a slight zoom-out at login. Changing it crossfades
+from the old image to the new one over about 0.6 seconds.
+
+Use an image that matches the display's physical resolution for sharp detail
+after the login zoom ends. On a scaled display, use its physical pixel dimensions
+rather than the logical desktop size.
+
+If you choose another image during a crossfade, Bingux finishes that fade and
+then shows your latest choice. It keeps the background covered throughout.
+
+Closing the editor unmaps its full-screen editor and options windows. Bingux keeps the editor state for reopening without keeping those graphics surfaces mapped.
+
+## Arrange widgets
+
 Drag a widget from the centre palette into the left, centre or right section of the top bar, or into the dock. A widget already on the desktop moves instead of being duplicated. Sidebar panel widgets can move within the sidebar. Drag a widget back into the palette to remove it. Keep at least one sidebar panel.
 
 The open centre palette has Widgets and Apps views. Drag an installed app into the dock to pin it. The dock preview uses the saved pins and order. The control centre stays open beside the palette; drag its tiles to change their order or drag one into the palette to remove it.
 
-The palette uses shared widget components with sample content. It does not continuously capture live widgets. The item you pick up follows the cursor, and a line marks its insertion position. Fixed Space and Flexible space items can be added more than once to the top bar. Flexible spaces share the available width in their section. Fixed spaces have an adjustable width from 8 to 160 pixels.
+The palette uses shared widget components with sample content. It does not continuously capture live widgets. The item you pick up follows the cursor, and a line marks its insertion position.
+
+Add Space or Flexible space more than once to the top bar. Space leaves a fixed gap; Flexible space shares the available room in its section. For Space, open its widget options and set Width from 8 to 160 pixels in steps of 4. The default width is 20 pixels.
 
 The **Workspaces** widget shows the active workspace's number and display name. Open it to switch by workspace; Bingux addresses the target by its stable Gnoblin workspace ID. Add it to the top bar, dock, sidebar, or control centre from the Widgets palette. It is available when Bingux can connect to Gnoblin's compositor bridge.
 
-Label and Icon tiles create independent items in the top bar or dock. Edit their text or choose a symbol from the icon grid. They follow the container display mode unless you set an override. Removing an instance clears its options; Undo restores both the item and its appearance.
+## Edit widget options
+
+Add a Label or Icon tile to the top bar or dock. Edit its text or choose a symbol from the icon grid. It follows the container display mode unless you set an override.
+
+Removing an instance clears its options. Undo restores the item and its appearance.
 
 A popped-out sidebar uses its saved desktop edge while the editor is open. The
 editor moves the existing content into that edge surface. Done and Cancel both
 restore the floating window without changing its content or popped-out state.
 
-On Gnoblin, the editor stays above fullscreen apps and below its real containers.
-Closing it restores their previous stacking order without changing the app's
-fullscreen state.
+On Gnoblin, the editor stays above fullscreen apps and below its containers.
+Closing it releases companion ordering without changing the app's fullscreen
+state. Options for a newly loaded container appear after its first frame is ready.
+Closing options returns keyboard input to the editor and keeps its containers
+visible, including after a background click.
 
-Click a container to open its settings beside it. Right-click a placed widget, double-click its palette preview, or focus the preview and press Enter to open widget options. Move and Remove are in those options. The icon grid and dock pointer settings expand on request. Undo and Redo reverse complete drops and individual settings changes.
+Click a container to open its settings beside it. To open widget options, right-click a placed widget, double-click its palette preview, or focus the preview and press Enter.
+
+Use Move and Remove in those options. Expand the icon grid or dock pointer settings when needed. Undo and Redo reverse complete drops and individual settings changes.
+
+## Apply or cancel changes
 
 Changes stay in the preview until **Done**. Cancel discards the preview. Escape closes the current options panel first, then the editor. Restore defaults resets the top-bar and sidebar widget arrangement in the preview. Existing settings changes are also saved when applying the desktop.
 
 The live shell uses the same widget instances after reparenting. Menus follow their controls, including controls moved to the dock. Crowded top-bar sections move controls into the existing More menu. Live top-bar reordering remains persistent after using the editor.
 
+## Tray menus
+
+Right-click a tray icon to open its application menu. Bingux creates menus
+when you hover, focus or activate an icon, and reuses them on later opens.
+
+If an application supplies its menu after the first click, Bingux waits up to four seconds for
+the entries. Press Escape or click away to cancel the request.
+
 ## Search providers
 
-**Settings > Search** lists website search engines and built-in providers. Use Add to create a website engine with a name, unique shortcut and URL containing `{query}`. `%s` is also accepted by the form. The search terms are URL-encoded before substitution. Bingux opens the result through its existing browser launcher.
+Open **Settings > Search** to manage website engines and built-in providers. Choose Add to create an engine; the new form starts with empty fields.
+
+| Field    | Accepted value                                                                    | Effect                                                             |
+| -------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Name     | Nonempty text, up to 80 characters                                                | Labels the engine.                                                 |
+| Shortcut | 1–24 lowercase letters, digits or hyphens; starts with a letter or digit          | Selects this engine with `shortcut: search terms`. Must be unique. |
+| URL      | HTTP or HTTPS URL, up to 2048 characters, with one `{query}` in its path or query | Opens the website through the browser launcher.                    |
+
+The form also accepts `%s` in place of `{query}`. For example, add URL `https://duckduckgo.com/?q={query}` and shortcut `ddg`, then search for `ddg: desktop widgets`. Search terms are URL-encoded before substitution.
 
 An enabled engine can be made the default. The current default cannot be disabled or removed until another engine is selected. Custom shortcuts use `shortcut: search terms`. The built-in `wiki:`, `gh:`, `maps:` and `yt:` shortcuts remain reserved.
 
@@ -40,7 +85,11 @@ Press Apply to save search changes. The settings helper restarts the user search
 
 User overrides are stored atomically in `$XDG_CONFIG_HOME/bingux/settings.json`. They remain separate from package-managed files. The settings backend validates engine URLs, unique shortcuts, enabled defaults, desktop ranges, widget destinations and duplicate widgets before replacing the file. The search daemon validates engine configuration again when loading it.
 
-The shell imports the effective runtime layout once into version 1 of the desktop settings. This includes top-bar and overflow order, dock pins and app order, sidebar edge, and control-centre choices. The source state is retained in `layout-before-import.json`. Spacing instances use unique IDs such as `spring:1` and `spacer:1`; fixed widths are stored in `desktop.widgetOptions["spacer:1"].width`. Existing imported arrangements do not gain spacing items automatically. Later launches and the editor load the saved layout. Unsupported versions are rejected. JPEG XL and other wallpapers that Qt cannot read directly are converted to a cached PNG by the settings helper.
+The shell imports the effective runtime layout once into version 1 of the desktop settings. This includes top-bar and overflow order, dock pins and app order, sidebar edge, and control-centre choices. The source state is retained in `layout-before-import.json`.
+
+Spacing instances use unique IDs such as `spring:1` and `spacer:1`; fixed widths are stored in `desktop.widgetOptions["spacer:1"].width`. Existing imported arrangements do not gain spacing items automatically. Later launches and the editor load the saved layout. Unsupported versions are rejected.
+
+JPEG XL and other wallpapers that Qt cannot read directly are converted to a cached PNG by the settings helper.
 
 ## Checks
 

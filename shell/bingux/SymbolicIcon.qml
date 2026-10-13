@@ -4,14 +4,16 @@ import Quickshell.Widgets
 
 Item {
     id: root
-    property alias source: image.source
+    property url source: ""
     property int implicitSize: Theme.iconSize
     property color color: Theme.text
+    readonly property url resolvedSource: AdwaitaIcons.source(source)
     implicitWidth: implicitSize
     implicitHeight: implicitSize
     IconImage {
         id: image
         anchors.fill: parent
+        source: root.resolvedSource
         visible: false
     }
     MultiEffect {

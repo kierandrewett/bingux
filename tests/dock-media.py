@@ -177,7 +177,9 @@ try:
                 "required property var settings\n    property alias testItems: dockItems",
             )
         )
-        dock = dock.replace("id: dockButton", "id: dockButton\n                    property alias testMenu: appMenu")
+        dock = dock.replace(
+            "id: dockButton", "id: dockButton\n                    property alias testMenu: dockButton.appMenu"
+        )
         (fixture / "Dock.qml").write_text(dock)
         shutil.copy2(ROOT / "tests/dock-media.qml", fixture / "shell.qml")
         applications = fixture / "data/applications"

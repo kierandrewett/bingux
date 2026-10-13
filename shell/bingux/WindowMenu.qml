@@ -9,9 +9,8 @@ TrayMenu {
     property int requestGeneration: 0
     signal requestFailed(string message)
 
-    // Keep the popup surface and its delegates warm between openings.
-    keepWindowAlive: true
-    keepContentAlive: true
+    // ShellPopup keeps quick reopenings warm and expires idle native windows.
+    // The action model remains available without permanently mapped surfaces.
     revealOriginX: 0
     revealOriginY: 0
     openMotion: 80
@@ -45,7 +44,8 @@ TrayMenu {
         requestFailed(message);
     }
 
-    function nativeActions(window, menuContext) {
+    // Entries, order and wording follow GNOME Shell's window menu.
+    function nativeActions(window, menuContext, workspaces, monitors) {
         const id = String(window.id);
         const result = [];
         const append = (text, method, arguments_, enabled, checked) => result.push({
@@ -56,45 +56,104 @@ TrayMenu {
                 checkState: checked ? Qt.Checked : Qt.Unchecked,
                 triggered: () => root.requestWindowAction(method, arguments_)
             });
+        const separator = () => {
+            if (result.length && !result[result.length - 1].isSeparator)
+                result.push({
+                    text: "",
+                    enabled: false,
+                    isSeparator: true,
+                    hasChildren: false,
+                    checkState: Qt.Unchecked
+                });
+        };
 
-        if (window.minimized === true || window.maximized === true)
+        if (window.minimized !== true)
+            append("Hide", "window.minimize", {
+                id
+            }, window.minimizable !== false, false);
+        if (window.maximized === true || window.minimized === true)
             append("Restore", "window.restore", {
                 id
             }, true, false);
+        else
+            append("Maximize", "window.set_maximized", {
+                id,
+                enabled: true
+            }, window.maximizable !== false, false);
         if (menuContext && window.movable !== false)
             append("Move", "window.begin_move", {
                 menu_context: menuContext
             }, true, false);
-        if (menuContext && window.resizable !== false)
-            append("Resize from bottom-right", "window.begin_resize", {
+        if (menuContext && window.resizable !== false && window.maximized !== true)
+            append("Resize", "window.begin_resize", {
                 menu_context: menuContext,
                 edge: "south_east"
             }, true, false);
-        if (window.minimized !== true)
-            append("Minimise", "window.minimize", {
-                id
-            }, window.minimizable !== false, false);
-        if (window.maximized !== true)
-            append("Maximise", "window.set_maximized", {
-                id,
-                enabled: true
-            }, window.maximizable !== false, false);
 
-        result.push({
-            text: "",
-            enabled: false,
-            isSeparator: true,
-            hasChildren: false,
-            checkState: Qt.Unchecked
-        });
+        separator();
         append("Always on Top", "window.set_above", {
             id,
             enabled: window.above !== true
         }, true, window.above === true);
-        append("On All Workspaces", "window.set_sticky", {
+        append("Always on Visible Workspace", "window.set_sticky", {
             id,
             enabled: window.sticky !== true
         }, true, window.sticky === true);
+
+        if (window.sticky !== true && workspaces.length > 1) {
+            const current = Number(window.workspace_number);
+            const moveTo = (text, number) => append(text, "window.move_to_workspace", {
+                    id,
+                    workspace: {
+                        number
+                    }
+                }, true, false);
+            if (current > 1)
+                moveTo("Move to Workspace Left", current - 1);
+            if (current < workspaces.length)
+                moveTo("Move to Workspace Right", current + 1);
+        }
+
+        const here = monitors.find(monitor => monitor.id === window.monitor_id);
+        if (here && monitors.length > 1) {
+            const centre = monitor => ({
+                        x: monitor.x + monitor.width / 2,
+                        y: monitor.y + monitor.height / 2
+                    });
+            const origin = centre(here);
+            const nearest = (along, across) => {
+                let best = null;
+                let bestDistance = Infinity;
+                for (const monitor of monitors) {
+                    if (monitor.id === here.id)
+                        continue;
+                    const point = centre(monitor);
+                    const dx = point.x - origin.x;
+                    const dy = point.y - origin.y;
+                    if (along(dx, dy) <= 0 || Math.abs(across(dx, dy)) > Math.abs(along(dx, dy)))
+                        continue;
+                    const distance = Math.hypot(dx, dy);
+                    if (distance < bestDistance) {
+                        best = monitor;
+                        bestDistance = distance;
+                    }
+                }
+                return best;
+            };
+            const toMonitor = (text, target) => {
+                if (target)
+                    append(text, "window.move_to_monitor", {
+                        id,
+                        monitor: target.id
+                    }, true, false);
+            };
+            toMonitor("Move to Monitor Up", nearest((dx, dy) => -dy, dx => dx));
+            toMonitor("Move to Monitor Down", nearest((dx, dy) => dy, dx => dx));
+            toMonitor("Move to Monitor Left", nearest((dx, dy) => -dx, (dx, dy) => dy));
+            toMonitor("Move to Monitor Right", nearest((dx, dy) => dx, (dx, dy) => dy));
+        }
+
+        separator();
         append("Close", "window.close", {
             id
         }, window.closable !== false, false);
@@ -144,11 +203,23 @@ TrayMenu {
                 return;
             }
 
-            root.screen = target;
-            root.windowId = request.window_id;
-            root.requestedPosition = Qt.point(request.x - target.x, request.y - target.y);
-            root.actions = root.nativeActions(window, typeof request.menu_context === "string" ? request.menu_context : "");
-            root.visible = true;
+            // Workspace and monitor lists decide which "Move to" entries exist.
+            // A failed lookup only leaves those entries out.
+            const finish = (workspaces, monitors) => {
+                if (generation !== root.requestGeneration)
+                    return;
+                root.screen = target;
+                root.windowId = request.window_id;
+                root.requestedPosition = Qt.point(request.x - target.x, request.y - target.y);
+                root.actions = root.nativeActions(window, typeof request.menu_context === "string" ? request.menu_context : "", workspaces, monitors);
+                root.visible = true;
+            };
+            compositor.requestApi("workspace.list", {}, (workspaceResult, workspaceError) => {
+                const workspaces = !workspaceError && Array.isArray(workspaceResult.workspaces) ? workspaceResult.workspaces : [];
+                compositor.requestApi("monitor.list", {}, (monitorResult, monitorError) => {
+                    finish(workspaces, !monitorError && Array.isArray(monitorResult.monitors) ? monitorResult.monitors : []);
+                });
+            });
         });
         if (!requestId)
             reportFailure("Gnoblin is not ready to list windows");

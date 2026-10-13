@@ -8,13 +8,31 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
-import Quickshell.Services.Mpris
 import "MediaMatch.js" as MediaMatch
 import "SteamApplications.js" as SteamApplications
 import "DesktopLayout.js" as DesktopLayout
 
 PanelWindow {
     id: root
+    // Compile menu code once, on first use. Each opened menu belongs to its
+    // button, so removing a dock group also destroys its menu and delegates.
+    property var appMenuComponent: null
+    function createAppMenu(button, icon) {
+        if (!appMenuComponent)
+            appMenuComponent = Qt.createComponent("DockAppMenu.qml");
+        if (appMenuComponent.status !== Component.Ready) {
+            console.warn("Dock menu failed to load:", appMenuComponent.errorString());
+            if (appMenuComponent.status === Component.Error)
+                appMenuComponent = null;
+            return null;
+        }
+        return appMenuComponent.createObject(button, {
+            dock: root,
+            button,
+            appIcon: icon
+        });
+    }
+    readonly property var folderPopup: folderPopupLoader.item
     signal applicationInteracted
     signal widgetEditRequested(string widgetId, var control)
 
@@ -60,7 +78,12 @@ PanelWindow {
     property real dragRailX: 0
     property real dragRailY: 0
     property real dragLift: 0
-    Behavior on dragLift { NumberAnimation { duration: Theme.reducedMotion ? 0 : 115; easing.type: Easing.OutCubic } }
+    Behavior on dragLift {
+        NumberAnimation {
+            duration: Theme.reducedMotion ? 0 : 115
+            easing.type: Easing.OutCubic
+        }
+    }
     readonly property var folderColors: ["blue", "teal", "green", "yellow", "orange", "red", "pink", "purple", "slate"]
     function folderById(id) {
         return folders.find(folder => folder.id === id) || null;
@@ -70,7 +93,11 @@ PanelWindow {
         if (existing)
             return existing;
         const entry = desktopEntryFor(normaliseAppId(id));
-        return entry ? {id: normaliseAppId(entry.startupClass || entry.id), desktopEntry: entry, windows: []} : null;
+        return entry ? {
+            id: normaliseAppId(entry.startupClass || entry.id),
+            desktopEntry: entry,
+            windows: []
+        } : null;
     }
     function folderIcon(id) {
         const entry = memberGroup(id)?.desktopEntry;
@@ -81,23 +108,37 @@ PanelWindow {
         return DesktopLayout.presentation(preferences, "app:" + pinIdentity(id), "dock", entry?.name || id, entry?.icon || "application-x-executable", true, false).label;
     }
     function folderAppState(id) {
-        if (!id) return {active: false, running: false, windows: 0};
+        if (!id)
+            return {
+                active: false,
+                running: false,
+                windows: 0
+            };
         const group = memberGroup(id);
         const windows = group?.windows || [];
         let active = false;
         for (const window of windows)
-            if (window?.activated || window === lastActiveWindow) active = true;
-        return {active, running: windows.length > 0, windows: windows.length};
+            if (window?.activated || window === lastActiveWindow)
+                active = true;
+        return {
+            active,
+            running: windows.length > 0,
+            windows: windows.length
+        };
     }
     function activeFolderApp(id) {
         const folder = folderById(id);
-        if (!folder) return "";
+        if (!folder)
+            return "";
         for (const app of folder.apps)
-            if (folderAppState(app).active) return app;
+            if (folderAppState(app).active)
+                return app;
         return "";
     }
     function saveFolders(next) {
-        BinguxPreferences.saveDesktop({dockFolders: next});
+        BinguxPreferences.saveDesktop({
+            dockFolders: next
+        });
         refreshAppGroups();
     }
     function updateFolder(id, changes) {
@@ -111,13 +152,16 @@ PanelWindow {
         const identity = pinIdentity(group.desktopEntry.id);
         const apps = [];
         for (const app of folder.apps) {
-            if (app === identity) return false;
+            if (app === identity)
+                return false;
             apps.push(app);
         }
         apps.splice(Math.max(0, Math.min(apps.length, destination ?? apps.length)), 0, identity);
         if (!isPinned(group))
             updatePinPreference(group, true);
-        updateFolder(folderId, {apps});
+        updateFolder(folderId, {
+            apps
+        });
         return true;
     }
     function createFolder(sourceId, targetId) {
@@ -137,14 +181,26 @@ PanelWindow {
         order.push(...appOrder.filter(id => !order.includes(id) && id !== sourceId && id !== targetId));
         const pins = [...new Set(pinnedApps.concat(apps))];
         if (preferences.dockApps)
-            BinguxPreferences.saveDesktop({dockApps: {pinnedApps: pins, order}});
+            BinguxPreferences.saveDesktop({
+                dockApps: {
+                    pinnedApps: pins,
+                    order
+                }
+            });
         else {
             dockState.pinnedApps = [...new Set(dockState.pinnedApps.concat(apps))];
             dockState.unpinnedApps = dockState.unpinnedApps.filter(id => !apps.includes(pinIdentity(id)));
             dockState.order = order;
             dockState.sync();
         }
-        saveFolders(folders.concat([{id: folderId, name: "Folder", color: Theme.gnomeAccentName, apps}]));
+        saveFolders(folders.concat([
+            {
+                id: folderId,
+                name: "Folder",
+                color: Theme.gnomeAccentName,
+                apps
+            }
+        ]));
         openFolderId = folderId;
         return true;
     }
@@ -153,13 +209,21 @@ PanelWindow {
         if (!folder)
             return;
         const apps = folder.apps.filter(id => id !== appId);
-        const nextFolders = folders.map(item => item.id === folderId ? Object.assign({}, item, {apps}) : item);
+        const nextFolders = folders.map(item => item.id === folderId ? Object.assign({}, item, {
+                apps
+            }) : item);
         const identity = pinIdentity(appId);
         const order = appOrder.filter(id => pinIdentity(id) !== identity);
         const folderIndex = order.indexOf(folderId);
         order.splice(folderIndex < 0 ? order.length : folderIndex + 1, 0, identity);
         if (preferences.dockApps)
-            BinguxPreferences.saveDesktop({dockFolders: nextFolders, dockApps: {pinnedApps, order}});
+            BinguxPreferences.saveDesktop({
+                dockFolders: nextFolders,
+                dockApps: {
+                    pinnedApps,
+                    order
+                }
+            });
         else {
             dockState.order = order;
             dockState.sync();
@@ -176,7 +240,12 @@ PanelWindow {
         const order = appOrder.filter(id => id !== folderId && !folder.apps.includes(id));
         order.splice(index >= 0 ? Math.min(index, order.length) : order.length, 0, ...folder.apps);
         if (preferences.dockApps)
-            BinguxPreferences.saveDesktop({dockApps: {pinnedApps, order}});
+            BinguxPreferences.saveDesktop({
+                dockApps: {
+                    pinnedApps,
+                    order
+                }
+            });
         else {
             dockState.order = order;
             dockState.sync();
@@ -209,9 +278,11 @@ PanelWindow {
     property bool startupReady: false
     property string startupLayoutKey: ""
     visible: startupReady
+    onStartupReadyChanged: if (startupReady)
+        Startup.dockMapped()
     Timer {
         id: startupSettle
-        interval: 150
+        interval: 60
         onTriggered: if (BinguxPreferences.loaded)
             root.finishStartup()
     }
@@ -219,6 +290,14 @@ PanelWindow {
         id: startupDeadline
         interval: 1500
         onTriggered: root.finishStartup()
+    }
+    // Preferences are read synchronously, so they may be ready before this
+    // connection exists.
+    property QtObject initialPreferences: QtObject {
+        Component.onCompleted: if (!root.startupReady && BinguxPreferences.loaded) {
+            root.refreshAppGroups();
+            startupSettle.restart();
+        }
     }
     Connections {
         target: BinguxPreferences
@@ -312,8 +391,7 @@ PanelWindow {
             function onTitleChanged() {
                 const appId = root.normaliseAppId(modelData.appId || "");
                 const desktopEntry = appId ? DesktopEntries.byId(appId) || DesktopEntries.byId(appId + ".desktop") || DesktopEntries.heuristicLookup(appId) : null;
-                const steamMatch = SteamApplications.entryForWindow(DesktopEntries.applications.values, appId, modelData.title, desktopEntry)
-                    || SteamApplications.gameForWindow(root.installedSteamGames, appId, modelData.title, desktopEntry);
+                const steamMatch = SteamApplications.entryForWindow(DesktopEntries.applications.values, appId, modelData.title, desktopEntry) || SteamApplications.gameForWindow(root.installedSteamGames, appId, modelData.title, desktopEntry);
                 if (!appId || steamMatch || (!desktopEntry && !root.steamDesktopEntryCache.has(appId)))
                     root.refreshAppGroups();
             }
@@ -354,11 +432,8 @@ PanelWindow {
 
     Process {
         id: steamGameCatalog
-        command: [
-            "python3",
-            decodeURIComponent(Qt.resolvedUrl("steam-games.py").toString().replace(/^file:\/\//, ""))
-        ]
-        running: true
+        command: ["python3", decodeURIComponent(Qt.resolvedUrl("steam-games.py").toString().replace(/^file:\/\//, ""))]
+        running: Startup.settled
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
@@ -372,7 +447,7 @@ PanelWindow {
         }
         stderr: StdioCollector {
             onStreamFinished: if (text.trim())
-                console.warn("Steam game discovery:", text.trim());
+                console.warn("Steam game discovery:", text.trim())
         }
     }
     Timer {
@@ -397,13 +472,25 @@ PanelWindow {
         screen: root.screen
         anchorBottom: root.dockTopFromBottom
     }
-    DockFolderPopup {
-        id: folderPopup
-        objectName: "dockFolderPopup"
-        dock: root
-        folderId: root.openFolderId
-        screen: root.screen
-        anchorBottom: root.dockTopFromBottom
+    Loader {
+        id: folderPopupLoader
+        active: false
+        asynchronous: false
+    }
+    function ensureFolderPopup() {
+        if (!folderPopup) {
+            folderPopupLoader.setSource(Qt.resolvedUrl("DockFolderPopup.qml"), {
+                objectName: "dockFolderPopup",
+                dock: root,
+                folderId: Qt.binding(() => root.openFolderId),
+                screen: Qt.binding(() => root.screen),
+                anchorBottom: Qt.binding(() => root.dockTopFromBottom)
+            });
+            folderPopupLoader.active = true;
+            if (!folderPopup)
+                console.warn("Dock folder popup failed to load:", folderPopupLoader.source.toString());
+        }
+        return folderPopup;
     }
     PanelWindow {
         id: folderDragOverlay
@@ -414,7 +501,12 @@ PanelWindow {
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "bingux-dock-folder-drag"
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        anchors { top: true; bottom: true; left: true; right: true }
+        anchors {
+            top: true
+            bottom: true
+            left: true
+            right: true
+        }
         mask: Region {}
         OsIconImage {
             x: root.dragRailX + (root.dragPointerX - root.dragRailX) * root.dragLift - width / 2
@@ -424,12 +516,12 @@ PanelWindow {
             implicitSize: root.iconSize
             source: root.draggedId ? root.folderIcon(root.draggedId) : "application-x-executable"
             scale: 1.08
-            opacity: root.dragLift * (folderPopup.visible ? 0 : 1)
+            opacity: root.dragLift * (folderPopup?.visible ? 0 : 1)
         }
     }
     function openFolder(id) {
         const folder = folderById(id);
-        if (!folder)
+        if (!folder || !ensureFolderPopup())
             return;
         closeMenus();
         for (let index = 0; index < dockItems.count; index++) {
@@ -679,7 +771,8 @@ PanelWindow {
         dragPointerY = (screen ? screen.height : 0) - root.height - root.margins.bottom + point.y;
         for (let index = 0; index < dockItems.count; index++) {
             const source = dockItems.itemAt(index);
-            if (source?.currentGroup.id !== draggedId) continue;
+            if (source?.currentGroup.id !== draggedId)
+                continue;
             const centre = source.mapToItem(root.contentItem, source.width / 2, source.height / 2);
             dragRailX = centre.x + root.margins.left;
             dragRailY = (screen ? screen.height : 0) - root.height - root.margins.bottom + centre.y;
@@ -707,7 +800,7 @@ PanelWindow {
         folderDropId = "";
         folderDropIndex = -1;
         const folder = folderById(openFolderId);
-        if (!folder || !folderPopup.visible)
+        if (!folder || !folderPopup || !folderPopup.visible)
             return;
         const left = folderPopup.panelX;
         const top = folderPopup.panelY;
@@ -715,9 +808,7 @@ PanelWindow {
             folderDropId = folder.id;
             folderDropIndex = folderPopup.dropIndexAt(dragPointerX - left, dragPointerY - top);
             folderPopup.dragPageAt(dragPointerX - left);
-        } else if (Math.abs(dragPointerX - folderPopup.anchorX) < root.iconSize * 0.8
-                   && dragPointerY > top + folderPopup.popupHeight
-                   && dragPointerY < folderPopup.originY + root.iconSize / 2) {
+        } else if (Math.abs(dragPointerX - folderPopup.anchorX) < root.iconSize * 0.8 && dragPointerY > top + folderPopup.popupHeight && dragPointerY < folderPopup.originY + root.iconSize / 2) {
             // Bridge the short gap between the dock tile and its popup.
             folderDropId = folder.id;
             folderDropIndex = folder.apps.length;
@@ -734,7 +825,8 @@ PanelWindow {
             root.folderHoverReady = true;
             if (root.folderById(target)) {
                 root.openFolder(target);
-                folderPopup.page = 0;
+                if (folderPopup)
+                    folderPopup.page = 0;
             }
         }
     }
@@ -782,7 +874,9 @@ PanelWindow {
         launchAttempts = attempts;
         if (pendingLaunchGroupId === id)
             pendingLaunchGroupId = "";
-        ShellNotifications.send("Could not open " + (group?.desktopEntry?.name || attempt.name || id), message, {retryDesktopId: id});
+        ShellNotifications.send("Could not open " + (group?.desktopEntry?.name || attempt.name || id), message, {
+            retryDesktopId: id
+        });
     }
 
     function animateLaunchFor(groupId) {
@@ -1124,7 +1218,14 @@ PanelWindow {
             const windows = [];
             for (const id of folder.apps || [])
                 windows.push(...(memberGroups[root.pinIdentity(id)]?.windows || []));
-            groups.push({id: folder.id, desktopEntry: null, windows, entering: false, exiting: false, folder: true});
+            groups.push({
+                id: folder.id,
+                desktopEntry: null,
+                windows,
+                entering: false,
+                exiting: false,
+                folder: true
+            });
             discoveryIndexes[folder.id] = groups.length - 1;
             groupIndexes[folder.id] = groups.length - 1;
         }
@@ -1462,8 +1563,14 @@ PanelWindow {
             anchors.fill: parent
             acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
             hoverEnabled: true
-            onPositionChanged: mouse => { if (root.draggedId) root.updateFolderDrag(dragCaptureMouse, mouse); }
-            onReleased: mouse => { root.updateFolderDrag(dragCaptureMouse, mouse); root.finishDrag(); }
+            onPositionChanged: mouse => {
+                if (root.draggedId)
+                    root.updateFolderDrag(dragCaptureMouse, mouse);
+            }
+            onReleased: mouse => {
+                root.updateFolderDrag(dragCaptureMouse, mouse);
+                root.finishDrag();
+            }
             onCanceled: root.cancelDrag()
         }
     }
@@ -1479,7 +1586,8 @@ PanelWindow {
             const insertIndex = root.folderDropIndex < 0 ? folder.apps.length : root.folderDropIndex;
             if (root.addToFolder(id, folderTarget, insertIndex)) {
                 root.cancelDrag();
-                folderPopup.page = Math.floor(insertIndex / 9);
+                if (folderPopup)
+                    folderPopup.page = Math.floor(insertIndex / 9);
                 return;
             }
         }
@@ -1536,7 +1644,8 @@ PanelWindow {
 
     function cancelDrag() {
         folderHoverDelay.stop();
-        folderPopup.stopDragPaging();
+        if (folderPopup)
+            folderPopup.stopDragPaging();
         root.folderHoverId = "";
         root.folderHoverReady = false;
         root.folderDropId = "";
@@ -1721,7 +1830,20 @@ PanelWindow {
                             windows: []
                         }
                         required property int index
-                        property alias menuOpen: appMenu.visible
+                        property var appMenu: null
+                        property bool menuOpen: false
+                        function ensureMenu() {
+                            if (!appMenu)
+                                appMenu = root.createAppMenu(dockButton, dockIcon);
+                            return appMenu;
+                        }
+                        onMenuOpenChanged: {
+                            const menu = menuOpen ? ensureMenu() : appMenu;
+                            if (menu)
+                                menu.visible = menuOpen;
+                            else if (menuOpen)
+                                menuOpen = false;
+                        }
                         property bool entering: false
                         readonly property bool exiting: currentGroup.exiting === true
                         readonly property real animatedReorderShift: reorderTransform.x
@@ -1752,7 +1874,7 @@ PanelWindow {
                             presenceAnimation.start();
                         }
                         function publishRectangle() {
-                            if (appMenu.visible)
+                            if (appMenu && appMenu.visible)
                                 appMenu.updateAnchor();
                             const position = dockIcon.mapToItem(root.contentItem, 0, 0);
                             const rect = root.visible ? Qt.rect(Math.round(position.x), Math.round(position.y), dockIcon.width, dockIcon.height) : Qt.rect(0, 0, 0, 0);
@@ -1886,8 +2008,14 @@ PanelWindow {
                                 SequentialAnimation on pulse {
                                     running: root.draggedId && root.folderHoverId === dockButton.currentGroup.id && !dockButton.currentGroup.folder && !Theme.reducedMotion
                                     loops: Animation.Infinite
-                                    NumberAnimation { to: 0.3; duration: 170 }
-                                    NumberAnimation { to: 1; duration: 170 }
+                                    NumberAnimation {
+                                        to: 0.3
+                                        duration: 170
+                                    }
+                                    NumberAnimation {
+                                        to: 1
+                                        duration: 170
+                                    }
                                 }
                             }
 
@@ -1919,7 +2047,7 @@ PanelWindow {
                                 iconSize: root.iconSize
                                 dock: root
                                 folder: root.folderById(dockButton.currentGroup.id)
-                                contentsHidden: folderPopup.previewHidden && root.openFolderId === dockButton.currentGroup.id
+                                contentsHidden: !!folderPopup && folderPopup.previewHidden && root.openFolderId === dockButton.currentGroup.id
                                 activeAppId: root.activeFolderApp(dockButton.currentGroup.id)
                                 highlighted: (root.folderHoverId === dockButton.currentGroup.id || root.folderDropId === dockButton.currentGroup.id) && root.draggedId.length > 0
                             }
@@ -1969,7 +2097,6 @@ PanelWindow {
                             preventStealing: true
                             onEntered: {
                                 root.tooltipEntered(dockButton);
-                                notificationPreview.prepare();
                             }
                             onExited: {
                                 tooltipDelay.stop();
@@ -1991,11 +2118,14 @@ PanelWindow {
                                 const offset = mouse.x - pressX + (root.draggedId === dockButton.currentGroup.id ? root.dragOffset : 0);
                                 if (!moved && Math.hypot(offset, mouse.y - pressY) < 8)
                                     return;
+                                // The icon moves when dragOffset changes. Save the
+                                // event's dock position before changing its transform.
+                                const point = dockMouse.mapToItem(root.contentItem, mouse.x, mouse.y);
                                 moved = true;
                                 root.draggedId = dockButton.currentGroup.id;
                                 root.dragOffset = offset;
                                 root.dropIndex = root.dragDestination(dockButton.currentGroup.id, offset);
-                                root.updateFolderDrag(dockMouse, mouse);
+                                root.updateFolderDrag(root.contentItem, point);
                             }
                             onReleased: function (mouse) {
                                 if (moved) {
@@ -2004,7 +2134,8 @@ PanelWindow {
                                 } else
                                     root.cancelDrag();
                             }
-                            onCanceled: if (!dragCaptureMouse.pressed) root.cancelDrag()
+                            onCanceled: if (!dragCaptureMouse.pressed)
+                                root.cancelDrag()
                             onClicked: function (mouse) {
                                 if (moved)
                                     return;
@@ -2041,8 +2172,11 @@ PanelWindow {
                                         menuPrepare.stop();
                                         dockButton.menuOpen = false;
                                     } else {
-                                        notificationPreview.prepare();
-                                        menuPrepare.restart();
+                                        const menu = dockButton.ensureMenu();
+                                        if (menu) {
+                                            menu.prepareCards();
+                                            menuPrepare.restart();
+                                        }
                                     }
                                 }
                             }
@@ -2072,244 +2206,9 @@ PanelWindow {
                             id: menuPrepare
                             interval: 32
                             onTriggered: if (!dockButton.exiting && !root.draggedId) {
-                                notificationPreview.layoutCards();
+                                if (dockButton.appMenu)
+                                    dockButton.appMenu.layoutCards();
                                 dockButton.menuOpen = true;
-                            }
-                        }
-
-                        ShellPopup {
-                            id: appMenu
-                            objectName: "dockAppMenu"
-                            Timer {
-                                id: closeClickGuard
-                                interval: 350
-                                onTriggered: appMenu.dismissOnOutsideClick = true
-                            }
-                            readonly property var mediaPlayers: Mpris.players.values.filter(player => MediaMatch.matches(player, dockButton.currentGroup))
-                            readonly property bool mediaArtworkAnimating: {
-                                for (let index = 0; index < mediaControls.count; index++) {
-                                    if (mediaControls.itemAt(index)?.artworkAnimating)
-                                        return true;
-                                }
-                                return false;
-                            }
-                            revealOriginY: popupHeight
-                            popupWidth: mediaPlayers.length > 0 || dockButton.notificationCount > 0 || notificationPreview.renderedNotificationCount > 0 ? 320 : 280
-                            Behavior on popupWidth {
-                                enabled: appMenu.visible
-                                NumberAnimation {
-                                    duration: Theme.reducedMotion ? 0 : 240
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
-                            contentPadding: Theme.gap
-                            popupHeight: menuColumn.implicitHeight + contentPadding * 2
-                            Behavior on popupHeight {
-                                enabled: appMenu.visible && notificationPreview.activeCollapses === 0 && !appMenu.mediaArtworkAnimating
-                                NumberAnimation {
-                                    duration: Theme.reducedMotion ? 0 : 240
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
-                            screen: root.screen
-                            property real dockCentreX: 0
-                            function updateAnchor() {
-                                dockCentreX = dockButton.mapToItem(root.contentItem, dockButton.width / 2, 0).x;
-                            }
-                            preferredX: root.margins.left + dockCentreX - popupWidth / 2
-                            preferredY: height - root.dockTopFromBottom - popupHeight - Theme.gap
-                            onVisibleChanged: {
-                                if (visible) {
-                                    updateAnchor();
-                                    menuNavigation.focusMenu();
-                                }
-                            }
-
-                            MenuNavigator {
-                                id: menuNavigation
-                                entries: menuColumn.children
-                                focusTarget: menuColumn
-                                onEscapeRequested: dockButton.menuOpen = false
-                                onActivateRequested: entry => entry.triggered()
-                            }
-
-                            Rectangle {
-                                id: menuSurface
-
-                                width: parent.width
-                                height: implicitHeight
-                                implicitHeight: menuColumn.implicitHeight + 12
-                                color: "transparent"
-
-                                ColumnLayout {
-                                    id: menuColumn
-
-                                    // Keep the container keyboard-active when the
-                                    // menu opens. Once an action is focused its
-                                    // own handlers delegate to the same navigator.
-                                    Keys.priority: Keys.BeforeItem
-                                    Keys.onDownPressed: function (event) {
-                                        menuNavigation.move(1);
-                                        event.accepted = true;
-                                    }
-                                    Keys.onUpPressed: function (event) {
-                                        menuNavigation.move(-1);
-                                        event.accepted = true;
-                                    }
-                                    Keys.onReturnPressed: function (event) {
-                                        menuNavigation.activateCurrent();
-                                        event.accepted = true;
-                                    }
-                                    Keys.onSpacePressed: function (event) {
-                                        menuNavigation.activateCurrent();
-                                        event.accepted = true;
-                                    }
-                                    Keys.onEscapePressed: function (event) {
-                                        menuNavigation.escapeRequested();
-                                        event.accepted = true;
-                                    }
-
-                                    spacing: 2
-
-                                    anchors {
-                                        left: parent.left
-                                        right: parent.right
-                                    }
-
-                                    Repeater {
-                                        id: mediaControls
-                                        model: appMenu.mediaPlayers
-                                        delegate: DockMediaControls {
-                                            accent: dockIcon.accentColor
-                                            accentForeground: dockIcon.accentForeground
-                                            required property var modelData
-                                            Layout.fillWidth: true
-                                            player: modelData
-                                            menuActive: appMenu.visible || appMenu.closing
-                                            cornerRadius: appMenu.contentRadius
-                                        }
-                                    }
-                                    MenuSeparator {
-                                        visible: appMenu.mediaPlayers.length > 0
-                                    }
-
-                                    DockNotifications {
-                                        id: notificationPreview
-                                        Layout.fillWidth: true
-                                        visible: entries.length > 0 || renderedNotificationCount > 0
-                                        state: root.notificationStore
-                                        menuActive: appMenu.visible
-                                        entries: dockButton.appNotifications
-                                    }
-                                    MenuSeparator {
-                                        visible: notificationPreview.visible
-                                        implicitHeight: Theme.gap * notificationPreview.presence
-                                    }
-
-                                    MenuAction {
-                                        objectName: "dockPinAction"
-                                        cornerRadius: appMenu.contentRadius
-                                        navigation: menuNavigation
-                                        label: root.isPinned(dockButton.currentGroup) ? "Unpin from dock" : "Pin to dock"
-                                        // Keep pinning in the same plain action group as
-                                        // Launch new…; this action intentionally has no icon.
-                                        iconSource: ""
-                                        enabled: dockButton.currentGroup.desktopEntry !== null || root.isPinned(dockButton.currentGroup)
-                                        onTriggered: {
-                                            dockButton.menuOpen = false;
-                                            root.setPinned(dockButton.currentGroup, !root.isPinned(dockButton.currentGroup));
-                                        }
-                                    }
-
-                                    MenuAction {
-                                        cornerRadius: appMenu.contentRadius
-                                        navigation: menuNavigation
-                                        label: "Launch new..."
-                                        visible: dockButton.currentGroup.desktopEntry !== null
-                                        onTriggered: {
-                                            root.launch(dockButton.currentGroup, true);
-                                            dockButton.menuOpen = false;
-                                        }
-                                    }
-
-                                    MenuSeparator {
-                                        visible: desktopActions.count > 0
-                                    }
-
-                                    MenuSection {
-                                        label: dockButton.currentGroup.desktopEntry?.name || dockButton.currentGroup.id
-                                        visible: desktopActions.count > 0
-                                    }
-
-                                    Repeater {
-                                        id: desktopActions
-
-                                        model: dockButton.currentGroup.windows.length > 0 && dockButton.currentGroup.desktopEntry ? dockButton.currentGroup.desktopEntry.actions : []
-
-                                        delegate: MenuAction {
-                                            cornerRadius: appMenu.contentRadius
-                                            navigation: menuNavigation
-                                            required property var modelData
-
-                                            label: root.menuLabel(modelData.name, "Application action")
-                                            onTriggered: {
-                                                modelData.execute();
-                                                dockButton.menuOpen = false;
-                                            }
-                                        }
-                                    }
-
-                                    MenuSeparator {
-                                        visible: dockButton.currentGroup.windows.length > 0 || !!root.launchAttempts[dockButton.currentGroup.id]
-                                    }
-
-                                    MenuSection {
-                                        label: "Open windows"
-                                        visible: dockButton.currentGroup.windows.length > 0 || !!root.launchAttempts[dockButton.currentGroup.id]
-                                    }
-
-                                    Repeater {
-                                        model: ScriptModel {
-                                            values: dockButton.currentGroup.windows.concat(root.launchAttempts[dockButton.currentGroup.id] ? [
-                                                {
-                                                    loading: true
-                                                }
-                                            ] : [])
-                                        }
-
-                                        delegate: MenuAction {
-                                            cornerRadius: appMenu.contentRadius
-                                            navigation: menuNavigation
-                                            required property var modelData
-                                            readonly property bool isLoading: !!modelData?.loading
-
-                                            label: isLoading ? "Loading..." : root.menuLabel(modelData && modelData.title, dockButton.currentGroup.id)
-                                            iconSource: dockIcon.source
-                                            loading: isLoading
-                                            closable: isLoading || !!modelData
-                                            selectedWindow: !isLoading && !!modelData && (modelData.activated || (appMenu.visible && !ToplevelManager.activeToplevel && root.lastActiveWindow === modelData))
-                                            onCloseRequested: {
-                                                if (isLoading) {
-                                                    root.cancelLaunch(dockButton.currentGroup.id);
-                                                } else if (modelData) {
-                                                    appMenu.dismissOnOutsideClick = false;
-                                                    closeClickGuard.restart();
-                                                    const window = modelData;
-                                                    Qt.callLater(() => {
-                                                        if (window)
-                                                            window.close();
-                                                    });
-                                                }
-                                            }
-                                            onTriggered: {
-                                                if (!isLoading && modelData)
-                                                    modelData.activate();
-                                                if (!isLoading)
-                                                    dockButton.menuOpen = false;
-                                            }
-                                        }
-                                    }
-                                }
                             }
                         }
                     }
@@ -2364,169 +2263,5 @@ PanelWindow {
         }
 
         target: DesktopEntries
-    }
-
-    component MenuAction: ActionButton {
-        id: action
-        readonly property bool menuEntry: true
-        property url iconSource: ""
-        property bool loading: false
-        property bool closable: false
-        property bool closing: false
-        Timer {
-            id: closeRetry
-            interval: 10000
-            onTriggered: action.closing = false
-        }
-        property bool selectedWindow: false
-        signal closeRequested
-        property var navigation: null
-        showFocusRing: navigation !== null && navigation.keyboardNavigation && activeFocus
-        flat: true
-        required property string label
-        signal triggered
-        text: label
-        leftPadding: Theme.padding
-        rightPadding: closable ? Theme.spaceSmall : Theme.padding
-        Layout.fillWidth: true
-        implicitHeight: 38
-        Keys.priority: Keys.BeforeItem
-        Keys.onDownPressed: function (event) {
-            if (navigation) {
-                navigation.move(1);
-                event.accepted = true;
-            }
-        }
-        Keys.onUpPressed: function (event) {
-            if (navigation) {
-                navigation.move(-1);
-                event.accepted = true;
-            }
-        }
-        Keys.onEscapePressed: function (event) {
-            if (navigation) {
-                navigation.escapeRequested();
-                event.accepted = true;
-            }
-        }
-        onClicked: {
-            if (navigation)
-                navigation.pointerActivate();
-            triggered();
-        }
-        contentItem: Item {
-            RowLayout {
-                anchors.fill: parent
-                spacing: Theme.gap
-                OsIconImage {
-                    visible: !action.loading && action.iconSource.toString().length > 0
-                    source: action.iconSource
-                    implicitSize: Theme.iconSize
-                    Layout.alignment: Qt.AlignVCenter
-                }
-                PreviewSpinner {
-                    visible: action.loading
-                    implicitWidth: Theme.iconSize
-                    implicitHeight: Theme.iconSize
-                    loading: action.loading
-                    colour: Theme.accent
-                    Layout.alignment: Qt.AlignVCenter
-                }
-                Text {
-                    Layout.fillWidth: true
-                    text: action.label
-                    textFormat: Text.PlainText
-                    elide: Text.ElideRight
-                    color: action.selectedWindow ? Theme.accent : action.loading ? Theme.muted : Theme.text
-                    font.weight: action.selectedWindow ? Font.Medium : Font.Normal
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize
-                    verticalAlignment: Text.AlignVCenter
-                }
-                ActionButton {
-                    id: closeWindow
-                    objectName: "closeWindowButton"
-                    horizontalPadding: Theme.spaceSmall
-                    visible: action.closable
-                    Layout.preferredWidth: 28
-                    Layout.preferredHeight: 28
-                    Layout.alignment: Qt.AlignVCenter
-                    flat: true
-                    hoverEnabled: true
-                    enabled: !action.closing
-                    contentItem: Item {
-                        Text {
-                            anchors.centerIn: parent
-                            visible: !action.closing
-                            text: "\u00d7"
-                            color: Theme.text
-                            font.pixelSize: 22
-                        }
-                        PreviewSpinner {
-                            anchors.centerIn: parent
-                            implicitWidth: 22
-                            implicitHeight: 22
-                            loading: action.closing
-                            colour: Theme.text
-                            Accessible.name: "Closing " + action.label
-                        }
-                    }
-                    Accessible.name: action.loading ? "Cancel loading" : (action.closing ? "Closing " : "Close ") + action.label
-                    showFocusRing: action.navigation !== null && action.navigation.keyboardNavigation
-                    background: Rectangle {
-                        radius: closeWindow.cornerRadius
-                        // The menu row is already hovered underneath this
-                        // button, so use a brighter surface for its own state.
-                        color: closeWindow.down ? Qt.lighter(Theme.pressed, 1.2) : closeWindow.hovered ? Theme.pressed : "transparent"
-                        border.width: closeWindow.showFocusRing && closeWindow.activeFocus ? 2 : 0
-                        border.color: Theme.accent
-                    }
-                    onClicked: {
-                        if (action.navigation)
-                            action.navigation.pointerActivate();
-                        action.closing = true;
-                        closeRetry.restart();
-                        action.closeRequested();
-                    }
-                }
-            }
-        }
-    }
-
-    component MenuSection: Item {
-        required property string label
-        implicitHeight: sectionLabel.implicitHeight + Theme.spaceSmall
-        Layout.fillWidth: true
-
-        Text {
-            id: sectionLabel
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            leftPadding: Theme.padding
-            rightPadding: Theme.padding
-            text: parent.label
-            color: Theme.muted
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSmall
-            font.weight: Font.DemiBold
-            elide: Text.ElideRight
-        }
-    }
-
-    component MenuSeparator: Item {
-        implicitHeight: Theme.gap
-        Layout.fillWidth: true
-
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: Theme.padding
-            anchors.rightMargin: Theme.padding
-            height: 1
-            color: Theme.outline
-            opacity: 0.8
-        }
     }
 }

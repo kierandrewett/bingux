@@ -125,7 +125,8 @@ ShellRoot {
             }
             tryVerify(() => !history.retained);
             check(state.allEntries.length === 1, "Closing history preserves the notification");
-            tryVerify(() => !surface.visible, 2000, "Archived history must unmap the empty full-screen surface");
+            tryVerify(() => !surface.presented && !surface.desktopViewport.visible, 2000, "Archived history stops drawing in its cached surface");
+            check(surface.mask.height === 0 && !surface.contentItem.enabled, "Empty history releases input");
             history.visible = true;
             if (!Theme.reducedMotion)
                 wait(50);

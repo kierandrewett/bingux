@@ -66,7 +66,7 @@ Rectangle {
                 x: tableChoice.width - width - 8
                 y: (tableChoice.height - height) / 2
                 implicitSize: 14
-                source: Quickshell.iconPath("pan-down-symbolic")
+                source: AdwaitaIcons.source("pan-down-symbolic")
                 color: Theme.muted
             }
         }

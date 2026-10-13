@@ -10,7 +10,7 @@ import "ControlLayout.js" as ControlLayout
 
 ShellPopup {
     id: root
-    keepWindowAlive: DesktopEditing.editor !== null
+    keepWindowAlive: DesktopEditing.active
     readonly property var groupedLayout: controls.groupedLayout
     function snapshotLayout() {
         return JSON.parse(JSON.stringify(BinguxPreferences.data.desktop.controlLayout || ControlLayout.defaults()));
@@ -43,11 +43,25 @@ ShellPopup {
     function controlCell(name) {
         return controls.controlCell(name);
     }
-    readonly property var controlChoices: extrasView.choices
-    readonly property var deviceControls: detailView
+    // The detail pages are built on first use so they stay out of shell start-up.
+    property bool pagesRequested: false
+    function extrasPage() {
+        pagesRequested = true;
+        return extrasLoader.item;
+    }
+    function detailPageItem() {
+        pagesRequested = true;
+        return detailLoader.item;
+    }
+    function controlChoices() {
+        return extrasPage().choices;
+    }
+    function deviceControls() {
+        return detailPageItem();
+    }
     property var services: ControlCentreServices
     readonly property bool extraPage: ["vpn", "power", "customise", "session"].includes(detailPage)
-    readonly property var activeDetailView: extraPage ? extrasView : detailView
+    readonly property var activeDetailView: extraPage ? extrasLoader.item : detailLoader.item
     readonly property var connectedVpns: services.vpns.filter(vpn => vpn.connected)
     readonly property bool showVpn: services.showControl("vpn") && services.vpns.length > 0
     Binding {
@@ -75,8 +89,9 @@ ShellPopup {
             movedAnchor = widget;
             visible = true;
         }
-        if (page === "audio")
-            detailView.audioTab = audioTab || "output";
+        pagesRequested = true;
+        if (page === "audio" && detailLoader.item)
+            detailLoader.item.audioTab = audioTab || "output";
         pendingOverviewFocus = false;
         detailTrigger = trigger || null;
         pendingDetailFocus = !!(trigger && trigger.visualFocus);
@@ -87,13 +102,13 @@ ShellPopup {
         interval: 16
         repeat: true
         running: root.detailOpen && root.pendingDetailFocus
-        onTriggered: if (root.activeDetailView.visible) {
+        onTriggered: if (root.activeDetailView && root.activeDetailView.visible) {
             root.activeDetailView.focusBack(Qt.TabFocusReason);
             root.pendingDetailFocus = false;
         }
     }
     function closeDetail() {
-        const keyboard = activeDetailView.keyboardNavigation;
+        const keyboard = activeDetailView?.keyboardNavigation;
         detailOpen = false;
         pendingOverviewFocus = keyboard && !!detailTrigger;
     }
@@ -131,7 +146,7 @@ ShellPopup {
     readonly property real dockSafeBottom: height - dockSafeInset - Theme.gap
     readonly property real editorTop: Theme.barHeight + 40 + (DesktopEditing.editor?.topInset || 0)
     readonly property real maximumPopupHeight: Math.max(0, Math.min(height * 0.8, DesktopEditing.active ? dockSafeBottom - editorTop : anchorAbove ? anchorTop - Theme.barHeight - Theme.gap : dockSafeBottom - belowAnchorY))
-    property real controlsHeight: Math.min(detailOpen ? activeDetailView.implicitHeight : Math.max(96, controls.implicitHeight), Math.max(0, maximumPopupHeight - contentPadding * 2))
+    property real controlsHeight: Math.min(detailOpen ? (activeDetailView?.implicitHeight || 0) : Math.max(96, controls.implicitHeight), Math.max(0, maximumPopupHeight - contentPadding * 2))
     Behavior on controlsHeight {
         enabled: root.visible && root.revealScale === 1
         NumberAnimation {
@@ -229,35 +244,43 @@ ShellPopup {
             }
         }
 
-        ControlCentreExtras {
-            id: extrasView
-            objectName: "controlExtrasPage"
-            services: root.services
-            page: root.detailPage
+        Loader {
+            id: extrasLoader
+            active: root.pagesRequested || root.detailOpen
             x: (1 - root.detailProgress) * 12
-            opacity: root.detailProgress
             width: parent.width
             height: parent.height
-            visible: root.detailProgress > 0 && root.extraPage
-            enabled: root.detailOpen && root.extraPage
-            onBackRequested: root.closeDetail()
-            onSettingsRequested: panel => root.settings(panel)
+            sourceComponent: ControlCentreExtras {
+                objectName: "controlExtrasPage"
+                services: root.services
+                page: root.detailPage
+                opacity: root.detailProgress
+                anchors.fill: parent
+                visible: root.detailProgress > 0 && root.extraPage
+                enabled: root.detailOpen && root.extraPage
+                onBackRequested: root.closeDetail()
+                onSettingsRequested: panel => root.settings(panel)
+            }
         }
-        ControlCentreDetails {
-            id: detailView
-            objectName: "controlDetailPage"
+        Loader {
+            id: detailLoader
+            active: root.pagesRequested || root.detailOpen
             x: (1 - root.detailProgress) * 12
-            opacity: root.detailProgress
             width: parent.width
             height: parent.height
-            visible: root.detailProgress > 0 && !root.extraPage
-            enabled: root.detailOpen && !root.extraPage
-            indicators: root.indicators
-            bluetoothAdapter: root.bluetoothAdapter
-            page: root.detailPage
-            active: root.visible && root.detailOpen
-            onBackRequested: root.closeDetail()
-            onSettingsRequested: panel => root.settings(panel)
+            sourceComponent: ControlCentreDetails {
+                objectName: "controlDetailPage"
+                opacity: root.detailProgress
+                anchors.fill: parent
+                visible: root.detailProgress > 0 && !root.extraPage
+                enabled: root.detailOpen && !root.extraPage
+                indicators: root.indicators
+                bluetoothAdapter: root.bluetoothAdapter
+                page: root.detailPage
+                active: root.visible && root.detailOpen
+                onBackRequested: root.closeDetail()
+                onSettingsRequested: panel => root.settings(panel)
+            }
         }
     }
 }

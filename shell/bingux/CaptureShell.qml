@@ -9,56 +9,5 @@ ShellRoot {
             Quickshell.inhibitReloadPopup();
         }
     }
-    UiSession {
-        id: session
-        sessionName: "capture"
-        bindings: [
-            {
-                id: "capture",
-                accelerator: Quickshell.env("BINGUX_CAPTURE_SHORTCUT") || "<Alt>s",
-                hold: 8,
-                modal: false
-            }
-        ]
-        onActivated: (id, first) => {
-            if (first) {
-                capture.open();
-            }
-        }
-        state: ({
-                visible: capture.opened && !capture.pickingFolder,
-                surface: "bingux-capture",
-                companions: ["bingux-capture-controls"],
-                companionsAbove: true,
-                state: capture.state,
-                busy: capture.busy,
-                recording: capture.recording,
-                cleanStop: !!capture.capabilities.cleanStop,
-                elapsedText: capture.elapsedText,
-                countdown: capture.countdown
-            })
-        onCommandReceived: command => {
-            if (command.action === "open")
-                capture.open();
-            else if (command.action === "close")
-                capture.close();
-            else if (command.action === "stop")
-                capture.stop(command.hoveredAt || 0);
-        }
-    }
-    CaptureTool {
-        id: capture
-        screen: Quickshell.screens[0]
-        onOpening: {
-            session.command("search", {
-                action: "close"
-            });
-            session.command("switcher", {
-                action: "close"
-            });
-            session.command("emoji", {
-                action: "close"
-            });
-        }
-    }
+    CaptureHost {}
 }

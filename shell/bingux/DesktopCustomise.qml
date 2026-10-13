@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
@@ -30,10 +31,11 @@ Scope {
                 companions: DesktopEditing.surfaces.map(surface => surface.window.WlrLayershell.namespace).concat(["gnoblin-shell-popup", "bingux-sidebar-corner", "bingux-panel-outline"])
             })
     }
-    // Reuse the render window after the first open so previews retain their scene.
+    // Keep editor state between opens, but release the mapped backing surface
+    // while closed. A transparent fullscreen window still owns GPU resources.
     PanelWindow {
         id: editWindow
-        visible: root.initialised
+        visible: root.visible
         color: "transparent"
         anchors {
             top: true
@@ -104,7 +106,7 @@ Scope {
     }
     PanelWindow {
         id: inspectorWindow
-        visible: root.initialised
+        visible: root.visible && root.optionsPage !== ""
         screen: editWindow.screen
         color: "transparent"
         anchors {
@@ -116,12 +118,13 @@ Scope {
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "gnoblin-shell-popup"
-        WlrLayershell.keyboardFocus: root.visible && root.optionsPage !== "" ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: root.inspectorReady ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        contentItem.focus: root.inspectorReady
         mask: Region {
             x: optionsPopover.x
             y: optionsPopover.y
-            width: root.visible && root.optionsPage ? optionsPopover.width : 0
-            height: root.visible && root.optionsPage ? optionsPopover.height : 0
+            width: root.inspectorReady ? optionsPopover.width : 0
+            height: root.inspectorReady ? optionsPopover.height : 0
         }
         contentItem.Keys.onEscapePressed: root.optionsPage = ""
     }
@@ -212,7 +215,25 @@ Scope {
         }
         return paletteSelection.width ? paletteSelection : Qt.rect(palette.x, palette.y + 100, 160, 100);
     }
+    // A lazy container must submit its first frame before the inspector rises
+    // above it. Keep a missing panel pending instead of using a timing delay.
+    property bool inspectorReady: false
+    readonly property var inspectionRenderWindow: inspectionSurface?.window.contentItem.Window.window ?? (["control-centre", "sidebar"].includes(inspectedZone) ? null : editWindow.contentItem.Window.window)
+    function prepareInspector() {
+        inspectorReady = false;
+        if (visible && optionsPage && inspectionRenderWindow)
+            inspectionRenderWindow.update();
+    }
+    onInspectionRenderWindowChanged: prepareInspector()
+    Connections {
+        target: root.inspectionRenderWindow
+        enabled: root.visible && root.optionsPage !== "" && !root.inspectorReady
+        function onFrameSwapped() {
+            root.inspectorReady = true;
+        }
+    }
     onOptionsPageChanged: {
+        prepareInspector();
         iconsExpanded = false;
         behaviourExpanded = false;
     }
@@ -289,9 +310,12 @@ Scope {
     property point pointer: Qt.point(0, 0)
     property string wallpaper: ""
     property bool restoreSettings: false
-    onVisibleChanged: if (!visible && restoreSettings) {
-        restoreSettings = false;
-        settings.visible = true;
+    onVisibleChanged: {
+        prepareInspector();
+        if (!visible && restoreSettings) {
+            restoreSettings = false;
+            settings.visible = true;
+        }
     }
     property bool applying: false
     property var originalDesktop: ({})
@@ -733,10 +757,13 @@ Scope {
                 root.cancel();
         }
         Image {
+            id: editorWallpaper
             anchors.fill: parent
-            source: root.wallpaper
+            source: canvas.width > 0 && canvas.height > 0 ? root.wallpaper : ""
+            sourceSize: Qt.size(Math.ceil(canvas.width * Screen.devicePixelRatio), Math.ceil(canvas.height * Screen.devicePixelRatio))
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
+            retainWhileLoading: true
         }
         Rectangle {
             anchors.fill: parent
@@ -926,7 +953,7 @@ Scope {
             id: optionsPopover
             objectName: "customiseInspector"
             parent: inspectorWindow.contentItem
-            visible: root.visible && root.optionsPage !== ""
+            visible: root.inspectorReady
             readonly property rect target: root.inspectionAnchor
             readonly property bool beside: ["sidebar", "control-centre"].includes(root.inspectedZone)
             readonly property real desiredX: beside ? (target.x > canvas.width / 2 ? target.x - width - 12 : target.x + target.width + 12) : target.x + target.width / 2 - width / 2

@@ -144,9 +144,11 @@ or a secret service. The extension controls its own schema and migration.
 
 In the main shell process, `context.unstable` exposes `root`, `topBar`, `dock`, `controlCentre`
 and `sidebar`. These are actual objects, so an extension can connect signals, create children
-or replace behaviour. This access is deliberately open. Restore modifications on unload and
-check members before use. The objects can change between releases. `unstable` is `null` in
-standalone Settings and other processes without the main shell.
+or replace behaviour. Control Centre is created after startup settles or when first opened;
+`context.unstable.controlCentre` can be `null` before then. A saved layout that places its
+widgets in the bar creates it immediately. This access is deliberately open. Restore
+modifications on unload and check members before use. The objects can change between releases.
+`unstable` is `null` in standalone Settings and other processes without the main shell.
 
 Use the supported context when it covers a feature. If an internal hook proves useful to
 several extensions, add it to the public contract with tests instead of forcing each extension

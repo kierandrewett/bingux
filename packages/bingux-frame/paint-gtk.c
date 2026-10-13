@@ -187,7 +187,7 @@ void frame_paint(void* pixels, const struct FramePaint* m) {
         }
     gtk_widget_allocate(v->header, MAX(1, m->width - m->left - m->right), MAX(1, m->top), -1, NULL);
     GtkSnapshot* snapshot = gtk_snapshot_new();
-    /* Native frame clips the client body. Draw theme background for side edges.
+    /* Native masks the content hole, including its rounded bottom corners.
      */
     gtk_snapshot_render_background(snapshot, gtk_widget_get_style_context(v->window), 0, 0,
                                    m->width, m->height);
@@ -200,10 +200,68 @@ void frame_paint(void* pixels, const struct FramePaint* m) {
          * glyph rasterization. Download preserves the premultiplied ARGB32
          * format expected by the shared-memory transport. */
         GskRenderer* renderer = gtk_native_get_renderer(GTK_NATIVE(v->window));
-        graphene_rect_t bounds = GRAPHENE_RECT_INIT(0, 0, m->width, m->height);
-        GdkTexture* texture = gsk_renderer_render_texture(renderer, node, &bounds);
-        gdk_texture_download(texture, pixels, m->width * 4);
-        g_object_unref(texture);
+        int top = CLAMP(m->top, 0, m->height);
+        int bottom = CLAMP(m->bottom, 0, m->height - top);
+        int left = CLAMP(m->left, 0, m->width);
+        int right = CLAMP(m->right, 0, m->width - left);
+        gboolean valid_extents =
+            top == m->top && bottom == m->bottom && left == m->left && right == m->right;
+        gboolean bounded_corners = MIN(m->width, m->height) + 2.0 * abs(left - right) <= m->width;
+        /* Fractional-scale filtering can sample one adjacent body texel even
+         * along the square content-hole edges. Expand nonzero strips by one. */
+        top = MIN(top + (top > 0), m->height);
+        bottom = MIN(bottom + (bottom > 0), m->height - top);
+        left = MIN(left + (left > 0), m->width);
+        right = MIN(right + (right > 0), m->width - left);
+        int middle = m->height - top - bottom;
+        /* The protocol does not carry radius/exponent. Native clamps radius to
+         * min(size)/2 and rounds the content hole at the bottom. Its visible
+         * body pixels therefore fit in maximum-radius corner guards; include
+         * one pixel for fractional radius/AA. Subtract the existing strips so
+         * no destination pixel is downloaded twice. */
+        int guard = (MIN(m->width, m->height) + 1) / 2 + 1;
+        int corner_y = MAX(top, m->height - guard);
+        int corner_height = MAX(0, m->height - bottom - corner_y);
+        int corner_left = CLAMP(guard, left, m->width - right);
+        int corner_right = CLAMP(m->width - guard, corner_left, m->width - right);
+        graphene_rect_t strips[] = {
+            GRAPHENE_RECT_INIT(0, 0, m->width, top),
+            GRAPHENE_RECT_INIT(0, top, left, middle),
+            GRAPHENE_RECT_INIT(m->width - right, top, right, middle),
+            GRAPHENE_RECT_INIT(0, m->height - bottom, m->width, bottom),
+            GRAPHENE_RECT_INIT(left, corner_y, corner_left - left, corner_height),
+            GRAPHENE_RECT_INIT(corner_right, corner_y, m->width - right - corner_right,
+                               corner_height),
+        };
+        guint count = G_N_ELEMENTS(strips);
+        gboolean opaque_body = FALSE;
+#if GTK_CHECK_VERSION(4, 16, 0)
+        graphene_rect_t opaque;
+        graphene_rect_t body =
+            GRAPHENE_RECT_INIT(m->width / 4.f, m->height / 4.f, m->width / 2.f, m->height / 2.f);
+        opaque_body = gsk_render_node_get_opaque_rect(node, &opaque) &&
+                      graphene_rect_contains_rect(&opaque, &body);
+#endif
+        /* With unequal sides, the native shader tests both corner thresholds
+         * using the selected half's inset radius. Keep full readback if either
+         * opposite threshold can cross the centre, or extents need clamping.
+         * Otherwise the selected corner starts at max(side,radius) and above
+         * height-max(bottom,radius), proving these guards for every exponent.
+         * Translucent crops can change opacity rounding: retain their viewport. */
+        if (!opaque_body || !bounded_corners || !valid_extents) {
+            strips[0] = GRAPHENE_RECT_INIT(0, 0, m->width, m->height);
+            count = 1;
+        }
+        for (guint i = 0; i < count; i++) {
+            const graphene_rect_t* rect = &strips[i];
+            if (rect->size.width <= 0 || rect->size.height <= 0)
+                continue;
+            GdkTexture* texture = gsk_renderer_render_texture(renderer, node, rect);
+            guchar* destination =
+                (guchar*)pixels + ((gsize)rect->origin.y * m->width + (int)rect->origin.x) * 4;
+            gdk_texture_download(texture, destination, m->width * 4);
+            g_object_unref(texture);
+        }
         gsk_render_node_unref(node);
     }
     v->dirty = FALSE;

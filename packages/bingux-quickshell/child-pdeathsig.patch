@@ -1,0 +1,22 @@
+diff --git a/src/io/process.cpp b/src/io/process.cpp
+index 6055e2c..2cd8faa 100644
+--- a/src/io/process.cpp
++++ b/src/io/process.cpp
+@@ -8,6 +8,7 @@
+ #include <qlogging.h>
+ #include <qobject.h>
+ #include <qprocess.h>
++#include <sys/prctl.h>
+ #include <qqmlinfo.h>
+ #include <qtmetamacros.h>
+ #include <qtypes.h>
+@@ -213,6 +214,9 @@ void Process::startProcessIfReady() {
+ 	if (!this->mStdinEnabled) this->process->closeWriteChannel();
+ 
+ 	this->setupEnvironment(this->process);
++	// Helpers must not outlive the shell. A killed or crashed shell otherwise
++	// leaves every helper running, and each restart adds another set.
++	this->process->setChildProcessModifier([] { prctl(PR_SET_PDEATHSIG, SIGKILL); });
+ 	this->process->start(cmd, args);
+ }
+ 

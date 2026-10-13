@@ -53,7 +53,7 @@ Item {
     SymbolicIcon {
         anchors.centerIn: parent
         visible: root.status !== Image.Ready && !fade.running
-        source: Quickshell.iconPath("audio-x-generic-symbolic")
+        source: AdwaitaIcons.source("audio-x-generic-symbolic")
     }
     ParallelAnimation {
         id: fade

@@ -377,10 +377,10 @@ def main(argv=None):
     path = args.path or (None if args.config else os.environ.get("BINGUX_CONFIG_PATH"))
     target = args.target if args.command == "ipc" else args.command
     companions = {
-        "search": "SearchShell.qml",
-        "switcher": "SwitcherShell.qml",
-        "capture": "CaptureShell.qml",
-        "emoji": "EmojiShell.qml",
+        "search": "PopoutsShell.qml",
+        "switcher": "PopoutsShell.qml",
+        "capture": "PopoutsShell.qml",
+        "emoji": "PopoutsShell.qml",
     }
     if target in companions:
         # Invoke the companion directly, even when the desktop is frozen.

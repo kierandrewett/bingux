@@ -59,9 +59,7 @@ Item {
                 maskThresholdMin: 0.5
                 maskSpreadAtMin: 1.0
             }
-            source: root.requestedIcon.startsWith("file://")
-                    ? root.requestedIcon
-                    : Quickshell.iconPath(root.requestedIcon, "application-x-executable")
+            source: root.requestedIcon.startsWith("file://") ? root.requestedIcon : AdwaitaIcons.source(root.requestedIcon, "application-x-executable")
         }
     }
     // The mask removes icon pixels, so hover, selection and wallpaper show

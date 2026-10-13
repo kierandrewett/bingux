@@ -81,7 +81,7 @@ Item {
             SymbolicIcon {
                 anchors.centerIn: parent
                 implicitSize: 16
-                source: Quickshell.iconPath(button.iconName)
+                source: AdwaitaIcons.source(button.iconName)
                 color: Theme.muted
             }
         }
@@ -144,7 +144,7 @@ Item {
                 anchors.centerIn: parent
                 visible: root.details !== null && root.details.kind === "audio"
                 implicitSize: 64
-                source: Quickshell.iconPath("audio-x-generic-symbolic")
+                source: AdwaitaIcons.source("audio-x-generic-symbolic")
                 color: Theme.muted
             }
             TapHandler {

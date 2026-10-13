@@ -38,6 +38,7 @@ ShellRoot {
         when: true
         function test_popout_preserves_content() {
             sidebar.selectContent("notes");
+            sidebar.open();
             const notes = findChild(sidebar.contentItem, "notesEditor");
             notes.text = "# A note\n\nKeep this text.";
             const content = sidebar.contentItem;
