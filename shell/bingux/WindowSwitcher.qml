@@ -580,7 +580,7 @@ Scope {
                                 // The switcher selection must remain visible against a
                                 // thumbnail without inheriting the desktop accent.
                                 // Accents such as yellow otherwise read as a frame.
-                                selectedColor: Qt.rgba(0.72, 0.74, 0.78, 0.20)
+                                selectedColor: Theme.switcherSelection
                                 opacity: selectedCard ? 1 : 0
                                 Behavior on opacity {
                                     enabled: root.shown && !Theme.reducedMotion

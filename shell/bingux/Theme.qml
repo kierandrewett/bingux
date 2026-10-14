@@ -83,6 +83,9 @@ QtObject {
     function flatten(foreground, backdrop) {
         return Qt.rgba(foreground.r * foreground.a + backdrop.r * (1 - foreground.a), foreground.g * foreground.a + backdrop.g * (1 - foreground.a), foreground.b * foreground.a + backdrop.b * (1 - foreground.a), 1);
     }
+    function surfaceColor(foreground, backdrop) {
+        return flatSurfaces ? flatten(foreground, backdrop) : foreground;
+    }
     function insetRadius(outerRadius, padding) {
         return Math.max(0, outerRadius - padding);
     }
@@ -106,6 +109,14 @@ QtObject {
     readonly property color hover: flatSurfaces ? flatten(Qt.rgba(0.42, 0.42, 0.44, 0.34), popupSurface) : Qt.rgba(0.42, 0.42, 0.44, 0.34)
     readonly property color pressed: flatSurfaces ? flatten(Qt.rgba(0.52, 0.52, 0.54, 0.46), popupSurface) : Qt.rgba(0.52, 0.52, 0.54, 0.46)
     readonly property color selection: flatSurfaces ? flatten(Qt.rgba(accent.r, accent.g, accent.b, 0.28), popupSurface) : Qt.rgba(accent.r, accent.g, accent.b, 0.28)
+    readonly property color switcherSelection: surfaceColor(Qt.rgba(0.72, 0.74, 0.78, 0.20), popupSurface)
+    readonly property color searchRowSeparator: surfaceColor(Qt.rgba(text.r, text.g, text.b, 0.08), overlaySurface)
+    readonly property color searchSelectionOutline: surfaceColor(Qt.rgba(126 / 255, 159 / 255, 200 / 255, 56 / 255), popupSurface)
+    readonly property real searchResultOpacity: flatSurfaces ? 1 : 0.58
+    readonly property color captureWindowShade: surfaceColor(Qt.rgba(0, 0, 0, 153 / 255), Qt.rgba(0.20, 0.20, 0.20, 1))
+    readonly property color captureRegionShade: surfaceColor(Qt.rgba(0, 0, 0, 136 / 255), Qt.rgba(0.20, 0.20, 0.20, 1))
+    readonly property color recordingShade: surfaceColor(Qt.rgba(0, 0, 0, 51 / 255), Qt.rgba(0.20, 0.20, 0.20, 1))
+    readonly property color captureHighlight: surfaceColor(Qt.rgba(accent.r, accent.g, accent.b, 0.30), popupSurface)
     readonly property color border: "#ffffff"
     readonly property color panelOuterOutline: flatSurfaces ? "#ff0b0b0b" : Qt.rgba(0, 0, 0, 0.5)
     // Shared inner edge used by bars, cards, dock/sidebar surfaces, and

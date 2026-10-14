@@ -42,7 +42,7 @@ ShellPopup {
     popupHeight: footerY + (pageCount > 1 ? 39 : 20) + optionsHeight
     contentPadding: 0
     cornerRadius: 28
-    outlineColor: Qt.rgba(1, 1, 1, 0.11)
+    outlineColor: Theme.surfaceColor(Qt.rgba(1, 1, 1, 0.11), Theme.popupSurface)
     preferredX: anchorX - popupWidth / 2
     preferredY: height - anchorBottom - popupHeight - Theme.gap
     revealOriginY: popupHeight
@@ -306,7 +306,7 @@ ShellPopup {
                 radius: 11
                 color: root.folderColor
                 border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.25)
+                border.color: Theme.surfaceColor(Qt.rgba(1, 1, 1, 0.25), root.folderColor)
             }
             MouseArea {
                 anchors.fill: parent
@@ -360,9 +360,9 @@ ShellPopup {
                                 width: 64
                                 height: 64
                                 radius: 17
-                                color: cell.appState.active ? Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, 0.18) : root.dock.folderDropId === root.folderId && root.dock.folderDropIndex === cell.appIndex ? Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, 0.26) : cellMouse.containsMouse ? Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, 0.10) : "transparent"
+                                color: cell.appState.active ? Theme.surfaceColor(Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, 0.18), Theme.popupSurface) : root.dock.folderDropId === root.folderId && root.dock.folderDropIndex === cell.appIndex ? Theme.surfaceColor(Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, 0.26), Theme.popupSurface) : cellMouse.containsMouse ? Theme.surfaceColor(Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, 0.10), Theme.popupSurface) : "transparent"
                                 border.width: cell.appState.active ? 1 : 0
-                                border.color: Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, 0.52)
+                                border.color: Theme.surfaceColor(Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, 0.52), Theme.popupSurface)
                                 Behavior on color {
                                     ColorAnimation {
                                         duration: Theme.reducedMotion ? 0 : 120

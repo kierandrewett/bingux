@@ -9,8 +9,10 @@ Scope {
     id: root
 
     readonly property string path: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/bingux/lock-theme.json"
-    property color background: "#111318"
-    property color surface: "#261f232b"
+    property color backgroundValue: "#111318"
+    readonly property color background: Theme.surfaceColor(backgroundValue, Theme.background)
+    property color surfaceValue: "#261f232b"
+    readonly property color surface: Theme.surfaceColor(surfaceValue, background)
     property color text: "#ffffff"
     property color mutedText: "#c7cbd5"
     property color accent: "#3584e4"
@@ -29,9 +31,9 @@ Scope {
         if (!data || typeof data !== "object" || Array.isArray(data))
             return;
         if (isColour(data.background))
-            background = data.background;
+            backgroundValue = data.background;
         if (isColour(data.surface))
-            surface = data.surface;
+            surfaceValue = data.surface;
         if (isColour(data.text))
             text = data.text;
         if (isColour(data.mutedText))

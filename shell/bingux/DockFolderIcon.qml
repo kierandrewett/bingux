@@ -27,11 +27,11 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: Math.max(12, root.iconSize * 0.25)
-        color: Theme.softwareRendering ? Theme.flatten(Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, root.contentsHidden ? 0.38 : 0.28), Theme.popupSurface) : Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, root.contentsHidden ? 0.38 : 0.28)
+        color: Theme.surfaceColor(Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, root.contentsHidden ? 0.38 : 0.28), Theme.popupSurface)
         property real pulse: 1
         opacity: root.highlighted ? pulse : 1
         border.width: 1
-        border.color: root.highlighted ? Qt.rgba(1, 1, 1, 0.48) : Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, 0.32)
+        border.color: root.highlighted ? Theme.surfaceColor(Qt.rgba(1, 1, 1, 0.48), Theme.popupSurface) : Theme.surfaceColor(Qt.rgba(root.folderColor.r, root.folderColor.g, root.folderColor.b, 0.32), Theme.popupSurface)
         Behavior on color {
             ColorAnimation {
                 duration: Theme.reducedMotion ? 0 : 170
@@ -68,9 +68,9 @@ Item {
                 Rectangle {
                     anchors.fill: parent
                     radius: Math.max(4, parent.width * 0.22)
-                    color: Theme.softwareRendering ? Theme.flatten(Qt.rgba(1, 1, 1, 0.24), Theme.popupSurface) : Qt.rgba(1, 1, 1, 0.24)
+                    color: Theme.surfaceColor(Qt.rgba(1, 1, 1, 0.24), Theme.popupSurface)
                     border.width: parent.active ? 1 : 0
-                    border.color: Qt.rgba(1, 1, 1, 0.7)
+                    border.color: Theme.surfaceColor(Qt.rgba(1, 1, 1, 0.7), Theme.popupSurface)
                     visible: parent.active
                 }
                 OsIconImage {
@@ -94,7 +94,7 @@ Item {
                 width: root.iconSize * 0.15
                 height: width
                 radius: Math.max(3, width * 0.24)
-                color: Theme.softwareRendering ? Theme.flatten(Qt.rgba(0.03, 0.03, 0.05, 0.13), Theme.popupSurface) : Qt.rgba(0.03, 0.03, 0.05, 0.13)
+                color: Theme.surfaceColor(Qt.rgba(0.03, 0.03, 0.05, 0.13), Theme.popupSurface)
             }
         }
     }

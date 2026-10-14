@@ -83,7 +83,7 @@ Item {
     width: parent ? parent.width : 0
     height: rowHeight
     implicitHeight: rowHeight
-    opacity: activationEnabled ? 1 : 0.58
+    opacity: activationEnabled ? 1 : Theme.searchResultOpacity
 
     function escapeRichText(value) {
         return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;");
@@ -270,7 +270,7 @@ Item {
         radius: Theme.insetRadius(Theme.radius + 2, 2)
         color: root.selected ? Theme.selection : "transparent"
         border.width: root.selected ? 1 : 0
-        border.color: "#387e9fc8"
+        border.color: Theme.searchSelectionOutline
     }
 
     Item {

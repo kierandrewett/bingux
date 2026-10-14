@@ -605,7 +605,7 @@ Item {
                                             anchors.bottom: parent.bottom
                                             visible: factRow.index < body.metadataRows.length - 1
                                             height: 1
-                                            color: Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, 0.08)
+                                            color: Theme.searchRowSeparator
                                         }
                                     }
                                 }
