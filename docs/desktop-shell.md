@@ -574,6 +574,16 @@ Network keeps saved profiles and VPNs behind Other connections; Bluetooth reveal
 nearby devices only after Add a device. The overview omits the title and close button, and
 Display opens system settings directly.
 
+## Not Responding dialog
+
+Gnoblin reports a client that stops answering liveness pings as `unresponsive` on its window record and
+sends `gnoblin.window.changed`. Bingux listens for that change and shows one dialog at a time with
+two choices: **Wait** hides it until the window changes state again, and **Force Quit** runs
+`gnoblinctl window kill ID`, which sends SIGKILL to the application. The dialog closes when the
+window recovers or goes away. If the kill command fails, the dialog stays open and the shell logs the
+exit code. The dialog needs Gnoblin with `window.kill`; the ping timeout is
+`window_management.check_alive_timeout`.
+
 ## Keyboard layout switcher
 
 The right-hand top-bar layout label opens the shared keyboard-layout popup.
