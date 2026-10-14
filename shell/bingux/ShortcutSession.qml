@@ -25,6 +25,7 @@ QtObject {
     property int apiMinor: 0
     property int requestSequence: 0
     property var ownedBindings: []
+    property var unavailableBindings: []
     property bool bindingRequestPending: false
     property string activeSessionBindingId: ""
     property string activeSessionId: ""
@@ -43,7 +44,7 @@ QtObject {
     signal windowMenuRequested(var request)
     signal windowResponsivenessChanged(var window)
     signal windowClosed(string windowId)
-    readonly property bool ready: socket.connected && helloReceived && (nativeProtocol ? apiReady && ownedBindings.length === (enabled ? bindings.length : 0) : boundCount === bindings.length)
+    readonly property bool ready: socket.connected && helloReceived && (nativeProtocol ? apiReady && ownedBindings.length === (enabled ? bindings.length - unavailableBindings.length : 0) : boundCount === bindings.length)
     readonly property bool connected: socket.connected
     signal activated(string id, bool first, int modifiers, string focusContext)
     signal keyPressed(int key, int modifiers, string focusContext)
@@ -347,13 +348,16 @@ QtObject {
             return;
         }
 
-        const missing = desired.find(binding => !ownedBindings.some(current => current.id === binding.id));
+        const missing = desired.find(binding => !ownedBindings.some(current => current.id === binding.id) && !unavailableBindings.includes(binding.id));
         if (missing) {
             bindingRequestPending = true;
             requestApi("shortcut.bind", missing, (result, error) => {
                 bindingRequestPending = false;
                 if (error) {
-                    failed(error);
+                    // A key another component owns stays unavailable. Report it once and carry on
+                    // with the remaining bindings instead of retrying it forever.
+                    failed(missing.id + " (" + missing.accelerator + "): " + error);
+                    unavailableBindings = unavailableBindings.concat([missing.id]);
                     bindingRetry.restart();
                 } else {
                     ownedBindings = ownedBindings.concat([missing]);
@@ -644,6 +648,7 @@ QtObject {
         onConnectedChanged: {
             root.boundCount = 0;
             root.ownedBindings = [];
+            root.unavailableBindings = [];
             root.bindingRequestPending = false;
             root.apiRequests = ({});
             root.thumbnailRequests = ({});
