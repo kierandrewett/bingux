@@ -277,6 +277,14 @@ PanelWindow {
     property bool appGroupsInitialised: false
     property bool startupReady: false
     property string startupLayoutKey: ""
+    // The dock slides up from below the screen edge once, when it first maps.
+    property real enterOffset: startupReady ? 0 : (root.height + root.itemSize + 16) / 2
+    Behavior on enterOffset {
+        NumberAnimation {
+            duration: Theme.reducedMotion ? 0 : 360
+            easing.type: Easing.OutCubic
+        }
+    }
     visible: startupReady
     onStartupReadyChanged: if (startupReady)
         Startup.dockMapped()
@@ -1737,6 +1745,7 @@ PanelWindow {
         onYChanged: rectangleUpdate.restart()
 
         anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: root.enterOffset
         x: root.preferences.dockAlignment === "left" ? Theme.padding : root.preferences.dockAlignment === "right" ? root.width - width - Theme.padding : (root.width - width) / 2
         width: Math.min(root.width - Theme.padding * 2, Math.max(DesktopEditing.active ? root.itemSize + 16 : 0, dockRow.implicitWidth + dockSurface.itemPadding * 2))
         height: root.itemSize + 16
