@@ -537,7 +537,7 @@ Scope {
             }
             Rectangle {
                 anchors.fill: parent
-                color: "#99000000"
+                color: Theme.captureWindowShade
                 visible: !overlay.active || preferences.target === "window"
             }
             Rectangle {
@@ -545,7 +545,7 @@ Scope {
                 y: 0
                 width: parent.width
                 height: overlay.selection.y
-                color: "#88000000"
+                color: Theme.captureRegionShade
                 visible: overlay.active && preferences.target === "region"
             }
             Rectangle {
@@ -553,7 +553,7 @@ Scope {
                 y: overlay.selection.y
                 width: overlay.selection.x
                 height: overlay.selection.height
-                color: "#88000000"
+                color: Theme.captureRegionShade
                 visible: overlay.active && preferences.target === "region"
             }
             Rectangle {
@@ -561,7 +561,7 @@ Scope {
                 y: overlay.selection.y
                 width: parent.width - x
                 height: overlay.selection.height
-                color: "#88000000"
+                color: Theme.captureRegionShade
                 visible: overlay.active && preferences.target === "region"
             }
             Rectangle {
@@ -569,7 +569,7 @@ Scope {
                 y: overlay.selection.y + overlay.selection.height
                 width: parent.width
                 height: parent.height - y
-                color: "#88000000"
+                color: Theme.captureRegionShade
                 visible: overlay.active && preferences.target === "region"
             }
 
@@ -615,7 +615,7 @@ Scope {
                 y: window ? Math.max(0, window.y - overlay.modelData.y) : 0
                 width: window ? Math.max(0, Math.min(overlay.width, window.x + window.width - overlay.modelData.x) - x) : 0
                 height: window ? Math.max(0, Math.min(overlay.height, window.y + window.height - overlay.modelData.y) - y) : 0
-                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.3)
+                color: Theme.captureHighlight
                 border.color: Theme.accent
                 border.width: 3
                 radius: 8

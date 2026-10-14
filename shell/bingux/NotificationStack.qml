@@ -600,7 +600,7 @@ Flickable {
                 width: notificationColumn.width - effectiveInset * 2
                 radius: root.cardRadius
                 readonly property color surfaceFill: root.cardBackground
-                color: Qt.rgba(surfaceFill.r, surfaceFill.g, surfaceFill.b, groupHead || groupExpanded ? 1 : surfaceFill.a + (1 - surfaceFill.a) * revealProgress)
+                color: Theme.surfaceColor(Qt.rgba(surfaceFill.r, surfaceFill.g, surfaceFill.b, groupHead || groupExpanded ? 1 : surfaceFill.a + (1 - surfaceFill.a) * revealProgress), Theme.popupSurface)
                 border.width: root.cardBorder ? 1 : 0
                 border.color: Theme.outline
                 PanelOutline {

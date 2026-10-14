@@ -10,8 +10,10 @@ Rectangle {
     radius: corner ? 5 : 2
     color: active ? Theme.accent : Theme.text
     border.width: corner ? 1 : 0
-    border.color: "#66000000"
+    border.color: Theme.surfaceColor(Qt.rgba(0, 0, 0, 0.4), color)
     Behavior on color {
-        ColorAnimation { duration: Theme.reducedMotion ? 0 : 100 }
+        ColorAnimation {
+            duration: Theme.reducedMotion ? 0 : 100
+        }
     }
 }

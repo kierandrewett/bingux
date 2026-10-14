@@ -226,7 +226,9 @@ instant. Notification cards do not request keyboard focus. Their pointer mask co
 only the visible card stack.
 
 On software-rendered sessions, Bingux disables motion, backdrop blur, and
-decorative shadows, and uses opaque versions of its panel and popup colours.
+decorative shadows, and uses opaque versions of its panel, popup, and embedded
+overlay colours. This includes the switcher, search results, lock and capture
+surfaces, notifications, and dock folder previews.
 Detection checks `BINGUX_SOFTWARE_RENDERING=1|0` first, then Gnoblin's
 `gnoblinctl --json output list` renderer data, then the shell's Qt renderer.
 When Qt reports OpenGL, Bingux checks the session's Xwayland renderer with

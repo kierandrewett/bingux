@@ -25,18 +25,18 @@ Item {
     Rectangle {
         anchors.fill: parent
         color: LockTheme.background
-        opacity: LockTheme.backgroundImage === "" ? 1 : 0.72
+        opacity: Theme.flatSurfaces ? 1 : LockTheme.backgroundImage === "" ? 1 : 0.72
     }
     Rectangle {
         anchors.fill: parent
         gradient: Gradient {
             GradientStop {
                 position: 0
-                color: "#33000000"
+                color: Theme.surfaceColor(Qt.rgba(0, 0, 0, 51 / 255), LockTheme.background)
             }
             GradientStop {
                 position: 1
-                color: "#99000000"
+                color: Theme.surfaceColor(Qt.rgba(0, 0, 0, 153 / 255), LockTheme.background)
             }
         }
     }
@@ -47,7 +47,7 @@ Item {
         height: content.implicitHeight + 56
         radius: 28
         color: LockTheme.surface
-        border.color: "#26ffffff"
+        border.color: Theme.surfaceColor(Qt.rgba(1, 1, 1, 38 / 255), LockTheme.surface)
         border.width: 1
 
         Column {
@@ -97,9 +97,9 @@ Item {
                 selectByMouse: false
                 background: Rectangle {
                     radius: 10
-                    color: "#22000000"
+                    color: Theme.surfaceColor(Qt.rgba(0, 0, 0, 34 / 255), LockTheme.surface)
                     border.width: 1
-                    border.color: response.activeFocus ? LockTheme.accent : "#40ffffff"
+                    border.color: response.activeFocus ? LockTheme.accent : Theme.surfaceColor(Qt.rgba(1, 1, 1, 64 / 255), LockTheme.surface)
                 }
                 onAccepted: root.submitResponse()
             }

@@ -33,7 +33,7 @@ Scope {
             readonly property real top: Math.max(0, Math.min(height, root.region.y - modelData.y))
             readonly property real right: Math.max(left, Math.min(width, root.region.x + root.region.width - modelData.x))
             readonly property real bottom: Math.max(top, Math.min(height, root.region.y + root.region.height - modelData.y))
-            readonly property color dim: "#33000000"
+            readonly property color dim: Theme.recordingShade
             Rectangle {
                 y: Theme.barHeight
                 width: shade.width
