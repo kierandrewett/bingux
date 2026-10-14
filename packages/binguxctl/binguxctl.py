@@ -7,7 +7,6 @@ import math
 from pathlib import Path
 import os
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -95,7 +94,7 @@ def parser():
     search = commands.add_parser("search", help="Control search or set its query")
     search.add_argument("action", nargs="?", default="open", choices=["open", "close", "toggle", "status", "query"])
     search.add_argument("text", nargs="*")
-    for name in ("settings", "calendar", "controls", "metrics", "keyboard", "notifications"):
+    for name in ("calendar", "controls", "metrics", "keyboard", "notifications"):
         command = commands.add_parser(name, help=f"Control {name}")
         actions = ["open", "close", "toggle", "status"]
         if name == "controls":
@@ -297,7 +296,7 @@ def invocation(args, cli):
         call = ["search", action]
     elif command == "dnd":
         call = ["shell", "dnd", action]
-    elif command in ("settings", "search", "calendar", "controls", "metrics", "keyboard", "notifications"):
+    elif command in ("search", "calendar", "controls", "metrics", "keyboard", "notifications"):
         call = ["shell", "panel", command, action]
     elif command == "sidebar":
         allowed = {
@@ -369,10 +368,6 @@ def refresh_network(prefix, query=execute, sleep=time.sleep, monotonic=time.mono
 def main(argv=None):
     cli = parser()
     args = cli.parse_args(argv)
-    if args.command == "settings":
-        launcher = os.environ.get("BINGUX_SETTINGS_APP") or shutil.which("bingux-settings")
-        if launcher:
-            return subprocess.call([launcher, args.action])
     call = invocation(args, cli)
     path = args.path or (None if args.config else os.environ.get("BINGUX_CONFIG_PATH"))
     target = args.target if args.command == "ipc" else args.command

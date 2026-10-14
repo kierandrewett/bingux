@@ -83,8 +83,6 @@ ShellRoot {
     readonly property var notificationSurfaceItem: notificationSurface
     // True when a saved bar layout holds one of Control Centre's own widgets.
     readonly property bool controlCentreNeeded: {
-        if (DesktopEditing.active)
-            return true;
         const layout = BinguxPreferences.data.desktop.layout;
         if (!layout || typeof layout !== "object")
             return false;
@@ -120,7 +118,6 @@ ShellRoot {
             windowMenuPopup.visible = false;
         if (panel !== desktopMenuPopup)
             desktopMenuPopup.visible = false;
-        const editingContainers = DesktopEditing.active && (panel === barOverflow || (controlCentre && panel === controlCentre));
         for (const widget of terminalSidebar.panelWidgets) {
             if (panel !== widget.popup)
                 widget.popup.visible = false;
@@ -133,11 +130,11 @@ ShellRoot {
             emojiPicker.close();
         if (calendarLoader.item && panel !== calendarLoader.item)
             calendarLoader.item.visible = false;
-        if (controlCentre && !editingContainers && panel !== controlCentre && !anchoredInPopup(panel, controlCentre))
+        if (controlCentre && panel !== controlCentre && !anchoredInPopup(panel, controlCentre))
             controlCentre.visible = false;
         if (metricsLoader.item && panel !== metricsLoader.item)
             metricsLoader.item.visible = false;
-        if (!editingContainers && panel !== barOverflow && !anchoredInPopup(panel, barOverflow))
+        if (panel !== barOverflow && !anchoredInPopup(panel, barOverflow))
             barOverflow.visible = false;
         if (notificationCentreLoader.item && panel !== notificationCentreLoader.item)
             notificationCentreLoader.item.visible = false;
@@ -153,90 +150,19 @@ ShellRoot {
     function toggleSearch() {
         searchOverlay.toggleSearch();
     }
-    function openWidgetMenu(id, item, window) {
-        widgetMenu.widgetId = id;
-        widgetMenu.anchorItem = item;
-        widgetMenu.anchorWindow = window.nativeWindow || window;
-        widgetMenu.visible = true;
-    }
     WindowMenu {
         id: windowMenuPopup
     }
     DesktopMenu {
         id: desktopMenuPopup
     }
-    TrayMenu {
-        id: widgetMenu
-        property string widgetId: ""
-        readonly property bool application: widgetId.startsWith("app:")
-        readonly property var appGroup: application ? dock.appGroups.find(group => "app:" + dock.pinIdentity(group.desktopEntry?.id || group.id) === widgetId) : null
-        screen: topBar.screen
-        actions: (application ? [
-                {
-                    text: appGroup && dock.isPinned(appGroup) ? "Unpin from dock" : "Pin to dock",
-                    enabled: !!appGroup && (dock.isPinned(appGroup) || !!appGroup.desktopEntry),
-                    triggered: () => {
-                        if (appGroup)
-                            dock.setPinned(appGroup, !dock.isPinned(appGroup));
-                    }
-                }
-            ] : []).concat([
-            {
-                text: "Customise…",
-                enabled: true,
-                icon: "preferences-system-symbolic",
-                triggered: () => root.settingsItem().openCustomise(widgetId, "Widget")
-            },
-            {
-                text: "Move…",
-                enabled: true,
-                icon: "transform-move-symbolic",
-                triggered: () => root.settingsItem().openCustomise(widgetId, "Move")
-            }
-        ], application ? [] : [
-            {
-                text: "Remove",
-                enabled: true,
-                icon: "list-remove-symbolic",
-                triggered: () => root.settingsItem().openCustomise(widgetId, "Remove")
-            }
-        ]).map(action => Object.assign({
-                isSeparator: false,
-                hasChildren: false,
-                checkState: Qt.Unchecked
-            }, action))
-    }
-
-    Connections {
-        target: DesktopEditing
-        function onActiveChanged() {
-            if (DesktopEditing.active) {
-                root.closePanelsExcept(null);
-                widgetMenu.visible = false;
-                const panel = root.lazyControlCentre();
-                panel.detailOpen = false;
-                Qt.callLater(() => panel.visible = DesktopEditing.active);
-            } else {
-                if (controlCentre)
-                    controlCentre.visible = false;
-                barOverflow.visible = false;
-            }
-        }
-    }
-    ProfileSettings {
+    ShellPreferences {
         id: profileSettings
     }
 
     TerminalSidebar {
         id: terminalSidebar
         onPanelOpening: popup => root.closePanelsExcept(popup)
-        onWidgetEditRequested: (id, item, window) => root.openWidgetMenu(id, item, window)
-        onCustomiseRequested: {
-            if (DesktopEditing.active)
-                root.customiserItem().selectContainer("sidebar");
-            else
-                root.settingsItem().openCustomise("", "Sidebar");
-        }
         systemMetrics: metrics
         widgetLayout: topBar
         settings: profileSettings
@@ -293,9 +219,7 @@ ShellRoot {
             };
         }
         onCommandReceived: command => {
-            if (command.action === "settings")
-                root.settingsItem().visible = true;
-            else if (command.action === "pin" && typeof command.id === "string") {
+            if (command.action === "pin" && typeof command.id === "string") {
                 const entry = dock.desktopEntryFor(dock.normaliseAppId(command.id));
                 if (entry)
                     dock.setPinned({
@@ -416,7 +340,7 @@ ShellRoot {
         sidebarScreen: terminalSidebar.screen
         leftInset: terminalSidebar.leftInset
         rightInset: terminalSidebar.rightInset
-        inputSuspended: captureTool.opened || DesktopEditing.active
+        inputSuspended: captureTool.opened
         notificationCentre: notificationCentreLoader.item
         screen: topBar.screen
         state: notificationState
@@ -466,47 +390,6 @@ ShellRoot {
         dockView: dock
     }
 
-    // Settings and the desktop editor are large and rarely open. Their sources compile the
-    // first time something asks for them; declaring them inline compiled both on every start
-    // and cost about 0.6 seconds of shell startup.
-    property var settingsObject: null
-    property var customiserObject: null
-    function customiserItem() {
-        if (!customiserObject)
-            settingsItem();
-        return customiserObject;
-    }
-    function settingsItem() {
-        if (settingsObject)
-            return settingsObject;
-        const settingsComponent = Qt.createComponent("BinguxSettings.qml");
-        const customiserComponent = Qt.createComponent("DesktopCustomise.qml");
-        if (settingsComponent.status !== Component.Ready || customiserComponent.status !== Component.Ready) {
-            console.warn("Settings failed to load:", settingsComponent.errorString(), customiserComponent.errorString());
-            return null;
-        }
-        const settings = settingsComponent.createObject(root, {
-            shellHosted: true,
-            systemMetrics: metrics,
-            dockView: dock
-        });
-        settings.currentLayout = Qt.binding(() => topBar.snapshotLayout());
-        settings.currentSidebarEdge = Qt.binding(() => terminalSidebar.edge);
-        settings.visibleChanged.connect(() => {
-            if (settings.visible)
-                root.closePanelsExcept(null);
-        });
-        settingsObject = settings;
-        const customiser = customiserComponent.createObject(root, {
-            settings: settings,
-            screen: topBar.screen
-        });
-        customiser.sidebarPanelRequested.connect(id => terminalSidebar.selectContent(id));
-        customiserObject = customiser;
-        settings.customiser = customiser;
-        return settings;
-    }
-
     IpcHandler {
         target: "shell"
         function windowMenu(payload: string): void {
@@ -521,12 +404,6 @@ ShellRoot {
             desktopMenuPopup.screen = target;
             desktopMenuPopup.requestedPosition = Qt.point(x, y);
             desktopMenuPopup.visible = true;
-        }
-        function customise(): void {
-            root.settingsItem().openCustomise("", "");
-        }
-        function customiseContainer(container: string): void {
-            root.settingsItem().openContainerCustomise(container);
         }
         function status(): string {
             return JSON.stringify({
@@ -557,7 +434,6 @@ ShellRoot {
         }
         function panel(name: string, action: string): string {
             const panels = {
-                settings: root.settingsObject,
                 calendar: calendarLoader,
                 controls: controlCentre,
                 notifications: notificationCentreLoader,
@@ -574,7 +450,7 @@ ShellRoot {
                     ok: false,
                     error: "Unknown panel action: " + action
                 });
-            const current = name === "keyboard" ? inputSourceSelector.menuOpen : name === "settings" ? !!root.settingsObject?.visible : ["calendar", "notifications", "metrics"].includes(name) ? !!panels[name].item?.visible : !!panels[name]?.visible;
+            const current = name === "keyboard" ? inputSourceSelector.menuOpen : ["calendar", "notifications", "metrics"].includes(name) ? !!panels[name].item?.visible : !!panels[name]?.visible;
             if (action === "status")
                 return JSON.stringify({
                     open: current
@@ -590,9 +466,6 @@ ShellRoot {
                     inputSourceSelector.openMenu();
                 else
                     inputSourceSelector.menuOpen = false;
-            } else if (name === "settings") {
-                if (show || root.settingsObject)
-                    root.settingsItem().visible = show;
             } else if (["calendar", "notifications", "metrics"].includes(name)) {
                 if (show || panels[name].item)
                     root.lazyPopup(panels[name]).visible = show;
@@ -683,10 +556,8 @@ ShellRoot {
         ControlCentre {
             id: controlCentre
             widgetLayout: topBar
-            onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, item.editWindow || item.barWindow || controlCentre)
-            onCustomiseRequested: root.settingsItem().openCustomise("", "")
-            anchorWindow: DesktopEditing.active ? topBar : controlCentre.movedAnchor?.barWindow || (topBar.zoneFor(systemPill) === "control-centre" ? topBar : topBar.windowFor(controlCentre.movedAnchor || systemPill))
-            anchorItem: DesktopEditing.active ? null : controlCentre.movedAnchor || (topBar.zoneFor(systemPill) === "control-centre" ? null : systemPill)
+            anchorWindow: controlCentre.movedAnchor?.barWindow || (topBar.zoneFor(systemPill) === "control-centre" ? topBar : topBar.windowFor(controlCentre.movedAnchor || systemPill))
+            anchorItem: controlCentre.movedAnchor || (topBar.zoneFor(systemPill) === "control-centre" ? null : systemPill)
             dockSafeInset: Math.max(Theme.dockExclusiveHeight, dock.dockTopFromBottom)
             indicators: systemIndicators
             screen: topBar.screen
@@ -733,9 +604,9 @@ ShellRoot {
 
     ShellPopup {
         id: barOverflow
-        keepWindowAlive: DesktopEditing.active
-        dismissOnOutsideClick: !DesktopEditing.active
-        keyboardInteractive: !DesktopEditing.active
+        keepWindowAlive: false
+        dismissOnOutsideClick: true
+        keyboardInteractive: true
         anchorWindow: topBar.windowFor(overflowButton)
         anchorItem: overflowButton
         screen: topBar.screen
@@ -790,19 +661,6 @@ ShellRoot {
                     rowSpacing: Theme.gap
                     Keys.onEscapePressed: barOverflow.visible = false
                 }
-            }
-            NativeEditSurface {
-                anchors.fill: parent
-                zoneName: "overflow"
-                visible: DesktopEditing.active && barOverflow.visible
-                geometryItem: barOverflow.body.parent
-                window: barOverflow.hostItem ? barOverflow.anchorWindow : barOverflow.nativeWindow
-                sourceOnly: true
-                vertical: true
-                entries: topBar.overflowItems.map(item => ({
-                            id: topBar.nameFor(item),
-                            item
-                        }))
             }
         }
     }
@@ -1183,7 +1041,7 @@ ShellRoot {
         exclusiveZone: Theme.barHeight
         implicitHeight: Theme.barHeight
         color: "transparent"
-        WlrLayershell.layer: DesktopEditing.active || !!popouts.states.search?.revealCompanions ? WlrLayer.Overlay : WlrLayer.Top
+        WlrLayershell.layer: !!popouts.states.search?.revealCompanions ? WlrLayer.Overlay : WlrLayer.Top
         WlrLayershell.namespace: "bingux-top-bar"
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
         anchors {
@@ -1215,46 +1073,10 @@ ShellRoot {
         }
         readonly property real editLeftBoundary: Math.max(leftControls.width, Math.min(centerControls.x, (leftControls.width + centerControls.x) / 2))
         readonly property real editRightBoundary: Math.min(width - rightControls.width, Math.max(centerControls.x + centerControls.width, (centerControls.x + centerControls.width + width - rightControls.width) / 2))
-        NativeEditSurface {
-            window: topBar
-            zoneName: "top-left"
-            x: 0
-            width: topBar.editLeftBoundary
-            height: topBar.height
-            entries: topBar.defaultControls.filter(item => topBar.zoneFor(item) === zoneName && !topBar.overflows(item)).map(item => ({
-                        id: topBar.controlNames[topBar.defaultControls.indexOf(item)],
-                        item
-                    }))
-        }
-        NativeEditSurface {
-            window: topBar
-            zoneName: "top-center"
-            x: topBar.editLeftBoundary
-            width: Math.max(0, topBar.editRightBoundary - x)
-            height: topBar.height
-            entries: topBar.defaultControls.filter(item => topBar.zoneFor(item) === zoneName && !topBar.overflows(item)).map(item => ({
-                        id: topBar.controlNames[topBar.defaultControls.indexOf(item)],
-                        item
-                    }))
-        }
-        NativeEditSurface {
-            window: topBar
-            zoneName: "top-right"
-            x: topBar.editRightBoundary
-            width: topBar.width - x
-            height: topBar.height
-            entries: topBar.defaultControls.filter(item => topBar.zoneFor(item) === zoneName && !topBar.overflows(item)).map(item => ({
-                        id: topBar.controlNames[topBar.defaultControls.indexOf(item)],
-                        item
-                    }))
-        }
         Item {
-            // The native edit surfaces above this item own all edit gestures.
-            // Disable the live controls underneath them so a click while
-            // arranging widgets cannot open a menu or change a setting.
             objectName: "topBarLiveWidgets"
-            enabled: !DesktopEditing.active
-            opacity: DesktopEditing.active ? 0.68 : 1
+            enabled: true
+            opacity: 1
             anchors.fill: parent
             GridLayout {
                 id: leftControls
@@ -1341,15 +1163,6 @@ ShellRoot {
                 GridLayout {
                     id: rightControls
                     width: topBar.hasSpring("top-right") ? topBar.zoneBudget("top-right") : implicitWidth
-                    Instantiator {
-                        model: topBar.defaultControls.filter(item => !(controlCentre?.movableWidgets ?? []).includes(item) && !terminalSidebar.panelWidgets.includes(item))
-                        delegate: WidgetEditHandle {
-                            required property var modelData
-                            control: modelData
-                            widgetId: modelData.widgetId || topBar.controlNames[topBar.defaultControls.indexOf(modelData)] || ""
-                            onRequested: (id, item) => root.openWidgetMenu(id, item, topBar.windowFor(item))
-                        }
-                    }
                     rows: 1
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
@@ -1504,16 +1317,15 @@ ShellRoot {
     Dock {
         id: dock
         screen: topBar.screen
-        WlrLayershell.layer: DesktopEditing.active || !!popouts.states.search?.revealCompanions ? WlrLayer.Overlay : WlrLayer.Top
+        WlrLayershell.layer: !!popouts.states.search?.revealCompanions ? WlrLayer.Overlay : WlrLayer.Top
         onApplicationInteracted: popouts.command("search", {
             action: "hide"
         })
-        onWidgetEditRequested: (id, item) => root.openWidgetMenu(id, item, dock)
         notifications: notificationState.allEntries
         notificationStore: notificationState
         margins.left: terminalSidebar.leftInset
         margins.right: terminalSidebar.rightInset
         settings: profileSettings
-        visible: dock.startupReady && (DesktopEditing.active || profileSettings.dockEnabled)
+        visible: dock.startupReady && (profileSettings.dockEnabled)
     }
 }

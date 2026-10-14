@@ -20,7 +20,6 @@ class InstallTest(unittest.TestCase):
             home, config = base / "home", base / "config"
             for filename in (
                 "text/libbinguxtext.so",
-                "settings/libbinguxsettings.so",
                 "effects/libbinguxeffects.so",
                 "wayland-sync/libbinguxwaylandsync.so",
                 "bingux-audio-meter",
@@ -97,7 +96,6 @@ class InstallTest(unittest.TestCase):
             build, stage = base / "build", base / "stage"
             for filename in (
                 "text/libbinguxtext.so",
-                "settings/libbinguxsettings.so",
                 "effects/libbinguxeffects.so",
                 "wayland-sync/libbinguxwaylandsync.so",
                 "bingux-audio-meter",
@@ -122,7 +120,7 @@ class InstallTest(unittest.TestCase):
                 ],
                 check=True,
             )
-            for name in ("bingux", "binguxctl", "bingux-settings", "bingux-lock", "bingux-frame"):
+            for name in ("bingux", "binguxctl", "bingux-lock", "bingux-frame"):
                 launcher = stage / "usr/bin" / name
                 self.assertTrue(launcher.stat().st_mode & 0o111)
                 subprocess.run(["sh", "-n", str(launcher)], check=True)
@@ -137,7 +135,7 @@ class InstallTest(unittest.TestCase):
             search_service = stage / "usr/libexec/bingux/search-service"
             subprocess.run(["sh", "-n", str(search_service)], check=True)
             self.assertIn("/usr/share/bingux/shell/migrate-search-config.py", search_service.read_text())
-            self.assertTrue((stage / "usr/share/bingux/shell/ProfileSettings.qml").is_file())
+            self.assertTrue((stage / "usr/share/bingux/shell/ShellPreferences.qml").is_file())
             self.assertTrue((stage / "usr/share/gnoblin/conf.d/bingux.lua").is_file())
             integration = (stage / "usr/share/gnoblin/conf.d/bingux.lua").read_text()
             self.assertIn('["ext-background-effect-v1"] = true', integration)
@@ -193,7 +191,6 @@ class InstallTest(unittest.TestCase):
             home, config = base / "home", base / "config"
             for filename in (
                 "text/libbinguxtext.so",
-                "settings/libbinguxsettings.so",
                 "effects/libbinguxeffects.so",
                 "wayland-sync/libbinguxwaylandsync.so",
                 "bingux-audio-meter",
@@ -221,7 +218,7 @@ class InstallTest(unittest.TestCase):
                 check=True,
             )
             self.assertTrue((prefix / ".bingux-install.json").is_file())
-            self.assertTrue((prefix / "share/bingux/shell/ProfileSettings.qml").is_file())
+            self.assertTrue((prefix / "share/bingux/shell/ShellPreferences.qml").is_file())
             self.assertTrue((prefix / "share/gnoblin/conf.d/bingux.lua").is_file())
             user_integration = (prefix / "share/gnoblin/conf.d/bingux.lua").read_text()
             self.assertIn(
@@ -325,7 +322,6 @@ class InstallTest(unittest.TestCase):
             home, config, bin_dir = base / "home", base / "config", base / "bin"
             for filename in (
                 "text/libbinguxtext.so",
-                "settings/libbinguxsettings.so",
                 "effects/libbinguxeffects.so",
                 "wayland-sync/libbinguxwaylandsync.so",
                 "bingux-audio-meter",
@@ -383,7 +379,6 @@ class InstallTest(unittest.TestCase):
             home, bin_dir = base / "home", base / "bin"
             for filename in (
                 "text/libbinguxtext.so",
-                "settings/libbinguxsettings.so",
                 "effects/libbinguxeffects.so",
                 "wayland-sync/libbinguxwaylandsync.so",
                 "bingux-audio-meter",

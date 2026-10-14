@@ -39,15 +39,10 @@
                     counter.popup.visible = false;
                 }
                 console.log("EXTENSION_STAGE: preview");
-                const widget = topBar.extensionWidgets[0];
-                binguxSettings.openCustomise("", "");
-                tryVerify(() => DesktopEditing.active, 3000);
-                compare(widget.enabled, false);
                 const preview = extensionPreview.createObject(topBar.contentItem);
                 tryVerify(() => !!preview.previewControl?.children[0].item, 3000);
                 compare(preview.previewControl.context.preview, true);
                 preview.destroy();
-                binguxSettings.customiser.cancel();
                 console.log("EXTENSION_STAGE: disable");
                 ExtensionRegistry.setEnabled("org.bingux.example", false);
                 tryVerify(() => !ExtensionRegistry.widget(id), 4000);
@@ -79,17 +74,6 @@
                 tryVerify(() => !!counter.popup?.visible, 3000);
                 compare(counter.popup.anchorWindow, topBar.windowFor(topBar.extensionWidgets[0]));
                 counter.popup.visible = false;
-                console.log("EXTENSION_STAGE: settings");
-                binguxSettings.page = "Extensions";
-                binguxSettings.visible = true;
-                wait(200);
-                compare(binguxSettings.pageTitle, "Extensions");
-                const extensionSettings = findChild(binguxSettings.contentItem, "extensionSettings");
-                verify(!!extensionSettings);
-                extensionSettings.selectedId = "org.bingux.example";
-                const settingsContent = findChild(extensionSettings, "extensionSettingsContent");
-                tryVerify(() => !!settingsContent.item, 3000);
-                compare(settingsContent.item.context.extensionId, "org.bingux.example");
                 extensionReport.setText("PASS");
             } catch (error) {
                 extensionReport.setText("FAIL: " + error);

@@ -74,7 +74,6 @@ def manifest(folder):
                 previewSource=component(folder, widget.get("preview", widget.get("component"))),
             )
         )
-    result["settingsSource"] = component(folder, data["settings"]) if data.get("settings") else ""
     result["entrySource"] = component(folder, data["entry"]) if data.get("entry") else ""
     return result
 

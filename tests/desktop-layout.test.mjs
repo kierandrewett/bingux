@@ -144,7 +144,6 @@ test("native portable controls can move through bar, dock and sidebar without du
         "controls-tiles",
         "control-divider",
         "control-header-space",
-        "control-customise",
     ]) {
         let current = layout.defaults();
         for (const zone of ["top-left", "top-center", "top-right", "dock", "sidebar", "palette"]) {

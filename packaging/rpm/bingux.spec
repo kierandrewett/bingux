@@ -86,7 +86,6 @@ install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bin
 %{_bindir}/bingux-wallpaper
 %{_bindir}/bingux-popouts
 %{_bindir}/bingux-search-ui
-%{_bindir}/bingux-settings
 %{_bindir}/bingux-switcher-ui
 %{_bindir}/binguxctl
 %{_bindir}/bingux-audio-meter

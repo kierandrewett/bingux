@@ -239,8 +239,7 @@ The packaged Gnoblin defaults enable blur for layer surfaces and set opacity
 only on named Bingux panels. Other layer surfaces keep their own opacity, so a
 wallpaper is not faded by the shell defaults.
 
-Set `desktop.wallpaper` in `$XDG_CONFIG_HOME/bingux/settings.json` through
-**Bingux Settings > Desktop > Wallpaper**. The value is an absolute image path.
+Set `desktop.wallpaper` in `$XDG_CONFIG_HOME/bingux/settings.json` by setting the `wallpaper` field in the `desktop` object. The value is an absolute image path.
 An empty or unreadable path leaves Gnoblin's black background visible. Bingux
 creates one background layer-shell surface per screen and converts image formats
 that Qt cannot decode into a cached PNG.

@@ -63,8 +63,8 @@ Keep data-specific menu entries in their caller; do not create another window or
 animation for each menu. Tray, keyboard, dock, calendar, and control-centre menus
 all use this component.
 
-Right-click empty wallpaper for Change Background…, Display Settings and Settings,
-which open those pages in GNOME Settings (gnome-control-center). The
+Right-click empty wallpaper for Change Background… or Display Settings, which
+open the background or display page in GNOME Settings (gnome-control-center). The
 menu opens at the pointer, clamps to the screen edges, and closes on Escape or
 a press outside.
 

@@ -62,14 +62,13 @@ For shell behaviour and configuration, see the [shell guide](shell/bingux/README
 
 ## Source layout
 
-- `shell/bingux/`: desktop UI, settings and Python helpers.
+- `shell/bingux/`: desktop UI, preference storage and Python helpers.
 - `packages/`: search and metrics daemons, native plugins and helper programs.
 - `tests/`: component, input and integration checks.
 - `scripts/test-desktop`: starts an isolated nested desktop for testing.
 - `packaging/`: native RPM and user-systemd packaging files.
 
-A complete install includes the native text and settings plugins as well as the
-QML files. Quickshell and every Qt plugin must use a compatible Qt build.
+A complete install includes the native text plugin and QML files. Quickshell and every Qt plugin must use a compatible Qt build.
 
 ## Development
 

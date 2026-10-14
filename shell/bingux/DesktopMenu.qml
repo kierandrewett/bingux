@@ -20,5 +20,5 @@ TrayMenu {
     preferredX: requestedPosition.x
     preferredY: requestedPosition.y
     compactRows: true
-    actions: [settingsAction("Change Background…", "background"), settingsAction("Display Settings", "display"), settingsAction("Settings", "")]
+    actions: [settingsAction("Change Background…", "background"), settingsAction("Display Settings", "display")]
 }

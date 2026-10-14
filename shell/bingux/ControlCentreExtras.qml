@@ -9,34 +9,6 @@ Item {
     property bool tailscaleOpen: false
     property bool publicNetworkOpen: false
     readonly property var publicNetwork: root.services.publicNetwork || ({})
-    onPageChanged: {
-        tailscaleOpen = false;
-        publicNetworkOpen = false;
-    }
-    onVisibleChanged: if (!visible) {
-        tailscaleOpen = false;
-        publicNetworkOpen = false;
-    }
-    function goBack() {
-        if (tailscaleOpen)
-            tailscaleOpen = false;
-        else
-            backRequested();
-    }
-    function togglePublicNetwork() {
-        publicNetworkOpen = !publicNetworkOpen;
-        if (publicNetworkOpen && root.services.refreshPublicNetwork)
-            root.services.refreshPublicNetwork();
-    }
-    implicitHeight: layout.implicitHeight
-    readonly property bool keyboardNavigation: back.visualFocus
-    function focusBack(reason) {
-        back.forceActiveFocus(reason);
-    }
-    signal backRequested
-    signal settingsRequested(string panel)
-    Keys.onEscapePressed: goBack()
-    Keys.onLeftPressed: goBack()
     readonly property var choices: [
         {
             id: "vpn",
@@ -69,6 +41,34 @@ Item {
             available: !!services.state.awakeAvailable
         }
     ]
+    onPageChanged: {
+        tailscaleOpen = false;
+        publicNetworkOpen = false;
+    }
+    onVisibleChanged: if (!visible) {
+        tailscaleOpen = false;
+        publicNetworkOpen = false;
+    }
+    function goBack() {
+        if (tailscaleOpen)
+            tailscaleOpen = false;
+        else
+            backRequested();
+    }
+    function togglePublicNetwork() {
+        publicNetworkOpen = !publicNetworkOpen;
+        if (publicNetworkOpen && root.services.refreshPublicNetwork)
+            root.services.refreshPublicNetwork();
+    }
+    implicitHeight: layout.implicitHeight
+    readonly property bool keyboardNavigation: back.visualFocus
+    function focusBack(reason) {
+        back.forceActiveFocus(reason);
+    }
+    signal backRequested
+    signal settingsRequested(string panel)
+    Keys.onEscapePressed: goBack()
+    Keys.onLeftPressed: goBack()
     ColumnLayout {
         id: layout
         anchors.fill: parent

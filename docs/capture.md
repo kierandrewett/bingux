@@ -169,12 +169,9 @@ python3 tests/capture-recording-controls-live.py
 # each, then both together. Checks AAC tracks, duration and full decode:
 python3 tests/capture-live.py --audio
 qs -p shell/bingux/CapturePreviewTest.qml
-# Set BINGUX_CAPTURE_SETTINGS_PATH to a temporary file:// path and
-# BINGUX_CAPTURE_TEST_RESULTS to a temporary output path for interaction tests:
+# The interaction fixture checks frozen previews, drawing and resizing, inline
+# capture options, keyboard control and Escape without recording:
 qs -p shell/bingux/CaptureInteractionTest.qml
-# With the same temporary settings/report environment, test audio switches,
-# Advanced settings, keyboard control, resize and Escape without recording:
-qs -p shell/bingux/CaptureSettingsTest.qml
 ```
 
 Live checks cover CPU and automatic H.264 recording, including duration and full

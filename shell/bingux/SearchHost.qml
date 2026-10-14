@@ -103,8 +103,5 @@ Scope {
         }
         dockView: dockProxy
         dockSafeInset: typeof session.states.desktop?.dockSafeInset === "number" ? session.states.desktop.dockSafeInset : Theme.dockExclusiveHeight
-        onSettingsRequested: session.command("desktop", {
-            action: "settings"
-        })
     }
 }

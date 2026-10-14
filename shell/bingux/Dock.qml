@@ -35,7 +35,6 @@ PanelWindow {
     }
     readonly property var folderPopup: folderPopupLoader.item
     signal applicationInteracted
-    signal widgetEditRequested(string widgetId, var control)
 
     readonly property real popupAnchorTop: (screen ? screen.height : 0) - height - margins.bottom + dockSurface.y
     readonly property alias editSurface: dockSurface
@@ -1732,26 +1731,6 @@ PanelWindow {
 
     Rectangle {
         id: dockSurface
-        NativeEditSurface {
-            anchors.fill: parent
-            window: root
-            zoneName: "dock"
-            entries: {
-                const result = [];
-                for (let i = 0; i < dockItems.count; i++) {
-                    const item = dockItems.itemAt(i);
-                    if (item)
-                        result.push({
-                            id: "app:" + root.pinIdentity(item.currentGroup.desktopEntry?.id || item.currentGroup.id),
-                            item
-                        });
-                }
-                return result.concat(Object.keys(DesktopEditing.sources).filter(id => root.preferences.layout?.dock.includes(id)).map(id => ({
-                            id,
-                            item: DesktopEditing.sources[id]
-                        })));
-            }
-        }
         readonly property real itemPadding: Math.max(0, (height - root.itemSize) / 2)
         readonly property real bottomGap: Math.max(0, root.height - y - height)
         onXChanged: rectangleUpdate.restart()
@@ -1772,8 +1751,6 @@ PanelWindow {
 
         Flickable {
             id: dockLiveWidgets
-            // Dock editing is handled by NativeEditSurface. Keep the live app
-            // buttons inert while the editor is open.
             objectName: "dockLiveWidgets"
             enabled: !DesktopEditing.active
             opacity: DesktopEditing.active ? 0.68 : 1
@@ -1847,12 +1824,6 @@ PanelWindow {
 
                     delegate: Item {
                         id: dockButton
-                        WidgetEditHandle {
-                            control: dockButton
-                            widgetId: "app:" + root.pinIdentity(dockButton.currentGroup.desktopEntry?.id || dockButton.currentGroup.id)
-                            visible: !dockButton.currentGroup.folder
-                            onRequested: (id, item) => root.widgetEditRequested(id, item)
-                        }
 
                         required property var modelData
                         readonly property var currentGroup: root.appGroups.find(group => group.id === modelData.id) ?? {

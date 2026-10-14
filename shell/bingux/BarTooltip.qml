@@ -28,7 +28,7 @@ Scope {
     readonly property point followedPosition: {
         if (!shown)
             return Qt.point(0, 0);
-        // A hovered widget can move while its container leaves Customise UI.
+        // A hovered widget can move while its container moves between containers.
         // Follow its geometry without a polling timer or a second hover event.
         DesktopEditing.observeGeometry(anchorItem);
         if (hostItem)
@@ -91,7 +91,7 @@ Scope {
             height: implicitHeight
             text: root.text
             details: root.details
-            supportingText: root.supportingText || ((root.reorderable || root.detectedReorderable) && DesktopEditing.active ? "Shift + right-click to customise" : "")
+            supportingText: root.supportingText
             wrapText: true
         }
     }

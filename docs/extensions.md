@@ -1,7 +1,7 @@
 # Write a Bingux extension
 
 An extension is a folder with an `extension.json` manifest and QML files. It can add widgets,
-run background code, expose actions, open popups and provide its own settings page.
+run background code, expose actions and open popups.
 Its QML can use Qt and Quickshell directly. The host does not prescribe a widget's contents.
 
 Extensions are trusted code. They run in the shell process with the user's access to files,
@@ -14,9 +14,14 @@ Copy an extension into `~/.local/share/bingux/extensions/<id>/`. The folder name
 its manifest ID. System packages can use `/usr/share/bingux/extensions/<id>/` or
 `/usr/local/share/bingux/extensions/<id>/`. XDG data paths are respected; a user copy takes precedence.
 
-Open **Bingux Settings > Extensions**, select **Reload extensions**, then enable the extension.
-Its widgets appear in **Customise UI**. Drag them into the bar, dock, sidebar or control centre.
-The normal layout file stores their position and display overrides.
+Enable an extension from a terminal, then ask the running shell to reload it:
+
+```sh
+python3 shell/bingux/extensions.py enable org.bingux.example
+binguxctl ipc extensions reload
+```
+
+Existing saved widget placements remain in the layout.
 
 From a source checkout, the same controls are available from the command line:
 
@@ -48,7 +53,6 @@ Start the shell with `BINGUX_NO_EXTENSIONS=1` to bypass all extensions during re
     "name": "Home",
     "apiVersion": 1,
     "entry": "Service.qml",
-    "settings": "Settings.qml",
     "widgets": [
         {
             "id": "status",
@@ -61,8 +65,8 @@ Start the shell with `BINGUX_NO_EXTENSIONS=1` to bypass all extensions during re
 }
 ```
 
-Only `id`, `name` and `apiVersion` are required at the top level. `entry`, `settings`,
-`widgets`, `icon` and `preview` are optional. Preview defaults to the widget component.
+Only `id`, `name` and `apiVersion` are required at the top level. `entry` and
+`widgets` are optional. Preview defaults to the widget component.
 Extra metadata is accepted. IDs use lower-case letters, digits, dots, hyphens and underscores,
 start with a letter or digit, and are at most 128 characters. Component paths are relative
 QML files inside the extension folder.
@@ -78,7 +82,7 @@ Do not silently change API 1 behaviour or remove it with an ordinary shell updat
 
 ## Component context
 
-Each entry point, widget, preview and settings component declares:
+Each entry point, widget and preview component declares:
 
 ```qml
 required property var context
@@ -94,12 +98,12 @@ Clean up external changes, processes and signal connections that your code owns.
 | `apiVersion`                     | Host contract, currently `1`                                           |
 | `extensionId`, `widgetId`        | Owner IDs; `widgetId` is empty outside widgets                         |
 | `preview`                        | Use sample data and do not start live work                             |
-| `editing`                        | Customise UI is active, or this is a preview                           |
+| `editing`                        | `true` in previews; `false` for widgets running in the shell           |
 | `container`                      | Current placement, such as `top-right`, `dock` or `sidebar`            |
 | `anchorWindow`, `anchorItem`     | Current window and item for a widget popup                             |
 | `presentation`                   | Effective label, icon, display mode, `showIcon` and `showText`         |
 | `theme`                          | Shell theme; supported tokens listed below                             |
-| `reportError(message)`           | Add an error to Settings > Extensions                                  |
+| `reportError(message)`           | Report an extension error to the shell                                 |
 | `registerAction(name, callback)` | Register `<extensionId>/<name>`; removed when the context is destroyed |
 | `invokeAction(id, payload)`      | Call a registered action and return its result                         |
 | `publish(name, payload)`         | Send an event to extension contexts                                    |
@@ -114,8 +118,8 @@ Use `Connections { target: context; function onEvent(name, payload) { ... } }` t
 Action names and event names should include the extension ID to avoid collisions. Actions are
 synchronous; start slow work asynchronously. A missing action throws an error.
 
-The host disables widget input during customisation. Extensions must also honour `editing`
-for their own shortcuts and separate windows. Previews always have `editing: true`.
+Previews have `editing: true`; runtime widgets have `editing: false`. Extensions should
+honour this property for shortcuts and separate windows.
 A preview can use the same component with mock data, or a separate preview component.
 
 ## Shared shell controls
@@ -126,7 +130,7 @@ Full custom QML is supported. These optional helpers reuse Bingux's existing com
   and connect its `clicked` signal. Its presentation and window follow the widget placement.
 - `context.createFace(parent, properties)` creates the shell icon/text presentation.
 - `context.createPopup(contentComponent, properties)` creates the shell popup. It follows the
-  widget across containers, uses normal dismissal and motion, and closes during customisation.
+  widget across containers and uses normal dismissal and motion.
   Its content receives `context`. Set `popupWidth` and content `implicitHeight`; toggle
   `popup.visible` to open and close. This helper returns `null` in previews.
 
@@ -135,12 +139,12 @@ owns popups and destroys them on unload. A QML component can also own its
 own UI, processes, models and windows without using the helpers. See the runnable
 [counter example](../examples/extensions/org.bingux.example/Counter.qml).
 
-## Settings and deeper changes
+## Extension configuration
 
-The optional `settings` component appears under **Configure** on the Extensions page.
-It can provide any QML UI. Store its settings separately from the desktop layout, for example
-in `$XDG_CONFIG_HOME/bingux/extensions/<id>/`. Keep access tokens in a separate private file
-or a secret service. The extension controls its own schema and migration.
+The host does not load a manifest `settings` component. Extensions that need configuration
+should expose their own documented file or command and store it separately from the desktop
+layout, for example under `$XDG_CONFIG_HOME/bingux/extensions/<id>/`. Keep access tokens in a
+private file or a secret service. The extension controls its own schema and migration.
 
 In the main shell process, `context.unstable` exposes `root`, `topBar`, `dock`, `controlCentre`
 and `sidebar`. These are actual objects, so an extension can connect signals, create children
@@ -148,7 +152,7 @@ or replace behaviour. Control Centre is created after startup settles or when fi
 `context.unstable.controlCentre` can be `null` before then. A saved layout that places its
 widgets in the bar creates it immediately. This access is deliberately open. Restore
 modifications on unload and check members before use. The objects can change between releases.
-`unstable` is `null` in standalone Settings and other processes without the main shell.
+`unstable` is `null` in processes without the main shell.
 
 Use the supported context when it covers a feature. If an internal hook proves useful to
 several extensions, add it to the public contract with tests instead of forcing each extension

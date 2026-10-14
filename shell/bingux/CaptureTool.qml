@@ -1130,7 +1130,7 @@ Scope {
                         }
                     }
                 }
-                CaptureSettings {
+                CaptureOptions {
                     id: optionsPanel
                     parent: toolbar
                     width: 360

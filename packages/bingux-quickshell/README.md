@@ -5,10 +5,6 @@ A layer surface must record the settings sent when it is created. Quickshell
 returns to its default before the next commit, the compositor keeps the old
 value.
 
-In Customise UI, this can leave the sidebar accepting keyboard focus,
-so a mouse press takes focus from the editor and the return of focus cancels
-the button click.
-
 `layer-initial-state.patch` records the initial settings in the existing
 committed-state snapshot. Downstream package builders can apply it when they
 build the matching Quickshell release.

@@ -15,7 +15,7 @@ def check_file(path):
         config = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "bingux/settings.json"
         preferences = json.loads(config.read_text()).get("previews", {})
         if preferences.get("enabled") is False:
-            raise ValueError("File previews are disabled in Bingux Settings.")
+            raise ValueError("File previews are disabled.")
         maximum = preferences.get("maxMegabytes", 20)
         if type(maximum) is int:
             limit = min(MAX_FILE_BYTES, max(1, maximum) * 1_000_000)

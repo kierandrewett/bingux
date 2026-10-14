@@ -55,13 +55,6 @@ FocusScope {
         width: parent.width
         height: root.cardHeight
     }
-    WidgetEditHandle {
-        control: fullContent
-        widgetId: root.editWidgetId
-        previewSource: false
-        visible: root.barLayout && root.editWidgetId !== ""
-        onRequested: (id, item) => root.editRequested(id, item)
-    }
     ShellPopup {
         id: details
         objectName: "mediaDetailsPopup"

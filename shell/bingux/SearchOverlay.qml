@@ -206,7 +206,6 @@ PanelWindow {
     property bool chatMode: false
     property bool chatPending: false
     property string pendingChatPrompt: ""
-    signal settingsRequested
     property string streamingChatText: ""
     property var chatTranscript: []
     property var displayedResults: []
@@ -744,7 +743,7 @@ PanelWindow {
                 root.chatPending = false;
                 root.chatTranscript = root.chatTranscript.map(entry => entry.pending ? {
                         prompt: entry.prompt,
-                        message: (root.streamingChatText ? root.streamingChatText + "\n\n" : "") + "The AI request failed. Check your CLI login and model in Bingux Settings, then try again."
+                        message: (root.streamingChatText ? root.streamingChatText + "\n\n" : "") + "The AI request failed. Check your CLI login and model, then try again."
                     } : entry);
                 root.pendingChatPrompt = "";
                 root.queryError = failedChat ? "AI unavailable" : root.errorMessage(code);
@@ -1128,15 +1127,14 @@ PanelWindow {
                         }
                     }
 
-                    ActionButton {
+                    Text {
                         visible: root.quickChatEnabled && searchInput.text.trim().startsWith("!") && root.chatPrompt() !== "" && root.queryComplete && root.results.length === 0 && !root.chatMode
-                        text: "Set up AI in Bingux Settings"
-                        iconName: "preferences-system-symbolic"
                         Layout.fillWidth: true
-                        onClicked: {
-                            root.closeSearch();
-                            root.settingsRequested();
-                        }
+                        text: "Edit AI preferences in ~/.config/bingux/settings.json"
+                        wrapMode: Text.Wrap
+                        color: Theme.muted
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSmall
                     }
 
                     ListView {

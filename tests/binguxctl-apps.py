@@ -16,7 +16,7 @@ shutil.copytree(repo / "shell/bingux", config, ignore=shutil.ignore_patterns("__
 fixture = config / "AppControlTest.qml"
 fixture.write_text("""import Quickshell
 ShellRoot {
-    ProfileSettings { id: profile }
+    ShellPreferences { id: profile }
     Dock { id: dock; settings: profile }
     ShellCommands { indicators: null; mediaControls: null; notificationState: null; dockView: dock }
 }

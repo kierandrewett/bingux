@@ -13,7 +13,7 @@ GridLayout {
     property var desktop: DesktopEditing.desktop
     property var widgetLayout: null
     property var barWindow: null
-    property bool editingEnabled: true
+    property bool editingEnabled: false
     property bool active: false
     property var bluetoothAdapter: null
     property var mediaPlayers: []
@@ -22,7 +22,6 @@ GridLayout {
     signal settingsRequested(string panel)
     signal detailRequested(string page, var trigger, string audioTab)
     signal lockRequested
-    signal widgetEditRequested(string widgetId, var control)
     signal customiseRequested
     signal playerSelected(var player)
     function settings(panel) {
@@ -94,17 +93,6 @@ GridLayout {
         Component.onCompleted: if (root.editingEnabled)
             DesktopEditing.registerSource(widgetId, group)
         Component.onDestruction: DesktopEditing.unregisterSource(widgetId, group)
-        TapHandler {
-            id: groupEdit
-            enabled: root.editingEnabled
-            acceptedButtons: Qt.RightButton
-            acceptedModifiers: Qt.ShiftModifier
-            onTapped: {
-                if (group.memberEntries.some(entry => entry.item.visible && entry.item.contains(entry.item.mapFromItem(group, groupEdit.point.position))))
-                    return;
-                root.widgetEditRequested(group.widgetId, group);
-            }
-        }
     }
     component ActionWidget: IconButton {
         id: action
@@ -122,13 +110,6 @@ GridLayout {
         barWindow: placed && root.widgetLayout ? root.widgetLayout.windowFor(action) : headerControls.barWindow
         implicitHeight: barLayout ? Theme.barHeight : 32
         presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "controls-header", label, iconName, true, false, placed ? "" : headerControls.container || "control-centre")
-        WidgetEditHandle {
-            previewSource: root.editingEnabled
-            visible: root.editingEnabled
-            control: action
-            widgetId: action.widgetId
-            onRequested: (id, item) => root.widgetEditRequested(id, item)
-        }
         Component.onCompleted: root.actionWidgets = root.actionWidgets.concat([action])
         Component.onDestruction: root.actionWidgets = root.actionWidgets.filter(item => item !== action)
     }
@@ -147,13 +128,6 @@ GridLayout {
         Layout.row: placed ? root.widgetLayout.controlRow(audio) : (barLayout ? 0 : root.groupPosition("controls-audio", widgetId))
         Layout.column: placed ? root.widgetLayout.controlColumn(audio) : (barLayout ? root.groupPosition("controls-audio", widgetId) : 0)
         presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "controls-audio", label, muteIconName, true, false, placed ? "" : audioRows.container || "control-centre")
-        WidgetEditHandle {
-            previewSource: root.editingEnabled
-            visible: root.editingEnabled
-            control: audio
-            widgetId: audio.widgetId
-            onRequested: (id, item) => root.widgetEditRequested(id, item)
-        }
     }
     component QuickWidget: ControlRow {
         id: quick
@@ -171,13 +145,6 @@ GridLayout {
         Layout.column: placed ? root.widgetLayout.controlColumn(quick) : (barLayout ? root.widgetOrder.indexOf(controlName) : root.controlCell(controlName).column)
         Layout.columnSpan: placed || barLayout ? 1 : root.controlSpan(controlName)
         presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "controls-tiles", title, iconName, true, !barLayout, placed ? "" : quickRows.container || "control-centre")
-        WidgetEditHandle {
-            previewSource: root.editingEnabled
-            visible: root.editingEnabled
-            control: quick
-            widgetId: quick.widgetId
-            onRequested: (id, item) => root.widgetEditRequested(id, item)
-        }
         BarTooltip {
             anchorItem: quick
             barWindow: placed && root.widgetLayout ? root.widgetLayout.windowFor(quick) : quickRows.barWindow
@@ -267,13 +234,6 @@ GridLayout {
             implicitHeight: Theme.barHeight
             Layout.fillWidth: !barLayout && !fixedWidth
             Layout.preferredWidth: barLayout || fixedWidth ? gapSize : -1
-            WidgetEditHandle {
-                previewSource: root.editingEnabled
-                visible: root.editingEnabled
-                control: headerSpace
-                widgetId: headerSpace.widgetId
-                onRequested: (id, item) => root.widgetEditRequested(id, item)
-            }
         }
         BatteryStatus {
             id: batteryControl
@@ -295,13 +255,6 @@ GridLayout {
             presentation: Object.assign({}, DesktopLayout.presentation(root.desktop, widgetId, container || "controls-header", label, batteryControl.iconName, true, true, placed ? "" : headerControls.container || "control-centre"), {
                 custom: true
             })
-            WidgetEditHandle {
-                previewSource: root.editingEnabled
-                visible: root.editingEnabled
-                control: batteryControl
-                widgetId: batteryControl.widgetId
-                onRequested: (id, item) => root.widgetEditRequested(id, item)
-            }
         }
         ActionWidget {
             id: settingsControl
@@ -384,14 +337,6 @@ GridLayout {
         implicitHeight: barLayout ? Theme.barHeight - 12 : 1
         color: Theme.outline
         opacity: 0.5
-        WidgetEditHandle {
-            previewSource: root.editingEnabled
-            visible: root.editingEnabled
-            control: dividerControl
-            anchors.margins: -5
-            widgetId: dividerControl.widgetId
-            onRequested: (id, item) => root.widgetEditRequested(id, item)
-        }
     }
     NativeGroup {
         id: quickRows
@@ -516,7 +461,6 @@ GridLayout {
         id: mediaControl
         objectName: "controlMediaCard"
         editWidgetId: widgetId
-        onEditRequested: (id, item) => root.widgetEditRequested(id, item)
         readonly property string widgetId: "control-media"
         readonly property string container: DesktopLayout.zone(root.desktop.layout || {}, widgetId)
         readonly property bool placed: root.widgetLayout !== null && container !== ""
@@ -528,13 +472,6 @@ GridLayout {
         visible: placed || root.sectionRow(widgetId) >= 0
         Layout.fillWidth: !barLayout
         presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "control-centre", player ? player.trackTitle || player.identity : "Media playback", "applications-multimedia-symbolic", true, true)
-        WidgetEditHandle {
-            previewSource: root.editingEnabled
-            visible: root.editingEnabled
-            control: mediaControl
-            widgetId: mediaControl.widgetId
-            onRequested: (id, item) => root.widgetEditRequested(id, item)
-        }
         player: root.mediaPlayer
         playerOptions: root.mediaPlayers
         onPlayerSelected: selectedPlayer => root.playerSelected(selectedPlayer)
@@ -559,17 +496,10 @@ GridLayout {
         text: "Customise controls..."
         iconName: "document-edit-symbolic"
         presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "control-centre", text, iconName, barLayout, !barLayout)
-        WidgetEditHandle {
-            previewSource: root.editingEnabled
-            visible: root.editingEnabled
-            control: customiseControl
-            widgetId: customiseControl.widgetId
-            onRequested: (id, item) => root.widgetEditRequested(id, item)
-        }
         BarTooltip {
             anchorItem: customiseControl
             barWindow: customiseControl.barWindow
-            requested: root.editingEnabled && customiseControl.barLayout && customiseControl.hovered
+            requested: root.active && customiseControl.barLayout && customiseControl.hovered
             text: customiseControl.displayedText
         }
         onClicked: root.customiseRequested()

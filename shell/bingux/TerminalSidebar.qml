@@ -9,8 +9,6 @@ import "DesktopLayout.js" as DesktopLayout
 
 Scope {
     id: root
-    signal widgetEditRequested(string widgetId, var control, var window)
-    signal customiseRequested
     signal panelOpening(var popup)
     required property var settings
     property var systemMetrics: null
@@ -24,7 +22,6 @@ Scope {
     component PanelWidget: SidebarPanelWidget {
         sidebar: root
         widgetLayout: root.widgetLayout
-        onEditRequested: (id, item, window) => root.widgetEditRequested(id, item, window)
         onOpening: popup => root.panelOpening(popup)
     }
     PanelWidget {
@@ -691,20 +688,6 @@ Scope {
                 requested: panel.visible
             }
             readonly property real geometryRevision: panel.reveal
-            NativeEditSurface {
-                anchors.fill: parent
-                anchors.topMargin: sidebarHeader.height
-                geometryItem: panelSurface
-                window: panel
-                zoneName: "sidebar"
-                vertical: true
-                entries: (root.activePanel ? [
-                        {
-                            id: root.contentType,
-                            item: root.activePanel
-                        }
-                    ] : []).concat(root.externalEntries)
-            }
             width: root.edge === "top" ? panel.width : panel.extent
             height: root.edge === "top" ? panel.extent : panel.height
             x: root.edge === "right" ? panel.width - width : 0
@@ -754,12 +737,6 @@ Scope {
                         ActionButton {
                             id: contentPicker
                             objectName: "sidebarContentPicker"
-                            WidgetEditHandle {
-                                control: contentPicker
-                                widgetId: root.contentType
-                                previewSource: false
-                                onRequested: (id, item) => root.widgetEditRequested(id, item, root.widgetWindow)
-                            }
                             text: root.currentContent.label
                             presentation: DesktopLayout.presentation(DesktopEditing.desktop, root.contentType, "sidebar", root.currentContent.label, root.currentContent.icon, true, true)
                             alignLeft: true
@@ -819,7 +796,7 @@ Scope {
                         visible: !root.contentType && !root.externalEntries.length
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        text: DesktopEditing.active ? "Drop widgets here" : "Add widgets in Customise UI"
+                        text: DesktopEditing.active ? "Drop widgets here" : "Add widgets to the saved layout"
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                         wrapMode: Text.Wrap
@@ -1037,12 +1014,6 @@ Scope {
                         id: sidebarWidget
                         required property var modelData
                         objectName: "sidebar-select-" + modelData.id
-                        WidgetEditHandle {
-                            control: sidebarWidget
-                            widgetId: sidebarWidget.modelData.id
-                            previewSource: false
-                            onRequested: (id, item) => root.widgetEditRequested(id, item, contentMenu)
-                        }
                         readonly property bool menuEntry: true
                         signal triggered
                         text: modelData.label
@@ -1133,24 +1104,6 @@ Scope {
                     color: Theme.barDivider
                     Layout.topMargin: 4
                     Layout.bottomMargin: 4
-                }
-                ActionButton {
-                    id: sidebarCustomise
-                    readonly property bool menuEntry: true
-                    signal triggered
-                    text: "Customise sidebar…"
-                    iconName: "preferences-system-symbolic"
-                    Layout.fillWidth: true
-                    implicitHeight: 36
-                    flat: true
-                    alignLeft: true
-                    cornerRadius: contentMenu.contentRadius
-                    Keys.forwardTo: [contentNavigation]
-                    onClicked: triggered()
-                    onTriggered: {
-                        contentMenu.visible = false;
-                        root.customiseRequested();
-                    }
                 }
             }
         }
