@@ -17,6 +17,7 @@ QtObject {
     property bool trackPrivacy: false
     property bool trackWindowDrag: false
     property bool trackWindowMenu: false
+    property bool trackWindowResponsiveness: false
     property bool helloReceived: false
     property bool nativeProtocol: false
     property bool apiReady: false
@@ -40,6 +41,8 @@ QtObject {
     signal snapCompleted(var state)
     signal privacySnapshot(var state)
     signal windowMenuRequested(var request)
+    signal windowResponsivenessChanged(var window)
+    signal windowClosed(string windowId)
     readonly property bool ready: socket.connected && helloReceived && (nativeProtocol ? apiReady && ownedBindings.length === (enabled ? bindings.length : 0) : boundCount === bindings.length)
     readonly property bool connected: socket.connected
     signal activated(string id, bool first, int modifiers, string focusContext)
@@ -569,6 +572,8 @@ QtObject {
             events.push("gnoblin.privacy.changed");
         if (trackWindowDrag)
             events.push("gnoblin.window.drag.started", "gnoblin.window.drag.updated", "gnoblin.window.drag.ended");
+        if (trackWindowResponsiveness)
+            events.push("gnoblin.window.changed", "gnoblin.window.closed");
         if (trackWindowMenu) {
             if (apiMinor >= 27)
                 events.push("gnoblin.window.menu-requested");
@@ -725,6 +730,11 @@ QtObject {
                         root.handleOperationCompletion(record);
                     } else if (root.nativeProtocol && record.event === "gnoblin.privacy.changed") {
                         root.privacySnapshot(record.state || {});
+                    } else if (root.nativeProtocol && root.trackWindowResponsiveness && record.event === "gnoblin.window.changed") {
+                        if ((record.changed || []).includes("unresponsive") && record.window)
+                            root.windowResponsivenessChanged(record.window);
+                    } else if (root.nativeProtocol && root.trackWindowResponsiveness && record.event === "gnoblin.window.closed") {
+                        root.windowClosed(String(record.window_id));
                     } else if (root.nativeProtocol && record.event === "gnoblin.window.menu-requested") {
                         root.windowMenuRequested(record);
                     } else if (root.nativeProtocol && record.event === "gnoblin.window.drag.started") {
