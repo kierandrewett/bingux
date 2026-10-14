@@ -76,7 +76,7 @@ Item {
             ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 0
-                SettingsRow {
+                CaptureOptionRow {
                     objectName: "captureSystemAudio"
                     visible: root.video
                     title: "System audio"
@@ -88,7 +88,7 @@ Item {
                     toggleChecked: root.systemAudio
                     onToggleRequested: root.setAudio(!root.systemAudio, root.microphone)
                 }
-                SettingsRow {
+                CaptureOptionRow {
                     objectName: "captureMicrophoneAudio"
                     visible: root.video
                     title: "Microphone"
@@ -100,14 +100,14 @@ Item {
                     toggleChecked: root.microphone
                     onToggleRequested: root.setAudio(root.systemAudio, !root.microphone)
                 }
-                SettingsRow {
+                CaptureOptionRow {
                     title: "Show pointer"
                     rowInteractive: false
                     toggleVisible: true
                     toggleChecked: preferences.cursor
                     onToggleRequested: preferences.cursor = !preferences.cursor
                 }
-                SettingsRow {
+                CaptureOptionRow {
                     visible: !root.video
                     title: "Copy to clipboard"
                     rowInteractive: false
@@ -148,7 +148,7 @@ Item {
                 value: preferences.quality
                 onChosen: value => preferences.quality = value
             }
-            SettingsRow {
+            CaptureOptionRow {
                 objectName: "captureSaveFolder"
                 title: "Save to"
                 subtitle: preferences.directory || (root.video ? "Videos / Recordings" : "Pictures / Screenshots")
@@ -157,7 +157,7 @@ Item {
                 onActionTriggered: preferences.directory = ""
                 onClicked: folderPicker.open()
             }
-            SettingsRow {
+            CaptureOptionRow {
                 objectName: "captureAdvancedSettings"
                 title: "Advanced"
                 navigation: true

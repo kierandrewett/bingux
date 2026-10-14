@@ -153,8 +153,6 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         source / "packages/bingux-wayland-sync/qmldir": qml / "Bingux/Wayland/qmldir",
         build / "text/libbinguxtext.so": qml / "Bingux/Text/libbinguxtext.so",
         source / "packages/bingux-text-layout/qmldir": qml / "Bingux/Text/qmldir",
-        build / "settings/libbinguxsettings.so": qml / "Bingux/Settings/libbinguxsettings.so",
-        source / "packages/bingux-settings/platform/qmldir": qml / "Bingux/Settings/qmldir",
         build / "bingux-audio-meter": prefix / "bin/bingux-audio-meter",
         build / "bingux-image-clipboard": prefix / "libexec/bingux/bingux-image-clipboard",
         build / "bingux-frame": prefix / "libexec/bingux/bingux-frame",
@@ -265,7 +263,6 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     )
     installed.append(entry_path.relative_to(prefix))
     copy(source / "packages/binguxctl/binguxctl.py", prefix / "libexec/bingux/binguxctl.py")
-    copy(source / "packages/bingux-settings/bingux-settings", prefix / "libexec/bingux/bingux-settings", True)
     if managed:
         copy(source / "scripts/install-shell.py", prefix / "libexec/bingux/install-shell.py", True)
 
@@ -282,7 +279,6 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     common += "export BINGUX_ADWAITA_ICON_DIR=" + shlex.quote(str(prefix / "share/icons/Adwaita")) + "\n"
     common += "export BINGUX_CONFIG_PATH=" + shlex.quote(str(shell)) + "\n"
     common += "export BINGUX_AUDIO_METER=" + shlex.quote(str(prefix / "bin/bingux-audio-meter")) + "\n"
-    common += "export BINGUX_SETTINGS_QML=" + shlex.quote(str(shell / "settings.qml")) + "\n"
     wrappers = {
         "bingux": 'exec "${BINGUX_QUICKSHELL:-qs}" -p "$BINGUX_CONFIG_PATH" "$@"\n',
         "bingux-search-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
@@ -304,7 +300,6 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         + shlex.quote(str(shell / "WallpaperShell.qml"))
         + ' "$@"\n',
         "bingux-lock": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "LockShell.qml")) + ' "$@"\n',
-        "bingux-settings": "exec " + shlex.quote(str(prefix / "libexec/bingux/bingux-settings")) + ' "$@"\n',
         "binguxctl": "exec python3 " + shlex.quote(str(prefix / "libexec/bingux/binguxctl.py")) + ' "$@"\n',
         "bingux-frame": "exec " + shlex.quote(str(prefix / "libexec/bingux/bingux-frame")) + ' "$@"\n',
     }
@@ -400,7 +395,6 @@ def integration_paths(prefix, managed=False):
         "bingux-popouts",
         "bingux-wallpaper",
         "bingux-lock",
-        "bingux-settings",
         "binguxctl",
         "bingux-frame",
         "bingux-clipboard-paste",

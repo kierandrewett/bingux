@@ -10,7 +10,7 @@ import "ControlLayout.js" as ControlLayout
 
 ShellPopup {
     id: root
-    keepWindowAlive: DesktopEditing.active
+    keepWindowAlive: false
     readonly property var groupedLayout: controls.groupedLayout
     function snapshotLayout() {
         return JSON.parse(JSON.stringify(BinguxPreferences.data.desktop.controlLayout || ControlLayout.defaults()));
@@ -22,8 +22,6 @@ ShellPopup {
         return ControlLayout.position(groupedLayout, group, id);
     }
     required property var indicators
-    signal widgetEditRequested(string widgetId, var control)
-    signal customiseRequested
     property var widgetLayout: null
     readonly property alias widgetHost: controls
     readonly property var externalEntries: widgetLayout ? widgetLayout.defaultControls.map(item => ({
@@ -52,9 +50,6 @@ ShellPopup {
     function detailPageItem() {
         pagesRequested = true;
         return detailLoader.item;
-    }
-    function controlChoices() {
-        return extrasPage().choices;
     }
     function deviceControls() {
         return detailPageItem();
@@ -142,12 +137,8 @@ ShellPopup {
     property var selectedMediaPlayer: null
     property var mediaPlayer: mediaPlayers.indexOf(selectedMediaPlayer) >= 0 ? selectedMediaPlayer : mediaPlayers.find(player => player.isPlaying) || mediaPlayers[0] || null
     popupWidth: Theme.notificationWidth + contentPadding * 2
-    readonly property real editorTop: Theme.barHeight + 40 + (DesktopEditing.editor?.topInset || 0)
     property real dockSafeInset: Theme.dockExclusiveHeight
-    popupSafeTop: DesktopEditing.active ? editorTop : Theme.barHeight + Theme.gap
     popupDockSafeBottom: height - dockSafeInset - Theme.gap
-    popupBelowAnchorY: DesktopEditing.active ? editorTop : belowAnchorY
-    popupAnchorAbove: !DesktopEditing.active && anchorAbove
     property real controlsHeight: Math.min(detailOpen ? (activeDetailView?.implicitHeight || 0) : Math.max(96, controls.implicitHeight), Math.max(0, maximumPopupHeight - contentPadding * 2))
     Behavior on controlsHeight {
         enabled: root.visible && root.revealScale === 1
@@ -157,29 +148,10 @@ ShellPopup {
         }
     }
     popupHeight: Math.ceil(controlsHeight) + contentPadding * 2
-    preferredX: DesktopEditing.active ? width - popupWidth - DesktopEditing.editor.rightInset - 24 : anchorItem ? anchorPosition.x - popupWidth : width - popupWidth - Theme.padding
-
-    preferredY: DesktopEditing.active ? editorTop : anchorItem ? (anchorAbove ? anchorTop - popupHeight - Theme.gap : anchorPosition.y + Theme.gap) : Theme.barHeight + Theme.gap
-    dismissOnOutsideClick: !DesktopEditing.active
-    keyboardInteractive: !DesktopEditing.active
-    NativeEditSurface {
-        parent: root.body.parent
-        anchors.fill: parent
-        window: root.nativeWindow
-        zoneName: "control-centre"
-        vertical: ControlLayout.groupFor(DesktopEditing.editor?.draggedId || "") !== "controls-header"
-        geometryItem: {
-            const group = ControlLayout.groupFor(DesktopEditing.editor?.draggedId || "");
-            return group === "controls-header" && controls.headerGroup.visible && !controls.headerGroup.placed ? controls.headerGroup : group === "controls-audio" && controls.audioGroup.visible && !controls.audioGroup.placed ? controls.audioGroup : root.body.parent;
-        }
-        entries: root.movableWidgets.filter(item => !item.barLayout && !item.memberEntries).map(item => ({
-                    id: item.widgetId,
-                    item
-                })).concat(root.movableWidgets.filter(item => !item.barLayout && item.memberEntries).map(item => ({
-                    id: item.widgetId,
-                    item
-                }))).concat(root.externalEntries).filter(entry => entry.item.Window.window === root.body.Window.window)
-    }
+    preferredX: anchorItem ? anchorPosition.x - popupWidth : width - popupWidth - Theme.padding
+    preferredY: anchorItem ? (anchorAbove ? anchorTop - popupHeight - Theme.gap : anchorPosition.y + Theme.gap) : Theme.barHeight + Theme.gap
+    dismissOnOutsideClick: true
+    keyboardInteractive: true
 
     function settings(panel) {
         Quickshell.execDetached(["python3", decodeURIComponent(Qt.resolvedUrl("application_spawn.py").toString().replace(/^file:\/\//, "")), "--", "env", "XDG_CURRENT_DESKTOP=GNOME", "gnome-control-center", panel]);
@@ -189,14 +161,14 @@ ShellPopup {
     Item {
         id: controlDeck
         objectName: "controlLiveWidgets"
-        enabled: !DesktopEditing.active
-        opacity: DesktopEditing.active ? 0.68 : 1
+        enabled: true
+        opacity: 1
         width: parent.width
         height: root.controlsHeight
         Text {
             anchors.centerIn: parent
             visible: !root.detailOpen && controls.implicitHeight === 0
-            text: DesktopEditing.active ? "Drop widgets here" : "No controls here"
+            text: "No controls here"
             color: Theme.muted
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSize
@@ -240,8 +212,7 @@ ShellPopup {
                     Quickshell.execDetached(["bingux-lock"]);
                     root.visible = false;
                 }
-                onWidgetEditRequested: (id, item) => root.widgetEditRequested(id, item)
-                onCustomiseRequested: root.customiseRequested()
+                onCustomiseRequested: root.openDetail("customise", null, "")
                 onPlayerSelected: player => root.selectedMediaPlayer = player
             }
         }

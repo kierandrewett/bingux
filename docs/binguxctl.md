@@ -161,7 +161,9 @@ binguxctl awake on
 ```
 
 Control-centre pages are `network`, `bluetooth`, `audio`, `display`, `vpn`,
-`power` and `customise`. Opening a page is idempotent. `--input` opens the
+`power` and `customise`. The customise page controls which optional items appear
+in the Control Centre; it does not enable their system features. Opening a page
+is idempotent. `--input` opens the
 microphone tab on the audio page. Audio device IDs are PipeWire node names
 from `audio devices`; pass `--input` to select a microphone.
 

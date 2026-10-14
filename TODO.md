@@ -16,7 +16,6 @@ work belongs in Git history and does not stay here as a second changelog.
 
 - [ ] Replace remaining direct `qs` launches with the installed launcher or an
       explicit `BINGUX_QUICKSHELL` value.
-- [ ] Add a single runtime dependency report to Settings and `binguxctl`.
 - [ ] Move optional Python helpers behind clear feature checks.
 - [ ] Keep every long-running helper at core limit zero and test crash recovery.
 - [ ] Record real hardware evidence for the OSD producer path.
@@ -24,9 +23,9 @@ work belongs in Git history and does not stay here as a second changelog.
 ## Extensions
 
 - [x] Discover XDG extension folders with explicit enable state.
-- [x] Register QML widgets in the existing layout and Customise UI.
+- [x] Register QML widgets in the existing desktop layout.
 - [x] Preserve placement when an extension is missing or disabled.
-- [x] Provide settings, actions, events, shared controls and anchored popups.
+- [x] Provide actions, events, shared controls and anchored popups.
 - [x] Test preview isolation, unload cleanup and fresh-process placement restore.
 - [ ] Add the Home Assistant extension after its server and entity contract is
       chosen.

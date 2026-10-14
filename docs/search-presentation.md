@@ -161,7 +161,7 @@ xdg-open. Configure it as `commands.fileOpener` and as the suggestion script's
 opener so both activation paths use the same default-browser routing.
 
 Applications and calculation are built in. File search needs `fileRoots` in the
-runtime search configuration. Weather needs `weather` location settings, AI can be enabled through Bingux Settings with a CLI harness; legacy `ai` endpoint/model/credential-file settings remain compatible, database search needs
+runtime search configuration. Weather needs `weather` location configuration, AI uses the `search.ai` preferences in the Bingux preference file, database search needs
 `sqliteSources`, and external providers need `providerManifestPaths`.
 Disabled or empty sources do not create empty group headings.
 
@@ -292,17 +292,17 @@ For example: `qs ipc --pid <shell-pid> call search query firefox`.
 Check an empty query, several app/file matches, a fuzzy query, a calculation,
 no matches, selection movement, closing and immediate reopening.
 
-## Settings and explicit AI search
+## Explicit AI search
 
-Open **Bingux Settings** from application search, or run `binguxctl settings open`.
-Its Search, AI, Previews and Desktop pages save user overrides in
+Bingux reads search and desktop preferences from
 `$XDG_CONFIG_HOME/bingux/settings.json` (normally `~/.config/bingux/settings.json`).
-Managed search configuration is left in place. Applying search changes restarts
-only `bingux-searchd`; desktop and preview preferences update in the running shell.
+The file is validated by `shell/bingux/settings-backend.py`; managed search configuration
+remains separate. Searchd reloads its configuration when its user service restarts.
 
-AI is disabled by default. Choose **Pi** or **Claude Code**, optionally a model
-and executable path. Existing CLI authentication is reused; the settings app does
-not read or store credentials. Enter `! your question` in search, then press Enter.
+AI is disabled by default. Set the `search.ai` object to choose `pi` or `claude`,
+with optional model and executable values. Existing CLI authentication is reused; Bingux
+does not read or store credentials. The supported fields and validation are defined by
+`DEFAULTS` and `validate()` in `shell/bingux/settings-backend.py`. Enter `! your question` in search, then press Enter.
 Typing the prompt does not invoke a harness or send it to external search providers.
 The older `?` prefix remains compatible. Follow-ups in the open conversation do
 not need another prefix. Closing search cancels the request and resets its connection, clearing both the UI
@@ -344,6 +344,5 @@ accepted in answer text; other control characters remain rejected.
 Checks: `python3 tests/search-cli-ai.py` uses the real daemon and a deterministic
 fake CLI to check explicit activation, streaming, history, errors and cancellation
 of descendants. It makes no AI account requests. `bash tests/search-ai.sh` checks
-streamed UI updates and stale reply handling. `bash tests/bingux-settings.sh`
-checks settings persistence, validation and layout. `python3 tests/preview-extra.test.py`
+streamed UI updates and stale reply handling. `python3 tests/preview-extra.test.py`
 covers frontmatter, tables, email, archive escaping and limits.

@@ -12,7 +12,7 @@ without changing the shell's built-in layout model.
 
 | Layer              | Location                     | Responsibility                                                           |
 | ------------------ | ---------------------------- | ------------------------------------------------------------------------ |
-| Shell              | `shell/bingux/`              | Draws the top bar, dock, sidebar, popouts and settings surfaces.         |
+| Shell              | `shell/bingux/`              | Draws the top bar, dock, sidebar, popouts and control centre.            |
 | Native helpers     | `packages/`                  | Builds the search, status, audio and QML plugin helpers.                 |
 | User state         | `$XDG_CONFIG_HOME/bingux/`   | Stores layout, settings, search, notes and extension enable state.       |
 | Extension registry | `shell/bingux/extensions.py` | Discovers trusted extension manifests and preserves disabled placements. |
@@ -54,8 +54,7 @@ provides the required protocols.
 ## Extension model
 
 Extensions are discovered from XDG data directories and enabled explicitly in
-`$XDG_CONFIG_HOME/bingux/extensions.json`. A manifest declares QML widgets,
-optional settings and an optional background entry point. Widget IDs are stored
+`$XDG_CONFIG_HOME/bingux/extensions.json`. A manifest declares QML widgets and an optional background entry point. Widget IDs are stored
 in the existing layout file, so disabling an extension does not discard the
 user's placement.
 

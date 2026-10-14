@@ -12,7 +12,7 @@ FocusScope {
     readonly property var spec: ExtensionRegistry.widget(widgetId) || ControlLayout.widget(widgetId) || DesktopLayout.widget(widgetId) || {}
     readonly property bool groupedWidget: !!ControlLayout.groupFor(widgetId)
     readonly property bool nativeGroupPreview: ["controls-header", "controls-audio", "controls-tiles"].includes(widgetId)
-    readonly property bool utilityWidget: ["control-divider", "control-header-space", "control-customise"].includes(widgetId)
+    readonly property bool utilityWidget: ["control-divider", "control-header-space"].includes(widgetId)
     readonly property bool panelWidget: !!spec.panel
     readonly property string nativeGroup: ControlLayout.groupFor(widgetId) || (DesktopLayout.controlOrder().includes(widgetId.slice(8)) ? "controls-tiles" : "")
     readonly property string ownContainer: DesktopLayout.placement(DesktopEditing.desktop, widgetId)
@@ -77,8 +77,7 @@ FocusScope {
                     "control-media": mediaControl,
                     "control-divider": divider,
                     "control-header-space": space,
-                    "control-battery": battery,
-                    "control-customise": customiseButton
+                    "control-battery": battery
                 })[root.widgetId] || headerButton : root.panelWidget ? panel : root.spec.decoration ? decoration : root.spec.layoutItem ? space : root.widgetId.startsWith("control-") ? control : ({
                     search,
                     workspaces,
@@ -168,16 +167,6 @@ FocusScope {
             presentation: Object.assign({}, root.controlPresentation(label, "battery-good-symbolic", true, true), {
                 custom: true
             })
-        }
-    }
-    Component {
-        id: customiseButton
-        ActionButton {
-            text: "Customise controls..."
-            iconName: "document-edit-symbolic"
-            flat: true
-            implicitHeight: root.barLayout ? Theme.barHeight : 28
-            presentation: root.controlPresentation(text, iconName, root.barLayout, !root.barLayout)
         }
     }
     QtObject {

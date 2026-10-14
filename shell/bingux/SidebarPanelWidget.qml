@@ -29,12 +29,6 @@ SidebarPanelFace {
     Layout.column: widgetLayout ? widgetLayout.controlColumn(root) : 0
     Layout.row: widgetLayout ? widgetLayout.controlRow(root) : 0
     onContainerChanged: panelPopup.visible = false
-    WidgetEditHandle {
-        control: root
-        widgetId: root.widgetId
-        previewSource: false
-        onRequested: (id, item) => root.editRequested(id, item, root.barWindow)
-    }
     ShellPopup {
         id: panelPopup
         screen: root.barWindow ? root.barWindow.screen : root.sidebar.screen

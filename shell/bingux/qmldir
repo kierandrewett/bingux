@@ -30,10 +30,11 @@ Pill 1.0 Pill.qml
 ShortcutSession 1.0 ShortcutSession.qml
 WindowSwitcher 1.0 WindowSwitcher.qml
 PrivacyIndicators 1.0 PrivacyIndicators.qml
-ProfileSettings 1.0 ProfileSettings.qml
+ShellPreferences 1.0 ShellPreferences.qml
 SearchOverlay 1.0 SearchOverlay.qml
 CaptureTool 1.0 CaptureTool.qml
-CaptureSettings 1.0 CaptureSettings.qml
+CaptureOptions 1.0 CaptureOptions.qml
+CaptureOptionRow 1.0 CaptureOptionRow.qml
 BrowserFocus 1.0 BrowserFocus.qml
 SearchResult 1.0 SearchResult.qml
 OsIconImage 1.0 OsIconImage.qml
@@ -135,35 +136,19 @@ TableRowSurface 1.0 TableRowSurface.qml
 ShellCommands 1.0 ShellCommands.qml
 
 singleton BinguxPreferences 1.0 BinguxPreferences.qml
-BinguxSettings 1.0 BinguxSettings.qml
 
 singleton CompositorEnvironment 1.0 CompositorEnvironment.qml
 singleton LockTheme 1.0 LockTheme.qml
 LockAuthentication 1.0 LockAuthentication.qml
 LockScreen 1.0 LockScreen.qml
 NotesSlashMenu 1.0 NotesSlashMenu.qml
-SettingsGroup 1.0 SettingsGroup.qml
-SettingsHeading 1.0 SettingsHeading.qml
-SettingsField 1.0 SettingsField.qml
-SettingsChoice 1.0 SettingsChoice.qml
-SearchSettings 1.0 SearchSettings.qml
-DesktopCustomise 1.0 DesktopCustomise.qml
 
-SettingsRow 1.0 SettingsRow.qml
-SettingsReveal 1.0 SettingsReveal.qml
-SettingsNavigationRow 1.0 SettingsNavigationRow.qml
-SettingsOptionRow 1.0 SettingsOptionRow.qml
 
 singleton DesktopEditing 1.0 DesktopEditing.qml
-NativeEditSurface 1.0 NativeEditSurface.qml
-WidgetEditHandle 1.0 WidgetEditHandle.qml
 WidgetPreview 1.0 WidgetPreview.qml
-WidgetDrag 1.0 WidgetDrag.qml
-WidgetDropArea 1.0 WidgetDropArea.qml
 
 SnapAssist 1.0 SnapAssist.qml
 
-DesktopSettings 1.0 DesktopSettings.qml
 
 SessionPower 1.0 SessionPower.qml
 BarSpace 1.0 BarSpace.qml
@@ -191,14 +176,12 @@ ControlGroupPreview 1.0 ControlGroupPreview.qml
 BarOverflowButton 1.0 BarOverflowButton.qml
 BarNotificationButton 1.0 BarNotificationButton.qml
 SidebarPanelFace 1.0 SidebarPanelFace.qml
-DesktopLayoutSettings 1.0 DesktopLayoutSettings.qml
 
 singleton ExtensionRegistry 1.0 ExtensionRegistry.qml
 ExtensionContext 1.0 ExtensionContext.qml
 ExtensionWidget 1.0 ExtensionWidget.qml
 ExtensionServices 1.0 ExtensionServices.qml
 
-ExtensionSettings 1.0 ExtensionSettings.qml
 
 singleton BackgroundEffects 1.0 BackgroundEffects.qml
 BackgroundEffect 1.0 BackgroundEffect.qml

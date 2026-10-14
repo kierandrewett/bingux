@@ -16,7 +16,15 @@ preview an opted-in transition with `gnoblinctl animation preview NAME
 
 ## Scope
 
-The Bingux desktop shell is an optional profile feature. It supplies the top bar, dock, search surface, notification surface, and on-screen display for a Gnoblin session. The top bar includes a clock (hours and minutes; turn on seconds under Settings > Top bar, which redraws the bar every second), tray, metrics, privacy, input, network, audio, and power indicators. It is not a compositor and it does not modify GNOME Shell UI. Right-clicking empty wallpaper opens a menu with Change Background…, Display Settings and Settings, which open the matching GNOME Settings pages; windows, panels, and the dock keep their own pointer menus.
+The Bingux desktop shell is an optional profile feature. It supplies the top bar,
+dock, search surface, notification surface, and on-screen display for a Gnoblin
+session. The top bar includes a clock, tray, metrics, privacy, input, network,
+audio, and power indicators. Set `desktop.clockSeconds` to `true` in
+`$XDG_CONFIG_HOME/bingux/settings.json` to show seconds; the clock then redraws
+every second. Bingux is not a compositor and does not modify GNOME Shell UI.
+Right-click empty wallpaper for Change Background… or Display Settings, which
+open the matching GNOME Settings pages. Windows, panels and the dock keep their
+own pointer menus.
 
 The tray uses `QsMenuAnchor` for left and right menu actions. Pixmap-only tray items, including the disconnected Tailscale item in the validation VM, use a visible local glyph fallback when the layer-shell icon provider cannot render the image URL.
 The reference implementation uses Quickshell 0.2.1 for layer-shell surfaces. Quickshell supplies `zwlr_layer_shell_v1`, `zwlr_foreign_toplevel_manager_v1`, StatusNotifierItem menus, desktop-entry actions, and the desktop-notification service used by this shell. Bingux pins the exact Quickshell package through its flake lock.

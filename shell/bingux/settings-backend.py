@@ -192,7 +192,7 @@ def read():
 def validate_desktop(desktop, previous=None):
     """Use the same desktop schema for disk reads and proposed writes."""
     if previous is not None and previous["layoutVersion"] == 1 and desktop["layoutVersion"] != 1:
-        raise ValueError("The desktop layout has changed. Reopen Settings before saving.")
+        raise ValueError("The desktop layout has changed. Reload preferences before saving.")
     if type(desktop["layoutVersion"]) is not int or desktop["layoutVersion"] not in (0, 1):
         raise ValueError("This desktop layout version is not supported.")
     applications = desktop["dockApps"]
@@ -255,7 +255,7 @@ def validate_desktop(desktop, previous=None):
     control_order = desktop["controlOrder"]
     validate_control_layout(desktop["controlLayout"])
     if previous is not None and previous["controlLayout"] is not None and desktop["controlLayout"] is None:
-        raise ValueError("The control-centre layout has changed. Reopen Settings before saving.")
+        raise ValueError("The control-centre layout has changed. Reload preferences before saving.")
     if control_order is not None and (
         not isinstance(control_order, list)
         or any(

@@ -47,7 +47,6 @@ class RpmPackageTest(unittest.TestCase):
             "bingux-capture-ui",
             "bingux-emoji-ui",
             "bingux-search-ui",
-            "bingux-settings",
             "bingux-switcher-ui",
             "binguxctl",
             "bingux-frame",
