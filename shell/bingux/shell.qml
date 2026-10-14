@@ -1038,6 +1038,14 @@ ShellRoot {
             barOverflow.visible = false
         margins.left: terminalSidebar.leftInset
         margins.right: terminalSidebar.rightInset
+        // The bar slides down from above the screen edge once, when the dock first maps.
+        property real enterOffset: dock.startupReady ? 0 : Theme.barHeight
+        Behavior on enterOffset {
+            NumberAnimation {
+                duration: Theme.reducedMotion ? 0 : 360
+                easing.type: Easing.OutCubic
+            }
+        }
         exclusiveZone: Theme.barHeight
         implicitHeight: Theme.barHeight
         color: "transparent"
@@ -1052,7 +1060,9 @@ ShellRoot {
 
         Rectangle {
             id: barSurface
-            anchors.fill: parent
+            width: parent.width
+            height: parent.height
+            y: -topBar.enterOffset
             color: Theme.barBackground
             // The layer rule supplies the blur policy. Request the matching
             // material region so the compositor limits blur to this bar.
@@ -1077,7 +1087,9 @@ ShellRoot {
             objectName: "topBarLiveWidgets"
             enabled: true
             opacity: 1
-            anchors.fill: parent
+            width: parent.width
+            height: parent.height
+            y: -topBar.enterOffset
             GridLayout {
                 id: leftControls
                 width: topBar.hasSpring("top-left") ? topBar.zoneBudget("top-left") : implicitWidth
