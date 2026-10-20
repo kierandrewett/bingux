@@ -61,10 +61,15 @@ ShellRoot {
             Qt.quit()
 
         WlSessionLockSurface {
-            color: "#111318"
-            LockScreen {
+            color: Theme.background
+            SessionScreen {
                 anchors.fill: parent
                 authentication: lockAuthentication
+                ready: lock.secure
+                accountName: lockAuthentication.userName
+                accountDisplayName: lockAuthentication.userDisplayName
+                accountImage: lockAuthentication.userImage
+                wallpaper: lockAuthentication.wallpaper
             }
         }
     }

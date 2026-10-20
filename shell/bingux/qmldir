@@ -139,9 +139,11 @@ ShellCommands 1.0 ShellCommands.qml
 singleton BinguxPreferences 1.0 BinguxPreferences.qml
 
 singleton CompositorEnvironment 1.0 CompositorEnvironment.qml
-singleton LockTheme 1.0 LockTheme.qml
+SessionScreen 1.0 SessionScreen.qml
 LockAuthentication 1.0 LockAuthentication.qml
-LockScreen 1.0 LockScreen.qml
+GreeterAuthentication 1.0 GreeterAuthentication.qml
+GreeterCatalog 1.0 GreeterCatalog.qml
+GreeterScreen 1.0 GreeterScreen.qml
 NotesSlashMenu 1.0 NotesSlashMenu.qml
 
 

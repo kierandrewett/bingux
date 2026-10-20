@@ -1,0 +1,8 @@
+#%PAM-1.0
+#
+# Fingerprint-only conversation for the Bingux lock screen. The lock client
+# runs it beside the bingux-lock password conversation when fprintd reports an
+# enrolled finger, so either method unlocks. pam_fprintd must be installed;
+# the leading '-' keeps a missing module from logging an error.
+-auth required pam_fprintd.so
+auth required pam_deny.so
