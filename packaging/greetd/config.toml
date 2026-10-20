@@ -1,0 +1,13 @@
+# greetd configuration for the Bingux login manager.
+# Install as /etc/greetd/config.toml. The greeter session is Gnoblin in greeter
+# mode with the Bingux greeter as its only client.
+
+[terminal]
+# Virtual terminal for the greeter. User sessions start on the same VT.
+vt = 1
+
+[default_session]
+command = "bingux-greeter-session"
+# The greetd package creates this account. Arch names it "greeter"; Fedora
+# names it "greetd". Match the account that owns /var/lib/greetd.
+user = "greeter"

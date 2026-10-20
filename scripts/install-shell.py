@@ -158,8 +158,13 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         build / "bingux-frame": prefix / "libexec/bingux/bingux-frame",
         build / "cargo/release/bingux-searchd": prefix / "bin/bingux-searchd",
         build / "cargo/release/bingux-statusd": prefix / "bin/bingux-statusd",
+        build / "cargo/release/bingux-session": prefix / "bin/bingux-session",
         source / "scripts/bingux-clipboard-paste": prefix / "bin/bingux-clipboard-paste",
+        source / "scripts/bingux-greeter-session": prefix / "bin/bingux-greeter-session",
         source / "packaging/gnoblin/bingux.lua": prefix / "share/gnoblin/conf.d/bingux.lua",
+        source / "packaging/gnoblin/greeter.lua": prefix / "share/bingux/greeter/gnoblin.lua",
+        source / "packaging/greetd/config.toml": prefix / "share/bingux/greeter/greetd.toml",
+        source / "packaging/polkit/50-bingux-greeter.rules": prefix / "share/polkit-1/rules.d/50-bingux-greeter.rules",
     }
     missing = [str(path) for path in payload if not path.is_file()]
     if missing:
@@ -174,6 +179,14 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         except ValueError:
             # QMLDIR is allowed to be outside PREFIX for package builders.
             installed.append(destination)
+
+    def write_generated(destination, text, executable=False):
+        destination_path = target(destination)
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        destination_path.write_text(text)
+        if executable:
+            destination_path.chmod(0o755)
+        installed.append(destination.relative_to(prefix))
 
     adwaita_source = source / "subprojects/adwaita-icon-theme"
     adwaita_assets = adwaita_source / "Adwaita"
@@ -241,10 +254,25 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
                 '"/usr/local/libexec/bingux/bingux-frame"',
                 json.dumps(str(prefix / "libexec/bingux/bingux-frame")),
             )
-            destination_path = target(destination)
-            destination_path.parent.mkdir(parents=True, exist_ok=True)
-            destination_path.write_text(generated)
-            installed.append(destination.relative_to(prefix))
+            write_generated(destination, generated)
+        elif path == source / "packaging/gnoblin/greeter.lua":
+            # The greeter account has no shell profile; the autostart path must
+            # point at this install's wrapper.
+            write_generated(
+                destination,
+                path.read_text().replace(
+                    '"/usr/local/bin/bingux-greeter"', json.dumps(str(prefix / "bin/bingux-greeter"))
+                ),
+            )
+        elif path == source / "scripts/bingux-greeter-session":
+            write_generated(
+                destination,
+                path.read_text().replace(
+                    "/usr/local/share/bingux/greeter/gnoblin.lua",
+                    shlex.quote(str(prefix / "share/bingux/greeter/gnoblin.lua")),
+                ),
+                executable=True,
+            )
         else:
             copy(path, destination, executable)
     entry_path = prefix / "share/gnoblin/scripts/bingux-text-input.js"
@@ -300,6 +328,9 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         + shlex.quote(str(shell / "WallpaperShell.qml"))
         + ' "$@"\n',
         "bingux-lock": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "LockShell.qml")) + ' "$@"\n',
+        "bingux-greeter": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
+        + shlex.quote(str(shell / "GreeterShell.qml"))
+        + ' "$@"\n',
         "binguxctl": "exec python3 " + shlex.quote(str(prefix / "libexec/bingux/binguxctl.py")) + ' "$@"\n',
         "bingux-frame": "exec " + shlex.quote(str(prefix / "libexec/bingux/bingux-frame")) + ' "$@"\n',
     }

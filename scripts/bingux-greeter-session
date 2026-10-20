@@ -1,0 +1,14 @@
+#!/bin/sh
+# Start the Bingux login greeter session for greetd.
+#
+# greetd runs this as the greeter account on the configured VT with
+# GREETD_SOCK set. Gnoblin provides the compositor in greeter mode and
+# autostarts bingux-greeter from the packaged greeter configuration. The
+# installer rewrites the paths below for its selected prefix.
+set -eu
+ulimit -c 0
+
+# greetd does not set the session type; Gnoblin needs it to accept the login.
+export XDG_SESSION_TYPE=wayland
+GNOBLIN="${BINGUX_GREETER_COMPOSITOR:-gnoblin}"
+exec "$GNOBLIN" --greeter --config /usr/local/share/bingux/greeter/gnoblin.lua "$@"
