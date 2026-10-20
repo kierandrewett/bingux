@@ -128,6 +128,13 @@ def parser():
     for name, actions in (("privacy", ["status"]), ("switcher", ["status", "close"])):
         command = commands.add_parser(name, help=f"Inspect {name}")
         command.add_argument("action", nargs="?", default="status", choices=actions)
+    settings = commands.add_parser("settings", help="Open Bingux Settings, optionally at a panel")
+    settings.add_argument(
+        "panel",
+        nargs="?",
+        default="",
+        help="Panel name, for example sound, network, display or appearance",
+    )
     ipc = commands.add_parser("ipc", help="Call any public IPC method directly")
     ipc.add_argument("target")
     ipc.add_argument("method")
@@ -365,9 +372,49 @@ def refresh_network(prefix, query=execute, sleep=time.sleep, monotonic=time.mono
         sleep(0.1)
 
 
+SETTINGS_PANELS = (
+    "appearance",
+    "background",
+    "desktop",
+    "search",
+    "display",
+    "sound",
+    "network",
+    "bluetooth",
+    "power",
+    "keyboard",
+    "mouse",
+    "datetime",
+    "users",
+    "about",
+)
+
+
+def open_settings(panel, cli, spawn=subprocess.Popen):
+    """Start the Settings application as its own session so it outlives binguxctl."""
+    if panel and panel not in SETTINGS_PANELS:
+        cli.error("Unknown settings panel; choose one of " + ", ".join(SETTINGS_PANELS))
+    executable = os.environ.get("BINGUX_SETTINGS_BIN", "bingux-settings")
+    command = [executable, *([panel] if panel else [])]
+    try:
+        spawn(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError as error:
+        print(f"binguxctl: could not start {executable}: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main(argv=None):
     cli = parser()
     args = cli.parse_args(argv)
+    if args.command == "settings":
+        return open_settings(args.panel, cli)
     call = invocation(args, cli)
     path = args.path or (None if args.config else os.environ.get("BINGUX_CONFIG_PATH"))
     target = args.target if args.command == "ipc" else args.command
