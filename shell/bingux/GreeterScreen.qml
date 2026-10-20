@@ -158,7 +158,7 @@ SessionScreen {
         }
         IconButton {
             objectName: "greeterRestart"
-            iconName: "system-reboot-symbolic"
+            iconName: "view-refresh-symbolic"
             label: "Restart"
             enabled: !root.powerBusy && !root.authentication.finishing
             onClicked: {

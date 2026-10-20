@@ -57,18 +57,17 @@ Item {
         id: backdrop
         objectName: "sessionWallpaper"
         anchors.fill: parent
-        visible: status === Image.Ready
         source: root.wallpaper
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
+        // Decoded at its natural size: a sourceSize bound to the screen
+        // restarted the asynchronous load and left it in Loading.
         cache: false
-        sourceSize.width: root.width
-        sourceSize.height: root.height
     }
     // Keep the clock and the prompt readable on bright wallpapers.
     Rectangle {
         anchors.fill: parent
-        visible: backdrop.visible
+        visible: backdrop.status === Image.Ready
         gradient: Gradient {
             GradientStop {
                 position: 0
@@ -191,7 +190,6 @@ Item {
             font.pixelSize: Theme.fontSize
             color: Theme.text
             placeholderTextColor: Theme.muted
-            horizontalAlignment: TextInput.AlignHCenter
             selectByMouse: false
             leftPadding: Theme.padding
             rightPadding: Theme.controlHeight
