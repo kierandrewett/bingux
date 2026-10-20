@@ -35,6 +35,7 @@ $(BUILD_DIR)/bingux-frame: packages/bingux-frame/paint-gtk.c packages/bingux-fra
 daemons:
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-searchd/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-statusd/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-session/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 
 doctor-build:
 	python3 scripts/check-dependencies.py --qmake '$(QMAKE)' --cargo '$(CARGO)' --cc '$(CC)' --pkg-config '$(PKG_CONFIG)'
@@ -51,6 +52,7 @@ check: doctor-build native daemons
 	QT_QPA_PLATFORM=offscreen $(BUILD_DIR)/text/spacing-test
 	$(CARGO) test --locked --manifest-path packages/bingux-searchd/Cargo.toml --lib
 	$(CARGO) test --locked --manifest-path packages/bingux-statusd/Cargo.toml
+	$(CARGO) test --locked --manifest-path packages/bingux-session/Cargo.toml
 	python3 tests/shortcut-reload.py
 	python3 tests/gnoblin-menu-focus.py
 	BINGUX_STATUSD_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-statusd python3 tests/osd-event-bridge.py
