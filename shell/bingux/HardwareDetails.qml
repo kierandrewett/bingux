@@ -176,7 +176,7 @@ Item {
             return;
         processMenu.visible = false;
         actionMessage = "";
-        actionRunner.command = ["python3", decodeURIComponent(Qt.resolvedUrl("process-action.py").toString().replace(/^file:\/\//, "")), "--batch", action];
+        actionRunner.command = [Python.python, decodeURIComponent(Qt.resolvedUrl("process-action.py").toString().replace(/^file:\/\//, "")), "--batch", action];
         actionRunner.running = true;
     }
     onPageChanged: {

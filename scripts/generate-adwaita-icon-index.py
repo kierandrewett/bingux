@@ -12,7 +12,6 @@ THEME = ROOT / "subprojects/adwaita-icon-theme/Adwaita/symbolic"
 OUTPUT = ROOT / "shell/bingux/AdwaitaIconIndex.js"
 ALIASES = {
     "battery-low": "battery-low-symbolic",
-    "org.gnome.Settings-symbolic": "emblem-system-symbolic",
     "screencast-stop-symbolic": "media-playback-stop-symbolic",
     "transform-move-symbolic": "object-select-symbolic",
 }

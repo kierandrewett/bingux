@@ -260,7 +260,7 @@ GridLayout {
             id: settingsControl
             widgetId: "control-settings"
             objectName: "controlSettings"
-            iconName: "org.gnome.Settings-symbolic"
+            iconName: "preferences-system-symbolic"
             label: "Settings"
             onClicked: root.settings("")
         }

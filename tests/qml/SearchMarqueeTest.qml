@@ -2,7 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 
-// Native QML timing regression: qs -p shell/bingux/SearchMarqueeTest.qml
+// Native QML timing regression: tests/qml/run.sh SearchMarqueeTest.qml
 
 PanelWindow {
     id: preview

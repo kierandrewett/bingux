@@ -125,7 +125,7 @@ Singleton {
     }
     Process {
         id: worker
-        command: Quickshell.env("BINGUX_CONTROLS_HELPER") ? [Quickshell.env("BINGUX_CONTROLS_HELPER")] : ["python3", "-u", decodeURIComponent(Qt.resolvedUrl("control-centre-services.py").toString().replace(/^file:\/\//, ""))]
+        command: Quickshell.env("BINGUX_CONTROLS_HELPER") ? [Quickshell.env("BINGUX_CONTROLS_HELPER")] : [Python.python, "-u", decodeURIComponent(Qt.resolvedUrl("control-centre-services.py").toString().replace(/^file:\/\//, ""))]
         running: true
         stdinEnabled: true
         stdout: SplitParser {
@@ -172,7 +172,7 @@ Singleton {
     }
     Process {
         id: inhibitor
-        command: [Quickshell.env("BINGUX_SESSION_INHIBIT") || "gnome-session-inhibit", "--inhibit", "idle:suspend", "--reason", "Keep Awake from Control Centre", "sleep", "infinity"]
+        command: ["sh", "-c", "if [ -n \"$BINGUX_SESSION_INHIBIT\" ] || command -v gnome-session-inhibit >/dev/null 2>&1; then exec \"${BINGUX_SESSION_INHIBIT:-gnome-session-inhibit}\" --inhibit idle:suspend --reason 'Keep Awake from Control Centre' sleep infinity; else exec systemd-inhibit --what=idle:sleep --who=Bingux --why='Keep awake' --mode=block sleep infinity; fi"]
         running: root.keepAwake
         onExited: code => {
             if (root.keepAwake) {

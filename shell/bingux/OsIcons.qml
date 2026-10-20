@@ -66,7 +66,7 @@ Singleton {
     }
     Process {
         id: worker
-        command: Quickshell.env("BINGUX_ICON_HELPER") ? [Quickshell.env("BINGUX_ICON_HELPER")] : ["python3", "-u", decodeURIComponent(Qt.resolvedUrl("render-os-icons.py").toString().replace(/^file:\/\//, ""))]
+        command: Quickshell.env("BINGUX_ICON_HELPER") ? [Quickshell.env("BINGUX_ICON_HELPER")] : [Python.python, "-u", decodeURIComponent(Qt.resolvedUrl("render-os-icons.py").toString().replace(/^file:\/\//, ""))]
         running: root.wanted
         stdinEnabled: true
         stdout: SplitParser {

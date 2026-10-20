@@ -207,7 +207,33 @@ def vpn_state():
     return rows
 
 
+def public_ip_lookup_enabled():
+    binary = os.environ.get("BINGUX_CONFIG_BIN") or shutil.which("bingux-config")
+    if not binary:
+        return False
+    try:
+        result = subprocess.run(
+            [binary, "get", "privacy.public_ip_lookup"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0 and result.stdout.strip() == "true"
+
+
 def public_network():
+    if not public_ip_lookup_enabled():
+        return {
+            "status": "disabled",
+            "ip": "",
+            "provider": "",
+            "country": "",
+            "region": "",
+            "error": "Public address lookup is off. Enable privacy.public_ip_lookup in bingux.toml.",
+        }
     request = urllib.request.Request("https://ipapi.co/json/", headers={"User-Agent": "Bingux/1.0"})
     try:
         with urllib.request.urlopen(request, timeout=5) as response:
@@ -267,22 +293,8 @@ class Controls:
     def read(self):
         result = {"vpns": vpn_state(), "power": power_state()}
         try:
-            bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-            result["awakeAvailable"] = (
-                bool(shutil.which("gnome-session-inhibit"))
-                and bus.call_sync(
-                    "org.freedesktop.DBus",
-                    "/org/freedesktop/DBus",
-                    "org.freedesktop.DBus",
-                    "NameHasOwner",
-                    GLib.Variant("(s)", ("org.gnome.SessionManager",)),
-                    None,
-                    Gio.DBusCallFlags.NONE,
-                    1000,
-                    None,
-                ).unpack()[0]
-            )
-        except GLib.Error:
+            result["awakeAvailable"] = bool(shutil.which("gnome-session-inhibit") or shutil.which("systemd-inhibit"))
+        except OSError:
             result["awakeAvailable"] = False
         try:
             result["nightLightActive"] = properties(

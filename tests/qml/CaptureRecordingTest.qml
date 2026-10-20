@@ -7,7 +7,12 @@ import Quickshell.Wayland
 ShellRoot {
     UiSession {
         sessionName: "capture-recording-test"
-        state: ({visible: capture.opened, surface: "bingux-capture", companions: ["bingux-capture-controls"], companionsAbove: true})
+        state: ({
+                visible: capture.opened,
+                surface: "bingux-capture",
+                companions: ["bingux-capture-controls"],
+                companionsAbove: true
+            })
     }
     CaptureTool {
         id: capture
@@ -15,7 +20,10 @@ ShellRoot {
     }
     // Known backdrop proves exact scrim opacity and a clear recording region.
     PanelWindow {
-        anchors { top: true; left: true }
+        anchors {
+            top: true
+            left: true
+        }
         implicitWidth: 1000
         implicitHeight: 700
         color: "#808080"
@@ -32,7 +40,9 @@ ShellRoot {
         readonly property string state: capture.state
         readonly property string elapsedText: capture.elapsedText
         readonly property int countdown: capture.countdown
-        function stop(hoveredAt) { capture.stop(hoveredAt); }
+        function stop(hoveredAt) {
+            capture.stop(hoveredAt);
+        }
     }
     QtObject {
         id: privacy
@@ -42,7 +52,10 @@ ShellRoot {
     }
     PanelWindow {
         id: bar
-        anchors { top: true; left: true }
+        anchors {
+            top: true
+            left: true
+        }
         implicitWidth: 360
         implicitHeight: 40
         color: Theme.surface
@@ -58,12 +71,19 @@ ShellRoot {
             barWindow: bar
         }
     }
-    FileView { id: report; path: Quickshell.env("BINGUX_CAPTURE_TEST_RESULTS") }
+    FileView {
+        id: report
+        path: Quickshell.env("BINGUX_CAPTURE_TEST_RESULTS")
+    }
     Process {
         id: screenshot
         command: ["grim", Quickshell.env("BINGUX_CAPTURE_TEST_GUIDE")]
     }
-    Timer { interval: 20000; running: true; onTriggered: Qt.quit() }
+    Timer {
+        interval: 20000
+        running: true
+        onTriggered: Qt.quit()
+    }
     TestCase {
         name: "RecordingControls"
         parent: bar.contentItem
@@ -71,8 +91,16 @@ ShellRoot {
         function test_recording() {
             report.setText("FAIL: recording controls\n");
             verify(capture.configureOptions(JSON.stringify({
-                kind: "recording", target: "region", audio: "none", delay: 0,
-                region: {x: 200, y: 200, width: 640, height: 360},
+                kind: "recording",
+                target: "region",
+                audio: "none",
+                delay: 0,
+                region: {
+                    x: 200,
+                    y: 200,
+                    width: 640,
+                    height: 360
+                },
                 directory: Quickshell.env("BINGUX_CAPTURE_TEST_DIRECTORY")
             })).ok);
             capture.open();
@@ -97,7 +125,11 @@ ShellRoot {
             wait(1200);
             mouseClick(indicator, indicator.width / 2, indicator.height / 2);
             tryCompare(capture, "state", "saved", 6000);
-            report.setText(JSON.stringify({path: capture.savedPath, expected, result: "PASS"}));
+            report.setText(JSON.stringify({
+                path: capture.savedPath,
+                expected,
+                result: "PASS"
+            }));
         }
     }
 }

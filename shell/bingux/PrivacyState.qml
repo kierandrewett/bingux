@@ -45,7 +45,7 @@ Scope {
     readonly property string locationTooltip: "Location in use"
     Process {
         id: microphoneFallback
-        command: ["python3", Qt.resolvedUrl("microphone-status.py").toString().replace("file://", "")]
+        command: [Python.python, Qt.resolvedUrl("microphone-status.py").toString().replace("file://", "")]
         running: Startup.settled && !root.nativeMicrophoneFeedPresent
         onRunningChanged: if (!running) {
             root.legacyMicrophoneAvailable = false;
@@ -66,7 +66,7 @@ Scope {
         }
     }
     Process {
-        command: ["python3", Qt.resolvedUrl("camera-status.py").toString().replace("file://", "")]
+        command: [Python.python, Qt.resolvedUrl("camera-status.py").toString().replace("file://", "")]
         running: Startup.settled
         stdout: SplitParser {
             onRead: data => {

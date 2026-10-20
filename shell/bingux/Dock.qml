@@ -440,7 +440,7 @@ PanelWindow {
 
     Process {
         id: steamGameCatalog
-        command: ["python3", decodeURIComponent(Qt.resolvedUrl("steam-games.py").toString().replace(/^file:\/\//, ""))]
+        command: [Python.python, decodeURIComponent(Qt.resolvedUrl("steam-games.py").toString().replace(/^file:\/\//, ""))]
         running: Startup.settled
         stdout: StdioCollector {
             onStreamFinished: {
@@ -1374,7 +1374,7 @@ PanelWindow {
 
     function applicationLaunchCommand(desktopId, options, token) {
         const helper = Quickshell.env("BINGUX_APP_LAUNCHER_HELPER");
-        const command = (helper ? [helper] : ["python3", decodeURIComponent(Qt.resolvedUrl("launch-application.py").toString().replace(/^file:\/\//, ""))]).concat(options);
+        const command = (helper ? [helper] : [Python.python, decodeURIComponent(Qt.resolvedUrl("launch-application.py").toString().replace(/^file:\/\//, ""))]).concat(options);
         if (token)
             command.push("--activation-token=" + token);
         return command.concat(["--", desktopId]);

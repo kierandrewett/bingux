@@ -211,7 +211,7 @@ Scope {
             if (root.dockView && typeof root.dockView.beginExternalLaunch === "function")
                 root.dockView.beginExternalLaunch(target.application.id, target.application.name || "");
             const helper = Quickshell.env("BINGUX_APP_LAUNCHER_HELPER");
-            const command = helper ? [helper] : ["python3", decodeURIComponent(Qt.resolvedUrl("launch-application.py").toString().replace(/^file:\/\//, ""))];
+            const command = helper ? [helper] : [Python.python, decodeURIComponent(Qt.resolvedUrl("launch-application.py").toString().replace(/^file:\/\//, ""))];
             Quickshell.execDetached(command.concat(["--notify-errors", "--", target.application.id]));
         } else {
             return false;

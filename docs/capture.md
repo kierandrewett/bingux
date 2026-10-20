@@ -168,10 +168,10 @@ python3 tests/capture-recording-controls-live.py
 # Also records the default system audio and microphone devices for three seconds
 # each, then both together. Checks AAC tracks, duration and full decode:
 python3 tests/capture-live.py --audio
-qs -p shell/bingux/CapturePreviewTest.qml
+tests/qml/run.sh CapturePreviewTest.qml
 # The interaction fixture checks frozen previews, drawing and resizing, inline
 # capture options, keyboard control and Escape without recording:
-qs -p shell/bingux/CaptureInteractionTest.qml
+tests/qml/run.sh CaptureInteractionTest.qml
 ```
 
 Live checks cover CPU and automatic H.264 recording, including duration and full

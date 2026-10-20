@@ -154,7 +154,7 @@ ShellPopup {
     keyboardInteractive: true
 
     function settings(panel) {
-        Quickshell.execDetached(["python3", decodeURIComponent(Qt.resolvedUrl("application_spawn.py").toString().replace(/^file:\/\//, "")), "--", "env", "XDG_CURRENT_DESKTOP=GNOME", "gnome-control-center", panel]);
+        Quickshell.execDetached([Python.python, Python.applicationSpawn, "--", Python.settings].concat(panel ? [panel] : []));
         visible = false;
     }
 

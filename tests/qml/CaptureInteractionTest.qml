@@ -6,7 +6,12 @@ import Quickshell.Io
 ShellRoot {
     UiSession {
         sessionName: "capture-interaction-test"
-        state: ({visible: capture.opened, surface: "bingux-capture", companions: ["bingux-capture-controls"], companionsAbove: true})
+        state: ({
+                visible: capture.opened,
+                surface: "bingux-capture",
+                companions: ["bingux-capture-controls"],
+                companionsAbove: true
+            })
     }
     property bool frozenBeforeDismiss: false
     FileView {
@@ -104,7 +109,10 @@ ShellRoot {
             mouseMove(surface, toolbar.x + 20, toolbar.y - 80);
             mouseRelease(handle);
             verify(toolbar.y < oldY - 40, "Toolbar moves with its handle");
-            verify(capture.configureOptions(JSON.stringify({kind: "recording", audio: "none"})).ok);
+            verify(capture.configureOptions(JSON.stringify({
+                kind: "recording",
+                audio: "none"
+            })).ok);
             report.setText("FAIL: settings toggle or menu lookup\n");
             mouseClick(find(surface, "captureSettingsToggle"));
             report.setText("FAIL: settings opened=" + capture.optionsOpen + "\n");
