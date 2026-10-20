@@ -27,6 +27,8 @@ class InstallTest(unittest.TestCase):
                 "bingux-frame",
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
+                "cargo/release/bingux-config",
+                "cargo/release/bingux-settings",
             ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -103,6 +105,8 @@ class InstallTest(unittest.TestCase):
                 "bingux-frame",
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
+                "cargo/release/bingux-config",
+                "cargo/release/bingux-settings",
             ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -198,6 +202,8 @@ class InstallTest(unittest.TestCase):
                 "bingux-frame",
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
+                "cargo/release/bingux-config",
+                "cargo/release/bingux-settings",
             ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -329,6 +335,8 @@ class InstallTest(unittest.TestCase):
                 "bingux-frame",
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
+                "cargo/release/bingux-config",
+                "cargo/release/bingux-settings",
             ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -386,6 +394,8 @@ class InstallTest(unittest.TestCase):
                 "bingux-frame",
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
+                "cargo/release/bingux-config",
+                "cargo/release/bingux-settings",
             ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)

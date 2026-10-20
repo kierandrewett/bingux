@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import shutil
 from pathlib import Path
 import tempfile
 import unittest
@@ -73,15 +74,20 @@ class ExtraPreviewTests(unittest.TestCase):
         self.assertIn("A message.", data["renderedText"])
 
     def test_user_size_limit_and_hard_cap(self):
-        settings = self.path / "config/bingux/settings.json"
-        settings.parent.mkdir(parents=True)
-        settings.write_text('{"previews":{"maxMegabytes":1}}')
+        config = self.path / "config/bingux/bingux.toml"
+        config.parent.mkdir(parents=True)
+        config.write_text("[previews]\nmax_megabytes = 1\n")
+        binary = os.environ.get("BINGUX_CONFIG_BIN") or shutil.which("bingux-config")
+        self.assertIsNotNone(binary, "set BINGUX_CONFIG_BIN to the bingux-config binary")
+        binary_environment = patch.dict(os.environ, {"BINGUX_CONFIG_BIN": binary})
+        binary_environment.start()
+        self.addCleanup(binary_environment.stop)
         path = self.path / "large.csv"
         with path.open("wb") as stream:
             stream.truncate(1_000_001)
         with self.assertRaisesRegex(ValueError, "1 MB limit"):
             preview.metadata(path)
-        settings.write_text('{"previews":{"maxMegabytes":200}}')
+        config.write_text("[previews]\nmax_megabytes = 200\n")
         with path.open("wb") as stream:
             stream.truncate(20_000_001)
         with self.assertRaisesRegex(ValueError, "20 MB limit"):

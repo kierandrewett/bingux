@@ -15,6 +15,11 @@ BuildRequires:  pkgconfig(wayland-client)
 BuildRequires:  pkgconfig(gtk4)
 BuildRequires:  pkgconfig(libadwaita-1)
 BuildRequires:  wayland-devel
+BuildRequires:  pkgconfig(egl)
+BuildRequires:  pkgconfig(fontconfig)
+BuildRequires:  pkgconfig(freetype2)
+BuildRequires:  pkgconfig(gl)
+BuildRequires:  pkgconfig(xkbcommon)
 BuildRequires:  qt6-qtbase-devel
 BuildRequires:  qt6-qtdeclarative-devel
 BuildRequires:  qt6-qtwayland-devel
@@ -23,12 +28,12 @@ BuildRequires:  qt6-qttools
 BuildRequires:  rust
 BuildRequires:  systemd-rpm-macros
 
-Requires:       gnome-control-center
-Requires:       gnome-session
 Requires:       gnome-settings-daemon
 Requires:       gtk3
 Requires:       gtk4
 Requires:       libadwaita
+Requires:       fontconfig
+Requires:       mesa-libEGL
 Requires:       python3
 Requires:       python3-cairo
 Requires:       python3-gobject
@@ -94,6 +99,9 @@ install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bin
 %{_bindir}/bingux-searchd
 %{_bindir}/bingux-search-service
 %{_bindir}/bingux-statusd
+%{_bindir}/bingux-config
+%{_bindir}/bingux-settings
+%{_datadir}/applications/bingux-settings.desktop
 %{_libdir}/bingux/
 %{_libexecdir}/bingux/
 %{_datadir}/bingux/

@@ -62,7 +62,9 @@ For shell behaviour and configuration, see the [shell guide](shell/bingux/README
 
 ## Source layout
 
-- `shell/bingux/`: desktop UI, preference storage and Python helpers.
+- `shell/bingux/`: desktop UI and Python helpers.
+- `packages/bingux-config/`: configuration schema, `bingux.toml` store and CLI.
+- `packages/bingux-settings/`: the Settings application.
 - `packages/`: search and metrics daemons, native plugins and helper programs.
 - `tests/`: component, input and integration checks.
 - `scripts/test-desktop`: starts an isolated nested desktop for testing.

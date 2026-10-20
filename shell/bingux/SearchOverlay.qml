@@ -1130,7 +1130,7 @@ PanelWindow {
                     Text {
                         visible: root.quickChatEnabled && searchInput.text.trim().startsWith("!") && root.chatPrompt() !== "" && root.queryComplete && root.results.length === 0 && !root.chatMode
                         Layout.fillWidth: true
-                        text: "Edit AI preferences in ~/.config/bingux/settings.json"
+                        text: "Set [search.ai] in ~/.config/bingux/bingux.toml or run bingux-config explain search.ai"
                         wrapMode: Text.Wrap
                         color: Theme.muted
                         font.family: Theme.fontFamily

@@ -19,8 +19,8 @@ preview an opted-in transition with `gnoblinctl animation preview NAME
 The Bingux desktop shell is an optional profile feature. It supplies the top bar,
 dock, search surface, notification surface, and on-screen display for a Gnoblin
 session. The top bar includes a clock, tray, metrics, privacy, input, network,
-audio, and power indicators. Set `desktop.clockSeconds` to `true` in
-`$XDG_CONFIG_HOME/bingux/settings.json` to show seconds; the clock then redraws
+audio, and power indicators. Run `bingux-config set desktop.clock_seconds true`
+to show seconds; the clock then redraws
 every second. Bingux is not a compositor and does not modify GNOME Shell UI.
 Right-click empty wallpaper for Change Background… or Display Settings, which
 open the matching GNOME Settings pages. Windows, panels and the dock keep their

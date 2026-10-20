@@ -156,8 +156,11 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         build / "bingux-audio-meter": prefix / "bin/bingux-audio-meter",
         build / "bingux-image-clipboard": prefix / "libexec/bingux/bingux-image-clipboard",
         build / "bingux-frame": prefix / "libexec/bingux/bingux-frame",
+        build / "cargo/release/bingux-config": prefix / "bin/bingux-config",
         build / "cargo/release/bingux-searchd": prefix / "bin/bingux-searchd",
         build / "cargo/release/bingux-statusd": prefix / "bin/bingux-statusd",
+        build / "cargo/release/bingux-settings": prefix / "bin/bingux-settings",
+        source / "packages/bingux-settings/bingux-settings.desktop": prefix / "share/applications/bingux-settings.desktop",
         source / "scripts/bingux-clipboard-paste": prefix / "bin/bingux-clipboard-paste",
         source / "packaging/gnoblin/bingux.lua": prefix / "share/gnoblin/conf.d/bingux.lua",
     }
@@ -202,8 +205,6 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     shell = prefix / "share/bingux/shell"
     for path in (source / "shell/bingux").rglob("*"):
         if not path.is_file() or "__pycache__" in path.parts or path.suffix == ".pyc":
-            continue
-        if path.name.endswith("Test.qml"):
             continue
         copy(path, shell / path.relative_to(source / "shell/bingux"))
     gnoblin_integration = prefix / "share/bingux/gnoblin"
@@ -279,6 +280,12 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     common += "export BINGUX_ADWAITA_ICON_DIR=" + shlex.quote(str(prefix / "share/icons/Adwaita")) + "\n"
     common += "export BINGUX_CONFIG_PATH=" + shlex.quote(str(shell)) + "\n"
     common += "export BINGUX_AUDIO_METER=" + shlex.quote(str(prefix / "bin/bingux-audio-meter")) + "\n"
+    # Helpers run with the interpreter that installed Bingux, and the shell
+    # finds its own binaries even when ~/.local/bin is not on PATH.
+    common += "export BINGUX_PYTHON=${BINGUX_PYTHON:-" + shlex.quote(str(Path(sys.executable))) + "}\n"
+    common += "export BINGUX_CONFIG_BIN=${BINGUX_CONFIG_BIN:-" + shlex.quote(str(prefix / "bin/bingux-config")) + "}\n"
+    common += "export BINGUX_SETTINGS_BIN=${BINGUX_SETTINGS_BIN:-" + shlex.quote(str(prefix / "bin/bingux-settings")) + "}\n"
+    common += "export PATH=" + shlex.quote(str(prefix / "bin")) + ':"$PATH"\n'
     wrappers = {
         "bingux": 'exec "${BINGUX_QUICKSHELL:-qs}" -p "$BINGUX_CONFIG_PATH" "$@"\n',
         "bingux-search-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
@@ -300,7 +307,7 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         + shlex.quote(str(shell / "WallpaperShell.qml"))
         + ' "$@"\n',
         "bingux-lock": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "LockShell.qml")) + ' "$@"\n',
-        "binguxctl": "exec python3 " + shlex.quote(str(prefix / "libexec/bingux/binguxctl.py")) + ' "$@"\n',
+        "binguxctl": 'exec "$BINGUX_PYTHON" ' + shlex.quote(str(prefix / "libexec/bingux/binguxctl.py")) + ' "$@"\n',
         "bingux-frame": "exec " + shlex.quote(str(prefix / "libexec/bingux/bingux-frame")) + ' "$@"\n',
     }
     if managed:
