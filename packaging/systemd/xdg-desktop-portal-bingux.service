@@ -1,0 +1,12 @@
+[Unit]
+Description=Bingux desktop portal backend
+PartOf=bingux.target
+After=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=org.freedesktop.impl.portal.desktop.bingux
+ExecStart=/usr/libexec/bingux/xdg-desktop-portal-bingux
+Restart=on-failure
+RestartSec=3
+LimitCORE=0

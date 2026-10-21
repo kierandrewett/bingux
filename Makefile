@@ -50,6 +50,7 @@ daemons:
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-searchd/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-statusd/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-session/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-portal/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-settings/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 
 doctor-build:
@@ -71,6 +72,7 @@ check: doctor-build native daemons
 	$(CARGO) test --locked --manifest-path packages/bingux-searchd/Cargo.toml --lib
 	$(CARGO) test --locked --manifest-path packages/bingux-statusd/Cargo.toml
 	$(CARGO) test --locked --manifest-path packages/bingux-session/Cargo.toml
+	$(CARGO) test --locked --manifest-path packages/bingux-portal/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	python3 tests/shortcut-reload.py
 	python3 tests/gnoblin-menu-focus.py
 	BINGUX_STATUSD_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-statusd python3 tests/osd-event-bridge.py

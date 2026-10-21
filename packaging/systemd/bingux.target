@@ -5,7 +5,7 @@ Description=Bingux helper services
 # are started by Gnoblin's Lua autostart; only the helper daemons belong here.
 PartOf=graphical-session.target
 After=graphical-session.target
-Wants=bingux-searchd.service bingux-statusd.service bingux-greeter-export.service bingux-greeter-export.path
+Wants=bingux-searchd.service bingux-statusd.service xdg-desktop-portal-bingux.service bingux-greeter-export.service bingux-greeter-export.path
 
 [Install]
 WantedBy=gnoblin-session.target

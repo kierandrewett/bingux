@@ -98,7 +98,7 @@ that provide the layer-shell protocols.
 %install
 %make_install PREFIX=%{_prefix} DESTDIR=%{buildroot} BUILD_DIR=build QMLDIR=%{_libdir}/bingux/qml
 
-for unit in bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service bingux-lock.service bingux-greeter-export.service bingux-greeter-export.path; do
+for unit in bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service bingux-lock.service bingux-greeter-export.service bingux-greeter-export.path xdg-desktop-portal-bingux.service; do
     sed -e 's|/usr/lib64|%{_libdir}|g' packaging/systemd/$unit > %{buildroot}%{_userunitdir}/$unit
 done
 install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bingux-lock
@@ -144,6 +144,8 @@ install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bin
 %{_libdir}/bingux/
 %{_libexecdir}/bingux/
 %{_datadir}/bingux/
+%{_datadir}/xdg-desktop-portal/portals/bingux.portal
+%{_datadir}/dbus-1/services/org.freedesktop.impl.portal.desktop.bingux.service
 %{_datadir}/gnoblin/conf.d/bingux.lua
 %{_datadir}/gnoblin/scripts/bingux-text-input.js
 %{_userunitdir}/bingux*.service

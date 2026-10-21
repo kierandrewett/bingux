@@ -162,6 +162,7 @@ def build_payload(source, build, prefix, qml, target, managed=False):
         build / "cargo/release/bingux-searchd": prefix / "bin/bingux-searchd",
         build / "cargo/release/bingux-statusd": prefix / "bin/bingux-statusd",
         build / "cargo/release/bingux-session": prefix / "bin/bingux-session",
+        build / "cargo/release/xdg-desktop-portal-bingux": prefix / "libexec/bingux/xdg-desktop-portal-bingux",
         build / "cargo/release/bingux-settings": prefix / "bin/bingux-settings",
         source / "packages/bingux-settings/bingux-settings.desktop": prefix
         / "share/applications/bingux-settings.desktop",
@@ -172,6 +173,9 @@ def build_payload(source, build, prefix, qml, target, managed=False):
         source / "packaging/greetd/config.toml": prefix / "share/bingux/greeter/greetd.toml",
         source / "packaging/polkit/50-bingux-greeter.rules": prefix / "share/polkit-1/rules.d/50-bingux-greeter.rules",
         source / "packaging/tmpfiles/bingux-greeter.conf": prefix / "lib/tmpfiles.d/bingux-greeter.conf",
+        source / "packaging/portal/bingux.portal": prefix / "share/xdg-desktop-portal/portals/bingux.portal",
+        source / "packaging/portal/org.freedesktop.impl.portal.desktop.bingux.service": prefix
+        / "share/dbus-1/services/org.freedesktop.impl.portal.desktop.bingux.service",
     }
     missing = [str(path) for path in payload if not path.is_file()]
     if missing:
@@ -236,6 +240,7 @@ def build_payload(source, build, prefix, qml, target, managed=False):
         executable = destination.parent == prefix / "bin" or destination in (
             prefix / "libexec/bingux/bingux-image-clipboard",
             prefix / "libexec/bingux/bingux-frame",
+            prefix / "libexec/bingux/xdg-desktop-portal-bingux",
         )
         if path == source / "packaging/gnoblin/bingux.lua":
             # GDM does not necessarily include the user's command-link folder
@@ -433,6 +438,7 @@ def integration_paths(prefix, managed=False):
         "bingux-lock.service",
         "bingux-greeter-export.service",
         "bingux-greeter-export.path",
+        "xdg-desktop-portal-bingux.service",
     )
     bin_dir = Path(os.environ.get("XDG_BIN_HOME") or Path.home() / ".local/bin")
     config_dir = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")

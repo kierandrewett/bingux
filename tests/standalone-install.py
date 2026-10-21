@@ -27,6 +27,7 @@ BUILD_OUTPUTS = (
     "cargo/release/bingux-config",
     "cargo/release/bingux-helper",
     "cargo/release/bingux-settings",
+    "cargo/release/xdg-desktop-portal-bingux",
 )
 
 
@@ -196,6 +197,7 @@ class InstallTest(unittest.TestCase):
                 {
                     "bingux-searchd.service",
                     "bingux-statusd.service",
+                    "xdg-desktop-portal-bingux.service",
                     "bingux-greeter-export.service",
                     "bingux-greeter-export.path",
                 },

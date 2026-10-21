@@ -17,6 +17,7 @@ UNITS = (
     "bingux-switcher-ui.service",
     "bingux-capture-ui.service",
     "bingux-emoji-ui.service",
+    "xdg-desktop-portal-bingux.service",
 )
 
 
