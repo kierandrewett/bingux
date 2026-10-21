@@ -24,9 +24,13 @@ binguxctl keyboard next
 binguxctl emoji open
 binguxctl privacy status
 binguxctl ipc introduction show          # Open the first-login introduction
+binguxctl identify show DP-1 HDMI-1      # Label DP-1 as 1 and HDMI-1 as 2
+binguxctl identify hide                  # Remove display labels now
 binguxctl status
 binguxctl reload
 ```
+
+`identify show CONNECTOR...` labels the named displays in the order given: the first connector is shown as 1, the second as 2, and so on. The labels last five seconds and replace any earlier labels. `identify hide` removes them immediately. Connector names are the Output values on the Displays page, such as `DP-1`. See [desktop shell](desktop-shell.md#display-identification) for the behaviour when outputs change.
 
 Opening capture is idempotent. `capture toggle` retains the keyboard shortcut's
 behaviour: open/close the selector, cancel a countdown, or stop a recording.

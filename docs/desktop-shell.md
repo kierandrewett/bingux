@@ -651,3 +651,13 @@ later). Older compositors send no activation event, so no label is shown.
 The regression test `tests/workspace-change.py` runs only inside Gnoblin's private test session, because it
 asserts `WAYLAND_DISPLAY` starts with `gnoblin-gs-`. It is not part of `make check-session`. Run it from
 that session with `QS_TEST_BIN=build/bingux-shell/quickshell/src/bingux-shell QML_IMPORT_PATH=build/qml python3 tests/workspace-change.py`.
+
+## Display identification
+
+`binguxctl identify show CONNECTOR...`, and the Identify action on Settings' Displays page, ask the shell to label each output with its number and connector name. The number is large and centred on its output, with the connector name beneath it. Labels show for five seconds. A repeated request replaces them and restarts that hold, so they never stack. `binguxctl identify hide` clears them at once. Labels are click-through and never take keyboard focus. They fade in and out using the shell's motion tokens; with reduced motion enabled (`BINGUX_REDUCED_MOTION=1`) they appear and hide without fading.
+
+Numbers follow the request order, and each connector is matched to an output by name. A connector with no output still takes its number but draws no label, so the numbers still match the Displays page. Any change to the output list, such as a hotplug or layout change, clears every label. A number therefore never stays on a connector that was unplugged or reassigned.
+
+Settings sends every display in its page order, including disabled displays. Each display group shows the same number in its Number row. The shell accepts 1 to 16 unique connector names made of letters, digits, dots, underscores and dashes.
+
+`tests/identify.qml` covers replacement, ordering, rejected payloads, hide, expiry, click-through and hotplug. `tests/identify.py` runs it in headless Sway as part of `make check-session`.

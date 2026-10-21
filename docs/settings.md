@@ -44,6 +44,8 @@ Desktop has an Introduction group with a **Show introduction** action. It asks t
 running shell to reopen the first-login guide (`binguxctl ipc introduction show`),
 so it needs a running Bingux shell and reports an error otherwise.
 
+The Displays page has an Identify group with an **Identify** action. It asks the running shell to label each display with its number and connector, using `binguxctl identify show`. Each display group shows the same number in its Number row. Like Show introduction, it needs a running Bingux shell and reports an error otherwise.
+
 ## Gnoblin and GSettings
 
 Gnoblin's Lua configuration can set pointer, touchpad and keyboard options.
