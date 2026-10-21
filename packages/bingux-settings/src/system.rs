@@ -1,0 +1,170 @@
+//! Running system commands without blocking the UI thread.
+//!
+//! Freya's event loop is single threaded, so every command runs on a std
+//! thread and hands its result back through a channel that a Freya task
+//! polls. Every command has a timeout and a readable failure message.
+
+use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
+
+use freya::prelude::*;
+
+/// A readable failure from a system command.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CommandError(pub String);
+
+impl std::fmt::Display for CommandError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+pub type CommandResult = Result<String, CommandError>;
+
+/// Run `program args` with a timeout and return trimmed stdout.
+///
+/// A missing program, a timeout and a non-zero exit all become a
+/// `CommandError` whose message is fit for an inline error row.
+pub fn run(program: &str, args: &[&str], timeout: Duration) -> CommandResult {
+    run_with_stdin(program, args, None, timeout)
+}
+
+/// Like [`run`] with data written to the command's stdin.
+pub fn run_with_stdin(
+    program: &str,
+    args: &[&str],
+    stdin: Option<&str>,
+    timeout: Duration,
+) -> CommandResult {
+    let mut child = Command::new(program)
+        .args(args)
+        .stdin(if stdin.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| match error.kind() {
+            std::io::ErrorKind::NotFound => CommandError(format!("{program} is not installed.")),
+            _ => CommandError(format!("Could not start {program}: {error}")),
+        })?;
+    if let (Some(data), Some(mut pipe)) = (stdin, child.stdin.take()) {
+        use std::io::Write;
+        let _ = pipe.write_all(data.as_bytes());
+    }
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if start.elapsed() < timeout => std::thread::sleep(Duration::from_millis(15)),
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(CommandError(format!(
+                    "{program} did not answer within {} seconds.",
+                    timeout.as_secs()
+                )));
+            }
+            Err(error) => return Err(CommandError(format!("{program} failed: {error}"))),
+        }
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|error| CommandError(format!("{program} failed: {error}")))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if output.status.success() {
+        return Ok(stdout);
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let detail = stderr
+        .trim()
+        .lines()
+        .last()
+        .or_else(|| stdout.lines().last())
+        .unwrap_or("")
+        .trim();
+    Err(CommandError(if detail.is_empty() {
+        format!("{program} failed.")
+    } else {
+        format!("{program}: {detail}")
+    }))
+}
+
+/// Run `work` on a background thread and deliver its result to `state`.
+///
+/// Call from an event handler or `use_hook`; never from inside `render`
+/// without a hook, or every render would start a new thread.
+pub fn background<T: Send + 'static>(
+    mut state: State<Option<T>>,
+    work: impl FnOnce() -> T + Send + 'static,
+) {
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = sender.send(work());
+    });
+    spawn(async move {
+        loop {
+            match receiver.try_recv() {
+                Ok(value) => {
+                    state.set(Some(value));
+                    return;
+                }
+                Err(mpsc::TryRecvError::Empty) => timer(Duration::from_millis(30)).await,
+                Err(mpsc::TryRecvError::Disconnected) => return,
+            }
+        }
+    });
+}
+
+/// Run `work` in the background and call `done` with its result on the UI
+/// thread, for actions that update several pieces of state.
+pub fn background_then<T: Send + 'static>(
+    work: impl FnOnce() -> T + Send + 'static,
+    done: impl FnOnce(T) + 'static,
+) {
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = sender.send(work());
+    });
+    spawn(async move {
+        loop {
+            match receiver.try_recv() {
+                Ok(value) => {
+                    done(value);
+                    return;
+                }
+                Err(mpsc::TryRecvError::Empty) => timer(Duration::from_millis(30)).await,
+                Err(mpsc::TryRecvError::Disconnected) => return,
+            }
+        }
+    });
+}
+
+/// Read a gsettings key; the value keeps gsettings' quoting.
+pub fn gsettings_get(schema: &str, key: &str) -> CommandResult {
+    run("gsettings", &["get", schema, key], Duration::from_secs(3))
+}
+
+/// Write a gsettings key with a serialised GVariant value.
+pub fn gsettings_set(schema: &str, key: &str, value: &str) -> CommandResult {
+    run(
+        "gsettings",
+        &["set", schema, key, value],
+        Duration::from_secs(3),
+    )
+}
+
+/// Strip GVariant string quotes (`'blue'` -> `blue`).
+pub fn unquote(value: &str) -> String {
+    value.trim().trim_matches('\'').to_string()
+}
+
+/// A value row-sized summary of a command's availability.
+pub fn which(program: &str) -> bool {
+    std::env::var_os("PATH")
+        .map(|path| std::env::split_paths(&path).any(|dir| dir.join(program).is_file()))
+        .unwrap_or(false)
+}
