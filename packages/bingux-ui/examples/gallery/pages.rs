@@ -149,12 +149,28 @@ impl Component for ControlsPage {
                     ))
                     .row(choice_row(
                         "Dropdown",
-                        vec![
-                            ("en".into(), "English (United Kingdom)".into()),
-                            ("fr".into(), "French (France)".into()),
-                            ("de".into(), "German (Germany)".into()),
-                            ("es".into(), "Spanish (Spain)".into()),
-                        ],
+                        // A long list, to show the capped scrolling menu.
+                        [
+                            ("en", "English (United Kingdom)"),
+                            ("fr", "French (France)"),
+                            ("de", "German (Germany)"),
+                            ("es", "Spanish (Spain)"),
+                            ("it", "Italian (Italy)"),
+                            ("pt", "Portuguese (Portugal)"),
+                            ("nl", "Dutch (Netherlands)"),
+                            ("sv", "Swedish (Sweden)"),
+                            ("da", "Danish (Denmark)"),
+                            ("nb", "Norwegian (Norway)"),
+                            ("fi", "Finnish (Finland)"),
+                            ("pl", "Polish (Poland)"),
+                            ("cs", "Czech (Czechia)"),
+                            ("el", "Greek (Greece)"),
+                            ("tr", "Turkish (Turkey)"),
+                            ("ja", "Japanese (Japan)"),
+                        ]
+                        .iter()
+                        .map(|(key, name)| (key.to_string(), name.to_string()))
+                        .collect(),
                         &language.read().clone(),
                         move |key: String| language.set(key),
                     ))

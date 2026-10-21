@@ -1,7 +1,9 @@
 //! A dropdown: a 36 px `elevated` button with no idle outline, showing the
 //! current choice. Pressing it floats a popover of 36 px rows at radius 20
 //! with a 1 px outline; the selected row carries the accent selection layer
-//! and a tick.
+//! and a tick. A long list scrolls inside a capped menu with a scrollbar and
+//! opens the current choice in view; the menu opens upward when there is no
+//! room below the button.
 
 use freya::animation::*;
 use freya::prelude::*;
@@ -12,6 +14,11 @@ use crate::surface::{focus_border, is_activation_key, surface_color, use_tokens}
 
 /// Width of the floating option list.
 const MENU_WIDTH: f32 = 240.0;
+/// The tallest the option list gets before it scrolls, rows only.
+const MENU_MAX_ROWS_HEIGHT: f32 = 320.0;
+/// Space between the button and the menu, and how far the menu slides in.
+const MENU_GAP: f32 = 4.0;
+const MENU_SLIDE: f32 = 3.0;
 
 /// `options` are `(key, label)` pairs; `on_select` receives the chosen key.
 #[derive(PartialEq)]
@@ -58,6 +65,8 @@ impl Component for Dropdown {
         let mut open = use_state(|| false);
         let mut highlighted = use_state(|| None::<usize>);
         let mut button_width = use_state(|| 0.0_f32);
+        let mut button_area = use_state(Area::default);
+        let mut scroll = use_scroll_controller(ScrollConfig::default);
         let mut hovered_item = use_state(|| None::<usize>);
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
@@ -91,6 +100,29 @@ impl Component for Dropdown {
             })
         };
         let count = options.len();
+        // The rows' height, and the part of it the menu shows.
+        let list_height = count as f32 * CONTROL_HEIGHT;
+        let viewport_height = list_height.min(MENU_MAX_ROWS_HEIGHT);
+        let menu_height = viewport_height + 2.0 * S2;
+        // Scroll offset that puts row `index` in the middle of the menu, or
+        // keeps it in view when `centre` is false.
+        let offset_for = move |index: usize, current: i32, centre: bool| -> i32 {
+            let top = index as f32 * CONTROL_HEIGHT;
+            let furthest = (list_height - viewport_height).max(0.0);
+            let want = if centre {
+                top - (viewport_height - CONTROL_HEIGHT) / 2.0
+            } else {
+                let shown_top = -(current as f32);
+                if top < shown_top {
+                    top
+                } else if top + CONTROL_HEIGHT > shown_top + viewport_height {
+                    top + CONTROL_HEIGHT - viewport_height
+                } else {
+                    shown_top
+                }
+            };
+            -(want.clamp(0.0, furthest) as i32)
+        };
         let on_key_down = {
             let choose = choose.clone();
             move |event: Event<KeyboardEventData>| {
@@ -104,6 +136,9 @@ impl Component for Dropdown {
                             }
                         } else {
                             highlighted.set(selected_index);
+                            if let Some(index) = selected_index {
+                                scroll.scroll_to_y(offset_for(index, 0, true));
+                            }
                             open.set(true);
                         }
                     }
@@ -116,6 +151,7 @@ impl Component for Dropdown {
                             .or(selected_index)
                             .map_or(0, |index| (index + 1).min(count.saturating_sub(1)));
                         highlighted.set(Some(next));
+                        scroll.scroll_to_y(offset_for(next, <(i32, i32)>::from(scroll).1, !open()));
                         open.set(true);
                     }
                     Key::Named(NamedKey::ArrowUp) => {
@@ -123,6 +159,7 @@ impl Component for Dropdown {
                             .or(selected_index)
                             .map_or(0, |index| index.saturating_sub(1));
                         highlighted.set(Some(next));
+                        scroll.scroll_to_y(offset_for(next, <(i32, i32)>::from(scroll).1, !open()));
                         open.set(true);
                     }
                     _ => return,
@@ -156,7 +193,8 @@ impl Component for Dropdown {
             })
             .border(focus_border(&tokens, focus()))
             .on_sized(move |event: Event<SizedEventData>| {
-                button_width.set_if_modified(event.area.width())
+                button_width.set_if_modified(event.area.width());
+                button_area.set_if_modified(event.area);
             })
             .maybe(!enabled, |element| element.opacity(0.45))
             .maybe(enabled, |element| {
@@ -182,6 +220,9 @@ impl Component for Dropdown {
                         event.prevent_default();
                         a11y_id.request_focus();
                         let next = !open();
+                        if next && let Some(index) = selected_index {
+                            scroll.scroll_to_y(offset_for(index, 0, true));
+                        }
                         open.set(next);
                         highlighted.set(if next { selected_index } else { None });
                     })
@@ -209,6 +250,18 @@ impl Component for Dropdown {
 
         // The list is at least MENU_WIDTH and never narrower than the button.
         let menu_width = button_width().max(MENU_WIDTH);
+        // Open upward when the window has no room below the button and more
+        // room above it.
+        let window_height = Platform::get().current_window().root_size.read().height;
+        let below = window_height - button_area.read().max_y() - MENU_GAP;
+        let above = button_area.read().min_y() - MENU_GAP;
+        let open_up = menu_height > below && above > below;
+        let slide = MENU_SLIDE * (1.0 - progress);
+        let menu_offset = if open_up {
+            -(CONTROL_HEIGHT + menu_height + MENU_GAP) + slide
+        } else {
+            MENU_GAP - slide
+        };
         // `offset_x`/`offset_y` move an element's children, so the card sits
         // inside a zero-sized anchor that carries the offsets.
         let menu = visible.then(|| {
@@ -216,7 +269,7 @@ impl Component for Dropdown {
                 .width(Size::px(0.0))
                 .height(Size::px(0.0))
                 .offset_x((button_width() - menu_width).min(0.0))
-                .offset_y(4.0 - 3.0 * (1.0 - progress))
+                .offset_y(menu_offset)
                 .child(
                     rect()
                         .layer(Layer::Overlay)
@@ -234,23 +287,43 @@ impl Component for Dropdown {
                         .shadow(
                             Shadow::new()
                                 .position(ShadowPosition::Normal)
-                                .y(8.0)
-                                .blur(24.0)
+                                .y(S2)
+                                .blur(S5)
                                 .color(Color::BLACK.with_af32(0.35)),
                         )
-                        .children(options.iter().enumerate().map(|(index, (_, text))| {
-                            let choose = choose.clone();
-                            Element::from(DropdownItem {
-                                text: text.clone(),
-                                selected: Some(index) == selected_index,
-                                highlighted: hovered_item().is_none()
-                                    && Some(index) == highlighted(),
-                                on_press: EventHandler::new(move |_: ()| choose.call(index)),
-                                on_hover: EventHandler::new(move |inside: bool| {
-                                    hovered_item.set(if inside { Some(index) } else { None })
-                                }),
-                            })
-                        })),
+                        .child(
+                            rect()
+                                .width(Size::fill())
+                                .height(Size::px(viewport_height))
+                                .child(
+                                    ScrollView::new_controlled(scroll)
+                                        .drag_scrolling(false)
+                                        .auto_hide_scrollbars(false)
+                                        .children(options.iter().enumerate().map(
+                                            |(index, (_, text))| {
+                                                let choose = choose.clone();
+                                                Element::from(DropdownItem {
+                                                    text: text.clone(),
+                                                    selected: Some(index) == selected_index,
+                                                    highlighted: hovered_item().is_none()
+                                                        && Some(index) == highlighted(),
+                                                    on_press: EventHandler::new(move |_: ()| {
+                                                        choose.call(index)
+                                                    }),
+                                                    on_hover: EventHandler::new(
+                                                        move |inside: bool| {
+                                                            hovered_item.set(if inside {
+                                                                Some(index)
+                                                            } else {
+                                                                None
+                                                            })
+                                                        },
+                                                    ),
+                                                })
+                                            },
+                                        )),
+                                ),
+                        ),
                 )
         });
 

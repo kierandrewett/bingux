@@ -54,9 +54,9 @@ fn main() {
         (WINDOW_SIZE.0, 1100.0),
     );
     shot.settle(std::time::Duration::from_millis(400))
-        .click(880.0, 807.0)
+        .click(860.0, 623.0)
         .settle(std::time::Duration::from_millis(300))
-        .hover(820.0, 870.0)
+        .hover(780.0, 760.0)
         .settle(std::time::Duration::from_millis(100))
         .save(&path);
     println!("[snapshot] wrote {path}");
