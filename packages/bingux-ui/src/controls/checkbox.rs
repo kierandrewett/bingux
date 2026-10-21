@@ -7,7 +7,7 @@ use freya::prelude::*;
 
 use crate::icons::{self, Icon};
 use crate::scale::*;
-use crate::surface::{is_activation_key, use_tokens};
+use crate::surface::{is_activation_key, surface_color, use_tokens};
 
 /// Side of the 18 px check and radio boxes.
 const BOX_SIZE: f32 = 18.0;
@@ -82,7 +82,7 @@ impl Component for Checkbox {
             if filled {
                 tokens.accent
             } else {
-                Color::TRANSPARENT
+                tokens.elevated
             },
             move |from, to| {
                 AnimColor::new(from, to)
@@ -304,12 +304,8 @@ impl Component for RadioButton {
         };
         let fill = if selected {
             tokens.accent
-        } else if pressing() {
-            tokens.pressed
-        } else if hovering() {
-            tokens.hover
         } else {
-            Color::TRANSPARENT
+            surface_color(&tokens, tokens.elevated, hovering(), pressing(), false)
         };
         let select = move || {
             if !selected {

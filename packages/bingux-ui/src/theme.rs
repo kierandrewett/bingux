@@ -156,29 +156,35 @@ impl Tokens {
             accent_name,
             scheme,
             reduced_motion,
-            bg: rgba(0.106, 0.106, 0.106, 1.0),
-            surface: rgba(0.106, 0.106, 0.106, 1.0),
-            sidebar: rgba(0.078, 0.078, 0.078, 1.0),
-            elevated: rgba(1.0, 1.0, 1.0, 0.05),
-            elevated_hover: rgba(1.0, 1.0, 1.0, 0.09),
-            elevated_pressed: rgba(1.0, 1.0, 1.0, 0.13),
-            separator: rgba(1.0, 1.0, 1.0, 0.09),
-            card: rgba(1.0, 1.0, 1.0, 0.05),
-            hover: rgba(1.0, 1.0, 1.0, 0.05),
-            pressed: rgba(1.0, 1.0, 1.0, 0.09),
-            selection: rgba(1.0, 1.0, 1.0, 0.09),
+            // The shell's flat surfaces (`flatSurfaces` in Theme.qml), computed
+            // once: popupSurface is the window, shellSurface the sidebar and
+            // elevated the group cards, buttons and fields.
+            bg: rgba(0.1716, 0.1716, 0.1716, 1.0),
+            surface: rgba(0.1716, 0.1716, 0.1716, 1.0),
+            sidebar: rgba(0.0960, 0.0960, 0.0960, 1.0),
+            elevated: rgba(0.2054, 0.2054, 0.2109, 1.0),
+            elevated_hover: rgba(0.2560, 0.2560, 0.2629, 1.0),
+            elevated_pressed: rgba(0.3319, 0.3319, 0.3411, 1.0),
+            separator: rgba(0.980, 0.980, 0.980, 0.08),
+            card: rgba(0.2054, 0.2054, 0.2109, 1.0),
+            // State layers drawn over any base, as ControlCentreButtonSurface
+            // does: hover 0.34 at 0.42, pressed 0.46 at 0.72, selected 0.28
+            // at 0.44.
+            hover: rgba(0.42, 0.42, 0.44, 0.1428),
+            pressed: rgba(0.52, 0.52, 0.54, 0.3312),
+            selection: accent.with_af32(0.1232),
             border: rgba(1.0, 1.0, 1.0, 1.0),
-            outline: rgba(1.0, 1.0, 1.0, 0.16),
-            text: rgba(0.93, 0.93, 0.92, 1.0),
-            muted: rgba(0.93, 0.93, 0.92, 0.58),
-            bar_divider: rgba(1.0, 1.0, 1.0, 0.07),
+            outline: rgba(0.314, 0.314, 0.314, 0.75),
+            text: rgba(0.980, 0.980, 0.980, 1.0),
+            muted: rgba(0.690, 0.690, 0.690, 1.0),
+            bar_divider: rgba(0.980, 0.980, 0.980, 0.08),
             success: rgba(0.561, 0.941, 0.643, 1.0),
             warning: rgba(0.976, 0.941, 0.420, 1.0),
             danger: rgba(1.0, 0.482, 0.388, 1.0),
             accent_foreground: rgba(1.0, 1.0, 1.0, 1.0),
             tooltip_surface: rgba(0.12, 0.12, 0.13, 0.82),
             tooltip_outline: rgba(1.0, 1.0, 1.0, 0.16),
-            popover: rgba(0.150, 0.150, 0.150, 1.0),
+            popover: rgba(0.2054, 0.2054, 0.2109, 1.0),
         }
     }
 

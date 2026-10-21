@@ -202,7 +202,7 @@ fn adapter_group(adapter: &Adapter, ctx: Ctx) -> Group {
                 );
             },
         ));
-        let scan = row("Scan for devices").subtitle("Looks for nearby devices for 8 seconds.");
+        let scan = row("Scan for devices");
         let scan = if ctx.idle {
             scan.trailing(row_button("Scan", move |_| {
                 perform(

@@ -132,7 +132,6 @@ impl Component for AboutPage {
         page_column()
             .child(
                 Group::titled("Device")
-                    .description("What this machine is made of.")
                     .row(property_row("Device name", facts.hostname))
                     .row(property_row("Hardware model", facts.hardware))
                     .row(property_row("Processor", facts.processor))
@@ -141,7 +140,6 @@ impl Component for AboutPage {
             )
             .child(
                 Group::titled("System")
-                    .description("What it runs, and which versions.")
                     .row(property_row("Operating system", facts.os))
                     .row(property_row("Bingux", env!("CARGO_PKG_VERSION")))
                     .row(property_row("Gnoblin", facts.gnoblin))

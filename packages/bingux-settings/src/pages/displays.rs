@@ -1150,7 +1150,6 @@ fn night_group(
     night: &Night,
 ) -> Group {
     Group::titled("Night light")
-        .description("Warmer colours on screen.")
         .row(switch_row("Enabled", night.enabled, move |on: bool| {
             set_night_enabled(model, error, on);
         }))
@@ -1185,7 +1184,7 @@ fn apply_footer(tokens: &Tokens, model: State<Option<Page>>, error: State<Option
             .child(
                 rect()
                     .width(Size::flex(1.0))
-                    .child(caption("Apply saves this layout for future sessions.")),
+                    .child(caption("Saved for future sessions.")),
             )
             .child(primary_button("Apply", move |_| apply(model, error))),
     )

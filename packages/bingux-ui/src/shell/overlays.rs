@@ -230,7 +230,7 @@ impl Component for DialogLayer {
             .height(Size::window_percent(100.0))
             .layer(Layer::OverlayLevel(8))
             .center()
-            .background(Color::BLACK.with_af32(0.45 * progress))
+            .background(Color::BLACK.with_af32(0.4 * progress))
             .on_press(move |_: Event<PressEventData>| overlays.dismiss_dialog())
             .child(
                 rect()
@@ -239,15 +239,15 @@ impl Component for DialogLayer {
                     .a11y_role(AccessibilityRole::AlertDialog)
                     .a11y_alt(self.dialog.title.clone())
                     .width(Size::px(DIALOG_WIDTH))
-                    .padding(S5)
-                    .spacing(S4)
-                    .corner_radius(RADIUS_LG)
+                    .padding(S4)
+                    .spacing(S3)
+                    .corner_radius(RADIUS_XL)
                     .background(tokens.popover)
                     .border(
                         Border::new()
                             .width(1.0)
                             .alignment(BorderAlignment::Inner)
-                            .fill(tokens.tooltip_outline),
+                            .fill(tokens.outline),
                     )
                     .shadow(
                         Shadow::new()
@@ -355,7 +355,7 @@ impl Component for ToastLayer {
                         Border::new()
                             .width(1.0)
                             .alignment(BorderAlignment::Inner)
-                            .fill(tokens.tooltip_outline),
+                            .fill(tokens.outline),
                     )
                     .shadow(
                         Shadow::new()

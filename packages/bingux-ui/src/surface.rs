@@ -1,10 +1,12 @@
 //! Sizes and the interaction surface every control shares.
 //!
-//! One scale for the whole library. A row is 50 px, or 62 px with a
-//! subtitle; a control is 34 px; a group and a card have a 12 px radius and
-//! a row or button 8 px. Interaction is a transparent base with a white
-//! hover layer, a stronger pressed layer and a 2 px keyboard-focus ring.
-//! Idle outlines are not used; they turn lists into a grid of boxes.
+//! One scale for the whole library. A row is 40 px, or 56 px with a
+//! subtitle; a control is 36 px; a group card has a 12 px radius and a row
+//! or button 8 px. Interaction is a set of alpha layers drawn over the
+//! surface a control sits on: selection, then hover or press, as
+//! `ControlCentreButtonSurface.qml` does. Keyboard focus is a 2 px accent
+//! ring on controls. Idle outlines are not used; they turn lists into a grid
+//! of boxes.
 
 use freya::prelude::*;
 
@@ -41,7 +43,34 @@ pub fn focus_border(tokens: &Tokens, focus: Focus) -> Border {
     }
 }
 
-/// The hover, pressed and selected layers of `ControlCentreButtonSurface`.
+/// Source-over composition: `top` drawn over `bottom`, both possibly
+/// translucent. The result keeps the combined alpha, so layers stack the
+/// way they do on screen.
+pub fn over(top: Color, bottom: Color) -> Color {
+    let top_alpha = f32::from(top.a()) / 255.0;
+    let bottom_alpha = f32::from(bottom.a()) / 255.0;
+    let out_alpha = top_alpha + bottom_alpha * (1.0 - top_alpha);
+    if out_alpha <= 0.0 {
+        return Color::TRANSPARENT;
+    }
+    let channel = |t: u8, b: u8| {
+        let mixed = (f32::from(t) * top_alpha + f32::from(b) * bottom_alpha * (1.0 - top_alpha))
+            / out_alpha;
+        mixed.round().clamp(0.0, 255.0) as u8
+    };
+    Color::from((
+        channel(top.r(), bottom.r()),
+        channel(top.g(), bottom.g()),
+        channel(top.b(), bottom.b()),
+        (out_alpha * 255.0).round().clamp(0.0, 255.0) as u8,
+    ))
+}
+
+/// The colour of an interactive surface: `base`, then the selection layer
+/// when selected, then the press layer when pressed or the hover layer when
+/// hovered. Each layer is an alpha overlay composed over what is beneath it,
+/// as `ControlCentreButtonSurface` draws them. Press replaces hover, as the
+/// shell hides the hover layer while the control is down.
 pub fn surface_color(
     tokens: &Tokens,
     base: Color,
@@ -49,15 +78,17 @@ pub fn surface_color(
     pressing: bool,
     selected: bool,
 ) -> Color {
-    if pressing {
-        tokens.pressed
-    } else if hovering {
-        tokens.hover
-    } else if selected {
-        tokens.selection
+    let mut color = if selected {
+        over(tokens.selection, base)
     } else {
         base
+    };
+    if pressing {
+        color = over(tokens.pressed, color);
+    } else if hovering {
+        color = over(tokens.hover, color);
     }
+    color
 }
 
 /// Hover and press state for one interactive element, with the handlers

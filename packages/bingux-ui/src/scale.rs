@@ -24,6 +24,8 @@ pub const GUTTER: f32 = S3;
 pub const RADIUS_SM: f32 = 4.0;
 pub const RADIUS: f32 = 8.0;
 pub const RADIUS_LG: f32 = 12.0;
+/// The shell's card radius: dialogs, popovers and toasts.
+pub const RADIUS_XL: f32 = 20.0;
 
 /// Type scale. Body is 14; secondary text 12; badges 11; section titles
 /// 16; status-page titles 20; the page title 28.
@@ -53,9 +55,10 @@ pub const FIELD_WIDTH: f32 = 220.0;
 /// The keyboard focus ring.
 pub const RING_WIDTH: f32 = 2.0;
 
-/// A control (button, dropdown, field, segmented control) is 34 px high; a
-/// row is 54 px, or 66 px with a subtitle.
-pub const CONTROL_HEIGHT: f32 = 34.0;
-pub const BUTTON_HEIGHT: f32 = 34.0;
-pub const ROW_HEIGHT: f32 = 54.0;
-pub const TALL_ROW_HEIGHT: f32 = 66.0;
+/// A control (button, dropdown, field, segmented control) is 36 px high, as
+/// `ActionButton.qml`; a row is 40 px, or 56 px with a subtitle, as
+/// `ControlRow.qml`.
+pub const CONTROL_HEIGHT: f32 = 36.0;
+pub const BUTTON_HEIGHT: f32 = 36.0;
+pub const ROW_HEIGHT: f32 = 40.0;
+pub const TALL_ROW_HEIGHT: f32 = 56.0;

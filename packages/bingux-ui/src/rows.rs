@@ -155,7 +155,7 @@ impl Component for Row {
             Color::TRANSPARENT,
             interactive && hovering(),
             interactive && pressing(),
-            false,
+            self.selected,
         );
         let text_color = if !self.enabled {
             tokens.muted
@@ -164,7 +164,11 @@ impl Component for Row {
         } else {
             tokens.text
         };
-        let icon_color = tokens.muted;
+        let icon_color = if self.selected {
+            tokens.accent
+        } else {
+            tokens.muted
+        };
 
         let title = label()
             .text(self.title.clone())
@@ -203,13 +207,13 @@ impl Component for Row {
             .width(Size::flex(1.0))
             .height(Size::px(height - 2.0 * S2))
             .main_align(Alignment::Center)
-            .spacing(1.0)
+            .spacing(S0)
             .child(title_line)
             .maybe_child(self.subtitle.as_ref().map(|subtitle| {
                 label()
                     .text(subtitle.clone())
                     .color(tokens.muted)
-                    .font_size(TEXT_MD)
+                    .font_size(TEXT_SM)
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis)
             }));
@@ -447,8 +451,8 @@ impl Component for ExpanderRow {
                     rect()
                         .width(Size::fill())
                         .height(Size::px(1.0))
-                        .margin((0.0, 0.0, 0.0, S3))
-                        .background(tokens.text.with_af32(0.07))
+                        .margin((0.0, 0.0, 0.0, GUTTER))
+                        .background(tokens.separator)
                         .into(),
                 );
             }
@@ -466,7 +470,7 @@ impl Component for ExpanderRow {
                         rect()
                             .width(Size::fill())
                             .height(Size::px(1.0))
-                            .background(tokens.text.with_af32(0.07)),
+                            .background(tokens.separator),
                     )
                     .children(children)
             }))

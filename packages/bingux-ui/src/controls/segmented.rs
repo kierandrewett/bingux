@@ -3,7 +3,7 @@
 use freya::prelude::*;
 
 use crate::scale::*;
-use crate::surface::{field_border, focus_border, surface_color, use_tokens};
+use crate::surface::{focus_border, surface_color, use_tokens};
 
 /// The shell's segmented control: a quiet `elevated` rail where only the
 /// selected segment is raised.
@@ -31,9 +31,8 @@ impl Component for Segmented {
         let tokens = use_tokens();
         rect()
             .height(Size::px(CONTROL_HEIGHT))
-            .corner_radius(RADIUS_LG)
+            .corner_radius(RADIUS)
             .background(tokens.elevated)
-            .border(field_border(&tokens, Focus::Pointer))
             .padding(S1)
             .spacing(S1)
             .direction(Direction::Horizontal)

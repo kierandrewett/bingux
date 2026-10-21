@@ -1,10 +1,9 @@
 # bingux-ui
 
 `packages/bingux-ui` is the design system for Bingux's native applications.
-It is a Rust library on [Freya](https://freyaui.dev) with one visual system,
-the one GNOME Settings uses: opaque layered greys, boxed groups of 50 px rows,
-monochrome sidebar icons, one accent colour and one control size. Accent
-colours follow the shell's `Theme.qml`. Bingux Settings is built on it.
+It is a Rust library on [Freya](https://freyaui.dev) with the shell's visual
+system: the same surfaces, radii, rows, switches and sliders as the Control
+Centre. Bingux Settings is built on it.
 
 ## Use it in an application
 
@@ -76,37 +75,41 @@ short (80 to 200 ms) and stop when `BINGUX_REDUCED_MOTION=1` is set.
 
 ## Rules
 
-These keep every page the same. A component that breaks one is a bug.
+`bingux-ui` is the shell's look in Freya. The source of truth is the shell's
+own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
+`ControlSwitch.qml`, `ControlCentreButtonSurface.qml`, `ActionButton.qml` and
+`SeekSlider.qml`. When the shell changes, change these to match.
 
-- **One scale, in `src/scale.rs`.** Spacing is `S0` to `S7` on a 4 px grid;
-  radius is `RADIUS_SM`, `RADIUS`, `RADIUS_LG`; type is `TEXT_XS` to
-  `TEXT_DISPLAY` (11, 12, 14, 16, 20, 28); icons are `ICON_SM`, `ICON_MD`,
-  `ICON_LG`, `ICON_XL`; square boxes are `BOX_SM` to `BOX_2XL`. A control is
-  `CONTROL_HEIGHT` high; a row is `ROW_HEIGHT`, or `TALL_ROW_HEIGHT` with a
-  subtitle.
+- **Colours are the shell's `flatSurfaces` palette** (`Tokens::new`): the
+  window is `popupSurface`, the sidebar `shellSurface`, group cards and
+  buttons `elevated`. Hover, pressed and selected are alpha layers drawn over
+  any base, as `ControlCentreButtonSurface` does, and selection is tinted with
+  the accent. Text is `#fafafa`, secondary text `#b0b0b0`.
+- **One scale, in `src/scale.rs`.** Spacing is `S0` to `S7` on a 4 px grid.
+  Radius is 8 for controls and row hover, 12 for group cards and 20 for
+  dialogs, popovers and toasts (`RADIUS`, `RADIUS_LG`, `RADIUS_XL`). Type is
+  14 body, 12 secondary, 16 section titles. Controls are 36 px; a row is 40
+  px, or 56 px with a subtitle.
 - **`scripts/ui-lint.py` enforces it.** It fails on a raw number in a spacing,
   padding, margin, radius, font-size, width, height or icon-size call, and on
-  `FontWeight::BOLD`. Only 0.0 and 1.0 (a hairline) and halves or doubles of a
-  name pass. To use a new value, add it to `scale.rs` first. `make check`
-  runs it.
-- **One inset.** `GUTTER` is the only horizontal inset. Row text, section
-  titles and sidebar items all start `GUTTER` from their
-  container, so they line up.
-- Read colours from `use_tokens()`. The only literal colours are white and
-  black overlays. Surfaces are opaque: `bg`, `sidebar`, and the white
-  overlays `elevated`, `hover`, `pressed` and `selection` for states.
-- **The page is flat and starts with its first section.** There is no page
-  title, description or headline: the sidebar already names the page. A
-  section is a bold title, an optional muted line, then rows with no card
-  behind them and a hairline between rows. A page is `page_column()`, which
-  puts `S6` between sections. A message (loading, empty, error) is a `status`
-  row of normal height inside a section; only an error is tinted.
+  `FontWeight::BOLD`. To use a new value, add it to `scale.rs` first.
+  `make check` runs it.
+- **One inset.** `GUTTER` (12) is the only horizontal inset: row text,
+  section titles and sidebar items start `GUTTER` from their container.
+- **A group is a card.** A small title sits above a 12 px card whose rows are
+  flush against it, with a hairline between rows. A row is an optional icon,
+  a normal-weight title, an optional small muted subtitle and trailing
+  content. A page starts with its first group; there is no page title.
+- **Controls are the shell's.** The switch is 36 x 20 with a 16 px thumb. The
+  slider has a 6 px track (8 px while dragging), a text-coloured fill that
+  turns accent while dragging and a 16 px thumb. Buttons are 36 px with an
+  `elevated` fill and no idle outline; a row action is a small muted label
+  with a hover layer. Only text fields keep an outline.
+- **A message** (loading, empty, error) is a `status` row inside a group; only
+  an error is tinted. A page that has no data yet shows `skeleton()`, not text.
 - **Chrome.** The header bar carries the window buttons only. The sidebar is
-  a search field, then items under `NavItem::group` labels, with a neutral
-  pill on the selected item.
-- Buttons, dropdowns, segmented controls, steppers and text fields share one
-  fill (`elevated`) and one 1 px outline (`field_border`). Hover and pressed
-  raise the fill. The keyboard ring is `RING_WIDTH` in the accent colour.
+  a search field, then rows under `NavItem::group` labels, with the selection
+  layer and an accent icon on the selected row.
 - The window is opaque and square. Gnoblin draws the corners, border and
   shadow, so an application sets no corner radius, transparency or shadow on
   its root.

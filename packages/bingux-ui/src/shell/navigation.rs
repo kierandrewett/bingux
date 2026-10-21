@@ -1,11 +1,11 @@
 //! The navigation split view: a sidebar with a search field and a flat list
-//! of destinations beside the page column, each with its own header bar,
-//! like GNOME Settings. Destination icons are monochrome and the selected
-//! destination has a neutral fill; colour is reserved for the accent in
-//! controls.
+//! of destinations beside the page column. The sidebar is the shell's
+//! sidebar surface with a hairline on its right edge. Items are rows with a
+//! muted icon and a normal-weight title; the selected row carries the accent
+//! selection layer, and hover and press are token layers drawn over it.
 //!
 //! Below [`SIDEBAR_OVERLAY_BELOW`] the sidebar becomes an overlay opened
-//! from the content header.
+//! from a button above the page, over a scrim.
 
 use freya::animation::*;
 use freya::prelude::*;
@@ -14,10 +14,13 @@ use crate::controls::{icon_button, search_field};
 use crate::icons::{self, Icon};
 use crate::scale::*;
 use crate::shell::window::{HeaderBar, WindowControls};
-use crate::surface::{focus_border, is_activation_key, use_tokens};
+use crate::surface::{focus_border, is_activation_key, over, use_tokens};
 use crate::theme::{
     HEADER_HEIGHT, SIDEBAR_OVERLAY_BELOW, SIDEBAR_WIDTH, Tokens, WINDOW_CONTROL_BUTTON,
 };
+
+/// The widest the page column gets; it is centred in the content frame.
+const PAGE_WIDTH: f32 = 680.0;
 
 /// One sidebar destination.
 pub trait NavItem: Copy + PartialEq + 'static {
@@ -55,7 +58,7 @@ impl<T: NavItem> NavigationSplitView<T> {
             items,
             selected,
             content: content.into(),
-            page_width: 640.0,
+            page_width: PAGE_WIDTH,
         }
     }
 
@@ -87,25 +90,29 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         );
         let overlay_progress = overlay_anim.get().value();
         let sidebar = |overlay: bool| Sidebar {
-            app_title: self.app_title.clone(),
             items: self.items.clone(),
             selected,
             query,
             sidebar_open,
             overlay,
         };
+        // The header carries only the window buttons; it is the drag region.
         let header = HeaderBar::new("")
             .background(tokens.bg)
-            .maybe(narrow, |bar| {
-                bar.leading(
+            .trailing(WindowControls);
+        // With the sidebar hidden, a button above the page opens it.
+        let show_pages = narrow.then(|| {
+            rect()
+                .width(Size::fill())
+                .padding((S2, side, 0.0, side))
+                .child(
                     icon_button(Icon::SidebarShow, move |_| {
                         sidebar_open.set(!sidebar_open())
                     })
                     .size(WINDOW_CONTROL_BUTTON)
                     .tooltip("Show pages"),
                 )
-            })
-            .trailing(WindowControls);
+        });
         rect()
             .expanded()
             .direction(Direction::Horizontal)
@@ -117,13 +124,14 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                     .width(Size::flex(1.0))
                     .height(Size::fill())
                     .child(header)
+                    .maybe_child(show_pages)
                     .child(
                         rect().width(Size::fill()).height(Size::flex(1.0)).child(
                             ScrollView::new().child(
                                 rect()
                                     .width(Size::fill())
                                     .cross_align(Alignment::Center)
-                                    .padding((S2, side, S6, side))
+                                    .padding((S2, side, S5, side))
                                     .child(
                                         rect()
                                             .width(Size::px(self.page_width))
@@ -164,7 +172,6 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
 
 #[derive(PartialEq)]
 struct Sidebar<T: NavItem> {
-    app_title: String,
     items: Vec<T>,
     selected: State<T>,
     query: State<String>,
@@ -203,7 +210,7 @@ impl<T: NavItem> Component for Sidebar<T> {
                         .text(group)
                         .color(tokens.muted)
                         .font_size(TEXT_SM)
-                        .margin((if entries.is_empty() { S1 } else { S4 }, 0.0, S1, S3))
+                        .margin((if entries.is_empty() { S1 } else { S4 }, 0.0, S1, GUTTER))
                         .into(),
                 );
             }
@@ -270,7 +277,7 @@ impl<T: NavItem> Component for Sidebar<T> {
                                     .text("Nothing matches.")
                                     .color(tokens.muted)
                                     .font_size(TEXT_MD)
-                                    .margin((S3, S2, 0.0, S2))
+                                    .margin((S3, GUTTER, 0.0, GUTTER))
                             })),
                     ),
                 ),
@@ -333,21 +340,25 @@ impl<T: NavItem> Component for NavEntry<T> {
         let overlay = self.overlay;
         let is_selected = selected() == item;
         let background = item_fill(&tokens, hovering(), pressing(), is_selected);
-        let border = focus_border(&tokens, focus());
+        let icon_color = if is_selected {
+            tokens.accent
+        } else {
+            tokens.muted
+        };
         rect()
             .a11y_id(a11y_id)
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Tab)
             .a11y_builder(move |builder| builder.set_selected(is_selected))
             .width(Size::fill())
-            .height(Size::px(CONTROL_HEIGHT))
+            .height(Size::px(ROW_HEIGHT))
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
-            .spacing(S3)
-            .padding((0.0, S3))
+            .spacing(GUTTER)
+            .padding((0.0, GUTTER))
             .corner_radius(RADIUS)
             .background(background)
-            .border(border)
+            .border(focus_border(&tokens, focus()))
             .cursor(CursorIcon::Pointer)
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| {
@@ -385,7 +396,7 @@ impl<T: NavItem> Component for NavEntry<T> {
                     selected.set(target);
                 }
             })
-            .child(icons::icon(item.icon(), ICON_LG, tokens.text))
+            .child(icons::icon(item.icon(), ICON_LG, icon_color))
             .child(
                 label()
                     .text(item.title())
@@ -397,15 +408,20 @@ impl<T: NavItem> Component for NavEntry<T> {
     }
 }
 
-/// Background of a sidebar item. The selected item has a fill of its own
-/// that gets stronger on hover and press, so it never looks weaker than an
-/// idle item.
+/// Background of a sidebar row. The selection layer is the base for the
+/// selected row; hover and press are token layers drawn over whatever is
+/// beneath, so they stack the way ControlCentreButtonSurface does.
 fn item_fill(tokens: &Tokens, hovering: bool, pressing: bool, selected: bool) -> Color {
-    match (selected, pressing, hovering) {
-        (true, true, _) | (true, false, true) => tokens.elevated_pressed,
-        (true, false, false) => tokens.selection,
-        (false, true, _) => tokens.pressed,
-        (false, false, true) => tokens.hover,
-        (false, false, false) => Color::TRANSPARENT,
+    let base = if selected {
+        tokens.selection
+    } else {
+        Color::TRANSPARENT
+    };
+    if pressing {
+        over(tokens.pressed, base)
+    } else if hovering {
+        over(tokens.hover, base)
+    } else {
+        base
     }
 }

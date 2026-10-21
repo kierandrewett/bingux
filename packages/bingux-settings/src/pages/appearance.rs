@@ -300,23 +300,19 @@ impl Component for AppearancePage {
                             .value(wallpaper_name),
                     )
                     .row(
-                        row("Choose a picture")
-                            .subtitle("Pick an image from disk.")
-                            .trailing(row_button("Choose image", move |_| {
-                                run_wallpaper_change(model, error, choose_wallpaper)
-                            })),
+                        row("Choose a picture").trailing(row_button("Choose image", move |_| {
+                            run_wallpaper_change(model, error, choose_wallpaper)
+                        })),
                     )
                     .row(
-                        row("GNOME background")
-                            .subtitle("Stop using a picture and follow GNOME.")
-                            .trailing(row_button("Use GNOME", move |_| {
-                                run_wallpaper_change(model, error, use_gnome_background)
-                            })),
+                        row("GNOME background").trailing(row_button("Use GNOME", move |_| {
+                            run_wallpaper_change(model, error, use_gnome_background)
+                        })),
                     ),
             )
             .child(
                 Group::titled("Font")
-                    .description("Applies to the shell now and to this window when it next starts.")
+                    .description("The shell uses it at once. This window uses it after a restart.")
                     .row(
                         entry_row("Font family", model_value.font.clone(), {
                             move |family: String| {
@@ -374,7 +370,7 @@ impl Component for AppearancePage {
                                 apply_scheme(shared, error, scheme);
                             },
                         )
-                        .subtitle("Followed by GTK applications; the shell stays dark."),
+                        .subtitle("GTK applications follow this. The shell stays dark."),
                     ),
                 )
             }))
@@ -387,7 +383,7 @@ impl Component for AppearancePage {
             .child(
                 Group::titled("Motion").row(
                     row("Reduced motion")
-                        .subtitle("Set with BINGUX_REDUCED_MOTION=1 when the window starts.")
+                        .subtitle("Set BINGUX_REDUCED_MOTION=1 to turn it on.")
                         .value(reduced_motion),
                 ),
             )

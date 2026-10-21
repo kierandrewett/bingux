@@ -36,13 +36,6 @@ impl Kind {
         }
     }
 
-    fn caption(self) -> &'static str {
-        match self {
-            Kind::Output => "Where all sound plays.",
-            Kind::Input => "Where sound is recorded.",
-        }
-    }
-
     fn none_found(self) -> &'static str {
         match self {
             Kind::Output => "No output devices found.",
@@ -387,7 +380,7 @@ fn channel_group(
     error: State<Option<String>>,
     queue: VolumeQueue,
 ) -> Group {
-    let group = Group::titled(kind.title()).description(kind.caption());
+    let group = Group::titled(kind.title());
     if devices.is_empty() {
         return group.row(status(Status::Empty(kind.none_found().into())));
     }
@@ -509,7 +502,7 @@ impl Component for SoundPage {
                 queue,
             ));
 
-        let applications = Group::titled("Applications").description("Each app's own volume.");
+        let applications = Group::titled("Applications");
         if data.streams.is_empty() {
             page = page.child(applications.row(status(Status::Empty(
                 "No applications are playing or recording audio.".into(),

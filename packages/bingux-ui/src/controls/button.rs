@@ -6,9 +6,10 @@ use freya::prelude::*;
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
 use crate::scale::*;
-use crate::surface::{field_border, focus_border, is_activation_key, surface_color, use_tokens};
+use crate::surface::{focus_border, is_activation_key, surface_color, use_tokens};
 
-/// The shell's `ActionButton`: 36 px tall on `elevated` at radius 8.
+/// The shell's `ActionButton`: 36 px tall on `elevated` at radius 8, with no
+/// idle outline.
 #[derive(PartialEq)]
 pub struct ActionButton {
     text: String,
@@ -133,11 +134,9 @@ impl Component for ActionButton {
         } else {
             tokens.text
         };
-        let border = if filled || self.flat {
-            focus_border(&tokens, focus())
-        } else {
-            field_border(&tokens, focus())
-        };
+        // No idle outline: the shell's buttons are filled or flat. Only the
+        // keyboard focus ring draws a border.
+        let border = focus_border(&tokens, focus());
         rect()
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
@@ -263,7 +262,7 @@ impl Component for RowButton {
             } else {
                 tokens.elevated
             })
-            .border(field_border(&tokens, focus()))
+            .border(focus_border(&tokens, focus()))
             .cursor(CursorIcon::Pointer)
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| {

@@ -1,13 +1,14 @@
-//! A dropdown (libadwaita `GtkDropDown`, SwiftUI `Picker(.menu)`): a 32 px
-//! pill on `elevated` showing the current choice; pressing it floats a
-//! card of 32 px options with the selected one ticked.
+//! A dropdown: a 36 px `elevated` button with no idle outline, showing the
+//! current choice. Pressing it floats a popover of 36 px rows at radius 20
+//! with a 1 px outline; the selected row carries the accent selection layer
+//! and a tick.
 
 use freya::animation::*;
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
 use crate::scale::*;
-use crate::surface::{field_border, is_activation_key, surface_color, use_tokens};
+use crate::surface::{focus_border, is_activation_key, surface_color, use_tokens};
 
 /// Width of the floating option list.
 const MENU_WIDTH: f32 = 240.0;
@@ -153,7 +154,7 @@ impl Component for Dropdown {
             } else {
                 tokens.elevated
             })
-            .border(field_border(&tokens, focus()))
+            .border(focus_border(&tokens, focus()))
             .on_sized(move |event: Event<SizedEventData>| {
                 button_width.set_if_modified(event.area.width())
             })
@@ -226,14 +227,14 @@ impl Component for Dropdown {
                         .layer(Layer::Overlay)
                         .opacity(progress)
                         .width(Size::px(menu_width))
-                        .padding(S1)
-                        .corner_radius(RADIUS_LG)
+                        .padding(S2)
+                        .corner_radius(RADIUS_XL)
                         .background(tokens.popover)
                         .border(
                             Border::new()
                                 .width(1.0)
                                 .alignment(BorderAlignment::Inner)
-                                .fill(tokens.tooltip_outline),
+                                .fill(tokens.outline),
                         )
                         .shadow(
                             Shadow::new()
@@ -294,7 +295,7 @@ impl Component for DropdownItem {
                 Color::TRANSPARENT,
                 hovering() || self.highlighted,
                 pressing(),
-                false,
+                self.selected,
             ))
             .cursor(CursorIcon::Pointer)
             .on_pointer_enter(move |_| {

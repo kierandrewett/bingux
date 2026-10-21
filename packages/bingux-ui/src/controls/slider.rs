@@ -1,24 +1,34 @@
-//! The slider: an accent-filled track and a round white handle.
+//! The slider: `SeekSlider.qml`. A thin track with a text-coloured fill and
+//! a round 16 px thumb. Track, fill and thumb share one centre line.
 
 use freya::animation::*;
 use freya::prelude::*;
 
 use crate::scale::*;
-use crate::surface::{focus_border, use_tokens};
+use crate::surface::use_tokens;
 
+/// The track is 6 px, or 8 px while it is being dragged.
 const TRACK: f32 = 6.0;
-const HANDLE: f32 = 20.0;
-const HANDLE_GROWN: f32 = 22.0;
+const TRACK_ACTIVE: f32 = 8.0;
+/// The thumb is a 16 px circle.
+const THUMB: f32 = 16.0;
+/// Thumb scale while pressed and while dragging.
+const SCALE_PRESSED: f32 = 1.1;
+const SCALE_DRAGGING: f32 = 1.3;
+/// The pointer hit row, and the focus ring: a 1 px circle hugging the thumb.
+const HIT: f32 = 20.0;
+const FOCUS_RING: f32 = THUMB + 2.0;
+const DISABLED_OPACITY: f32 = 0.45;
+const SCALE_MS: u64 = 120;
+const PERCENT: f64 = 100.0;
 
 /// Every part of the slider is placed from this one line, the middle of the
-/// 22 px track row, so the track, the accent fill and the handle share one
-/// centre whatever size the handle is at that frame.
-const CENTRE: f32 = HANDLE_GROWN / 2.0;
-const PERCENT: f32 = 100.0;
+/// hit row, so the track, the fill and the thumb share one centre whatever
+/// size the track and thumb are at that frame.
+const CENTRE: f32 = HIT / 2.0;
 
-/// A 6 px track filled with the accent up to a 20 px white handle that
-/// grows to 22 px while dragging. The handle stays inside the track, so
-/// 0 and 100 are the ends of the travel.
+/// A thin track filled up to a 16 px thumb. The thumb stays inside the
+/// track, so 0 and 100 are the ends of the travel.
 #[derive(PartialEq)]
 pub struct Slider {
     value: f64,
@@ -34,7 +44,7 @@ pub fn slider(value: f64, on_moved: impl Into<EventHandler<f64>>) -> Slider {
         value: value.clamp(0.0, 100.0),
         enabled: true,
         on_moved: on_moved.into(),
-        width: 220.0,
+        width: FIELD_WIDTH,
         step: None,
         show_value: false,
     }
@@ -58,7 +68,7 @@ impl Slider {
         self
     }
 
-    /// Show the rounded percentage in a 12 px muted label after the track.
+    /// Show the rounded percentage in a muted label after the track.
     pub fn show_value(mut self) -> Self {
         self.show_value = true;
         self
@@ -68,6 +78,7 @@ impl Slider {
 impl Component for Slider {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let mut pressing = use_state(|| false);
         let mut dragging = use_state(|| false);
         let mut size = use_state(Area::default);
         let a11y_id = use_a11y();
@@ -75,18 +86,25 @@ impl Component for Slider {
         let on_moved = self.on_moved.clone();
         let value = self.value;
         let enabled = self.enabled;
-        let motion = tokens.motion(120);
-        let handle_anim = use_animation_transition(
-            if dragging() { HANDLE + 2.0 } else { HANDLE },
-            move |from, to| {
-                AnimNum::new(from, to)
-                    .time(motion)
-                    .function(Function::Expo)
-                    .ease(Ease::Out)
-            },
-        );
-        let handle = handle_anim.get().value();
-        let travel = (self.width - HANDLE).max(1.0);
+        let interacting = pressing() && dragging();
+
+        let scale_target = if interacting {
+            SCALE_DRAGGING
+        } else if pressing() {
+            SCALE_PRESSED
+        } else {
+            1.0
+        };
+        let motion = tokens.motion(SCALE_MS);
+        let scale = use_animation_transition(scale_target, move |from, to| {
+            AnimNum::new(from, to)
+                .time(motion)
+                .function(Function::Expo)
+                .ease(Ease::Out)
+        });
+        let thumb = THUMB * scale.get().value();
+
+        let travel = (self.width - THUMB).max(1.0);
         let step = self.step;
         let snap = move |percent: f64| -> f64 {
             match step {
@@ -94,11 +112,9 @@ impl Component for Slider {
                 None => percent,
             }
         };
-
         let percent_at = move |x: f64| -> f64 {
-            let half = HANDLE as f64 / 2.0;
-            let travel = travel as f64;
-            snap(((x - half) / travel * 100.0).clamp(0.0, 100.0))
+            let half = THUMB as f64 / 2.0;
+            snap(((x - half) / travel as f64 * PERCENT).clamp(0.0, PERCENT))
         };
         let on_pointer_down = {
             let on_moved = on_moved.clone();
@@ -108,19 +124,24 @@ impl Component for Slider {
                 }
                 event.stop_propagation();
                 a11y_id.request_focus();
-                dragging.set(true);
+                pressing.set(true);
                 on_moved.call(percent_at(event.element_location().x));
             }
         };
         let on_move = {
             let on_moved = on_moved.clone();
             move |event: Event<PointerEventData>| {
-                if *dragging.peek() {
+                if *pressing.peek() {
                     event.prevent_default();
+                    dragging.set_if_modified(true);
                     let x = event.global_location().x - size.read().min_x() as f64;
                     on_moved.call(percent_at(x));
                 }
             }
+        };
+        let on_release = move |_| {
+            pressing.set_if_modified(false);
+            dragging.set_if_modified(false);
         };
         let on_key_down = {
             let on_moved = on_moved.clone();
@@ -130,14 +151,26 @@ impl Component for Slider {
                     Key::Named(NamedKey::ArrowLeft) | Key::Named(NamedKey::ArrowDown) => -delta,
                     Key::Named(NamedKey::ArrowRight) | Key::Named(NamedKey::ArrowUp) => delta,
                     Key::Named(NamedKey::Home) => -value,
-                    Key::Named(NamedKey::End) => 100.0 - value,
+                    Key::Named(NamedKey::End) => PERCENT - value,
                     _ => return,
                 };
-                on_moved.call(snap((value + delta).clamp(0.0, 100.0)));
+                on_moved.call(snap((value + delta).clamp(0.0, PERCENT)));
             }
         };
 
-        let track = rect()
+        let track_height = if interacting { TRACK_ACTIVE } else { TRACK };
+        let fill_colour = if !enabled {
+            tokens.muted
+        } else if interacting {
+            tokens.accent
+        } else {
+            tokens.text
+        };
+        let thumb_x = travel * (value as f32 / PERCENT as f32);
+        let centre_x = THUMB / 2.0 + thumb_x;
+        let fill_width = centre_x;
+
+        let row = rect()
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)
@@ -145,14 +178,11 @@ impl Component for Slider {
             .a11y_builder(move |builder| {
                 builder.set_numeric_value(value);
                 builder.set_min_numeric_value(0.0);
-                builder.set_max_numeric_value(100.0);
+                builder.set_max_numeric_value(PERCENT);
             })
             .width(Size::px(self.width))
-            .height(Size::px(CONTROL_HEIGHT))
-            .main_align(Alignment::Center)
-            .corner_radius(RADIUS)
-            .border(focus_border(&tokens, focus()))
-            .maybe(!enabled, |element| element.opacity(0.45))
+            .height(Size::px(HIT))
+            .maybe(!enabled, |element| element.opacity(DISABLED_OPACITY))
             .cursor(if enabled {
                 CursorIcon::Pointer
             } else {
@@ -163,51 +193,78 @@ impl Component for Slider {
                 element
                     .on_pointer_down(on_pointer_down)
                     .on_capture_global_pointer_move(on_move)
-                    .on_global_pointer_up(move |_| dragging.set_if_modified(false))
+                    .on_global_pointer_up(on_release)
                     .on_key_down(on_key_down)
             })
             .child(
                 rect()
-                    .width(Size::fill())
-                    .height(Size::px(HANDLE_GROWN))
-                    .child(
-                        rect()
-                            .position(Position::new_absolute().top(CENTRE - TRACK / 2.0).left(0.0))
-                            .width(Size::fill())
-                            .height(Size::px(TRACK))
-                            .corner_radius(TRACK / 2.0)
-                            .background(tokens.outline),
+                    .position(
+                        Position::new_absolute()
+                            .top(CENTRE - track_height / 2.0)
+                            .left(0.0),
                     )
-                    .child(
-                        rect()
-                            .position(Position::new_absolute().top(CENTRE - TRACK / 2.0).left(0.0))
-                            .width(Size::px(HANDLE / 2.0 + travel * (value as f32 / PERCENT)))
-                            .height(Size::px(TRACK))
-                            .corner_radius(TRACK / 2.0)
-                            .background(tokens.accent),
+                    .width(Size::px(self.width))
+                    .height(Size::px(track_height))
+                    .corner_radius(track_height / 2.0)
+                    .background(tokens.outline),
+            )
+            .child(
+                rect()
+                    .layer(Layer::Relative(1))
+                    .position(
+                        Position::new_absolute()
+                            .top(CENTRE - track_height / 2.0)
+                            .left(0.0),
                     )
-                    .child(
-                        rect()
-                            .position(
-                                Position::new_absolute().top(CENTRE - handle / 2.0).left(
-                                    travel * (value as f32 / 100.0) + (HANDLE - handle) / 2.0,
-                                ),
-                            )
-                            .width(Size::px(handle))
-                            .height(Size::px(handle))
-                            .corner_radius(handle / 2.0)
-                            .background(Color::WHITE)
-                            .shadow(Shadow::new().blur(3.0).color(Color::BLACK.with_af32(0.35))),
+                    .width(Size::px(fill_width))
+                    .height(Size::px(track_height))
+                    .corner_radius(track_height / 2.0)
+                    .background(fill_colour),
+            )
+            .maybe_child((enabled && focus() == Focus::Keyboard).then(|| {
+                rect()
+                    .position(
+                        Position::new_absolute()
+                            .top(CENTRE - FOCUS_RING / 2.0)
+                            .left(centre_x - FOCUS_RING / 2.0),
+                    )
+                    .width(Size::px(FOCUS_RING))
+                    .height(Size::px(FOCUS_RING))
+                    .corner_radius(FOCUS_RING / 2.0)
+                    .border(
+                        Border::new()
+                            .width(1.0)
+                            .alignment(BorderAlignment::Inner)
+                            .fill(tokens.accent),
+                    )
+            }))
+            .child(
+                rect()
+                    .layer(Layer::Relative(3))
+                    .position(
+                        Position::new_absolute()
+                            .top(CENTRE - thumb / 2.0)
+                            .left(centre_x - thumb / 2.0),
+                    )
+                    .width(Size::px(thumb))
+                    .height(Size::px(thumb))
+                    .corner_radius(thumb / 2.0)
+                    .background(tokens.text)
+                    .border(
+                        Border::new()
+                            .width(1.0)
+                            .alignment(BorderAlignment::Inner)
+                            .fill(tokens.elevated),
                     ),
             );
         if !self.show_value {
-            return Element::from(track);
+            return Element::from(row);
         }
         rect()
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
             .spacing(S2)
-            .child(track)
+            .child(row)
             .child(
                 label()
                     .text(format!("{}%", value.round() as i64))

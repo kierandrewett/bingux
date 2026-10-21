@@ -144,7 +144,7 @@ impl Component for KeyboardPage {
                         })
                     },
                 )
-                .subtitle(format!("{} ms before a held key repeats", model.delay_ms))
+                .subtitle(format!("{} ms", model.delay_ms))
                 .enabled(model.repeat),
             ),
         };
@@ -165,7 +165,7 @@ impl Component for KeyboardPage {
                         })
                     },
                 )
-                .subtitle(format!("{} ms between repeats", model.interval_ms))
+                .subtitle(format!("{} ms", model.interval_ms))
                 .enabled(model.repeat),
             ),
         };

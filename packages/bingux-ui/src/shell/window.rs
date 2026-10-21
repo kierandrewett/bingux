@@ -6,7 +6,7 @@ use freya::prelude::*;
 use crate::icons::{self, Icon};
 use crate::scale::*;
 use crate::surface::use_tokens;
-use crate::theme::{HEADER_HEIGHT, WINDOW_CONTROL_BUTTON, WINDOW_CONTROL_CIRCLE};
+use crate::theme::{HEADER_HEIGHT, WINDOW_CONTROL_BUTTON};
 
 /// Run `callback` with the winit window of the current Freya window.
 pub fn with_window(callback: impl FnOnce(&mut freya::winit::window::Window) + 'static) {
@@ -158,14 +158,16 @@ impl Component for WindowControl {
             if self.danger {
                 tokens.danger
             } else {
-                tokens.hover
+                tokens.elevated_hover
             }
         } else {
-            tokens.elevated
+            Color::TRANSPARENT
         };
         rect()
             .width(Size::px(WINDOW_CONTROL_BUTTON))
             .height(Size::px(WINDOW_CONTROL_BUTTON))
+            .corner_radius(WINDOW_CONTROL_BUTTON / 2.0)
+            .background(circle)
             .center()
             .cursor(CursorIcon::Pointer)
             .a11y_role(AccessibilityRole::Button)
@@ -183,14 +185,6 @@ impl Component for WindowControl {
                     Action::Close => Platform::get().close_window(Platform::window_id()),
                 }
             })
-            .child(
-                rect()
-                    .width(Size::px(WINDOW_CONTROL_CIRCLE))
-                    .height(Size::px(WINDOW_CONTROL_CIRCLE))
-                    .corner_radius(WINDOW_CONTROL_CIRCLE / 2.0)
-                    .background(circle)
-                    .center()
-                    .child(icons::icon(self.icon, ICON_SM, tokens.text)),
-            )
+            .child(icons::icon(self.icon, ICON_MD, tokens.text))
     }
 }

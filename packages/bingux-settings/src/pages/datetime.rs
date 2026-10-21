@@ -162,7 +162,6 @@ impl Component for DateTimePage {
         };
 
         let ntp = model_data.ntp;
-        let zone_caption = format!("Current: {}", model_data.timezone);
         let clock_format = model_data.clock_format.clone();
 
         let mut page = page_column();
@@ -194,13 +193,10 @@ impl Component for DateTimePage {
                 .row(time_row),
         )
         .child(
-            Group::titled("Time zone").row(
-                text_row("Zone", zone_input, move |text: String| {
-                    let zone = text.trim().to_string();
-                    commit(ctx, move || set_timezone(&zone));
-                })
-                .subtitle(zone_caption),
-            ),
+            Group::titled("Time zone").row(text_row("Zone", zone_input, move |text: String| {
+                let zone = text.trim().to_string();
+                commit(ctx, move || set_timezone(&zone));
+            })),
         )
         .child(
             Group::titled("Format")

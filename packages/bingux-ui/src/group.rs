@@ -1,4 +1,8 @@
 //! Preference groups, captions, headings and status blocks.
+//!
+//! A group is a card, as a `ControlCentreDetails.qml` section: a muted name
+//! above, an optional muted description, then rows set flush against one
+//! card surface with hairlines between them.
 
 use freya::prelude::*;
 
@@ -7,7 +11,8 @@ use crate::controls::progress::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
 use crate::layout::page_column;
 use crate::scale::*;
-use crate::surface::use_tokens;
+use crate::surface::{over, use_tokens};
+use crate::theme::Tokens;
 
 /// A short muted explanation under a title or group.
 pub fn caption(text: impl Into<String>) -> Element {
@@ -30,9 +35,9 @@ impl Component for CaptionText {
     }
 }
 
-/// A group of rows on one card with an optional name and description
-/// above it, like a libadwaita preferences group with macOS inset
-/// separators between rows.
+/// A group of rows on one card, with an optional name and description above
+/// it. Rows sit flush against the card, with no inset around their hover
+/// layer; a hairline inset by the gutter divides them.
 #[derive(PartialEq)]
 pub struct Group {
     title: Option<String>,
@@ -82,33 +87,18 @@ impl Group {
 impl Component for Group {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let mut children = Vec::with_capacity(self.rows.len() * 2);
-        for (index, row) in self.rows.iter().enumerate() {
-            if index > 0 {
-                children.push(
-                    rect()
-                        .width(Size::fill())
-                        .height(Size::px(1.0))
-                        .background(tokens.separator)
-                        .into(),
-                );
-            }
-            children.push(row.clone());
-        }
-        // A flat section: a bold title, an optional muted description, then
-        // rows with no surface behind them, with a hairline between rows.
-        // The page column owns the space between sections.
+        let children = card_rows(&tokens, self.rows.clone());
         let heading = (self.title.is_some() || self.description.is_some()).then(|| {
             rect()
                 .width(Size::fill())
-                .padding((0.0, GUTTER, S2, GUTTER))
+                .padding((0.0, GUTTER))
                 .direction(Direction::Horizontal)
                 .content(Content::Flex)
                 .cross_align(Alignment::Center)
                 .child(
                     rect()
                         .width(Size::flex(1.0))
-                        .spacing(S1)
+                        .spacing(S0)
                         .maybe_child(
                             self.title
                                 .as_ref()
@@ -118,14 +108,47 @@ impl Component for Group {
                 )
                 .maybe_child(self.trailing.clone())
         });
+        // The page column owns the space between groups; the name sits
+        // a small step above its card.
         rect()
             .width(Size::fill())
+            .spacing(S1)
             .maybe_child(heading)
-            .child(rect().width(Size::fill()).children(children))
+            .child(card_surface(&tokens).children(children))
     }
 }
 
-/// A group name: small, muted, aligned with the row text.
+/// The card every group and skeleton section sits on: the card colour, a
+/// 12 px radius, and content clipped to that radius so flush rows follow it.
+fn card_surface(tokens: &Tokens) -> Rect {
+    rect()
+        .width(Size::fill())
+        .corner_radius(RADIUS_LG)
+        .background(tokens.card)
+        .overflow(Overflow::Clip)
+}
+
+/// Rows with a hairline between each pair, inset by the gutter on the left.
+fn card_rows(tokens: &Tokens, rows: Vec<Element>) -> Vec<Element> {
+    let mut children = Vec::with_capacity(rows.len() * 2);
+    for (index, row) in rows.into_iter().enumerate() {
+        if index > 0 {
+            children.push(
+                rect()
+                    .width(Size::fill())
+                    .height(Size::px(1.0))
+                    .margin((0.0, 0.0, 0.0, GUTTER))
+                    .background(tokens.separator)
+                    .into(),
+            );
+        }
+        children.push(row);
+    }
+    children
+}
+
+/// A group name: small and muted, as the section titles in
+/// `ControlCentreDetails.qml`, aligned with the row text.
 pub fn section_label(text: impl Into<String>) -> Element {
     let text = text.into();
     SectionLabel { text }.into()
@@ -141,9 +164,11 @@ impl Component for SectionLabel {
         let tokens = use_tokens();
         label()
             .text(self.text.clone())
-            .color(tokens.text)
-            .font_size(TEXT_LG)
-            .font_weight(FontWeight::SEMI_BOLD)
+            .color(tokens.muted)
+            .font_size(TEXT_SM)
+            .font_weight(FontWeight::MEDIUM)
+            .max_lines(1)
+            .text_overflow(TextOverflow::Ellipsis)
     }
 }
 
@@ -156,7 +181,7 @@ pub enum Status {
     Info(String),
 }
 
-/// A short status on a group surface: loading, empty, error or informational.
+/// A short status on a card: loading, empty, error or informational.
 #[derive(PartialEq)]
 pub struct StatusBlock {
     status: Status,
@@ -187,19 +212,22 @@ impl Component for StatusBlock {
             Status::Error(text) => (text.clone(), tokens.danger, Some(Icon::DialogError)),
             Status::Info(text) => (text.clone(), tokens.text, None),
         };
+        // Only an error is tinted; it is a danger layer over the card.
+        let background = if matches!(self.status, Status::Error(_)) {
+            over(tokens.danger.with_af32(0.12), tokens.card)
+        } else {
+            tokens.card
+        };
         let short = text.chars().count() <= 70;
-        // A status is a row with the height of every other row. Only an
-        // error is tinted. A long message wraps and grows the row.
+        // A status has the metrics of a row. A long message wraps and grows
+        // the block.
         rect()
             .width(Size::fill())
             .maybe(short, |card| card.height(Size::px(ROW_HEIGHT)))
             .maybe(!short, |card| card.min_height(Size::px(ROW_HEIGHT)))
             .padding((S2, GUTTER))
             .spacing(S3)
-            .map(
-                matches!(self.status, Status::Error(_)).then_some(tokens.danger.with_af32(0.12)),
-                |card, tint| card.background(tint),
-            )
+            .background(background)
             .corner_radius(RADIUS_LG)
             .direction(Direction::Horizontal)
             .content(Content::Flex)
@@ -243,36 +271,34 @@ impl Component for Skeleton {
         let bar = |width: f32| {
             rect()
                 .width(Size::px(width))
-                .height(Size::px(TEXT_MD))
+                .height(Size::px(TEXT_SM))
                 .corner_radius(RADIUS_SM)
                 .background(tokens.elevated)
         };
         let section = || {
+            let rows = (0..SKELETON_ROWS).map(|_| {
+                Element::from(
+                    rect()
+                        .width(Size::fill())
+                        .height(Size::px(ROW_HEIGHT))
+                        .padding((0.0, GUTTER))
+                        .direction(Direction::Horizontal)
+                        .content(Content::Flex)
+                        .cross_align(Alignment::Center)
+                        .child(
+                            rect()
+                                .width(Size::flex(1.0))
+                                .child(bar(SKELETON_LABEL_WIDTH)),
+                        )
+                        .child(bar(SKELETON_VALUE_WIDTH)),
+                )
+            });
             rect()
                 .width(Size::fill())
-                .spacing(S2)
-                .child(
-                    rect()
-                        .padding((0.0, GUTTER, S2, GUTTER))
-                        .child(bar(SKELETON_TITLE_WIDTH)),
-                )
-                .children((0..SKELETON_ROWS).map(|_| {
-                    Element::from(
-                        rect()
-                            .width(Size::fill())
-                            .height(Size::px(ROW_HEIGHT))
-                            .padding((0.0, GUTTER))
-                            .direction(Direction::Horizontal)
-                            .content(Content::Flex)
-                            .cross_align(Alignment::Center)
-                            .child(
-                                rect()
-                                    .width(Size::flex(1.0))
-                                    .child(bar(SKELETON_LABEL_WIDTH)),
-                            )
-                            .child(bar(SKELETON_VALUE_WIDTH)),
-                    )
-                }))
+                .spacing(S1)
+                .padding((0.0, GUTTER))
+                .child(bar(SKELETON_TITLE_WIDTH))
+                .child(card_surface(&tokens).children(card_rows(&tokens, rows.collect())))
         };
         page_column().child(section()).child(section())
     }

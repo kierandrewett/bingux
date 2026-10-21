@@ -26,12 +26,12 @@ pub fn spacer() -> Rect {
     rect().width(Size::flex(1.0)).height(Size::flex(1.0))
 }
 
-/// A 1 px hairline in the text colour at 7% alpha, as between rows.
+/// A 1 px hairline in the separator colour, as between panes.
 pub fn divider(tokens: &Tokens) -> Rect {
     rect()
         .width(Size::fill())
         .height(Size::px(1.0))
-        .background(tokens.text.with_af32(0.07))
+        .background(tokens.separator)
 }
 
 /// The group card surface with 16 px padding, for content that is not a
@@ -57,8 +57,9 @@ pub fn clamp(max_width: f32, child: impl Into<Element>) -> Rect {
         )
 }
 
-/// The root of a settings page: full width, with the standard 24 px between
-/// groups. Groups and status rows carry no outer margin of their own.
+/// The root of a settings page: full width, with 24 px between groups, as
+/// the spacing between `ControlCentreDetails` sections. Groups and status
+/// blocks carry no outer margin of their own.
 pub fn page_column() -> Rect {
-    rect().width(Size::fill()).spacing(S6)
+    rect().width(Size::fill()).spacing(S5)
 }

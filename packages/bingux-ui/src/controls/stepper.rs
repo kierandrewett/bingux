@@ -5,7 +5,7 @@ use freya::prelude::*;
 
 use crate::icons::{self, Icon};
 use crate::scale::*;
-use crate::surface::{field_border, surface_color, use_tokens};
+use crate::surface::{focus_border, surface_color, use_tokens};
 
 /// An integer stepper bounded by `min..=max`, moving by `step`.
 #[derive(PartialEq)]
@@ -118,7 +118,7 @@ impl Component for Stepper {
             .corner_radius(RADIUS)
             .background(tokens.elevated)
             .maybe(!enabled, |element| element.opacity(0.45))
-            .border(field_border(&tokens, focus()))
+            .border(focus_border(&tokens, focus()))
             .padding((0.0, S0))
             .maybe(enabled, |element| element.on_key_down(on_key_down))
             .child(step_button(Icon::ListRemove, can_decrement, move |_| {

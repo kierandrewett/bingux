@@ -213,7 +213,7 @@ fn dock_size_row(ctx: Ctx, size: u32) -> Row {
     let dragged = *ctx.pending.read();
     let percent = dragged.unwrap_or_else(|| percent_for_size(size));
     row("Icon size")
-        .subtitle(format!("Icons are {} px", size_for_percent(percent)))
+        .subtitle(format!("{} px", size_for_percent(percent)))
         .trailing(
             rect()
                 .width(Size::px(FIELD_WIDTH))

@@ -26,8 +26,13 @@ impl Snapshot {
     /// Start `app` at `size` with the Bingux font registered when the
     /// system has it (`fc-match "Adwaita Sans"`).
     pub fn new(app: impl Fn() -> Element + 'static, size: SnapshotSize) -> Self {
-        let (mut runner, ()) =
-            TestingRunner::new(app, Size2D::new(size.0, size.1), |_| {}, scale_factor());
+        let scale = scale_factor();
+        let (mut runner, ()) = TestingRunner::new(
+            app,
+            Size2D::new(size.0 * scale as f32, size.1 * scale as f32),
+            |_| {},
+            scale,
+        );
         let family = font_family();
         if let Some(font) = crate::theme::font_files(family, 1).pop() {
             runner.set_fonts([(family, font.as_slice())].into_iter().collect());
