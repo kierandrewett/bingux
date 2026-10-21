@@ -541,6 +541,20 @@ class BinguxConfigTests(unittest.TestCase):
         self.assertIn("dock_size = 60", config_path().read_text())
         self.assertTrue((directory / "settings.json.migrated").exists())
 
+    def test_missing_ai_harness_blocks_writes_but_not_reads(self):
+        # The harness being installed is a property of the machine, not the
+        # file: a saved choice must keep loading after the program is removed.
+        config_path().parent.mkdir(parents=True, exist_ok=True)
+        config_path().write_text('[search.ai]\nharness = "pi"\nexecutable = "/nonexistent/pi"\n')
+        reply = run("dump")
+        self.assertNotIn("error", reply, reply)
+        self.assertEqual(reply["data"]["search"]["ai"]["harness"], "pi")
+        reply = run("save", stdin=json.dumps({"search": {"ai": {"harness": "pi", "executable": "/nonexistent/pi"}}}))
+        self.assertIn("not installed", reply["error"])
+        # Unrelated writes still work while the harness is missing.
+        reply = run("save", stdin=json.dumps({"desktop": {"dockSize": 64}}))
+        self.assertNotIn("error", reply, reply)
+
     def test_save_preserves_comments_in_existing_toml(self):
         config_path().parent.mkdir(parents=True, exist_ok=True)
         config_path().write_text("[desktop]\n# keep me\ndock_size = 60 # inline\n")
