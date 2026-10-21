@@ -145,7 +145,7 @@ QtObject {
     }
 
     function isValidResult(result) {
-        const kinds = ["application", "file", "folder", "database", "calculation", "weather", "chat", "action"];
+        const kinds = ["application", "file", "folder", "database", "calculation", "weather", "chat", "action", "command"];
         return hasOnlyFields(result, ["resultId", "desktopId", "providerId", "kind", "title", "subtitle", "icon", "score"]) && (result.desktopId === undefined || (result.providerId === "applications" && result.kind === "application" && isValidDesktopId(result.desktopId))) && isValidOpaqueResultId(result.resultId) && isValidProviderId(result.providerId) && kinds.indexOf(result.kind) !== -1 && isSafeDisplayText(result.title) && isSafeDisplayText(result.subtitle) && isSafeDisplayText(result.icon) && utf8ByteLength(result.title) + utf8ByteLength(result.subtitle) + utf8ByteLength(result.icon) <= maxResultDisplayBytes && isFiniteNumber(result.score) && result.score >= 0 && result.score <= 1;
     }
 

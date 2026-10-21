@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, bail};
 use bingux_searchd::{
     ai::{AiProvider, ChatHistory},
+    command,
     config::{SearchCommands, SearchConfig},
     external::{ExternalEvent, ExternalProviders},
     protocol::{
@@ -501,7 +502,7 @@ impl Runtime {
             return;
         }
 
-        let dispatch = if request.query.trim().starts_with(['!', '?']) {
+        let dispatch = if request.query.trim().starts_with(['!', '?']) || command::is_command_query(&request.query) {
             Default::default()
         } else {
             self.external.query(
@@ -522,7 +523,7 @@ impl Runtime {
         }
 
         let mut candidates = self.local.query(&request.query, usize::from(request.limit));
-        if let Some(weather) = &self.weather {
+        if let Some(weather) = self.weather.as_ref().filter(|_| !command::is_command_query(&request.query)) {
             if let Some(result) = weather.query(&request.query) {
                 candidates.push(Candidate {
                     provider_id: "weather".to_owned(),
@@ -2048,6 +2049,51 @@ mod tests {
         assert_eq!(activation_error["type"], "error");
         assert_eq!(activation_error["requestId"], "a-01");
         assert_eq!(activation_error["code"], "unknown-result");
+
+        drop(reader);
+        drop(shell_stream);
+        client.join().expect("join socket client");
+    }
+
+    #[test]
+    fn runs_command_mode_as_one_argv_result_and_reports_a_failed_launch_over_a_socket() {
+        let runtime = test_runtime();
+        let (daemon_stream, mut shell_stream) = UnixStream::pair().expect("create socket pair");
+        shell_stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("set socket read timeout");
+        let client = thread::spawn(move || handle_client(runtime, 1, daemon_stream));
+        let mut reader = BufReader::new(shell_stream.try_clone().expect("clone shell socket"));
+
+        shell_stream
+            .write_all(
+                br#"{"protocolVersion":1,"type":"query","requestId":"q-cmd","query":">missing-binary-xyz \"two words\"","limit":20}"#,
+            )
+            .and_then(|()| shell_stream.write_all(b"\n"))
+            .expect("send query request");
+
+        let results = read_socket_event(&mut reader);
+        assert_eq!(results["type"], "results");
+        assert_eq!(results["complete"], true);
+        let results = results["results"].as_array().expect("results array");
+        assert_eq!(results.len(), 1, "command mode returns only the command row");
+        assert_eq!(results[0]["kind"], "command");
+        assert_eq!(results[0]["title"], r#"missing-binary-xyz "two words""#);
+        assert_eq!(results[0]["subtitle"], "Run command");
+        let result_id = results[0]["resultId"].as_str().expect("result id").to_owned();
+
+        let activation = format!(
+            r#"{{"protocolVersion":1,"type":"activate","requestId":"a-cmd","resultId":"{result_id}"}}"#
+        );
+        shell_stream
+            .write_all(activation.as_bytes())
+            .and_then(|()| shell_stream.write_all(b"\n"))
+            .expect("send activation request");
+
+        let activation_error = read_socket_event(&mut reader);
+        assert_eq!(activation_error["type"], "error");
+        assert_eq!(activation_error["requestId"], "a-cmd");
+        assert_eq!(activation_error["code"], "provider-failed");
 
         drop(reader);
         drop(shell_stream);

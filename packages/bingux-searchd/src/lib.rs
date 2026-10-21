@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod cli_ai;
+pub mod command;
 pub mod config;
 pub mod external;
 pub mod matching;
