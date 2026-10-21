@@ -1,9 +1,12 @@
-//! Appearance: the wallpaper, the accent colour and the colour scheme.
+//! Appearance: the wallpaper, the font, the accent colour and the colour
+//! scheme.
 //!
-//! The wallpaper is `desktop.wallpaper` in `bingux-config`, which the shell
-//! draws. The accent and colour scheme are GNOME's `org.gnome.desktop.interface`
-//! keys, so the shell, the portal and GNOME apps all see them. Changing either
-//! updates the shared palette at once, so the whole window recolours.
+//! The wallpaper and the font are `desktop.wallpaper` and
+//! `appearance.font_family` in `bingux-config`, which the shell reads. The
+//! accent and colour scheme are still GNOME's `org.gnome.desktop.interface`
+//! keys, so the shell, the portal and GNOME apps all see them; without
+//! gsettings those two groups are left out. Changing either updates the
+//! shared palette at once, so the whole window recolours.
 
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -14,10 +17,13 @@ use freya::prelude::*;
 use crate::pages::bingux_config;
 use crate::system::{self, CommandError, background, background_then, which};
 use crate::theme::{Scheme, SharedTokens, Tokens, accent_for, accent_names, read_gsettings};
-use crate::ui::{Group, Status, choice_row, page_column, row, row_button, status, use_tokens};
+use crate::ui::{
+    Group, Status, choice_row, entry_row, page_column, row, row_button, status, use_tokens,
+};
 
 const INTERFACE: &str = "org.gnome.desktop.interface";
 const WALLPAPER_KEY: &str = "desktop.wallpaper";
+const FONT_KEY: &str = "appearance.font_family";
 const IMAGE_PATTERNS: &str = "*.png *.jpg *.jpeg *.webp *.jxl *.avif";
 const SWATCH: f32 = 24.0;
 const SWATCH_RING: f32 = 36.0;
@@ -26,6 +32,10 @@ const SWATCH_RING: f32 = 36.0;
 struct Model {
     /// Absolute path of the wallpaper, or empty for the GNOME background.
     wallpaper: String,
+    /// `appearance.font_family`; empty is the default font.
+    font: String,
+    /// Whether gsettings can read the accent and colour scheme.
+    gsettings: bool,
 }
 
 type Loaded = Result<Model, CommandError>;
@@ -34,20 +44,34 @@ fn config(args: &[&str]) -> Result<String, CommandError> {
     system::run(&bingux_config(), args, Duration::from_secs(5))
 }
 
-/// Checks the GNOME keys are readable and reads the current wallpaper.
+/// Reads the wallpaper and font, and whether the GNOME keys are readable.
 fn load() -> Loaded {
-    if !which("gsettings") {
-        return Err(CommandError("gsettings is not installed.".into()));
-    }
-    for key in ["accent-color", "color-scheme"] {
-        if read_gsettings(key).is_none() {
-            return Err(CommandError(format!(
-                "gsettings could not read {INTERFACE} {key}."
-            )));
-        }
-    }
+    let gsettings = which("gsettings")
+        && ["accent-color", "color-scheme"]
+            .iter()
+            .all(|key| read_gsettings(key).is_some());
     let wallpaper = config(&["get", WALLPAPER_KEY])?;
-    Ok(Model { wallpaper })
+    let font = config(&["get", FONT_KEY])?;
+    Ok(Model {
+        wallpaper,
+        font,
+        gsettings,
+    })
+}
+
+/// Stores a font family after checking that it is installed. Empty restores
+/// the default.
+fn set_font(family: &str) -> Result<Option<Model>, CommandError> {
+    let family = family.trim();
+    if family.is_empty() {
+        config(&["unset", FONT_KEY])?;
+    } else {
+        if crate::theme::font_files(family, 1).is_empty() {
+            return Err(CommandError(format!("The font {family} is not installed.")));
+        }
+        config(&["set", FONT_KEY, family])?;
+    }
+    load().map(Some)
 }
 
 fn reload(mut model: State<Option<Loaded>>) {
@@ -291,38 +315,75 @@ impl Component for AppearancePage {
                     ),
             )
             .child(
-                Group::titled("Accent colour").row(
-                    rect()
-                        .width(Size::fill())
-                        .direction(Direction::Horizontal)
-                        .content(Content::Flex)
-                        .cross_align(Alignment::Center)
-                        .padding((4.0, 16.0))
-                        .spacing(10.0)
-                        .children(swatches),
-                ),
+                Group::titled("Font")
+                    .description("Applies to the shell now and to this window when it next starts.")
+                    .row(
+                        entry_row("Font family", model_value.font.clone(), {
+                            move |family: String| {
+                                background_then(
+                                    move || set_font(&family),
+                                    move |result| match result {
+                                        Ok(Some(loaded)) => {
+                                            let mut error = error;
+                                            let mut model = model;
+                                            error.set(None);
+                                            model.set(Some(Ok(loaded)));
+                                        }
+                                        Ok(None) => {}
+                                        Err(failure) => {
+                                            let mut error = error;
+                                            error.set(Some(failure.0));
+                                        }
+                                    },
+                                );
+                            }
+                        })
+                        .placeholder("Adwaita Sans"),
+                    ),
             )
+            .maybe_child(model_value.gsettings.then(|| {
+                Element::from(
+                    Group::titled("Accent colour").row(
+                        rect()
+                            .width(Size::fill())
+                            .direction(Direction::Horizontal)
+                            .content(Content::Flex)
+                            .cross_align(Alignment::Center)
+                            .padding((4.0, 16.0))
+                            .spacing(10.0)
+                            .children(swatches),
+                    ),
+                )
+            }))
             // The shell and this window are always dark; the scheme is what
             // GTK applications and the portal follow, and it picks the
             // accent variant.
-            .child(
-                Group::titled("Colour scheme").row(
-                    choice_row(
-                        "Applications",
-                        scheme_options,
-                        tokens.scheme.gsettings_value(),
-                        move |key: String| {
-                            let scheme = match key.as_str() {
-                                "prefer-light" => Scheme::PreferLight,
-                                "prefer-dark" => Scheme::PreferDark,
-                                _ => Scheme::Default,
-                            };
-                            apply_scheme(shared, error, scheme);
-                        },
-                    )
-                    .subtitle("Followed by GTK applications; the shell stays dark."),
-                ),
-            )
+            .maybe_child(model_value.gsettings.then(|| {
+                Element::from(
+                    Group::titled("Colour scheme").row(
+                        choice_row(
+                            "Applications",
+                            scheme_options,
+                            tokens.scheme.gsettings_value(),
+                            move |key: String| {
+                                let scheme = match key.as_str() {
+                                    "prefer-light" => Scheme::PreferLight,
+                                    "prefer-dark" => Scheme::PreferDark,
+                                    _ => Scheme::Default,
+                                };
+                                apply_scheme(shared, error, scheme);
+                            },
+                        )
+                        .subtitle("Followed by GTK applications; the shell stays dark."),
+                    ),
+                )
+            }))
+            .maybe_child((!model_value.gsettings).then(|| {
+                Element::from(status(Status::Info(
+                    "Accent colour and colour scheme need gsettings, which is not available."
+                        .into(),
+                )))
+            }))
             .child(
                 Group::titled("Motion").row(
                     row("Reduced motion")

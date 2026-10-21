@@ -805,6 +805,22 @@ fn validate_previews(previews: &Value) -> Result<(), Error> {
     Ok(())
 }
 
+fn validate_appearance(appearance: &Value) -> Result<(), Error> {
+    let Some(family) = appearance["font_family"].as_str() else {
+        return Err(invalid(
+            "appearance.font_family",
+            "Font family must be text.",
+        ));
+    };
+    if family.chars().count() > 128 || family.chars().any(char::is_control) {
+        return Err(invalid(
+            "appearance.font_family",
+            "Font family must be at most 128 characters with no control characters.",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_privacy(privacy: &Value) -> Result<(), Error> {
     if !privacy["public_ip_lookup"].is_boolean() {
         return Err(invalid("privacy.public_ip_lookup", "Invalid toggle value."));
@@ -853,6 +869,7 @@ pub fn validate(
     let executable = validate_ai(&tree["search"], require_ai_installed)?;
     validate_previews(&tree["previews"])?;
     validate_privacy(&tree["privacy"])?;
+    validate_appearance(&tree["appearance"])?;
     Ok(executable)
 }
 

@@ -23,22 +23,30 @@ Settings has no store of its own. Every page reads and writes the system
 that owns the setting, so changes made elsewhere show up here and the other
 way round.
 
-| Page            | Backend                                                                      | Notes                                                                                                    |
-| --------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Appearance      | `bingux-config desktop.wallpaper`, GSettings `org.gnome.desktop.interface`   | Accent colour and colour scheme are the keys GTK apps and the portal read. The window recolours at once. |
-| Desktop, Search | `bingux-config` (`~/.config/bingux/bingux.toml`)                             | Same validation as `bingux-config set`. See [configuration](configuration.md).                           |
-| Displays        | `org.gnome.Mutter.DisplayConfig` over D-Bus, GSettings night light           | Apply writes a persistent layout (`~/.config/monitors.xml`).                                             |
-| Sound           | `wpctl` (WirePlumber)                                                        | Default devices, volumes, mute, and a volume slider for each application stream.                         |
-| Network         | `nmcli` (NetworkManager)                                                     | Wi-Fi, wired status, airplane mode.                                                                      |
-| Bluetooth       | `bluetoothctl` (BlueZ)                                                       | Power, scan, pair, connect, remove.                                                                      |
-| Power           | `powerprofilesctl`, `upower`, GSettings session and screensaver              | Blank screen and lock delays.                                                                            |
-| Keyboard, Mouse | GSettings `org.gnome.desktop.peripherals.*`, `gnoblinctl input`              | See the Gnoblin note below.                                                                              |
-| Date and Time   | `timedatectl`, GSettings clock format, `bingux-config desktop.clock_seconds` | Time zone and manual time may ask for authorisation.                                                     |
-| Users           | AccountsService over D-Bus                                                   | Full name changes may ask for authorisation.                                                             |
-| About           | `/etc/os-release`, DMI, `gnoblinctl --version`                               | Read-only.                                                                                               |
+| Page            | Backend                                                                                              | Notes                                                                                                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Appearance      | `bingux-config desktop.wallpaper`, `appearance.font_family`, GSettings `org.gnome.desktop.interface` | The font is Bingux's own setting. Accent colour and colour scheme are the keys GTK apps and the portal read, and are hidden without gsettings. |
+| Desktop, Search | `bingux-config` (`~/.config/bingux/bingux.toml`)                                                     | Same validation as `bingux-config set`. See [configuration](configuration.md).                                                                 |
+| Displays        | `org.gnome.Mutter.DisplayConfig` over D-Bus, GSettings night light                                   | Apply writes a persistent layout (`~/.config/monitors.xml`).                                                                                   |
+| Sound           | `wpctl` (WirePlumber)                                                                                | Default devices, volumes, mute, and a volume slider for each application stream.                                                               |
+| Network         | `nmcli` (NetworkManager)                                                                             | Wi-Fi, wired status, airplane mode.                                                                                                            |
+| Bluetooth       | `bluetoothctl` (BlueZ)                                                                               | Power, scan, pair, connect, remove.                                                                                                            |
+| Power           | `powerprofilesctl`, `upower`, GSettings session and screensaver                                      | Blank screen and lock delays.                                                                                                                  |
+| Keyboard, Mouse | GSettings `org.gnome.desktop.peripherals.*`, `gnoblinctl input`                                      | See the Gnoblin note below.                                                                                                                    |
+| Date and Time   | `timedatectl`, GSettings clock format, `bingux-config desktop.clock_seconds`                         | Time zone and manual time may ask for authorisation.                                                                                           |
+| Users           | AccountsService over D-Bus                                                                           | Full name changes may ask for authorisation.                                                                                                   |
+| About           | `/etc/os-release`, DMI, `gnoblinctl --version`                                                       | Read-only.                                                                                                                                     |
 
 Each page shows a readable error when its tool is missing or refuses the
 request, and a Try again action where that makes sense.
+
+## Font
+
+Bingux Settings and the shell use `appearance.font_family` from `bingux.toml`.
+When it is empty they use Adwaita Sans, or the system sans-serif when Adwaita
+Sans is not installed. GNOME's font setting is not read. Set it on the
+Appearance page or with `bingux-config set appearance.font_family Cantarell`.
+The shell follows the change at once; Bingux Settings reads it at start.
 
 ## Gnoblin and GSettings
 

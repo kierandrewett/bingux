@@ -195,11 +195,14 @@ impl Component for StatusBlock {
             Status::Error(text) => (text.clone(), tokens.danger, Some(Icon::DialogError)),
             Status::Info(text) => (text.clone(), tokens.text, None),
         };
-        // A status is a row on its own card, the same height and padding as
-        // every other row, so a page with a message looks like a page.
+        let short = text.chars().count() <= 70;
+        // A status is a row on its own card with the height of every other
+        // row, so a page with a message looks like a page. A long message
+        // wraps and grows the row.
         rect()
             .width(Size::fill())
-            .min_height(Size::px(ROW_HEIGHT - 16.0))
+            .maybe(short, |card| card.height(Size::px(ROW_HEIGHT)))
+            .maybe(!short, |card| card.min_height(Size::px(ROW_HEIGHT)))
             .padding((8.0, ROW_PADDING))
             .spacing(12.0)
             .background(tokens.card)
@@ -212,17 +215,11 @@ impl Component for StatusBlock {
             )
             .maybe_child(glyph.map(|glyph| icons::icon(glyph, 18.0, color)))
             .child(
-                rect()
+                paragraph()
                     .width(Size::flex(1.0))
-                    .min_height(Size::px(ROW_HEIGHT - 16.0))
-                    .main_align(Alignment::Center)
-                    .child(
-                        label()
-                            .color(color)
-                            .font_size(FONT_SIZE)
-                            .max_lines(4)
-                            .text(text),
-                    ),
+                    .color(color)
+                    .font_size(FONT_SIZE)
+                    .child(text),
             )
             .maybe_child(self.action.as_ref().map(|(label, on_press)| {
                 let on_press = on_press.clone();

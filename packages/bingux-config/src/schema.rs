@@ -17,6 +17,7 @@ pub struct Config {
     pub previews: Previews,
     pub desktop: Desktop,
     pub privacy: Privacy,
+    pub appearance: Appearance,
 }
 
 impl Config {
@@ -239,6 +240,16 @@ pub struct WidgetOptions {
     pub width: Option<i64>,
 }
 
+/// How Bingux windows look.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+pub struct Appearance {
+    /// Font family for the shell and Bingux applications. Empty means
+    /// Adwaita Sans, or the fontconfig default sans-serif when that family
+    /// is not installed.
+    pub font_family: String,
+}
+
 /// Privacy choices that gate outbound network requests.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]
@@ -358,6 +369,11 @@ pub const KEY_DOCS: &[KeyDoc] = &[
         section: "previews",
         key: "max_megabytes",
         accepted: "Largest previewed file, 1 to 20.",
+    },
+    KeyDoc {
+        section: "appearance",
+        key: "font_family",
+        accepted: "Installed font family name, for example \"Cantarell\". \"\" uses Adwaita Sans, or the system sans-serif when that is missing.",
     },
     KeyDoc {
         section: "privacy",

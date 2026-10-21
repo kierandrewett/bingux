@@ -8,8 +8,8 @@
 
 use freya::prelude::*;
 
-/// Font family used for all text. Falls back to the system sans when absent.
-pub const FONT_FAMILY: &str = "Adwaita Sans";
+/// The shell's own font.
+const DEFAULT_FONT_FAMILY: &str = "Adwaita Sans";
 /// Small caption size (`fontSmall`).
 pub const FONT_SMALL: f32 = 12.0;
 /// Body size (`fontSize`).
@@ -369,41 +369,97 @@ pub fn watch_appearance(mut tokens: State<Tokens>) {
     });
 }
 
-/// The bytes of the font fontconfig resolves `family` to, if the match is
-/// genuinely that family.
-pub fn system_font(family: &str) -> Option<Vec<u8>> {
-    let output = std::process::Command::new("fc-match")
-        .args(["-f", "%{family}\n%{file}", family])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let text = String::from_utf8_lossy(&output.stdout);
-    let mut lines = text.lines();
-    let matched = lines.next()?;
-    let file = lines.next()?;
-    if !matched
-        .split(',')
-        .any(|name| name.eq_ignore_ascii_case(family))
-    {
-        return None;
-    }
-    std::fs::read(file.trim()).ok()
+/// The interface font, read once. It is `appearance.font_family` from
+/// `bingux.toml`. When that is empty the family is Adwaita Sans, the shell's
+/// own font, or the fontconfig default sans-serif when Adwaita Sans is not
+/// installed. GNOME's font setting is not consulted.
+pub fn font_family() -> &'static str {
+    static FAMILY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    FAMILY.get_or_init(|| {
+        let configured = crate::runtime::run(
+            &crate::runtime::bingux_config(),
+            &["get", "appearance.font_family"],
+            std::time::Duration::from_secs(2),
+        )
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+        configured.unwrap_or_else(|| {
+            if !font_files(DEFAULT_FONT_FAMILY, 1).is_empty() {
+                return DEFAULT_FONT_FAMILY.to_string();
+            }
+            std::process::Command::new("fc-match")
+                .args(["-f", "%{family}", "sans-serif"])
+                .output()
+                .ok()
+                .and_then(|output| {
+                    let text = String::from_utf8_lossy(&output.stdout).into_owned();
+                    text.split(',').next().map(|name| name.trim().to_string())
+                })
+                .filter(|name| !name.is_empty())
+                .unwrap_or_else(|| DEFAULT_FONT_FAMILY.to_string())
+        })
+    })
 }
 
-/// Registers [`FONT_FAMILY`] with Freya from its font file.
+/// The font files fontconfig has for `family`, regular first, at most
+/// `limit` of them. Only files whose family really is `family` are kept, so
+/// a missing family gives an empty list instead of a substitute.
+pub fn font_files(family: &str, limit: usize) -> Vec<Vec<u8>> {
+    let Ok(output) = std::process::Command::new("fc-list")
+        .args(["-f", "%{file}\t%{family}\t%{style}\n", family])
+        .output()
+    else {
+        return Vec::new();
+    };
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut entries: Vec<(&str, &str)> = text
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.splitn(3, '\t');
+            let (file, names, style) = (fields.next()?, fields.next()?, fields.next()?);
+            names
+                .split(',')
+                .any(|name| name.trim().eq_ignore_ascii_case(family))
+                .then_some((file, style))
+        })
+        .collect();
+    // Upright faces before italic ones, then by file name, so the regular
+    // file is registered first and the limit drops italics first.
+    entries.sort_by_key(|(file, style)| (style.to_ascii_lowercase().contains("italic"), *file));
+    let mut seen = Vec::new();
+    let mut fonts = Vec::new();
+    for (file, _) in entries {
+        if fonts.len() == limit || seen.contains(&file) {
+            continue;
+        }
+        seen.push(file);
+        if let Ok(bytes) = std::fs::read(file) {
+            fonts.push(bytes);
+        }
+    }
+    fonts
+}
+
+/// Registers the interface font with Freya from its font files.
 ///
-/// Adwaita Sans is a variable font. Freya picks the weight axis for fonts it
-/// loads itself, but for a system font the text engine asks for Bold, gets
-/// the Regular instance and fakes the weight by smearing the outlines, which
-/// looks heavy and blotchy. Loading the file gives real instances for every
-/// weight. Without the font installed the system fallback is used.
+/// Many system fonts, Adwaita Sans and Cantarell among them, are variable.
+/// Freya picks the weight axis only for fonts it loads itself. For a system
+/// font the text engine asks for Bold, gets the Regular instance and fakes
+/// the weight by smearing the outlines, which looks heavy and blotchy.
+/// Loading the files gives real instances for every weight. When the family
+/// has no file, Freya falls back to its own system lookup by name.
 pub fn with_font(config: LaunchConfig) -> LaunchConfig {
-    match system_font(FONT_FAMILY) {
-        Some(bytes) => config
-            .with_font(FONT_FAMILY, bytes)
-            .with_default_font(FONT_FAMILY),
-        None => config,
+    let family = font_family();
+    let mut config = config;
+    let mut found = false;
+    for bytes in font_files(family, 4) {
+        config = config.with_font(family, bytes);
+        found = true;
+    }
+    if found {
+        config.with_default_font(family)
+    } else {
+        config
     }
 }

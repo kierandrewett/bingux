@@ -29,6 +29,7 @@ const RENAMES: &[(&str, &str)] = &[
     ("file_roots", "fileRoots"),
     ("max_megabytes", "maxMegabytes"),
     ("public_ip_lookup", "publicIpLookup"),
+    ("font_family", "fontFamily"),
 ];
 
 /// Keys whose immediate children are identifiers, not schema keys.

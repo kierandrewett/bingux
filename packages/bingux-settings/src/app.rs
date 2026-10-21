@@ -32,7 +32,7 @@ impl Component for App {
         rect()
             .expanded()
             .color(tokens.text)
-            .font_family(bingux_ui::theme::FONT_FAMILY)
+            .font_family(bingux_ui::theme::font_family())
             .child(OverlayHost::new(NavigationSplitView::new(
                 "Settings",
                 PageId::ALL.to_vec(),

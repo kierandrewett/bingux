@@ -156,6 +156,15 @@ missing program when you ask the assistant a question.
 | ------------------ | ---- | ------- | --------------------------------------------------------------------------- |
 | `public_ip_lookup` | bool | `false` | Let the Control Centre ask ipapi.co for the public address. Off by default. |
 
+### `[appearance]`
+
+| Key           | Type   | Default | Accepted values                                                                                                            |
+| ------------- | ------ | ------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `font_family` | string | `""`    | Installed font family name, for example `"Cantarell"`. Empty uses Adwaita Sans, or the system sans-serif if it is missing. |
+
+The shell and Bingux Settings both read it. The shell follows a change at once;
+Bingux Settings reads it when it starts.
+
 ## Where the shell reads it
 
 - The shell watches `bingux.toml` and reloads through `bingux-config dump`.

@@ -294,6 +294,10 @@ pub fn choice_row(
     on_select: impl Into<EventHandler<String>>,
 ) -> Row {
     let on_select = on_select.into();
+    // One option is a fact, not a choice.
+    if let [(_, only)] = options.as_slice() {
+        return row(title).value(only.clone());
+    }
     let short = options.len() <= 3 && options.iter().all(|(_, label)| label.chars().count() <= 12);
     if short {
         return row(title).trailing(segmented(options, selected, on_select));

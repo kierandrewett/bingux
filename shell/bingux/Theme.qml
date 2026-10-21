@@ -199,7 +199,8 @@ QtObject {
     readonly property int tooltipIconSize: 20
     readonly property int fontSize: 14
     readonly property int fontHeading: 16
-    readonly property string fontFamily: "Adwaita Sans"
+    // `appearance.font_family` in bingux.toml; empty keeps Adwaita Sans.
+    readonly property string fontFamily: (BinguxPreferences.data.appearance && BinguxPreferences.data.appearance.fontFamily) || "Adwaita Sans"
     readonly property int dockHeight: 88
     readonly property int dockPadding: Math.max(0, padding - spaceSmall)
     readonly property int dockExclusiveHeight: dockHeight + dockPadding * 2

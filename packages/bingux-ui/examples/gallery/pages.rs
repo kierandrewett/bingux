@@ -68,7 +68,7 @@ impl Component for Gallery {
         rect()
             .expanded()
             .color(tokens.text)
-            .font_family(bingux_ui::theme::FONT_FAMILY)
+            .font_family(bingux_ui::theme::font_family())
             .child(OverlayHost::new(NavigationSplitView::new(
                 "Gallery",
                 Page::ALL.to_vec(),

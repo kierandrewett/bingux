@@ -12,7 +12,7 @@ use freya::prelude::*;
 use freya::torin::prelude::Size2D;
 use freya_testing::TestingRunner;
 
-use crate::theme::FONT_FAMILY;
+use crate::theme::font_family;
 
 /// Width and height in logical pixels.
 pub type SnapshotSize = (f32, f32);
@@ -27,9 +27,10 @@ impl Snapshot {
     /// system has it (`fc-match "Adwaita Sans"`).
     pub fn new(app: impl Fn() -> Element + 'static, size: SnapshotSize) -> Self {
         let (mut runner, ()) = TestingRunner::new(app, Size2D::new(size.0, size.1), |_| {}, 1.0);
-        if let Some(font) = crate::theme::system_font(FONT_FAMILY) {
-            runner.set_fonts([(FONT_FAMILY, font.as_slice())].into_iter().collect());
-            runner.set_default_fonts(&[FONT_FAMILY.into()]);
+        let family = font_family();
+        if let Some(font) = crate::theme::font_files(family, 1).pop() {
+            runner.set_fonts([(family, font.as_slice())].into_iter().collect());
+            runner.set_default_fonts(&[family.into()]);
         }
         Self { runner }
     }

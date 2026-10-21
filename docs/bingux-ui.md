@@ -99,9 +99,11 @@ These keep every page the same. A component that breaks one is a bug.
 - The window is opaque and square. Gnoblin draws the corners, border and
   shadow, so an application sets no corner radius, transparency or shadow on
   its root.
-- Load Adwaita Sans with `theme::with_font(LaunchConfig::new())`. The font is
-  variable; Freya only picks real weights for fonts it loads itself, and
-  otherwise fakes bold, which looks blotchy.
+- Load the font with `theme::with_font(LaunchConfig::new())`. The family is
+  `appearance.font_family` from `bingux-config`, else Adwaita Sans, else the
+  system sans-serif; GNOME's font setting is not read. Many system fonts are
+  variable. Freya only picks real weights for fonts it loads itself, and
+  otherwise fakes bold, which looks blotchy, so `with_font` loads the files.
 - Icons are Adwaita symbolic SVGs under `packages/bingux-ui/icons/` with
   the hard-coded fill removed so they recolour. Add one by copying it from
   `/usr/share/icons/Adwaita/symbolic/` and adding a variant to `Icon`.

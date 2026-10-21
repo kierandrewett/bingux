@@ -26,6 +26,9 @@ Singleton {
                 "prewarm": true,
                 "maxMegabytes": 20
             },
+            "appearance": {
+                "fontFamily": ""
+            },
             "desktop": {
                 "dock": true,
                 "sidebar": true,
@@ -209,6 +212,7 @@ Singleton {
                     if (root.data.desktop.layoutVersion === 1 && incoming.desktop.layoutVersion !== 1)
                         throw new Error("The desktop layout has changed. Restore a version 1 layout.");
                     const next = {
+                        appearance: incoming.appearance,
                         search: incoming.search,
                         previews: incoming.previews,
                         desktop: Object.assign({}, incoming.desktop, writer.running ? writer.submitted || {} : {}, root.pendingDesktop || {})

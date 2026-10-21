@@ -169,6 +169,16 @@ pub fn which(program: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// The `bingux-config` command: `BINGUX_CONFIG_BIN` when set (the test
+/// harness convention), else PATH, else the binary built or installed beside
+/// the current executable.
+pub fn bingux_config() -> String {
+    std::env::var("BINGUX_CONFIG_BIN")
+        .ok()
+        .filter(|path| !path.is_empty())
+        .unwrap_or_else(|| locate("bingux-config"))
+}
+
 /// The command to run for a companion program: `program` when it is on
 /// PATH, else the copy beside the current executable (a build directory or
 /// an install prefix), else `program` so that running it still reports

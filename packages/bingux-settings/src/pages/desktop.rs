@@ -19,6 +19,8 @@ const TILES: [(&str, &str); 5] = [
     ("power", "Power"),
     ("awake", "Keep awake"),
 ];
+/// What the shell shows when `controlCentre` is absent (`ControlCentreServices.qml`).
+const TILE_DEFAULTS: [bool; 5] = [true, true, false, false, false];
 
 const DOCK_SIZE_MIN: f64 = 32.0;
 const DOCK_SIZE_RANGE: f64 = 48.0;
@@ -50,12 +52,16 @@ impl Model {
         let privacy = data
             .get("privacy")
             .ok_or("bingux-config dump has no privacy section.")?;
-        let control = desktop
+        // A fresh config has no `controlCentre`; the shell then shows its
+        // defaults, which are the `TILES` defaults here.
+        let mut tiles = TILE_DEFAULTS;
+        if let Some(control) = desktop
             .get("controlCentre")
-            .ok_or("bingux-config dump has no desktop.controlCentre.")?;
-        let mut tiles = [false; 5];
-        for (slot, (key, _)) in tiles.iter_mut().zip(TILES) {
-            *slot = flag(control, key)?;
+            .filter(|value| !matches!(value, Json::Null))
+        {
+            for (slot, (key, _)) in tiles.iter_mut().zip(TILES) {
+                *slot = flag(control, key)?;
+            }
         }
         Ok(Self {
             dock: flag(desktop, "dock")?,
