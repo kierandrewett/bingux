@@ -12,8 +12,8 @@ use freya::prelude::*;
 use crate::pages::gnoblin;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Status, caption, choice_row, page_title, primary_button, row, slider_row, status,
-    switch_row,
+    Group, Status, caption, choice_row, page_title, primary_button, row, row_button, slider_row,
+    status, switch_row,
 };
 
 const SERVICE: &str = "org.gnome.Mutter.DisplayConfig";
@@ -1072,6 +1072,7 @@ fn monitor_group(
     let mode = monitor.selected();
     Group::titled(&monitor.name)
         .row(row("Output").value(monitor.connector.clone()))
+        .row(row("Number").value((index + 1).to_string()))
         .row(switch_row("Enabled", enabled, move |on: bool| {
             edit(model, error, move |monitors| {
                 set_enabled(monitors, index, on)
@@ -1141,6 +1142,41 @@ fn monitor_group(
         )
 }
 
+/// The `binguxctl` arguments that label every display, in the order the page
+/// lists them. Disabled displays keep their place: the shell gives an unknown
+/// connector its number without drawing a label, so the numbers still match.
+fn identify_arguments(monitors: &[Monitor]) -> Vec<String> {
+    let mut arguments = vec!["identify".to_string(), "show".to_string()];
+    arguments.extend(monitors.iter().map(|monitor| monitor.connector.clone()));
+    arguments
+}
+
+/// Ask the running shell to label each display for a few seconds.
+fn identify(mut error: State<Option<String>>, arguments: Vec<String>) {
+    background_then(
+        move || {
+            let program = system::locate("binguxctl");
+            let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
+            system::run(&program, &arguments, Duration::from_secs(5))
+        },
+        move |result| match result {
+            Ok(_) => error.set(None),
+            Err(failure) => error.set(Some(failure.0)),
+        },
+    );
+}
+
+fn identify_group(error: State<Option<String>>, monitors: &[Monitor]) -> Group {
+    let arguments = identify_arguments(monitors);
+    Group::titled("Identify").row(
+        row("Identify displays")
+            .subtitle("Show each display's number and connector on screen for five seconds.")
+            .trailing(row_button("Identify", move |_| {
+                identify(error, arguments.clone())
+            })),
+    )
+}
+
 fn night_group(
     model: State<Option<Page>>,
     error: State<Option<String>>,
@@ -1189,6 +1225,9 @@ impl Component for DisplaysPage {
             }
             Ok(Displays::Editable { monitors, .. }) => {
                 let mut page = page;
+                if !monitors.is_empty() {
+                    page = page.child(identify_group(error, &monitors));
+                }
                 for (index, monitor) in monitors.iter().enumerate() {
                     page = page.child(monitor_group(model, error, index, monitor));
                 }
@@ -1214,5 +1253,43 @@ impl Component for DisplaysPage {
             Err(failure) => page.child(status(Status::Error(failure.0))),
         };
         page
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn monitor(connector: &str, enabled: bool) -> Monitor {
+        Monitor {
+            connector: connector.to_string(),
+            name: connector.to_string(),
+            modes: Vec::new(),
+            mode: 0,
+            enabled,
+            primary: false,
+            x: 0,
+            y: 0,
+            scale: 1.0,
+            transform: 0,
+        }
+    }
+
+    #[test]
+    fn identify_labels_displays_in_page_order() {
+        let monitors = [monitor("eDP-1", true), monitor("DP-1", true)];
+        assert_eq!(
+            identify_arguments(&monitors),
+            ["identify", "show", "eDP-1", "DP-1"]
+        );
+    }
+
+    #[test]
+    fn identify_keeps_disabled_displays_so_numbers_match_the_page() {
+        let monitors = [monitor("DP-1", false), monitor("DP-2", true)];
+        assert_eq!(
+            identify_arguments(&monitors),
+            ["identify", "show", "DP-1", "DP-2"]
+        );
     }
 }
