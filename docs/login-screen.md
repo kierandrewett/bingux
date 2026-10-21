@@ -25,14 +25,14 @@ sequenceDiagram
 
 The installer places these files (paths for the default prefix):
 
-| File                                             | Purpose                                                       |
-| ------------------------------------------------ | ------------------------------------------------------------- |
-| `bin/bingux-greeter`                             | Quickshell wrapper for `GreeterShell.qml`                     |
-| `bin/bingux-greeter-session`                     | greetd command: exports the session type and runs Gnoblin     |
-| `share/bingux/greeter/gnoblin.lua`               | Gnoblin greeter configuration: autostarts statusd and greeter |
-| `share/bingux/greeter/greetd.toml`               | greetd configuration example                                  |
-| `share/polkit-1/rules.d/50-bingux-greeter.rules` | lets the greeter account restart and shut down                |
-| `lib/tmpfiles.d/bingux-greeter.conf`             | creates `/var/lib/bingux/greeter` for wallpaper snapshots     |
+| File                                             | Purpose                                                                                                                  |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `bin/bingux-greeter`                             | Quickshell wrapper for `GreeterShell.qml`                                                                                |
+| `bin/bingux-greeter-session`                     | greetd command: exports the session type, gives the greeter account a writable `HOME` and runs Gnoblin                   |
+| `share/bingux/greeter/gnoblin.lua`               | Gnoblin greeter configuration: autostarts statusd and greeter                                                            |
+| `share/bingux/greeter/greetd.toml`               | greetd configuration example                                                                                             |
+| `share/polkit-1/rules.d/50-bingux-greeter.rules` | lets the greeter account restart and shut down                                                                           |
+| `lib/tmpfiles.d/bingux-greeter.conf`             | creates `/var/lib/bingux/greeter` for wallpaper snapshots and `/var/lib/bingux/greeter-home`, the greeter account's home |
 
 Point greetd at the session command in `/etc/greetd/config.toml`:
 

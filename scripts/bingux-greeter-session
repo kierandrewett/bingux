@@ -11,6 +11,19 @@ ulimit -c 0
 
 # greetd does not set the session type; Gnoblin needs it to accept the login.
 export XDG_SESSION_TYPE=wayland
+
+# Distributions give the greetd account no usable home (Arch: `/`). Mutter's
+# session manager, fontconfig's cache and Gnoblin's state all need one; without
+# it the compositor aborts before the greeter appears. The persistent state
+# directory from tmpfiles is preferred, the runtime directory is the fallback.
+if [ ! -w "${HOME:-/}" ] || [ "${HOME:-/}" = / ]; then
+    HOME=/var/lib/bingux/greeter-home
+    if [ ! -w "$HOME" ] && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+        HOME="$XDG_RUNTIME_DIR/bingux-greeter/home"
+        mkdir -p "$HOME"
+    fi
+    export HOME
+fi
 GNOBLIN="${BINGUX_GREETER_COMPOSITOR:-gnoblin}"
 GREETER_LUA=/usr/local/share/bingux/greeter/gnoblin.lua
 SESSION_BIN=/usr/local/bin/bingux-session
