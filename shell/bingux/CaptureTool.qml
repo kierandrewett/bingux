@@ -155,6 +155,13 @@ Scope {
     function send(record) {
         worker.write(JSON.stringify(record) + "\n");
     }
+    function sendCancel() {
+        // Name the active request so a late cancelled echo cannot end a newer request.
+        send({
+            command: "cancel",
+            request: activeRequest || undefined
+        });
+    }
     function open() {
         if (!worker.running)
             worker.running = true;
@@ -163,9 +170,7 @@ Scope {
             return;
         }
         if (busy) {
-            send({
-                command: "cancel"
-            });
+            sendCancel();
             return;
         }
         if (opened || state === "preparing") {
@@ -227,9 +232,7 @@ Scope {
         previewRequest++;
         if (!busy) {
             state = "idle";
-            send({
-                command: "cancel"
-            });
+            sendCancel();
             finishRequest("cancelled");
         }
     }
@@ -382,9 +385,7 @@ Scope {
                 error: "Request is not pending"
             };
         if (busy)
-            send({
-                command: "cancel"
-            });
+            sendCancel();
         else
             close();
         return {
@@ -468,21 +469,27 @@ Scope {
         } else if (event.event === "finalizing") {
             state = "finalizing";
         } else if (event.event === "saved") {
+            const portalRequest = activeRequest !== "";
             state = "saved";
             savedPath = event.path;
             partialPath = "";
             message = (event.kind === "recording" ? "Recording saved" : "Screenshot saved") + (event.copied ? " · Copied to clipboard" : "");
             finishRequest("saved", event.path);
-            if (!event.notified)
+            if (!portalRequest && !event.notified)
                 console.warn("Capture saved; desktop notification acknowledgement pending or unavailable");
         } else if (event.event === "error") {
+            const portalRequest = activeRequest !== "";
             captureSession.requested = false;
             state = "error";
             message = event.message;
             partialPath = event.partial || "";
             finishRequest("error", "", event.message);
-            notifyError();
+            if (!portalRequest)
+                notifyError();
         } else if (event.event === "cancelled") {
+            // A late echo for an earlier cancel must not end a newer request.
+            if ((event.request || "") !== activeRequest)
+                return;
             if (state !== "preparing")
                 state = "idle";
             finishRequest("cancelled");
@@ -503,13 +510,14 @@ Scope {
             }
         }
         onExited: {
-            const wasActive = root.opened || root.busy;
+            // Portal requests report failure through their result, not a notification.
+            const notify = (root.opened || root.busy) && root.activeRequest === "";
             root.ready = false;
             if (root.state !== "error") {
                 root.state = "error";
                 root.message = "Capture connection stopped. Open Capture to reconnect to the recorder.";
             }
-            if (wasActive)
+            if (notify)
                 root.notifyError();
             root.finishRequest("error", "", root.message);
         }
@@ -590,9 +598,7 @@ Scope {
         }
         function cancel(): void {
             if (root.busy)
-                root.send({
-                    command: "cancel"
-                });
+                root.sendCancel();
             else
                 root.close();
         }

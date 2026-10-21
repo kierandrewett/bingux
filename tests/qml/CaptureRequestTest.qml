@@ -51,12 +51,18 @@ ShellRoot {
             capture.rememberRequest("active-1", "pending");
             capture.activeRequest = "active-1";
             compare(capture.requestStatus("active-1").state, "pending");
+            capture.handle({
+                event: "cancelled",
+                request: "old-1"
+            });
+            compare(capture.activeRequest, "active-1", "A late echo for an earlier cancel keeps the active request");
+            compare(capture.requestStatus("active-1").state, "pending");
             compare(capture.cancelRequest("other").ok, false, "Cancel must name the active request");
             compare(capture.cancelRequest("active-1").ok, true, "Cancel names the active request");
             capture.finishRequest("cancelled");
             compare(capture.requestStatus("active-1").state, "cancelled");
             compare(capture.activeRequest, "");
-            report.setText("PASS: request ID validation, duplicate reservation, pending and cancelled states, unknown IDs\n");
+            report.setText("PASS: request ID validation, duplicate reservation, pending and cancelled states, late cancel echoes, unknown IDs\n");
             finish.start();
         }
     }

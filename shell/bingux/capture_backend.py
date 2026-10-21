@@ -341,7 +341,7 @@ class Capture:
                 elif command == "stop":
                     self.stop(record.get("hoveredAt", 0))
                 elif command == "cancel":
-                    self.cancel()
+                    self.cancel(record.get("request"))
             except (ValueError, TypeError, OSError, GLib.Error, subprocess.SubprocessError) as error:
                 self.fail(str(error))
         return True
@@ -941,7 +941,7 @@ class Capture:
             self.remote_fd = -1
         self.job = None
 
-    def cancel(self):
+    def cancel(self, request=None):
         if self.pipeline and self.job and self.job["kind"] == "recording":
             self.stop()
             return
@@ -954,7 +954,8 @@ class Capture:
         self.cleanup()
         if self.temporary and self.temporary.exists() and self.temporary.stat().st_size == 0:
             self.temporary.unlink()
-        self.emit("cancelled")
+        fields = {"request": request} if request else {}
+        self.emit("cancelled", **fields)
         self.clear_preview()
 
     def fail(self, message):
