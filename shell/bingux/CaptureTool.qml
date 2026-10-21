@@ -321,7 +321,7 @@ Scope {
     }
     Process {
         id: worker
-        command: Quickshell.env("BINGUX_CAPTURE_HELPER") ? [Quickshell.env("BINGUX_CAPTURE_HELPER")] : [Python.python, "-u", decodeURIComponent(Qt.resolvedUrl("capture_service.py").toString().replace(/^file:\/\//, ""))]
+        command: Quickshell.env("BINGUX_CAPTURE_HELPER") ? [Quickshell.env("BINGUX_CAPTURE_HELPER")] : [Python.python, "-u", Python.helper("capture_service.py")]
         running: true
         stdinEnabled: true
         stdout: SplitParser {

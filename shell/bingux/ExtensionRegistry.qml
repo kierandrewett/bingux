@@ -34,7 +34,7 @@ Scope {
     function setEnabled(id, enabled) {
         if (manager.running)
             return;
-        manager.command = [Python.python, decodeURIComponent(Qt.resolvedUrl("extensions.py").toString().replace("file://", "")), enabled ? "enable" : "disable", id];
+        manager.command = [Python.python, Python.helper("extensions.py"), enabled ? "enable" : "disable", id];
         manager.running = true;
     }
     Process {
@@ -63,7 +63,7 @@ Scope {
     }
     Process {
         id: scan
-        command: [Python.python, decodeURIComponent(Qt.resolvedUrl("extensions.py").toString().replace("file://", "")), "list"]
+        command: [Python.python, Python.helper("extensions.py"), "list"]
         // With nothing enabled there are no widgets to place, so the scan can
         // wait until the desktop is up instead of delaying start-up.
         // The lock screen and the greeter never load extensions: an

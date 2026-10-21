@@ -12,7 +12,7 @@ Item {
     property var nativeWindows: []
     property var pendingCommand: []
     property int attempts: 0
-    readonly property var spawnCommand: [Python.python, decodeURIComponent(Qt.resolvedUrl("application_spawn.py").toString().replace(/^file:\/\//, "")), "--"]
+    readonly property var spawnCommand: [Python.python, Python.helper("application_spawn.py"), "--"]
     signal launchStarted(string desktopId)
     signal failed(string message)
     ShortcutSession {
