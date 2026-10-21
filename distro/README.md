@@ -26,7 +26,8 @@ distro/build.sh --gnoblin ~/dev/gnoblin
 
 - The Gnoblin checkout must contain greeter mode (`gnoblin --greeter`), which
   is on the `feat/greeter-mode` branch until it reaches Gnoblin's `main`, and
-  the session-lock frame-callback fix (`a05f29ae`).
+  the session-lock fixes (`a05f29ae`, `2317ff42`, `4f33ee52`): without them the
+  lock screen stays black and unlocking crashes the compositor.
 - Both checkouts must be committed: the Bingux archive comes from
   `scripts/make-source-archive.sh` and the Gnoblin bundle from Gnoblin's
   `scripts/build-release-assets.sh --source-only`, which archive `HEAD`.
@@ -62,11 +63,12 @@ The image lands in `distro/out/bingux-os-<date>-x86_64.iso`.
 
 ## What the image does
 
-The login screen, then the desktop after signing in (both from the headless
+The login screen, the desktop after signing in and the lock screen (from the headless
 QEMU runs of the tests below):
 
 ![The Bingux login screen](../docs/images/bingux-os-login.webp)
 ![The Bingux desktop after signing in](../docs/images/bingux-os-desktop.webp)
+![The Bingux lock screen](../docs/images/bingux-os-lock.webp)
 
 - `greetd` is the display manager; it starts `bingux-greeter-session`, so the
   first thing on screen is the Bingux login screen on a Gnoblin greeter
