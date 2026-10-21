@@ -35,6 +35,18 @@ seed_existing_accounts() {
     done </etc/passwd
 }
 
+# The boot splash runs from the initramfs, so the plymouth hook has to be in
+# mkinitcpio's HOOKS. It goes after kms so the splash gets the graphics driver
+# before the root filesystem is mounted. A configuration that already has it is left alone.
+install_boot_splash() {
+    local config=/etc/mkinitcpio.conf
+    [ -f "$config" ] || return 0
+    grep -Eq '^HOOKS=.*\bplymouth\b' "$config" && return 0
+    grep -Eq '^HOOKS=.*\bkms\b' "$config" || return 0
+    sed -i -E '/^HOOKS=/ s/\bkms\b/kms plymouth/' "$config"
+    mkinitcpio -P >/dev/null 2>&1 || true
+}
+
 post_install() {
     install_repository
     install_greeter_config
@@ -44,8 +56,10 @@ post_install() {
     # Bingux's helper daemons (status, search, lock requests) follow every
     # Gnoblin session; the unit has no preset on Arch.
     systemctl --global enable bingux.target >/dev/null 2>&1 || true
+    install_boot_splash
 }
 
 post_upgrade() {
     install_greeter_config
+    install_boot_splash
 }

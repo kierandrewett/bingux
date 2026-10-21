@@ -1,0 +1,24 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+cat <<'EOF'
+Installing Bingux OS
+====================
+
+1. Connect to the network. Ethernet and known Wi-Fi networks connect on their
+   own; for Wi-Fi run nmtui.
+2. Find the disk to install onto:
+       lsblk
+3. Install. This ERASES the disk, so check the name twice:
+       bingux-os-install --disk /dev/DISK --user NAME
+   The installer asks for a password and then for the disk name to confirm.
+   Use --help for the hostname, timezone, locale and keyboard options.
+4. Reboot, remove the USB stick, and sign in at the Bingux login screen.
+
+Anything the installer does not cover (encryption, other layouts, extra
+packages) can be done with archinstall; add the bingux-os package to its
+additional packages.
+
+Project and documentation: https://github.com/kierandrewett/bingux
+EOF

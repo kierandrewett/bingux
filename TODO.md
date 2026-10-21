@@ -39,6 +39,11 @@ work belongs in Git history and does not stay here as a second changelog.
       boot it through its own bootloader and sign in: `tests/distro-install.py`.
 - [x] Document how the pacman repository is published
       (`distro/publish-repo.sh`, `distro/README.md`).
+- [x] Name the image Bingux OS everywhere the user sees it: boot menus, splash
+      (Plymouth `bingux` theme), motd, `/etc/os-release` and `/etc/issue`; checked by
+      `tests/distro-branding.py`.
+- [ ] Rename the remaining Arch strings the user can see: the choose-mirror
+      tool and the archinstall package name stay, the pacman mirror list stays Arch's.
 - [ ] Publish the repository for real and sign its packages and database; today
       it is unsigned (`SigLevel = Optional TrustAll`).
 - [ ] Boot the image on real hardware and install there. The installer needs

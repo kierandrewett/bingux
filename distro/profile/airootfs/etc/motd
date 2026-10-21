@@ -1,0 +1,9 @@
+Welcome to Bingux OS.
+
+To install Bingux OS onto a disk, run (this erases the disk):
+    bingux-os-install --disk /dev/DISK --user NAME
+
+For Wi-Fi, connect with the nmtui or nmcli utilities.
+Ethernet and Wi-Fi networks should connect automatically.
+
+The install notes are printed by the Installation_guide command.

@@ -14,8 +14,13 @@ esac
 
 mkdir -p "$(dirname "$root/$output")"
 if [[ -n "$(git -C "$root" status --porcelain --untracked-files=no)" ]]; then
-    echo "working tree has changes; commit the release source first" >&2
-    exit 1
+    if [[ "${BINGUX_ARCHIVE_FROM_HEAD:-0}" != 1 ]]; then
+        echo "working tree has changes; commit the release source first" >&2
+        echo "(BINGUX_ARCHIVE_FROM_HEAD=1 archives the committed HEAD and ignores the edits)" >&2
+        exit 1
+    fi
+    echo "warning: BINGUX_ARCHIVE_FROM_HEAD=1: uncommitted tracked edits are ignored;" >&2
+    echo "warning: archiving git HEAD $(git -C "$root" rev-parse --short HEAD)" >&2
 fi
 # Every pinned submodule (the Adwaita icon theme, Quickshell for bingux-shell)
 # ships inside the archive at its pinned revision; package builds run offline.
