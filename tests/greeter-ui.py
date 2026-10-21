@@ -24,6 +24,67 @@ ROOT = Path(__file__).resolve().parent.parent
 QS = os.environ.get("QS_TEST_BIN", "qs")
 SESSION_BIN = os.environ.get("BINGUX_SESSION_BIN", str(ROOT / "build/cargo/release/bingux-session"))
 
+def metrics_record(sample):
+    return (
+        json.dumps(
+            {
+                "protocolVersion": 1,
+                "type": "metrics",
+                "cpuPercent": 12.0,
+                "memoryTotalBytes": 8 << 30,
+                "memoryUsedBytes": 2 << 30,
+                "networkReceiveBytesPerSecond": 0,
+                "networkTransmitBytesPerSecond": 0,
+                "desktopStateAvailable": False,
+                "inputSources": [],
+                "currentInputSource": None,
+                "screenSharing": False,
+                "microphoneInUse": False,
+                "locationInUse": False,
+                "extra": {"sampledAtMs": sample},
+            },
+            separators=(",", ":"),
+        ).encode()
+        + b"\n"
+    )
+
+
+class FakeMetrics(threading.Thread):
+    """Serves metrics-v1 records so the status bar shows values, not '--'."""
+
+    def __init__(self, path):
+        super().__init__(daemon=True)
+        self.path = path
+        self.stop = threading.Event()
+
+    def run(self):
+        self.path.parent.mkdir(mode=0o700, exist_ok=True)
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        listener.bind(str(self.path))
+        listener.listen(4)
+        listener.settimeout(0.2)
+        with listener:
+            while not self.stop.is_set():
+                try:
+                    connection, _ = listener.accept()
+                except socket.timeout:
+                    continue
+                connection.settimeout(None)
+                threading.Thread(target=self.feed, args=(connection,), daemon=True).start()
+        self.path.unlink(missing_ok=True)
+
+    def feed(self, connection):
+        sample = 1
+        with connection:
+            while not self.stop.is_set():
+                try:
+                    connection.sendall(metrics_record(sample))
+                except OSError:
+                    return
+                sample += 1
+                self.stop.wait(1)
+
+
 
 class FakeGreetd(threading.Thread):
     def __init__(self, path):
@@ -181,6 +242,8 @@ def main():
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    metrics = FakeMetrics(runtime / "bingux/metrics-v1.sock")
+    metrics.start()
     try:
         # Sway picks its own socket name; wait for it in the private runtime dir.
         for _ in range(100):
@@ -271,6 +334,7 @@ def main():
             print(greetd.failures)
         return 0 if all(checks.values()) else 1
     finally:
+        metrics.stop.set()
         sway.terminate()
         sway.wait(timeout=5)
         if os.environ.get("BINGUX_GREETER_KEEP"):
