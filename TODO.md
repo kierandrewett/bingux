@@ -12,6 +12,25 @@ work belongs in Git history and does not stay here as a second changelog.
 - [ ] Package or document a matching Qt 6 QMLTermWidget build for the terminal.
 - [ ] Publish the first COPR build only after the clean install check passes.
 
+## Login screen and lock screen
+
+- [x] Bingux greeter for greetd on Gnoblin's greeter mode (`docs/login-screen.md`).
+- [x] Shared `SessionScreen` for the lock screen and the greeter, with the
+      session bar, session contexts and the capability gate.
+- [x] Compositor background on both sides of the login so no frame is black.
+- [ ] Answer Gnoblin's `gnoblinctl session lock` request by starting
+      `bingux-lock` from the shell (idle timeout and logind `Lock`).
+- [ ] Let `SessionBar` show the user's own extensions once an extension
+      capability contract exists; today `contexts` is recorded only.
+- [ ] Verify the greeter on real hardware: fingerprint hint, multi-monitor,
+      the exit into a fresh session.
+
+## Bingux OS
+
+- [ ] Build the live image (`distro/build.sh`) and run `tests/distro-boot.py`.
+- [ ] Boot the image on real hardware and install with archinstall.
+- [ ] Publish the pacman repository the image is built from.
+
 ## Shell maintenance
 
 - [ ] Replace remaining direct `qs` launches with the installed launcher or an

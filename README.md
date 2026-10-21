@@ -58,6 +58,9 @@ See [dock application menus](docs/dock-menus.md) for window and application acti
 See [sidebar panels](docs/sidebar-loading.md) for loading and retained content.
 
 See [desktop panels](docs/popup-loading.md) for first opening and dismissal.
+
+See the [login screen](docs/login-screen.md) and [secure session locking](docs/locking.md)
+for the greeter and the lock screen, and [Bingux OS](distro/README.md) for the live image.
 For shell behaviour and configuration, see the [shell guide](shell/bingux/README.md).
 
 ## Source layout
