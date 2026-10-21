@@ -402,6 +402,7 @@ def build_payload(source, build, prefix, qml, target, managed=False):
     installed.append(Path("bin/bingux-search-service"))
     unit_sources = sorted((source / "packaging/systemd").glob("bingux*.service"))
     unit_sources += sorted((source / "packaging/systemd").glob("bingux*.path"))
+    unit_sources.append(source / "packaging/systemd/xdg-desktop-portal-bingux.service")
     unit_sources.append(source / "packaging/systemd/bingux.target")
     for unit_source in unit_sources:
         unit = unit_source.read_text()

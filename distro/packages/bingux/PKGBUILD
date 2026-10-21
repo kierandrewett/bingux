@@ -23,7 +23,7 @@ depends=('gnoblin' 'greetd' 'qt6-declarative' 'qt6-wayland' 'qt6-svg' 'jemalloc'
     'gnome-control-center' 'gnome-session' 'gnome-settings-daemon' 'gtk3' 'gtk4' 'libadwaita'
     'python' 'python-cairo' 'python-gobject' 'python-pillow' 'python-yaml' 'ffmpeg'
     'wl-clipboard' 'xdg-utils' 'networkmanager' 'upower' 'pipewire' 'fprintd' 'polkit'
-    'fontconfig' 'freetype2' 'libxkbcommon' 'vulkan-icd-loader')
+    'fontconfig' 'freetype2' 'libxkbcommon' 'vulkan-icd-loader' 'xdg-desktop-portal')
 # !lto: bingux-searchd bundles SQLite through the cc crate; with makepkg's
 # -flto=auto the C objects become GCC bitcode that rustc's linker rejects
 # (undefined sqlite3_* symbols).
@@ -40,7 +40,7 @@ package() {
     cd "$srcdir/$pkgname-$pkgver" || return
     make install PREFIX=/usr DESTDIR="$pkgdir" BUILD_DIR=build QMLDIR=/usr/lib/bingux/qml
     # The installer writes units for /usr/lib64 prefixes; Arch uses /usr/lib.
-    for unit in packaging/systemd/bingux*.service packaging/systemd/bingux*.path packaging/systemd/bingux.target; do
+    for unit in packaging/systemd/bingux*.service packaging/systemd/xdg-desktop-portal-bingux.service packaging/systemd/bingux*.path packaging/systemd/bingux.target; do
         sed -e 's|/usr/lib64|/usr/lib|g' "$unit" >"$pkgdir/usr/lib/systemd/user/$(basename "$unit")"
     done
     install -Dm644 packages/bingux-shell/quickshell/LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE.quickshell"

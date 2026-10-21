@@ -143,6 +143,14 @@ mod tests {
         Ctl::new(path)
     }
 
+    /// Forking while another thread holds a freshly written script open
+    /// fails with ETXTBSY, so tests that spawn the fake take this lock.
+    fn spawn_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        LOCK.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     async fn alive() -> bool {
         true
     }
@@ -162,6 +170,7 @@ mod tests {
 
     #[test]
     fn saved_capture_returns_its_uri_after_pending_polls() {
+        let _spawn = spawn_lock();
         let ctl = fake_ctl(
             "saved",
             r#"{"ok":true}"#,
@@ -178,6 +187,7 @@ mod tests {
 
     #[test]
     fn rejected_request_fails_at_once() {
+        let _spawn = spawn_lock();
         let ctl = fake_ctl(
             "busy",
             r#"{"ok":false,"error":"busy"}"#,
@@ -190,6 +200,7 @@ mod tests {
 
     #[test]
     fn user_cancel_reports_cancelled() {
+        let _spawn = spawn_lock();
         let ctl = fake_ctl(
             "cancelled",
             r#"{"ok":true}"#,
@@ -202,6 +213,7 @@ mod tests {
 
     #[test]
     fn client_close_cancels_the_capture() {
+        let _spawn = spawn_lock();
         let ctl = fake_ctl(
             "close",
             r#"{"ok":true}"#,
@@ -214,6 +226,7 @@ mod tests {
 
     #[test]
     fn vanished_frontend_fails_the_capture() {
+        let _spawn = spawn_lock();
         let ctl = fake_ctl(
             "gone",
             r#"{"ok":true}"#,
@@ -226,6 +239,7 @@ mod tests {
 
     #[test]
     fn error_state_reports_the_shell_message() {
+        let _spawn = spawn_lock();
         let ctl = fake_ctl(
             "error",
             r#"{"ok":true}"#,
