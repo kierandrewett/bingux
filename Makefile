@@ -90,6 +90,7 @@ check-session: native daemons shell
 	cp $(BUILD_DIR)/wayland-sync/libbinguxwaylandsync.so packages/bingux-wayland-sync/qmldir $(BUILD_DIR)/qml/Bingux/Wayland/
 	QS_TEST_BIN=$(SHELL_BIN) BINGUX_SESSION_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-session python3 tests/greeter-ui.py
 	QS_TEST_BIN=$(SHELL_BIN) QML_IMPORT_PATH=$(abspath $(BUILD_DIR))/qml python3 tests/lock-ui.py
+	QS_TEST_BIN=$(SHELL_BIN) python3 tests/identify.py
 	QUICKSHELL_BIN=$(SHELL_BIN) bash tests/search-command.sh
 	python3 tests/shell-archive.py --build-dir $(BUILD_DIR)
 
