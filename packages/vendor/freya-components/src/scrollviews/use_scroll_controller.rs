@@ -245,7 +245,7 @@ pub(crate) trait ScrollFeel {
 
 impl ScrollFeel for TargetPlatform {
     fn scroll_smoothing_time(&self) -> f32 {
-        // Bingux patch: a wheel notch eases out over about 70 ms instead of
+        // Bingux patch: a wheel notch eases out over about 30 ms instead of
         // snapping in 60 ms. BINGUX_SCROLL_SMOOTHING sets the seconds.
         static SECONDS: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
         *SECONDS.get_or_init(|| {
@@ -253,7 +253,7 @@ impl ScrollFeel for TargetPlatform {
                 .ok()
                 .and_then(|value| value.parse::<f32>().ok())
                 .filter(|value| value.is_finite())
-                .map_or(0.07, |value| value.clamp(0.02, 0.6))
+                .map_or(0.03, |value| value.clamp(0.01, 0.6))
         })
     }
 
