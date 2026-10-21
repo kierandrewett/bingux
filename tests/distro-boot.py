@@ -116,16 +116,26 @@ def main():
                 f"ls /var/lib/bingux/greeter/{LIVE_USER}",
                 lambda o: "wallpaper" in o,
             )
-            time.sleep(10)
+            # Keys sent before the greeter is on screen are lost (baseline run 2 typed
+            # into the bare wallpaper), so wait for its clock rather than a timer.
+            frame = vm.wait_frame(clock_shown, attempts=60)
+            checks["greeter shows the clock"] = frame is not None
+            shot("greeter", frame)
             vm.recorder.mark("greeter interactive")
-            frame = shot("greeter")
-            checks["greeter shows the clock"] = frame is not None and clock_shown(frame)
+            # Give the greeter a moment to take keyboard focus after its first paint.
+            time.sleep(3)
 
             # Sign in the way a user would: type into the focused field.
             vm.recorder.expect("first session frame", session_painted)
             vm.type_text(LIVE_PASSWORD)
             vm.key("ret")
             vm.recorder.mark("password submitted")
+            # Still on the greeter after the wait: the keys were lost, so type again.
+            if vm.wait_frame(session_painted, attempts=20) is None:
+                greeter = vm.frame()
+                if greeter is not None and clock_shown(greeter):
+                    vm.type_text(LIVE_PASSWORD)
+                    vm.key("ret")
             probe("session shell runs as the user", f"pgrep -c -u {LIVE_USER} -f {SHELL_PATTERN}", count, attempts=60)
             probe("session compositor runs as the user", f"pgrep -c -u {LIVE_USER} -x gnoblin", count)
             probe("session wallpaper service runs", f"pgrep -c -u {LIVE_USER} -f bingux-wallpaper", count)

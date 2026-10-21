@@ -53,16 +53,32 @@ work belongs in Git history and does not stay here as a second changelog.
 
 ## Boot and handover baseline
 
-- [x] Five back-to-back `tests/distro-boot.py` runs on one ISO (`distro/out/baseline/`):
-      runs 1, 3, 5 passed; run 2 failed 8 checks and run 4 failed 13. Run 4 never
-      painted a session after the password was submitted; run 2's session checks
-      failed although the session painted late (first session frame at 423 s).
-- [ ] Make the greeter sign-in reliable: runs 2 and 4 both failed the session
-      checks, and run 4 also failed the lock checks.
-- [ ] Verify the GL renderer (`virtio-vga-gl`) in QEMU. Not verified: the QEMU log
-      was empty and no probe ran.
+- [x] Five back-to-back `tests/distro-boot.py` runs on the 2026.10.21 ISO
+      (`distro/out/baseline/`): runs 1, 3, 5 passed; run 2 failed 8 checks, run 4
+      failed 13. Submit-to-session-bar: run 1 10 s, run 3 18 s, run 5 11 s; run 2
+      318 s (second typing at 411 s); run 4 never started a session.
+- [x] Run 2 cause, in the harness: it slept 10 s and typed the password while the
+      screen still showed the bare wallpaper; the keys were lost and the greeter
+      sat at an empty field until a second typing. `tests/distro-boot.py` now waits
+      for the greeter clock, and retypes once if the greeter is still up after a
+      minute. Not re-run.
+- [ ] Run 4: the greeter never painted its clock; the screen was black from 167 s to
+      737 s and greetd never created a session for `live`. The harness cannot be
+      blamed for this one: it typed into a greeter that was not on screen. Find out
+      why the greeter output stays black.
+- [ ] Capture: QEMU `screendump` returned "no surface" for most frames in every run
+      (948 to 6231 errors), so most frames came from the VNC scanout fallback, and
+      black spans may be empty pictures. Fix the capture before frame timings count
+      as evidence.
+- [ ] Verify the GL renderer (`virtio-vga-gl`) in QEMU. Not verified: no run records
+      which display path was taken, and the serial log and reports contain no
+      renderer string. Add a probe that reads the compositor's GL renderer.
+- [ ] Run 3's boot took 57 s between the end of the GRUB menu and the kernel frame.
+      Not explained: the serial log has no timestamps. The menu itself is GRUB's
+      15 s timeout (`distro/profile/grub/grub.cfg`).
+- [ ] Re-run `tests/distro-boot.py` on the new ISO with the fixed sign-in wait.
 - [ ] Re-run `tests/distro-install.py` on an ISO that contains `bingux-installer`;
-      the current image predates the package and the test cannot pass on it.
+      the 2026.10.21 image predates the package and the test cannot pass on it.
 
 ## Shell maintenance
 
