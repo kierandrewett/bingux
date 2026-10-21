@@ -138,9 +138,11 @@ void applyEnvironment(const QString& prefix, const QString& shellDir) {
     prepend("XDG_DATA_DIRS", prefix + QStringLiteral("/share"),
             QStringLiteral("/usr/local/share:/usr/share"));
     prepend("PATH", prefix + QStringLiteral("/bin"));
-    setDefaultPath("BINGUX_ADWAITA_ICON_DIR", prefix + QStringLiteral("/share/bingux/icons/Adwaita"));
+    setDefaultPath("BINGUX_ADWAITA_ICON_DIR",
+                   prefix + QStringLiteral("/share/bingux/icons/Adwaita"));
     setDefaultPath("BINGUX_AUDIO_METER", prefix + QStringLiteral("/bin/bingux-audio-meter"));
     setDefaultPath("BINGUX_CONFIG_BIN", prefix + QStringLiteral("/bin/bingux-config"));
+    setDefaultPath("BINGUX_HELPER_BIN", prefix + QStringLiteral("/bin/bingux-helper"));
     setDefaultPath("BINGUX_SETTINGS_BIN", prefix + QStringLiteral("/bin/bingux-settings"));
     setDefaultPath("BINGUX_HELPER_DIR", prefix + QStringLiteral("/libexec/bingux/shell"));
     setDefault("BINGUX_PYTHON", QStringLiteral("python3"));

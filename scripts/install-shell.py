@@ -158,6 +158,7 @@ def build_payload(source, build, prefix, qml, target, managed=False):
         build / "bingux-image-clipboard": prefix / "libexec/bingux/bingux-image-clipboard",
         build / "bingux-frame": prefix / "libexec/bingux/bingux-frame",
         build / "cargo/release/bingux-config": prefix / "bin/bingux-config",
+        build / "cargo/release/bingux-helper": prefix / "bin/bingux-helper",
         build / "cargo/release/bingux-searchd": prefix / "bin/bingux-searchd",
         build / "cargo/release/bingux-statusd": prefix / "bin/bingux-statusd",
         build / "cargo/release/bingux-session": prefix / "bin/bingux-session",

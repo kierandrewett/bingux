@@ -4,6 +4,7 @@ singleton Startup 1.0 Startup.qml
 singleton AdwaitaIcons 1.0 AdwaitaIcons.qml
 singleton LaunchFeedback 1.0 LaunchFeedback.qml
 singleton Python 1.0 Python.qml
+singleton Helper 1.0 Helper.qml
 ActionButton 1.0 ActionButton.qml
 WidgetFace 1.0 WidgetFace.qml
 AppIcon 1.0 AppIcon.qml

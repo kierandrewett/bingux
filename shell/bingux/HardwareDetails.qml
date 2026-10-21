@@ -176,7 +176,7 @@ Item {
             return;
         processMenu.visible = false;
         actionMessage = "";
-        actionRunner.command = [Python.python, Python.helper("process-action.py"), "--batch", action];
+        actionRunner.command = Helper.command("process-action", ["--batch", action]);
         actionRunner.running = true;
     }
     onPageChanged: {

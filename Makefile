@@ -46,6 +46,7 @@ $(BUILD_DIR)/bingux-frame: packages/bingux-frame/paint-gtk.c packages/bingux-fra
 
 daemons:
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-config/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-helper/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-searchd/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-statusd/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-session/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
@@ -66,6 +67,7 @@ check: doctor-build native daemons
 	QT_QPA_PLATFORM=offscreen $(BUILD_DIR)/text/spacing-test
 	$(CARGO) test --locked --manifest-path packages/bingux-config/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	BINGUX_CONFIG_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-config python3 tests/bingux-config.test.py
+	$(CARGO) test --locked --manifest-path packages/bingux-helper/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	$(CARGO) test --locked --manifest-path packages/bingux-searchd/Cargo.toml --lib
 	$(CARGO) test --locked --manifest-path packages/bingux-statusd/Cargo.toml
 	$(CARGO) test --locked --manifest-path packages/bingux-session/Cargo.toml

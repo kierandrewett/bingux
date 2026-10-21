@@ -135,6 +135,7 @@ install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bin
 %{_bindir}/bingux-search-service
 %{_bindir}/bingux-statusd
 %{_bindir}/bingux-config
+%{_bindir}/bingux-helper
 %{_bindir}/bingux-settings
 %{_datadir}/applications/bingux-settings.desktop
 %{_libdir}/bingux/
