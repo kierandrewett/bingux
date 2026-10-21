@@ -10,8 +10,8 @@ use crate::icons::{self, Icon};
 use crate::system::{self, CommandError, background, background_then};
 use crate::theme::Tokens;
 use crate::ui::{
-    Group, Status, icon_button, page_title, primary_button, row, row_button, section_label, status,
-    switch_row, text_row, use_tokens,
+    Group, Overlays, ResponseKind, Status, dialog, icon_button, page_title, primary_button, row,
+    row_button, section_label, status, switch_row, text_row, use_overlays, use_tokens,
 };
 
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
@@ -176,6 +176,9 @@ fn load() -> Result<Model, CommandError> {
             &["-t", "-f", "NAME,TYPE", "connection", "show"],
             QUICK,
         )?);
+        // `--rescan no` returns NetworkManager's cached list at once; a
+        // fresh scan can block for ten seconds and the page would sit on
+        // "Reading Wi-Fi networks." Refresh and the poll loop rescan.
         parse_networks(
             &nmcli(
                 &[
@@ -185,8 +188,10 @@ fn load() -> Result<Model, CommandError> {
                     "device",
                     "wifi",
                     "list",
+                    "--rescan",
+                    "no",
                 ],
-                SCAN,
+                QUICK,
             )?,
             &saved,
         )
@@ -246,6 +251,7 @@ struct Ui {
     /// The SSID whose password row is open.
     selected: State<Option<String>>,
     password: State<String>,
+    overlays: Overlays,
 }
 
 impl Ui {
@@ -326,6 +332,21 @@ impl Ui {
         );
     }
 
+    /// Ask first: forgetting drops the saved password.
+    fn confirm_forget(self, ssid: String) {
+        let title = format!("Forget \"{ssid}\"?");
+        self.overlays.show_dialog(
+            dialog(
+                title,
+                "The saved password is removed. Connecting again asks for it.",
+            )
+            .cancel("Cancel")
+            .response("Forget", ResponseKind::Destructive, move |_| {
+                self.forget(ssid.clone())
+            }),
+        );
+    }
+
     fn forget(self, ssid: String) {
         let label = format!("Forgetting {ssid}.");
         self.act(&label, move || forget_network(&ssid), || {});
@@ -369,7 +390,9 @@ fn network_rows(
         }
         if network.saved {
             let ssid = network.ssid.clone();
-            trailing = trailing.child(row_button("Forget", move |_| ui.forget(ssid.clone())));
+            trailing = trailing.child(row_button("Forget", move |_| {
+                ui.confirm_forget(ssid.clone())
+            }));
         }
 
         let ssid = network.ssid.clone();
@@ -421,12 +444,14 @@ impl Component for NetworkPage {
         let action_error = use_state::<Option<String>>(|| None);
         let selected = use_state::<Option<String>>(|| None);
         let password = use_state::<String>(String::new);
+        let overlays = use_overlays();
         let ui = Ui {
             model,
             busy,
             action_error,
             selected,
             password,
+            overlays,
         };
 
         use_hook(move || {

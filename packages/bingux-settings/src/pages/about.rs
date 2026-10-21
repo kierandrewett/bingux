@@ -6,7 +6,7 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::system::{self, background};
-use crate::ui::{Group, Status, page_title, row, status};
+use crate::ui::{Group, Status, page_title, property_row, status};
 
 #[derive(Clone, PartialEq)]
 struct Facts {
@@ -140,19 +140,19 @@ impl Component for AboutPage {
             .child(page_title("About"))
             .child(
                 Group::titled("Device")
-                    .row(row("Device name").value(facts.hostname))
-                    .row(row("Hardware model").value(facts.hardware))
-                    .row(row("Processor").value(facts.processor))
-                    .row(row("Memory").value(facts.memory))
-                    .row(row("Disk").value(facts.disk)),
+                    .row(property_row("Device name", facts.hostname))
+                    .row(property_row("Hardware model", facts.hardware))
+                    .row(property_row("Processor", facts.processor))
+                    .row(property_row("Memory", facts.memory))
+                    .row(property_row("Disk", facts.disk)),
             )
             .child(
                 Group::titled("System")
-                    .row(row("Operating system").value(facts.os))
-                    .row(row("Kernel").value(facts.kernel))
-                    .row(row("Windowing system").value("Wayland"))
-                    .row(row("Bingux").value(env!("CARGO_PKG_VERSION")))
-                    .row(row("Gnoblin").value(facts.gnoblin)),
+                    .row(property_row("Operating system", facts.os))
+                    .row(property_row("Kernel", facts.kernel))
+                    .row(property_row("Windowing system", "Wayland"))
+                    .row(property_row("Bingux", env!("CARGO_PKG_VERSION")))
+                    .row(property_row("Gnoblin", facts.gnoblin)),
             )
     }
 }

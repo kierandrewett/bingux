@@ -4,11 +4,13 @@
 //! Gnoblin's Lua `input.keyboard` fields override the GSettings keys, so a
 //! row whose field is set in the committed snapshot is shown read-only.
 
+use std::time::Duration;
+
 use freya::prelude::*;
 
 use crate::pages::gnoblin::{self, InputSource, Json};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
-use crate::ui::{Group, Status, page_title, row, slider_row, status, switch_row};
+use crate::ui::{Group, Status, page_title, row, row_button, slider_row, status, switch_row};
 
 const KEYBOARD: &str = "org.gnome.desktop.peripherals.keyboard";
 const DELAY_RANGE: (f64, f64) = (100.0, 2000.0);
@@ -79,7 +81,7 @@ pub struct KeyboardPage;
 impl Component for KeyboardPage {
     fn render(&self) -> impl IntoElement {
         let loaded = use_state::<Option<Result<Model, CommandError>>>(|| None);
-        let error = use_state::<Option<String>>(|| None);
+        let mut error = use_state::<Option<String>>(|| None);
         use_hook(move || background(loaded, load));
 
         let Some(result) = loaded.read().clone() else {
@@ -198,11 +200,22 @@ impl Component for KeyboardPage {
             .into(),
         };
 
-        let shortcuts = Group::titled("Shortcuts").row(
-            row("Keyboard shortcuts")
-                .subtitle("Configured in Gnoblin's Lua config; run gnoblinctl config reload after editing")
-                .value(model.config_path.clone().unwrap_or_else(|| "gnoblinctl config path".into())),
-        );
+        // Shortcuts live in Gnoblin's Lua config. The row opens that file in
+        // the default editor; Gnoblin reloads it on `gnoblinctl config reload`.
+        let shortcuts_row = match model.config_path.clone() {
+            Some(path) => row("Keyboard shortcuts")
+                .subtitle(format!("Edit {path}, then run gnoblinctl config reload"))
+                .trailing(row_button("Open config", move |_| {
+                    let path = path.clone();
+                    background_then(
+                        move || system::run("xdg-open", &[path.as_str()], Duration::from_secs(5)),
+                        move |result| error.set(result.err().map(|e| e.0)),
+                    );
+                })),
+            None => row("Keyboard shortcuts")
+                .subtitle("Configured in Gnoblin's Lua config; Gnoblin is not running"),
+        };
+        let shortcuts = Group::titled("Shortcuts").row(shortcuts_row);
 
         rect()
             .width(Size::fill())

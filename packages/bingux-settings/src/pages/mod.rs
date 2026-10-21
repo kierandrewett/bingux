@@ -7,6 +7,17 @@
 use freya::prelude::*;
 
 use crate::icons::Icon;
+use crate::system;
+
+/// The `bingux-config` command every page uses: `BINGUX_CONFIG_BIN` when
+/// set (the test harness convention), else PATH, else the binary built or
+/// installed beside `bingux-settings`.
+pub fn bingux_config() -> String {
+    std::env::var("BINGUX_CONFIG_BIN")
+        .ok()
+        .filter(|path| !path.is_empty())
+        .unwrap_or_else(|| system::locate("bingux-config"))
+}
 
 pub mod about;
 pub mod appearance;

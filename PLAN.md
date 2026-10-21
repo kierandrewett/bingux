@@ -68,8 +68,13 @@ VALUE`, `save` (stdin JSON patch), `check`, `path`, `defaults` (annotated
 - Shell integration: the five launch sites call `bingux-settings PANEL`
   without `XDG_CURRENT_DESKTOP=GNOME`. The desktop entry, `binguxctl
 settings`, the Makefile, `install-shell.py` and the RPM install the binary.
-- Testing: headless `freya-testing` checks for the window shell and row
-  components, then a QEMU run that installs the binary into a Gnoblin
+- The window is built from `packages/bingux-ui`, the design system crate
+  (tokens, icons, controls, rows, groups, split view, dialogs, toasts) so
+  later Bingux applications share the shell's look. Its gallery example
+  shows every component; `docs/bingux-ui.md` is the guide.
+- Testing: headless `freya-testing` renders through `bingux_ui::snapshot`
+  (`bingux-settings --snapshot DIR`, `cargo run --example snapshot` in
+  bingux-ui), then a QEMU run that installs the binary into a Gnoblin
   guest, opens it from the Control Centre and captures screenshots.
 
 ## Phase 3: shell polish

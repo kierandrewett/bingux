@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
+use crate::pages::bingux_config;
 use crate::system::{self, CommandError, background, background_then, which};
 use crate::theme::{Scheme, SharedTokens, Tokens, accent_for, accent_names, read_gsettings};
 use crate::ui::{Group, Status, choice_row, page_title, row, row_button, status, use_tokens};
@@ -29,8 +30,8 @@ struct Model {
 
 type Loaded = Result<Model, CommandError>;
 
-fn bingux_config(args: &[&str]) -> Result<String, CommandError> {
-    system::run("bingux-config", args, Duration::from_secs(5))
+fn config(args: &[&str]) -> Result<String, CommandError> {
+    system::run(&bingux_config(), args, Duration::from_secs(5))
 }
 
 /// Checks the GNOME keys are readable and reads the current wallpaper.
@@ -45,7 +46,7 @@ fn load() -> Loaded {
             )));
         }
     }
-    let wallpaper = bingux_config(&["get", WALLPAPER_KEY])?;
+    let wallpaper = config(&["get", WALLPAPER_KEY])?;
     Ok(Model { wallpaper })
 }
 
@@ -99,13 +100,13 @@ fn choose_wallpaper() -> Result<Option<Model>, CommandError> {
     let Some(path) = pick_image()? else {
         return Ok(None);
     };
-    bingux_config(&["set", WALLPAPER_KEY, path.as_str()])?;
+    config(&["set", WALLPAPER_KEY, path.as_str()])?;
     load().map(Some)
 }
 
 /// Removes the wallpaper setting so the GNOME background applies again.
 fn use_gnome_background() -> Result<Option<Model>, CommandError> {
-    bingux_config(&["unset", WALLPAPER_KEY])?;
+    config(&["unset", WALLPAPER_KEY])?;
     load().map(Some)
 }
 
@@ -310,19 +311,27 @@ impl Component for AppearancePage {
                         .children(swatches),
                 ),
             )
-            .child(Group::titled("Colour scheme").row(choice_row(
-                "Appearance",
-                scheme_options,
-                tokens.scheme.gsettings_value(),
-                move |key: String| {
-                    let scheme = match key.as_str() {
-                        "prefer-light" => Scheme::PreferLight,
-                        "prefer-dark" => Scheme::PreferDark,
-                        _ => Scheme::Default,
-                    };
-                    apply_scheme(shared, error, scheme);
-                },
-            )))
+            // The shell and this window are always dark; the scheme is what
+            // GTK applications and the portal follow, and it picks the
+            // accent variant.
+            .child(
+                Group::titled("Colour scheme").row(
+                    choice_row(
+                        "Applications",
+                        scheme_options,
+                        tokens.scheme.gsettings_value(),
+                        move |key: String| {
+                            let scheme = match key.as_str() {
+                                "prefer-light" => Scheme::PreferLight,
+                                "prefer-dark" => Scheme::PreferDark,
+                                _ => Scheme::Default,
+                            };
+                            apply_scheme(shared, error, scheme);
+                        },
+                    )
+                    .subtitle("Followed by GTK applications; the shell stays dark."),
+                ),
+            )
             .child(
                 Group::titled("Motion").row(
                     row("Reduced motion")

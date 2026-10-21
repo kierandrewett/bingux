@@ -9,7 +9,10 @@ use freya::prelude::*;
 
 use crate::system::{self, CommandError, background, background_then};
 use crate::theme::Tokens;
-use crate::ui::{Group, Row, Status, page_title, row, row_button, status, switch_row, use_tokens};
+use crate::ui::{
+    Group, Overlays, ResponseKind, Row, Status, dialog, page_title, row, row_button, status,
+    switch_row, use_overlays, use_tokens,
+};
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(45);
@@ -50,6 +53,7 @@ struct Ctx {
     powered: bool,
     /// No action is running, so the action buttons may be shown.
     idle: bool,
+    overlays: Overlays,
 }
 
 fn bluetoothctl(args: &[&str], timeout: Duration) -> Result<String, CommandError> {
@@ -278,11 +282,22 @@ fn device_row(device: &Device, ctx: Ctx) -> Row {
         }))
         .maybe_child(ctx.idle.then(|| {
             row_button("Remove", move |_| {
-                perform(
-                    ctx,
-                    format!("Removing {remove_name}…"),
-                    args(&["remove", remove_mac.as_str()]),
-                    TIMEOUT,
+                let remove_name = remove_name.clone();
+                let remove_mac = remove_mac.clone();
+                ctx.overlays.show_dialog(
+                    dialog(
+                        format!("Remove \"{remove_name}\"?"),
+                        "The pairing is removed from this computer. Pair again to use it.",
+                    )
+                    .cancel("Cancel")
+                    .response("Remove", ResponseKind::Destructive, move |_| {
+                        perform(
+                            ctx,
+                            format!("Removing {remove_name}…"),
+                            args(&["remove", remove_mac.as_str()]),
+                            TIMEOUT,
+                        )
+                    }),
                 )
             })
         }));
@@ -298,6 +313,7 @@ pub struct BluetoothPage;
 impl Component for BluetoothPage {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let overlays = use_overlays();
         let model = use_state::<Loaded>(|| None);
         let error = use_state::<Option<String>>(|| None);
         let busy = use_state::<Option<String>>(|| None);
@@ -347,6 +363,7 @@ impl Component for BluetoothPage {
             tokens,
             powered: adapter.powered,
             idle: busy_message.is_none(),
+            overlays,
         };
 
         let mut page = rect().width(Size::fill()).child(page_title("Bluetooth"));

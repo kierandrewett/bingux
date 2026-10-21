@@ -59,13 +59,6 @@ impl Json {
         }
     }
 
-    pub fn as_f64(&self) -> Option<f64> {
-        match self {
-            Json::Number(value) => Some(*value),
-            _ => None,
-        }
-    }
-
     pub fn as_array(&self) -> Option<&[Json]> {
         match self {
             Json::Array(items) => Some(items),
@@ -279,10 +272,22 @@ fn parse_error(error: String) -> CommandError {
     CommandError(format!("Could not read Gnoblin's reply: {error}"))
 }
 
+/// Runs `gnoblinctl args`. A missing compositor socket becomes the short
+/// "Gnoblin is not running." so pages can show it in one line.
+pub fn gnoblinctl(args: &[&str]) -> CommandResult {
+    system::run("gnoblinctl", args, TIMEOUT).map_err(|error| {
+        if error.0.contains("Cannot connect to compositor socket") {
+            CommandError("Gnoblin is not running.".to_string())
+        } else {
+            error
+        }
+    })
+}
+
 /// The committed settings snapshot. Only fields set in the Lua config are
 /// present; `inherit` fields are absent.
 pub fn config_snapshot() -> Result<Json, CommandError> {
-    let output = system::run("gnoblinctl", &["--json", "config", "show"], TIMEOUT)?;
+    let output = gnoblinctl(&["--json", "config", "show"])?;
     Json::parse(&output).map_err(parse_error)
 }
 
@@ -315,7 +320,7 @@ pub fn lua_override(snapshot: &Json, path: &[&str]) -> Option<String> {
 
 /// The path of the active Gnoblin configuration file.
 pub fn config_path() -> Result<String, CommandError> {
-    let output = system::run("gnoblinctl", &["config", "path"], TIMEOUT)?;
+    let output = gnoblinctl(&["config", "path"])?;
     Ok(output.trim().to_string())
 }
 
@@ -330,7 +335,7 @@ pub struct InputSource {
 
 /// The configured input sources, with the active one flagged.
 pub fn input_sources() -> Result<Vec<InputSource>, CommandError> {
-    let output = system::run("gnoblinctl", &["--json", "input", "list"], TIMEOUT)?;
+    let output = gnoblinctl(&["--json", "input", "list"])?;
     let list = Json::parse(&output).map_err(parse_error)?;
     let sources = list
         .get(&["sources"])
@@ -354,13 +359,13 @@ pub fn input_sources() -> Result<Vec<InputSource>, CommandError> {
 }
 
 pub fn select_input_source(kind: &str, id: &str) -> CommandResult {
-    system::run("gnoblinctl", &["input", "select", kind, id], TIMEOUT)
+    gnoblinctl(&["input", "select", kind, id])
 }
 
 /// Whether a touchpad is attached. Uses Gnoblin's device list when it
 /// answers, and the kernel's device list otherwise.
 pub fn has_touchpad() -> bool {
-    let devices = system::run("gnoblinctl", &["--json", "input", "devices"], TIMEOUT)
+    let devices = gnoblinctl(&["--json", "input", "devices"])
         .ok()
         .and_then(|output| Json::parse(&output).ok());
     match devices {

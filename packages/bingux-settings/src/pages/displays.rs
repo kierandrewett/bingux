@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
+use crate::pages::gnoblin;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
     Group, Status, caption, choice_row, page_title, primary_button, row, slider_row, status,
@@ -490,10 +491,16 @@ fn load_displays() -> Result<Displays, CommandError> {
         Ok((serial, monitors)) => return Ok(Displays::Editable { serial, monitors }),
         Err(failure) => failure.0,
     };
-    let reason = format!("Mutter's DisplayConfig could not be read: {reason}");
+    // busctl reports an absent service as "not activatable"; that is the
+    // normal case outside GNOME and needs no diagnostic text.
+    let reason = if reason.contains("not activatable") {
+        "Mutter's DisplayConfig is not available.".to_string()
+    } else {
+        format!("Mutter's DisplayConfig could not be read: {reason}")
+    };
     match load_gnoblin() {
         Ok(records) => Ok(Displays::ReadOnly { reason, records }),
-        Err(fallback) => Err(CommandError(format!("{reason} gnoblinctl: {}", fallback.0))),
+        Err(fallback) => Err(CommandError(format!("{reason} {}", fallback.0))),
     }
 }
 
@@ -655,7 +662,7 @@ fn parse_monitor(json: &Json) -> Result<Monitor, String> {
 }
 
 fn load_gnoblin() -> Result<Vec<Record>, CommandError> {
-    let text = system::run("gnoblinctl", &["--json", "monitor", "list"], TIMEOUT)?;
+    let text = gnoblin::gnoblinctl(&["--json", "monitor", "list"])?;
     let list = parse_json(&text).map_err(CommandError)?;
     list.items()
         .iter()

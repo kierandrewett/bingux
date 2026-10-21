@@ -67,6 +67,7 @@ system settings; [configuration](docs/configuration.md) covers the file and CLI.
 - `shell/bingux/`: desktop UI and Python helpers.
 - `packages/bingux-config/`: configuration schema, `bingux.toml` store and CLI.
 - `packages/bingux-settings/`: the Settings application.
+- `packages/bingux-ui/`: the design system crate for Bingux's Freya applications.
 - `packages/`: search and metrics daemons, native plugins and helper programs.
 - `tests/`: component, input and integration checks.
 - `scripts/test-desktop`: starts an isolated nested desktop for testing.

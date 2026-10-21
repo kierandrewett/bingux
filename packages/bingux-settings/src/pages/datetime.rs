@@ -6,12 +6,12 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
+use crate::pages::bingux_config;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{Group, Status, choice_row, page_title, row, status, switch_row, text_row};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const INTERFACE: &str = "org.gnome.desktop.interface";
-const BINGUX_CONFIG_FALLBACK: &str = "/var/tmp/bingux-config-target/debug/bingux-config";
 
 #[derive(Clone)]
 struct Model {
@@ -49,21 +49,12 @@ fn parse_timedatectl(text: &str) -> Result<(String, bool), CommandError> {
     Ok((timezone, ntp))
 }
 
-/// `bingux-config` from PATH, else the host build used during development.
-fn bingux_config() -> &'static str {
-    if system::which("bingux-config") {
-        "bingux-config"
-    } else {
-        BINGUX_CONFIG_FALLBACK
-    }
-}
-
 fn load() -> Result<Model, CommandError> {
     let show = system::run("timedatectl", &["show"], TIMEOUT)?;
     let (timezone, ntp) = parse_timedatectl(&show)?;
     let clock_format = system::unquote(&system::gsettings_get(INTERFACE, "clock-format")?);
     // A missing bingux-config only loses the Show seconds row, not the page.
-    let clock_seconds = system::run(bingux_config(), &["get", "desktop.clock_seconds"], TIMEOUT)
+    let clock_seconds = system::run(&bingux_config(), &["get", "desktop.clock_seconds"], TIMEOUT)
         .ok()
         .map(|value| value == "true");
     let local_time = system::run("date", &["+%Y-%m-%d %H:%M:%S"], TIMEOUT)?;
@@ -243,7 +234,7 @@ impl Component for DateTimePage {
                             let value = if next { "true" } else { "false" };
                             commit(ctx, move || {
                                 system::run(
-                                    bingux_config(),
+                                    &bingux_config(),
                                     &["set", "desktop.clock_seconds", value],
                                     TIMEOUT,
                                 )

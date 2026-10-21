@@ -64,13 +64,13 @@ impl Component for App {
                 bingux_ui::theme::WINDOW_RADIUS
             })
             .overflow(Overflow::Clip)
-            .child(
+            .child(OverlayHost::new(
                 NavigationSplitView::new("Settings", PageId::ALL.to_vec(), page, page().render())
                     .profile(ProfileCard {
                         name: user_name,
                         subtitle: "Users and accounts".into(),
                         target: PageId::Users,
                     }),
-            )
+            ))
     }
 }
