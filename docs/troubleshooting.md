@@ -47,6 +47,11 @@ user service and a socket path under `$XDG_RUNTIME_DIR`.
    `journalctl --user -u bingux-statusd.service -b`.
 3. Restart it: `systemctl --user restart bingux-statusd.service`.
 
+Each helper service restarts three seconds after a crash
+(`Restart=on-failure`, `RestartSec=3`) and writes no core file
+(`LimitCORE=0`). `bingux-lock.service` is a manual diagnostic unit and does not
+restart.
+
 The shell and the helpers retry with a short delay. When the socket returns,
 the affected panel recovers without a shell restart. A missing compositor
 socket on a compositor other than Gnoblin is expected. Window and workspace
