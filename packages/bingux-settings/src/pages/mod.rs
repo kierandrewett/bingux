@@ -42,6 +42,24 @@ pub enum PageId {
     About,
 }
 
+/// Load every page's data in the background, so each page is filled in by
+/// the time it is opened.
+pub fn prefetch_all() {
+    about::prefetch();
+    appearance::prefetch();
+    bluetooth::prefetch();
+    datetime::prefetch();
+    desktop::prefetch();
+    displays::prefetch();
+    keyboard::prefetch();
+    mouse::prefetch();
+    network::prefetch();
+    power::prefetch();
+    search::prefetch();
+    sound::prefetch();
+    users::prefetch();
+}
+
 impl PageId {
     /// Sidebar order.
     pub const ALL: [PageId; 13] = [

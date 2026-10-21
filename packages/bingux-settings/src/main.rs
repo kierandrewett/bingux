@@ -114,7 +114,13 @@ fn snapshot_pages(dir: &str, only: &[String]) {
             },
             size,
         );
-        shot.settle(std::time::Duration::from_millis(4000));
+        // BINGUX_SETTINGS_SNAPSHOT_SETTLE_MS shortens the wait to capture a page
+        // before its data has arrived (the skeleton).
+        let settle_ms = std::env::var("BINGUX_SETTINGS_SNAPSHOT_SETTLE_MS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(4000);
+        shot.settle(std::time::Duration::from_millis(settle_ms));
         for (x, y) in &clicks {
             shot.click(*x, *y)
                 .settle(std::time::Duration::from_millis(1000));

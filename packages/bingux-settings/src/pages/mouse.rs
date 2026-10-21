@@ -8,7 +8,9 @@ use freya::prelude::*;
 
 use crate::pages::gnoblin::{self, Json};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
-use crate::ui::{Group, Row, Status, choice_row, page_column, row, slider, status, switch_row};
+use crate::ui::{
+    Group, Row, Status, choice_row, page_column, row, skeleton, slider, status, switch_row,
+};
 
 const MOUSE: &str = "org.gnome.desktop.peripherals.mouse";
 const TOUCHPAD: &str = "org.gnome.desktop.peripherals.touchpad";
@@ -206,13 +208,11 @@ pub struct MousePage;
 
 impl Component for MousePage {
     fn render(&self) -> impl IntoElement {
-        let loaded = use_state::<Option<Result<Model, CommandError>>>(|| None);
+        let loaded = system::use_cached("mouse", load);
         let error = use_state::<Option<String>>(|| None);
-        use_hook(move || background(loaded, load));
 
         let Some(result) = loaded.read().clone() else {
-            return page_column()
-                .child(status(Status::Loading("Reading pointer settings.".into())));
+            return page_column().child(skeleton());
         };
         let model = match result {
             Ok(model) => model,
@@ -293,4 +293,9 @@ impl Component for MousePage {
             .child(mouse_group)
             .maybe_child(touchpad_group)
     }
+}
+
+/// Start loading this page's data before it is opened.
+pub fn prefetch() {
+    system::prefetch("mouse", load);
 }

@@ -13,7 +13,8 @@ use crate::pages::bingux_config;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
     Group, Overlays, ResponseKind, Row, Status, choice_row, dialog, icon_button, page_column,
-    primary_button, row, slider_row, status, switch, switch_row, text_field, use_overlays,
+    primary_button, row, skeleton, slider_row, status, switch, switch_row, text_field,
+    use_overlays,
 };
 use bingux_ui::scale::*;
 
@@ -545,7 +546,7 @@ pub struct SearchPage;
 
 impl Component for SearchPage {
     fn render(&self) -> impl IntoElement {
-        let model = use_state::<Option<Result<Model, CommandError>>>(|| None);
+        let model = system::cached("search");
         let error = use_state::<Option<String>>(|| None);
         let overlays = use_overlays();
         let ctx = Ctx {
@@ -557,11 +558,7 @@ impl Component for SearchPage {
         use_hook(move || reload(ctx));
 
         let Some(loaded) = model.read().clone() else {
-            return page_column()
-                .child(status(Status::Loading(
-                    "Reading the search settings.".into(),
-                )))
-                .into_element();
+            return page_column().child(skeleton()).into_element();
         };
 
         let data = match loaded {
@@ -1008,4 +1005,9 @@ impl Component for AssistantModel {
             .width(FIELD_WIDTH * 2.0),
         )
     }
+}
+
+/// Start loading this page's data before it is opened.
+pub fn prefetch() {
+    system::prefetch("search", load);
 }

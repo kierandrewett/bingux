@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
-use crate::system::{self, background};
-use crate::ui::{Group, Status, page_column, property_row, status};
+use crate::system;
+use crate::ui::{Group, page_column, property_row, skeleton};
 
 #[derive(Clone, PartialEq)]
 struct Facts {
@@ -123,13 +123,10 @@ pub struct AboutPage;
 
 impl Component for AboutPage {
     fn render(&self) -> impl IntoElement {
-        let facts = use_state::<Option<Facts>>(|| None);
-        use_hook(move || background(facts, collect));
+        let facts = system::use_cached("about", collect);
 
         let Some(facts) = facts.read().clone() else {
-            return page_column().child(status(Status::Loading(
-                "Reading system information.".into(),
-            )));
+            return page_column().child(skeleton());
         };
 
         page_column()
@@ -152,4 +149,9 @@ impl Component for AboutPage {
                     .row(property_row("Windowing system", "Wayland")),
             )
     }
+}
+
+/// Start loading this page's data before it is opened.
+pub fn prefetch() {
+    system::prefetch("about", collect);
 }

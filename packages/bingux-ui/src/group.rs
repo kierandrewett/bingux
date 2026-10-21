@@ -5,6 +5,7 @@ use freya::prelude::*;
 use crate::controls::button::action_button;
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
+use crate::layout::page_column;
 use crate::scale::*;
 use crate::surface::use_tokens;
 
@@ -218,6 +219,62 @@ impl Component for StatusBlock {
                 let on_press = on_press.clone();
                 action_button(label.clone(), move |_| on_press.call(()))
             }))
+    }
+}
+
+/// The shape of a page before its data has arrived: two sections of quiet
+/// bars where the titles and rows will be. It carries no text, so nothing
+/// reads as "loading", and the real page replaces it in place.
+pub fn skeleton() -> Element {
+    Skeleton.into()
+}
+
+const SKELETON_TITLE_WIDTH: f32 = 120.0;
+const SKELETON_LABEL_WIDTH: f32 = 180.0;
+const SKELETON_VALUE_WIDTH: f32 = 96.0;
+const SKELETON_ROWS: usize = 3;
+
+#[derive(PartialEq)]
+struct Skeleton;
+
+impl Component for Skeleton {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let bar = |width: f32| {
+            rect()
+                .width(Size::px(width))
+                .height(Size::px(TEXT_MD))
+                .corner_radius(RADIUS_SM)
+                .background(tokens.elevated)
+        };
+        let section = || {
+            rect()
+                .width(Size::fill())
+                .spacing(S2)
+                .child(
+                    rect()
+                        .padding((0.0, GUTTER, S2, GUTTER))
+                        .child(bar(SKELETON_TITLE_WIDTH)),
+                )
+                .children((0..SKELETON_ROWS).map(|_| {
+                    Element::from(
+                        rect()
+                            .width(Size::fill())
+                            .height(Size::px(ROW_HEIGHT))
+                            .padding((0.0, GUTTER))
+                            .direction(Direction::Horizontal)
+                            .content(Content::Flex)
+                            .cross_align(Alignment::Center)
+                            .child(
+                                rect()
+                                    .width(Size::flex(1.0))
+                                    .child(bar(SKELETON_LABEL_WIDTH)),
+                            )
+                            .child(bar(SKELETON_VALUE_WIDTH)),
+                    )
+                }))
+        };
+        page_column().child(section()).child(section())
     }
 }
 

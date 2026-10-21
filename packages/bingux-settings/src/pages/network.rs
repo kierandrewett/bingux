@@ -10,7 +10,7 @@ use crate::icons::Icon;
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
     Group, Overlays, ResponseKind, Status, dialog, icon_button, page_column, primary_button, row,
-    row_button, status, switch_row, text_row, use_overlays,
+    row_button, skeleton, status, switch_row, text_row, use_overlays,
 };
 use bingux_ui::scale::*;
 
@@ -505,7 +505,7 @@ pub struct NetworkPage;
 
 impl Component for NetworkPage {
     fn render(&self) -> impl IntoElement {
-        let model = use_state::<Option<Result<Model, CommandError>>>(|| None);
+        let model = system::cached("network");
         let busy = use_state::<Option<String>>(|| None);
         let action_error = use_state::<Option<String>>(|| None);
         let selected = use_state::<Option<String>>(|| None);
@@ -532,9 +532,7 @@ impl Component for NetworkPage {
 
         let loaded = model.read().clone();
         let Some(loaded) = loaded else {
-            return page(vec![Element::from(status(Status::Loading(
-                "Reading Wi-Fi networks.".into(),
-            )))]);
+            return page(vec![skeleton()]);
         };
         let model = match loaded {
             Ok(model) => model,
@@ -573,4 +571,9 @@ impl Component for NetworkPage {
 
         page(blocks)
     }
+}
+
+/// Start loading this page's data before it is opened.
+pub fn prefetch() {
+    system::prefetch("network", load);
 }

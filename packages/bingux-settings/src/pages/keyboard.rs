@@ -10,7 +10,9 @@ use freya::prelude::*;
 
 use crate::pages::gnoblin::{self, InputSource, Json};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
-use crate::ui::{Group, Status, page_column, row, row_button, slider_row, status, switch_row};
+use crate::ui::{
+    Group, Status, page_column, row, row_button, skeleton, slider_row, status, switch_row,
+};
 
 const KEYBOARD: &str = "org.gnome.desktop.peripherals.keyboard";
 const DELAY_RANGE: (f64, f64) = (100.0, 2000.0);
@@ -82,13 +84,11 @@ pub struct KeyboardPage;
 
 impl Component for KeyboardPage {
     fn render(&self) -> impl IntoElement {
-        let loaded = use_state::<Option<Result<Model, CommandError>>>(|| None);
+        let loaded = system::use_cached("keyboard", load);
         let mut error = use_state::<Option<String>>(|| None);
-        use_hook(move || background(loaded, load));
 
         let Some(result) = loaded.read().clone() else {
-            return page_column()
-                .child(status(Status::Loading("Reading keyboard settings.".into())));
+            return page_column().child(skeleton());
         };
         let model = match result {
             Ok(model) => model,
@@ -234,4 +234,9 @@ impl Component for KeyboardPage {
             .child(sources)
             .child(shortcuts)
     }
+}
+
+/// Start loading this page's data before it is opened.
+pub fn prefetch() {
+    system::prefetch("keyboard", load);
 }

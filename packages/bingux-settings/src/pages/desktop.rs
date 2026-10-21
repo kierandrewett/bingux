@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use crate::ui::{
-    Group, Row, Status, dropdown, page_column, row, segmented, slider, status, switch_row,
+    Group, Row, Status, dropdown, page_column, row, segmented, skeleton, slider, status, switch_row,
 };
 use bingux_ui::scale::*;
 use freya::prelude::*;
@@ -256,10 +256,9 @@ pub struct DesktopPage;
 
 impl Component for DesktopPage {
     fn render(&self) -> impl IntoElement {
-        let model = use_state::<Option<Result<Model, CommandError>>>(|| None);
+        let model = system::use_cached("desktop", load);
         let error = use_state::<Option<String>>(|| None);
         let pending = use_state::<Option<f64>>(|| None);
-        use_hook(move || background(model, load));
         let ctx = Ctx {
             model,
             error,
@@ -267,9 +266,7 @@ impl Component for DesktopPage {
         };
 
         let Some(loaded) = model.read().clone() else {
-            return page_column().child(status(Status::Loading(
-                "Reading the shell configuration.".into(),
-            )));
+            return page_column().child(skeleton());
         };
         let m = match loaded {
             Ok(model_value) => model_value,
@@ -619,4 +616,9 @@ impl Parser<'_> {
             }
         }
     }
+}
+
+/// Start loading this page's data before it is opened.
+pub fn prefetch() {
+    system::prefetch("desktop", load);
 }

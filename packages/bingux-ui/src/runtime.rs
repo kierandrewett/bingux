@@ -119,6 +119,47 @@ pub fn background<T: Send + 'static>(
     });
 }
 
+thread_local! {
+    /// One state per page key, alive for the whole window. Pages read their
+    /// data from here, so switching pages never starts from nothing.
+    static MODELS: std::cell::RefCell<std::collections::HashMap<&'static str, Box<dyn std::any::Any>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// The long-lived state for `key`, created empty on first use.
+fn cached_state<T: 'static>(key: &'static str) -> State<Option<T>> {
+    MODELS.with(|models| {
+        let mut models = models.borrow_mut();
+        let entry = models
+            .entry(key)
+            .or_insert_with(|| Box::new(State::<Option<T>>::create_global(None)));
+        *entry
+            .downcast_ref::<State<Option<T>>>()
+            .expect("a model key is always used with one type")
+    })
+}
+
+/// A page's data: the last value that was loaded, at once, and a quiet
+/// refresh in the background each time the page opens. `None` only before the
+/// very first load has finished. Call from a component's `render`.
+pub fn use_cached<T: Send + 'static>(key: &'static str, load: fn() -> T) -> State<Option<T>> {
+    let state = cached_state::<T>(key);
+    use_hook(move || background(state, load));
+    state
+}
+
+/// The cached state for `key` without starting a refresh, for pages that run
+/// their own load and polling.
+pub fn cached<T: 'static>(key: &'static str) -> State<Option<T>> {
+    cached_state(key)
+}
+
+/// Start loading a page's data before the page is opened, so it is there
+/// when the user gets to it. Call once at start-up, from a hook.
+pub fn prefetch<T: Send + 'static>(key: &'static str, load: fn() -> T) {
+    background(cached_state::<T>(key), load);
+}
+
 /// Run `work` in the background and call `done` with its result on the UI
 /// thread, for actions that update several pieces of state.
 pub fn background_then<T: Send + 'static>(

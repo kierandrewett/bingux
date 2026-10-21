@@ -8,7 +8,9 @@ use freya::prelude::*;
 
 use crate::pages::bingux_config;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
-use crate::ui::{Group, Status, choice_row, page_column, row, status, switch_row, text_row};
+use crate::ui::{
+    Group, Status, choice_row, page_column, row, skeleton, status, switch_row, text_row,
+};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const INTERFACE: &str = "org.gnome.desktop.interface";
@@ -118,7 +120,7 @@ pub struct DateTimePage;
 
 impl Component for DateTimePage {
     fn render(&self) -> impl IntoElement {
-        let model = use_state::<Option<Result<Model, CommandError>>>(|| None);
+        let model = system::cached("datetime");
         let zone_input = use_state(String::new);
         let time_input = use_state(String::new);
         let error = use_state::<Option<String>>(|| None);
@@ -142,9 +144,7 @@ impl Component for DateTimePage {
         });
 
         let Some(loaded) = model.read().clone() else {
-            return page_column().child(status(Status::Loading(
-                "Reading the clock settings.".into(),
-            )));
+            return page_column().child(skeleton());
         };
 
         let model_data = match loaded {
@@ -236,4 +236,9 @@ impl Component for DateTimePage {
                 })),
         )
     }
+}
+
+/// Start loading this page's data before it is opened.
+pub fn prefetch() {
+    system::prefetch("datetime", load);
 }

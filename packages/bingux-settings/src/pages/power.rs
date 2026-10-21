@@ -7,7 +7,7 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::system::{self, CommandError, CommandResult, background, background_then};
-use crate::ui::{Group, Status, choice_row, page_column, row, status, switch_row};
+use crate::ui::{Group, Status, choice_row, page_column, row, skeleton, status, switch_row};
 
 const SESSION: &str = "org.gnome.desktop.session";
 const SCREENSAVER: &str = "org.gnome.desktop.screensaver";
@@ -186,12 +186,11 @@ pub struct PowerPage;
 
 impl Component for PowerPage {
     fn render(&self) -> impl IntoElement {
-        let loaded = use_state::<Option<Model>>(|| None);
+        let loaded = system::use_cached("power", load);
         let error = use_state::<Option<String>>(|| None);
-        use_hook(move || background(loaded, load));
 
         let Some(model) = loaded.read().clone() else {
-            return page_column().child(status(Status::Loading("Reading power settings.".into())));
+            return page_column().child(skeleton());
         };
 
         let mut page = page_column();
@@ -320,4 +319,9 @@ impl Component for PowerPage {
 
         page
     }
+}
+
+/// Start loading this page's data before it is opened.
+pub fn prefetch() {
+    system::prefetch("power", load);
 }

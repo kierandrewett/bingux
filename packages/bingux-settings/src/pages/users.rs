@@ -12,7 +12,9 @@ use freya::prelude::*;
 use crate::icons::{self, Icon};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::theme::Tokens;
-use crate::ui::{Group, Status, action_button, page_column, row, status, text_row, use_tokens};
+use crate::ui::{
+    Group, Status, action_button, page_column, row, skeleton, status, text_row, use_tokens,
+};
 use bingux_ui::scale::*;
 
 const ACCOUNTS: &str = "org.freedesktop.Accounts";
@@ -188,14 +190,13 @@ pub struct UsersPage;
 
 impl Component for UsersPage {
     fn render(&self) -> impl IntoElement {
-        let model = use_state::<Option<Result<Vec<Account>, CommandError>>>(|| None);
+        let model = system::use_cached("users", load);
         let mut selected = use_state::<Option<String>>(|| None);
         let mut draft = use_state(String::new);
         let mut error = use_state::<Option<String>>(|| None);
-        use_hook(move || background(model, load));
 
         let Some(loaded) = model.read().clone() else {
-            return page_column().child(status(Status::Loading("Reading user accounts.".into())));
+            return page_column().child(skeleton());
         };
         let accounts = match loaded {
             Ok(accounts) => accounts,
@@ -585,4 +586,9 @@ impl Parser<'_> {
         self.rest = rest;
         Ok(Json::Number(number))
     }
+}
+
+/// Start loading this page's data before it is opened.
+pub fn prefetch() {
+    system::prefetch("users", load);
 }

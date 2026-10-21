@@ -9,7 +9,7 @@ use freya::prelude::*;
 use bingux_ui::scale::*;
 
 use crate::system::{self, CommandError, background, background_then};
-use crate::ui::{Group, Status, dropdown, page_column, row, slider, status, switch_row};
+use crate::ui::{Group, Status, dropdown, page_column, row, skeleton, slider, status, switch_row};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const POLL: Duration = Duration::from_secs(5);
@@ -456,7 +456,7 @@ pub struct SoundPage;
 
 impl Component for SoundPage {
     fn render(&self) -> impl IntoElement {
-        let model = use_state::<Option<Result<Model, CommandError>>>(|| None);
+        let model = system::cached("sound");
         let error = use_state::<Option<String>>(|| None);
         let queue = VolumeQueue {
             pending: use_state(Vec::new),
@@ -474,7 +474,7 @@ impl Component for SoundPage {
         });
 
         let Some(loaded) = model.read().clone() else {
-            return page_column().child(status(Status::Loading("Reading audio devices.".into())));
+            return page_column().child(skeleton());
         };
         let data = match loaded {
             Ok(data) => data,
@@ -533,4 +533,9 @@ impl Component for SoundPage {
         }
         page
     }
+}
+
+/// Start loading this page's data before it is opened.
+pub fn prefetch() {
+    system::prefetch("sound", load);
 }

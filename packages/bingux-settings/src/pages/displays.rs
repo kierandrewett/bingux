@@ -13,7 +13,7 @@ use crate::pages::gnoblin;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
     Group, Status, Tokens, caption, choice_row, divider, hstack, page_column, primary_button, row,
-    slider_row, status, switch_row, use_tokens,
+    skeleton, slider_row, status, switch_row, use_tokens,
 };
 use bingux_ui::scale::*;
 
@@ -1193,15 +1193,14 @@ fn apply_footer(tokens: &Tokens, model: State<Option<Page>>, error: State<Option
 
 impl Component for DisplaysPage {
     fn render(&self) -> impl IntoElement {
-        let model = use_state::<Option<Page>>(|| None);
+        let model = system::use_cached("displays", load);
         let error = use_state::<Option<String>>(|| None);
         let night_ticket = use_state::<u64>(|| 0);
-        use_hook(move || background(model, load));
         let tokens = use_tokens();
 
         let mut page = page_column();
         let Some(loaded) = model.read().clone() else {
-            return page.child(status(Status::Loading("Reading displays.".into())));
+            return page.child(skeleton());
         };
         if let Some(message) = error.read().clone() {
             page = page.child(status(Status::Error(message)));
@@ -1235,4 +1234,9 @@ impl Component for DisplaysPage {
         };
         page
     }
+}
+
+/// Start loading this page's data before it is opened.
+pub fn prefetch() {
+    system::prefetch("displays", load);
 }

@@ -18,7 +18,8 @@ use crate::pages::bingux_config;
 use crate::system::{self, CommandError, background, background_then, which};
 use crate::theme::{Scheme, SharedTokens, Tokens, accent_for, accent_names, read_gsettings};
 use crate::ui::{
-    Group, Status, choice_row, entry_row, page_column, row, row_button, status, use_tokens,
+    Group, Status, choice_row, entry_row, page_column, row, row_button, skeleton, status,
+    use_tokens,
 };
 use bingux_ui::scale::*;
 
@@ -240,16 +241,13 @@ pub struct AppearancePage;
 
 impl Component for AppearancePage {
     fn render(&self) -> impl IntoElement {
-        let model = use_state::<Option<Loaded>>(|| None);
+        let model = system::use_cached("appearance", load);
         let error = use_state::<Option<String>>(|| None);
         let shared = use_consume::<SharedTokens>().0;
-        use_hook(move || background(model, load));
         let tokens = use_tokens();
 
         let Some(loaded) = model.read().clone() else {
-            return page_column().child(status(Status::Loading(
-                "Reading appearance settings.".into(),
-            )));
+            return page_column().child(skeleton());
         };
         let model_value = match loaded {
             Ok(value) => value,
@@ -394,4 +392,9 @@ impl Component for AppearancePage {
                 ),
             )
     }
+}
+
+/// Start loading this page's data before it is opened.
+pub fn prefetch() {
+    system::prefetch("appearance", load);
 }

@@ -10,7 +10,7 @@ use freya::prelude::*;
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
     Group, Overlays, ResponseKind, Row, Status, action_button, dialog, hstack, page_column,
-    primary_button, row, row_button, status, switch_row, use_overlays,
+    primary_button, row, row_button, skeleton, status, switch_row, use_overlays,
 };
 use bingux_ui::scale::*;
 
@@ -317,7 +317,7 @@ pub struct BluetoothPage;
 impl Component for BluetoothPage {
     fn render(&self) -> impl IntoElement {
         let overlays = use_overlays();
-        let model = use_state::<Loaded>(|| None);
+        let model = system::cached("bluetooth");
         let error = use_state::<Option<String>>(|| None);
         let busy = use_state::<Option<String>>(|| None);
 
@@ -334,8 +334,7 @@ impl Component for BluetoothPage {
         });
 
         let Some(loaded) = model.read().clone() else {
-            return page_column()
-                .child(status(Status::Loading("Reading Bluetooth devices.".into())));
+            return page_column().child(skeleton());
         };
         let data = match loaded {
             Ok(data) => data,
@@ -403,4 +402,9 @@ impl Component for BluetoothPage {
         }
         page
     }
+}
+
+/// Start loading this page's data before it is opened.
+pub fn prefetch() {
+    system::prefetch("bluetooth", load);
 }

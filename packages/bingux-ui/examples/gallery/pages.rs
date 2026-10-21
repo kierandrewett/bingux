@@ -287,6 +287,8 @@ impl Component for FeedbackPage {
         let mut notice = use_state(|| true);
         let overlays = use_overlays();
         page_column()
+        .child(Group::new("Skeleton".to_string()).description("Shown for a page before its data has arrived.".to_string()))
+        .child(skeleton())
         .child(
             banner("Updates are ready to install.")
                 .visible(notice())

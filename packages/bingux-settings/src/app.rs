@@ -32,6 +32,7 @@ pub struct App {
 impl Component for App {
     fn render(&self) -> impl IntoElement {
         let tokens = provide_tokens();
+        use_hook(crate::pages::prefetch_all);
         let page = use_state(|| self.initial);
         rect()
             .expanded()
