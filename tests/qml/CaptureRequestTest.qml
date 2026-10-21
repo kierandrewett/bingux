@@ -37,6 +37,17 @@ ShellRoot {
             compare(capture.requestStatus("done-1").state, "saved");
             compare(capture.requestStatus("done-1").path, "/tmp/x.png");
             compare(capture.requestIdError("done-1"), "Request ID already used", "Finished IDs stay reserved");
+            capture.settings.target = "window";
+            capture.settings.kind = "recording";
+            capture.rememberRequest("window-1", "pending");
+            capture.activeRequest = "window-1";
+            compare(capture.captureTarget, "region", "A saved window target uses the region selector for requests");
+            compare(capture.captureKind, "screenshot", "Requests always take screenshots");
+            capture.finishRequest("saved", "/tmp/y.png", "");
+            compare(capture.captureTarget, "window", "The saved target is kept after a request");
+            compare(capture.captureKind, "recording", "The saved mode is kept after a request");
+            capture.settings.target = "region";
+            capture.settings.kind = "screenshot";
             capture.rememberRequest("active-1", "pending");
             capture.activeRequest = "active-1";
             compare(capture.requestStatus("active-1").state, "pending");

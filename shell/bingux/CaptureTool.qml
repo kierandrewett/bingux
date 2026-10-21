@@ -26,7 +26,7 @@ Scope {
         return captureWindows.find(window => x >= window.x && y >= window.y && x < window.x + window.width && y < window.y + window.height) || null;
     }
     function hoverWindow(screen, x, y) {
-        if (preferences.target !== "window" || !directWindowPicker)
+        if (captureTarget !== "window" || !directWindowPicker)
             return;
         activeScreen = screen;
         selectedWindow = windowAt(screen.x + x, screen.y + y);
@@ -54,6 +54,9 @@ Scope {
     property string recordingTarget: ""
     property var requests: new Map()
     property string activeRequest: ""
+    readonly property bool requesting: activeRequest !== ""
+    readonly property string captureKind: requesting ? "screenshot" : preferences.kind
+    readonly property string captureTarget: requesting && preferences.target === "window" ? "region" : preferences.target
     property bool desktopPending: false
     readonly property bool recording: state === "recording"
     readonly property bool busy: ["countdown", "starting", "recording", "finalizing"].includes(state)
@@ -270,11 +273,6 @@ Scope {
     }
     function takeRequested() {
         // Requests capture a region or a whole screen only; the backend never opens a picker for them.
-        if (preferences.target === "window") {
-            finishRequest("error", "", "Window capture is not available for requests");
-            close();
-            return;
-        }
         const s = activeScreen;
         captureSession.requested = false;
         opened = false;
@@ -283,7 +281,7 @@ Scope {
         send({
             command: "capture",
             kind: "screenshot",
-            target: preferences.target === "screen" ? "screen" : "region",
+            target: captureTarget === "screen" ? "screen" : "region",
             screen: s.name,
             previewToken: root.previewToken,
             region: {
@@ -316,11 +314,6 @@ Scope {
             return {
                 ok: false,
                 error: "A capture is already in progress"
-            };
-        if (preferences.target === "window")
-            return {
-                ok: false,
-                error: "Window capture is not available for requests"
             };
         activeRequest = id;
         rememberRequest(id, "pending");
@@ -577,17 +570,12 @@ Scope {
                     ok: false,
                     error: "Open the capture selector before taking a capture"
                 });
-            if (root.activeRequest && preferences.target === "window")
-                return JSON.stringify({
-                    ok: false,
-                    error: "Window capture is not available for requests"
-                });
-            if (preferences.target === "window" && !root.capabilities.window)
+            if (captureTarget === "window" && !root.capabilities.window)
                 return JSON.stringify({
                     ok: false,
                     error: "Window capture is unavailable"
                 });
-            if (preferences.target === "window" && root.directWindowPicker && !root.selectedWindow)
+            if (captureTarget === "window" && root.directWindowPicker && !root.selectedWindow)
                 return JSON.stringify({
                     ok: false,
                     error: "Select a window first"
@@ -688,11 +676,11 @@ Scope {
             function edgeCoordinate(value, extent) {
                 return value <= 1 ? 0 : value >= extent - 1 ? extent : value;
             }
-            readonly property rect selection: active && preferences.target === "region" ? root.region : Qt.rect(0, 0, width, height)
+            readonly property rect selection: active && captureTarget === "region" ? root.region : Qt.rect(0, 0, width, height)
             Image {
                 anchors.fill: parent
                 source: root.previews[overlay.modelData.name]?.plain || ""
-                visible: preferences.kind === "screenshot"
+                visible: captureKind === "screenshot"
                 fillMode: Image.Stretch
                 cache: false
             }
@@ -701,7 +689,7 @@ Scope {
                 source: root.previews[overlay.modelData.name]?.cursor || ""
                 fillMode: Image.Stretch
                 cache: false
-                visible: preferences.kind === "screenshot" && preferences.cursor
+                visible: captureKind === "screenshot" && preferences.cursor
             }
             Shortcut {
                 sequence: "Escape"
@@ -720,19 +708,19 @@ Scope {
             Shortcut {
                 sequence: "Tab"
                 context: Qt.ApplicationShortcut
-                enabled: root.opened && overlay.active && preferences.target === "window" && root.directWindowPicker && !root.optionsOpen
+                enabled: root.opened && overlay.active && captureTarget === "window" && root.directWindowPicker && !root.optionsOpen
                 onActivated: root.cycleWindow(1)
             }
             Shortcut {
                 sequence: "Shift+Tab"
                 context: Qt.ApplicationShortcut
-                enabled: root.opened && overlay.active && preferences.target === "window" && root.directWindowPicker && !root.optionsOpen
+                enabled: root.opened && overlay.active && captureTarget === "window" && root.directWindowPicker && !root.optionsOpen
                 onActivated: root.cycleWindow(-1)
             }
             Rectangle {
                 anchors.fill: parent
                 color: Theme.captureWindowShade
-                visible: !overlay.active || preferences.target === "window"
+                visible: !overlay.active || captureTarget === "window"
             }
             Rectangle {
                 x: 0
@@ -740,7 +728,7 @@ Scope {
                 width: parent.width
                 height: overlay.selection.y
                 color: Theme.captureRegionShade
-                visible: overlay.active && preferences.target === "region"
+                visible: overlay.active && captureTarget === "region"
             }
             Rectangle {
                 x: 0
@@ -748,7 +736,7 @@ Scope {
                 width: overlay.selection.x
                 height: overlay.selection.height
                 color: Theme.captureRegionShade
-                visible: overlay.active && preferences.target === "region"
+                visible: overlay.active && captureTarget === "region"
             }
             Rectangle {
                 x: overlay.selection.x + overlay.selection.width
@@ -756,7 +744,7 @@ Scope {
                 width: parent.width - x
                 height: overlay.selection.height
                 color: Theme.captureRegionShade
-                visible: overlay.active && preferences.target === "region"
+                visible: overlay.active && captureTarget === "region"
             }
             Rectangle {
                 x: 0
@@ -764,7 +752,7 @@ Scope {
                 width: parent.width
                 height: parent.height - y
                 color: Theme.captureRegionShade
-                visible: overlay.active && preferences.target === "region"
+                visible: overlay.active && captureTarget === "region"
             }
 
             MouseArea {
@@ -772,29 +760,29 @@ Scope {
                 objectName: "captureRegionDraw"
                 anchors.fill: parent
                 preventStealing: true
-                hoverEnabled: preferences.target === "window" && root.directWindowPicker
+                hoverEnabled: captureTarget === "window" && root.directWindowPicker
                 onEntered: root.hoverWindow(overlay.modelData, mouseX, mouseY)
                 onClicked: mouse => {
-                    if (preferences.target !== "window" || !root.directWindowPicker)
+                    if (captureTarget !== "window" || !root.directWindowPicker)
                         return;
                     root.hoverWindow(overlay.modelData, mouse.x, mouse.y);
                     if (root.selectedWindow)
                         root.take();
                 }
-                cursorShape: preferences.target === "region" ? Qt.CrossCursor : Qt.ArrowCursor
+                cursorShape: captureTarget === "region" ? Qt.CrossCursor : Qt.ArrowCursor
                 property point origin
                 onPressed: mouse => {
-                    root.regionDragging = preferences.target === "region";
+                    root.regionDragging = captureTarget === "region";
                     root.activeScreen = overlay.modelData;
                     origin = Qt.point(overlay.edgeCoordinate(mouse.x, overlay.width), overlay.edgeCoordinate(mouse.y, overlay.height));
-                    if (preferences.target === "region")
+                    if (captureTarget === "region")
                         root.region = Qt.rect(Math.min(origin.x, overlay.width - 2), Math.min(origin.y, overlay.height - 2), 2, 2);
                 }
                 onReleased: root.regionDragging = false
                 onCanceled: root.regionDragging = false
                 onPositionChanged: mouse => {
                     root.hoverWindow(overlay.modelData, mouse.x, mouse.y);
-                    if (!pressed || preferences.target !== "region")
+                    if (!pressed || captureTarget !== "region")
                         return;
                     const x = overlay.edgeCoordinate(mouse.x, overlay.width);
                     const y = overlay.edgeCoordinate(mouse.y, overlay.height);
@@ -804,7 +792,7 @@ Scope {
             Rectangle {
                 objectName: "captureWindowHighlight"
                 readonly property var window: root.selectedWindow
-                visible: preferences.target === "window" && root.directWindowPicker && window !== null
+                visible: captureTarget === "window" && root.directWindowPicker && window !== null
                 x: window ? Math.max(0, window.x - overlay.modelData.x) : 0
                 y: window ? Math.max(0, window.y - overlay.modelData.y) : 0
                 width: window ? Math.max(0, Math.min(overlay.width, window.x + window.width - overlay.modelData.x) - x) : 0
@@ -842,20 +830,20 @@ Scope {
             }
             Rectangle {
                 id: selectionBorder
-                visible: overlay.active && preferences.target !== "window"
-                x: preferences.target === "screen" ? 4 : root.region.x
-                y: preferences.target === "screen" ? 4 : root.region.y
-                width: preferences.target === "screen" ? overlay.width - 8 : root.region.width
-                height: preferences.target === "screen" ? overlay.height - 8 : root.region.height
+                visible: overlay.active && captureTarget !== "window"
+                x: captureTarget === "screen" ? 4 : root.region.x
+                y: captureTarget === "screen" ? 4 : root.region.y
+                width: captureTarget === "screen" ? overlay.width - 8 : root.region.width
+                height: captureTarget === "screen" ? overlay.height - 8 : root.region.height
                 color: "transparent"
                 border.color: "white"
                 border.width: 1
-                radius: preferences.target === "screen" ? 12 : 2
+                radius: captureTarget === "screen" ? 12 : 2
                 MouseArea {
                     objectName: "captureRegionMove"
                     anchors.fill: parent
                     preventStealing: true
-                    enabled: preferences.target === "region"
+                    enabled: captureTarget === "region"
                     cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                     property point origin
                     property rect initial
@@ -876,7 +864,7 @@ Scope {
                     }
                 }
                 Repeater {
-                    model: preferences.target === "region" ? [
+                    model: captureTarget === "region" ? [
                         {
                             x: 0,
                             y: 0
@@ -976,7 +964,7 @@ Scope {
                     }
                 }
                 Rectangle {
-                    visible: preferences.target === "region"
+                    visible: captureTarget === "region"
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: parent.y < 40 ? 12 : -36
                     width: sizeLabel.implicitWidth + Theme.padding * 2
@@ -1055,7 +1043,7 @@ Scope {
                     }
                     Keys.onPressed: event => {
                         const delta = event.modifiers & Qt.ShiftModifier ? 10 : 1;
-                        if (preferences.target === "region" && [Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down].includes(event.key)) {
+                        if (captureTarget === "region" && [Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down].includes(event.key)) {
                             const dx = event.key === Qt.Key_Left ? -delta : event.key === Qt.Key_Right ? delta : 0;
                             const dy = event.key === Qt.Key_Up ? -delta : event.key === Qt.Key_Down ? delta : 0;
                             root.region = Qt.rect(Math.max(0, Math.min(overlay.width - root.region.width, root.region.x + dx)), Math.max(0, Math.min(overlay.height - root.region.height, root.region.y + dy)), root.region.width, root.region.height);
@@ -1188,8 +1176,8 @@ Scope {
                                     Layout.fillHeight: true
                                     hoverEnabled: true
                                     checkable: true
-                                    checked: preferences.target === modelData
-                                    enabled: modelData !== "window" || !root.ready || !!root.capabilities.window
+                                    checked: captureTarget === modelData
+                                    enabled: modelData !== "window" || (!requesting && (!root.ready || !!root.capabilities.window))
                                     objectName: "captureTarget" + modelData
                                     Accessible.name: modelData === "region" ? "Selection" : modelData === "screen" ? "Screen" : "Window"
                                     onClicked: preferences.target = modelData
@@ -1247,7 +1235,8 @@ Scope {
                                             height: 26
                                             hoverEnabled: true
                                             checkable: true
-                                            checked: preferences.kind === modelData
+                                            checked: captureKind === modelData
+                                            enabled: !requesting
                                             objectName: "captureMode" + modelData
                                             Accessible.name: modelData === "screenshot" ? "Screenshot" : "Recording"
                                             onClicked: preferences.kind = modelData
@@ -1280,8 +1269,8 @@ Scope {
                                 width: 48
                                 height: 48
                                 hoverEnabled: true
-                                Accessible.name: preferences.kind === "recording" ? "Start recording" : "Take screenshot"
-                                enabled: root.ready && (preferences.target !== "window" || (!!root.capabilities.window && (!root.directWindowPicker || root.selectedWindow !== null)))
+                                Accessible.name: captureKind === "recording" ? "Start recording" : "Take screenshot"
+                                enabled: root.ready && (captureTarget !== "window" || (!!root.capabilities.window && (!root.directWindowPicker || root.selectedWindow !== null)))
                                 onClicked: root.take()
                                 background: Rectangle {
                                     radius: width / 2
@@ -1293,7 +1282,7 @@ Scope {
                                         anchors.fill: parent
                                         anchors.margins: 5
                                         radius: width / 2
-                                        color: preferences.kind === "recording" ? Theme.recordingIndicator : Theme.text
+                                        color: captureKind === "recording" ? Theme.recordingIndicator : Theme.text
                                         opacity: shutter.down ? 0.65 : shutter.hovered ? 0.85 : 1
                                     }
                                 }
@@ -1337,6 +1326,7 @@ Scope {
                     enabled: root.optionsOpen
                     opacity: Math.max(0, toolbar.settingsProgress * 2 - 1)
                     preferences: root.settings
+                    kind: root.captureKind
                     audioAvailable: !!root.capabilities.audio
                     onPickingFolderChanged: root.pickingFolder = pickingFolder
                     onBack: root.optionsOpen = false

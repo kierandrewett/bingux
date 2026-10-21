@@ -143,7 +143,8 @@ cannot be reused while its entry is kept.
 Requests save a private PNG in the temporary directory, as Gnoblin's portal screenshots do.
 The result path names that file. Requests never copy to the clipboard, send a
 notification, or play the shutter. Only one capture runs at a time, so
-a second request fails at once. Window capture is refused for requests. See
+a second request fails at once. A saved window target does not open the window
+picker for a request: the request uses the region selector instead. See
 [binguxctl](binguxctl.md) for the command and reply formats.
 
 ## Shortcuts

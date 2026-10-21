@@ -8,9 +8,10 @@ Item {
     id: root
     objectName: "captureSettingsPage"
     required property var preferences
+    required property string kind
     property bool audioAvailable: false
     property bool advanced: false
-    readonly property bool video: preferences.kind === "recording"
+    readonly property bool video: kind === "recording"
     readonly property bool systemAudio: preferences.audio === "system" || preferences.audio === "both"
     readonly property bool microphone: preferences.audio === "microphone" || preferences.audio === "both"
     readonly property bool pickingFolder: folderPicker.visible
