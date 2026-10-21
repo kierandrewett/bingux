@@ -119,9 +119,33 @@ QtObject {
         }
     }
 
+    // The launch waits for two things: the remembered choice is written, and
+    // the screen has finished its exit (finish()). Whichever comes last
+    // starts the session. finish() may be called by every output.
+    property bool rememberDone: false
+    property bool finishRequested: false
+    property bool launched: false
+
+    function finish() {
+        finishRequested = true;
+        launchWhenReady();
+    }
+
+    function launchWhenReady() {
+        if (launched || !finishRequested || !rememberDone)
+            return;
+        if (Greetd.state !== GreetdState.ReadyToLaunch)
+            return;
+        launched = true;
+        Greetd.launch(session.command, launchEnvironment(), true);
+    }
+
     property Process remember: Process {
         command: ["bingux-session", "remember", root.userName, root.session ? root.session.id : ""]
-        onExited: Greetd.launch(root.session.command, root.launchEnvironment(), true)
+        onExited: {
+            root.rememberDone = true;
+            root.launchWhenReady();
+        }
     }
 
     property Connections greetd: Connections {
@@ -163,6 +187,9 @@ QtObject {
             }
             root.status = "Starting " + (root.session.name || root.session.id) + "…";
             root.statusIsError = false;
+            root.rememberDone = false;
+            root.finishRequested = false;
+            root.launched = false;
             root.remember.running = true;
         }
         function onError(message) {

@@ -49,6 +49,8 @@ QtObject {
             pam.respond(value);
     }
 
+    // Credentials accepted: stop PAM and let the screen play its exit. The
+    // screen calls finish() afterwards; that is the real unlock.
     function unlock() {
         unlockRequested = true;
         status = "Unlocking…";
@@ -57,6 +59,14 @@ QtObject {
             pam.abort();
         if (fingerprint.active)
             fingerprint.abort();
+    }
+
+    property bool finished: false
+
+    function finish() {
+        if (!unlockRequested || finished)
+            return;
+        finished = true;
         sessionLock.locked = false;
         unlockSubmitted();
     }

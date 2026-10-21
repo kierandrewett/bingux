@@ -35,10 +35,13 @@ class LockContractTest(unittest.TestCase):
         self.assertIn("PamResult.Success", authentication)
         self.assertIn("responseRequired", authentication)
         self.assertIn("responseVisible", authentication)
-        self.assertIn("sessionLock.secure && !pam.active", authentication)
+        self.assertIn("!sessionLock.secure || pam.active", authentication)
         self.assertIn("PamResult.Success && root.sessionLock.secure", authentication)
-        self.assertIn("root.sessionLock.locked = false;\n                root.unlockSubmitted();", authentication)
-        self.assertIn("authentication.sessionLock.secure", (ROOT / "shell/bingux/LockScreen.qml").read_text())
+        # The unlock request is only sent from finish(), after the screen's
+        # exit, and never more than once.
+        self.assertIn("if (!unlockRequested || finished)", authentication)
+        self.assertIn("sessionLock.locked = false;\n        unlockSubmitted();", authentication)
+        self.assertIn("ready: lock.secure", (ROOT / "shell/bingux/LockShell.qml").read_text())
         self.assertFalse((ROOT / "shell/bingux/LockBroker.qml").exists())
         self.assertFalse((ROOT / "shell/bingux/lock-broker.py").exists())
         self.assertFalse((ROOT / "shell/bingux/lock-start-gate.py").exists())
@@ -52,15 +55,12 @@ class LockContractTest(unittest.TestCase):
         self.assertIn("emit self->completed()", plugin)
         self.assertIn("EAGAIN", plugin)
 
-    def test_theme_is_client_only_and_rejects_nonlocal_values(self):
-        theme = (ROOT / "shell/bingux/LockTheme.qml").read_text()
-        screen = (ROOT / "shell/bingux/LockScreen.qml").read_text()
-        self.assertIn("lock-theme.json", theme)
-        self.assertIn("isColour", theme)
-        self.assertIn("isLocalAbsolutePath", theme)
-        self.assertIn("LockTheme.backgroundImage", screen)
+    def test_screen_only_reads_local_wallpaper_and_calls_finish_after_the_exit(self):
+        screen = (ROOT / "shell/bingux/SessionScreen.qml").read_text()
         self.assertIn("SystemClock", screen)
-        self.assertNotIn("IdleTimeoutSeconds", theme)
+        self.assertIn("root.authentication.finish()", screen)
+        self.assertNotIn("lock-theme.json", screen)
+        self.assertFalse((ROOT / "shell/bingux/LockTheme.qml").exists())
 
     def test_hypridle_example_is_explicitly_opt_in(self):
         example = (ROOT / "docs/hypridle-bingux.conf.example").read_text()

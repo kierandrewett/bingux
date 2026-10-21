@@ -113,10 +113,17 @@ def main():
     bin_dir.mkdir()
     # The greeter must see the remembered account; use a passwd-free stand-in
     # for bingux-session users so the test does not depend on host accounts.
+    # BINGUX_GREETER_WALLPAPER points at a real image for screenshots; the
+    # default is a small generated gradient so the test needs no network.
     wallpaper = home / "luna-wallpaper.png"
-    subprocess.run(
-        ["magick", "-size", "64x40", "gradient:#1b2a4a-#62a0ea", str(wallpaper)], check=False, capture_output=True
-    )
+    real_wallpaper = os.environ.get("BINGUX_GREETER_WALLPAPER")
+    if real_wallpaper and Path(real_wallpaper).is_file():
+        wallpaper = home / ("luna-wallpaper" + Path(real_wallpaper).suffix)
+        shutil.copy(real_wallpaper, wallpaper)
+    else:
+        subprocess.run(
+            ["magick", "-size", "64x40", "gradient:#1b2a4a-#62a0ea", str(wallpaper)], check=False, capture_output=True
+        )
     users = {
         "users": [
             {
@@ -155,7 +162,7 @@ def main():
         "WLR_RENDERER": "pixman",
         "WLR_LIBINPUT_NO_DEVICES": "1",
         "GREETD_SOCK": sock,
-        "BINGUX_SOFTWARE_RENDERING": "1",
+        "BINGUX_SOFTWARE_RENDERING": os.environ.get("BINGUX_SOFTWARE_RENDERING", "1"),
         "QT_QPA_PLATFORM": "wayland",
         "PATH": str(bin_dir) + ":" + os.environ.get("PATH", ""),
     }

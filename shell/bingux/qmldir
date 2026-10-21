@@ -140,6 +140,12 @@ singleton BinguxPreferences 1.0 BinguxPreferences.qml
 
 singleton CompositorEnvironment 1.0 CompositorEnvironment.qml
 SessionScreen 1.0 SessionScreen.qml
+SessionAvatar 1.0 SessionAvatar.qml
+SessionLink 1.0 SessionLink.qml
+SessionGlass 1.0 SessionGlass.qml
+SessionPopover 1.0 SessionPopover.qml
+SessionRow 1.0 SessionRow.qml
+SessionShadow 1.0 SessionShadow.qml
 LockAuthentication 1.0 LockAuthentication.qml
 GreeterAuthentication 1.0 GreeterAuthentication.qml
 GreeterCatalog 1.0 GreeterCatalog.qml

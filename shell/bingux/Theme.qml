@@ -229,6 +229,10 @@ QtObject {
     readonly property real popupInitialScale: 0.9
     readonly property int motion: reducedMotion ? 0 : 120
     readonly property int statusIndicatorMotion: reducedMotion ? 0 : 180
+    // Lock screen and greeter: the entrance slides the clock and the account
+    // into place; the exit fades them away before the desktop takes over.
+    readonly property int sessionEnterMotion: reducedMotion ? 0 : 420
+    readonly property int sessionExitMotion: reducedMotion ? 0 : 360
     readonly property int osdWidth: 360
     readonly property int osdPadding: 16
     readonly property int osdIconSize: 24
