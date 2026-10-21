@@ -20,11 +20,12 @@ work belongs in Git history and does not stay here as a second changelog.
 - [x] Compositor background on both sides of the login so no frame is black.
 - [x] Answer Gnoblin's `gnoblinctl session lock` request by starting
       `bingux-lock` from `bingux-statusd`.
-- [ ] The locked screen is black in the QEMU test (virtio-vga, software GL):
-      Gnoblin reports `locked` and the Bingux lock client (and swaylock) run and
-      commit frames, but the screen dump shows nothing. Reported to the Gnoblin
-      session; `tests/distro-boot.py` fails its lock-screen checks until that is
-      understood. On real hardware it is untested.
+- [ ] Unlocking crashes the compositor in the QEMU test: after the lock client
+      sends `unlock_and_destroy` and exits, Gnoblin segfaults in
+      libwayland-server and greetd restarts the greeter. The lock screen itself
+      paints now (Gnoblin `a05f29ae` frame callbacks, `2317ff42` lock surface
+      thaw). Reported to the Gnoblin session; `tests/distro-boot.py` fails its
+      unlock checks until that is fixed. Not tried on real hardware.
 - [ ] Lock on idle timeout and on logind `Lock` (lid close, suspend). Both
       reach Gnoblin as the same lock request; only the idle policy is missing.
 - [ ] Let `SessionBar` show the user's own extensions once an extension
