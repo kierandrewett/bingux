@@ -63,6 +63,21 @@ work belongs in Git history and does not stay here as a second changelog.
 - [x] Keep every long-running helper at core limit zero and test crash recovery.
 - [ ] Record real hardware evidence for the OSD producer path.
 
+## Shell regression net
+
+- [x] `tests/qmldir-complete.py` (in `make check`): every QML directory has a
+      qmldir, every type file is listed (singleton-marked) or allow-listed, and
+      every entry points at a file. `--committed` checks HEAD; pass a QML tree
+      as an argument to check another tree.
+- [x] `tests/lib/shell_source.py`: the one place that locates `shell.qml`
+      blocks for splicing tests. A moved anchor fails with a clear message.
+- [x] `tests/desktop-baseline.py`: headless sway, production shell, settles on
+      two identical frames, then compares the full desktop and the top bar with
+      `tests/fixtures/desktop-baseline/`. The clock and CPU/RAM readout are
+      masked. Tolerance: 0.2% of pixels, each channel moving by at most 8.
+      Run `QML_IMPORT_PATH=build/qml QS_TEST_BIN=build/bingux-shell/quickshell/src/bingux-shell python3 tests/desktop-baseline.py`; add `--update` to
+      regenerate the references after an intended visual change.
+
 ## Extensions
 
 - [x] Discover XDG extension folders with explicit enable state.

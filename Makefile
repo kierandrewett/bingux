@@ -76,6 +76,8 @@ check: doctor-build native daemons
 	BINGUX_STATUSD_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-statusd python3 tests/osd-event-bridge.py
 	BINGUX_STATUSD_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-statusd python3 tests/pad-help-event-bridge.py
 	python3 tests/lock-contract.test.py
+	python3 tests/qmldir-complete.py --self-test
+	python3 tests/qmldir-complete.py
 	$(MAKE) check-session
 	python3 tests/install-dependencies.py
 	$(MAKE) rpm-package
