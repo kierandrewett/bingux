@@ -140,15 +140,17 @@ def main():
                 attempts=120,
             )
             if checks["installed system shows the greeter"]:
-                time.sleep(10)
-                installed.type_text(PASSWORD)
-                installed.key("ret")
                 session = out / "installed-session.png"
-                checks["installed account signs in to a desktop"] = installed.wait_screen(
-                    session,
-                    session_painted,
-                    attempts=60,
-                )
+                checks["installed account signs in to a desktop"] = False
+                # Keys typed while the greeter is still settling can be lost, and the
+                # greeter then says "Try again": type the password again.
+                for _ in range(3):
+                    time.sleep(10)
+                    installed.type_text(PASSWORD)
+                    installed.key("ret")
+                    if installed.wait_screen(session, session_painted, attempts=25):
+                        checks["installed account signs in to a desktop"] = True
+                        break
         (out / "report.txt").write_text("\n".join(report))
         (out / "checks.json").write_text(json.dumps(checks, indent=2) + "\n")
     finally:
