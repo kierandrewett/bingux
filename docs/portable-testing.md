@@ -42,23 +42,23 @@ real machine: this is a UI test environment, not a security sandbox.
 ## Existing layer-shell desktop
 
 ```sh
-BINGUX_COMPOSITOR=portable qs -p shell/bingux
+BINGUX_COMPOSITOR=portable build/bingux-shell/quickshell/src/bingux-shell desktop --source shell/bingux
 ```
 
-Use a matching Quickshell/QML plugin runtime. This command uses your current
+`make shell` builds that binary. This command uses your current
 settings and services. An existing panel or notification daemon may conflict;
 the nested launcher is preferable for isolated testing. Bind compositor keys to
-`qs ipc -p /absolute/path/to/shell/bingux call -- search open` or other binguxctl
-commands. Portable mode disables Gnoblin socket connection attempts and skips
+`bingux-shell ipc -p /absolute/path/to/shell/bingux call -- search open` or
+other binguxctl commands. Portable mode disables Gnoblin socket connection attempts and skips
 global cursor requests without delaying app launch.
 
-To exercise an installed or staged payload, point the same test at its shell
-directory and QML plugin path:
+To exercise an installed or staged payload, point the same test at the shell
+directory that its `bingux-shell` unpacks from the packed archive:
 
 ```sh
 QML_IMPORT_PATH=/path/to/root/usr/lib64/bingux/qml \
 PATH=/path/to/root/usr/bin:$PATH \
-scripts/test-desktop --shell /path/to/root/usr/share/bingux/shell --smoke
+scripts/test-desktop --shell "$(/path/to/root/usr/bin/bingux-shell --shell-dir)" --smoke
 ```
 
 ## Dependency map

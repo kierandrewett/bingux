@@ -21,8 +21,9 @@ make install-user
 Everything is kept under `$XDG_DATA_HOME/bingux` (normally
 `~/.local/share/bingux`). Only convenience symlinks in `~/.local/bin` and
 `~/.config/systemd/user` point into that directory. Set `USER_PREFIX` to use a
-different absolute location, or set `BINGUX_QUICKSHELL` when the matching
-Quickshell executable is not on `PATH`.
+different absolute location. The shell runtime is built from source as
+`bingux-shell` (see `docs/standalone.md`); no separate Quickshell install is
+needed.
 
 Remove the complete managed payload with:
 

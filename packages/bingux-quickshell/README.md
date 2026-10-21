@@ -1,5 +1,10 @@
 # Bingux Quickshell runtime
 
+These patches are applied to the pinned Quickshell submodule when
+`packages/bingux-shell` is built (`prepare-quickshell.py` copies the submodule
+into the build tree and patches the copy). Downstream builders that ship their
+own Quickshell can apply the same files to the matching release.
+
 A layer surface must record the settings sent when it is created. Quickshell
 0.2.1 through 0.3.1 leave that snapshot at its default values. If a setting
 returns to its default before the next commit, the compositor keeps the old

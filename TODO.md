@@ -27,15 +27,24 @@ work belongs in Git history and does not stay here as a second changelog.
 
 ## Bingux OS
 
-- [ ] Build the live image (`distro/build.sh`) and run `tests/distro-boot.py`.
+- [x] Build the live image (`distro/build.sh`) and run `tests/distro-boot.py`
+      (rootless podman; the boot test reaches the Bingux login screen).
 - [ ] Boot the image on real hardware and install with archinstall.
 - [ ] Publish the pacman repository the image is built from.
 
 ## Shell maintenance
 
-- [ ] Replace remaining direct `qs` launches with the installed launcher or an
-      explicit `BINGUX_QUICKSHELL` value.
-- [ ] Move optional Python helpers behind clear feature checks.
+- [x] Build Quickshell into `bingux-shell` and run the shells from the packed
+      archive; the installed command names are symlinks to the binary.
+- [ ] Port the Python helpers (`shell/bingux/*.py`, 27 files) to a Rust
+      multicall binary shipped next to `bingux-shell`, one group at a time:
+      GIO and JSON helpers first (launch-application, extensions,
+      process-action, steam-games, session-activity, calendar), then fold
+      microphone, camera and control-centre state into `bingux-statusd`,
+      capture and preview last. `Python.helper()` and `BINGUX_HELPER_DIR` go
+      when the last file goes, with `python-gobject` and friends.
+- [ ] Point the live tests that still default `QS_TEST_BIN` to `qs` at the
+      built `bingux-shell`.
 - [ ] Keep every long-running helper at core limit zero and test crash recovery.
 - [ ] Record real hardware evidence for the OSD producer path.
 

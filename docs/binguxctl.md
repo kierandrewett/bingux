@@ -50,11 +50,12 @@ JSON. Failures print a diagnostic to stderr and return nonzero. Only an explicit
 repeated because the command may already have executed.
 
 The native package installs the command and uses `capture toggle` for the
-capture shortcut. It selects the configured Quickshell package and configuration
-name. For a development instance:
+capture shortcut. The installed `binguxctl` addresses the running shell
+through `bingux-shell --shell-dir`, the directory the archive was unpacked
+into. For a development instance running from a checkout:
 
 ```sh
-binguxctl --quickshell /path/to/qs --path /path/to/shell status
+binguxctl --quickshell /path/to/bingux-shell --path /path/to/shell/bingux status
 binguxctl --config bingux status
 ```
 

@@ -7,8 +7,9 @@ features.
 
 ## Build
 
-Install a matching Qt 6 development environment, Quickshell, a C compiler,
-Cargo and the system libraries used by the optional helpers. Then run:
+Install a matching Qt 6 development environment, CMake, Ninja, a C and C++
+compiler, Cargo and the system libraries used by the shell and the optional
+helpers. Then run:
 
 On Fedora, use the spec as the dependency source instead of maintaining a
 second package list:
@@ -18,40 +19,78 @@ sudo dnf install rpmdevtools
 sudo dnf builddep packaging/rpm/bingux.spec
 ```
 
-Install Quickshell from the package source that matches the Qt version on the
-host. The shell does not bundle or replace Quickshell.
+Fetch the pinned submodules once; the source archive used by packages already
+contains them:
+
+```sh
+git submodule update --init
+```
 
 ```sh
 make
 make check
 ```
 
-Before a source install, `make doctor` checks the compiler, Cargo, native
-libraries, Qt Quick/QML, Quickshell and user-systemd prerequisites. The managed
-install target runs this check automatically and explains missing dependencies
-before starting the build.
-
-The check queries the selected Quickshell without opening the shell. If its build
-and runtime Qt versions differ, it reports both versions and the executable.
-Rebuild or reinstall that runtime for your Qt version, or set `BINGUX_QUICKSHELL`
-to a matching executable before running `make doctor` again.
-
-`make doctor` also checks the selected Quickshell's desktop-action IDs through
-an isolated offscreen QML probe. A runtime that truncates IDs, fails to start
-the probe or does not finish within ten seconds blocks `make install-user`.
-Use a corrected Quickshell build; the
-[Gnoblin parser patch](https://github.com/kierandrewett/gnoblin/tree/main/patches/quickshell)
-includes preparation instructions. Set `BINGUX_QUICKSHELL` to select that
-executable, then rerun `make doctor`.
+Before a source install, `make doctor` checks the compilers, CMake, Cargo,
+native libraries, Qt Quick/QML, the submodules and user-systemd
+prerequisites. The managed install target runs this check automatically and
+explains missing dependencies before starting the build.
 
 Use `make install-user` for a checked source installation. Calling
 `scripts/install-shell.py` directly bypasses prerequisite validation and is
-not a safe way to resolve a failed doctor check. Package staging through
-`make install` does not validate the eventual desktop's Quickshell runtime.
+not a safe way to resolve a failed doctor check.
 
-The build produces the two QML plugins, the audio meter and the Rust search and
-status daemons. Quickshell is a runtime dependency because its Qt build must
-match the shell process.
+The build produces:
+
+- `bingux-shell`: Quickshell 0.2.1, with the runtime patches from
+  `packages/bingux-quickshell` applied, compiled into one binary whose entry
+  point knows the Bingux shells (`packages/bingux-shell`). No separate
+  Quickshell install is used; the Qt build is always the one the shell was
+  compiled against.
+- `bingux-shell.sxa`: the shell archive. `scripts/pack-shell.py` packs the QML,
+  JavaScript and assets of `shell/bingux` into one tar.xz with a manifest of
+  entry files per mode.
+- The three QML plugins, the audio meter, the Rust daemons and the Settings
+  application.
+
+### Shell modes
+
+`bingux-shell MODE` starts one shell surface; the installed command names are
+symlinks to the binary and select the same modes:
+
+| Command              | Mode        | Entry file           |
+| -------------------- | ----------- | -------------------- |
+| `bingux`             | `desktop`   | `shell.qml`          |
+| `bingux-lock`        | `lock`      | `LockShell.qml`      |
+| `bingux-greeter`     | `greeter`   | `GreeterShell.qml`   |
+| `bingux-popouts`     | `popouts`   | `PopoutsShell.qml`   |
+| `bingux-wallpaper`   | `wallpaper` | `WallpaperShell.qml` |
+| `bingux-search-ui`   | `search`    | `SearchShell.qml`    |
+| `bingux-switcher-ui` | `switcher`  | `SwitcherShell.qml`  |
+| `bingux-emoji-ui`    | `emoji`     | `EmojiShell.qml`     |
+| `bingux-capture-ui`  | `capture`   | `CaptureShell.qml`   |
+
+On first start the binary unpacks the archive into
+`$XDG_CACHE_HOME/bingux/shell/<content id>/` (or `/tmp/bingux-shell-<uid>`
+when the cache is not writable, as for the greeter account) and runs the entry
+file from there, so Qt's compiled-QML cache works on ordinary files. A new
+archive has a new content id; old directories can be deleted at any time.
+
+| Option or variable     | Effect                                                                |
+| ---------------------- | --------------------------------------------------------------------- |
+| `--source DIR`         | Run the mode from a checkout (`shell/bingux`) instead of the archive. |
+| `--archive FILE`       | Use this archive instead of the installed one.                        |
+| `--shell-dir`          | Print the unpacked shell directory (used by `binguxctl` for IPC).     |
+| `BINGUX_SHELL_SOURCE`  | Default for `--source`.                                               |
+| `BINGUX_SHELL_ARCHIVE` | Default for `--archive`.                                              |
+| `bingux-shell -p FILE` | Plain Quickshell with the Bingux environment, for tests and tools.    |
+
+The binary sets the environment the shell expects when it is not already set:
+`QML_IMPORT_PATH` (the Bingux QML plugins), `PATH` and `XDG_DATA_DIRS` (the
+install prefix), `BINGUX_HELPER_DIR` (the Python helpers under
+`libexec/bingux/shell`), `BINGUX_CONFIG_BIN`, `BINGUX_SETTINGS_BIN`,
+`BINGUX_AUDIO_METER` and `BINGUX_ADWAITA_ICON_DIR`. Values already in the
+environment win, so a developer can point an installed binary at a checkout.
 
 ## Install for your user
 
@@ -107,23 +146,16 @@ Bingux bundles its symbolic Adwaita icons. Launch it through the installed
 `bingux` command so its asset paths and QML plugins are available. Application
 icons use the system theme; an unavailable icon uses a bundled generic icon.
 
-The installer prefers Gnoblin's matching Quickshell runtime when it is
-installed below `$XDG_DATA_HOME/gnoblin`.
-
-Otherwise it detects `gnoblin-quickshell`, `qs`, or `quickshell`. Set
-`BINGUX_QUICKSHELL` to select a matching executable explicitly. The
-`bingux-uninstall` command removes the managed installation without the source
-checkout.
+The `bingux-uninstall` command removes the managed installation and the
+unpacked shell cache without the source checkout.
 
 ### Reclaim unused memory
 
-When built with jemalloc, the patched Quickshell runtime reclaims unused
-allocator pages asynchronously after panels close. It keeps the existing decay
-intervals and respects an explicit `MALLOC_CONF` environment value.
-
-See jemalloc's [configuration reference](https://jemalloc.net/jemalloc.3.html#tuning)
-for its option format. Other Quickshell builds retain their own memory behavior;
-installing Bingux alone does not patch that executable.
+`bingux-shell` is built with jemalloc and reclaims unused allocator pages
+asynchronously after panels close. It keeps the existing decay intervals and
+respects an explicit `MALLOC_CONF` environment value. See jemalloc's
+[configuration reference](https://jemalloc.net/jemalloc.3.html#tuning) for its
+option format.
 
 ### Uninstall Bingux
 
@@ -156,9 +188,11 @@ make install PREFIX=/usr DESTDIR="$PWD/dist/root"
 
 The package-oriented installer writes only below `DESTDIR`. It installs:
 
-- Shell files in `share/bingux/shell`.
-- Native QML plugins in `lib/bingux/qml`.
-- Helper programs in `bin` and `libexec/bingux`.
+- `bingux-shell` and the mode symlinks in `bin`.
+- The shell archive `bingux-shell.sxa` and the native QML plugins in
+  `lib/bingux` (`lib64` on Fedora).
+- The Python shell helpers in `libexec/bingux/shell`; other helper programs
+  in `bin` and `libexec/bingux`.
 - The Gnoblin module in `share/gnoblin/conf.d/bingux.lua`.
 - User systemd units in `lib/systemd/user`.
 
@@ -170,8 +204,8 @@ Gnoblin's Lua autostart starts the Bingux desktop, search, switcher, capture,
 and emoji layer-shell clients. Removing the Bingux module from the Gnoblin
 configuration stops those session-owned clients on the next reload.
 
-The shell launcher clears core dumps. Services restart after a failure and use
-the same QML import path as the shell.
+`bingux-shell` clears its core-dump limit at start. Services restart after a
+failure and use the same QML import path as the shell.
 
 ## Application scheduling
 
