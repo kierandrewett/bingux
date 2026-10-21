@@ -647,3 +647,7 @@ The label is driven by the `gnoblin.workspace.activated` event from Gnoblin's wi
 subscription. Only real changes of the active workspace produce it; creation, removal and
 rename events do not. The feature needs Gnoblin with the windows subscription (API 1.1 or
 later). Older compositors send no activation event, so no label is shown.
+
+The regression test `tests/workspace-change.py` runs only inside Gnoblin's private test session, because it
+asserts `WAYLAND_DISPLAY` starts with `gnoblin-gs-`. It is not part of `make check-session`. Run it from
+that session with `QS_TEST_BIN=build/bingux-shell/quickshell/src/bingux-shell QML_IMPORT_PATH=build/qml python3 tests/workspace-change.py`.
