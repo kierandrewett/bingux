@@ -372,6 +372,14 @@ ShellRoot {
         dockSafeInset: dock.dockTopFromBottom + Theme.dockPadding
     }
 
+    IdentifyState {
+        id: identify
+    }
+
+    IdentifySurface {
+        state: identify
+    }
+
     // Without seconds the clock wakes once a minute. Redrawing the bar every
     // second keeps the compositor re-rendering a blurred surface around the clock.
     Timer {
