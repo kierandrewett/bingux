@@ -92,7 +92,8 @@ build_package() {
             ;;
     esac
     chown -R builder:builder "$dir" "$REPO"
-    (cd "$dir" && sudo -u builder env MAKEFLAGS="-j$JOBS" PKGDEST="$REPO" makepkg -s --noconfirm --skippgpcheck)
+    # -f: a rerun with regenerated sources replaces the package of the same version.
+    (cd "$dir" && sudo -u builder env MAKEFLAGS="-j$JOBS" PKGDEST="$REPO" makepkg -sf --noconfirm --skippgpcheck)
     register_repo
     release_output
 }
