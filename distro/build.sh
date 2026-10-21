@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build Bingux OS from any Linux host with podman or docker.
 #
-# usage: distro/build.sh [--gnoblin PATH] [--step all|packages|iso]
+# usage: distro/build.sh [--gnoblin PATH] [--step all|packages|iso|package:NAME]
 #
 # 1. Produces the source inputs under distro/sources/:
 #    - the Bingux source archive from this checkout (committed tree)
@@ -27,7 +27,7 @@ while [ $# -gt 0 ]; do
             shift 2
             ;;
         *)
-            echo "usage: distro/build.sh [--gnoblin PATH] [--step all|packages|iso]" >&2
+            echo "usage: distro/build.sh [--gnoblin PATH] [--step all|packages|iso|package:NAME]" >&2
             exit 2
             ;;
     esac

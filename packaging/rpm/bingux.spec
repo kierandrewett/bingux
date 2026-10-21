@@ -27,6 +27,22 @@ BuildRequires:  qt6-qtbase-private-devel
 BuildRequires:  qt6-qttools
 BuildRequires:  rust
 BuildRequires:  systemd-rpm-macros
+# bingux-shell: Quickshell (vendored in packages/bingux-shell) built into the
+# Bingux binary with CMake and Ninja.
+BuildRequires:  cmake
+BuildRequires:  ninja-build
+BuildRequires:  cli11-devel
+BuildRequires:  jemalloc-devel
+BuildRequires:  pkgconfig(libarchive)
+BuildRequires:  pkgconfig(libpipewire-0.3)
+BuildRequires:  pkgconfig(libdrm)
+BuildRequires:  pkgconfig(polkit-agent-1)
+BuildRequires:  pkgconfig(xcb)
+BuildRequires:  pkgconfig(wayland-protocols)
+BuildRequires:  pam-devel
+BuildRequires:  qt6-qtshadertools-devel
+BuildRequires:  qt6-qtsvg-devel
+BuildRequires:  spirv-tools
 
 Requires:       gnome-settings-daemon
 Requires:       gtk3
@@ -40,10 +56,11 @@ Requires:       python3-gobject
 Requires:       python3-pillow
 Requires:       python3-pyyaml
 Requires:       /usr/bin/ffmpeg
-# Fedora's Quickshell package is named differently across repositories.  The
-# shell requires the stable executable interface, while the provider supplies
-# the matching Qt/QML runtime and modules.
-Requires:       /usr/bin/qs
+# The Qt QML runtime bingux-shell links against; Quickshell itself is inside
+# the binary.
+Requires:       qt6-qtdeclarative
+Requires:       qt6-qtwayland
+Requires:       qt6-qtsvg
 Requires:       systemd
 Requires:       wl-clipboard
 Requires:       xdg-utils
@@ -73,7 +90,7 @@ that provide the layer-shell protocols.
 %autosetup
 
 %build
-%make_build BUILD_DIR=build JOBS=%{?_smp_build_ncpus}%{!?_smp_build_ncpus:2}
+%make_build BUILD_DIR=build JOBS=%{?_smp_build_ncpus}%{!?_smp_build_ncpus:2} LIBDIR_NAME=%{_lib}
 
 %install
 %make_install PREFIX=%{_prefix} DESTDIR=%{buildroot} BUILD_DIR=build QMLDIR=%{_libdir}/bingux/qml
@@ -96,7 +113,9 @@ install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bin
 %license %{_datadir}/licenses/adwaita-icon-theme/COPYING
 %license %{_datadir}/licenses/adwaita-icon-theme/COPYING_CCBYSA3
 %license %{_datadir}/licenses/adwaita-icon-theme/COPYING_LGPL
+%license packages/bingux-shell/quickshell/LICENSE
 %doc README.md docs/extensions.md docs/locking.md docs/login-screen.md
+%{_bindir}/bingux-shell
 %{_bindir}/bingux
 %{_bindir}/bingux-capture-ui
 %{_bindir}/bingux-lock
@@ -121,7 +140,6 @@ install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bin
 %{_libdir}/bingux/
 %{_libexecdir}/bingux/
 %{_datadir}/bingux/
-%{_datadir}/icons/Adwaita/
 %{_datadir}/gnoblin/conf.d/bingux.lua
 %{_datadir}/gnoblin/scripts/bingux-text-input.js
 %{_userunitdir}/bingux*.service

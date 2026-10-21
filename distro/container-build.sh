@@ -31,12 +31,36 @@ prepare_host() {
         echo 'builder ALL=(ALL) NOPASSWD: ALL' >/etc/sudoers.d/builder
     fi
     mkdir -p "$REPO"
-    chown -R builder:builder "$OUT"
+    allow_rootless_chroot
+    register_repo
+}
+
+# arch-chroot (used by pacstrap -c and mkarchiso) mounts a fresh devtmpfs in
+# the chroot. A rootless container's user namespace cannot mount devtmpfs, so
+# the chroot gets a recursive bind of the container's /dev instead, which is
+# what arch-chroot's own unshare mode does.
+allow_rootless_chroot() {
+    local probe
+    probe="$(mktemp -d)"
+    if mount udev "$probe" -t devtmpfs -o mode=0755,nosuid 2>/dev/null; then
+        umount "$probe"
+        rmdir "$probe"
+        return 0
+    fi
+    rmdir "$probe"
+    log "rootless container: chroots bind /dev instead of mounting devtmpfs"
+    # pacstrap carries its own copy of chroot_setup.
+    local script
+    for script in /usr/bin/arch-chroot /usr/bin/pacstrap; do
+        sed -i 's|chroot_add_mount udev "$1/dev" -t devtmpfs -o mode=0755,nosuid|chroot_add_mount /dev "$1/dev" --rbind|' \
+            "$script"
+        grep -q 'chroot_add_mount /dev "$1/dev" --rbind' "$script"
+    done
 }
 
 # makepkg refuses to run as root; build as `builder` with the sources copied
 # next to the PKGBUILD. A local repository lets later packages depend on
-# earlier ones (bingux depends on quickshell and gnoblin).
+# earlier ones (bingux depends on gnoblin).
 build_package() {
     local name="$1"
     local dir="$STAGE/$name"
@@ -66,14 +90,30 @@ build_package() {
             }
             cp "$archive" "$dir/"
             ;;
-        quickshell)
-            cp "$WORK"/packages/bingux-quickshell/*.patch "$dir/"
-            ;;
     esac
-    chown -R builder:builder "$dir"
+    chown -R builder:builder "$dir" "$REPO"
     (cd "$dir" && sudo -u builder env MAKEFLAGS="-j$JOBS" PKGDEST="$REPO" makepkg -s --noconfirm --skippgpcheck)
-    repo-add -R "$REPO/bingux-os.db.tar.gz" "$REPO"/*.pkg.tar.* >/dev/null
-    # Later packages resolve their dependencies from this repository.
+    register_repo
+    release_output
+}
+
+# Container root is the host user under rootless podman; outputs owned by
+# the builder account would be unwritable on the host.
+release_output() {
+    chown -R 0:0 "$OUT"
+}
+
+# Later packages resolve their dependencies from the repository built so far;
+# a package:NAME run uses the repository of an earlier run. The database is
+# rebuilt from the package files, so a run that was interrupted after makepkg
+# but before repo-add still counts its package.
+register_repo() {
+    ls "$REPO"/*.pkg.tar.* >/dev/null 2>&1 || return 0
+    log "registering the package repository"
+    # A fresh database: repo-add cannot update one that carries SELinux
+    # attributes from a host checkout.
+    rm -f "$REPO"/bingux-os.db "$REPO"/bingux-os.db.tar.gz "$REPO"/bingux-os.files "$REPO"/bingux-os.files.tar.gz
+    repo-add -q -R "$REPO/bingux-os.db.tar.gz" "$REPO"/*.pkg.tar.*
     if ! grep -q '^\[bingux-os\]' /etc/pacman.conf; then
         printf '\n[bingux-os]\nSigLevel = Optional TrustAll\nServer = file://%s\n' "$REPO" >>/etc/pacman.conf
     fi
@@ -81,7 +121,6 @@ build_package() {
 }
 
 build_packages() {
-    build_package quickshell
     build_package gnoblin
     build_package bingux
 }
@@ -105,7 +144,7 @@ build_iso() {
     log "building the live image (this takes a while)"
     mkdir -p "$OUT"
     mkarchiso -v -w "$STAGE/iso-work" -o "$OUT" "$profile"
-    chown -R builder:builder "$OUT"
+    release_output
     log "done: $(ls "$OUT"/*.iso)"
 }
 
@@ -123,8 +162,14 @@ case "$STEP" in
         prepare_host
         build_iso
         ;;
+    package:*)
+        # One package against the repository built so far, for PKGBUILD work
+        # without rebuilding Mutter.
+        prepare_host
+        build_package "${STEP#package:}"
+        ;;
     *)
-        echo "usage: container-build.sh [all|packages|iso]" >&2
+        echo "usage: container-build.sh [all|packages|iso|package:NAME]" >&2
         exit 2
         ;;
 esac

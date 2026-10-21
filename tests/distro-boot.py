@@ -80,11 +80,23 @@ class Serial:
         return needle.encode() in self.log
 
     def run(self, command, timeout=30):
-        marker = f"__DONE_{int(time.time() * 1000)}__"
+        """Run a shell command over the console and return its output only.
+
+        The console echoes the command line, so the marker is split in the
+        command (`__DO''NE_...`) and only the shell's own echo of the finished
+        command prints it whole; the text before that echo line is dropped.
+        """
+        marker = f"__{int(time.time() * 1000) % 100000}__"
         start = len(self.log)
-        self.sock.sendall((command + f"; echo {marker}\n").encode())
+        self.sock.sendall((command + f"; echo {marker[:3]}''{marker[3:]}\n").encode())
         self.wait_for(marker, timeout)
-        return self.log[start:].decode(errors="replace")
+        text = self.log[start:].decode(errors="replace").split(marker, 1)[0]
+        # The line editor echoes the command as it is typed and once more when
+        # it redraws the prompt; the output follows the last echo.
+        echoed = text.rfind(f"{marker[:3]}''{marker[3:]}")
+        if echoed >= 0:
+            text = text[text.find("\n", echoed) + 1 :]
+        return text
 
 
 def main():
@@ -143,20 +155,47 @@ def main():
             checks["booted to a shell"] = True
             # The greeter can take a moment after multi-user.target.
             for _ in range(60):
-                active = serial.run("systemctl is-active greetd")
-                if "\nactive" in active or active.strip().endswith("active"):
+                if serial.run("systemctl is-active greetd").strip() == "active":
                     break
                 time.sleep(2)
-            report = serial.run(
-                "systemctl is-active greetd; pgrep -a -f 'gnoblin --greeter' | head -n 1; "
-                "pgrep -a -f bingux-greeter | head -n 3; id live; ls /var/lib/bingux/greeter/live"
+            # The greeter client follows the compositor; on a software-rendered
+            # VM that can take a while after greetd reports active.
+            for _ in range(45):
+                if "GREETER_UP" in serial.run("pgrep -f bingux-greeter >/dev/null && echo GREETER_UP"):
+                    break
+                time.sleep(2)
+            # One short command per probe: the console wraps long lines, which
+            # would put echoed fragments into the captured output.
+            probes = {
+                "greetd active": "systemctl is-active greetd",
+                "gnoblin greeter compositor running": "pgrep -c -f 'gnoblin --greeter'",
+                "bingux-greeter running": "pgrep -c -f bingux-greeter",
+                "live account exists": "id -u live",
+                "greeter wallpaper snapshot": "ls /var/lib/bingux/greeter/live",
+            }
+            report = ""
+            for label, probe in probes.items():
+                output = serial.run(probe).strip()
+                report += f"$ {probe}\n{output}\n"
+                if label == "greetd active":
+                    checks[label] = output == "active"
+                elif label == "greeter wallpaper snapshot":
+                    checks[label] = "wallpaper" in output
+                elif label == "live account exists":
+                    checks[label] = output.isdigit()
+                else:
+                    checks[label] = output.isdigit() and int(output) > 0
+            # Diagnostics for a failed boot, next to the screenshot.
+            report += "$ journalctl -b -u greetd\n" + serial.run(
+                "journalctl -b -u greetd --no-pager -o cat | tail -n 40", 60
             )
-            checks["greetd active"] = "\nactive" in report
-            checks["gnoblin greeter compositor running"] = "gnoblin --greeter" in report
-            checks["bingux-greeter running"] = "bingux-greeter" in report
-            checks["live account exists"] = "uid=" in report
-            checks["greeter wallpaper snapshot"] = "wallpaper" in report
-            time.sleep(5)
+            report += "$ journalctl -b -p err\n" + serial.run("journalctl -b -p err --no-pager -o cat | tail -n 40", 60)
+            report += "$ journalctl -b (greeter session)\n" + serial.run(
+                "journalctl -b --no-pager -o short-iso _UID=$(id -u greeter) | tail -n 80", 60
+            )
+            (out / "report.txt").write_text(report)
+            # Give the greeter time to paint its first frame.
+            time.sleep(10)
             monitor(monitor_path, f"screendump {work / 'screen.ppm'}")
             if (work / "screen.ppm").exists():
                 subprocess.run(["magick", str(work / "screen.ppm"), str(out / "screen.png")], check=False)

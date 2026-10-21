@@ -8,10 +8,9 @@ stock `archlinux` container, so the host only needs podman or docker.
 distro/
   build.sh              host entry point: sources, then the container build
   container-build.sh    package builds and mkarchiso inside the container
-  packages/             PKGBUILDs for the three packages Arch does not ship
-    quickshell/         Quickshell 0.2.1 with the Bingux runtime patches
+  packages/             PKGBUILDs for the two packages Arch does not ship
     gnoblin/            placeholder; the PKGBUILD comes from the Gnoblin release tooling
-    bingux/             this repository
+    bingux/             this repository, including bingux-shell (vendored Quickshell)
   profile/              archiso overlay on top of the releng profile
   sources/              generated inputs (ignored)
   out/                  packages, repository and the ISO (ignored)
@@ -26,11 +25,15 @@ distro/build.sh --gnoblin ~/dev/gnoblin
 - Both checkouts must be committed: the Bingux archive comes from
   `scripts/make-source-archive.sh` and the Gnoblin bundle from Gnoblin's
   `scripts/build-release-assets.sh --source-only`, which archive `HEAD`.
-- The container runs privileged because `mkarchiso` needs loop devices.
+- The container runs privileged so that `pacstrap` and `mkarchiso` can mount
+  the chroot's `/proc`, `/sys` and `/dev`. Rootless podman works: the build
+  script makes `arch-chroot` bind the container's `/dev` because a user
+  namespace cannot mount devtmpfs.
 - `--step packages` stops after the pacman repository in `distro/out/repo`;
-  `--step iso` reuses it.
-- Expect an hour or more the first time: Mutter and Quickshell compile from
-  source. `JOBS` limits parallelism.
+  `--step iso` reuses it. `--step package:bingux` rebuilds one package against
+  that repository, which is the quick loop for PKGBUILD changes.
+- Expect an hour or more the first time: Mutter and bingux-shell (Quickshell
+  built into the Bingux binary) compile from source. `JOBS` limits parallelism.
 
 The image lands in `distro/out/bingux-os-<date>-x86_64.iso`.
 
