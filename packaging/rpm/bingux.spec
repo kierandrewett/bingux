@@ -28,7 +28,6 @@ BuildRequires:  qt6-qttools
 BuildRequires:  rust
 BuildRequires:  systemd-rpm-macros
 
-Requires:       gnome-settings-daemon
 Requires:       gtk3
 Requires:       gtk4
 Requires:       libadwaita
@@ -38,7 +37,6 @@ Requires:       python3
 Requires:       python3-cairo
 Requires:       python3-gobject
 Requires:       python3-pillow
-Requires:       python3-pyyaml
 Requires:       /usr/bin/ffmpeg
 # Fedora's Quickshell package is named differently across repositories.  The
 # shell requires the stable executable interface, while the provider supplies
@@ -53,6 +51,11 @@ Requires:       dconf
 Requires:       glib2
 # Backends the Settings application drives. Each page reports a readable
 # error when its tool is missing, so these are recommendations.
+# Night light state in the Control Centre reads gnome-settings-daemon and
+# reports "off" without it; YAML frontmatter in document previews needs
+# PyYAML and shows "could not be parsed" without it.
+Recommends:     gnome-settings-daemon
+Recommends:     python3-pyyaml
 Recommends:     NetworkManager
 Recommends:     accountsservice
 Recommends:     bluez
