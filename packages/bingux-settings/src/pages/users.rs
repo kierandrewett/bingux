@@ -12,7 +12,8 @@ use freya::prelude::*;
 use crate::icons::{self, Icon};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::theme::Tokens;
-use crate::ui::{Group, Status, TALL_ROW_HEIGHT, page_column, row, status, text_row, use_tokens};
+use crate::ui::{Group, Status, page_column, row, status, text_row, use_tokens};
+use bingux_ui::scale::*;
 
 const ACCOUNTS: &str = "org.freedesktop.Accounts";
 const ACCOUNTS_PATH: &str = "/org/freedesktop/Accounts";
@@ -316,33 +317,33 @@ impl Component for AccountRow {
             label()
                 .text(self.account.user_name.clone())
                 .color(tokens.muted)
-                .font_size(13.0)
+                .font_size(TEXT_MD)
                 .max_lines(1)
                 .text_overflow(TextOverflow::Ellipsis)
         });
 
         let avatar = rect()
-            .width(Size::px(36.0))
-            .height(Size::px(36.0))
-            .corner_radius(18.0)
+            .width(Size::px(BOX_LG))
+            .height(Size::px(BOX_LG))
+            .corner_radius(BOX_LG / 2.0)
             .background(tokens.accent)
             .center()
             .child(
                 label()
                     .text(initials(&name))
                     .color(tokens.accent_foreground)
-                    .font_size(14.0)
+                    .font_size(TEXT_MD)
                     .font_weight(FontWeight::SEMI_BOLD),
             );
         let text_column = rect()
             .width(Size::flex(1.0))
             .main_align(Alignment::Center)
-            .spacing(2.0)
+            .spacing(S0)
             .child(
                 label()
                     .text(name)
                     .color(tokens.text)
-                    .font_size(15.0)
+                    .font_size(TEXT_LG)
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
             )
@@ -354,8 +355,8 @@ impl Component for AccountRow {
             .direction(Direction::Horizontal)
             .content(Content::Flex)
             .cross_align(Alignment::Center)
-            .padding((0.0, 16.0))
-            .spacing(12.0)
+            .padding((0.0, S4))
+            .spacing(S3)
             .background(if hovering() {
                 tokens.hover
             } else {
@@ -372,10 +373,10 @@ impl Component for AccountRow {
                 label()
                     .text(role)
                     .color(tokens.muted)
-                    .font_size(14.0)
+                    .font_size(TEXT_MD)
                     .max_lines(1),
             )
-            .child(icons::icon(Icon::GoNext, 16.0, tokens.muted))
+            .child(icons::icon(Icon::GoNext, ICON_MD, tokens.muted))
     }
 }
 

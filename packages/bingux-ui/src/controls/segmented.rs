@@ -2,7 +2,8 @@
 
 use freya::prelude::*;
 
-use crate::surface::{CONTROL_HEIGHT, FONT_SIZE, focus_border, surface_color, use_tokens};
+use crate::scale::*;
+use crate::surface::{field_border, focus_border, surface_color, use_tokens};
 
 /// The shell's segmented control: a quiet `elevated` rail where only the
 /// selected segment is raised.
@@ -30,10 +31,11 @@ impl Component for Segmented {
         let tokens = use_tokens();
         rect()
             .height(Size::px(CONTROL_HEIGHT))
-            .corner_radius(9.0)
+            .corner_radius(RADIUS_LG)
             .background(tokens.elevated)
-            .padding(4.0)
-            .spacing(4.0)
+            .border(field_border(&tokens, Focus::Pointer))
+            .padding(S1)
+            .spacing(S1)
             .direction(Direction::Horizontal)
             .children(self.options.iter().map(|(key, text)| {
                 Element::from(Segment {
@@ -74,9 +76,9 @@ impl Component for Segment {
             .a11y_role(AccessibilityRole::Tab)
             .a11y_builder(|builder| builder.set_selected(self.selected))
             .height(Size::fill())
-            .padding((0.0, 10.0))
+            .padding((0.0, S2))
             .center()
-            .corner_radius(7.0)
+            .corner_radius(RADIUS)
             .background(surface_color(&tokens, base, hovering(), pressing(), false))
             .border(focus_border(&tokens, focus()))
             .cursor(CursorIcon::Pointer)
@@ -103,7 +105,7 @@ impl Component for Segment {
                     } else {
                         tokens.muted
                     })
-                    .font_size(FONT_SIZE)
+                    .font_size(TEXT_MD)
                     .max_lines(1),
             )
     }

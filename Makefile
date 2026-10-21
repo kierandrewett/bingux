@@ -49,6 +49,7 @@ rpm-package:
 
 check: doctor-build native daemons
 	python3 scripts/generate-adwaita-icon-index.py --check
+	python3 scripts/ui-lint.py
 	cd $(BUILD_DIR)/text && $(QMAKE) $(ROOT)/packages/bingux-text-layout/spacing-test.pro -o Makefile.tests && $(MAKE) -f Makefile.tests
 	QT_QPA_PLATFORM=offscreen $(BUILD_DIR)/text/spacing-test
 	$(CARGO) test --locked --manifest-path packages/bingux-config/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo

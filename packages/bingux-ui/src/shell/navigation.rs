@@ -12,6 +12,7 @@ use freya::prelude::*;
 
 use crate::controls::{icon_button, search_field};
 use crate::icons::{self, Icon};
+use crate::scale::*;
 use crate::shell::window::{HeaderBar, WindowControls};
 use crate::surface::{focus_border, is_activation_key, surface_color, use_tokens};
 use crate::theme::{SIDEBAR_OVERLAY_BELOW, SIDEBAR_WIDTH, WINDOW_CONTROL_BUTTON};
@@ -20,6 +21,14 @@ use crate::theme::{SIDEBAR_OVERLAY_BELOW, SIDEBAR_WIDTH, WINDOW_CONTROL_BUTTON};
 pub trait NavItem: Copy + PartialEq + 'static {
     fn title(self) -> &'static str;
     fn icon(self) -> Icon;
+    /// The sidebar section this item is listed under.
+    fn group(self) -> &'static str {
+        ""
+    }
+    /// One line under the page title.
+    fn description(self) -> &'static str {
+        ""
+    }
     /// Extra words the search field matches, space separated.
     fn keywords(self) -> &'static str {
         ""
@@ -86,7 +95,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             sidebar_open,
             overlay,
         };
-        let header = HeaderBar::new(selected().title())
+        let header = HeaderBar::new("")
             .background(tokens.bg)
             .maybe(narrow, |bar| {
                 bar.leading(
@@ -98,6 +107,24 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 )
             })
             .trailing(WindowControls);
+        let page_title = rect()
+            .width(Size::fill())
+            .spacing(S1)
+            .margin((0.0, 0.0, S6, crate::surface::GUTTER))
+            .child(
+                label()
+                    .text(selected().title())
+                    .font_size(TEXT_DISPLAY)
+                    .font_weight(FontWeight::SEMI_BOLD)
+                    .max_lines(1),
+            )
+            .maybe_child((!selected().description().is_empty()).then(|| {
+                label()
+                    .text(selected().description())
+                    .font_size(TEXT_MD)
+                    .color(tokens.muted)
+                    .max_lines(2)
+            }));
 
         rect()
             .expanded()
@@ -116,11 +143,12 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                                 rect()
                                     .width(Size::fill())
                                     .cross_align(Alignment::Center)
-                                    .padding((16.0, 24.0, 32.0, 24.0))
+                                    .padding((S2, S6, S7, S6))
                                     .child(
                                         rect()
                                             .width(Size::px(self.page_width))
                                             .max_width(Size::fill())
+                                            .child(page_title)
                                             .child(self.content.clone()),
                                     ),
                             ),
@@ -186,22 +214,41 @@ impl<T: NavItem> Component for Sidebar<T> {
                         .any(|word| word.starts_with(&needle))
             })
             .collect();
-        let header = HeaderBar::new(self.app_title.clone())
-            .centered()
-            .background(tokens.sidebar)
-            .leading(rect().width(Size::px(WINDOW_CONTROL_BUTTON)))
-            .trailing(if overlay {
-                Element::from(
-                    icon_button(Icon::SidebarShow, move |_| {
-                        let mut sidebar_open = sidebar_open;
-                        sidebar_open.set(false)
-                    })
-                    .size(WINDOW_CONTROL_BUTTON)
-                    .tooltip("Hide pages"),
-                )
-            } else {
-                Element::from(rect().width(Size::px(WINDOW_CONTROL_BUTTON)))
-            });
+        // The search field is the top of the sidebar. Only the overlay
+        // sidebar has a header, for the button that closes it.
+        let overlay_header = overlay.then(|| {
+            HeaderBar::new("").background(tokens.sidebar).trailing(
+                icon_button(Icon::SidebarShow, move |_| {
+                    let mut sidebar_open = sidebar_open;
+                    sidebar_open.set(false)
+                })
+                .size(WINDOW_CONTROL_BUTTON)
+                .tooltip("Hide pages"),
+            )
+        });
+        let mut entries: Vec<Element> = Vec::new();
+        let mut last_group = "";
+        for item in &visible {
+            let group = item.group();
+            if group != last_group && !group.is_empty() {
+                entries.push(
+                    label()
+                        .text(group)
+                        .color(tokens.muted)
+                        .font_size(TEXT_SM)
+                        .margin((if entries.is_empty() { S1 } else { S4 }, 0.0, S1, S3))
+                        .into(),
+                );
+            }
+            last_group = group;
+            entries.push(Element::from(NavEntry {
+                item: *item,
+                siblings: visible.clone(),
+                selected,
+                sidebar_open,
+                overlay,
+            }));
+        }
 
         rect()
             .width(Size::px(SIDEBAR_WIDTH))
@@ -218,30 +265,22 @@ impl<T: NavItem> Component for Sidebar<T> {
                     .alignment(BorderAlignment::Inner)
                     .fill(tokens.separator),
             )
-            .child(header)
+            .maybe_child(overlay_header)
             .child(SearchField { query })
             .child(
                 rect().width(Size::fill()).height(Size::flex(1.0)).child(
                     ScrollView::new().child(
                         rect()
                             .width(Size::fill())
-                            .padding((4.0, 10.0, 12.0, 10.0))
-                            .spacing(2.0)
-                            .children(visible.iter().map(|item| {
-                                Element::from(NavEntry {
-                                    item: *item,
-                                    siblings: visible.clone(),
-                                    selected,
-                                    sidebar_open,
-                                    overlay,
-                                })
-                            }))
+                            .padding((S1, S2, S3, S2))
+                            .spacing(S0)
+                            .children(entries)
                             .maybe_child(visible.is_empty().then(|| {
                                 label()
                                     .text("Nothing matches.")
                                     .color(tokens.muted)
-                                    .font_size(13.0)
-                                    .margin((12.0, 10.0, 0.0, 10.0))
+                                    .font_size(TEXT_MD)
+                                    .margin((S3, S2, 0.0, S2))
                             })),
                     ),
                 ),
@@ -259,8 +298,8 @@ impl Component for SearchField {
     fn render(&self) -> impl IntoElement {
         rect()
             .width(Size::fill())
-            .padding((2.0, 12.0, 10.0, 12.0))
-            .child(search_field(self.query, |_| {}).width(SIDEBAR_WIDTH - 24.0))
+            .padding(S2)
+            .child(search_field(self.query, |_| {}).width(SIDEBAR_WIDTH - 2.0 * S2))
     }
 }
 
@@ -301,12 +340,12 @@ impl<T: NavItem> Component for NavEntry<T> {
             .a11y_role(AccessibilityRole::Tab)
             .a11y_builder(move |builder| builder.set_selected(is_selected))
             .width(Size::fill())
-            .height(Size::px(36.0))
+            .height(Size::px(BOX_LG))
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
-            .spacing(12.0)
-            .padding((0.0, 12.0))
-            .corner_radius(8.0)
+            .spacing(S3)
+            .padding((0.0, S3))
+            .corner_radius(RADIUS)
             .background(background)
             .border(border)
             .cursor(CursorIcon::Pointer)
@@ -346,12 +385,12 @@ impl<T: NavItem> Component for NavEntry<T> {
                     selected.set(target);
                 }
             })
-            .child(icons::icon(item.icon(), 18.0, tokens.text))
+            .child(icons::icon(item.icon(), ICON_LG, tokens.text))
             .child(
                 label()
                     .text(item.title())
                     .color(tokens.text)
-                    .font_size(14.0)
+                    .font_size(TEXT_MD)
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
             )

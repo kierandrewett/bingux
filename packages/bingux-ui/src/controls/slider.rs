@@ -3,10 +3,13 @@
 use freya::animation::*;
 use freya::prelude::*;
 
-use crate::surface::{CONTROL_HEIGHT, FONT_SMALL, ROW_RADIUS, focus_border, use_tokens};
+use crate::scale::*;
+use crate::surface::{focus_border, use_tokens};
 
 const TRACK: f32 = 6.0;
 const HANDLE: f32 = 20.0;
+const HANDLE_GROWN: f32 = 22.0;
+const PERCENT: f32 = 100.0;
 
 /// A 6 px track filled with the accent up to a 20 px white handle that
 /// grows to 22 px while dragging. The handle stays inside the track, so
@@ -142,7 +145,7 @@ impl Component for Slider {
             .width(Size::px(self.width))
             .height(Size::px(CONTROL_HEIGHT))
             .main_align(Alignment::Center)
-            .corner_radius(ROW_RADIUS)
+            .corner_radius(RADIUS)
             .border(focus_border(&tokens, focus()))
             .maybe(!enabled, |element| element.opacity(0.45))
             .cursor(if enabled {
@@ -161,7 +164,7 @@ impl Component for Slider {
             .child(
                 rect()
                     .width(Size::fill())
-                    .height(Size::px(HANDLE + 2.0))
+                    .height(Size::px(HANDLE_GROWN))
                     .main_align(Alignment::Center)
                     .child(
                         rect()
@@ -173,7 +176,7 @@ impl Component for Slider {
                     .child(
                         rect()
                             .position(Position::new_absolute().top(1.0).left(0.0))
-                            .width(Size::px(HANDLE / 2.0 + travel * (value as f32 / 100.0)))
+                            .width(Size::px(HANDLE / 2.0 + travel * (value as f32 / PERCENT)))
                             .height(Size::px(HANDLE))
                             .main_align(Alignment::Center)
                             .child(
@@ -211,14 +214,14 @@ impl Component for Slider {
         rect()
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
-            .spacing(10.0)
+            .spacing(S2)
             .child(track)
             .child(
                 label()
                     .text(format!("{}%", value.round() as i64))
-                    .font_size(FONT_SMALL)
+                    .font_size(TEXT_SM)
                     .color(tokens.muted)
-                    .min_width(Size::px(36.0))
+                    .min_width(Size::px(BOX_LG))
                     .text_align(TextAlign::End),
             )
             .into()

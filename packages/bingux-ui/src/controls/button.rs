@@ -5,10 +5,8 @@ use freya::prelude::*;
 
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
-use crate::surface::{
-    BUTTON_HEIGHT, CONTROL_HEIGHT, FONT_SIZE, ROW_RADIUS, focus_border, is_activation_key,
-    surface_color, use_tokens,
-};
+use crate::scale::*;
+use crate::surface::{field_border, focus_border, is_activation_key, surface_color, use_tokens};
 
 /// The shell's `ActionButton`: 36 px tall on `elevated` at radius 8.
 #[derive(PartialEq)]
@@ -135,13 +133,10 @@ impl Component for ActionButton {
         } else {
             tokens.text
         };
-        let border = if focus() == Focus::Keyboard {
-            Border::new()
-                .width(2.0)
-                .alignment(BorderAlignment::Inner)
-                .fill(tokens.accent)
+        let border = if filled || self.flat {
+            focus_border(&tokens, focus())
         } else {
-            Border::new()
+            field_border(&tokens, focus())
         };
         rect()
             .a11y_id(a11y_id)
@@ -149,14 +144,14 @@ impl Component for ActionButton {
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::Button)
             .height(Size::px(BUTTON_HEIGHT))
-            .min_width(Size::px(36.0))
+            .min_width(Size::px(BOX_LG))
             .maybe(self.grow, |element| element.width(Size::flex(1.0)))
-            .padding((0.0, 12.0))
-            .spacing(8.0)
+            .padding((0.0, S3))
+            .spacing(S2)
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
             .main_align(Alignment::Center)
-            .corner_radius(ROW_RADIUS)
+            .corner_radius(RADIUS)
             .background(background)
             .maybe(!self.enabled, |element| element.opacity(0.5))
             .border(border)
@@ -195,14 +190,14 @@ impl Component for ActionButton {
             )
             .maybe_child(
                 (!self.loading)
-                    .then(|| self.icon.map(|icon| icons::icon(icon, 16.0, color)))
+                    .then(|| self.icon.map(|icon| icons::icon(icon, ICON_MD, color)))
                     .flatten(),
             )
             .child(
                 label()
                     .text(self.text.clone())
                     .color(color)
-                    .font_size(FONT_SIZE)
+                    .font_size(TEXT_MD)
                     .max_lines(1),
             )
     }
@@ -256,9 +251,9 @@ impl Component for RowButton {
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Button)
             .height(Size::px(CONTROL_HEIGHT))
-            .padding((0.0, 14.0))
+            .padding((0.0, S3))
             .center()
-            .corner_radius(ROW_RADIUS)
+            .corner_radius(RADIUS)
             .background(if self.prominent {
                 surface_color(&tokens, Color::TRANSPARENT, hovering(), pressing(), false)
             } else if pressing() {
@@ -268,7 +263,7 @@ impl Component for RowButton {
             } else {
                 tokens.elevated
             })
-            .border(focus_border(&tokens, focus()))
+            .border(field_border(&tokens, focus()))
             .cursor(CursorIcon::Pointer)
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| {
@@ -295,7 +290,7 @@ impl Component for RowButton {
                 label()
                     .text(self.text.clone())
                     .color(tokens.text)
-                    .font_size(FONT_SIZE)
+                    .font_size(TEXT_MD)
                     .font_weight(if self.prominent {
                         FontWeight::SEMI_BOLD
                     } else {
@@ -368,7 +363,7 @@ impl Component for IconButton {
             .width(Size::px(self.size))
             .height(Size::px(self.size))
             .center()
-            .corner_radius(ROW_RADIUS)
+            .corner_radius(RADIUS)
             .background(background)
             .border(focus_border(&tokens, focus()))
             .cursor(CursorIcon::Pointer)
@@ -393,7 +388,7 @@ impl Component for IconButton {
                     on_key.call(());
                 }
             })
-            .child(icons::icon(self.icon, 16.0, tokens.text));
+            .child(icons::icon(self.icon, ICON_MD, tokens.text));
         match &self.tooltip {
             Some(text) => TooltipContainer::new(Tooltip::new_text(text.clone()))
                 .child(button)

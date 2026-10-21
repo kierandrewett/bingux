@@ -48,6 +48,10 @@ impl NavItem for Page {
     }
 }
 
+const SAMPLE_PANEL_HEIGHT: f32 = 320.0;
+const SAMPLE_TILE_WIDTH: f32 = 132.0;
+const SAMPLE_TILE_HEIGHT: f32 = 72.0;
+
 #[derive(PartialEq)]
 pub struct Gallery {
     pub initial: Page,
@@ -179,7 +183,7 @@ impl Component for ButtonsPage {
             .child(
                 rect()
                     .direction(Direction::Horizontal)
-                    .spacing(10.0)
+                    .spacing(S2)
                     .cross_align(Alignment::Center)
                     .child(action_button("Action", |_| {}))
                     .child(action_button("With icon", |_| {}).icon(Icon::Folder))
@@ -192,7 +196,7 @@ impl Component for ButtonsPage {
             .child(
                 rect()
                     .direction(Direction::Horizontal)
-                    .spacing(10.0)
+                    .spacing(S2)
                     .cross_align(Alignment::Center)
                     .child(icon_button(Icon::Refresh, |_| {}).tooltip("Refresh"))
                     .child(icon_button(Icon::Delete, |_| {}).tooltip("Delete").danger())
@@ -321,8 +325,8 @@ impl Component for FeedbackPage {
         )
         .child(
             Group::new("Progress".to_string())
-                .row(row("Determinate").trailing(progress_bar(progress()).width(Size::px(220.0))))
-                .row(row("Indeterminate").trailing(progress_bar(None).width(Size::px(220.0))))
+                .row(row("Determinate").trailing(progress_bar(progress()).width(Size::px(FIELD_WIDTH))))
+                .row(row("Indeterminate").trailing(progress_bar(None).width(Size::px(FIELD_WIDTH))))
                 .row(row("Step").trailing(action_button("Advance", move |_| {
                     progress.set((progress() + 0.15).min(1.0))
                 }))),
@@ -330,7 +334,7 @@ impl Component for FeedbackPage {
         .child(
             rect()
                 .direction(Direction::Horizontal)
-                .spacing(24.0)
+                .spacing(S5)
                 .cross_align(Alignment::Center)
                 .child(spinner(SpinnerSize::Small))
                 .child(spinner(SpinnerSize::Medium))
@@ -345,8 +349,8 @@ impl Component for FeedbackPage {
         .child(
             rect()
                 .width(Size::fill())
-                .height(Size::px(320.0))
-                .corner_radius(CORNER)
+                .height(Size::px(SAMPLE_PANEL_HEIGHT))
+                .corner_radius(RADIUS_LG)
                 .background(tokens.card)
                 .child(
                     status_page(Icon::Bluetooth, "No devices found")
@@ -369,25 +373,35 @@ impl Component for TypographyPage {
             .child(
                 label()
                     .text("Hero title, 24 bold")
-                    .font_size(24.0)
-                    .font_weight(FontWeight::BOLD),
+                    .font_size(TEXT_XL)
+                    .font_weight(FontWeight::SEMI_BOLD),
             )
             .child(heading("Heading, 16 semibold"))
             .child(section_label("Section label, 13 semibold"))
-            .child(label().text("Body, 14").font_size(14.0))
+            .child(label().text("Body, 14").font_size(TEXT_MD))
             .child(caption("Caption, 12 muted"))
-            .child(label().text("Accent").font_size(14.0).color(tokens.accent))
-            .child(label().text("Danger").font_size(14.0).color(tokens.danger))
+            .child(
+                label()
+                    .text("Accent")
+                    .font_size(TEXT_MD)
+                    .color(tokens.accent),
+            )
+            .child(
+                label()
+                    .text("Danger")
+                    .font_size(TEXT_MD)
+                    .color(tokens.danger),
+            )
             .child(
                 label()
                     .text("Success")
-                    .font_size(14.0)
+                    .font_size(TEXT_MD)
                     .color(tokens.success),
             )
             .child(
                 label()
                     .text("Warning")
-                    .font_size(14.0)
+                    .font_size(TEXT_MD)
                     .color(tokens.warning),
             )
     }
@@ -404,21 +418,21 @@ impl Component for IconsPage {
                 .width(Size::fill())
                 .direction(Direction::Horizontal)
                 .content(Content::wrap_spacing(8.0))
-                .spacing(8.0)
+                .spacing(S2)
                 .children(Icon::ALL.iter().map(|glyph| {
                     Element::from(
                         rect()
-                            .width(Size::px(132.0))
-                            .height(Size::px(72.0))
-                            .corner_radius(CORNER)
+                            .width(Size::px(SAMPLE_TILE_WIDTH))
+                            .height(Size::px(SAMPLE_TILE_HEIGHT))
+                            .corner_radius(RADIUS_LG)
                             .background(tokens.card)
                             .center()
-                            .spacing(6.0)
+                            .spacing(S1)
                             .child(icon(*glyph, 20.0, tokens.text))
                             .child(
                                 label()
                                     .text(format!("{glyph:?}"))
-                                    .font_size(11.0)
+                                    .font_size(TEXT_XS)
                                     .color(tokens.muted)
                                     .max_lines(1),
                             ),

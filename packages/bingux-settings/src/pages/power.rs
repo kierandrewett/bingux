@@ -7,7 +7,7 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::system::{self, CommandError, CommandResult, background, background_then};
-use crate::ui::{Group, Status, choice_row, page_column, row, section_label, status, switch_row};
+use crate::ui::{Group, Status, choice_row, page_column, row, status, switch_row};
 
 const SESSION: &str = "org.gnome.desktop.session";
 const SCREENSAVER: &str = "org.gnome.desktop.screensaver";
@@ -210,12 +210,10 @@ impl Component for PowerPage {
                 }
                 page.child(group)
             }
-            Ok(None) => page
-                .child(section_label("Battery"))
-                .child(status(Status::Empty("No battery".into()))),
-            Err(e) => page
-                .child(section_label("Battery"))
-                .child(status(Status::Error(e.0))),
+            Ok(None) => {
+                page.child(Group::titled("Battery").row(status(Status::Empty("No battery".into()))))
+            }
+            Err(e) => page.child(Group::titled("Battery").row(status(Status::Error(e.0)))),
         };
 
         // Power mode
@@ -239,7 +237,7 @@ impl Component for PowerPage {
                 } else {
                     Status::Error(e.0)
                 };
-                page.child(section_label("Power mode")).child(status(kind))
+                page.child(Group::titled("Power mode").row(status(kind)))
             }
         };
 

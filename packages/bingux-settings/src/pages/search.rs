@@ -15,6 +15,7 @@ use crate::ui::{
     Group, Overlays, ResponseKind, Row, Status, choice_row, dialog, icon_button, page_column,
     primary_button, row, slider_row, status, switch, switch_row, text_row, use_overlays,
 };
+use bingux_ui::scale::*;
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const PROVIDERS: [(&str, &str); 7] = [
@@ -673,7 +674,7 @@ fn engine_row(engine: Engine, engines: &[Engine], default: &str, ctx: Ctx) -> Ro
             write_engines(ctx, &default_for_toggle, toggled.clone());
         }))
         .child(
-            rect().margin((0.0, 0.0, 0.0, 8.0)).child(
+            rect().margin((0.0, 0.0, 0.0, S2)).child(
                 icon_button(Icon::Delete, move |_| {
                     let default = default_for_remove.clone();
                     let without = without.clone();
@@ -867,7 +868,7 @@ impl Component for FileRootAdd {
                     )
                     .child(
                         rect()
-                            .margin((0.0, 0.0, 0.0, 8.0))
+                            .margin((0.0, 0.0, 0.0, S2))
                             .child(primary_button("Add", add)),
                     ),
             )

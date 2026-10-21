@@ -14,6 +14,14 @@ impl NavItem for PageId {
         PageId::icon(self)
     }
 
+    fn group(self) -> &'static str {
+        PageId::group(self)
+    }
+
+    fn description(self) -> &'static str {
+        PageId::description(self)
+    }
+
     fn keywords(self) -> &'static str {
         PageId::keywords(self)
     }

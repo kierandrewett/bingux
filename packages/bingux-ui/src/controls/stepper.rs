@@ -4,9 +4,8 @@
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::surface::{
-    CONTROL_HEIGHT, FONT_SIZE, ROW_RADIUS, focus_border, surface_color, use_tokens,
-};
+use crate::scale::*;
+use crate::surface::{field_border, surface_color, use_tokens};
 
 /// An integer stepper bounded by `min..=max`, moving by `step`.
 #[derive(PartialEq)]
@@ -116,11 +115,11 @@ impl Component for Stepper {
             .height(Size::px(CONTROL_HEIGHT))
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
-            .corner_radius(ROW_RADIUS)
+            .corner_radius(RADIUS)
             .background(tokens.elevated)
             .maybe(!enabled, |element| element.opacity(0.45))
-            .border(focus_border(&tokens, focus()))
-            .padding((0.0, 2.0))
+            .border(field_border(&tokens, focus()))
+            .padding((0.0, S0))
             .maybe(enabled, |element| element.on_key_down(on_key_down))
             .child(step_button(Icon::ListRemove, can_decrement, move |_| {
                 decrement();
@@ -128,14 +127,14 @@ impl Component for Stepper {
             }))
             .child(
                 rect()
-                    .min_width(Size::px(44.0))
+                    .min_width(Size::px(BOX_XL))
                     .height(Size::fill())
-                    .padding((0.0, 6.0))
+                    .padding((0.0, S1))
                     .center()
                     .child(
                         label()
                             .text(text)
-                            .font_size(FONT_SIZE)
+                            .font_size(TEXT_MD)
                             .color(tokens.text)
                             .max_lines(1),
                     ),
@@ -171,9 +170,9 @@ impl Component for StepButton {
         let enabled = self.enabled;
         let on_press = self.on_press.clone();
         rect()
-            .width(Size::px(28.0))
-            .height(Size::px(28.0))
-            .corner_radius(6.0)
+            .width(Size::px(BOX_MD))
+            .height(Size::px(BOX_MD))
+            .corner_radius(RADIUS)
             .center()
             .background(if enabled {
                 surface_color(&tokens, Color::TRANSPARENT, hovering(), pressing(), false)
@@ -204,7 +203,7 @@ impl Component for StepButton {
             })
             .child(icons::icon(
                 self.icon,
-                14.0,
+                ICON_MD,
                 if enabled { tokens.text } else { tokens.muted },
             ))
     }

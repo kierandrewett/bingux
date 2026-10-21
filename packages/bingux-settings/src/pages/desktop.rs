@@ -6,6 +6,7 @@
 use std::time::Duration;
 
 use crate::ui::{Group, Row, Status, choice_row, page_column, row, slider, status, switch_row};
+use bingux_ui::scale::*;
 use freya::prelude::*;
 
 use crate::pages::bingux_config;
@@ -213,7 +214,7 @@ fn dock_size_row(ctx: Ctx, size: u32) -> Row {
         .subtitle(format!("{} px", size_for_percent(percent)))
         .trailing(
             rect()
-                .width(Size::px(220.0))
+                .width(Size::px(FIELD_WIDTH))
                 .on_global_pointer_up(move |_: Event<PointerEventData>| {
                     release_dock_size(ctx, size)
                 })
@@ -222,7 +223,7 @@ fn dock_size_row(ctx: Ctx, size: u32) -> Row {
                         let mut pending = ctx.pending;
                         pending.set(Some(value));
                     })
-                    .width(220.0),
+                    .width(FIELD_WIDTH),
                 ),
         )
 }

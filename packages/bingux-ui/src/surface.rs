@@ -10,19 +10,7 @@ use freya::prelude::*;
 
 use crate::theme::{SharedTokens, Tokens};
 
-/// Group surface radius: `Theme.insetRadius(cardRadius, gap)`.
-pub const CORNER: f32 = 12.0;
-/// Hover radius of rows and buttons inside a group.
-pub const ROW_RADIUS: f32 = 8.0;
-pub const CONTROL_HEIGHT: f32 = 34.0;
-pub const BUTTON_HEIGHT: f32 = 34.0;
-pub const ROW_HEIGHT: f32 = 50.0;
-pub const TALL_ROW_HEIGHT: f32 = 62.0;
-/// Horizontal padding inside a row and of group titles, so text lines up.
-pub const ROW_PADDING: f32 = 16.0;
-pub const FONT_SIZE: f32 = 14.0;
-pub const FONT_SMALL: f32 = 12.0;
-pub const FONT_HEADING: f32 = 14.0;
+pub use crate::scale::*;
 
 /// The live palette the window root provided. Reading it subscribes the
 /// component to accent and colour-scheme changes.
@@ -30,10 +18,22 @@ pub fn use_tokens() -> Tokens {
     *use_consume::<SharedTokens>().0.read()
 }
 
+/// The 1 px outline around buttons, dropdowns, fields and segmented
+/// controls. Keyboard focus replaces it with the accent ring.
+pub fn field_border(tokens: &Tokens, focus: Focus) -> Border {
+    if focus == Focus::Keyboard {
+        return focus_border(tokens, focus);
+    }
+    Border::new()
+        .width(1.0)
+        .alignment(BorderAlignment::Inner)
+        .fill(tokens.outline)
+}
+
 pub fn focus_border(tokens: &Tokens, focus: Focus) -> Border {
     if focus == Focus::Keyboard {
         Border::new()
-            .width(2.0)
+            .width(RING_WIDTH)
             .alignment(BorderAlignment::Inner)
             .fill(tokens.accent)
     } else {

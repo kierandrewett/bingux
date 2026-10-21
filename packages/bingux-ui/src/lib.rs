@@ -15,6 +15,7 @@ pub mod icons;
 pub mod layout;
 pub mod rows;
 pub mod runtime;
+pub mod scale;
 pub mod shell;
 #[cfg(feature = "testing")]
 pub mod snapshot;
@@ -31,11 +32,12 @@ pub mod prelude {
         EntryRow, ExpanderRow, Row, choice_row, entry_row, expander_row, property_row, row,
         slider_row, switch_row, text_row,
     };
+    pub use crate::scale::*;
     pub use crate::shell::{
         Banner, BannerKind, Dialog, HeaderBar, NavItem, NavigationSplitView, OverlayHost, Overlays,
         ResponseKind, SearchField, StatusPage, WindowControls, banner, dialog, status_page,
         use_overlays,
     };
-    pub use crate::surface::{CORNER, ROW_HEIGHT, TALL_ROW_HEIGHT, use_tokens};
+    pub use crate::surface::use_tokens;
     pub use crate::theme::{Scheme, SharedTokens, Tokens, provide_tokens};
 }

@@ -5,9 +5,8 @@ use freya::prelude::*;
 use crate::controls::button::action_button;
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
-use crate::surface::{
-    CORNER, FONT_HEADING, FONT_SIZE, FONT_SMALL, ROW_HEIGHT, ROW_PADDING, use_tokens,
-};
+use crate::scale::*;
+use crate::surface::use_tokens;
 
 /// A short muted explanation under a title or group.
 pub fn caption(text: impl Into<String>) -> Element {
@@ -25,8 +24,7 @@ impl Component for CaptionText {
         let tokens = use_tokens();
         paragraph()
             .color(tokens.muted)
-            .font_size(FONT_SMALL)
-            .margin((0.0, 0.0, 0.0, ROW_PADDING))
+            .font_size(TEXT_SM)
             .child(self.text.clone())
     }
 }
@@ -90,24 +88,26 @@ impl Component for Group {
                     rect()
                         .width(Size::fill())
                         .height(Size::px(1.0))
-                        .background(tokens.separator)
+                        .background(tokens.separator.with_af32(0.045))
                         .into(),
                 );
             }
             children.push(row.clone());
         }
-        // The page column owns the space between groups; a group has no
-        // outer margin. The title and description line up with row text.
+        // A flat section: a bold title, an optional muted description, a
+        // hairline, then rows with no surface behind them. The page column
+        // owns the space between sections.
         let heading = (self.title.is_some() || self.description.is_some()).then(|| {
             rect()
                 .width(Size::fill())
+                .padding((0.0, GUTTER))
                 .direction(Direction::Horizontal)
                 .content(Content::Flex)
                 .cross_align(Alignment::Center)
                 .child(
                     rect()
                         .width(Size::flex(1.0))
-                        .spacing(2.0)
+                        .spacing(S1)
                         .maybe_child(
                             self.title
                                 .as_ref()
@@ -119,16 +119,17 @@ impl Component for Group {
         });
         rect()
             .width(Size::fill())
-            .spacing(8.0)
             .maybe_child(heading)
-            .child(
-                rect()
-                    .width(Size::fill())
-                    .background(tokens.card)
-                    .corner_radius(CORNER)
-                    .overflow(Overflow::Clip)
-                    .children(children),
+            .maybe_child(
+                (self.title.is_some() || self.description.is_some()).then(|| {
+                    rect()
+                        .width(Size::fill())
+                        .height(Size::px(1.0))
+                        .margin((S3, 0.0, S1, 0.0))
+                        .background(tokens.separator)
+                }),
             )
+            .child(rect().width(Size::fill()).children(children))
     }
 }
 
@@ -149,9 +150,8 @@ impl Component for SectionLabel {
         label()
             .text(self.text.clone())
             .color(tokens.text)
-            .font_size(FONT_HEADING)
-            .font_weight(FontWeight::BOLD)
-            .margin((0.0, 0.0, 0.0, ROW_PADDING))
+            .font_size(TEXT_LG)
+            .font_weight(FontWeight::SEMI_BOLD)
     }
 }
 
@@ -196,29 +196,31 @@ impl Component for StatusBlock {
             Status::Info(text) => (text.clone(), tokens.text, None),
         };
         let short = text.chars().count() <= 70;
-        // A status is a row on its own card with the height of every other
-        // row, so a page with a message looks like a page. A long message
-        // wraps and grows the row.
+        // A status is a row with the height of every other row. Only an
+        // error is tinted. A long message wraps and grows the row.
         rect()
             .width(Size::fill())
             .maybe(short, |card| card.height(Size::px(ROW_HEIGHT)))
             .maybe(!short, |card| card.min_height(Size::px(ROW_HEIGHT)))
-            .padding((8.0, ROW_PADDING))
-            .spacing(12.0)
-            .background(tokens.card)
-            .corner_radius(CORNER)
+            .padding((S2, GUTTER))
+            .spacing(S3)
+            .map(
+                matches!(self.status, Status::Error(_)).then_some(tokens.danger.with_af32(0.12)),
+                |card, tint| card.background(tint),
+            )
+            .corner_radius(RADIUS_LG)
             .direction(Direction::Horizontal)
             .content(Content::Flex)
             .cross_align(Alignment::Center)
             .maybe_child(
                 matches!(self.status, Status::Loading(_)).then(|| spinner(SpinnerSize::Small)),
             )
-            .maybe_child(glyph.map(|glyph| icons::icon(glyph, 18.0, color)))
+            .maybe_child(glyph.map(|glyph| icons::icon(glyph, ICON_LG, color)))
             .child(
                 paragraph()
                     .width(Size::flex(1.0))
                     .color(color)
-                    .font_size(FONT_SIZE)
+                    .font_size(TEXT_MD)
                     .child(text),
             )
             .maybe_child(self.action.as_ref().map(|(label, on_press)| {
@@ -233,7 +235,7 @@ pub fn heading(text: impl Into<String>) -> Element {
     let text = text.into();
     label()
         .text(text)
-        .font_size(FONT_HEADING)
+        .font_size(TEXT_LG)
         .font_weight(FontWeight::SEMI_BOLD)
         .into()
 }

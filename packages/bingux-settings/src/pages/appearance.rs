@@ -20,6 +20,7 @@ use crate::theme::{Scheme, SharedTokens, Tokens, accent_for, accent_names, read_
 use crate::ui::{
     Group, Status, choice_row, entry_row, page_column, row, row_button, status, use_tokens,
 };
+use bingux_ui::scale::*;
 
 const INTERFACE: &str = "org.gnome.desktop.interface";
 const WALLPAPER_KEY: &str = "desktop.wallpaper";
@@ -207,7 +208,7 @@ fn swatch(
 ) -> Element {
     let border = if selected {
         Border::new()
-            .width(2.0)
+            .width(RING_WIDTH)
             .alignment(BorderAlignment::Inner)
             .fill(ring)
     } else {
@@ -349,8 +350,8 @@ impl Component for AppearancePage {
                             .direction(Direction::Horizontal)
                             .content(Content::Flex)
                             .cross_align(Alignment::Center)
-                            .padding((4.0, 16.0))
-                            .spacing(10.0)
+                            .padding((S1, S4))
+                            .spacing(S2)
                             .children(swatches),
                     ),
                 )

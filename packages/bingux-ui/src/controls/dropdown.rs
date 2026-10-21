@@ -6,10 +6,8 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::surface::{
-    CONTROL_HEIGHT, FONT_SIZE, ROW_RADIUS, focus_border, is_activation_key, surface_color,
-    use_tokens,
-};
+use crate::scale::*;
+use crate::surface::{field_border, is_activation_key, surface_color, use_tokens};
 
 /// Width of the floating option list.
 const MENU_WIDTH: f32 = 240.0;
@@ -142,12 +140,12 @@ impl Component for Dropdown {
             .maybe(self.width.is_some(), |element| {
                 element.width(Size::px(self.width.unwrap_or_default()))
             })
-            .padding((0.0, 8.0, 0.0, 12.0))
-            .spacing(8.0)
+            .padding((0.0, S2, 0.0, S3))
+            .spacing(S2)
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
             .main_align(Alignment::SpaceBetween)
-            .corner_radius(ROW_RADIUS)
+            .corner_radius(RADIUS)
             .background(if enabled && pressing() {
                 tokens.elevated_pressed
             } else if enabled && hovering() {
@@ -155,7 +153,7 @@ impl Component for Dropdown {
             } else {
                 tokens.elevated
             })
-            .border(focus_border(&tokens, focus()))
+            .border(field_border(&tokens, focus()))
             .on_sized(move |event: Event<SizedEventData>| {
                 button_width.set_if_modified(event.area.width())
             })
@@ -196,12 +194,12 @@ impl Component for Dropdown {
             .child(
                 label()
                     .text(current)
-                    .font_size(FONT_SIZE)
+                    .font_size(TEXT_MD)
                     .color(tokens.text)
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
             )
-            .child(icons::icon(Icon::PanDown, 14.0, tokens.muted));
+            .child(icons::icon(Icon::PanDown, ICON_MD, tokens.muted));
 
         // The list is at least MENU_WIDTH and never narrower than the button.
         let menu_width = button_width().max(MENU_WIDTH);
@@ -218,8 +216,8 @@ impl Component for Dropdown {
                         .layer(Layer::Overlay)
                         .opacity(progress)
                         .width(Size::px(menu_width))
-                        .padding(4.0)
-                        .corner_radius(10.0)
+                        .padding(S1)
+                        .corner_radius(RADIUS_LG)
                         .background(tokens.popover)
                         .border(
                             Border::new()
@@ -275,12 +273,12 @@ impl Component for DropdownItem {
             .a11y_role(AccessibilityRole::MenuItem)
             .width(Size::fill())
             .height(Size::px(CONTROL_HEIGHT))
-            .padding((0.0, 10.0))
-            .spacing(10.0)
+            .padding((0.0, S2))
+            .spacing(S2)
             .direction(Direction::Horizontal)
             .content(Content::Flex)
             .cross_align(Alignment::Center)
-            .corner_radius(6.0)
+            .corner_radius(RADIUS)
             .background(surface_color(
                 &tokens,
                 Color::TRANSPARENT,
@@ -310,7 +308,7 @@ impl Component for DropdownItem {
             .child(
                 label()
                     .text(self.text.clone())
-                    .font_size(FONT_SIZE)
+                    .font_size(TEXT_MD)
                     .color(tokens.text)
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis)
@@ -318,7 +316,7 @@ impl Component for DropdownItem {
             )
             .child(icons::icon(
                 Icon::Check,
-                12.0,
+                ICON_SM,
                 if self.selected {
                     tokens.accent
                 } else {

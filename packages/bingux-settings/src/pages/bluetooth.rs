@@ -13,6 +13,7 @@ use crate::ui::{
     Group, Overlays, ResponseKind, Row, Status, dialog, page_column, row, row_button, status,
     switch_row, use_overlays, use_tokens,
 };
+use bingux_ui::scale::*;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(45);
@@ -252,12 +253,12 @@ fn device_row(device: &Device, ctx: Ctx) -> Row {
     let trailing = rect()
         .direction(Direction::Horizontal)
         .cross_align(Alignment::Center)
-        .spacing(8.0)
+        .spacing(S2)
         .child(
             label()
                 .text(device_status(device))
                 .color(ctx.tokens.muted)
-                .font_size(13.0)
+                .font_size(TEXT_MD)
                 .max_lines(1),
         )
         .maybe_child((ctx.idle && ctx.powered && device.connected).then(|| {

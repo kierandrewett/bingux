@@ -78,24 +78,34 @@ short (80 to 200 ms) and stop when `BINGUX_REDUCED_MOTION=1` is set.
 
 These keep every page the same. A component that breaks one is a bug.
 
+- **One scale, in `src/scale.rs`.** Spacing is `S0` to `S7` on a 4 px grid;
+  radius is `RADIUS_SM`, `RADIUS`, `RADIUS_LG`; type is `TEXT_XS` to
+  `TEXT_DISPLAY` (11, 12, 14, 16, 20, 28); icons are `ICON_SM`, `ICON_MD`,
+  `ICON_LG`, `ICON_XL`; square boxes are `BOX_SM` to `BOX_2XL`. A control is
+  `CONTROL_HEIGHT` high; a row is `ROW_HEIGHT`, or `TALL_ROW_HEIGHT` with a
+  subtitle.
+- **`scripts/ui-lint.py` enforces it.** It fails on a raw number in a spacing,
+  padding, margin, radius, font-size, width, height or icon-size call, and on
+  `FontWeight::BOLD`. Only 0.0 and 1.0 (a hairline) and halves or doubles of a
+  name pass. To use a new value, add it to `scale.rs` first. `make check`
+  runs it.
+- **One inset.** `GUTTER` is the only horizontal inset. Row text, section
+  titles, the page title and sidebar items all start `GUTTER` from their
+  container, so they line up.
 - Read colours from `use_tokens()`. The only literal colours are white and
-  black overlays. Surfaces are opaque: page `bg`, `sidebar`, `card`, and the
-  white overlays `elevated`, `hover`, `pressed` and `selection` for states.
-- One size scale: rows are 50 px, or 62 px with a subtitle; controls and
-  buttons are 34 px; group and card radius is 12 px, row and button radius
-  8 px; row text is 14 px and secondary text 12 px. Rows are 16 px from the
-  group edge, and group titles line up with row text.
-- Spacing belongs to the parent. A page is `page_column()`, which puts 24 px
-  between groups. Groups, rows and status rows carry no outer margin.
-- The header bar shows the page title. A page has no title of its own.
-- Sidebar icons are monochrome. The selected item has a neutral fill. Colour
-  is for the accent in controls: switches, sliders, checkmarks, suggested
-  buttons.
+  black overlays. Surfaces are opaque: `bg`, `sidebar`, and the white
+  overlays `elevated`, `hover`, `pressed` and `selection` for states.
+- **The page is flat.** A section is a bold title, an optional muted line, a
+  hairline, then rows with no card behind them. A page is `page_column()`,
+  which puts `S6` between sections. A message (loading, empty, error) is a
+  `status` row of normal height inside a section; only an error is tinted.
+- **The page title is in the page**, not the header bar: `NavItem::title`
+  and `NavItem::description` are drawn above the content. The header bar
+  carries the window buttons only. The sidebar is search, then items under
+  `NavItem::group` labels, with a neutral pill on the selected item.
 - Buttons, dropdowns, segmented controls, steppers and text fields share one
-  fill (`elevated`) with no idle outline. Hover and pressed raise it.
-- A message in a page (loading, empty, error) is a `status` row of the same
-  height as every other row, not loose text. Use a `banner` for an error
-  that needs an action.
+  fill (`elevated`) and one 1 px outline (`field_border`). Hover and pressed
+  raise the fill. The keyboard ring is `RING_WIDTH` in the accent colour.
 - The window is opaque and square. Gnoblin draws the corners, border and
   shadow, so an application sets no corner radius, transparency or shadow on
   its root.

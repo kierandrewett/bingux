@@ -4,6 +4,7 @@
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
+use crate::scale::*;
 use crate::surface::use_tokens;
 use crate::theme::{HEADER_HEIGHT, WINDOW_CONTROL_BUTTON, WINDOW_CONTROL_CIRCLE};
 
@@ -72,8 +73,8 @@ impl Component for HeaderBar {
         let title = label()
             .text(self.title.clone())
             .width(Size::flex(1.0))
-            .font_size(14.0)
-            .font_weight(FontWeight::BOLD)
+            .font_size(TEXT_MD)
+            .font_weight(FontWeight::SEMI_BOLD)
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis)
             .text_align(if self.centered {
@@ -87,13 +88,8 @@ impl Component for HeaderBar {
             .direction(Direction::Horizontal)
             .content(Content::Flex)
             .cross_align(Alignment::Center)
-            .padding((
-                0.0,
-                8.0,
-                0.0,
-                if self.leading.is_empty() { 12.0 } else { 8.0 },
-            ))
-            .spacing(4.0)
+            .padding((0.0, S2, 0.0, if self.leading.is_empty() { S3 } else { S2 }))
+            .spacing(S1)
             .background(self.background.unwrap_or(tokens.surface))
             .on_pointer_down(drag_on_pointer_down)
             .children(self.leading.clone())
@@ -112,7 +108,7 @@ impl Component for WindowControls {
         rect()
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
-            .spacing(4.0)
+            .spacing(S1)
             .child(WindowControl {
                 icon: Icon::WindowMinimize,
                 tooltip: "Minimise",
@@ -194,7 +190,7 @@ impl Component for WindowControl {
                     .corner_radius(WINDOW_CONTROL_CIRCLE / 2.0)
                     .background(circle)
                     .center()
-                    .child(icons::icon(self.icon, 12.0, tokens.text)),
+                    .child(icons::icon(self.icon, ICON_SM, tokens.text)),
             )
     }
 }

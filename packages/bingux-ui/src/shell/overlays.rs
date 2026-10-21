@@ -11,7 +11,10 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use crate::controls::button::{ActionButton, action_button, primary_button};
-use crate::surface::{CORNER, FONT_SIZE, FONT_SMALL, is_activation_key, use_tokens};
+use crate::scale::*;
+use crate::surface::{is_activation_key, use_tokens};
+
+const DIALOG_WIDTH: f32 = 400.0;
 
 /// How a dialog response is styled.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -235,10 +238,10 @@ impl Component for DialogLayer {
                     .a11y_focusable(true)
                     .a11y_role(AccessibilityRole::AlertDialog)
                     .a11y_alt(self.dialog.title.clone())
-                    .width(Size::px(400.0))
-                    .padding(24.0)
-                    .spacing(16.0)
-                    .corner_radius(CORNER)
+                    .width(Size::px(DIALOG_WIDTH))
+                    .padding(S5)
+                    .spacing(S4)
+                    .corner_radius(RADIUS_LG)
                     .background(tokens.popover)
                     .border(
                         Border::new()
@@ -265,8 +268,8 @@ impl Component for DialogLayer {
                     .child(
                         label()
                             .text(self.dialog.title.clone())
-                            .font_size(18.0)
-                            .font_weight(FontWeight::BOLD)
+                            .font_size(TEXT_LG)
+                            .font_weight(FontWeight::SEMI_BOLD)
                             .color(tokens.text)
                             .text_align(TextAlign::Center)
                             .width(Size::fill()),
@@ -275,7 +278,7 @@ impl Component for DialogLayer {
                         paragraph()
                             .width(Size::fill())
                             .color(tokens.muted)
-                            .font_size(FONT_SIZE)
+                            .font_size(TEXT_MD)
                             .text_align(TextAlign::Center)
                             .child(self.dialog.body.clone())
                     }))
@@ -285,7 +288,7 @@ impl Component for DialogLayer {
                             .width(Size::fill())
                             .direction(Direction::Horizontal)
                             .content(Content::Flex)
-                            .spacing(8.0)
+                            .spacing(S2)
                             .children(buttons),
                     ),
             )
@@ -341,12 +344,12 @@ impl Component for ToastLayer {
                 rect()
                     .a11y_role(AccessibilityRole::Status)
                     .a11y_alt(self.toast.text.clone())
-                    .height(Size::px(40.0))
-                    .padding((0.0, 6.0, 0.0, 16.0))
-                    .spacing(12.0)
+                    .height(Size::px(BOX_XL))
+                    .padding((0.0, S1, 0.0, S4))
+                    .spacing(S3)
                     .direction(Direction::Horizontal)
                     .cross_align(Alignment::Center)
-                    .corner_radius(20.0)
+                    .corner_radius(BOX_XL / 2.0)
                     .background(tokens.popover)
                     .border(
                         Border::new()
@@ -366,16 +369,16 @@ impl Component for ToastLayer {
                     .child(
                         label()
                             .text(self.toast.text.clone())
-                            .font_size(FONT_SIZE)
+                            .font_size(TEXT_MD)
                             .color(tokens.text)
                             .max_lines(1),
                     )
                     .maybe_child(action)
                     .child(
                         rect()
-                            .width(Size::px(28.0))
-                            .height(Size::px(28.0))
-                            .corner_radius(14.0)
+                            .width(Size::px(BOX_MD))
+                            .height(Size::px(BOX_MD))
+                            .corner_radius(RADIUS_LG)
                             .center()
                             .cursor(CursorIcon::Pointer)
                             .a11y_role(AccessibilityRole::Button)
@@ -383,7 +386,7 @@ impl Component for ToastLayer {
                             .on_press(move |_: Event<PressEventData>| overlays.dismiss_toast(id))
                             .child(crate::icons::icon(
                                 crate::icons::Icon::WindowClose,
-                                12.0,
+                                ICON_SM,
                                 tokens.muted,
                             )),
                     ),
@@ -406,9 +409,9 @@ impl Component for ToastAction {
         rect()
             .a11y_role(AccessibilityRole::Button)
             .a11y_focusable(true)
-            .height(Size::px(28.0))
-            .padding((0.0, 10.0))
-            .corner_radius(14.0)
+            .height(Size::px(BOX_MD))
+            .padding((0.0, S2))
+            .corner_radius(RADIUS_LG)
             .center()
             .background(if hovering() {
                 tokens.hover
@@ -430,7 +433,7 @@ impl Component for ToastAction {
             .child(
                 label()
                     .text(self.text.clone())
-                    .font_size(FONT_SMALL)
+                    .font_size(TEXT_SM)
                     .font_weight(FontWeight::SEMI_BOLD)
                     .color(tokens.accent)
                     .max_lines(1),

@@ -13,10 +13,13 @@ use crate::controls::slider::slider;
 use crate::controls::switch::switch;
 use crate::controls::text_field::text_field;
 use crate::icons::{self, Icon};
-use crate::surface::{
-    FONT_SIZE, FONT_SMALL, ROW_HEIGHT, ROW_PADDING, TALL_ROW_HEIGHT, focus_border, surface_color,
-    use_tokens,
-};
+use crate::scale::*;
+use crate::surface::{focus_border, surface_color, use_tokens};
+
+/// The widest a read-only value gets before it is cut with an ellipsis.
+const VALUE_MAX_WIDTH: f32 = 340.0;
+/// The width of the editable field in an entry row.
+const ENTRY_WIDTH: f32 = 260.0;
 
 /// One row: optional leading icon, title, optional subtitle, and trailing
 /// content. The whole row is the target when `on_press` is set.
@@ -127,10 +130,10 @@ impl Component for ValueText {
         label()
             .text(self.text.clone())
             .color(tokens.muted)
-            .font_size(FONT_SIZE)
+            .font_size(TEXT_MD)
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis)
-            .max_width(Size::px(340.0))
+            .max_width(Size::px(VALUE_MAX_WIDTH))
     }
 }
 
@@ -166,7 +169,7 @@ impl Component for Row {
         let title = label()
             .text(self.title.clone())
             .color(text_color)
-            .font_size(FONT_SIZE)
+            .font_size(TEXT_MD)
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis);
         let title_line: Element = match &self.badge {
@@ -174,20 +177,20 @@ impl Component for Row {
             Some(badge) => rect()
                 .direction(Direction::Horizontal)
                 .cross_align(Alignment::Center)
-                .spacing(8.0)
+                .spacing(S2)
                 .child(title)
                 .child(
                     rect()
-                        .height(Size::px(18.0))
-                        .padding((0.0, 7.0))
-                        .corner_radius(9.0)
+                        .height(Size::px(BOX_SM))
+                        .padding((0.0, S2))
+                        .corner_radius(RADIUS)
                         .background(tokens.accent.with_af32(0.18))
                         .center()
                         .child(
                             label()
                                 .text(badge.clone())
                                 .color(tokens.accent)
-                                .font_size(11.0)
+                                .font_size(TEXT_XS)
                                 .font_weight(FontWeight::SEMI_BOLD)
                                 .max_lines(1),
                         ),
@@ -198,7 +201,7 @@ impl Component for Row {
         // `min_height`, so the column carries the row's inner height itself.
         let text_column = rect()
             .width(Size::flex(1.0))
-            .height(Size::px(height - 16.0))
+            .height(Size::px(height - 2.0 * S2))
             .main_align(Alignment::Center)
             .spacing(1.0)
             .child(title_line)
@@ -206,7 +209,7 @@ impl Component for Row {
                 label()
                     .text(subtitle.clone())
                     .color(tokens.muted)
-                    .font_size(FONT_SMALL)
+                    .font_size(TEXT_SM)
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis)
             }));
@@ -225,8 +228,8 @@ impl Component for Row {
             .direction(Direction::Horizontal)
             .content(Content::Flex)
             .cross_align(Alignment::Center)
-            .padding((8.0, ROW_PADDING))
-            .spacing(12.0)
+            .padding((S2, GUTTER))
+            .spacing(S3)
             .background(background)
             .border(focus_border(&tokens, focus()))
             .maybe(interactive, |element| {
@@ -248,17 +251,17 @@ impl Component for Row {
             })
             .maybe_child(
                 self.leading
-                    .map(|leading| icons::icon(leading, 18.0, icon_color)),
+                    .map(|leading| icons::icon(leading, ICON_LG, icon_color)),
             )
             .child(text_column)
             .maybe_child(self.trailing.clone())
             .maybe_child(
                 (self.selected && !self.navigates)
-                    .then(|| icons::icon(Icon::Check, 12.0, tokens.accent)),
+                    .then(|| icons::icon(Icon::Check, ICON_SM, tokens.accent)),
             )
             .maybe_child(
                 self.navigates
-                    .then(|| icons::icon(Icon::GoNext, 12.0, tokens.muted)),
+                    .then(|| icons::icon(Icon::GoNext, ICON_SM, tokens.muted)),
             )
     }
 }
@@ -332,7 +335,7 @@ impl Component for PropertyValue {
         paragraph()
             .width(Size::percent(55.0))
             .color(tokens.muted)
-            .font_size(FONT_SIZE)
+            .font_size(TEXT_MD)
             .text_align(TextAlign::End)
             .child(self.text.clone())
     }
@@ -375,7 +378,7 @@ impl Component for EntryRow {
         let draft = use_state(|| committed.clone());
         let on_commit = self.on_commit.clone();
         let field = text_field(draft, move |text: String| on_commit.call(text))
-            .width(260.0)
+            .width(ENTRY_WIDTH)
             .maybe_placeholder(self.placeholder.clone())
             .revert_to(committed);
         row(self.title.clone()).trailing(field)
@@ -432,7 +435,7 @@ impl Component for ExpanderRow {
         let chevron =
             rect()
                 .rotate(progress * 90.0)
-                .child(icons::icon(Icon::GoNext, 12.0, tokens.muted));
+                .child(icons::icon(Icon::GoNext, ICON_SM, tokens.muted));
         let header = row(self.title.clone())
             .maybe_subtitle(self.subtitle.clone())
             .trailing(chevron)
@@ -444,7 +447,7 @@ impl Component for ExpanderRow {
                     rect()
                         .width(Size::fill())
                         .height(Size::px(1.0))
-                        .margin((0.0, 0.0, 0.0, 12.0))
+                        .margin((0.0, 0.0, 0.0, S3))
                         .background(tokens.text.with_af32(0.07))
                         .into(),
                 );
@@ -458,7 +461,7 @@ impl Component for ExpanderRow {
                 rect()
                     .width(Size::fill())
                     .opacity(progress)
-                    .padding((0.0, 0.0, 0.0, 16.0))
+                    .padding((0.0, 0.0, 0.0, S4))
                     .child(
                         rect()
                             .width(Size::fill())

@@ -15,6 +15,7 @@ use crate::ui::{
     Group, Status, caption, choice_row, page_column, primary_button, row, slider_row, status,
     switch_row,
 };
+use bingux_ui::scale::*;
 
 const SERVICE: &str = "org.gnome.Mutter.DisplayConfig";
 const OBJECT: &str = "/org/gnome/Mutter/DisplayConfig";
@@ -1198,7 +1199,7 @@ impl Component for DisplaysPage {
                         .direction(Direction::Horizontal)
                         .content(Content::Flex)
                         .cross_align(Alignment::Center)
-                        .margin((0.0, 0.0, 20.0, 0.0))
+                        .padding((0.0, GUTTER))
                         .child(
                             rect()
                                 .width(Size::flex(1.0))

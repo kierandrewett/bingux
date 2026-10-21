@@ -7,7 +7,11 @@ use freya::prelude::*;
 
 use crate::controls::button::{action_button, row_button};
 use crate::icons::{self, Icon};
-use crate::surface::{CORNER, FONT_SIZE, use_tokens};
+use crate::scale::*;
+use crate::surface::use_tokens;
+
+/// The widest a status page's text gets.
+const PAGE_MAX_WIDTH: f32 = 420.0;
 
 /// A centred icon in a muted tile, a title, a description and an
 /// optional action. Fills its parent.
@@ -59,37 +63,37 @@ impl Component for StatusPage {
         rect()
             .expanded()
             .center()
-            .padding(32.0)
-            .spacing(12.0)
+            .padding(S6)
+            .spacing(S3)
             .child(
                 rect()
-                    .width(Size::px(96.0))
-                    .height(Size::px(96.0))
-                    .corner_radius(28.0)
+                    .width(Size::px(BOX_2XL))
+                    .height(Size::px(BOX_2XL))
+                    .corner_radius(RADIUS_LG * 2.0)
                     .background(tokens.elevated)
                     .center()
-                    .margin((0.0, 0.0, 8.0, 0.0))
-                    .child(icons::icon(self.icon, 48.0, tokens.muted)),
+                    .margin((0.0, 0.0, S2, 0.0))
+                    .child(icons::icon(self.icon, ICON_XL, tokens.muted)),
             )
             .child(
                 label()
                     .text(self.title.clone())
-                    .font_size(22.0)
-                    .font_weight(FontWeight::BOLD)
+                    .font_size(TEXT_XL)
+                    .font_weight(FontWeight::SEMI_BOLD)
                     .color(tokens.text)
                     .text_align(TextAlign::Center),
             )
             .maybe_child(self.description.clone().map(|text| {
                 paragraph()
-                    .max_width(Size::px(420.0))
+                    .max_width(Size::px(PAGE_MAX_WIDTH))
                     .color(tokens.muted)
-                    .font_size(FONT_SIZE)
+                    .font_size(TEXT_MD)
                     .text_align(TextAlign::Center)
                     .child(text)
             }))
             .maybe_child(self.action.clone().map(|(label, on_press)| {
                 rect()
-                    .margin((12.0, 0.0, 0.0, 0.0))
+                    .margin((S3, 0.0, 0.0, 0.0))
                     .child(action_button(label, on_press))
             }))
             .maybe_child(self.child.clone())
@@ -179,22 +183,22 @@ impl Component for Banner {
         Element::from(
             rect()
                 .width(Size::fill())
-                .height(Size::px(44.0 * progress))
+                .height(Size::px(BOX_XL * progress))
                 .overflow(Overflow::Clip)
                 .opacity(progress)
-                .margin((0.0, 0.0, 16.0 * progress, 0.0))
+                .margin((0.0, 0.0, S4 * progress, 0.0))
                 .child(
                     rect()
                         .a11y_role(AccessibilityRole::Status)
                         .a11y_alt(self.text.clone())
                         .width(Size::fill())
-                        .height(Size::px(44.0))
-                        .padding((0.0, 8.0, 0.0, 14.0))
-                        .spacing(12.0)
+                        .height(Size::px(BOX_XL))
+                        .padding((0.0, S2, 0.0, S3))
+                        .spacing(S3)
                         .direction(Direction::Horizontal)
                         .content(Content::Flex)
                         .cross_align(Alignment::Center)
-                        .corner_radius(CORNER)
+                        .corner_radius(RADIUS_LG)
                         .background(tint.with_af32(0.16))
                         .border(
                             Border::new()
@@ -206,7 +210,7 @@ impl Component for Banner {
                             label()
                                 .width(Size::flex(1.0))
                                 .text(self.text.clone())
-                                .font_size(FONT_SIZE)
+                                .font_size(TEXT_MD)
                                 .color(tokens.text)
                                 .max_lines(1)
                                 .text_overflow(TextOverflow::Ellipsis),
@@ -218,9 +222,9 @@ impl Component for Banner {
                         )
                         .maybe_child(on_dismiss.map(|on_dismiss| {
                             rect()
-                                .width(Size::px(28.0))
-                                .height(Size::px(28.0))
-                                .corner_radius(14.0)
+                                .width(Size::px(BOX_MD))
+                                .height(Size::px(BOX_MD))
+                                .corner_radius(RADIUS_LG)
                                 .center()
                                 .cursor(CursorIcon::Pointer)
                                 .a11y_role(AccessibilityRole::Button)
@@ -229,7 +233,7 @@ impl Component for Banner {
                                     event.stop_propagation();
                                     on_dismiss.call(());
                                 })
-                                .child(icons::icon(Icon::WindowClose, 12.0, tokens.muted))
+                                .child(icons::icon(Icon::WindowClose, ICON_SM, tokens.muted))
                         })),
                 ),
         )

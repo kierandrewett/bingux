@@ -489,9 +489,9 @@ impl Component for SoundPage {
             ));
 
         if data.streams.is_empty() {
-            page = page.child(status(Status::Empty(
+            page = page.child(Group::titled("Applications").row(status(Status::Empty(
                 "No applications are playing or recording audio.".into(),
-            )));
+            ))));
         } else {
             page = page.child(Group::titled("Applications").rows(data.streams.iter().map(
                 |stream| {

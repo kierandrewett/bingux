@@ -13,6 +13,7 @@ use crate::ui::{
     Group, Overlays, ResponseKind, Status, dialog, icon_button, page_column, primary_button, row,
     row_button, status, switch_row, text_row, use_overlays, use_tokens,
 };
+use bingux_ui::scale::*;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
 const QUICK: Duration = Duration::from_secs(5);
@@ -380,10 +381,10 @@ fn network_rows(
 
         let mut trailing = rect()
             .direction(Direction::Horizontal)
-            .spacing(8.0)
+            .spacing(S2)
             .cross_align(Alignment::Center);
         if network.in_use {
-            trailing = trailing.child(icons::icon(Icon::Check, 16.0, tokens.accent));
+            trailing = trailing.child(icons::icon(Icon::Check, ICON_MD, tokens.accent));
         }
         if network.saved {
             let ssid = network.ssid.clone();

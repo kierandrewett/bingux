@@ -10,27 +10,8 @@ use freya::prelude::*;
 
 /// The shell's own font.
 const DEFAULT_FONT_FAMILY: &str = "Adwaita Sans";
-/// Small caption size (`fontSmall`).
-pub const FONT_SMALL: f32 = 12.0;
-/// Body size (`fontSize`).
-pub const FONT_BODY: f32 = 14.0;
-/// Heading size (`fontHeading`).
-pub const FONT_HEADING: f32 = 16.0;
-
-/// Spacing scale (`spaceSmall`, `gap`, `padding`, `paddingLarge`).
-pub const SPACE_SMALL: f32 = 4.0;
-pub const GAP: f32 = 8.0;
-pub const PADDING: f32 = 12.0;
-pub const PADDING_LARGE: f32 = 20.0;
-/// Corner radius of boxed groups and the window frame (`radius`).
-pub const RADIUS: f32 = 12.0;
-/// Default control height (`controlHeight`).
-pub const CONTROL_HEIGHT: f32 = 32.0;
-/// Icon size inside controls (`iconSize`).
-pub const ICON_SIZE: f32 = 16.0;
-
-/// Height of the header bar and the sidebar title row.
-pub const HEADER_HEIGHT: f32 = 47.0;
+/// Height of the window header bar.
+pub const HEADER_HEIGHT: f32 = 48.0;
 /// Sidebar width.
 pub const SIDEBAR_WIDTH: f32 = 260.0;
 /// Width below which the sidebar becomes an overlay.
@@ -175,29 +156,29 @@ impl Tokens {
             accent_name,
             scheme,
             reduced_motion,
-            bg: rgba(0.141, 0.141, 0.141, 1.0),
-            surface: rgba(0.141, 0.141, 0.141, 1.0),
-            sidebar: rgba(0.169, 0.169, 0.169, 1.0),
-            elevated: rgba(1.0, 1.0, 1.0, 0.10),
-            elevated_hover: rgba(1.0, 1.0, 1.0, 0.15),
-            elevated_pressed: rgba(1.0, 1.0, 1.0, 0.20),
-            separator: rgba(1.0, 1.0, 1.0, 0.08),
-            card: rgba(0.200, 0.200, 0.200, 1.0),
-            hover: rgba(1.0, 1.0, 1.0, 0.06),
-            pressed: rgba(1.0, 1.0, 1.0, 0.11),
-            selection: rgba(1.0, 1.0, 1.0, 0.10),
+            bg: rgba(0.106, 0.106, 0.106, 1.0),
+            surface: rgba(0.106, 0.106, 0.106, 1.0),
+            sidebar: rgba(0.078, 0.078, 0.078, 1.0),
+            elevated: rgba(1.0, 1.0, 1.0, 0.05),
+            elevated_hover: rgba(1.0, 1.0, 1.0, 0.09),
+            elevated_pressed: rgba(1.0, 1.0, 1.0, 0.13),
+            separator: rgba(1.0, 1.0, 1.0, 0.07),
+            card: rgba(1.0, 1.0, 1.0, 0.05),
+            hover: rgba(1.0, 1.0, 1.0, 0.05),
+            pressed: rgba(1.0, 1.0, 1.0, 0.09),
+            selection: rgba(1.0, 1.0, 1.0, 0.09),
             border: rgba(1.0, 1.0, 1.0, 1.0),
-            outline: rgba(1.0, 1.0, 1.0, 0.22),
-            text: rgba(1.0, 1.0, 1.0, 1.0),
-            muted: rgba(1.0, 1.0, 1.0, 0.62),
-            bar_divider: rgba(1.0, 1.0, 1.0, 0.08),
+            outline: rgba(1.0, 1.0, 1.0, 0.16),
+            text: rgba(0.93, 0.93, 0.92, 1.0),
+            muted: rgba(0.93, 0.93, 0.92, 0.58),
+            bar_divider: rgba(1.0, 1.0, 1.0, 0.07),
             success: rgba(0.561, 0.941, 0.643, 1.0),
             warning: rgba(0.976, 0.941, 0.420, 1.0),
             danger: rgba(1.0, 0.482, 0.388, 1.0),
             accent_foreground: rgba(1.0, 1.0, 1.0, 1.0),
             tooltip_surface: rgba(0.12, 0.12, 0.13, 0.82),
             tooltip_outline: rgba(1.0, 1.0, 1.0, 0.16),
-            popover: rgba(0.220, 0.220, 0.220, 1.0),
+            popover: rgba(0.150, 0.150, 0.150, 1.0),
         }
     }
 
@@ -424,9 +405,14 @@ pub fn font_files(family: &str, limit: usize) -> Vec<Vec<u8>> {
                 .then_some((file, style))
         })
         .collect();
-    // Upright faces before italic ones, then by file name, so the regular
-    // file is registered first and the limit drops italics first.
-    entries.sort_by_key(|(file, style)| (style.to_ascii_lowercase().contains("italic"), *file));
+    // Upright faces only. Registered under one family name, an italic file
+    // can win the lookup and set every line in italics. Regular files go
+    // first so the limit keeps them.
+    entries.retain(|(file, style)| {
+        !style.to_ascii_lowercase().contains("italic")
+            && !file.to_ascii_lowercase().contains("italic")
+    });
+    entries.sort_by_key(|(file, _)| *file);
     let mut seen = Vec::new();
     let mut fonts = Vec::new();
     for (file, _) in entries {

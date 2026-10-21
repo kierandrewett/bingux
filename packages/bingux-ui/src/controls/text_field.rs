@@ -8,7 +8,11 @@
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::surface::{CONTROL_HEIGHT, FONT_SIZE, FONT_SMALL, ROW_RADIUS, use_tokens};
+use crate::scale::*;
+use crate::surface::use_tokens;
+
+/// A multiline field is this many controls high.
+const MULTILINE_ROWS: f32 = 3.0;
 
 /// A single-line (or multi-line) text field bound to a `State<String>`.
 #[derive(PartialEq)]
@@ -121,7 +125,7 @@ impl Component for TextField {
         let outline = if invalid {
             tokens.danger
         } else {
-            Color::TRANSPARENT
+            tokens.outline
         };
         let focus_outline = if invalid {
             tokens.danger
@@ -138,7 +142,7 @@ impl Component for TextField {
             placeholder_color: Some(Preference::Specific(tokens.muted.with_a(170))),
         };
         let layout = InputLayoutThemePartial {
-            corner_radius: Some(Preference::Specific(CornerRadius::new_all(ROW_RADIUS))),
+            corner_radius: Some(Preference::Specific(CornerRadius::new_all(RADIUS))),
             padding: Some(Preference::Specific(Gaps::new(6.0, 10.0, 6.0, 10.0))),
         };
 
@@ -161,7 +165,9 @@ impl Component for TextField {
         if !self.multiline {
             input = input.height(Size::px(CONTROL_HEIGHT));
         } else {
-            input = input.multiline(true).height(Size::px(CONTROL_HEIGHT * 3.0));
+            input = input
+                .multiline(true)
+                .height(Size::px(CONTROL_HEIGHT * MULTILINE_ROWS));
         }
         if let Some(placeholder) = &self.placeholder {
             input = input.placeholder(placeholder.clone());
@@ -170,9 +176,9 @@ impl Component for TextField {
             input = input.mode(InputMode::new_password());
         }
         if let Some(icon) = self.leading {
-            input = input.leading(rect().margin((0.0, 6.0, 0.0, 0.0)).child(icons::icon(
+            input = input.leading(rect().margin((0.0, S1, 0.0, 0.0)).child(icons::icon(
                 icon,
-                14.0,
+                ICON_MD,
                 tokens.muted,
             )));
         }
@@ -180,9 +186,9 @@ impl Component for TextField {
             let on_change = on_change.clone();
             input = input.trailing(
                 rect()
-                    .width(Size::px(20.0))
-                    .height(Size::px(20.0))
-                    .corner_radius(10.0)
+                    .width(Size::px(BOX_SM))
+                    .height(Size::px(BOX_SM))
+                    .corner_radius(RADIUS_LG)
                     .center()
                     .cursor(CursorIcon::Pointer)
                     .on_press(move |event: Event<PressEventData>| {
@@ -192,7 +198,7 @@ impl Component for TextField {
                             on_change.call(String::new());
                         }
                     })
-                    .child(icons::icon(Icon::EditClear, 12.0, tokens.muted)),
+                    .child(icons::icon(Icon::EditClear, ICON_SM, tokens.muted)),
             );
         }
         if let Some(on_change) = on_change {
@@ -203,13 +209,13 @@ impl Component for TextField {
         }
 
         rect()
-            .spacing(4.0)
-            .font_size(FONT_SIZE)
+            .spacing(S1)
+            .font_size(TEXT_MD)
             .child(input)
             .maybe_child(self.invalid.clone().map(|message| {
                 label()
                     .text(message)
-                    .font_size(FONT_SMALL)
+                    .font_size(TEXT_SM)
                     .color(tokens.danger)
                     .max_lines(2)
             }))

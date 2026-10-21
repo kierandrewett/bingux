@@ -4,7 +4,7 @@
 
 use freya::prelude::*;
 
-use crate::surface::CORNER;
+use crate::scale::*;
 use crate::theme::Tokens;
 
 /// A horizontal stack with vertically centred children and `spacing`.
@@ -39,9 +39,9 @@ pub fn divider(tokens: &Tokens) -> Rect {
 pub fn card(tokens: &Tokens) -> Rect {
     rect()
         .width(Size::fill())
-        .corner_radius(CORNER)
+        .corner_radius(RADIUS_LG)
         .background(tokens.card)
-        .padding(16.0)
+        .padding(S4)
 }
 
 /// Centres `child` and caps its width, like `AdwClamp`. Pages use 640 px.
@@ -60,5 +60,5 @@ pub fn clamp(max_width: f32, child: impl Into<Element>) -> Rect {
 /// The root of a settings page: full width, with the standard 24 px between
 /// groups. Groups and status rows carry no outer margin of their own.
 pub fn page_column() -> Rect {
-    rect().width(Size::fill()).spacing(24.0)
+    rect().width(Size::fill()).spacing(S6)
 }

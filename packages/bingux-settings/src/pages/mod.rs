@@ -47,11 +47,11 @@ impl PageId {
     pub const ALL: [PageId; 13] = [
         PageId::Network,
         PageId::Bluetooth,
+        PageId::Displays,
+        PageId::Sound,
         PageId::Appearance,
         PageId::Desktop,
         PageId::Search,
-        PageId::Displays,
-        PageId::Sound,
         PageId::Power,
         PageId::Keyboard,
         PageId::Mouse,
@@ -75,6 +75,35 @@ impl PageId {
             Self::DateTime => "Date and Time",
             Self::Users => "Users",
             Self::About => "About",
+        }
+    }
+
+    /// The sidebar section the page is listed under.
+    pub fn group(self) -> &'static str {
+        match self {
+            Self::Network | Self::Bluetooth | Self::Displays | Self::Sound => "Connections",
+            Self::Appearance | Self::Desktop | Self::Search => "Bingux",
+            Self::Power | Self::Keyboard | Self::Mouse | Self::DateTime => "Hardware and time",
+            Self::Users | Self::About => "System",
+        }
+    }
+
+    /// One line under the page title.
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::Network => "Wi-Fi, wired connections and airplane mode",
+            Self::Bluetooth => "Adapter and paired devices",
+            Self::Appearance => "Wallpaper, font, accent colour and colour scheme",
+            Self::Desktop => "Dock, sidebar, top bar and Control Centre",
+            Self::Search => "Providers, web engines, file locations and previews",
+            Self::Displays => "Resolution, refresh rate, scale and night light",
+            Self::Sound => "Output and input devices, volumes and applications",
+            Self::Power => "Battery, power mode, blank screen and lock",
+            Self::Keyboard => "Key repeat, input sources and shortcuts",
+            Self::Mouse => "Pointer speed, scrolling and touchpad gestures",
+            Self::DateTime => "Clock, time zone and automatic time",
+            Self::Users => "Accounts on this computer",
+            Self::About => "This computer, the system and versions",
         }
     }
 

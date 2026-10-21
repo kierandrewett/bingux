@@ -4,7 +4,10 @@
 use freya::animation::*;
 use freya::prelude::*;
 
-use crate::surface::{FONT_SMALL, use_tokens};
+use crate::scale::*;
+use crate::surface::use_tokens;
+
+const BAR_HEIGHT: f32 = 6.0;
 
 /// A 6 px progress bar. Determinate bars fill with the accent colour;
 /// an indeterminate bar sweeps a 30% segment across the track.
@@ -65,13 +68,13 @@ impl Component for ProgressBar {
             Some(_) => rect()
                 .width(Size::percent(percent))
                 .height(Size::fill())
-                .corner_radius(3.0)
+                .corner_radius(RADIUS_SM)
                 .background(tokens.accent)
                 .into(),
             None if tokens.reduced_motion => rect()
                 .width(Size::percent(30.0))
                 .height(Size::fill())
-                .corner_radius(3.0)
+                .corner_radius(RADIUS_SM)
                 .background(tokens.accent)
                 .into(),
             None => SweepTrack { sweep_x }.into(),
@@ -79,7 +82,7 @@ impl Component for ProgressBar {
 
         rect()
             .width(self.width.clone())
-            .spacing(6.0)
+            .spacing(S1)
             .a11y_role(AccessibilityRole::ProgressIndicator)
             .a11y_builder(move |builder| {
                 if let Some(fraction) = fraction {
@@ -93,19 +96,19 @@ impl Component for ProgressBar {
                     .width(Size::fill())
                     .direction(Direction::Horizontal)
                     .main_align(Alignment::SpaceBetween)
-                    .child(label().text(text).font_size(FONT_SMALL).color(tokens.muted))
+                    .child(label().text(text).font_size(TEXT_SM).color(tokens.muted))
                     .maybe_child(fraction.map(|fraction| {
                         label()
                             .text(format!("{}%", (fraction * 100.0).round() as i64))
-                            .font_size(FONT_SMALL)
+                            .font_size(TEXT_SM)
                             .color(tokens.muted)
                     }))
             }))
             .child(
                 rect()
                     .width(Size::fill())
-                    .height(Size::px(6.0))
-                    .corner_radius(3.0)
+                    .height(Size::px(BAR_HEIGHT))
+                    .corner_radius(RADIUS_SM)
                     .background(tokens.outline)
                     .overflow(Overflow::Clip)
                     .child(bar),
@@ -133,7 +136,7 @@ impl Component for SweepTrack {
                 rect()
                     .width(Size::percent(30.0))
                     .height(Size::fill())
-                    .corner_radius(3.0)
+                    .corner_radius(RADIUS_SM)
                     .background(tokens.accent)
                     .offset_x(width * self.sweep_x / 100.0),
             )
@@ -232,12 +235,12 @@ impl Component for Spinner {
         rect()
             .a11y_role(AccessibilityRole::ProgressIndicator)
             .cross_align(Alignment::Center)
-            .spacing(10.0)
+            .spacing(S2)
             .child(ring)
             .maybe_child(self.text.clone().map(|text| {
                 label()
                     .text(text)
-                    .font_size(FONT_SMALL)
+                    .font_size(TEXT_SM)
                     .color(tokens.muted)
                     .max_lines(1)
             }))

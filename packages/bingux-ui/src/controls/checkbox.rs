@@ -6,10 +6,14 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::surface::{FONT_SIZE, is_activation_key, use_tokens};
+use crate::scale::*;
+use crate::surface::{is_activation_key, use_tokens};
 
 /// Side of the 18 px check and radio boxes.
 const BOX_SIZE: f32 = 18.0;
+const DASH_WIDTH: f32 = 8.0;
+const DASH_HEIGHT: f32 = 2.0;
+const DOT_SIZE: f32 = 8.0;
 
 /// Tri-state checkbox value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -109,13 +113,13 @@ impl Component for Checkbox {
             CheckState::Off => None,
             CheckState::On => Some(Element::from(icons::icon(
                 Icon::Check,
-                12.0,
+                ICON_SM,
                 tokens.accent_foreground,
             ))),
             CheckState::Mixed => Some(Element::from(
                 rect()
-                    .width(Size::px(8.0))
-                    .height(Size::px(2.0))
+                    .width(Size::px(DASH_WIDTH))
+                    .height(Size::px(DASH_HEIGHT))
                     .corner_radius(1.0)
                     .background(tokens.accent_foreground),
             )),
@@ -135,7 +139,7 @@ impl Component for Checkbox {
             })
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
-            .spacing(8.0)
+            .spacing(S2)
             .maybe(!enabled, |element| element.opacity(0.45))
             .cursor(if enabled {
                 CursorIcon::Pointer
@@ -171,7 +175,7 @@ impl Component for Checkbox {
                 rect()
                     .width(Size::px(BOX_SIZE))
                     .height(Size::px(BOX_SIZE))
-                    .corner_radius(5.0)
+                    .corner_radius(RADIUS_SM)
                     .background(fill)
                     .border(
                         Border::new()
@@ -182,7 +186,7 @@ impl Component for Checkbox {
                     .child(
                         rect()
                             .expanded()
-                            .corner_radius(5.0)
+                            .corner_radius(RADIUS_SM)
                             .background(overlay)
                             .center()
                             .maybe_child(glyph),
@@ -191,7 +195,7 @@ impl Component for Checkbox {
             .maybe_child(self.text.clone().map(|text| {
                 label()
                     .text(text)
-                    .font_size(FONT_SIZE)
+                    .font_size(TEXT_MD)
                     .color(tokens.text)
                     .max_lines(1)
             }))
@@ -241,7 +245,7 @@ impl Component for RadioGroup {
         let enabled = self.enabled;
         let on_select = self.on_select.clone();
         let selected = self.selected.clone();
-        let mut container = rect().spacing(if self.horizontal { 16.0 } else { 10.0 });
+        let mut container = rect().spacing(if self.horizontal { S4 } else { S2 });
         if self.horizontal {
             container = container.direction(Direction::Horizontal);
         }
@@ -281,12 +285,13 @@ impl Component for RadioButton {
         let selected = self.selected;
         let on_select = self.on_select.clone();
         let motion = tokens.motion(100);
-        let dot = use_animation_transition(if selected { 8.0 } else { 0.0 }, move |from, to| {
-            AnimNum::new(from, to)
-                .time(motion)
-                .function(Function::Expo)
-                .ease(Ease::Out)
-        });
+        let dot =
+            use_animation_transition(if selected { DOT_SIZE } else { 0.0 }, move |from, to| {
+                AnimNum::new(from, to)
+                    .time(motion)
+                    .function(Function::Expo)
+                    .ease(Ease::Out)
+            });
         let dot = dot.get().value();
         let ring = if focus() == Focus::Keyboard {
             tokens.text
@@ -319,7 +324,7 @@ impl Component for RadioButton {
             .a11y_builder(move |builder| builder.set_toggled(Toggled::from(selected)))
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
-            .spacing(8.0)
+            .spacing(S2)
             .maybe(!enabled, |element| element.opacity(0.45))
             .cursor(if enabled {
                 CursorIcon::Pointer
@@ -375,7 +380,7 @@ impl Component for RadioButton {
             .child(
                 label()
                     .text(self.text.clone())
-                    .font_size(FONT_SIZE)
+                    .font_size(TEXT_MD)
                     .color(tokens.text)
                     .max_lines(1),
             )
