@@ -7,8 +7,8 @@ import QtQml
 QtObject {
     id: root
 
-    ShortcutSession {
-        id: compositor
+    // QtObject has no default property, so the session is held in a property.
+    property ShortcutSession compositor: ShortcutSession {
         enabled: true
     }
 

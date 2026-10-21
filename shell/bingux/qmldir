@@ -208,3 +208,4 @@ ExtensionServices 1.0 ExtensionServices.qml
 
 singleton BackgroundEffects 1.0 BackgroundEffects.qml
 BackgroundEffect 1.0 BackgroundEffect.qml
+FirstLoginIntro 1.0 FirstLoginIntro.qml
