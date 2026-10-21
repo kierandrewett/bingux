@@ -69,8 +69,17 @@ Settings looks for `bingux-config` in this order:
 
 Set `BINGUX_CONFIG_BIN` when you run a build that is not installed.
 
-## Night light shows as off, or document front matter fails to parse
+## A helper reports a missing Python module or Night Light is unavailable
 
-Both features use optional packages. Install `gnome-settings-daemon` for the
-night light state. Install `python3-pyyaml` to show YAML front matter in
-document previews. The RPM lists both as recommended packages.
+Some features use optional packages. When one is missing, the helper replies
+with the package name instead of failing, and `make doctor` lists it under
+"Optional features not available".
+
+| Package                           | Feature that needs it                     | What you see without it                                          |
+| --------------------------------- | ----------------------------------------- | ---------------------------------------------------------------- |
+| `python3-gobject`                 | Control Centre, calendar and most helpers | "PyGObject (python3-gobject) is not installed."                  |
+| `python3-cairo`, `python3-pillow` | Document and image previews               | "Python module cairo is missing; install python3-cairo."         |
+| `python3-pyyaml`                  | YAML front matter in Markdown previews    | "YAML frontmatter needs python3-pyyaml, which is not installed." |
+| `gnome-settings-daemon`           | Night Light                               | The Night Light control shows "Unavailable".                     |
+
+The RPM requires the first two rows and recommends the last two.

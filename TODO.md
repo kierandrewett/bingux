@@ -16,7 +16,7 @@ work belongs in Git history and does not stay here as a second changelog.
 
 - [x] Replace remaining direct `qs` launches with the installed launcher or an
       explicit `BINGUX_QUICKSHELL` value.
-- [ ] Move optional Python helpers behind clear feature checks.
+- [x] Move optional Python helpers behind clear feature checks.
 - [ ] Keep every long-running helper at core limit zero and test crash recovery.
 - [ ] Record real hardware evidence for the OSD producer path.
 
