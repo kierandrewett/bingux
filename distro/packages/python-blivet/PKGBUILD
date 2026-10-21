@@ -1,0 +1,35 @@
+# Storage library for the Bingux OS installer. Built from the PyPI source
+# distribution, which is what upstream releases; the AUR package builds the same
+# tree from the GitHub tag. Runtime libraries are all Arch extra packages.
+# Licence: upstream declares LGPL-2.1-or-later. The source headers mix
+# GPL-2.0-or-later and LGPL-2.1-or-later, and the tree ships COPYING (GPL-2.0)
+# and COPYING.LESSER (LGPL-2.1); both are installed. See distro/installer/README.md.
+# shellcheck shell=bash disable=SC2034,SC2154
+_pkgname=blivet
+pkgname=python-blivet
+pkgver=3.14.2
+pkgrel=1
+pkgdesc='Python module for system storage configuration (partitioning, LUKS, LVM, Btrfs, resize)'
+arch=('any')
+url='https://github.com/storaged-project/blivet'
+license=('LGPL-2.1-or-later' 'GPL-2.0-or-later')
+depends=('python' 'python-gobject' 'python-pyparted' 'python-pyudev' 'python-dasbus' 'python-packaging'
+    'libblockdev' 'libblockdev-part' 'libblockdev-fs' 'libblockdev-crypto' 'libblockdev-btrfs'
+    'libblockdev-loop' 'libblockdev-dm' 'libblockdev-lvm' 'libblockdev-swap' 'libblockdev-mdraid'
+    'python-libblockdev' 'parted' 'e2fsprogs' 'util-linux' 'systemd-libs')
+makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
+options=('!debug')
+source=("https://files.pythonhosted.org/packages/31/d0/e87afa32b1379305cad87e4047754f097130a2fea4677df614015a0fd258/${_pkgname}-${pkgver}.tar.gz")
+sha256sums=('db2cd996ed354d47fdc60740d912a102250a0fc469bfe17df6bced649c172e5b')
+
+build() {
+    cd "${_pkgname}-${pkgver}" || return
+    python -m build --wheel --no-isolation
+}
+
+package() {
+    cd "${_pkgname}-${pkgver}" || return
+    python -m installer --destdir="$pkgdir" dist/*.whl
+    install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+    install -Dm644 COPYING.LESSER "$pkgdir/usr/share/licenses/$pkgname/COPYING.LESSER"
+}
