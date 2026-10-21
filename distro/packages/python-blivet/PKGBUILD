@@ -8,7 +8,7 @@
 _pkgname=blivet
 pkgname=python-blivet
 pkgver=3.14.2
-pkgrel=1
+pkgrel=2
 pkgdesc='Python module for system storage configuration (partitioning, LUKS, LVM, Btrfs, resize)'
 arch=('any')
 url='https://github.com/storaged-project/blivet'
@@ -32,4 +32,9 @@ package() {
     python -m installer --destdir="$pkgdir" dist/*.whl
     install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
     install -Dm644 COPYING.LESSER "$pkgdir/usr/share/licenses/$pkgname/COPYING.LESSER"
+    # libblockdev-lvm ships 10-lvm-dbus.cfg, which pins the lvm plugin to lvmdbusd (not
+    # shipped; the installer hits ServiceUnknown on the first device scan). Later conf.d
+    # files override earlier ones, so this restores the local lvm plugin.
+    install -d "$pkgdir/etc/libblockdev/3/conf.d"
+    printf '[lvm]\nsonames=libbd_lvm.so.3\n' > "$pkgdir/etc/libblockdev/3/conf.d/99-bingux-lvm.cfg"
 }
