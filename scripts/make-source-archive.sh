@@ -13,7 +13,7 @@ case "$version" in
 esac
 
 mkdir -p "$(dirname "$root/$output")"
-if [[ -n "$(git -C "$root" status --porcelain)" ]]; then
+if [[ -n "$(git -C "$root" status --porcelain --untracked-files=no)" ]]; then
     echo "working tree has changes; commit the release source first" >&2
     exit 1
 fi
