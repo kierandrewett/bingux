@@ -11,6 +11,30 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# Every build output the installer copies, as placeholder files.
+BUILD_OUTPUTS = (
+    "text/libbinguxtext.so",
+    "effects/libbinguxeffects.so",
+    "wayland-sync/libbinguxwaylandsync.so",
+    "bingux-audio-meter",
+    "bingux-image-clipboard",
+    "bingux-frame",
+    "bingux-shell/quickshell/src/bingux-shell",
+    "bingux-shell.sxa",
+    "cargo/release/bingux-searchd",
+    "cargo/release/bingux-statusd",
+    "cargo/release/bingux-session",
+    "cargo/release/bingux-config",
+    "cargo/release/bingux-settings",
+)
+
+
+def write_build_fixtures(build):
+    for filename in BUILD_OUTPUTS:
+        path = build / filename
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("test fixture\n")
+
 
 class InstallTest(unittest.TestCase):
     def test_user_upgrade_migrates_legacy_launcher_without_losing_search_settings(self):
@@ -18,22 +42,7 @@ class InstallTest(unittest.TestCase):
             base = Path(name)
             build, prefix = base / "build", base / "install"
             home, config = base / "home", base / "config"
-            for filename in (
-                "text/libbinguxtext.so",
-                "effects/libbinguxeffects.so",
-                "wayland-sync/libbinguxwaylandsync.so",
-                "bingux-audio-meter",
-                "bingux-image-clipboard",
-                "bingux-frame",
-                "cargo/release/bingux-searchd",
-                "cargo/release/bingux-statusd",
-                "cargo/release/bingux-session",
-                "cargo/release/bingux-config",
-                "cargo/release/bingux-settings",
-            ):
-                path = build / filename
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text("test fixture\n")
+            write_build_fixtures(build)
             search_config = config / "bingux/search.json"
             search_config.parent.mkdir(parents=True)
             search_config.write_text(
@@ -68,7 +77,7 @@ class InstallTest(unittest.TestCase):
             migrated = json.loads(search_config.read_text())
             self.assertEqual(
                 migrated["commands"]["applicationLauncher"],
-                [sys.executable, str(prefix / "share/bingux/shell/launch-application.py")],
+                [sys.executable, str(prefix / "libexec/bingux/shell/launch-application.py")],
             )
             self.assertEqual(migrated["commands"]["fileOpener"], ["/custom/open"])
             self.assertEqual(migrated["commands"]["clipboard"], ["/custom/copy"])
@@ -97,22 +106,7 @@ class InstallTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as name:
             base = Path(name)
             build, stage = base / "build", base / "stage"
-            for filename in (
-                "text/libbinguxtext.so",
-                "effects/libbinguxeffects.so",
-                "wayland-sync/libbinguxwaylandsync.so",
-                "bingux-audio-meter",
-                "bingux-image-clipboard",
-                "bingux-frame",
-                "cargo/release/bingux-searchd",
-                "cargo/release/bingux-statusd",
-                "cargo/release/bingux-session",
-                "cargo/release/bingux-config",
-                "cargo/release/bingux-settings",
-            ):
-                path = build / filename
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text("test fixture\n")
+            write_build_fixtures(build)
             subprocess.run(
                 [
                     "python3",
@@ -126,22 +120,39 @@ class InstallTest(unittest.TestCase):
                 ],
                 check=True,
             )
-            for name in ("bingux", "binguxctl", "bingux-lock", "bingux-frame"):
+            for name in ("binguxctl", "bingux-frame"):
                 launcher = stage / "usr/bin" / name
                 self.assertTrue(launcher.stat().st_mode & 0o111)
                 subprocess.run(["sh", "-n", str(launcher)], check=True)
                 self.assertNotIn(str(stage), launcher.read_text())
+            # The shell surfaces are one binary; the names select the mode.
+            self.assertTrue((stage / "usr/bin/bingux-shell").stat().st_mode & 0o111)
+            for name in ("bingux", "bingux-lock", "bingux-greeter", "bingux-popouts", "bingux-wallpaper"):
+                link = stage / "usr/bin" / name
+                self.assertTrue(link.is_symlink())
+                self.assertEqual(os.readlink(link), "bingux-shell")
+            self.assertIn('"$BINGUX_QUICKSHELL" --shell-dir', (stage / "usr/bin/binguxctl").read_text())
             config = json.loads((stage / "usr/share/bingux/search.json").read_text())
             self.assertEqual(config["commands"]["applicationLauncher"][0], sys.executable)
             self.assertEqual(
-                config["commands"]["applicationLauncher"][1], "/usr/share/bingux/shell/launch-application.py"
+                config["commands"]["applicationLauncher"][1], "/usr/libexec/bingux/shell/launch-application.py"
             )
             self.assertEqual(config["commands"]["fileOpener"], ["/usr/bin/xdg-open"])
             self.assertEqual(config["commands"]["clipboard"], ["/usr/bin/wl-copy"])
             search_service = stage / "usr/libexec/bingux/search-service"
             subprocess.run(["sh", "-n", str(search_service)], check=True)
-            self.assertIn("/usr/share/bingux/shell/migrate-search-config.py", search_service.read_text())
-            self.assertTrue((stage / "usr/share/bingux/shell/ShellPreferences.qml").is_file())
+            # The command points at the installed path, never the staging root.
+            self.assertIn(
+                "exec /usr/libexec/bingux/search-service", (stage / "usr/bin/bingux-search-service").read_text()
+            )
+            self.assertIn("/usr/libexec/bingux/shell/migrate-search-config.py", search_service.read_text())
+            # QML and assets ship in the archive beside the QML plugins, not as loose files.
+            self.assertTrue((stage / "usr/lib/bingux/bingux-shell.sxa").is_file())
+            self.assertFalse((stage / "usr/share/bingux/shell").exists())
+            self.assertTrue((stage / "usr/libexec/bingux/shell/bingux_runtime.py").is_file())
+            # The bundled icons are private; /usr/share/icons/Adwaita belongs to the distribution.
+            self.assertTrue((stage / "usr/share/bingux/icons/Adwaita/symbolic").is_dir())
+            self.assertFalse((stage / "usr/share/icons").exists())
             self.assertTrue((stage / "usr/share/gnoblin/conf.d/bingux.lua").is_file())
             integration = (stage / "usr/share/gnoblin/conf.d/bingux.lua").read_text()
             self.assertIn('["ext-background-effect-v1"] = true', integration)
@@ -154,7 +165,7 @@ class InstallTest(unittest.TestCase):
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Effects/libbinguxeffects.so").is_file())
             self.assertTrue((stage / "usr/lib/bingux/qml/Bingux/Wayland/libbinguxwaylandsync.so").is_file())
             self.assertFalse((stage / "home").exists())
-            self.assertFalse((stage / "usr/share/bingux/shell/__pycache__").exists())
+            self.assertFalse((stage / "usr/libexec/bingux/shell/__pycache__").exists())
             unit = (stage / "usr/lib/systemd/user/bingux.service").read_text()
             self.assertIn("LimitCORE=0", unit)
             self.assertIn("ExecStart=/usr/bin/bingux --no-color", unit)
@@ -165,7 +176,7 @@ class InstallTest(unittest.TestCase):
             for name in ("capture", "emoji"):
                 unit = (stage / f"usr/lib/systemd/user/bingux-{name}-ui.service").read_text()
                 self.assertIn(f"ExecStart=/usr/bin/bingux-{name}-ui", unit)
-                self.assertTrue((stage / f"usr/bin/bingux-{name}-ui").is_file())
+                self.assertTrue((stage / f"usr/bin/bingux-{name}-ui").is_symlink())
             lock_unit = (stage / "usr/lib/systemd/user/bingux-lock.service").read_text()
             self.assertIn("ExecStart=/usr/bin/bingux-lock", lock_unit)
             self.assertNotIn("WantedBy=", lock_unit)
@@ -206,22 +217,7 @@ class InstallTest(unittest.TestCase):
             base = Path(name)
             build, prefix = base / "build", base / "install"
             home, config = base / "home", base / "config"
-            for filename in (
-                "text/libbinguxtext.so",
-                "effects/libbinguxeffects.so",
-                "wayland-sync/libbinguxwaylandsync.so",
-                "bingux-audio-meter",
-                "bingux-image-clipboard",
-                "bingux-frame",
-                "cargo/release/bingux-searchd",
-                "cargo/release/bingux-statusd",
-                "cargo/release/bingux-session",
-                "cargo/release/bingux-config",
-                "cargo/release/bingux-settings",
-            ):
-                path = build / filename
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text("test fixture\n")
+            write_build_fixtures(build)
             environment = {**os.environ, "HOME": str(home), "XDG_CONFIG_HOME": str(config)}
             subprocess.run(
                 [
@@ -238,7 +234,7 @@ class InstallTest(unittest.TestCase):
                 check=True,
             )
             self.assertTrue((prefix / ".bingux-install.json").is_file())
-            self.assertTrue((prefix / "share/bingux/shell/ShellPreferences.qml").is_file())
+            self.assertTrue((prefix / "lib/bingux/bingux-shell.sxa").is_file())
             self.assertTrue((prefix / "share/gnoblin/conf.d/bingux.lua").is_file())
             user_integration = (prefix / "share/gnoblin/conf.d/bingux.lua").read_text()
             self.assertIn(
@@ -340,22 +336,7 @@ class InstallTest(unittest.TestCase):
             base = Path(name)
             build, prefix = base / "build", base / "install"
             home, config, bin_dir = base / "home", base / "config", base / "bin"
-            for filename in (
-                "text/libbinguxtext.so",
-                "effects/libbinguxeffects.so",
-                "wayland-sync/libbinguxwaylandsync.so",
-                "bingux-audio-meter",
-                "bingux-image-clipboard",
-                "bingux-frame",
-                "cargo/release/bingux-searchd",
-                "cargo/release/bingux-statusd",
-                "cargo/release/bingux-session",
-                "cargo/release/bingux-config",
-                "cargo/release/bingux-settings",
-            ):
-                path = build / filename
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text("test fixture\n")
+            write_build_fixtures(build)
             bin_dir.mkdir()
             log = base / "systemctl.log"
             fake_systemctl = bin_dir / "systemctl"
@@ -400,22 +381,7 @@ class InstallTest(unittest.TestCase):
             base = Path(name)
             build, prefix = base / "build", base / "install"
             home, bin_dir = base / "home", base / "bin"
-            for filename in (
-                "text/libbinguxtext.so",
-                "effects/libbinguxeffects.so",
-                "wayland-sync/libbinguxwaylandsync.so",
-                "bingux-audio-meter",
-                "bingux-image-clipboard",
-                "bingux-frame",
-                "cargo/release/bingux-searchd",
-                "cargo/release/bingux-statusd",
-                "cargo/release/bingux-session",
-                "cargo/release/bingux-config",
-                "cargo/release/bingux-settings",
-            ):
-                path = build / filename
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text("test fixture\n")
+            write_build_fixtures(build)
             bin_dir.mkdir()
             (bin_dir / "python3").symlink_to(sys.executable)
             environment = {**os.environ, "HOME": str(home), "PATH": str(bin_dir)}

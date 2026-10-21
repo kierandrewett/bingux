@@ -155,7 +155,7 @@ def main():
             "BINGUX_LAYOUT_IMPORT": "0",
             "BINGUX_CONFIG_BIN": "/usr/bin/false",
             "BINGUX_ICON_HELPER": "/usr/bin/false",
-            "BINGUX_ADWAITA_ICON_DIR": os.environ.get("BINGUX_ADWAITA_ICON_DIR", "/usr/share/icons/Adwaita"),
+            "BINGUX_ADWAITA_ICON_DIR": os.environ.get("BINGUX_ADWAITA_ICON_DIR", "/usr/share/bingux/icons/Adwaita"),
             "BINGUX_IDLE_REPORT": str(fixture / "report"),
         }
         for key in ("WAYLAND_DISPLAY", "DISPLAY", "SESSION_MANAGER"):

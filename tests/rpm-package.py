@@ -43,6 +43,7 @@ class RpmPackageTest(unittest.TestCase):
 
     def test_shell_wrappers_and_license_are_packaged(self):
         for wrapper in (
+            "bingux-shell",
             "bingux",
             "bingux-capture-ui",
             "bingux-emoji-ui",
@@ -54,9 +55,13 @@ class RpmPackageTest(unittest.TestCase):
             self.assertIn(f"/usr/bin/{wrapper}", self.spec)
         self.assertIn("%license COPYING", self.spec)
 
-    def test_runtime_requires_the_quickshell_executable(self):
-        self.assertIn("Requires:       /usr/bin/qs", self.spec)
+    def test_quickshell_is_built_in_not_required(self):
+        # bingux-shell carries Quickshell; only its Qt runtime is a dependency.
+        self.assertNotIn("/usr/bin/qs", self.spec)
         self.assertNotIn("Requires:       quickshell\n", self.spec)
+        self.assertIn("Requires:       qt6-qtdeclarative", self.spec)
+        for build_requirement in ("cmake", "ninja-build", "cli11-devel", "pkgconfig(libarchive)"):
+            self.assertIn(f"BuildRequires:  {build_requirement}", self.spec)
 
     def test_gnoblin_fragment_is_in_the_payload(self):
         self.assertTrue((ROOT / "packaging/gnoblin/bingux.lua").is_file())

@@ -123,7 +123,11 @@ def escape():
     qmp("send-key", keys=[{"type": "qcode", "data": "esc"}])
 
 
-target = args.shell_target or f"{GUEST_HOME}/.local/share/bingux/share/bingux/shell/shell.qml"
+# The installed shell runs from the archive that bingux-shell unpacks into the
+# guest user's cache; the binary reports that directory.
+target = args.shell_target or (
+    guest(f"{GUEST_HOME}/.local/share/bingux/bin/bingux-shell", "--shell-dir").strip() + "/shell.qml"
+)
 original = guest("cat", target).encode()
 source = args.source.read_text()
 fixture = (REPO / "tests/popups-load-native.inc.qml").read_text()
