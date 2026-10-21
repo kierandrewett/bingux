@@ -633,9 +633,15 @@ fn pad_help_request_from_event(
     value: &Value,
     monitors: &BTreeMap<String, Monitor>,
 ) -> Option<PadHelpRequest> {
-    let monitor_id = value.get("monitor_id")?.as_str()?;
-    let monitor_index = monitors.get(monitor_id)?.index;
-    let output_names = event_output_names(value, monitor_id);
+    // Gnoblin documents monitor_id as optional for pad help. An absent or null
+    // id targets the first monitor; an id that names no known monitor is stale
+    // and the request is dropped, as for OSD events.
+    let monitor = match value.get("monitor_id") {
+        None | Some(Value::Null) => monitors.values().min_by_key(|monitor| monitor.index)?,
+        Some(id) => monitors.get(id.as_str()?)?,
+    };
+    let monitor_index = monitor.index;
+    let output_names = event_output_names(value, &monitor.id);
     let edition_mode = value.get("edition_mode")?.as_bool()?;
     let device = pad_help_device(value.get("device")?)?;
     let buttons = array_items(value, "buttons", pad_help_button)?;
@@ -890,5 +896,21 @@ mod tests {
         let mut missing_edition = event.clone();
         missing_edition.as_object_mut().unwrap().remove("edition_mode");
         assert!(pad_help_request_from_event(&missing_edition, &monitors).is_none());
+
+        // monitor_id is optional: an absent or null id targets the first monitor.
+        let two_monitors = parse_monitor_snapshot(
+            &json!({"monitors":[{"id":"HDMI-1", "index":3}, {"id":"DP-1", "index":2}]}),
+        );
+        for unplaced in [json!(null), json!("absent")] {
+            let mut event = event.clone();
+            event.as_object_mut().unwrap().remove("monitor_id");
+            if unplaced.is_null() {
+                event["monitor_id"] = unplaced;
+            }
+            let request = pad_help_request_from_event(&event, &two_monitors).unwrap();
+            let record: Value = serde_json::from_str(&pad_help_json(&request).unwrap()).unwrap();
+            assert_eq!(record["monitorIndex"], 2);
+            assert_eq!(record["outputNames"], json!(["DP-1"]));
+        }
     }
 }
