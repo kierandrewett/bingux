@@ -2,9 +2,10 @@ pragma Singleton
 import QtQuick
 
 // Capability gate for actions a widget may take. In the desktop everything
-// is allowed. The lock screen and the greeter run the same widget code, so
-// every path that launches, shows content or reaches a session service asks
-// here first and refuses when the context does not permit it.
+// is allowed. The lock screen, the greeter and kiosk hosts run the same
+// widget code, so every path that launches, shows content or reaches a
+// session service asks here first and refuses when the context does not
+// permit it.
 //
 // Capabilities:
 //   launch              start applications or run app commands
@@ -16,12 +17,20 @@ import QtQuick
 //   notificationContent show notification bodies and actions
 //   mediaControl        play, pause, skip
 //   volume              change the output volume
+//   network             switch networks, join Wi-Fi
+//   doNotDisturb        toggle Do Not Disturb
+//
+// Before a user session exists (lock, greeter, kiosk) the control centre's
+// controls are granted; everything that opens content or launches is refused.
 QtObject {
     id: root
 
+    readonly property var preLoginGrants: ["volume", "power", "network", "doNotDisturb"]
+
     readonly property var table: ({
-            locked: ["volume", "power"],
-            greeter: ["power"]
+            locked: preLoginGrants,
+            greeter: preLoginGrants,
+            kiosk: preLoginGrants
         })
 
     function allows(capability) {

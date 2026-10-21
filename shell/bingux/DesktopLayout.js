@@ -1,20 +1,27 @@
 .import "ControlLayout.js" as ControlLayout
 
 // `contexts` lists the session contexts a widget may appear in. "desktop" is
-// the running shell; "locked" is the lock screen bar; "greeter" is the login
-// screen bar. Widgets without the field are desktop-only. Lock and greeter
-// bars never show anything that launches, opens content or reaches a session
-// service; SessionServices gates the actions those widgets would take.
-const sessionContexts = ["desktop", "locked", "greeter"];
+// the running shell; "locked" is the lock screen; "greeter" is the login
+// screen; "kiosk" is a pre-login host such as the OS installer. Widgets
+// without the field are desktop-only. Pre-login contexts show only what makes
+// sense before a user session exists; SessionServices gates the actions those
+// widgets would take, and StatusBar keeps the slots of desktop-only widgets
+// that the default layout places beside shared ones, shown disabled.
+const sessionContexts = ["desktop", "locked", "greeter", "kiosk"];
 const widgets = [
     { id: "search", label: "Search", icon: "system-search-symbolic", contexts: ["desktop"] },
     { id: "workspaces", label: "Workspaces", icon: "view-grid-symbolic", contexts: ["desktop"] },
-    { id: "clock", label: "Date and time", icon: "x-office-calendar-symbolic", contexts: ["desktop"] },
+    {
+        id: "clock",
+        label: "Date and time",
+        icon: "x-office-calendar-symbolic",
+        contexts: ["desktop", "locked", "greeter", "kiosk"],
+    },
     {
         id: "controls",
         label: "Control centre",
         icon: "preferences-system-symbolic",
-        contexts: ["desktop", "locked", "greeter"],
+        contexts: ["desktop", "locked", "greeter", "kiosk"],
     },
     {
         id: "notifications",
@@ -22,12 +29,17 @@ const widgets = [
         icon: "preferences-system-notifications-symbolic",
         contexts: ["desktop", "locked"],
     },
-    { id: "metrics", label: "System monitors", icon: "computer-symbolic", contexts: ["desktop"] },
+    {
+        id: "metrics",
+        label: "System monitors",
+        icon: "computer-symbolic",
+        contexts: ["desktop", "locked", "greeter", "kiosk"],
+    },
     {
         id: "keyboard",
         label: "Keyboard layout",
         icon: "input-keyboard-symbolic",
-        contexts: ["desktop", "locked", "greeter"],
+        contexts: ["desktop", "locked", "greeter", "kiosk"],
     },
     { id: "tray", label: "System tray", icon: "view-more-symbolic", contexts: ["desktop"] },
     { id: "overflow", label: "More status controls", icon: "view-more-symbolic", contexts: ["desktop"] },

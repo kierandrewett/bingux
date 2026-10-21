@@ -19,6 +19,13 @@ ROOT = Path(__file__).resolve().parents[1]
 SHELL = ROOT / "shell/bingux"
 
 
+def context_list(table, widget_id):
+    match = re.search(r"id: \"%s\"[^}]*?contexts: \[([^\]]*)\]" % re.escape(widget_id), table)
+    if not match:
+        raise AssertionError(widget_id + " has no contexts list")
+    return re.findall(r"\"([a-z]+)\"", match.group(1))
+
+
 class SessionContextTest(unittest.TestCase):
     def test_every_widget_declares_its_contexts(self):
         layout = (SHELL / "DesktopLayout.js").read_text()
@@ -28,17 +35,22 @@ class SessionContextTest(unittest.TestCase):
         for entry in re.finditer(r"\{\s*id: \"([a-z-]+)\"(?P<body>[^}]*)\}", table):
             self.assertIn("contexts:", entry.group("body"), entry.group(1) + " has no contexts")
         self.assertIn("function allowed(id, mode)", layout)
-        # The clock lives in SessionScreen, so the bar never duplicates it.
-        self.assertRegex(table, r'id: "clock"[^}]*contexts: \["desktop"\]')
-        self.assertRegex(table, r'id: "controls"[^}]*contexts: \[\s*"desktop",\s*"locked",\s*"greeter",?\s*\]')
-        self.assertRegex(table, r'id: "keyboard"[^}]*contexts: \[\s*"desktop",\s*"locked",\s*"greeter",?\s*\]')
-        for desktop_only in ("search", "tray", "metrics", "capture", "overflow", "workspaces"):
-            self.assertRegex(table, r'id: "%s"[^}]*contexts: \["desktop"\]' % desktop_only)
+        # Clock, metrics, keyboard and the control centre are shared with the
+        # pre-login contexts; StatusBar renders them for every context.
+        pre_login = ["desktop", "locked", "greeter", "kiosk"]
+        for shared in ("clock", "controls", "keyboard", "metrics"):
+            self.assertEqual(context_list(table, shared), pre_login, shared)
+        for desktop_only in ("search", "tray", "capture", "overflow", "workspaces"):
+            self.assertEqual(context_list(table, desktop_only), ["desktop"], desktop_only)
+        self.assertEqual(context_list(table, "notifications"), ["desktop", "locked"])
+        self.assertIn('"kiosk"', layout[layout.index("const sessionContexts") :].split("\n", 1)[0])
 
     def test_capability_table_matches_the_design(self):
         services = (SHELL / "SessionServices.qml").read_text()
-        self.assertIn('locked: ["volume", "power"]', services)
-        self.assertIn('greeter: ["power"]', services)
+        self.assertIn('preLoginGrants: ["volume", "power", "network", "doNotDisturb"]', services)
+        self.assertIn("locked: preLoginGrants", services)
+        self.assertIn("greeter: preLoginGrants", services)
+        self.assertIn("kiosk: preLoginGrants", services)
 
     def test_action_paths_consult_the_gate(self):
         expected = {
