@@ -6,12 +6,11 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
-use crate::icons::{self, Icon};
+use crate::icons::Icon;
 use crate::system::{self, CommandError, background, background_then};
-use crate::theme::Tokens;
 use crate::ui::{
-    Group, Overlays, ResponseKind, Status, dialog, icon_button, lead, page_column, primary_button,
-    row, row_button, status, switch_row, text_row, use_overlays, use_tokens,
+    Group, Overlays, ResponseKind, Status, dialog, icon_button, page_column, primary_button, row,
+    row_button, status, switch_row, text_row, use_overlays,
 };
 use bingux_ui::scale::*;
 
@@ -20,6 +19,8 @@ const QUICK: Duration = Duration::from_secs(5);
 /// `device wifi list` takes about four seconds on a busy radio.
 const SCAN: Duration = Duration::from_secs(10);
 const CONNECT: Duration = Duration::from_secs(90);
+/// Width of the right-hand action column in the network list.
+const ACTION_WIDTH: f32 = BOX_2XL;
 
 #[derive(Clone, PartialEq)]
 struct Model {
@@ -358,57 +359,124 @@ fn page(children: Vec<Element>) -> impl IntoElement {
     page_column().children(children)
 }
 
-/// One row per network, plus the password row under the selected one.
-fn network_rows(
-    ui: Ui,
-    networks: &[Network],
-    selected: Option<&str>,
-    tokens: Tokens,
-) -> Vec<Element> {
+/// The right-hand column of a network row. Every row has one, so Forget and
+/// Connect sit in the same place whether or not a row has an action.
+fn action_slot(action: Option<Element>) -> Element {
+    rect()
+        .width(Size::px(ACTION_WIDTH))
+        .direction(Direction::Horizontal)
+        .main_align(Alignment::End)
+        .cross_align(Alignment::Center)
+        .maybe_child(action)
+        .into()
+}
+
+/// "1 network nearby" or "N networks nearby".
+fn network_count(count: usize) -> String {
+    if count == 1 {
+        "1 network nearby".to_string()
+    } else {
+        format!("{count} networks nearby")
+    }
+}
+
+/// The Wi-Fi section. Its title and hairline stay the same in every state,
+/// so the page keeps one shape whether Wi-Fi is off, missing or empty.
+fn wifi_section(ui: Ui, model: &Model) -> Element {
+    let title = "Wi-Fi networks";
+    if model.wifi_hw == "missing" {
+        return Element::from(Group::titled(title).row(Element::from(status(Status::Empty(
+            "This computer has no Wi-Fi hardware.".into(),
+        )))));
+    }
+    if !wifi_usable(&model.wifi_hw) {
+        return Element::from(Group::titled(title).row(Element::from(status(Status::Info(
+            "Wi-Fi hardware is disabled.".into(),
+        )))));
+    }
+    if !model.wifi_on {
+        let text = if model.airplane {
+            "Wi-Fi is off in airplane mode."
+        } else {
+            "Wi-Fi is off."
+        };
+        return Element::from(
+            Group::titled(title).row(Element::from(status(Status::Empty(text.into())))),
+        );
+    }
+
+    let refresh = icon_button(Icon::Refresh, move |_| ui.rescan()).tooltip("Refresh");
+    if model.networks.is_empty() {
+        return Element::from(
+            Group::titled(title)
+                .trailing(refresh)
+                .row(Element::from(status(Status::Empty(
+                    "No Wi-Fi networks found. Press refresh to scan again.".into(),
+                )))),
+        );
+    }
+    let selected = ui.selected.read().clone();
+    Element::from(
+        Group::titled(title)
+            .description(network_count(model.networks.len()))
+            .trailing(refresh)
+            .rows(network_rows(ui, &model.networks, selected.as_deref())),
+    )
+}
+
+/// The Wired section: one row per Ethernet device, or a note when there are none.
+fn wired_section(wired: &[WiredDevice]) -> Element {
+    let group = Group::titled("Wired");
+    if wired.is_empty() {
+        return Element::from(group.row(Element::from(status(Status::Empty(
+            "No wired network devices.".into(),
+        )))));
+    }
+    Element::from(group.rows(wired.iter().map(|device| {
+        Element::from(
+            row(device.name.clone())
+                .maybe_subtitle(Some(device.connection.clone()))
+                .value(capitalise(&device.state)),
+        )
+    })))
+}
+
+/// One row per network, plus the password rows under the selected one.
+fn network_rows(ui: Ui, networks: &[Network], selected: Option<&str>) -> Vec<Element> {
     let mut rows = Vec::new();
     for network in networks {
         let needs_password = network.secured && !network.saved && !network.in_use;
 
-        let mut parts = Vec::new();
-        if network.in_use {
-            parts.push("Connected".to_string());
-        }
-        parts.push(format!("Signal {}%", network.signal));
+        let mut parts = vec![format!("Signal {}%", network.signal)];
         parts.push(if network.secured { "Secured" } else { "Open" }.to_string());
         if network.saved {
             parts.push("Saved".to_string());
         }
+        let subtitle = parts.join(" · ");
 
-        let mut trailing = rect()
-            .direction(Direction::Horizontal)
-            .spacing(S2)
-            .cross_align(Alignment::Center);
-        if network.in_use {
-            trailing = trailing.child(icons::icon(Icon::Check, ICON_MD, tokens.accent));
-        }
-        if network.saved {
+        let forget = network.saved.then(|| {
             let ssid = network.ssid.clone();
-            trailing = trailing.child(row_button("Forget", move |_| {
+            Element::from(row_button("Forget", move |_| {
                 ui.confirm_forget(ssid.clone())
-            }));
-        }
+            }))
+        });
 
         let ssid = network.ssid.clone();
         let mut item = row(network.ssid.clone())
-            .subtitle(parts.join(" · "))
-            .trailing(trailing);
-        if !network.in_use {
-            item = if needs_password {
-                let target = ssid.clone();
-                item.on_press(move |_| {
-                    let is_open = ui.selected.read().as_deref() == Some(target.as_str());
-                    let mut selected = ui.selected;
-                    selected.set(if is_open { None } else { Some(target.clone()) });
-                })
-            } else {
-                let target = ssid.clone();
-                item.on_press(move |_| ui.connect(target.clone(), None))
-            };
+            .subtitle(subtitle)
+            .trailing(action_slot(forget));
+        if network.in_use {
+            item = item.badge("Connected");
+        } else if needs_password {
+            let target = ssid.clone();
+            item = item.on_press(move |_| {
+                let is_open = ui.selected.read().as_deref() == Some(target.as_str());
+                let mut selected = ui.selected;
+                selected.set(if is_open { None } else { Some(target.clone()) });
+            });
+        } else {
+            let target = ssid.clone();
+            item = item.on_press(move |_| ui.connect(target.clone(), None));
         }
         rows.push(Element::from(item));
 
@@ -420,12 +488,13 @@ fn network_rows(
                 move |password: String| ui.connect(target.clone(), Some(password)),
             )));
             let target = ssid.clone();
-            rows.push(Element::from(row(format!("Join {ssid}")).trailing(
-                primary_button("Connect", move |_| {
-                    let password = ui.password.read().clone();
-                    ui.connect(target.clone(), Some(password));
-                }),
-            )));
+            let connect = primary_button("Connect", move |_| {
+                let password = ui.password.read().clone();
+                ui.connect(target.clone(), Some(password));
+            });
+            rows.push(Element::from(
+                row(format!("Join {ssid}")).trailing(action_slot(Some(Element::from(connect)))),
+            ));
         }
     }
     rows
@@ -436,7 +505,6 @@ pub struct NetworkPage;
 
 impl Component for NetworkPage {
     fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
         let model = use_state::<Option<Result<Model, CommandError>>>(|| None);
         let busy = use_state::<Option<String>>(|| None);
         let action_error = use_state::<Option<String>>(|| None);
@@ -478,15 +546,7 @@ impl Component for NetworkPage {
         };
 
         let mut blocks: Vec<Element> = Vec::new();
-        blocks.push(lead(if model.airplane {
-            "Airplane mode is on.".to_string()
-        } else if let Some(network) = model.networks.iter().find(|network| network.in_use) {
-            format!("Connected to {}.", network.ssid)
-        } else if model.wired.iter().any(|device| device.state == "connected") {
-            "Connected by cable.".to_string()
-        } else {
-            "Not connected.".to_string()
-        }));
+
         if let Some(text) = busy.read().clone() {
             blocks.push(Element::from(status(Status::Loading(text))));
         }
@@ -508,53 +568,8 @@ impl Component for NetworkPage {
                 )),
         ));
 
-        if model.wifi_hw == "missing" {
-            blocks.push(Element::from(status(Status::Empty(
-                "This computer has no Wi-Fi hardware.".into(),
-            ))));
-        } else if !usable {
-            blocks.push(Element::from(status(Status::Info(
-                "Wi-Fi hardware is disabled.".into(),
-            ))));
-        } else if !model.wifi_on {
-            blocks.push(Element::from(status(Status::Empty("Wi-Fi is off.".into()))));
-        } else {
-            let refresh = icon_button(Icon::Refresh, move |_| ui.rescan()).tooltip("Refresh");
-            if model.networks.is_empty() {
-                blocks.push(Element::from(
-                    Group::titled("Wi-Fi networks").trailing(refresh).row(
-                        row("No Wi-Fi networks found").subtitle("Press refresh to scan again."),
-                    ),
-                ));
-            } else {
-                let selected_ssid = ui.selected.read().clone();
-                blocks.push(Element::from(
-                    Group::titled("Wi-Fi networks")
-                        .trailing(refresh)
-                        .rows(network_rows(
-                            ui,
-                            &model.networks,
-                            selected_ssid.as_deref(),
-                            tokens,
-                        )),
-                ));
-            }
-        }
-
-        if model.wired.is_empty() {
-            blocks.push(Element::from(status(Status::Empty(
-                "No wired network devices.".into(),
-            ))));
-        } else {
-            let rows = model.wired.iter().map(|device| {
-                Element::from(
-                    row(device.name.clone())
-                        .maybe_subtitle(Some(device.connection.clone()))
-                        .value(capitalise(&device.state)),
-                )
-            });
-            blocks.push(Element::from(Group::titled("Wired").rows(rows)));
-        }
+        blocks.push(wifi_section(ui, &model));
+        blocks.push(wired_section(&model.wired));
 
         page(blocks)
     }

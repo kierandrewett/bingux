@@ -12,8 +12,8 @@ use freya::prelude::*;
 use crate::pages::gnoblin;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Status, caption, choice_row, page_column, primary_button, row, slider_row, status,
-    switch_row,
+    Group, Status, Tokens, caption, choice_row, divider, hstack, page_column, primary_button, row,
+    slider_row, status, switch_row, use_tokens,
 };
 use bingux_ui::scale::*;
 
@@ -1072,6 +1072,7 @@ fn monitor_group(
     let enabled = monitor.enabled;
     let mode = monitor.selected();
     Group::titled(&monitor.name)
+        .description(monitor_state(monitor))
         .row(row("Output").value(monitor.connector.clone()))
         .row(switch_row("Enabled", enabled, move |on: bool| {
             edit(model, error, move |monitors| {
@@ -1149,6 +1150,7 @@ fn night_group(
     night: &Night,
 ) -> Group {
     Group::titled("Night light")
+        .description("Warmer colours on screen.")
         .row(switch_row("Enabled", night.enabled, move |on: bool| {
             set_night_enabled(model, error, on);
         }))
@@ -1160,12 +1162,42 @@ fn night_group(
         .row(row("Temperature").value(format!("{} K", night.kelvin)))
 }
 
+/// The line under a monitor's name: whether it is on, and whether it is the
+/// primary display.
+fn monitor_state(monitor: &Monitor) -> &'static str {
+    if !monitor.enabled {
+        "Off"
+    } else if monitor.primary {
+        "Primary display"
+    } else {
+        "Secondary display"
+    }
+}
+
+/// Apply saves the draft layout. It sits under the last monitor on the
+/// page inset, with a hairline above it like the group headings.
+fn apply_footer(tokens: &Tokens, model: State<Option<Page>>, error: State<Option<String>>) -> Rect {
+    rect().width(Size::fill()).child(divider(tokens)).child(
+        hstack(S4)
+            .width(Size::fill())
+            .padding((S4, GUTTER))
+            .content(Content::Flex)
+            .child(
+                rect()
+                    .width(Size::flex(1.0))
+                    .child(caption("Apply saves this layout for future sessions.")),
+            )
+            .child(primary_button("Apply", move |_| apply(model, error))),
+    )
+}
+
 impl Component for DisplaysPage {
     fn render(&self) -> impl IntoElement {
         let model = use_state::<Option<Page>>(|| None);
         let error = use_state::<Option<String>>(|| None);
         let night_ticket = use_state::<u64>(|| 0);
         use_hook(move || background(model, load));
+        let tokens = use_tokens();
 
         let mut page = page_column();
         let Some(loaded) = model.read().clone() else {
@@ -1193,20 +1225,7 @@ impl Component for DisplaysPage {
                 for (index, monitor) in monitors.iter().enumerate() {
                     page = page.child(monitor_group(model, error, index, monitor));
                 }
-                page.child(
-                    rect()
-                        .width(Size::fill())
-                        .direction(Direction::Horizontal)
-                        .content(Content::Flex)
-                        .cross_align(Alignment::Center)
-                        .padding((0.0, GUTTER))
-                        .child(
-                            rect()
-                                .width(Size::flex(1.0))
-                                .child(caption("Apply saves this layout for future sessions.")),
-                        )
-                        .child(primary_button("Apply", move |_| apply(model, error))),
-                )
+                page.child(apply_footer(&tokens, model, error))
             }
         };
 

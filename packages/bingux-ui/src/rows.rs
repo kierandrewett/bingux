@@ -209,7 +209,7 @@ impl Component for Row {
                 label()
                     .text(subtitle.clone())
                     .color(tokens.muted)
-                    .font_size(TEXT_SM)
+                    .font_size(TEXT_MD)
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis)
             }));
@@ -305,7 +305,7 @@ pub fn choice_row(
     if short {
         return row(title).trailing(segmented(options, selected, on_select));
     }
-    row(title).trailing(dropdown(options, selected, on_select))
+    row(title).trailing(dropdown(options, selected, on_select).width(FIELD_WIDTH))
 }
 
 /// A row with a text field on the right; `on_submit` fires on Enter.

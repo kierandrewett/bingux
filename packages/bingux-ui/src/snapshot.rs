@@ -26,7 +26,8 @@ impl Snapshot {
     /// Start `app` at `size` with the Bingux font registered when the
     /// system has it (`fc-match "Adwaita Sans"`).
     pub fn new(app: impl Fn() -> Element + 'static, size: SnapshotSize) -> Self {
-        let (mut runner, ()) = TestingRunner::new(app, Size2D::new(size.0, size.1), |_| {}, 1.0);
+        let (mut runner, ()) =
+            TestingRunner::new(app, Size2D::new(size.0, size.1), |_| {}, scale_factor());
         let family = font_family();
         if let Some(font) = crate::theme::font_files(family, 1).pop() {
             runner.set_fonts([(family, font.as_slice())].into_iter().collect());
@@ -86,4 +87,15 @@ pub fn snapshot(
     Snapshot::new(app, size)
         .settle(Duration::from_millis(settle_ms))
         .save(path);
+}
+
+/// The display scale to render at: `BINGUX_SNAPSHOT_SCALE`, default 1.0. A
+/// fractional value such as 1.25 or 1.5 shows pixel-rounding problems that a
+/// scale of 1 hides.
+fn scale_factor() -> f64 {
+    std::env::var("BINGUX_SNAPSHOT_SCALE")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .filter(|scale: &f64| *scale >= 1.0)
+        .unwrap_or(1.0)
 }

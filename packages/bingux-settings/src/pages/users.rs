@@ -12,7 +12,7 @@ use freya::prelude::*;
 use crate::icons::{self, Icon};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::theme::Tokens;
-use crate::ui::{Group, Status, page_column, row, status, text_row, use_tokens};
+use crate::ui::{Group, Status, action_button, page_column, row, status, text_row, use_tokens};
 use bingux_ui::scale::*;
 
 const ACCOUNTS: &str = "org.freedesktop.Accounts";
@@ -213,10 +213,6 @@ impl Component for UsersPage {
                 .find(|account| account.path == path)
                 .cloned()
         });
-        let title = selected_account.as_ref().map_or_else(
-            || "Users".to_string(),
-            |account| account.display_name().to_string(),
-        );
         let banner = error
             .read()
             .clone()
@@ -227,9 +223,9 @@ impl Component for UsersPage {
         match selected_account {
             Some(account) => {
                 let path = account.path.clone();
-                let back = row("Users")
-                    .leading(Icon::GoPrevious)
-                    .on_press(move |_| selected.set(None));
+                let back = action_button("Users", move |_| selected.set(None))
+                    .icon(Icon::GoPrevious)
+                    .flat();
                 let name_row = text_row("Full name", draft, move |name: String| {
                     let path = path.clone();
                     background_then(
@@ -251,9 +247,13 @@ impl Component for UsersPage {
                         }
                     });
                 });
-                page.child(Group::new(None).row(back))
+                let header = rect()
+                    .width(Size::fill())
+                    .spacing(S3)
+                    .child(rect().padding((0.0, GUTTER - S3)).child(back));
+                page.child(header)
                     .child(
-                        Group::titled(&title)
+                        Group::titled("Account")
                             .row(name_row)
                             .row(row("User name").value(account.user_name.clone()))
                             .row(row("Account type").value(if account.administrator {
@@ -272,23 +272,32 @@ impl Component for UsersPage {
                                 "No"
                             })),
                     )
-                    .child(Group::titled("Password").row(password_row))
+                    .child(
+                        Group::titled("Password")
+                            .description("Opens a terminal to run passwd.")
+                            .row(password_row),
+                    )
             }
             None => {
-                let rows = accounts.iter().map(|account| {
-                    let path = account.path.clone();
-                    let real_name = account.real_name.clone();
-                    let on_press: EventHandler<()> = (move |_: ()| {
-                        draft.set(real_name.clone());
-                        selected.set(Some(path.clone()));
-                    })
-                    .into();
-                    Element::from(AccountRow {
-                        account: account.clone(),
-                        on_press,
-                    })
-                });
-                page.child(Group::new(None).rows(rows))
+                let group = Group::titled("Accounts");
+                let group = if accounts.is_empty() {
+                    group.row(status(Status::Empty("No accounts found.".into())))
+                } else {
+                    group.rows(accounts.iter().map(|account| {
+                        let path = account.path.clone();
+                        let real_name = account.real_name.clone();
+                        let on_press: EventHandler<()> = (move |_: ()| {
+                            draft.set(real_name.clone());
+                            selected.set(Some(path.clone()));
+                        })
+                        .into();
+                        Element::from(AccountRow {
+                            account: account.clone(),
+                            on_press,
+                        })
+                    }))
+                };
+                page.child(group)
             }
         }
     }
@@ -355,7 +364,7 @@ impl Component for AccountRow {
             .direction(Direction::Horizontal)
             .content(Content::Flex)
             .cross_align(Alignment::Center)
-            .padding((0.0, S4))
+            .padding((0.0, GUTTER))
             .spacing(S3)
             .background(if hovering() {
                 tokens.hover

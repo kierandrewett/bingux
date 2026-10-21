@@ -90,20 +90,20 @@ These keep every page the same. A component that breaks one is a bug.
   name pass. To use a new value, add it to `scale.rs` first. `make check`
   runs it.
 - **One inset.** `GUTTER` is the only horizontal inset. Row text, section
-  titles, the page title and sidebar items all start `GUTTER` from their
+  titles and sidebar items all start `GUTTER` from their
   container, so they line up.
 - Read colours from `use_tokens()`. The only literal colours are white and
   black overlays. Surfaces are opaque: `bg`, `sidebar`, and the white
   overlays `elevated`, `hover`, `pressed` and `selection` for states.
-- **The page is flat.** A section is a bold title, an optional muted line, a
-  hairline, then rows with no card behind them. A page is `page_column()`,
-  which puts `S6` between sections. A message (loading, empty, error) is a
-  `status` row of normal height inside a section; only an error is tinted.
-- **The page title is in the page**, not the header bar: `NavItem::title`
-  and `NavItem::description` are drawn above the content. The header bar
-  carries the window buttons only. A page may open with `lead(text)`, one
-  large sentence that says where things stand, such as "Connected to Home." The sidebar is search, then items under
-  `NavItem::group` labels, with a neutral pill on the selected item.
+- **The page is flat and starts with its first section.** There is no page
+  title, description or headline: the sidebar already names the page. A
+  section is a bold title, an optional muted line, then rows with no card
+  behind them and a hairline between rows. A page is `page_column()`, which
+  puts `S6` between sections. A message (loading, empty, error) is a `status`
+  row of normal height inside a section; only an error is tinted.
+- **Chrome.** The header bar carries the window buttons only. The sidebar is
+  a search field, then items under `NavItem::group` labels, with a neutral
+  pill on the selected item.
 - Buttons, dropdowns, segmented controls, steppers and text fields share one
   fill (`elevated`) and one 1 px outline (`field_border`). Hover and pressed
   raise the fill. The keyboard ring is `RING_WIDTH` in the accent colour.

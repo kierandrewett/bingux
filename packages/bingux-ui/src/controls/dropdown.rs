@@ -196,10 +196,20 @@ impl Component for Dropdown {
                     .text(current)
                     .font_size(TEXT_MD)
                     .color(tokens.text)
+                    .maybe(self.width.is_some(), |element| {
+                        // Button width less padding, spacing and the chevron.
+                        let label_width = self.width.unwrap_or_default() - S3 - S2 - S2 - ICON_MD;
+                        element.width(Size::px(label_width.max(0.0)))
+                    })
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
             )
-            .child(icons::icon(Icon::PanDown, ICON_MD, tokens.muted));
+            .child(
+                rect()
+                    .width(Size::px(ICON_MD))
+                    .height(Size::px(ICON_MD))
+                    .child(icons::icon(Icon::PanDown, ICON_MD, tokens.muted)),
+            );
 
         // The list is at least MENU_WIDTH and never narrower than the button.
         let menu_width = button_width().max(MENU_WIDTH);

@@ -26,8 +26,6 @@ const INTERFACE: &str = "org.gnome.desktop.interface";
 const WALLPAPER_KEY: &str = "desktop.wallpaper";
 const FONT_KEY: &str = "appearance.font_family";
 const IMAGE_PATTERNS: &str = "*.png *.jpg *.jpeg *.webp *.jxl *.avif";
-const SWATCH: f32 = 24.0;
-const SWATCH_RING: f32 = 36.0;
 
 #[derive(Clone, PartialEq)]
 struct Model {
@@ -198,7 +196,8 @@ fn run_wallpaper_change(
     });
 }
 
-/// One accent circle. The selected one is ringed in the text colour.
+/// One accent circle, set in a box of the icon-button size so the row keeps
+/// an even pitch. The selected one is ringed in the text colour.
 fn swatch(
     name: &'static str,
     color: Color,
@@ -219,18 +218,18 @@ fn swatch(
             .a11y_role(AccessibilityRole::Button)
             .a11y_alt(format!("Accent colour {name}"))
             .a11y_focusable(true)
-            .width(Size::px(SWATCH_RING))
-            .height(Size::px(SWATCH_RING))
+            .width(Size::px(BOX_LG))
+            .height(Size::px(BOX_LG))
             .center()
-            .corner_radius(SWATCH_RING / 2.0)
+            .corner_radius(BOX_LG / 2.0)
             .border(border)
             .cursor(CursorIcon::Pointer)
             .on_press(on_press)
             .child(
                 rect()
-                    .width(Size::px(SWATCH))
-                    .height(Size::px(SWATCH))
-                    .corner_radius(SWATCH / 2.0)
+                    .width(Size::px(BOX_MD))
+                    .height(Size::px(BOX_MD))
+                    .corner_radius(BOX_MD / 2.0)
                     .background(color),
             ),
     )
@@ -303,14 +302,16 @@ impl Component for AppearancePage {
                             .value(wallpaper_name),
                     )
                     .row(
-                        row("Choose a picture from disk")
+                        row("Choose a picture")
+                            .subtitle("Pick an image from disk.")
                             .trailing(row_button("Choose image", move |_| {
                                 run_wallpaper_change(model, error, choose_wallpaper)
                             })),
                     )
                     .row(
-                        row("Use the GNOME background")
-                            .trailing(row_button("Use GNOME background", move |_| {
+                        row("GNOME background")
+                            .subtitle("Stop using a picture and follow GNOME.")
+                            .trailing(row_button("Use GNOME", move |_| {
                                 run_wallpaper_change(model, error, use_gnome_background)
                             })),
                     ),
@@ -350,8 +351,8 @@ impl Component for AppearancePage {
                             .direction(Direction::Horizontal)
                             .content(Content::Flex)
                             .cross_align(Alignment::Center)
-                            .padding((S1, S4))
-                            .spacing(S2)
+                            .padding((S1, S0))
+                            .spacing(S1)
                             .children(swatches),
                     ),
                 )

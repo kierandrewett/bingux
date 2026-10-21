@@ -6,10 +6,10 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
+use bingux_ui::scale::*;
+
 use crate::system::{self, CommandError, background, background_then};
-use crate::ui::{
-    Group, Status, choice_row, lead, page_column, row, slider, slider_row, status, switch_row,
-};
+use crate::ui::{Group, Status, dropdown, page_column, row, slider, status, switch_row};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const POLL: Duration = Duration::from_secs(5);
@@ -36,10 +36,17 @@ impl Kind {
         }
     }
 
+    fn caption(self) -> &'static str {
+        match self {
+            Kind::Output => "Where all sound plays.",
+            Kind::Input => "Where sound is recorded.",
+        }
+    }
+
     fn none_found(self) -> &'static str {
         match self {
-            Kind::Output => "No output devices",
-            Kind::Input => "No input devices",
+            Kind::Output => "No output devices found.",
+            Kind::Input => "No input devices found.",
         }
     }
 }
@@ -363,6 +370,15 @@ fn update_stream(mut model: State<Option<Result<Model, CommandError>>>, id: u32,
     }
 }
 
+/// A volume slider for the shared control column: the track leaves room for
+/// the percentage, so the slider and its label end at the row's right edge.
+fn volume_slider(value: f64, on_moved: impl Into<EventHandler<f64>>) -> Element {
+    slider(value, on_moved)
+        .width(FIELD_WIDTH - S2 - BOX_LG)
+        .show_value()
+        .into()
+}
+
 fn channel_group(
     kind: Kind,
     devices: &[Device],
@@ -371,40 +387,45 @@ fn channel_group(
     error: State<Option<String>>,
     queue: VolumeQueue,
 ) -> Group {
-    let group = Group::titled(kind.title());
+    let group = Group::titled(kind.title()).description(kind.caption());
     if devices.is_empty() {
-        return group.row(row("Device").value(kind.none_found()));
+        return group.row(status(Status::Empty(kind.none_found().into())));
     }
 
-    let options: Vec<(String, String)> = devices
-        .iter()
-        .map(|device| (device.id.to_string(), device.name.clone()))
-        .collect();
     let selected = devices
         .iter()
         .find(|device| device.is_default)
         .map(|device| device.id.to_string())
         .unwrap_or_default();
-    let mut group = group.row(choice_row(
-        "Device",
-        options,
-        &selected,
-        move |key: String| {
-            if let Ok(id) = key.parse::<u32>() {
-                apply(
-                    vec!["set-default".to_string(), id.to_string()],
-                    model,
-                    error,
-                );
-            }
-        },
-    ));
+    // One device is a fact. Several share a dropdown at the slider width, so
+    // every control on the page has the same width and right edge.
+    let device = match devices {
+        [only] => row("Device").value(only.name.clone()),
+        _ => {
+            let options: Vec<(String, String)> = devices
+                .iter()
+                .map(|device| (device.id.to_string(), device.name.clone()))
+                .collect();
+            row("Device").trailing(
+                dropdown(options, selected, move |key: String| {
+                    if let Ok(id) = key.parse::<u32>() {
+                        apply(
+                            vec!["set-default".to_string(), id.to_string()],
+                            model,
+                            error,
+                        );
+                    }
+                })
+                .width(FIELD_WIDTH),
+            )
+        }
+    };
+    let mut group = group.row(device);
 
     if let Some(level) = level {
         let id = level.id;
         group = group
-            .row(slider_row(
-                "Volume",
+            .row(row("Volume").trailing(volume_slider(
                 (level.volume * 100.0).min(100.0),
                 move |value: f64| {
                     let percent = value.round().clamp(0.0, 100.0) as u32;
@@ -413,7 +434,7 @@ fn channel_group(
                     });
                     set_volume(queue, error, id, percent);
                 },
-            ))
+            )))
             .row(switch_row("Mute", level.muted, move |next: bool| {
                 update_level(model, kind, |level| level.muted = next);
                 apply(
@@ -466,13 +487,6 @@ impl Component for SoundPage {
         };
 
         let mut page = page_column();
-        if let Some(output) = &data.output {
-            page = page.child(lead(if output.muted {
-                "Output is muted.".to_string()
-            } else {
-                format!("Output is at {}%.", (output.volume * 100.0).round())
-            }));
-        }
         if let Some(message) = error.read().clone() {
             page = page.child(status(Status::Error(message)));
         }
@@ -495,28 +509,27 @@ impl Component for SoundPage {
                 queue,
             ));
 
+        let applications = Group::titled("Applications").description("Each app's own volume.");
         if data.streams.is_empty() {
-            page = page.child(Group::titled("Applications").row(status(Status::Empty(
+            page = page.child(applications.row(status(Status::Empty(
                 "No applications are playing or recording audio.".into(),
             ))));
         } else {
-            page = page.child(Group::titled("Applications").rows(data.streams.iter().map(
-                |stream| {
-                    let id = stream.id;
-                    let base = row(stream.name.clone()).subtitle(stream.summary());
-                    match stream.level {
-                        Some((volume, _)) => Element::from(base.trailing(slider(
-                            (volume * 100.0).min(100.0),
-                            move |value: f64| {
-                                let percent = value.round().clamp(0.0, 100.0) as u32;
-                                update_stream(model, id, f64::from(percent) / 100.0);
-                                set_volume(queue, error, id, percent);
-                            },
-                        ))),
-                        None => Element::from(base),
-                    }
-                },
-            )));
+            page = page.child(applications.rows(data.streams.iter().map(|stream| {
+                let id = stream.id;
+                let base = row(stream.name.clone()).subtitle(stream.summary());
+                match stream.level {
+                    Some((volume, _)) => Element::from(base.trailing(volume_slider(
+                        (volume * 100.0).min(100.0),
+                        move |value: f64| {
+                            let percent = value.round().clamp(0.0, 100.0) as u32;
+                            update_stream(model, id, f64::from(percent) / 100.0);
+                            set_volume(queue, error, id, percent);
+                        },
+                    ))),
+                    None => Element::from(base.value("No volume control")),
+                }
+            })));
         }
         page
     }

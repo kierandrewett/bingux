@@ -88,25 +88,6 @@ impl PageId {
         }
     }
 
-    /// One line under the page title.
-    pub fn description(self) -> &'static str {
-        match self {
-            Self::Network => "Wi-Fi, wired connections and airplane mode",
-            Self::Bluetooth => "Adapter and paired devices",
-            Self::Appearance => "Wallpaper, font, accent colour and colour scheme",
-            Self::Desktop => "Dock, sidebar, top bar and Control Centre",
-            Self::Search => "Providers, web engines, file locations and previews",
-            Self::Displays => "Resolution, refresh rate, scale and night light",
-            Self::Sound => "Output and input devices, volumes and applications",
-            Self::Power => "Battery, power mode, blank screen and lock",
-            Self::Keyboard => "Key repeat, input sources and shortcuts",
-            Self::Mouse => "Pointer speed, scrolling and touchpad gestures",
-            Self::DateTime => "Clock, time zone and automatic time",
-            Self::Users => "Accounts on this computer",
-            Self::About => "This computer, the system and versions",
-        }
-    }
-
     /// Words the sidebar search matches besides the title.
     pub fn keywords(self) -> &'static str {
         match self {
@@ -131,7 +112,7 @@ impl PageId {
             Self::Network => Icon::Network,
             Self::Bluetooth => Icon::Bluetooth,
             Self::Appearance => Icon::Appearance,
-            Self::Desktop => Icon::PreferencesSystem,
+            Self::Desktop => Icon::Desktop,
             Self::Search => Icon::Search,
             Self::Displays => Icon::Display,
             Self::Sound => Icon::Sound,

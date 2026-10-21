@@ -9,6 +9,11 @@ use crate::surface::{focus_border, use_tokens};
 const TRACK: f32 = 6.0;
 const HANDLE: f32 = 20.0;
 const HANDLE_GROWN: f32 = 22.0;
+
+/// Every part of the slider is placed from this one line, the middle of the
+/// 22 px track row, so the track, the accent fill and the handle share one
+/// centre whatever size the handle is at that frame.
+const CENTRE: f32 = HANDLE_GROWN / 2.0;
 const PERCENT: f32 = 100.0;
 
 /// A 6 px track filled with the accent up to a 20 px white handle that
@@ -165,9 +170,9 @@ impl Component for Slider {
                 rect()
                     .width(Size::fill())
                     .height(Size::px(HANDLE_GROWN))
-                    .main_align(Alignment::Center)
                     .child(
                         rect()
+                            .position(Position::new_absolute().top(CENTRE - TRACK / 2.0).left(0.0))
                             .width(Size::fill())
                             .height(Size::px(TRACK))
                             .corner_radius(TRACK / 2.0)
@@ -175,37 +180,24 @@ impl Component for Slider {
                     )
                     .child(
                         rect()
-                            .position(Position::new_absolute().top(1.0).left(0.0))
+                            .position(Position::new_absolute().top(CENTRE - TRACK / 2.0).left(0.0))
                             .width(Size::px(HANDLE / 2.0 + travel * (value as f32 / PERCENT)))
-                            .height(Size::px(HANDLE))
-                            .main_align(Alignment::Center)
-                            .child(
-                                rect()
-                                    .width(Size::fill())
-                                    .height(Size::px(TRACK))
-                                    .corner_radius(TRACK / 2.0)
-                                    .background(tokens.accent),
-                            ),
+                            .height(Size::px(TRACK))
+                            .corner_radius(TRACK / 2.0)
+                            .background(tokens.accent),
                     )
                     .child(
                         rect()
                             .position(
-                                Position::new_absolute()
-                                    .top(1.0 + (HANDLE - handle) / 2.0)
-                                    .left(
-                                        travel * (value as f32 / 100.0) - (handle - HANDLE) / 2.0,
-                                    ),
+                                Position::new_absolute().top(CENTRE - handle / 2.0).left(
+                                    travel * (value as f32 / 100.0) + (HANDLE - handle) / 2.0,
+                                ),
                             )
                             .width(Size::px(handle))
                             .height(Size::px(handle))
                             .corner_radius(handle / 2.0)
                             .background(Color::WHITE)
-                            .shadow(
-                                Shadow::new()
-                                    .y(1.0)
-                                    .blur(3.0)
-                                    .color(Color::BLACK.with_af32(0.35)),
-                            ),
+                            .shadow(Shadow::new().blur(3.0).color(Color::BLACK.with_af32(0.35))),
                     ),
             );
         if !self.show_value {

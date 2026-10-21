@@ -162,7 +162,7 @@ impl Tokens {
             elevated: rgba(1.0, 1.0, 1.0, 0.05),
             elevated_hover: rgba(1.0, 1.0, 1.0, 0.09),
             elevated_pressed: rgba(1.0, 1.0, 1.0, 0.13),
-            separator: rgba(1.0, 1.0, 1.0, 0.07),
+            separator: rgba(1.0, 1.0, 1.0, 0.09),
             card: rgba(1.0, 1.0, 1.0, 0.05),
             hover: rgba(1.0, 1.0, 1.0, 0.05),
             pressed: rgba(1.0, 1.0, 1.0, 0.09),

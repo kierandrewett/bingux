@@ -15,6 +15,8 @@ use crate::ui::{Group, Status, page_column, row, row_button, slider_row, status,
 const KEYBOARD: &str = "org.gnome.desktop.peripherals.keyboard";
 const DELAY_RANGE: (f64, f64) = (100.0, 2000.0);
 const INTERVAL_RANGE: (f64, f64) = (10.0, 200.0);
+const GNOBLIN_NOT_RUNNING: &str = "Gnoblin is not running.";
+const INPUT_SOURCES_NOTE: &str = "Set in Gnoblin's Lua config under input_sources.sources.";
 
 #[derive(Clone, PartialEq)]
 struct Model {
@@ -168,11 +170,16 @@ impl Component for KeyboardPage {
             ),
         };
 
+        // The section always opens with where the list comes from. A missing
+        // Gnoblin is a calm muted line; any other failure is an error.
+        let sources_group = Group::titled("Input sources").description(INPUT_SOURCES_NOTE);
         let sources: Element = match &model.sources {
-            Ok(sources) if sources.is_empty() => {
-                status(Status::Empty("Gnoblin has no input sources configured.".into())).into()
-            }
-            Ok(sources) => Group::titled("Input sources")
+            Ok(sources) if sources.is_empty() => sources_group
+                .row(status(Status::Empty(
+                    "Gnoblin has no input sources configured.".into(),
+                )))
+                .into(),
+            Ok(sources) => sources_group
                 .rows(sources.iter().map(|source| {
                     let kind = source.kind.clone();
                     let id = source.id.clone();
@@ -184,15 +191,19 @@ impl Component for KeyboardPage {
                             .enabled(!active)
                             .on_press(move |_| {
                                 let (kind, id) = (kind.clone(), id.clone());
-                                commit(loaded, error, move || gnoblin::select_input_source(&kind, &id))
+                                commit(loaded, error, move || {
+                                    gnoblin::select_input_source(&kind, &id)
+                                })
                             }),
                     )
                 }))
                 .into(),
-            Err(message) => status(Status::Info(format!(
-                "Input sources are configured in Gnoblin's Lua config (input_sources.sources). {message}"
-            )))
-            .into(),
+            Err(message) if message == GNOBLIN_NOT_RUNNING => sources_group
+                .row(status(Status::Empty(message.clone())))
+                .into(),
+            Err(message) => sources_group
+                .row(status(Status::Error(message.clone())))
+                .into(),
         };
 
         // Shortcuts live in Gnoblin's Lua config. The row opens that file in

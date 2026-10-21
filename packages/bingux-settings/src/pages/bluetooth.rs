@@ -8,10 +8,9 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::system::{self, CommandError, background, background_then};
-use crate::theme::Tokens;
 use crate::ui::{
-    Group, Overlays, ResponseKind, Row, Status, dialog, lead, page_column, row, row_button, status,
-    switch_row, use_overlays, use_tokens,
+    Group, Overlays, ResponseKind, Row, Status, action_button, dialog, hstack, page_column,
+    primary_button, row, row_button, status, switch_row, use_overlays,
 };
 use bingux_ui::scale::*;
 
@@ -50,7 +49,6 @@ struct Ctx {
     model: State<Loaded>,
     error: State<Option<String>>,
     busy: State<Option<String>>,
-    tokens: Tokens,
     powered: bool,
     /// No action is running, so the action buttons may be shown.
     idle: bool,
@@ -236,10 +234,11 @@ fn device_status(device: &Device) -> String {
     }
 }
 
-/// One device: name and MAC, with its status and the actions it allows.
-/// Pair applies to unpaired devices, Connect to paired ones; Remove works on
-/// any device BlueZ knows. Pairing that needs a passkey fails with BlueZ's
-/// message because bluetoothctl has no agent here.
+/// One device: name, then its status and MAC, with the actions it allows.
+/// Pair applies to unpaired devices, Connect to paired ones and Disconnect
+/// to connected ones; Remove works on any device BlueZ knows. Pairing that
+/// needs a passkey fails with BlueZ's message because bluetoothctl has no
+/// agent here. The one accent action is Connect or Pair; the rest are quiet.
 fn device_row(device: &Device, ctx: Ctx) -> Row {
     let disconnect_mac = device.mac.clone();
     let disconnect_name = device.name.clone();
@@ -250,19 +249,9 @@ fn device_row(device: &Device, ctx: Ctx) -> Row {
     let pair_mac = device.mac.clone();
     let pair_name = device.name.clone();
 
-    let trailing = rect()
-        .direction(Direction::Horizontal)
-        .cross_align(Alignment::Center)
-        .spacing(S2)
-        .child(
-            label()
-                .text(device_status(device))
-                .color(ctx.tokens.muted)
-                .font_size(TEXT_MD)
-                .max_lines(1),
-        )
+    let trailing = hstack(S2)
         .maybe_child((ctx.idle && ctx.powered && device.connected).then(|| {
-            row_button("Disconnect", move |_| {
+            action_button("Disconnect", move |_| {
                 perform(
                     ctx,
                     format!("Disconnecting from {disconnect_name}…"),
@@ -270,10 +259,11 @@ fn device_row(device: &Device, ctx: Ctx) -> Row {
                     TIMEOUT,
                 )
             })
+            .flat()
         }))
         .maybe_child(
             (ctx.idle && ctx.powered && device.paired && !device.connected).then(|| {
-                row_button("Connect", move |_| {
+                primary_button("Connect", move |_| {
                     perform(
                         ctx,
                         format!("Connecting to {connect_name}…"),
@@ -284,7 +274,7 @@ fn device_row(device: &Device, ctx: Ctx) -> Row {
             }),
         )
         .maybe_child((ctx.idle && ctx.powered && !device.paired).then(|| {
-            row_button("Pair", move |_| {
+            primary_button("Pair", move |_| {
                 perform(
                     ctx,
                     format!("Pairing with {pair_name}…"),
@@ -294,7 +284,7 @@ fn device_row(device: &Device, ctx: Ctx) -> Row {
             })
         }))
         .maybe_child(ctx.idle.then(|| {
-            row_button("Remove", move |_| {
+            action_button("Remove", move |_| {
                 let remove_name = remove_name.clone();
                 let remove_mac = remove_mac.clone();
                 ctx.overlays.show_dialog(
@@ -313,10 +303,11 @@ fn device_row(device: &Device, ctx: Ctx) -> Row {
                     }),
                 )
             })
+            .flat()
         }));
 
     row(device.name.clone())
-        .subtitle(device.mac.clone())
+        .subtitle(format!("{} · {}", device_status(device), device.mac))
         .trailing(trailing)
 }
 
@@ -325,7 +316,6 @@ pub struct BluetoothPage;
 
 impl Component for BluetoothPage {
     fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
         let overlays = use_overlays();
         let model = use_state::<Loaded>(|| None);
         let error = use_state::<Option<String>>(|| None);
@@ -366,24 +356,12 @@ impl Component for BluetoothPage {
             model,
             error,
             busy,
-            tokens,
             powered: adapter.powered,
             idle: busy_message.is_none(),
             overlays,
         };
 
         let mut page = page_column();
-        let connected = data
-            .devices
-            .iter()
-            .filter(|device| device.connected)
-            .count();
-        page = page.child(lead(match (adapter.powered, connected) {
-            (false, _) => "Bluetooth is off.".to_string(),
-            (true, 0) => "No devices connected.".to_string(),
-            (true, 1) => "1 device connected.".to_string(),
-            (true, count) => format!("{count} devices connected."),
-        }));
         if let Some(message) = error.read().clone() {
             page = page.child(status(Status::Error(message)));
         }

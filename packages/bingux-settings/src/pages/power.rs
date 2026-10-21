@@ -7,7 +7,7 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::system::{self, CommandError, CommandResult, background, background_then};
-use crate::ui::{Group, Status, choice_row, lead, page_column, row, status, switch_row};
+use crate::ui::{Group, Status, choice_row, page_column, row, status, switch_row};
 
 const SESSION: &str = "org.gnome.desktop.session";
 const SCREENSAVER: &str = "org.gnome.desktop.screensaver";
@@ -195,20 +195,11 @@ impl Component for PowerPage {
         };
 
         let mut page = page_column();
-        if let Ok(Some(battery)) = &model.battery {
-            page = page.child(lead(format!(
-                "Battery at {}, {}.",
-                battery.percentage,
-                battery.state.to_lowercase()
-            )));
-        } else if matches!(model.battery, Ok(None)) {
-            page = page.child(lead("Running on mains power."));
-        }
         if let Some(message) = error.read().clone() {
             page = page.child(status(Status::Error(message)));
         }
 
-        // Battery
+        // Battery: no group on a machine without one.
         page = match model.battery.clone() {
             Ok(Some(battery)) => {
                 let mut group = Group::titled("Battery")
@@ -219,9 +210,7 @@ impl Component for PowerPage {
                 }
                 page.child(group)
             }
-            Ok(None) => {
-                page.child(Group::titled("Battery").row(status(Status::Empty("No battery".into()))))
-            }
+            Ok(None) => page,
             Err(e) => page.child(Group::titled("Battery").row(status(Status::Error(e.0)))),
         };
 
@@ -240,14 +229,11 @@ impl Component for PowerPage {
                     },
                 )))
             }
-            Err(e) => {
-                let kind = if e.0.contains("not installed") {
-                    Status::Info(e.0)
-                } else {
-                    Status::Error(e.0)
-                };
-                page.child(Group::titled("Power mode").row(status(kind)))
-            }
+            Err(e) if e.0.contains("not installed") => page.child(
+                Group::titled("Power mode")
+                    .row(row("Profile").value("Not installed").enabled(false)),
+            ),
+            Err(e) => page.child(Group::titled("Power mode").row(status(Status::Error(e.0)))),
         };
 
         // Power saving

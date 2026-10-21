@@ -14,8 +14,10 @@ use crate::controls::{icon_button, search_field};
 use crate::icons::{self, Icon};
 use crate::scale::*;
 use crate::shell::window::{HeaderBar, WindowControls};
-use crate::surface::{focus_border, is_activation_key, surface_color, use_tokens};
-use crate::theme::{SIDEBAR_OVERLAY_BELOW, SIDEBAR_WIDTH, WINDOW_CONTROL_BUTTON};
+use crate::surface::{focus_border, is_activation_key, use_tokens};
+use crate::theme::{
+    HEADER_HEIGHT, SIDEBAR_OVERLAY_BELOW, SIDEBAR_WIDTH, Tokens, WINDOW_CONTROL_BUTTON,
+};
 
 /// One sidebar destination.
 pub trait NavItem: Copy + PartialEq + 'static {
@@ -23,10 +25,6 @@ pub trait NavItem: Copy + PartialEq + 'static {
     fn icon(self) -> Icon;
     /// The sidebar section this item is listed under.
     fn group(self) -> &'static str {
-        ""
-    }
-    /// One line under the page title.
-    fn description(self) -> &'static str {
         ""
     }
     /// Extra words the search field matches, space separated.
@@ -74,6 +72,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let mut sidebar_open = use_state(|| false);
         let width = Platform::get().current_window().root_size.read().width;
         let narrow = width < SIDEBAR_OVERLAY_BELOW;
+        let side = if narrow { S4 } else { S6 };
         let selected = self.selected;
         // The overlay sidebar slides in over 160 ms while the scrim fades.
         let motion = tokens.motion(160);
@@ -107,25 +106,6 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 )
             })
             .trailing(WindowControls);
-        let page_title = rect()
-            .width(Size::fill())
-            .spacing(S1)
-            .margin((0.0, 0.0, S6, crate::surface::GUTTER))
-            .child(
-                label()
-                    .text(selected().title())
-                    .font_size(TEXT_DISPLAY)
-                    .font_weight(FontWeight::SEMI_BOLD)
-                    .max_lines(1),
-            )
-            .maybe_child((!selected().description().is_empty()).then(|| {
-                label()
-                    .text(selected().description())
-                    .font_size(TEXT_MD)
-                    .color(tokens.muted)
-                    .max_lines(2)
-            }));
-
         rect()
             .expanded()
             .direction(Direction::Horizontal)
@@ -143,12 +123,11 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                                 rect()
                                     .width(Size::fill())
                                     .cross_align(Alignment::Center)
-                                    .padding((S2, S6, S7, S6))
+                                    .padding((S2, side, S6, side))
                                     .child(
                                         rect()
                                             .width(Size::px(self.page_width))
                                             .max_width(Size::fill())
-                                            .child(page_title)
                                             .child(self.content.clone()),
                                     ),
                             ),
@@ -214,18 +193,6 @@ impl<T: NavItem> Component for Sidebar<T> {
                         .any(|word| word.starts_with(&needle))
             })
             .collect();
-        // The search field is the top of the sidebar. Only the overlay
-        // sidebar has a header, for the button that closes it.
-        let overlay_header = overlay.then(|| {
-            HeaderBar::new("").background(tokens.sidebar).trailing(
-                icon_button(Icon::SidebarShow, move |_| {
-                    let mut sidebar_open = sidebar_open;
-                    sidebar_open.set(false)
-                })
-                .size(WINDOW_CONTROL_BUTTON)
-                .tooltip("Hide pages"),
-            )
-        });
         let mut entries: Vec<Element> = Vec::new();
         let mut last_group = "";
         for item in &visible {
@@ -250,6 +217,21 @@ impl<T: NavItem> Component for Sidebar<T> {
             }));
         }
 
+        let close = overlay.then(|| {
+            icon_button(Icon::SidebarShow, move |_| {
+                let mut sidebar_open = sidebar_open;
+                sidebar_open.set(false)
+            })
+            .size(WINDOW_CONTROL_BUTTON)
+            .tooltip("Hide pages")
+        });
+        let field_width = SIDEBAR_WIDTH
+            - 2.0 * S2
+            - if overlay {
+                WINDOW_CONTROL_BUTTON + S2
+            } else {
+                0.0
+            };
         rect()
             .width(Size::px(SIDEBAR_WIDTH))
             .height(Size::fill())
@@ -265,14 +247,22 @@ impl<T: NavItem> Component for Sidebar<T> {
                     .alignment(BorderAlignment::Inner)
                     .fill(tokens.separator),
             )
-            .maybe_child(overlay_header)
-            .child(SearchField { query })
+            .maybe(overlay, |sidebar| {
+                sidebar.shadow(
+                    Shadow::new()
+                        .position(ShadowPosition::Normal)
+                        .y(8.0)
+                        .blur(24.0)
+                        .color(Color::BLACK.with_af32(0.45)),
+                )
+            })
+            .child(search_band(query, field_width, close))
             .child(
                 rect().width(Size::fill()).height(Size::flex(1.0)).child(
                     ScrollView::new().child(
                         rect()
                             .width(Size::fill())
-                            .padding((S1, S2, S3, S2))
+                            .padding((S2, S2, S4, S2))
                             .spacing(S0)
                             .children(entries)
                             .maybe_child(visible.is_empty().then(|| {
@@ -288,7 +278,7 @@ impl<T: NavItem> Component for Sidebar<T> {
     }
 }
 
-/// The sidebar search field: a rounded well with a search glyph.
+/// The sidebar search field: a rounded well with a search glyph, on the top band.
 #[derive(PartialEq)]
 pub struct SearchField {
     pub query: State<String>,
@@ -296,11 +286,27 @@ pub struct SearchField {
 
 impl Component for SearchField {
     fn render(&self) -> impl IntoElement {
-        rect()
-            .width(Size::fill())
-            .padding(S2)
-            .child(search_field(self.query, |_| {}).width(SIDEBAR_WIDTH - 2.0 * S2))
+        search_band(self.query, SIDEBAR_WIDTH - 2.0 * S2, None::<Element>)
     }
+}
+
+/// The top band of the sidebar. It is HEADER_HEIGHT tall, like the page
+/// header, so the search field sits on the window-control line. The overlay
+/// puts its close button to the right of the field.
+fn search_band(
+    query: State<String>,
+    field_width: f32,
+    close: Option<impl IntoElement>,
+) -> impl IntoElement {
+    rect()
+        .width(Size::fill())
+        .height(Size::px(HEADER_HEIGHT))
+        .direction(Direction::Horizontal)
+        .cross_align(Alignment::Center)
+        .padding((0.0, S2))
+        .spacing(S2)
+        .child(search_field(query, |_| {}).width(field_width))
+        .maybe_child(close)
 }
 
 #[derive(PartialEq)]
@@ -326,13 +332,7 @@ impl<T: NavItem> Component for NavEntry<T> {
         let mut sidebar_open = self.sidebar_open;
         let overlay = self.overlay;
         let is_selected = selected() == item;
-        let background = surface_color(
-            &tokens,
-            Color::TRANSPARENT,
-            hovering(),
-            pressing(),
-            is_selected,
-        );
+        let background = item_fill(&tokens, hovering(), pressing(), is_selected);
         let border = focus_border(&tokens, focus());
         rect()
             .a11y_id(a11y_id)
@@ -340,7 +340,7 @@ impl<T: NavItem> Component for NavEntry<T> {
             .a11y_role(AccessibilityRole::Tab)
             .a11y_builder(move |builder| builder.set_selected(is_selected))
             .width(Size::fill())
-            .height(Size::px(BOX_LG))
+            .height(Size::px(CONTROL_HEIGHT))
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
             .spacing(S3)
@@ -394,5 +394,18 @@ impl<T: NavItem> Component for NavEntry<T> {
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
             )
+    }
+}
+
+/// Background of a sidebar item. The selected item has a fill of its own
+/// that gets stronger on hover and press, so it never looks weaker than an
+/// idle item.
+fn item_fill(tokens: &Tokens, hovering: bool, pressing: bool, selected: bool) -> Color {
+    match (selected, pressing, hovering) {
+        (true, true, _) | (true, false, true) => tokens.elevated_pressed,
+        (true, false, false) => tokens.selection,
+        (false, true, _) => tokens.pressed,
+        (false, false, true) => tokens.hover,
+        (false, false, false) => Color::TRANSPARENT,
     }
 }

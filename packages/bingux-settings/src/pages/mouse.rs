@@ -8,7 +8,7 @@ use freya::prelude::*;
 
 use crate::pages::gnoblin::{self, Json};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
-use crate::ui::{Group, Row, Status, choice_row, page_column, row, slider_row, status, switch_row};
+use crate::ui::{Group, Row, Status, choice_row, page_column, row, slider, status, switch_row};
 
 const MOUSE: &str = "org.gnome.desktop.peripherals.mouse";
 const TOUCHPAD: &str = "org.gnome.desktop.peripherals.touchpad";
@@ -100,6 +100,11 @@ fn speed_value(percent: f64) -> String {
     format!("{:.3}", (percent / 100.0 * 2.0 - 1.0).clamp(-1.0, 1.0))
 }
 
+/// The pointer speed as shown to the user: two decimals.
+fn speed_label(speed: f64) -> String {
+    format!("{speed:.2}")
+}
+
 fn bool_value(value: bool) -> &'static str {
     if value { "true" } else { "false" }
 }
@@ -144,12 +149,14 @@ impl Setting<'_> {
                 .value(value),
             None => {
                 let (schema, loaded, error) = (self.schema, self.loaded, self.error);
-                slider_row(self.title, speed_percent(speed), move |percent: f64| {
-                    let value = speed_value(percent);
-                    commit(loaded, error, move || {
-                        system::gsettings_set(schema, "speed", &value)
-                    })
-                })
+                row(self.title)
+                    .subtitle(speed_label(speed))
+                    .trailing(slider(speed_percent(speed), move |percent: f64| {
+                        let value = speed_value(percent);
+                        commit(loaded, error, move || {
+                            system::gsettings_set(schema, "speed", &value)
+                        })
+                    }))
             }
         }
     }
@@ -216,7 +223,6 @@ impl Component for MousePage {
                 );
             }
         };
-
         let setting = |schema, group, key, title| Setting {
             schema,
             key,

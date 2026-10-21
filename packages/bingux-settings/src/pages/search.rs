@@ -13,7 +13,7 @@ use crate::pages::bingux_config;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
     Group, Overlays, ResponseKind, Row, Status, choice_row, dialog, icon_button, page_column,
-    primary_button, row, slider_row, status, switch, switch_row, text_row, use_overlays,
+    primary_button, row, slider_row, status, switch, switch_row, text_field, use_overlays,
 };
 use bingux_ui::scale::*;
 
@@ -269,7 +269,7 @@ fn missing(key: &str) -> CommandError {
     CommandError(format!("bingux-config did not report {key}."))
 }
 
-fn text_field(object: &Json, key: &str) -> Result<String, CommandError> {
+fn json_text(object: &Json, key: &str) -> Result<String, CommandError> {
     object
         .get(key)
         .and_then(Json::as_str)
@@ -279,10 +279,10 @@ fn text_field(object: &Json, key: &str) -> Result<String, CommandError> {
 
 fn parse_engine(object: &Json) -> Result<Engine, CommandError> {
     Ok(Engine {
-        id: text_field(object, "id")?,
-        name: text_field(object, "name")?,
-        shortcut: text_field(object, "shortcut")?,
-        url: text_field(object, "url")?,
+        id: json_text(object, "id")?,
+        name: json_text(object, "name")?,
+        shortcut: json_text(object, "shortcut")?,
+        url: json_text(object, "url")?,
         enabled: object
             .get("enabled")
             .and_then(Json::as_bool)
@@ -323,7 +323,7 @@ fn parse_dump(text: &str) -> Result<Model, CommandError> {
 
     let ai = match search.get("ai") {
         Some(object @ Json::Object(_)) => Some(Ai {
-            harness: text_field(object, "harness")?,
+            harness: json_text(object, "harness")?,
             model: object
                 .get("model")
                 .and_then(Json::as_str)
@@ -349,7 +349,7 @@ fn parse_dump(text: &str) -> Result<Model, CommandError> {
 
     Ok(Model {
         disabled_providers: strings(search.get("disabledProviders")),
-        default_engine: text_field(search, "defaultEngine")?,
+        default_engine: json_text(search, "defaultEngine")?,
         engines,
         ai,
         file_roots,
@@ -587,11 +587,28 @@ impl Component for SearchPage {
                 ctx,
             })
             .child(files_group(&data, ctx))
+            .child(FileRootAdd {
+                roots: data.file_roots.clone().unwrap_or_default(),
+                ctx,
+            })
             .child(previews_group(&data, ctx))
             .child(assistant_group(&data, ctx));
 
         page.into_element()
     }
+}
+
+/// A form's action row: the button sits at the right, on the row height.
+fn form_footer(button: impl IntoElement) -> Element {
+    rect()
+        .width(Size::fill())
+        .height(Size::px(ROW_HEIGHT))
+        .direction(Direction::Horizontal)
+        .main_align(Alignment::End)
+        .cross_align(Alignment::Center)
+        .padding((0.0, GUTTER))
+        .child(button)
+        .into()
 }
 
 fn providers_group(data: &Model, ctx: Ctx) -> Group {
@@ -751,28 +768,27 @@ impl Component for AddEngine {
         };
 
         Group::titled("Add engine")
-            .row(text_row("Name", name, |_: String| {}))
+            .description("The shortcut uses lowercase letters, digits and hyphens. The URL must contain {query} once.")
+            .row(row("Name").trailing(text_field(name, |_: String| {}).width(FIELD_WIDTH * 2.0)))
+            .row(row("Shortcut").trailing(text_field(shortcut, |_: String| {}).width(FIELD_WIDTH * 2.0)))
             .row(
-                text_row("Shortcut", shortcut, |_: String| {})
-                    .subtitle("Lowercase letters, digits and hyphens."),
-            )
-            .row(
-                row("URL").subtitle("Must contain {query} once.").trailing(
-                    crate::ui::text_field(url, |_: String| {})
+                row("URL").trailing(
+                    text_field(url, |_: String| {})
+                        .width(FIELD_WIDTH * 2.0)
                         .placeholder("https://example.com/?q={query}"),
                 ),
             )
-            .row(row("Add engine").trailing(primary_button("Add", add)))
+            .row(form_footer(primary_button("Add", add)))
     }
 }
 
 fn files_group(data: &Model, ctx: Ctx) -> Group {
-    let mut group = Group::titled("File search");
+    let mut group = Group::titled("File search").description(
+        "Files in these folders appear in search results. With none listed, the home folders are searched.",
+    );
     match &data.file_roots {
         None => {
-            group = group.row(row("Folders").subtitle(
-                "Using the built-in home folders. Add a folder to search only the listed ones.",
-            ));
+            group = group.row(row("Folders").value("Built-in home folders"));
         }
         Some(roots) => {
             for root in roots {
@@ -808,10 +824,7 @@ fn files_group(data: &Model, ctx: Ctx) -> Group {
             }
         }
     }
-    group.row(FileRootAdd {
-        roots: data.file_roots.clone().unwrap_or_default(),
-        ctx,
-    })
+    group
 }
 
 /// Adds an absolute, existing directory to the file search roots.
@@ -857,21 +870,16 @@ impl Component for FileRootAdd {
         });
         let submit = add.clone();
 
-        row("Add folder")
-            .subtitle("Absolute path of an existing folder.")
-            .trailing(
-                rect()
-                    .direction(Direction::Horizontal)
-                    .child(
-                        crate::ui::text_field(path, move |_: String| submit.call(()))
-                            .placeholder("/home/user/Documents"),
-                    )
-                    .child(
-                        rect()
-                            .margin((0.0, 0.0, 0.0, S2))
-                            .child(primary_button("Add", add)),
-                    ),
+        Group::titled("Add folder")
+            .description("An absolute path to an existing folder.")
+            .row(
+                row("Path").trailing(
+                    text_field(path, move |_: String| submit.call(()))
+                        .width(FIELD_WIDTH * 2.0)
+                        .placeholder("/home/user/Documents"),
+                ),
             )
+            .row(form_footer(primary_button("Add", add)))
     }
 }
 
@@ -939,35 +947,37 @@ fn assistant_group(data: &Model, ctx: Ctx) -> Group {
         ("pi".to_string(), "Pi".to_string()),
         ("claude".to_string(), "Claude".to_string()),
     ];
-    let mut group = Group::titled("Assistant").row(choice_row(
-        "Harness",
-        options,
-        &selected,
-        move |harness: String| {
-            if harness == "none" {
-                commit(ctx, vec!["unset".into(), "search.ai".into()]);
-                return;
-            }
-            // Keep the model when switching; an executable only fits its own harness.
-            let next = match &current {
-                Some(ai) if ai.harness == harness => Ai {
-                    harness: harness.clone(),
-                    ..ai.clone()
-                },
-                Some(ai) => Ai {
-                    harness: harness.clone(),
-                    model: ai.model.clone(),
-                    executable: None,
-                },
-                None => Ai {
-                    harness: harness.clone(),
-                    model: String::new(),
-                    executable: None,
-                },
-            };
-            commit(ctx, set_args("search.ai", ai_toml(&next)));
-        },
-    ));
+    let mut group = Group::titled("Assistant")
+        .description("The model is passed to the harness. Leave it empty for the harness default.")
+        .row(choice_row(
+            "Harness",
+            options,
+            &selected,
+            move |harness: String| {
+                if harness == "none" {
+                    commit(ctx, vec!["unset".into(), "search.ai".into()]);
+                    return;
+                }
+                // Keep the model when switching; an executable only fits its own harness.
+                let next = match &current {
+                    Some(ai) if ai.harness == harness => Ai {
+                        harness: harness.clone(),
+                        ..ai.clone()
+                    },
+                    Some(ai) => Ai {
+                        harness: harness.clone(),
+                        model: ai.model.clone(),
+                        executable: None,
+                    },
+                    None => Ai {
+                        harness: harness.clone(),
+                        model: String::new(),
+                        executable: None,
+                    },
+                };
+                commit(ctx, set_args("search.ai", ai_toml(&next)));
+            },
+        ));
     if let Some(ai) = data.ai.clone() {
         group = group.row(AssistantModel { ai, ctx });
     }
@@ -987,13 +997,15 @@ impl Component for AssistantModel {
         let ai = self.ai.clone();
         let ctx = self.ctx;
 
-        text_row("Model", draft, move |text: String| {
-            let next = Ai {
-                model: text.trim().to_string(),
-                ..ai.clone()
-            };
-            commit(ctx, set_args("search.ai", ai_toml(&next)));
-        })
-        .subtitle("Passed to the harness. Leave empty for its default.")
+        row("Model").trailing(
+            text_field(draft, move |text: String| {
+                let next = Ai {
+                    model: text.trim().to_string(),
+                    ..ai.clone()
+                };
+                commit(ctx, set_args("search.ai", ai_toml(&next)));
+            })
+            .width(FIELD_WIDTH * 2.0),
+        )
     }
 }

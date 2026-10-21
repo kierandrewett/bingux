@@ -68,7 +68,7 @@ fn load() -> Result<Model, CommandError> {
 }
 
 fn read_now() -> Result<String, String> {
-    system::run("date", &["+%A %-d %B %Y %H:%M:%S %Z"], TIMEOUT).map_err(|e| e.0)
+    system::run("date", &["+%a %-d %b %Y, %H:%M:%S %Z"], TIMEOUT).map_err(|e| e.0)
 }
 
 fn set_timezone(zone: &str) -> CommandResult {
@@ -166,7 +166,6 @@ impl Component for DateTimePage {
         let clock_format = model_data.clock_format.clone();
 
         let mut page = page_column();
-
         if let Some(message) = error.read().clone() {
             page = page.child(status(Status::Error(message)));
         }
@@ -196,7 +195,7 @@ impl Component for DateTimePage {
         )
         .child(
             Group::titled("Time zone").row(
-                text_row("Time zone", zone_input, move |text: String| {
+                text_row("Zone", zone_input, move |text: String| {
                     let zone = text.trim().to_string();
                     commit(ctx, move || set_timezone(&zone));
                 })

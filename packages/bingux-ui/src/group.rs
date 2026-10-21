@@ -88,19 +88,19 @@ impl Component for Group {
                     rect()
                         .width(Size::fill())
                         .height(Size::px(1.0))
-                        .background(tokens.separator.with_af32(0.045))
+                        .background(tokens.separator)
                         .into(),
                 );
             }
             children.push(row.clone());
         }
-        // A flat section: a bold title, an optional muted description, a
-        // hairline, then rows with no surface behind them. The page column
-        // owns the space between sections.
+        // A flat section: a bold title, an optional muted description, then
+        // rows with no surface behind them, with a hairline between rows.
+        // The page column owns the space between sections.
         let heading = (self.title.is_some() || self.description.is_some()).then(|| {
             rect()
                 .width(Size::fill())
-                .padding((0.0, GUTTER))
+                .padding((0.0, GUTTER, S2, GUTTER))
                 .direction(Direction::Horizontal)
                 .content(Content::Flex)
                 .cross_align(Alignment::Center)
@@ -120,15 +120,6 @@ impl Component for Group {
         rect()
             .width(Size::fill())
             .maybe_child(heading)
-            .maybe_child(
-                (self.title.is_some() || self.description.is_some()).then(|| {
-                    rect()
-                        .width(Size::fill())
-                        .height(Size::px(1.0))
-                        .margin((S3, 0.0, S1, 0.0))
-                        .background(tokens.separator)
-                }),
-            )
             .child(rect().width(Size::fill()).children(children))
     }
 }
@@ -227,30 +218,6 @@ impl Component for StatusBlock {
                 let on_press = on_press.clone();
                 action_button(label.clone(), move |_| on_press.call(()))
             }))
-    }
-}
-
-/// One large sentence at the top of a page that says where things stand,
-/// such as "Connected to Home." or "Output is at 80%."
-pub fn lead(text: impl Into<String>) -> Element {
-    LeadText { text: text.into() }.into()
-}
-
-#[derive(PartialEq)]
-struct LeadText {
-    text: String,
-}
-
-impl Component for LeadText {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        label()
-            .text(self.text.clone())
-            .color(tokens.text)
-            .font_size(TEXT_XL)
-            .font_weight(FontWeight::MEDIUM)
-            .margin((0.0, GUTTER))
-            .max_lines(2)
     }
 }
 

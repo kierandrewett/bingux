@@ -5,7 +5,9 @@
 
 use std::time::Duration;
 
-use crate::ui::{Group, Row, Status, choice_row, page_column, row, slider, status, switch_row};
+use crate::ui::{
+    Group, Row, Status, dropdown, page_column, row, segmented, slider, status, switch_row,
+};
 use bingux_ui::scale::*;
 use freya::prelude::*;
 
@@ -211,7 +213,7 @@ fn dock_size_row(ctx: Ctx, size: u32) -> Row {
     let dragged = *ctx.pending.read();
     let percent = dragged.unwrap_or_else(|| percent_for_size(size));
     row("Icon size")
-        .subtitle(format!("{} px", size_for_percent(percent)))
+        .subtitle(format!("Icons are {} px", size_for_percent(percent)))
         .trailing(
             rect()
                 .width(Size::px(FIELD_WIDTH))
@@ -226,6 +228,27 @@ fn dock_size_row(ctx: Ctx, size: u32) -> Row {
                     .width(FIELD_WIDTH),
                 ),
         )
+}
+
+/// Segmented control on the right, for two or three short options.
+fn segment_row(
+    title: &str,
+    options: Vec<(String, String)>,
+    selected: &str,
+    on_select: impl Into<EventHandler<String>>,
+) -> Row {
+    row(title).trailing(segmented(options, selected, on_select))
+}
+
+/// Dropdown on the right at `FIELD_WIDTH`, the same width as the icon size
+/// slider, so every control in the right column lines up.
+fn menu_row(
+    title: &str,
+    options: Vec<(String, String)>,
+    selected: &str,
+    on_select: impl Into<EventHandler<String>>,
+) -> Row {
+    row(title).trailing(dropdown(options, selected, on_select).width(FIELD_WIDTH))
 }
 
 #[derive(PartialEq)]
@@ -259,7 +282,6 @@ impl Component for DesktopPage {
         };
         let edge = m.sidebar_edge.clone().unwrap_or_else(|| "auto".to_string());
         let failure = error.read().clone();
-
         page_column()
             .maybe_child(failure.map(|message| status(Status::Error(message))))
             .child(
@@ -268,7 +290,7 @@ impl Component for DesktopPage {
                         write(ctx, Change::Set("desktop.dock", on.to_string()))
                     }))
                     .row(dock_size_row(ctx, m.dock_size))
-                    .row(choice_row(
+                    .row(segment_row(
                         "Alignment",
                         vec![
                             ("left".into(), "Left".into()),
@@ -277,8 +299,11 @@ impl Component for DesktopPage {
                         ],
                         &m.dock_alignment,
                         move |key: String| write(ctx, Change::Set("desktop.dock_alignment", key)),
-                    ))
-                    .row(choice_row(
+                    )),
+            )
+            .child(
+                Group::titled("Dock actions")
+                    .row(menu_row(
                         "Click",
                         vec![
                             ("toggle".into(), "Show or hide windows".into()),
@@ -288,7 +313,7 @@ impl Component for DesktopPage {
                         &m.dock_click,
                         move |key: String| write(ctx, Change::Set("desktop.dock_click", key)),
                     ))
-                    .row(choice_row(
+                    .row(menu_row(
                         "Middle click",
                         vec![
                             ("launch".into(), "Launch a new window".into()),
@@ -300,7 +325,7 @@ impl Component for DesktopPage {
                             write(ctx, Change::Set("desktop.dock_middle_click", key))
                         },
                     ))
-                    .row(choice_row(
+                    .row(menu_row(
                         "Scroll",
                         vec![
                             ("cycle".into(), "Cycle windows".into()),
@@ -309,7 +334,7 @@ impl Component for DesktopPage {
                         &m.dock_scroll,
                         move |key: String| write(ctx, Change::Set("desktop.dock_scroll", key)),
                     ))
-                    .row(choice_row(
+                    .row(segment_row(
                         "Scroll direction",
                         vec![
                             ("natural".into(), "Natural".into()),
@@ -326,7 +351,7 @@ impl Component for DesktopPage {
                     .row(switch_row("Show sidebar", m.sidebar, move |on: bool| {
                         write(ctx, Change::Set("desktop.sidebar", on.to_string()))
                     }))
-                    .row(choice_row(
+                    .row(menu_row(
                         "Edge",
                         vec![
                             ("auto".into(), "Automatic".into()),

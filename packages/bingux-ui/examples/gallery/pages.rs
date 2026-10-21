@@ -370,6 +370,7 @@ impl Component for TypographyPage {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         page_column()
+            .padding((0.0, GUTTER))
             .child(
                 label()
                     .text("Hero title, 24 bold")

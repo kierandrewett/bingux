@@ -19,6 +19,7 @@ pub enum Icon {
     WindowMaximize,
     WindowRestore,
     Appearance,
+    Desktop,
     Search,
     Network,
     Bluetooth,
@@ -51,7 +52,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 39] = [
+    pub const ALL: [Icon; 40] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -63,6 +64,7 @@ impl Icon {
         Self::WindowMaximize,
         Self::WindowRestore,
         Self::Appearance,
+        Self::Desktop,
         Self::Search,
         Self::Network,
         Self::Bluetooth,
@@ -106,14 +108,15 @@ impl Icon {
             Self::WindowMinimize => include_bytes!("../icons/window-minimize-symbolic.svg"),
             Self::WindowMaximize => include_bytes!("../icons/window-maximize-symbolic.svg"),
             Self::WindowRestore => include_bytes!("../icons/window-restore-symbolic.svg"),
-            Self::Appearance => {
-                include_bytes!("../icons/preferences-desktop-appearance-symbolic.svg")
+            Self::Appearance => include_bytes!("../icons/applications-graphics-symbolic.svg"),
+            Self::Desktop => {
+                include_bytes!("../icons/preferences-desktop-wallpaper-symbolic.svg")
             }
             Self::Search => include_bytes!("../icons/system-search-symbolic.svg"),
             Self::Network => include_bytes!("../icons/network-wireless-symbolic.svg"),
             Self::Bluetooth => include_bytes!("../icons/bluetooth-active-symbolic.svg"),
-            Self::Sound => include_bytes!("../icons/audio-speakers-symbolic.svg"),
-            Self::Power => include_bytes!("../icons/battery-symbolic.svg"),
+            Self::Sound => include_bytes!("../icons/audio-volume-high-symbolic.svg"),
+            Self::Power => include_bytes!("../icons/battery-level-100-symbolic.svg"),
             Self::Keyboard => include_bytes!("../icons/input-keyboard-symbolic.svg"),
             Self::Mouse => include_bytes!("../icons/input-mouse-symbolic.svg"),
             Self::Clock => include_bytes!("../icons/preferences-system-time-symbolic.svg"),
