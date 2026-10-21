@@ -16,6 +16,8 @@ DISTRO="$WORK/distro"
 OUT="$DISTRO/out"
 REPO="$OUT/repo"
 STAGE="$(mktemp -d /tmp/bingux-os.XXXXXX)"
+# mktemp creates it 0700 for root; the builder account must traverse it.
+chmod 755 "$STAGE"
 JOBS="${JOBS:-$(nproc)}"
 STEP="${1:-all}"
 
