@@ -33,11 +33,15 @@ QtObject {
             kiosk: preLoginGrants
         })
 
-    function allows(capability) {
+    // Pure check for visibility bindings; does not log.
+    function permits(capability) {
         if (!SessionContext.restricted)
             return true;
-        const granted = table[SessionContext.mode] || [];
-        if (granted.includes(capability))
+        return (table[SessionContext.mode] || []).includes(capability);
+    }
+
+    function allows(capability) {
+        if (permits(capability))
             return true;
         console.log("[session] " + capability + " refused in " + SessionContext.mode + " context");
         return false;
