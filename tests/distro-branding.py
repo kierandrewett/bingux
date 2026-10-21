@@ -74,11 +74,13 @@ def check_sources(failures):
         if want not in hook:
             failures.append(f"alpm hook lacks {want}")
 
-    for rel in ("bingux.plymouth", "bingux.script", "plymouthd.conf"):
+    for rel in ("bingux.plymouth", "bingux.script"):
         if not (PACKAGE / rel).exists():
             failures.append(f"missing {rel}")
-    if "Theme=bingux" not in (PACKAGE / "plymouthd.conf").read_text():
-        failures.append("plymouthd.conf does not select the bingux theme")
+    if (PACKAGE / "plymouthd.conf").exists():
+        failures.append("bingux-os ships plymouthd.conf, which plymouth owns")
+    if "plymouth-set-default-theme -R bingux" not in (PACKAGE / "bingux-os.install").read_text():
+        failures.append("install hook does not select the bingux theme")
 
     if "'plymouth'" not in (PACKAGE / "PKGBUILD").read_text():
         failures.append("PKGBUILD does not depend on plymouth")
