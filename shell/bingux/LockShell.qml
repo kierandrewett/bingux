@@ -15,7 +15,13 @@ ShellRoot {
     // intentionally retained if the client dies.
     Component.onCompleted: {
         Quickshell.watchFiles = false;
+        SessionContext.enter("locked");
         lock.locked = true;
+    }
+
+    // Keyboard layouts for the session bar, from the user's bingux-statusd.
+    Metrics {
+        id: metrics
     }
 
     LockAuthentication {
@@ -65,6 +71,7 @@ ShellRoot {
             SessionScreen {
                 anchors.fill: parent
                 authentication: lockAuthentication
+                metrics: metrics
                 ready: lock.secure
                 accountName: lockAuthentication.userName
                 accountDisplayName: lockAuthentication.userDisplayName

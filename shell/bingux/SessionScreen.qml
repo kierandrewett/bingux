@@ -12,10 +12,10 @@ import Quickshell
 // screen then plays its exit and calls finish(), which hands over to the
 // desktop (unlock) or to the chosen session (greeter). finish() is idempotent.
 //
-// Date and clock sit at the top, the account identity and prompt at the
-// bottom, over the user's wallpaper. Surfaces are translucent white so they
-// read the same on any wallpaper. The host fills four slots: topContent (the
-// session bar), leadingContent (above the account), cornerLeadingContent
+// The session bar sits at the top, the date and clock below it, the account
+// identity and prompt at the bottom, over the user's wallpaper. Surfaces are
+// translucent white so they read the same on any wallpaper. The host fills
+// three slots: leadingContent (above the account), cornerLeadingContent
 // (bottom left) and cornerContent (bottom right).
 Item {
     id: root
@@ -34,7 +34,11 @@ Item {
     // Resolved by the caller: the user's own wallpaper for the lock, the
     // selected account's exported wallpaper for the greeter.
     property url wallpaper: ""
-    property alias topContent: top.data
+    // The top bar is on by default; metrics (bingux-statusd) feeds its
+    // keyboard layout menu and may be null.
+    property bool showBar: true
+    property var metrics: null
+    property string gnoblinCtlPath: "gnoblinctl"
     property alias leadingContent: leading.data
     property alias cornerLeadingContent: cornerLeading.data
     property alias cornerContent: corner.data
@@ -146,17 +150,35 @@ Item {
         }
     }
 
-    Item {
-        id: top
+    // The locked-down top bar: keyboard layout, status and power. Menus open
+    // inside this surface, above everything else on the screen.
+    SessionBar {
+        id: bar
+        objectName: "sessionBar"
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        implicitHeight: childrenRect.height
+        z: 20
+        visible: root.showBar
+        interactive: root.interactive
+        backdrop: backdrop
+        metrics: root.metrics
+        gnoblinCtlPath: root.gnoblinCtlPath
         opacity: root.showingControls ? 1 : 0
         Behavior on opacity {
             NumberAnimation {
                 duration: root.leaving ? Theme.sessionExitMotion : Theme.sessionEnterMotion
             }
+        }
+    }
+    // A click anywhere else closes the bar's menus.
+    MouseArea {
+        anchors.fill: parent
+        z: 19
+        visible: bar.openMenu !== ""
+        onClicked: {
+            bar.closeMenus();
+            root.focusPrompt();
         }
     }
 

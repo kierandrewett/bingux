@@ -110,7 +110,10 @@ ShellRoot {
         onTriggered: root.fail("timed out at step " + root.step + " secure=" + lock.secure)
     }
 
-    Component.onCompleted: lock.locked = true
+    Component.onCompleted: {
+        SessionContext.enter("locked");
+        lock.locked = true;
+    }
 
     WlSessionLock {
         id: lock

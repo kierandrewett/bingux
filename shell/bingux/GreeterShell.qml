@@ -10,7 +10,16 @@ import Quickshell.Wayland
 ShellRoot {
     id: root
 
-    Component.onCompleted: Quickshell.watchFiles = false
+    Component.onCompleted: {
+        Quickshell.watchFiles = false;
+        SessionContext.enter("greeter");
+    }
+
+    // Keyboard layouts for the session bar; the greeter session runs its own
+    // bingux-statusd (see packaging/gnoblin/greeter.lua).
+    Metrics {
+        id: metrics
+    }
 
     GreeterAuthentication {
         id: authentication
@@ -42,6 +51,7 @@ ShellRoot {
                 anchors.fill: parent
                 authentication: authentication
                 catalog: catalog
+                metrics: metrics
                 interactive: window.primary
             }
         }

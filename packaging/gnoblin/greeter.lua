@@ -7,6 +7,8 @@
 
 local defaults = {
     autostart = {
+        -- Status first: it publishes keyboard layouts for the greeter's bar.
+        { name = "bingux-statusd", command = { "/usr/local/bin/bingux-statusd" } },
         { name = "bingux-greeter", command = { "/usr/local/bin/bingux-greeter" } },
     },
     protocols = {

@@ -165,6 +165,7 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         source / "packaging/gnoblin/greeter.lua": prefix / "share/bingux/greeter/gnoblin.lua",
         source / "packaging/greetd/config.toml": prefix / "share/bingux/greeter/greetd.toml",
         source / "packaging/polkit/50-bingux-greeter.rules": prefix / "share/polkit-1/rules.d/50-bingux-greeter.rules",
+        source / "packaging/tmpfiles/bingux-greeter.conf": prefix / "lib/tmpfiles.d/bingux-greeter.conf",
     }
     missing = [str(path) for path in payload if not path.is_file()]
     if missing:
@@ -258,12 +259,12 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         elif path == source / "packaging/gnoblin/greeter.lua":
             # The greeter account has no shell profile; the autostart path must
             # point at this install's wrapper.
-            write_generated(
-                destination,
-                path.read_text().replace(
-                    '"/usr/local/bin/bingux-greeter"', json.dumps(str(prefix / "bin/bingux-greeter"))
-                ),
-            )
+            generated = path.read_text()
+            for name in ("bingux-greeter", "bingux-statusd"):
+                generated = generated.replace(
+                    json.dumps("/usr/local/bin/" + name), json.dumps(str(prefix / ("bin/" + name)))
+                )
+            write_generated(destination, generated)
         elif path == source / "scripts/bingux-greeter-session":
             write_generated(
                 destination,
@@ -402,6 +403,7 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     installed.append(Path("libexec/bingux/search-service"))
     installed.append(Path("bin/bingux-search-service"))
     unit_sources = sorted((source / "packaging/systemd").glob("bingux*.service"))
+    unit_sources += sorted((source / "packaging/systemd").glob("bingux*.path"))
     unit_sources.append(source / "packaging/systemd/bingux.target")
     for unit_source in unit_sources:
         unit = unit_source.read_text()
@@ -442,6 +444,8 @@ def integration_paths(prefix, managed=False):
         "bingux-capture-ui.service",
         "bingux-emoji-ui.service",
         "bingux-lock.service",
+        "bingux-greeter-export.service",
+        "bingux-greeter-export.path",
     )
     bin_dir = Path(os.environ.get("XDG_BIN_HOME") or Path.home() / ".local/bin")
     config_dir = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")

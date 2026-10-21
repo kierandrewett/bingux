@@ -30,11 +30,14 @@ Item {
         }
     }
 
+    // A dark tint over the blur: white rows stay readable on a bright sky,
+    // which a white tint cannot promise.
     SessionGlass {
         anchors.fill: parent
         backdrop: root.backdrop
         radius: 14
-        tint: Qt.rgba(1, 1, 1, 0.14)
+        tint: Qt.rgba(0, 0, 0, 0.32)
+        outline: Qt.rgba(1, 1, 1, 0.16)
     }
     // Clicks inside the panel must not reach the dismiss area behind it.
     MouseArea {

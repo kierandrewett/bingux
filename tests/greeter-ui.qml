@@ -18,6 +18,8 @@ ShellRoot {
         Qt.exit(1);
     }
 
+    Component.onCompleted: SessionContext.enter("greeter")
+
     GreeterAuthentication {
         id: authentication
         onLaunchFailed: message => root.fail("launch failed: " + message)
