@@ -97,7 +97,19 @@ fn battery(value: &str) -> Option<u8> {
         .ok()
 }
 
+/// Whether the kernel has a Bluetooth controller. Without one, and without
+/// bluetoothd, `bluetoothctl` waits for its whole timeout, so check first.
+fn has_controller() -> bool {
+    std::fs::read_dir("/sys/class/bluetooth").is_ok_and(|mut entries| entries.next().is_some())
+}
+
 fn load() -> Result<Model, CommandError> {
+    if !has_controller() {
+        return Ok(Model {
+            adapter: None,
+            devices: Vec::new(),
+        });
+    }
     if bluetoothctl(&["list"], TIMEOUT)?.trim().is_empty() {
         return Ok(Model {
             adapter: None,
