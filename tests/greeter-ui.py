@@ -209,6 +209,22 @@ def main():
         captured = []
         acks = [0]
 
+        def grab_settled(target):
+            # Popups lay out a few frames after they open; grab until two
+            # consecutive grabs match so the shot is not taken mid-layout.
+            previous = None
+            for _ in range(20):
+                time.sleep(0.3)
+                probe = target.with_suffix(".probe.png")
+                subprocess.run(["grim", str(probe)], env=environment, check=False)
+                current = probe.read_bytes() if probe.exists() else None
+                probe.unlink(missing_ok=True)
+                if current is not None and current == previous:
+                    target.write_bytes(current)
+                    return
+                previous = current
+            subprocess.run(["grim", str(target)], env=environment, check=False)
+
         def read_output():
             # Each "GREETER_UI_SHOT <name>" marker is grabbed once the frame
             # is settled, then the QML is resumed by rewriting the ack file.
@@ -216,9 +232,8 @@ def main():
                 lines.append(line)
                 if "GREETER_UI_SHOT " in line:
                     name = line.split("GREETER_UI_SHOT ", 1)[1].strip()
-                    time.sleep(0.3)
                     target = shots_dir / (name + ".png")
-                    subprocess.run(["grim", str(target)], env=environment, check=False)
+                    grab_settled(target)
                     captured.append(name)
                     acks[0] += 1
                     ack.write_text(str(acks[0]))

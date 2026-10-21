@@ -41,6 +41,25 @@ ShellRoot {
         paused = true;
     }
 
+    // Hold the queue until predicate() is true, then shoot. Used where the
+    // shown state is reached asynchronously (lazily created popups).
+    function shotWhen(name, predicate) {
+        if (predicate()) {
+            shot(name);
+            return;
+        }
+        pending.unshift(() => shotWhen(name, predicate));
+        paused = true;
+        waitTimer.restart();
+    }
+
+    Timer {
+        id: waitTimer
+        interval: 100
+        repeat: false
+        onTriggered: { paused = false; root.drain(); }
+    }
+
     Component.onCompleted: SessionContext.enter("greeter")
 
     // The harness rewrites this file after each screenshot to resume.
@@ -126,7 +145,7 @@ ShellRoot {
                 root.queue(() => root.shot("sessions"));
                 root.queue(() => screen.pageStack.back());
                 root.queue(() => screen.toggleControlCentre());
-                root.queue(() => root.shot("control-centre"));
+                root.queue(() => root.shotWhen("control-centre", () => screen.controlCentreOpen));
                 root.queue(() => screen.toggleControlCentre());
                 root.queue(() => screen.focusPrompt());
                 root.queue(() => { screen.responseField.text = "secret"; });

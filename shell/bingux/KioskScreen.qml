@@ -106,6 +106,7 @@ Item {
     // The real control centre, created on first use. The pendingOpen flag
     // covers the first request, which arrives before the item exists.
     property bool controlCentreWanted: false
+    readonly property bool controlCentreOpen: centreLoader.item !== null && centreLoader.item.visible
     property bool pendingOpen: false
 
     function toggleControlCentre() {
