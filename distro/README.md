@@ -110,20 +110,16 @@ QEMU runs of the tests below):
 Boot the image in UEFI mode, then:
 
 ```sh
-bingux-os-install --disk /dev/nvme0n1 --user kieran
+bingux-installer probe
+sudo bingux-installer install --plan plan.json
 ```
 
-This erases the whole disk (it asks you to type the disk name first; `--yes`
-skips that), creates a 512 MiB EFI partition and an ext4 root, installs the
-base system and `bingux-os` with archinstall and systemd-boot, creates the
-account with administrator rights and asks for its password (or reads
-`--password-file`). The base system comes from the Arch mirrors, so the
-machine needs a network connection. Other options: `--hostname`, `--timezone`,
-`--locale`, `--keyboard`.
-
-It supports UEFI only. For another layout, encryption or extra packages, run
-`archinstall` yourself and add `bingux-os` to the additional packages; its
-install hook does the rest.
+`probe` prints the disks as JSON. Write `plan.json` by hand: the v1 schema has
+the required keys `version`, `disk`, `confirm_erase`, `users`, `hostname`,
+`timezone`, `locale` and `keymap`, documented in `distro/installer/README.md`.
+`install` erases the disk named in the plan. The daemon,
+`bingux-installer-daemon`, is socket-activated. Interactive plan generation
+and a GUI installer are out of scope for v1. It supports UEFI only.
 
 `tests/distro-install.py` runs this end to end in QEMU: it installs onto a
 blank virtual disk, inspects the result, boots the disk alone and signs in.

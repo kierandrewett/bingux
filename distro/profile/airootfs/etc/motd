@@ -1,7 +1,8 @@
 Welcome to Bingux OS.
 
-To install Bingux OS onto a disk, run (this erases the disk):
-    bingux-os-install --disk /dev/DISK --user NAME
+To install Bingux OS onto a disk (this erases the disk), run
+`bingux-installer probe`, write a plan file, then run:
+    sudo bingux-installer install --plan plan.json
 
 For Wi-Fi, connect with the nmtui or nmcli utilities.
 Ethernet and Wi-Fi networks should connect automatically.
