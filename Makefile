@@ -74,6 +74,7 @@ check: doctor-build native daemons
 	python3 tests/shortcut-reload.py
 	python3 tests/gnoblin-menu-focus.py
 	BINGUX_STATUSD_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-statusd python3 tests/osd-event-bridge.py
+	BINGUX_STATUSD_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-statusd python3 tests/pad-help-event-bridge.py
 	python3 tests/lock-contract.test.py
 	$(MAKE) check-session
 	python3 tests/install-dependencies.py
@@ -91,6 +92,7 @@ check-session: native daemons shell
 	QS_TEST_BIN=$(SHELL_BIN) BINGUX_SESSION_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-session python3 tests/greeter-ui.py
 	QS_TEST_BIN=$(SHELL_BIN) QML_IMPORT_PATH=$(abspath $(BUILD_DIR))/qml python3 tests/lock-ui.py
 	QS_TEST_BIN=$(SHELL_BIN) python3 tests/identify.py
+	QS_TEST_BIN=$(SHELL_BIN) python3 tests/pad-help.py
 	QUICKSHELL_BIN=$(SHELL_BIN) bash tests/search-command.sh
 	python3 tests/shell-archive.py --build-dir $(BUILD_DIR)
 

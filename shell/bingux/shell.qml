@@ -380,6 +380,14 @@ ShellRoot {
         state: identify
     }
 
+    PadHelpState {
+        id: padHelp
+    }
+
+    PadHelpSurface {
+        state: padHelp
+    }
+
     // Without seconds the clock wakes once a minute. Redrawing the bar every
     // second keeps the compositor re-rendering a blurred surface around the clock.
     Timer {

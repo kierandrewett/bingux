@@ -146,10 +146,11 @@ def main():
                 raise AssertionError(f"unexpected event subscription: {subscription!r}")
             # Gnoblin keeps one API version per connection, the latest request's,
             # and counts a lock subscriber only while it is 1.21 or more (OSD
-            # events: 1.27). A later request at a lower version silently ends
-            # both subscriptions, so every request must carry the same one.
+            # events: 1.27, pad help: 1.73). A later request at a lower version
+            # silently ends both subscriptions, so every request must carry the
+            # same one: the wire minor is the hello minor capped at 1.73.
             versions = {json.dumps(request.get("api_version"), sort_keys=True) for request in requests}
-            if versions != {json.dumps({"major": 1, "minor": 27})}:
+            if versions != {json.dumps({"major": 1, "minor": 73})}:
                 raise AssertionError(f"requests use different API versions: {requests!r}")
 
             expected = {

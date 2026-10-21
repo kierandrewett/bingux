@@ -661,3 +661,31 @@ Numbers follow the request order, and each connector is matched to an output by 
 Settings sends every display in its page order, including disabled displays. Each display group shows the same number in its Number row. The shell accepts 1 to 16 unique connector names made of letters, digits, dots, underscores and dashes.
 
 `tests/identify.qml` covers replacement, ordering, rejected payloads, hide, expiry, click-through and hotplug. `tests/identify.py` runs it in headless Sway as part of `make check-session`.
+
+## Tablet-pad help
+
+When a tablet pad's configured `help` button is pressed, Gnoblin (native-control API 1.73 or later) sends
+`gnoblin.input.pad-help-requested`. Gnoblin shows nothing itself, so Bingux draws the card. `bingux-statusd`
+subscribes only when the compositor reports API 1.73, maps `monitor_id` to the current monitor index, and
+forwards one newline-delimited JSON record on `$XDG_RUNTIME_DIR/bingux/pad-help-v1.sock`. A request with no
+`monitor_id` targets the first monitor. A request naming an unknown monitor is dropped.
+
+The record is `protocolVersion` 1, `type` `pad-help`, `monitorIndex`, `outputNames`, `editionMode`, `device`
+(`id`, `name`, `deviceType`), `buttons` (`button`, optional `label`, optional `modeGroup`), `modeGroups`
+(`group`, `modeCount`, `switchButtons`) and `features` (`type` of `ring`, `strip` or `dial`, `index`, optional
+`positiveLabel` and `negativeLabel`). The daemon rejects control characters and caps the record at 64 buttons,
+8 mode groups, 32 features and 8 KiB of label text. It forwards no other field and the shell sends nothing
+back to Gnoblin. `{"protocolVersion":1,"type":"pad-help-clear"}` is sent to every client when the Gnoblin
+connection drops.
+
+The card names the device and lists its buttons, mode groups, rings, strips and dials. A control with no
+label from the input stack shows as unlabelled instead of blank. Only one card exists: a new request replaces
+the old one, on whichever output it names. The card closes after 10 seconds, on Escape, on a clear record, or
+when the shell's socket to `bingux-statusd` drops. While it is open it holds exclusive keyboard focus so Escape
+reaches it, and pointer input outside the card passes through. With reduced motion enabled
+(`BINGUX_REDUCED_MOTION=1`) it appears and hides without fading.
+
+`tests/pad-help-event-bridge.py` sends a fixture event through the real daemon and checks the record and the
+clear record. `tests/pad-help.qml` and `tests/pad-help.py` check the surface in headless Sway: replacement,
+missing labels, Escape, expiry and clearing on disconnect. The bridge test runs in `make check`. The surface
+test runs in `make check-session`, which `make check` also runs.

@@ -32,6 +32,8 @@ WorkspaceChangeState 1.0 WorkspaceChangeState.qml
 WorkspaceChangeSurface 1.0 WorkspaceChangeSurface.qml
 IdentifyState 1.0 IdentifyState.qml
 IdentifySurface 1.0 IdentifySurface.qml
+PadHelpState 1.0 PadHelpState.qml
+PadHelpSurface 1.0 PadHelpSurface.qml
 Pill 1.0 Pill.qml
 ShortcutSession 1.0 ShortcutSession.qml
 WindowSwitcher 1.0 WindowSwitcher.qml
