@@ -272,11 +272,11 @@ pub(crate) struct SmoothDamp {
 /// coming and settles fast once they stop, so a scroll neither lingers nor
 /// snaps. `BINGUX_SCROLL_SPEED` scales all three (default 1; 2 is twice as
 /// quick, 0.5 twice as soft).
-const BEGIN_OMEGA: f32 = 35.0;
-const CONTINUOUS_OMEGA: f32 = 14.0;
+const BEGIN_OMEGA: f32 = 40.0;
+const CONTINUOUS_OMEGA: f32 = 30.0;
 const SETTLE_OMEGA: f32 = 60.0;
 /// Seconds without a wheel event after which the scroll settles.
-const SETTLE_AFTER: f32 = 0.08;
+const SETTLE_AFTER: f32 = 0.06;
 /// Seconds between wheel events within which a motion counts as continuous.
 const CONTINUOUS_WITHIN: f32 = 0.12;
 
@@ -439,7 +439,19 @@ impl ScrollController {
                 previous_frame = Instant::now();
 
                 let target = scroll_controller.position();
-                if damp.write().advance(target, elapsed_seconds) {
+                let settled = damp.write().advance(target, elapsed_seconds);
+                if std::env::var_os("BINGUX_SCROLL_DEBUG").is_some() {
+                    let d = damp.read();
+                    eprintln!(
+                        "[scroll] frame dt={:.1}ms pos_y={:.1} target_y={:.1} vel_y={:.0} settled={}",
+                        elapsed_seconds * 1000.0,
+                        d.position.y,
+                        target.y,
+                        d.velocity.y,
+                        settled
+                    );
+                }
+                if settled {
                     break;
                 }
 

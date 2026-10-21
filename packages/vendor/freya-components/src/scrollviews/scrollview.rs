@@ -34,8 +34,18 @@ use crate::scrollviews::{
     use_scroll_controller,
 };
 
+/// Milliseconds since the first debug call, for BINGUX_SCROLL_DEBUG logs.
+fn debug_ms() -> f64 {
+    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    START
+        .get_or_init(std::time::Instant::now)
+        .elapsed()
+        .as_secs_f64()
+        * 1000.0
+}
+
 /// Bingux patch: the most a wheel scroll may trail its target, in pixels.
-const MAX_WHEEL_LAG: f32 = 240.0;
+const MAX_WHEEL_LAG: f32 = 1200.0;
 
 /// Scrollable area with bidirectional support and scrollbars.
 ///
@@ -300,6 +310,16 @@ impl Component for ScrollView {
             };
 
             let animate = e.source == WheelSource::Line;
+            if std::env::var_os("BINGUX_SCROLL_DEBUG").is_some() {
+                eprintln!(
+                    "[scroll] t={:.0}ms wheel src={:?} dy={:.1} rendered_y={:.1} target_y={:.1}",
+                    debug_ms(),
+                    e.source,
+                    y_movement,
+                    rendered_position.y,
+                    corrected_scrolled_y
+                );
+            }
             if animate {
                 scroll_controller.animate_from(rendered_position);
             } else {
@@ -308,9 +328,9 @@ impl Component for ScrollView {
             // Bingux patch: a wheel scroll can be interrupted. The new target
             // starts from the content's current position when the wheel turns
             // the other way (the old pending travel is dropped), and the
-            // content never trails its target by more than MAX_WHEEL_LAG, so
-            // a fast spin cannot queue up distance that keeps scrolling after
-            // the wheel stops.
+            // content never trails its target by more than MAX_WHEEL_LAG. The cap
+            // is large: a free-spinning wheel sends thousands of pixels a
+            // second and the content has to be able to keep up with it.
             let base = |target: f32, rendered: f32, movement: f32| -> f32 {
                 if !animate {
                     return rendered;

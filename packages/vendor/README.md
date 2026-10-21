@@ -14,8 +14,8 @@ The only changes are scroll feel for a desktop:
   `BINGUX_SCROLL_SPEED` scales it (1 default, 2 twice as quick).
 - `freya-components/src/scrollviews/scrollview.rs`: a wheel scroll can be
   interrupted. Turning the wheel the other way drops the pending travel and
-  starts from the content's current position, and the content never trails its
-  target by more than 240 px, so a fast spin cannot queue up distance.
+  starts from the content's current position. `BINGUX_SCROLL_DEBUG=1` prints
+  every wheel event and animation frame to stderr.
 
 Both crates are MIT licensed by the Freya authors. Tests and examples are not
 copied. Drop this directory and the patch entries when upstream exposes these
