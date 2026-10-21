@@ -1,0 +1,40 @@
+# Bingux OS installer: root daemon (socket-activated) and client CLI that
+# partition, copy and configure a target disk from the live image.
+# The container build supplies bingux-installer-src.tar.xz, which holds the
+# installer/ tree from distro/installer (see distro/container-build.sh).
+# shellcheck shell=bash disable=SC2034
+pkgname=bingux-installer
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Bingux OS installer: privileged daemon and client that install Bingux OS from the live image'
+arch=('any')
+url='https://github.com/kierandrewett/bingux'
+license=('GPL-3.0-or-later')
+depends=('python' 'python-blivet' 'parted' 'gptfdisk' 'dosfstools' 'e2fsprogs' 'btrfs-progs'
+    'cryptsetup' 'rsync' 'openssl' 'util-linux' 'squashfs-tools' 'mkinitcpio' 'systemd'
+    'grub' 'efibootmgr' 'ntfs-3g')
+makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
+options=('!debug')
+install=bingux-installer.install
+source=('bingux-installer-src.tar.xz')
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/installer" || return
+    python -m build --wheel --no-isolation
+}
+
+package() {
+    cd "$srcdir/installer" || return
+    python -m installer --destdir="$pkgdir" dist/*.whl
+
+    local unit
+    for unit in systemd/*.socket systemd/*.service; do
+        install -Dm644 "$unit" -t "$pkgdir/usr/lib/systemd/system/"
+    done
+    # Group bingux-install gates the socket; created by systemd-sysusers.
+    install -Dm644 systemd/bingux-installer.conf "$pkgdir/usr/lib/sysusers.d/bingux-installer.conf"
+
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

@@ -90,6 +90,11 @@ build_package() {
             }
             cp "$archive" "$dir/"
             ;;
+        bingux-installer)
+            tar -C "$DISTRO" -cJf "$dir/bingux-installer-src.tar.xz" \
+                --exclude=tests/vm --exclude=__pycache__ --exclude='*.egg-info' \
+                --exclude=dist --exclude=.pytest_cache installer
+            ;;
     esac
     chown -R builder:builder "$dir" "$REPO"
     # -f: a rerun with regenerated sources replaces the package of the same version.
@@ -124,6 +129,8 @@ register_repo() {
 build_packages() {
     build_package gnoblin
     build_package bingux
+    build_package python-blivet
+    build_package bingux-installer
     build_package bingux-os
 }
 

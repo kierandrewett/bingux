@@ -63,7 +63,6 @@ wireplumber
 sof-firmware
 alsa-utils
 arch-install-scripts
-archinstall
 xdg-user-dirs
 xdg-utils
 noto-fonts
@@ -105,4 +104,12 @@ adwaita-fonts
 gsettings-desktop-schemas
 dconf
 foot
+
+# Installer: installs Bingux OS onto a disk from the live session
+python
+python-blivet
+bingux-installer
+ntfs-3g
+squashfs-tools
+openssl
 firefox

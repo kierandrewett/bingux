@@ -23,5 +23,4 @@ file_permissions=(
     ["/etc/gshadow"]="0:0:400"
     ["/root"]="0:0:750"
     ["/usr/local/bin/bingux-os-firstboot"]="0:0:755"
-    ["/usr/local/bin/bingux-os-install"]="0:0:755"
 )

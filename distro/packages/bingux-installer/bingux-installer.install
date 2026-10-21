@@ -1,0 +1,14 @@
+post_install() {
+    # Creates the bingux-install group that gates the installer socket.
+    # The socket itself is never enabled on installed systems.
+    systemd-sysusers
+    systemctl daemon-reload
+}
+
+post_upgrade() {
+    post_install
+}
+
+post_remove() {
+    systemctl daemon-reload
+}
