@@ -1,5 +1,8 @@
 use crate::Event;
-use bingux_statusd::{DesktopState, InputSource, OsdRequest, PrivacyState};
+use bingux_statusd::{
+    DesktopState, InputSource, OsdRequest, PadHelpButton, PadHelpDevice, PadHelpFeature,
+    PadHelpFeatureKind, PadHelpModeGroup, PadHelpRequest, PrivacyState,
+};
 use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -26,13 +29,15 @@ const EVENTS_API_MINOR: u64 = 9;
 const OSD_API_MINOR: u64 = 27;
 const MONITORS_API_MINOR: u64 = 1;
 const LOCK_API_MINOR: u64 = 21;
+const PAD_HELP_API_MINOR: u64 = 73;
 
 const PRIVACY_EVENT: &str = "gnoblin.privacy.changed";
 const OSD_EVENT: &str = "gnoblin.osd.requested";
+const PAD_HELP_EVENT: &str = "gnoblin.input.pad-help-requested";
 const LOCK_EVENT: &str = "gnoblin.session.lock-requested";
 const LOCK_UNIT: &str = "bingux-lock.service";
 
-/// Start the compositor-socket subscriber for Gnoblin state and OSD requests.
+/// Start the compositor-socket subscriber for Gnoblin state, OSD and pad-help requests.
 pub fn start_state_subscriber(sender: SyncSender<Event>) {
     thread::spawn(move || run_state_subscriber(sender));
 }
@@ -49,6 +54,7 @@ fn run_state_subscriber(sender: SyncSender<Event>) {
         if sender
             .send(Event::DesktopState(DesktopState::default()))
             .is_err()
+            || sender.send(Event::PadHelpClear).is_err()
         {
             return;
         }
@@ -77,12 +83,12 @@ fn subscribe_to_gnoblin(
     let events = string_set(hello.get("events"));
 
     // Gnoblin keeps one API version per connection, the one of the latest
-    // request, and delivers lock requests and OSD events only while it is
-    // high enough (lock 1.21, OSD 1.27). Every request therefore carries the
+    // request, and delivers lock requests, OSD and pad-help events only while it is
+    // high enough (lock 1.21, OSD 1.27, pad help 1.73). Every request therefore carries the
     // same version, the highest this client needs, instead of the lowest each
     // call would accept: the input and privacy reads used to drop it to 1.6
     // and 1.17 right after the subscription and silently ended it.
-    let wire_minor = api_minor.min(OSD_API_MINOR);
+    let wire_minor = api_minor.min(PAD_HELP_API_MINOR);
     let subscribed_events = supported_events(api_minor, &events);
     let mut initial_subscriptions = BTreeSet::new();
     let expected_events: BTreeSet<String> = subscribed_events
@@ -235,6 +241,13 @@ fn subscribe_to_gnoblin(
                         .map_err(|_| "OSD receiver stopped".to_owned())?;
                 }
             }
+            PAD_HELP_EVENT => {
+                if let Some(request) = pad_help_request_from_event(&record, &monitors) {
+                    sender
+                        .send(Event::PadHelpRequest(request))
+                        .map_err(|_| "pad-help receiver stopped".to_owned())?;
+                }
+            }
             "subscribed" => {
                 if initial_subscriptions.contains("events") {
                     let accepted = string_set(record.get("events"));
@@ -296,6 +309,9 @@ fn supported_events(api_minor: u64, available: &BTreeSet<String>) -> Vec<&'stati
     }
     if api_minor >= OSD_API_MINOR && available.contains(OSD_EVENT) {
         events.push(OSD_EVENT);
+    }
+    if api_minor >= PAD_HELP_API_MINOR && available.contains(PAD_HELP_EVENT) {
+        events.push(PAD_HELP_EVENT);
     }
     if api_minor >= LOCK_API_MINOR && available.contains(LOCK_EVENT) {
         events.push(LOCK_EVENT);
@@ -582,17 +598,7 @@ fn osd_request_from_event(
 ) -> Option<OsdRequest> {
     let monitor_id = value.get("monitor_id")?.as_str()?;
     let monitor_index = monitors.get(monitor_id)?.index;
-    let output_names = value
-        .get("output_names")
-        .and_then(Value::as_array)
-        .map(|names| {
-            names
-                .iter()
-                .map(|name| name.as_str().map(str::to_owned))
-                .collect::<Option<Vec<_>>>()
-        })
-        .flatten()
-        .unwrap_or_else(|| vec![monitor_id.to_owned()]);
+    let output_names = event_output_names(value, monitor_id);
     let icon = value
         .get("icon")
         .and_then(Value::as_str)
@@ -606,6 +612,117 @@ fn osd_request_from_event(
     // Gnoblin's native event carries presentation details only. Negative
     // levels tell the existing Bingux OSD protocol to omit its level bar.
     OsdRequest::new(monitor_index, output_names, icon, label, -1.0, -1.0)
+}
+
+/// The outputs an event targets, falling back to the monitor's own id when
+/// Gnoblin omits or malforms `output_names`.
+fn event_output_names(value: &Value, monitor_id: &str) -> Vec<String> {
+    value
+        .get("output_names")
+        .and_then(Value::as_array)
+        .and_then(|names| {
+            names
+                .iter()
+                .map(|name| name.as_str().map(str::to_owned))
+                .collect::<Option<Vec<_>>>()
+        })
+        .unwrap_or_else(|| vec![monitor_id.to_owned()])
+}
+
+fn pad_help_request_from_event(
+    value: &Value,
+    monitors: &BTreeMap<String, Monitor>,
+) -> Option<PadHelpRequest> {
+    let monitor_id = value.get("monitor_id")?.as_str()?;
+    let monitor_index = monitors.get(monitor_id)?.index;
+    let output_names = event_output_names(value, monitor_id);
+    let edition_mode = value.get("edition_mode")?.as_bool()?;
+    let device = pad_help_device(value.get("device")?)?;
+    let buttons = array_items(value, "buttons", pad_help_button)?;
+    let mode_groups = array_items(value, "mode_groups", pad_help_mode_group)?;
+    let features = array_items(value, "features", pad_help_feature)?;
+    PadHelpRequest::new(
+        monitor_index,
+        output_names,
+        edition_mode,
+        device,
+        buttons,
+        mode_groups,
+        features,
+    )
+}
+
+/// Map every element of an array field; one malformed element rejects the request.
+fn array_items<T>(value: &Value, key: &str, parse: fn(&Value) -> Option<T>) -> Option<Vec<T>> {
+    value.get(key)?.as_array()?.iter().map(parse).collect()
+}
+
+fn pad_help_device(value: &Value) -> Option<PadHelpDevice> {
+    Some(PadHelpDevice {
+        id: value.get("id")?.as_str()?.to_owned(),
+        name: value.get("name")?.as_str()?.to_owned(),
+        device_type: value.get("device_type")?.as_str()?.to_owned(),
+    })
+}
+
+fn pad_help_button(value: &Value) -> Option<PadHelpButton> {
+    Some(PadHelpButton {
+        button: u32_field(value, "button")?,
+        label: optional_label(value, "label")?,
+        mode_group: optional_u32_field(value, "mode_group")?,
+    })
+}
+
+fn pad_help_mode_group(value: &Value) -> Option<PadHelpModeGroup> {
+    Some(PadHelpModeGroup {
+        group: u32_field(value, "group")?,
+        mode_count: u32_field(value, "mode_count")?,
+        switch_buttons: array_items(value, "switch_buttons", u32_value)?,
+    })
+}
+
+fn pad_help_feature(value: &Value) -> Option<PadHelpFeature> {
+    // Gnoblin names a strip's labels by direction and a ring's or dial's by rotation.
+    let (kind, positive_key, negative_key) = match value.get("type")?.as_str()? {
+        "ring" => (PadHelpFeatureKind::Ring, "clockwise_label", "counterclockwise_label"),
+        "dial" => (PadHelpFeatureKind::Dial, "clockwise_label", "counterclockwise_label"),
+        "strip" => (PadHelpFeatureKind::Strip, "up_label", "down_label"),
+        _ => return None,
+    };
+    Some(PadHelpFeature {
+        kind,
+        index: u32_field(value, "index")?,
+        positive_label: optional_label(value, positive_key)?,
+        negative_label: optional_label(value, negative_key)?,
+    })
+}
+
+fn u32_value(value: &Value) -> Option<u32> {
+    value.as_u64().and_then(|number| u32::try_from(number).ok())
+}
+
+fn u32_field(value: &Value, key: &str) -> Option<u32> {
+    u32_value(value.get(key)?)
+}
+
+/// An absent or null optional number is `Some(None)`; a present value of the
+/// wrong type rejects the whole request.
+fn optional_u32_field(value: &Value, key: &str) -> Option<Option<u32>> {
+    match value.get(key) {
+        None | Some(Value::Null) => Some(None),
+        Some(field) => u32_value(field).map(Some),
+    }
+}
+
+/// Absent, null and empty labels are all `Some(None)`, so the surface shows its
+/// own fallback for an unlabelled control.
+fn optional_label(value: &Value, key: &str) -> Option<Option<String>> {
+    match value.get(key) {
+        None | Some(Value::Null) => Some(None),
+        Some(Value::String(label)) if label.is_empty() => Some(None),
+        Some(Value::String(label)) => Some(Some(label.to_owned())),
+        Some(_) => None,
+    }
 }
 
 fn json_revision(value: Option<&Value>) -> Option<u64> {
@@ -625,10 +742,12 @@ fn publish_state(state: &StateSnapshot, sender: &SyncSender<Event>) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::{
-        MAX_BRIDGE_LINE_BYTES, StateSnapshot, osd_request_from_event, parse_input_source,
-        parse_monitor_snapshot, read_json_line, supported_events, validate_hello,
+        MAX_BRIDGE_LINE_BYTES, StateSnapshot, osd_request_from_event,
+        pad_help_request_from_event, parse_input_source, parse_monitor_snapshot, read_json_line,
+        supported_events, validate_hello,
     };
-    use serde_json::json;
+    use bingux_statusd::pad_help_json;
+    use serde_json::{Value, json};
     use std::{collections::BTreeSet, io::Cursor};
 
     #[test]
@@ -640,6 +759,7 @@ mod tests {
             "gnoblin.privacy.changed".to_owned(),
             "gnoblin.osd.requested".to_owned(),
             "gnoblin.session.lock-requested".to_owned(),
+            "gnoblin.input.pad-help-requested".to_owned(),
         ]);
         assert_eq!(
             supported_events(20, &available),
@@ -654,6 +774,15 @@ mod tests {
             vec![
                 "gnoblin.privacy.changed",
                 "gnoblin.osd.requested",
+                "gnoblin.session.lock-requested"
+            ]
+        );
+        assert_eq!(
+            supported_events(73, &available),
+            vec![
+                "gnoblin.privacy.changed",
+                "gnoblin.osd.requested",
+                "gnoblin.input.pad-help-requested",
                 "gnoblin.session.lock-requested"
             ]
         );
@@ -723,5 +852,43 @@ mod tests {
             "{\"protocolVersion\":2,\"type\":\"osd\",\"monitorIndex\":2,\"outputNames\":[\"DP-1\"],\"icon\":\"audio-volume-high-symbolic\",\"label\":\"Volume\",\"level\":-1.0,\"maxLevel\":-1.0}\n"
         );
         assert!(osd_request_from_event(&json!({"monitor_id":"HDMI-1"}), &monitors).is_none());
+    }
+
+    #[test]
+    fn maps_pad_help_monitor_and_keeps_only_well_formed_payloads() {
+        let monitors = parse_monitor_snapshot(&json!({"monitors":[{"id":"DP-1", "index":2}]}));
+        let event = json!({
+            "event": "gnoblin.input.pad-help-requested",
+            "monitor_id": "DP-1",
+            "edition_mode": false,
+            "device": {"id": "pad-1", "name": "Intuos Pro M Pad", "device_type": "pad"},
+            "buttons": [
+                {"button": 1, "label": "Toggle overlay", "mode_group": 0},
+                {"button": 2, "label": ""}
+            ],
+            "mode_groups": [{"group": 0, "mode_count": 2, "switch_buttons": [1]}],
+            "features": [
+                {"type": "ring", "index": 0, "clockwise_label": "Zoom in", "counterclockwise_label": ""},
+                {"type": "strip", "index": 1, "up_label": "Scroll up", "down_label": "Scroll down"}
+            ]
+        });
+        let request = pad_help_request_from_event(&event, &monitors).unwrap();
+        let record: Value = serde_json::from_str(&pad_help_json(&request).unwrap()).unwrap();
+        assert_eq!(record["monitorIndex"], 2);
+        assert_eq!(record["outputNames"], json!(["DP-1"]));
+        assert_eq!(record["device"]["deviceType"], "pad");
+        assert_eq!(record["buttons"][0]["label"], "Toggle overlay");
+        assert!(record["buttons"][1].get("label").is_none());
+        assert_eq!(record["features"][0]["type"], "ring");
+        assert!(record["features"][0].get("negativeLabel").is_none());
+        assert_eq!(record["features"][1]["negativeLabel"], "Scroll down");
+
+        assert!(pad_help_request_from_event(&json!({"monitor_id":"HDMI-1"}), &monitors).is_none());
+        let mut unknown_feature = event.clone();
+        unknown_feature["features"] = json!([{"type": "wheel", "index": 0}]);
+        assert!(pad_help_request_from_event(&unknown_feature, &monitors).is_none());
+        let mut missing_edition = event.clone();
+        missing_edition.as_object_mut().unwrap().remove("edition_mode");
+        assert!(pad_help_request_from_event(&missing_edition, &monitors).is_none());
     }
 }

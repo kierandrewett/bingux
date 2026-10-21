@@ -5,8 +5,9 @@ mod gnoblin;
 mod record_allocation;
 
 use bingux_statusd::{
-    DesktopState, Metrics, OsdRequest, byte_rate, cpu_percent, metrics_with_desktop_state_json,
-    microphone::CaptureSnapshot, osd_json, parse_cpu_stat, parse_meminfo, parse_network_totals,
+    DesktopState, Metrics, OsdRequest, PAD_HELP_CLEAR_RECORD, PadHelpRequest, byte_rate,
+    cpu_percent, metrics_with_desktop_state_json, microphone::CaptureSnapshot, osd_json,
+    pad_help_json, parse_cpu_stat, parse_meminfo, parse_network_totals,
 };
 use std::{
     env,
@@ -26,6 +27,7 @@ use std::{
 
 const METRICS_SOCKET_NAME: &str = "metrics-v1.sock";
 const OSD_SOCKET_NAME: &str = "osd-v2.sock";
+const PAD_HELP_SOCKET_NAME: &str = "pad-help-v1.sock";
 const SAMPLE_INTERVAL: Duration = Duration::from_secs(2);
 const MAX_CLIENTS: usize = 16;
 const EVENT_QUEUE_CAPACITY: usize = MAX_CLIENTS * 2 + 8;
@@ -36,9 +38,12 @@ const ACTIVE_SOCKET_PROBE_TIMEOUT: Duration = Duration::from_millis(250);
 pub(crate) enum Event {
     MetricsClient(UnixStream),
     OsdClient(UnixStream),
+    PadHelpClient(UnixStream),
     DesktopState(DesktopState),
     Microphone(CaptureSnapshot),
     OsdRequest(OsdRequest),
+    PadHelpRequest(PadHelpRequest),
+    PadHelpClear,
 }
 
 struct RawSample {
@@ -114,8 +119,10 @@ fn main() {
 fn run() -> io::Result<()> {
     let metrics_listener = bind_socket(METRICS_SOCKET_NAME)?;
     let osd_listener = bind_socket(OSD_SOCKET_NAME)?;
+    let pad_help_listener = bind_socket(PAD_HELP_SOCKET_NAME)?;
     eprintln!("[bingux-statusd] metrics socket ready");
     eprintln!("[bingux-statusd] OSD socket ready");
+    eprintln!("[bingux-statusd] pad-help socket ready");
     let (sender, receiver) = mpsc::sync_channel(EVENT_QUEUE_CAPACITY);
     start_client_listener(
         metrics_listener,
@@ -129,6 +136,12 @@ fn run() -> io::Result<()> {
         OSD_SOCKET_NAME,
         Event::OsdClient,
     );
+    start_client_listener(
+        pad_help_listener,
+        sender.clone(),
+        PAD_HELP_SOCKET_NAME,
+        Event::PadHelpClient,
+    );
     gnoblin::start_state_subscriber(sender.clone());
     bingux_statusd::microphone::start(move |snapshot| {
         sender.send(Event::Microphone(snapshot)).is_ok()
@@ -141,6 +154,7 @@ fn run() -> io::Result<()> {
     let mut latest_record = record_json(&latest_metrics, &desktop_state, &microphone)?;
     let mut metrics_clients = Vec::new();
     let mut osd_clients = Vec::new();
+    let mut pad_help_clients = Vec::new();
     let mut next_sample = Instant::now() + SAMPLE_INTERVAL;
 
     loop {
@@ -180,6 +194,13 @@ fn run() -> io::Result<()> {
                     osd_clients.push(client);
                 }
             }
+            Ok(Event::PadHelpClient(client)) => {
+                // Pad help is transient: a new client receives only later requests.
+                prune_disconnected_clients(&mut pad_help_clients);
+                if pad_help_clients.len() < MAX_CLIENTS && client.set_nonblocking(true).is_ok() {
+                    pad_help_clients.push(client);
+                }
+            }
             Ok(Event::DesktopState(state)) => {
                 desktop_state = state;
                 latest_record = record_json(&latest_metrics, &desktop_state, &microphone)?;
@@ -194,6 +215,14 @@ fn run() -> io::Result<()> {
                 let record = osd_json(&request)
                     .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
                 publish_record(&mut osd_clients, &record);
+            }
+            Ok(Event::PadHelpRequest(request)) => {
+                let record = pad_help_json(&request)
+                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+                publish_record(&mut pad_help_clients, &record);
+            }
+            Ok(Event::PadHelpClear) => {
+                publish_record(&mut pad_help_clients, PAD_HELP_CLEAR_RECORD);
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => {
