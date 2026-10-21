@@ -16,9 +16,29 @@ install_repository() {
     fi
 }
 
+# archinstall creates the account before it installs the additional packages,
+# so the account misses the files this package puts in /etc/skel. Give regular
+# accounts the Gnoblin configuration when they have none; without it Gnoblin
+# seeds its own example, which does not load the Bingux drop-ins, and the
+# session shows no shell.
+seed_existing_accounts() {
+    local skel=/etc/skel/.config/gnoblin/init.lua name uid gid home existing
+    while IFS=: read -r name _ uid gid _ home _; do
+        { [ "$uid" -ge 1000 ] && [ "$uid" -lt 60000 ] && [ -d "$home" ]; } 2>/dev/null || continue
+        existing=
+        for file in init.lua gnoblin.toml gnoblin.conf; do
+            [ -e "$home/.config/gnoblin/$file" ] && existing=1
+        done
+        [ -z "$existing" ] || continue
+        install -d -o "$uid" -g "$gid" -m 755 "$home/.config" "$home/.config/gnoblin"
+        install -o "$uid" -g "$gid" -m 644 "$skel" "$home/.config/gnoblin/init.lua"
+    done </etc/passwd
+}
+
 post_install() {
     install_repository
     install_greeter_config
+    seed_existing_accounts
     systemctl enable greetd.service NetworkManager.service >/dev/null 2>&1 || true
     systemctl set-default graphical.target >/dev/null 2>&1 || true
     # Bingux's helper daemons (status, search, lock requests) follow every
