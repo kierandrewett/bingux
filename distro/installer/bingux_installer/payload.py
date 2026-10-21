@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from .runner import CommandError, Runner
 from .storage import StorageLayout
 
 SOURCE_SFS = "/run/archiso/bootmnt/arch/x86_64/airootfs.sfs"
+LIVE_KERNEL = "/run/archiso/bootmnt/arch/boot/x86_64/vmlinuz-linux"
 SOURCE_MNT = Path("/run/bingux-installer/source")
 TARGET_MNT = Path("/run/bingux-installer/target")
 RSYNC_PERCENT = re.compile(r"(\d{1,3})%")
@@ -24,9 +26,12 @@ CHROOT_BINDS = (("/dev", "dev", "--rbind"), ("/proc", "proc", "--rbind"),
                 ("/sys", "sys", "--rbind"), ("/run", "run", "--bind"))
 
 
-def preflight(sfs: str = SOURCE_SFS, *, exists: Callable[[str], bool] = os.path.isfile) -> None:
+def preflight(sfs: str = SOURCE_SFS, kernel: str = LIVE_KERNEL, *,
+              exists: Callable[[str], bool] = os.path.isfile) -> None:
     if not exists(sfs):
         raise InstallerError("payload_failed", f"live payload {sfs} is missing")
+    if not exists(kernel):
+        raise InstallerError("payload_failed", f"live kernel {kernel} is missing")
 
 
 def mount_source(runner: Runner, sfs: str, mountpoint: Path) -> None:
@@ -36,6 +41,21 @@ def mount_source(runner: Runner, sfs: str, mountpoint: Path) -> None:
 
 def unmount_source(runner: Runner, mountpoint: Path) -> None:
     runner.run(["umount", str(mountpoint)], check=False)
+
+
+def copy_kernel(target: Path, kernel: str = LIVE_KERNEL) -> None:
+    """Place the live kernel at target/boot/vmlinuz-linux.
+
+    archiso moves the kernel and initramfs out of the airootfs onto the ISO, so the
+    copied /boot is empty and mkinitcpio has no kernel to build from. The ISO kernel
+    is the same build as the squashfs modules. On UEFI target/boot is the ESP.
+    """
+    boot = target / "boot"
+    try:
+        boot.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(kernel, boot / "vmlinuz-linux")
+    except OSError as exc:
+        raise InstallerError("payload_failed", f"could not copy the kernel: {exc}") from exc
 
 
 def copy_payload(runner: Runner, source: Path, target: Path,

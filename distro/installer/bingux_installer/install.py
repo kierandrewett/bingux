@@ -220,6 +220,7 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
         phase("copy", 0, "copying the live system")
         _guard("payload_failed", payload.copy_payload, runner, env.source, env.target,
                lambda pct: phase("copy", pct, f"copying the live system ({pct}%)"))
+        _guard("payload_failed", payload.copy_kernel, env.target)
         payload.unmount_source(runner, env.source)
         mounts.source = False
         _guard("payload_failed", payload.mount_chroot_binds, runner, env.target)
