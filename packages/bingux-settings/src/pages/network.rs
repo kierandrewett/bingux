@@ -10,8 +10,8 @@ use crate::icons::{self, Icon};
 use crate::system::{self, CommandError, background, background_then};
 use crate::theme::Tokens;
 use crate::ui::{
-    Group, Overlays, ResponseKind, Status, dialog, icon_button, page_column, primary_button, row,
-    row_button, status, switch_row, text_row, use_overlays, use_tokens,
+    Group, Overlays, ResponseKind, Status, dialog, icon_button, lead, page_column, primary_button,
+    row, row_button, status, switch_row, text_row, use_overlays, use_tokens,
 };
 use bingux_ui::scale::*;
 
@@ -478,6 +478,15 @@ impl Component for NetworkPage {
         };
 
         let mut blocks: Vec<Element> = Vec::new();
+        blocks.push(lead(if model.airplane {
+            "Airplane mode is on.".to_string()
+        } else if let Some(network) = model.networks.iter().find(|network| network.in_use) {
+            format!("Connected to {}.", network.ssid)
+        } else if model.wired.iter().any(|device| device.state == "connected") {
+            "Connected by cable.".to_string()
+        } else {
+            "Not connected.".to_string()
+        }));
         if let Some(text) = busy.read().clone() {
             blocks.push(Element::from(status(Status::Loading(text))));
         }

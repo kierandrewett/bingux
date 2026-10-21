@@ -10,7 +10,7 @@ use freya::prelude::*;
 use crate::system::{self, CommandError, background, background_then};
 use crate::theme::Tokens;
 use crate::ui::{
-    Group, Overlays, ResponseKind, Row, Status, dialog, page_column, row, row_button, status,
+    Group, Overlays, ResponseKind, Row, Status, dialog, lead, page_column, row, row_button, status,
     switch_row, use_overlays, use_tokens,
 };
 use bingux_ui::scale::*;
@@ -373,6 +373,17 @@ impl Component for BluetoothPage {
         };
 
         let mut page = page_column();
+        let connected = data
+            .devices
+            .iter()
+            .filter(|device| device.connected)
+            .count();
+        page = page.child(lead(match (adapter.powered, connected) {
+            (false, _) => "Bluetooth is off.".to_string(),
+            (true, 0) => "No devices connected.".to_string(),
+            (true, 1) => "1 device connected.".to_string(),
+            (true, count) => format!("{count} devices connected."),
+        }));
         if let Some(message) = error.read().clone() {
             page = page.child(status(Status::Error(message)));
         }

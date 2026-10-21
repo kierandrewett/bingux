@@ -230,6 +230,30 @@ impl Component for StatusBlock {
     }
 }
 
+/// One large sentence at the top of a page that says where things stand,
+/// such as "Connected to Home." or "Output is at 80%."
+pub fn lead(text: impl Into<String>) -> Element {
+    LeadText { text: text.into() }.into()
+}
+
+#[derive(PartialEq)]
+struct LeadText {
+    text: String,
+}
+
+impl Component for LeadText {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        label()
+            .text(self.text.clone())
+            .color(tokens.text)
+            .font_size(TEXT_XL)
+            .font_weight(FontWeight::MEDIUM)
+            .margin((0.0, GUTTER))
+            .max_lines(2)
+    }
+}
+
 /// A heading-sized label for in-page headers such as a details view.
 pub fn heading(text: impl Into<String>) -> Element {
     let text = text.into();

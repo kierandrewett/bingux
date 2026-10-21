@@ -101,7 +101,8 @@ These keep every page the same. A component that breaks one is a bug.
   `status` row of normal height inside a section; only an error is tinted.
 - **The page title is in the page**, not the header bar: `NavItem::title`
   and `NavItem::description` are drawn above the content. The header bar
-  carries the window buttons only. The sidebar is search, then items under
+  carries the window buttons only. A page may open with `lead(text)`, one
+  large sentence that says where things stand, such as "Connected to Home." The sidebar is search, then items under
   `NavItem::group` labels, with a neutral pill on the selected item.
 - Buttons, dropdowns, segmented controls, steppers and text fields share one
   fill (`elevated`) and one 1 px outline (`field_border`). Hover and pressed

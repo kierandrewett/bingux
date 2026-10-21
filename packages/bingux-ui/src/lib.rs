@@ -25,7 +25,9 @@ pub mod theme;
 /// Everything an application window normally needs.
 pub mod prelude {
     pub use crate::controls::*;
-    pub use crate::group::{Group, Status, StatusBlock, caption, heading, section_label, status};
+    pub use crate::group::{
+        Group, Status, StatusBlock, caption, heading, lead, section_label, status,
+    };
     pub use crate::icons::{Icon, icon};
     pub use crate::layout::{card, clamp, divider, hstack, page_column, spacer, vstack};
     pub use crate::rows::{
