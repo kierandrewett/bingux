@@ -59,6 +59,8 @@ See [sidebar panels](docs/sidebar-loading.md) for loading and retained content.
 
 See [desktop panels](docs/popup-loading.md) for first opening and dismissal.
 For shell behaviour and configuration, see the [shell guide](shell/bingux/README.md).
+If something does not start or shows no data, see [troubleshooting](docs/troubleshooting.md).
+
 [Bingux Settings](docs/settings.md) is the graphical front for shell and
 system settings; [configuration](docs/configuration.md) covers the file and CLI.
 

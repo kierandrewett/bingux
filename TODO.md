@@ -34,5 +34,5 @@ work belongs in Git history and does not stay here as a second changelog.
 
 - [x] Keep the standalone build and install path as the public entry point.
 - [x] Keep extension documentation separate from shell implementation details.
-- [ ] Add a short troubleshooting page for Qt, layer-shell and helper sockets.
+- [x] Add a short troubleshooting page for Qt, layer-shell and helper sockets.
 - [x] Add a contributor guide with formatting, tests and package checks.
