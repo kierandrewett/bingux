@@ -1,11 +1,11 @@
 //! A numeric stepper (SwiftUI `Stepper`, libadwaita `GtkSpinButton`): a
-//! value label with `-` and `+` buttons in one 32 px pill on `elevated`.
+//! value label with `-` and `+` buttons in one 32 px pill on `control`.
 
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
 use crate::scale::*;
-use crate::surface::{focus_border, surface_color, use_tokens};
+use crate::surface::{focus_border, surface_color, use_enabled, use_tokens};
 
 /// An integer stepper bounded by `min..=max`, moving by `step`.
 #[derive(PartialEq)]
@@ -62,7 +62,7 @@ impl Component for Stepper {
         let focus = use_focus(a11y_id);
         let value = self.value.clamp(self.min, self.max);
         let (min, max, step) = (self.min, self.max, self.step);
-        let enabled = self.enabled;
+        let enabled = use_enabled(self.enabled);
         let on_change = self.on_change.clone();
         let can_decrement = enabled && value > min;
         let can_increment = enabled && value < max;
@@ -116,7 +116,7 @@ impl Component for Stepper {
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
             .corner_radius(RADIUS)
-            .background(tokens.elevated)
+            .background(tokens.control)
             .maybe(!enabled, |element| element.opacity(0.45))
             .border(focus_border(&tokens, focus()))
             .padding((0.0, S0))

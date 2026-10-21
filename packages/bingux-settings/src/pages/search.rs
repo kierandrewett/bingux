@@ -775,7 +775,7 @@ impl Component for AddEngine {
                         .placeholder("https://example.com/?q={query}"),
                 ),
             )
-            .row(form_footer(primary_button("Add", add)))
+            .row(form_footer(primary_button("Add", add).compact()))
     }
 }
 
@@ -876,7 +876,7 @@ impl Component for FileRootAdd {
                         .placeholder("/home/user/Documents"),
                 ),
             )
-            .row(form_footer(primary_button("Add", add)))
+            .row(form_footer(primary_button("Add", add).compact()))
     }
 }
 

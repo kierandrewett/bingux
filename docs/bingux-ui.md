@@ -81,15 +81,22 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
 `SeekSlider.qml`. When the shell changes, change these to match.
 
 - **Colours are the shell's `flatSurfaces` palette** (`Tokens::new`): the
-  window is `popupSurface`, the sidebar `shellSurface`, group cards and
-  buttons `elevated`. Hover, pressed and selected are alpha layers drawn over
+  window is `popupSurface`, the sidebar `shellSurface`, group cards, dialogs
+  and popovers `elevated`. Buttons, fields, dropdowns and segmented controls
+  use `control`, one step lighter than `elevated`, so they stay visible on a
+  card. Hover, pressed and selected are alpha layers drawn over
   any base, as `ControlCentreButtonSurface` does, and selection is tinted with
   the accent. Text is `#fafafa`, secondary text `#b0b0b0`.
 - **One scale, in `src/scale.rs`.** Spacing is `S0` to `S7` on a 4 px grid.
   Radius is 8 for controls and row hover, 12 for group cards and 20 for
   dialogs, popovers and toasts (`RADIUS`, `RADIUS_LG`, `RADIUS_XL`). Type is
-  14 body, 12 secondary, 16 section titles. Controls are 36 px; a row is 40
-  px, or 56 px with a subtitle.
+  14 body, 12 secondary, 16 section titles. A row is 40 px, or 56 px with a
+  subtitle, and every row keeps that height. A control in a row (dropdown,
+  field, segmented control, stepper, `compact()` or row button) is 32 px, so
+  it leaves 4 px above and below. A standalone `ActionButton` and a menu item
+  are 36 px. Dropdowns and fields in a row share one 220 px column
+  (`FIELD_WIDTH`), so their left edges line up; a dropdown grows to fit a
+  longer option.
 - **`scripts/ui-lint.py` enforces it.** It fails on a raw number in a spacing,
   padding, margin, radius, font-size, width, height or icon-size call, and on
   `FontWeight::BOLD`. To use a new value, add it to `scale.rs` first.
@@ -102,9 +109,9 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   content. A page starts with its first group; there is no page title.
 - **Controls are the shell's.** The switch is 36 x 20 with a 16 px thumb. The
   slider has a 6 px track (8 px while dragging), a text-coloured fill that
-  turns accent while dragging and a 16 px thumb. Buttons are 36 px with an
-  `elevated` fill and no idle outline; a row action is a small muted label
-  with a hover layer. Only text fields keep an outline.
+  turns accent while dragging and a 16 px thumb. Buttons are filled with
+  `control` and have no idle outline; no control has one. A disabled row
+  (`row(..).enabled(false)`) dims and disables every control in it.
 - **A message** (loading, empty, error) is a `status` row inside a group; only
   an error is tinted. A page that has no data yet shows `skeleton()`, not text.
 - **Chrome.** The header bar carries the window buttons only. The sidebar is

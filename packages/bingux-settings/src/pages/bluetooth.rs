@@ -259,7 +259,7 @@ fn device_row(device: &Device, ctx: Ctx) -> Row {
                     TIMEOUT,
                 )
             })
-            .flat()
+            .compact()
         }))
         .maybe_child(
             (ctx.idle && ctx.powered && device.paired && !device.connected).then(|| {
@@ -271,6 +271,7 @@ fn device_row(device: &Device, ctx: Ctx) -> Row {
                         CONNECT_TIMEOUT,
                     )
                 })
+                .compact()
             }),
         )
         .maybe_child((ctx.idle && ctx.powered && !device.paired).then(|| {
@@ -282,6 +283,7 @@ fn device_row(device: &Device, ctx: Ctx) -> Row {
                     CONNECT_TIMEOUT,
                 )
             })
+            .compact()
         }))
         .maybe_child(ctx.idle.then(|| {
             action_button("Remove", move |_| {
@@ -303,7 +305,7 @@ fn device_row(device: &Device, ctx: Ctx) -> Row {
                     }),
                 )
             })
-            .flat()
+            .compact()
         }));
 
     row(device.name.clone())

@@ -318,7 +318,7 @@ fn search_band(
         .cross_align(Alignment::Center)
         .padding((0.0, S2))
         .spacing(S2)
-        .child(search_field(query, |_| {}).width(field_width))
+        .child(search_field(query, |_| {}).well().width(field_width))
         .maybe_child(close)
 }
 

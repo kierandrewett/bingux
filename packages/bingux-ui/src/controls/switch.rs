@@ -5,7 +5,7 @@ use accesskit::Toggled;
 use freya::animation::*;
 use freya::prelude::*;
 
-use crate::surface::{is_activation_key, use_tokens};
+use crate::surface::{is_activation_key, use_enabled, use_tokens};
 
 const SWITCH_WIDTH: f32 = 36.0;
 const SWITCH_HEIGHT: f32 = 20.0;
@@ -55,9 +55,9 @@ impl Component for Switch {
         let focus = use_focus(a11y_id);
         let on = self.on;
         let on_toggle = self.on_toggle.clone();
-        let enabled = self.enabled;
+        let enabled = use_enabled(self.enabled);
 
-        let track = if on { tokens.accent } else { tokens.elevated };
+        let track = if on { tokens.accent } else { tokens.control };
         let outline = tokens.outline;
         let thumb_color = if on { Color::WHITE } else { tokens.text };
         let overlay = if enabled && pressing() {

@@ -6,9 +6,9 @@ use freya::prelude::*;
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
 use crate::scale::*;
-use crate::surface::{focus_border, is_activation_key, surface_color, use_tokens};
+use crate::surface::{focus_border, is_activation_key, surface_color, use_enabled, use_tokens};
 
-/// The shell's `ActionButton`: 36 px tall on `elevated` at radius 8, with no
+/// The shell's `ActionButton`: 36 px tall on `control` at radius 8, with no
 /// idle outline.
 #[derive(PartialEq)]
 pub struct ActionButton {
@@ -20,6 +20,7 @@ pub struct ActionButton {
     enabled: bool,
     loading: bool,
     grow: bool,
+    compact: bool,
     on_press: EventHandler<()>,
 }
 
@@ -36,6 +37,7 @@ pub fn action_button(
         enabled: true,
         loading: false,
         grow: false,
+        compact: false,
         on_press: on_press.into(),
     }
 }
@@ -65,6 +67,12 @@ impl ActionButton {
         self
     }
 
+    /// 32 px high instead of 36, for a button inside a row.
+    pub fn compact(mut self) -> Self {
+        self.compact = true;
+        self
+    }
+
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
         self
@@ -90,7 +98,8 @@ impl Component for ActionButton {
         let focus = use_focus(a11y_id);
         let on_press = self.on_press.clone();
         let on_key = on_press.clone();
-        let enabled = self.enabled && !self.loading;
+        let usable = use_enabled(self.enabled);
+        let enabled = usable && !self.loading;
         let filled = self.accent || self.destructive;
         let fill = if self.destructive {
             tokens.danger
@@ -102,7 +111,7 @@ impl Component for ActionButton {
         } else if self.flat {
             Color::TRANSPARENT
         } else {
-            tokens.elevated
+            tokens.control
         };
         let background = if filled {
             if pressing() {
@@ -112,22 +121,10 @@ impl Component for ActionButton {
             } else {
                 base
             }
-        } else if self.flat {
-            if pressing() {
-                tokens.pressed
-            } else if hovering() {
-                tokens.hover
-            } else {
-                base
-            }
-        } else if pressing() {
-            tokens.elevated_pressed
-        } else if hovering() {
-            tokens.elevated_hover
         } else {
-            base
+            surface_color(&tokens, base, hovering(), pressing(), false)
         };
-        let color = if !self.enabled {
+        let color = if !usable {
             tokens.muted
         } else if filled {
             tokens.accent_foreground
@@ -142,7 +139,11 @@ impl Component for ActionButton {
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::Button)
-            .height(Size::px(BUTTON_HEIGHT))
+            .height(Size::px(if self.compact {
+                CONTROL_HEIGHT
+            } else {
+                BUTTON_HEIGHT
+            }))
             .min_width(Size::px(BOX_LG))
             .maybe(self.grow, |element| element.width(Size::flex(1.0)))
             .padding((0.0, S3))
@@ -152,7 +153,7 @@ impl Component for ActionButton {
             .main_align(Alignment::Center)
             .corner_radius(RADIUS)
             .background(background)
-            .maybe(!self.enabled, |element| element.opacity(0.5))
+            .maybe(!usable, |element| element.opacity(0.5))
             .border(border)
             .maybe(enabled, |element| {
                 element
@@ -238,46 +239,54 @@ impl Component for RowButton {
         let mut pressing = use_state(|| false);
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
+        let enabled = use_enabled(true);
         let on_press = self.on_press.clone();
         let on_key = on_press.clone();
         rect()
             .a11y_id(a11y_id)
-            .a11y_focusable(true)
+            .a11y_focusable(enabled)
+            .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::Button)
+            .maybe(!enabled, |element| element.opacity(0.5))
             .height(Size::px(CONTROL_HEIGHT))
             .padding((0.0, S3))
             .center()
             .corner_radius(RADIUS)
-            .background(if self.prominent {
-                surface_color(&tokens, Color::TRANSPARENT, hovering(), pressing(), false)
-            } else if pressing() {
-                tokens.elevated_pressed
-            } else if hovering() {
-                tokens.elevated_hover
-            } else {
-                tokens.elevated
-            })
+            .background(surface_color(
+                &tokens,
+                if self.prominent {
+                    Color::TRANSPARENT
+                } else {
+                    tokens.control
+                },
+                hovering(),
+                pressing(),
+                false,
+            ))
             .border(focus_border(&tokens, focus()))
-            .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| {
-                hovering.set(false);
-                pressing.set_if_modified(false);
-            })
-            .on_pointer_down(move |event: Event<PointerEventData>| {
-                event.stop_propagation();
-                pressing.set(true);
-            })
-            .on_global_pointer_up(move |_| pressing.set_if_modified(false))
-            .on_press(move |event: Event<PressEventData>| {
-                event.stop_propagation();
-                on_press.call(());
-                a11y_id.request_focus();
-            })
-            .on_key_down(move |event: Event<KeyboardEventData>| {
-                if is_activation_key(&event.key) {
-                    event.stop_propagation();
-                    on_key.call(());
-                }
+            .maybe(enabled, |element| {
+                element
+                    .on_pointer_enter(move |_| hovering.set(true))
+                    .on_pointer_leave(move |_| {
+                        hovering.set(false);
+                        pressing.set_if_modified(false);
+                    })
+                    .on_pointer_down(move |event: Event<PointerEventData>| {
+                        event.stop_propagation();
+                        pressing.set(true);
+                    })
+                    .on_global_pointer_up(move |_| pressing.set_if_modified(false))
+                    .on_press(move |event: Event<PressEventData>| {
+                        event.stop_propagation();
+                        on_press.call(());
+                        a11y_id.request_focus();
+                    })
+                    .on_key_down(move |event: Event<KeyboardEventData>| {
+                        if is_activation_key(&event.key) {
+                            event.stop_propagation();
+                            on_key.call(());
+                        }
+                    })
             })
             .child(
                 label()
@@ -307,7 +316,7 @@ pub struct IconButton {
 pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconButton {
     IconButton {
         icon,
-        size: CONTROL_HEIGHT,
+        size: BUTTON_HEIGHT,
         tooltip: None,
         on_press: on_press.into(),
         danger: false,

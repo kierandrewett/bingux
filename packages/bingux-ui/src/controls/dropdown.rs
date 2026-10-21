@@ -1,4 +1,4 @@
-//! A dropdown: a 36 px `elevated` button with no idle outline, showing the
+//! A dropdown: a 32 px `control` button with no idle outline, showing the
 //! current choice. Pressing it floats a popover of 36 px rows at radius 20
 //! with a 1 px outline; the selected row carries the accent selection layer
 //! and a tick. A long list scrolls inside a capped menu with a scrollbar and
@@ -10,7 +10,7 @@ use freya::prelude::*;
 
 use crate::icons::{self, Icon};
 use crate::scale::*;
-use crate::surface::{focus_border, is_activation_key, surface_color, use_tokens};
+use crate::surface::{focus_border, is_activation_key, surface_color, use_enabled, use_tokens};
 
 /// Width of the floating option list.
 const MENU_WIDTH: f32 = 240.0;
@@ -19,6 +19,14 @@ const MENU_MAX_ROWS_HEIGHT: f32 = 320.0;
 /// Space between the button and the menu, and how far the menu slides in.
 const MENU_GAP: f32 = 4.0;
 const MENU_SLIDE: f32 = 3.0;
+/// The widest the button gets before the label is cut with an ellipsis.
+const BUTTON_MAX_WIDTH: f32 = 360.0;
+/// A generous average glyph width at body size. Freya cannot size a button
+/// to an ellipsised label, so the button is sized from its longest option
+/// and does not change width when the choice changes.
+const GLYPH_WIDTH: f32 = 7.4;
+/// Left padding, gap and chevron with its right padding.
+const BUTTON_CHROME: f32 = S3 + S2 + ICON_MD + S2;
 
 /// `options` are `(key, label)` pairs; `on_select` receives the chosen key.
 #[derive(PartialEq)]
@@ -26,7 +34,7 @@ pub struct Dropdown {
     options: Vec<(String, String)>,
     selected: String,
     enabled: bool,
-    width: Option<f32>,
+    min_width: f32,
     on_select: EventHandler<String>,
 }
 
@@ -39,7 +47,7 @@ pub fn dropdown(
         options,
         selected: selected.into(),
         enabled: true,
-        width: None,
+        min_width: 0.0,
         on_select: on_select.into(),
     }
 }
@@ -50,9 +58,11 @@ impl Dropdown {
         self
     }
 
-    /// Fix the button width; by default it fits the current label.
-    pub fn width(mut self, width: f32) -> Self {
-        self.width = Some(width);
+    /// The button is at least this wide, so a column of dropdowns shares
+    /// one left edge. It fits the longest option otherwise, up to
+    /// [`BUTTON_MAX_WIDTH`].
+    pub fn min_width(mut self, width: f32) -> Self {
+        self.min_width = width;
         self
     }
 }
@@ -70,7 +80,7 @@ impl Component for Dropdown {
         let mut hovered_item = use_state(|| None::<usize>);
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
-        let enabled = self.enabled;
+        let enabled = use_enabled(self.enabled);
         let on_select = self.on_select.clone();
         let options = self.options.clone();
         let selected_index = options.iter().position(|(key, _)| *key == self.selected);
@@ -100,23 +110,31 @@ impl Component for Dropdown {
             })
         };
         let count = options.len();
+        let longest = options
+            .iter()
+            .map(|(_, text)| text.chars().count())
+            .max()
+            .unwrap_or(0) as f32;
+        let width = (longest * GLYPH_WIDTH + BUTTON_CHROME)
+            .min(BUTTON_MAX_WIDTH)
+            .max(self.min_width);
         // The rows' height, and the part of it the menu shows.
-        let list_height = count as f32 * CONTROL_HEIGHT;
+        let list_height = count as f32 * MENU_ITEM_HEIGHT;
         let viewport_height = list_height.min(MENU_MAX_ROWS_HEIGHT);
         let menu_height = viewport_height + 2.0 * S2;
         // Scroll offset that puts row `index` in the middle of the menu, or
         // keeps it in view when `centre` is false.
         let offset_for = move |index: usize, current: i32, centre: bool| -> i32 {
-            let top = index as f32 * CONTROL_HEIGHT;
+            let top = index as f32 * MENU_ITEM_HEIGHT;
             let furthest = (list_height - viewport_height).max(0.0);
             let want = if centre {
-                top - (viewport_height - CONTROL_HEIGHT) / 2.0
+                top - (viewport_height - MENU_ITEM_HEIGHT) / 2.0
             } else {
                 let shown_top = -(current as f32);
                 if top < shown_top {
                     top
-                } else if top + CONTROL_HEIGHT > shown_top + viewport_height {
-                    top + CONTROL_HEIGHT - viewport_height
+                } else if top + MENU_ITEM_HEIGHT > shown_top + viewport_height {
+                    top + MENU_ITEM_HEIGHT - viewport_height
                 } else {
                     shown_top
                 }
@@ -175,22 +193,20 @@ impl Component for Dropdown {
             .a11y_role(AccessibilityRole::ComboBox)
             .a11y_builder(move |builder| builder.set_expanded(open()))
             .height(Size::px(CONTROL_HEIGHT))
-            .maybe(self.width.is_some(), |element| {
-                element.width(Size::px(self.width.unwrap_or_default()))
-            })
+            .width(Size::px(width))
             .padding((0.0, S2, 0.0, S3))
             .spacing(S2)
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
             .main_align(Alignment::SpaceBetween)
             .corner_radius(RADIUS)
-            .background(if enabled && pressing() {
-                tokens.elevated_pressed
-            } else if enabled && hovering() {
-                tokens.elevated_hover
-            } else {
-                tokens.elevated
-            })
+            .background(surface_color(
+                &tokens,
+                tokens.control,
+                enabled && hovering(),
+                enabled && pressing(),
+                false,
+            ))
             .border(focus_border(&tokens, focus()))
             .on_sized(move |event: Event<SizedEventData>| {
                 button_width.set_if_modified(event.area.width());
@@ -233,11 +249,7 @@ impl Component for Dropdown {
                     .text(current)
                     .font_size(TEXT_MD)
                     .color(tokens.text)
-                    .maybe(self.width.is_some(), |element| {
-                        // Button width less padding, spacing and the chevron.
-                        let label_width = self.width.unwrap_or_default() - S3 - S2 - S2 - ICON_MD;
-                        element.width(Size::px(label_width.max(0.0)))
-                    })
+                    .width(Size::px(width - BUTTON_CHROME))
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
             )
@@ -351,7 +363,7 @@ impl Component for DropdownItem {
         rect()
             .a11y_role(AccessibilityRole::MenuItem)
             .width(Size::fill())
-            .height(Size::px(CONTROL_HEIGHT))
+            .height(Size::px(MENU_ITEM_HEIGHT))
             .padding((0.0, S2))
             .spacing(S2)
             .direction(Direction::Horizontal)

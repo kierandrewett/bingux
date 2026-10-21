@@ -344,7 +344,7 @@ impl Component for AppearancePage {
                             .direction(Direction::Horizontal)
                             .content(Content::Flex)
                             .cross_align(Alignment::Center)
-                            .padding((S1, S0))
+                            .padding((S1, GUTTER - S1))
                             .spacing(S1)
                             .children(swatches),
                     ),

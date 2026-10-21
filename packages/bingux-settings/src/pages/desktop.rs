@@ -248,7 +248,7 @@ fn menu_row(
     selected: &str,
     on_select: impl Into<EventHandler<String>>,
 ) -> Row {
-    row(title).trailing(dropdown(options, selected, on_select).width(FIELD_WIDTH))
+    row(title).trailing(dropdown(options, selected, on_select).min_width(FIELD_WIDTH))
 }
 
 #[derive(PartialEq)]

@@ -14,12 +14,10 @@ use crate::controls::switch::switch;
 use crate::controls::text_field::text_field;
 use crate::icons::{self, Icon};
 use crate::scale::*;
-use crate::surface::{focus_border, surface_color, use_tokens};
+use crate::surface::{focus_border, provide_enabled, surface_color, use_tokens};
 
 /// The widest a read-only value gets before it is cut with an ellipsis.
 const VALUE_MAX_WIDTH: f32 = 340.0;
-/// The width of the editable field in an entry row.
-const ENTRY_WIDTH: f32 = 260.0;
 
 /// One row: optional leading icon, title, optional subtitle, and trailing
 /// content. The whole row is the target when `on_press` is set.
@@ -144,6 +142,7 @@ impl Component for Row {
         let mut pressing = use_state(|| false);
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
+        provide_enabled(self.enabled);
         let interactive = self.on_press.is_some() && self.enabled;
         let height = if self.subtitle.is_some() {
             TALL_ROW_HEIGHT
@@ -205,7 +204,7 @@ impl Component for Row {
         // `min_height`, so the column carries the row's inner height itself.
         let text_column = rect()
             .width(Size::flex(1.0))
-            .height(Size::px(height - 2.0 * S2))
+            .height(Size::px(height - 2.0 * S1))
             .main_align(Alignment::Center)
             .spacing(S0)
             .child(title_line)
@@ -232,7 +231,7 @@ impl Component for Row {
             .direction(Direction::Horizontal)
             .content(Content::Flex)
             .cross_align(Alignment::Center)
-            .padding((S2, GUTTER))
+            .padding((S1, GUTTER))
             .spacing(S3)
             .background(background)
             .border(focus_border(&tokens, focus()))
@@ -308,7 +307,7 @@ pub fn choice_row(
     if short {
         return row(title).trailing(segmented(options, selected, on_select));
     }
-    row(title).trailing(dropdown(options, selected, on_select).width(FIELD_WIDTH))
+    row(title).trailing(dropdown(options, selected, on_select).min_width(FIELD_WIDTH))
 }
 
 /// A row with a text field on the right; `on_submit` fires on Enter.
@@ -381,7 +380,7 @@ impl Component for EntryRow {
         let draft = use_state(|| committed.clone());
         let on_commit = self.on_commit.clone();
         let field = text_field(draft, move |text: String| on_commit.call(text))
-            .width(ENTRY_WIDTH)
+            .width(FIELD_WIDTH)
             .maybe_placeholder(self.placeholder.clone())
             .revert_to(committed);
         row(self.title.clone()).trailing(field)

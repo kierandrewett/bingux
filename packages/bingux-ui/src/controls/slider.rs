@@ -5,7 +5,7 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use crate::scale::*;
-use crate::surface::use_tokens;
+use crate::surface::{use_enabled, use_tokens};
 
 /// The track is 6 px, or 8 px while it is being dragged.
 const TRACK: f32 = 6.0;
@@ -16,7 +16,7 @@ const THUMB: f32 = 16.0;
 const SCALE_PRESSED: f32 = 1.1;
 const SCALE_DRAGGING: f32 = 1.3;
 /// The pointer hit row, and the focus ring: a 1 px circle hugging the thumb.
-const HIT: f32 = 20.0;
+const HIT: f32 = CONTROL_HEIGHT;
 const FOCUS_RING: f32 = THUMB + 2.0;
 const DISABLED_OPACITY: f32 = 0.45;
 const SCALE_MS: u64 = 120;
@@ -85,7 +85,7 @@ impl Component for Slider {
         let focus = use_focus(a11y_id);
         let on_moved = self.on_moved.clone();
         let value = self.value;
-        let enabled = self.enabled;
+        let enabled = use_enabled(self.enabled);
         let interacting = pressing() && dragging();
 
         let scale_target = if interacting {

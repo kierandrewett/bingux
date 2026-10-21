@@ -7,7 +7,7 @@ use freya::prelude::*;
 
 use crate::icons::{self, Icon};
 use crate::scale::*;
-use crate::surface::{is_activation_key, surface_color, use_tokens};
+use crate::surface::{is_activation_key, surface_color, use_enabled, use_tokens};
 
 /// Side of the 18 px check and radio boxes.
 const BOX_SIZE: f32 = 18.0;
@@ -74,7 +74,7 @@ impl Component for Checkbox {
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
         let state = self.state;
-        let enabled = self.enabled;
+        let enabled = use_enabled(self.enabled);
         let on_toggle = self.on_toggle.clone();
         let filled = state != CheckState::Off;
         let motion = tokens.motion(100);
@@ -237,7 +237,7 @@ impl RadioGroup {
 
 impl Component for RadioGroup {
     fn render(&self) -> impl IntoElement {
-        let enabled = self.enabled;
+        let enabled = use_enabled(self.enabled);
         let on_select = self.on_select.clone();
         let selected = self.selected.clone();
         let mut container = rect().spacing(if self.horizontal { S4 } else { S2 });
@@ -276,7 +276,7 @@ impl Component for RadioButton {
         let mut pressing = use_state(|| false);
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
-        let enabled = self.enabled;
+        let enabled = use_enabled(self.enabled);
         let selected = self.selected;
         let on_select = self.on_select.clone();
         let motion = tokens.motion(100);

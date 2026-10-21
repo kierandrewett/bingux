@@ -409,7 +409,7 @@ fn channel_group(
                         );
                     }
                 })
-                .width(FIELD_WIDTH),
+                .min_width(FIELD_WIDTH),
             )
         }
     };

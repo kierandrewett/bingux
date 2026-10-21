@@ -120,10 +120,12 @@ pub struct Tokens {
     pub surface: Color,
     /// Sidebar background.
     pub sidebar: Color,
-    /// Fill of buttons, fields and dropdowns that sit on a card or the page.
+    /// Fill of the group cards, dialogs and popovers.
     pub elevated: Color,
-    pub elevated_hover: Color,
-    pub elevated_pressed: Color,
+    /// Fill of buttons, fields, dropdowns and segmented controls. One step
+    /// lighter than `elevated`, so a control stays visible on a card.
+    /// Hover and press are the state layers over it.
+    pub control: Color,
     /// Hairline between rows and between panes.
     pub separator: Color,
     /// Group surface for lists on the page.
@@ -163,8 +165,7 @@ impl Tokens {
             surface: rgba(0.1716, 0.1716, 0.1716, 1.0),
             sidebar: rgba(0.0960, 0.0960, 0.0960, 1.0),
             elevated: rgba(0.2054, 0.2054, 0.2109, 1.0),
-            elevated_hover: rgba(0.2560, 0.2560, 0.2629, 1.0),
-            elevated_pressed: rgba(0.3319, 0.3319, 0.3411, 1.0),
+            control: rgba(0.2560, 0.2560, 0.2629, 1.0),
             separator: rgba(0.980, 0.980, 0.980, 0.08),
             card: rgba(0.2054, 0.2054, 0.2109, 1.0),
             // State layers drawn over any base, as ControlCentreButtonSurface

@@ -296,8 +296,11 @@ impl Component for Skeleton {
             rect()
                 .width(Size::fill())
                 .spacing(S1)
-                .padding((0.0, GUTTER))
-                .child(bar(SKELETON_TITLE_WIDTH))
+                .child(
+                    rect()
+                        .padding((0.0, GUTTER))
+                        .child(bar(SKELETON_TITLE_WIDTH)),
+                )
                 .child(card_surface(&tokens).children(card_rows(&tokens, rows.collect())))
         };
         page_column().child(section()).child(section())

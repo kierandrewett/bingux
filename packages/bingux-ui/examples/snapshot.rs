@@ -54,9 +54,9 @@ fn main() {
         (WINDOW_SIZE.0, 1100.0),
     );
     shot.settle(std::time::Duration::from_millis(400))
-        .click(860.0, 623.0)
+        .click(850.0, 606.0)
         .settle(std::time::Duration::from_millis(300))
-        .hover(780.0, 760.0)
+        .hover(780.0, 730.0)
         .settle(std::time::Duration::from_millis(100))
         .save(&path);
     println!("[snapshot] wrote {path}");
@@ -77,14 +77,14 @@ fn main() {
     );
     let path = format!("{out}/feedback-dialog.png");
     shot.settle(std::time::Duration::from_millis(400))
-        .click(897.0, 286.0)
+        .click(919.0, 563.0)
         .settle(std::time::Duration::from_millis(400))
         .save(&path);
     println!("[snapshot] wrote {path}");
     let path = format!("{out}/feedback-toast.png");
     shot.click(60.0, 500.0)
         .settle(std::time::Duration::from_millis(300))
-        .click(897.0, 335.0)
+        .click(919.0, 604.0)
         .settle(std::time::Duration::from_millis(500))
         .save(&path);
     println!("[snapshot] wrote {path}");

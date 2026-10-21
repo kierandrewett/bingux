@@ -55,10 +55,12 @@ pub const FIELD_WIDTH: f32 = 220.0;
 /// The keyboard focus ring.
 pub const RING_WIDTH: f32 = 2.0;
 
-/// A control (button, dropdown, field, segmented control) is 36 px high, as
-/// `ActionButton.qml`; a row is 40 px, or 56 px with a subtitle, as
-/// `ControlRow.qml`.
-pub const CONTROL_HEIGHT: f32 = 36.0;
+/// A control that sits in a row (dropdown, field, segmented control, stepper,
+/// row button) is 32 px high, as `Theme.controlHeight`, so a 40 px row keeps
+/// 4 px above and below it. A standalone `ActionButton` and a menu item are
+/// 36 px. A row is 40 px, or 56 px with a subtitle, as `ControlRow.qml`.
+pub const CONTROL_HEIGHT: f32 = 32.0;
 pub const BUTTON_HEIGHT: f32 = 36.0;
+pub const MENU_ITEM_HEIGHT: f32 = 36.0;
 pub const ROW_HEIGHT: f32 = 40.0;
 pub const TALL_ROW_HEIGHT: f32 = 56.0;

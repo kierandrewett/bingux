@@ -5,7 +5,7 @@ use freya::prelude::*;
 
 use crate::icons::{self, Icon};
 use crate::scale::*;
-use crate::surface::use_tokens;
+use crate::surface::{surface_color, use_tokens};
 use crate::theme::{HEADER_HEIGHT, WINDOW_CONTROL_BUTTON};
 
 /// Run `callback` with the winit window of the current Freya window.
@@ -158,7 +158,7 @@ impl Component for WindowControl {
             if self.danger {
                 tokens.danger
             } else {
-                tokens.elevated_hover
+                surface_color(&tokens, Color::TRANSPARENT, true, false, false)
             }
         } else {
             Color::TRANSPARENT

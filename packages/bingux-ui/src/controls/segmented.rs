@@ -3,9 +3,9 @@
 use freya::prelude::*;
 
 use crate::scale::*;
-use crate::surface::{focus_border, surface_color, use_tokens};
+use crate::surface::{focus_border, over, surface_color, use_enabled, use_tokens};
 
-/// The shell's segmented control: a quiet `elevated` rail where only the
+/// The shell's segmented control: a quiet `control` rail where only the
 /// selected segment is raised.
 #[derive(PartialEq)]
 pub struct Segmented {
@@ -29,10 +29,12 @@ pub fn segmented(
 impl Component for Segmented {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let enabled = use_enabled(true);
         rect()
             .height(Size::px(CONTROL_HEIGHT))
+            .maybe(!enabled, |element| element.opacity(0.45))
             .corner_radius(RADIUS)
-            .background(tokens.elevated)
+            .background(tokens.control)
             .padding(S1)
             .spacing(S1)
             .direction(Direction::Horizontal)
@@ -62,16 +64,18 @@ impl Component for Segment {
         let mut pressing = use_state(|| false);
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
+        let enabled = use_enabled(true);
         let key = self.key.clone();
         let on_select = self.on_select.clone();
         let base = if self.selected {
-            tokens.elevated_pressed
+            over(tokens.pressed, tokens.control)
         } else {
             Color::TRANSPARENT
         };
         rect()
             .a11y_id(a11y_id)
-            .a11y_focusable(true)
+            .a11y_focusable(enabled)
+            .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::Tab)
             .a11y_builder(|builder| builder.set_selected(self.selected))
             .height(Size::fill())
@@ -80,20 +84,23 @@ impl Component for Segment {
             .corner_radius(RADIUS)
             .background(surface_color(&tokens, base, hovering(), pressing(), false))
             .border(focus_border(&tokens, focus()))
-            .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| {
-                hovering.set(false);
-                pressing.set_if_modified(false);
-            })
-            .on_pointer_down(move |event: Event<PointerEventData>| {
-                event.stop_propagation();
-                pressing.set(true);
-            })
-            .on_global_pointer_up(move |_| pressing.set_if_modified(false))
-            .on_press(move |event: Event<PressEventData>| {
-                event.stop_propagation();
-                on_select.call(key.clone());
-                a11y_id.request_focus();
+            .maybe(enabled, |element| {
+                element
+                    .on_pointer_enter(move |_| hovering.set(true))
+                    .on_pointer_leave(move |_| {
+                        hovering.set(false);
+                        pressing.set_if_modified(false);
+                    })
+                    .on_pointer_down(move |event: Event<PointerEventData>| {
+                        event.stop_propagation();
+                        pressing.set(true);
+                    })
+                    .on_global_pointer_up(move |_| pressing.set_if_modified(false))
+                    .on_press(move |event: Event<PressEventData>| {
+                        event.stop_propagation();
+                        on_select.call(key.clone());
+                        a11y_id.request_focus();
+                    })
             })
             .child(
                 label()

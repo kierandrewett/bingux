@@ -175,6 +175,20 @@ impl Component for ControlsPage {
                         move |key: String| language.set(key),
                     ))
                     .row(
+                        choice_row(
+                            "Disabled dropdown",
+                            vec![
+                                ("a".into(), "First".into()),
+                                ("b".into(), "Second".into()),
+                                ("c".into(), "Third".into()),
+                                ("d".into(), "Fourth".into()),
+                            ],
+                            "a",
+                            |_| {},
+                        )
+                        .enabled(false),
+                    )
+                    .row(
                         row("Stepper").trailing(
                             stepper(count(), move |next| count.set(next))
                                 .range(0, 10)
@@ -190,39 +204,44 @@ struct ButtonsPage;
 
 impl Component for ButtonsPage {
     fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
         let plain = use_state(String::new);
         let query = use_state(|| "wifi".to_string());
         let secret = use_state(|| "hunter2".to_string());
         let bad = use_state(|| "relative/path".to_string());
         page_column()
             .child(
-                rect()
-                    .direction(Direction::Horizontal)
-                    .spacing(S2)
-                    .cross_align(Alignment::Center)
-                    .child(action_button("Action", |_| {}))
-                    .child(action_button("With icon", |_| {}).icon(Icon::Folder))
-                    .child(primary_button("Primary", |_| {}))
-                    .child(action_button("Flat", |_| {}).flat())
-                    .child(action_button("Destructive", |_| {}).destructive())
-                    .child(action_button("Loading", |_| {}).loading(true))
-                    .child(action_button("Disabled", |_| {}).enabled(false)),
+                Group::new("Buttons".to_string())
+                    .description("Inside a row a button is 32 px high; on its own it is 36 px.")
+                    .row(row("Default").trailing(action_button("Action", |_| {}).compact()))
+                    .row(
+                        row("With icon")
+                            .trailing(action_button("Open", |_| {}).icon(Icon::Folder).compact()),
+                    )
+                    .row(row("Suggested").trailing(primary_button("Save", |_| {}).compact()))
+                    .row(
+                        row("Destructive")
+                            .trailing(action_button("Delete", |_| {}).destructive().compact()),
+                    )
+                    .row(row("Flat").trailing(action_button("Skip", |_| {}).flat().compact()))
+                    .row(
+                        row("Loading")
+                            .trailing(action_button("Saving", |_| {}).loading(true).compact()),
+                    )
+                    .row(
+                        row("Disabled")
+                            .trailing(action_button("Action", |_| {}).enabled(false).compact()),
+                    )
+                    .row(row("Row button").trailing(row_button("Change", |_| {}))),
             )
             .child(
-                rect()
-                    .direction(Direction::Horizontal)
-                    .spacing(S2)
-                    .cross_align(Alignment::Center)
-                    .child(icon_button(Icon::Refresh, |_| {}).tooltip("Refresh"))
-                    .child(icon_button(Icon::Delete, |_| {}).tooltip("Delete").danger())
-                    .child(icon_button(Icon::OpenMenu, |_| {}).tooltip("Menu"))
-                    .child(row_button("Row pill", |_| {}))
-                    .child(
-                        label()
-                            .text("Icon buttons and the row pill")
-                            .color(tokens.muted),
+                Group::new("Icon buttons".to_string()).row(
+                    row("Refresh, delete, menu").trailing(
+                        hstack(S1)
+                            .child(icon_button(Icon::Refresh, |_| {}).tooltip("Refresh"))
+                            .child(icon_button(Icon::Delete, |_| {}).tooltip("Delete").danger())
+                            .child(icon_button(Icon::OpenMenu, |_| {}).tooltip("Menu")),
                     ),
+                ),
             )
             .child(
                 Group::new("Text fields".to_string())
@@ -327,18 +346,21 @@ impl Component for FeedbackPage {
                                 |_| {},
                             ),
                         )
-                    })),
+                    })
+                    .compact()),
                 )
                 .row(row("Toast").trailing(action_button("Show", move |_| {
                     overlays.toast("Settings saved")
-                })))
+                })
+                .compact()))
                 .row(
                     row("Toast with action").trailing(action_button("Show", move |_| {
                         overlays.toast_with_action("Network forgotten", "Undo", |_| {})
-                    })),
+                    })
+                    .compact()),
                 )
                 .row(
-                    row("Banner").trailing(action_button("Show again", move |_| notice.set(true))),
+                    row("Banner").trailing(action_button("Show again", move |_| notice.set(true)).compact()),
                 ),
         )
         .child(
@@ -347,7 +369,8 @@ impl Component for FeedbackPage {
                 .row(row("Indeterminate").trailing(progress_bar(None).width(Size::px(FIELD_WIDTH))))
                 .row(row("Step").trailing(action_button("Advance", move |_| {
                     progress.set((progress() + 0.15).min(1.0))
-                }))),
+                })
+                .compact())),
         )
         .child(
             rect()

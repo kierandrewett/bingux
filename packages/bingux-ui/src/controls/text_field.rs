@@ -1,15 +1,15 @@
 //! Text fields: Freya's `Input` in the shell's clothing (SwiftUI
 //! `TextField` and `SecureField`, libadwaita `GtkEntry`).
 //!
-//! A text field is the one control that keeps an idle 1 px outline, so
-//! the reader can see where to type. It sits on `elevated` at radius 8
-//! and is 32 px tall.
+//! A text field sits on `control` at radius 8 and is 32 px tall. Like every
+//! control it has no idle outline; focus draws the accent ring, an invalid
+//! value the danger one.
 
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
 use crate::scale::*;
-use crate::surface::use_tokens;
+use crate::surface::{use_enabled, use_tokens};
 
 /// A multiline field is this many controls high.
 const MULTILINE_ROWS: f32 = 3.0;
@@ -20,6 +20,7 @@ pub struct TextField {
     value: State<String>,
     placeholder: Option<String>,
     width: f32,
+    well: bool,
     password: bool,
     multiline: bool,
     enabled: bool,
@@ -36,7 +37,8 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
     TextField {
         value,
         placeholder: None,
-        width: 260.0,
+        width: FIELD_WIDTH,
+        well: false,
         password: false,
         multiline: false,
         enabled: true,
@@ -62,6 +64,13 @@ impl TextField {
 
     pub fn width(mut self, width: f32) -> Self {
         self.width = width;
+        self
+    }
+
+    /// Fill with `elevated`, for a field on the page or sidebar. A field on a
+    /// card, dialog or popover keeps the lighter `control` fill.
+    pub fn well(mut self) -> Self {
+        self.well = true;
         self
     }
 
@@ -125,7 +134,7 @@ impl Component for TextField {
         let outline = if invalid {
             tokens.danger
         } else {
-            tokens.outline
+            Color::TRANSPARENT
         };
         let focus_outline = if invalid {
             tokens.danger
@@ -133,9 +142,14 @@ impl Component for TextField {
             tokens.accent
         };
 
+        let fill = if self.well {
+            tokens.elevated
+        } else {
+            tokens.control
+        };
         let colors = InputColorsThemePartial {
-            background: Some(Preference::Specific(tokens.elevated)),
-            focus_background: Some(Preference::Specific(tokens.elevated)),
+            background: Some(Preference::Specific(fill)),
+            focus_background: Some(Preference::Specific(fill)),
             border_fill: Some(Preference::Specific(outline)),
             focus_border_fill: Some(Preference::Specific(focus_outline)),
             color: Some(Preference::Specific(tokens.text)),
@@ -148,7 +162,7 @@ impl Component for TextField {
 
         let mut input = Input::new(value)
             .width(Size::px(self.width))
-            .enabled(self.enabled)
+            .enabled(use_enabled(self.enabled))
             .theme_colors(colors)
             .theme_layout(layout)
             .on_submit(move |text: String| on_submit.call(text))
