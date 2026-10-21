@@ -1,6 +1,8 @@
+pub mod audio;
 pub mod extra;
 pub mod hardware;
 pub mod microphone;
+mod pactl;
 use serde::Serialize;
 use std::time::Duration;
 
@@ -92,6 +94,13 @@ impl OsdRequest {
             max_level,
         })
     }
+}
+
+/// A logical monitor an OSD can be shown on, as the compositor reports it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OsdTarget {
+    pub monitor_index: i32,
+    pub output_names: Vec<String>,
 }
 
 fn output_names_are_valid(output_names: &[String]) -> bool {
