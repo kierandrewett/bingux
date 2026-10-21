@@ -360,6 +360,16 @@ ShellRoot {
         rightInset: terminalSidebar.rightInset
     }
 
+    WorkspaceChangeState {
+        id: workspaceChange
+        source: WorkspaceState
+    }
+
+    WorkspaceChangeSurface {
+        state: workspaceChange
+        dockSafeInset: dock.dockTopFromBottom + Theme.dockPadding
+    }
+
     // Without seconds the clock wakes once a minute. Redrawing the bar every
     // second keeps the compositor re-rendering a blurred surface around the clock.
     Timer {

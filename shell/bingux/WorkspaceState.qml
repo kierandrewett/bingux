@@ -9,6 +9,10 @@ import Quickshell.Io
 QtObject {
     id: root
 
+    // Emitted once per completed change of the active workspace, from Gnoblin's
+    // gnoblin.workspace.activated event. Keyboard and bridge switches both arrive here.
+    signal workspaceActivated(var workspace, int sequence)
+
     readonly property string socketPath: {
         const overridePath = Quickshell.env("GNOBLIN_COMPOSITOR_SOCKET");
         if (overridePath)
@@ -95,6 +99,17 @@ QtObject {
         reconnectTimer.start();
     }
 
+    function acceptActivation(record) {
+        const workspace = record.workspace;
+        if (!workspace || typeof workspace !== "object" || typeof workspace.id !== "string" || workspace.id.length === 0 || !Number.isSafeInteger(workspace.number) || workspace.number < 1 || typeof workspace.name !== "string")
+            return;
+        workspaceActivated({
+            id: workspace.id,
+            number: workspace.number,
+            name: workspace.name
+        }, Number.isSafeInteger(record.sequence) ? record.sequence : -1);
+    }
+
     function ingest(line) {
         let record;
         try {
@@ -137,6 +152,8 @@ QtObject {
         }
         if (typeof record.event === "string" && record.event.startsWith("gnoblin.workspace.")) {
             workspaceEventsAvailable = true;
+            if (record.event === "gnoblin.workspace.activated")
+                acceptActivation(record);
             if (requestId !== "")
                 refreshQueued = true;
             else

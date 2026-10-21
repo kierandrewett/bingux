@@ -610,3 +610,18 @@ The overflow menu supports the same gesture within its list. Search and the cent
 remain fixed. The order is saved in `$XDG_CONFIG_HOME/bingux/top-bar.ini` (by default
 `~/.config/bingux/top-bar.ini`) and restored after reloads and restarts. Hidden controls
 keep their saved position.
+
+## Workspace change feedback
+
+After a completed workspace change, Bingux shows a short label naming the new workspace
+(`Workspace 2` and its name) centred above the dock on the output that has focus. The label appears
+whether the change came from a keyboard shortcut or from the compositor bridge. It hides
+itself 1.2 seconds after the last change. Repeated changes replace the label and restart that
+hold, so only one label is ever shown. The label never takes keyboard focus, does not
+intercept pointer input, and does not change the workspace selection. With reduced motion
+enabled (`BINGUX_REDUCED_MOTION=1`) it appears and hides without fading.
+
+The label is driven by the `gnoblin.workspace.activated` event from Gnoblin's windows
+subscription. Only real changes of the active workspace produce it; creation, removal and
+rename events do not. The feature needs Gnoblin with the windows subscription (API 1.1 or
+later). Older compositors send no activation event, so no label is shown.
