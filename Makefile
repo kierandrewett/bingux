@@ -13,7 +13,7 @@ OUTPUT ?= dist/bingux-$(VERSION).tar.xz
 SHELL := /bin/bash
 ROOT := $(abspath .)
 
-.PHONY: all native daemons doctor doctor-build check install install-user uninstall-user rpm-package source-archive
+.PHONY: all native daemons doctor doctor-build check check-session install install-user uninstall-user rpm-package source-archive
 all: native daemons
 
 native: $(BUILD_DIR)/bingux-image-clipboard $(BUILD_DIR)/bingux-frame
@@ -56,9 +56,19 @@ check: doctor-build native daemons
 	python3 tests/shortcut-reload.py
 	python3 tests/gnoblin-menu-focus.py
 	BINGUX_STATUSD_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-statusd python3 tests/osd-event-bridge.py
+	python3 tests/lock-contract.test.py
+	$(MAKE) check-session
 	python3 tests/install-dependencies.py
 	$(MAKE) rpm-package
 	python3 tests/standalone-install.py
+
+# The lock screen and the login greeter, driven in headless Sway. Needs sway,
+# grim and qs; the lock client imports the Bingux.Wayland plugin from the build.
+check-session: native daemons
+	mkdir -p $(BUILD_DIR)/qml/Bingux/Wayland
+	cp $(BUILD_DIR)/wayland-sync/libbinguxwaylandsync.so packages/bingux-wayland-sync/qmldir $(BUILD_DIR)/qml/Bingux/Wayland/
+	BINGUX_SESSION_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-session python3 tests/greeter-ui.py
+	QML_IMPORT_PATH=$(abspath $(BUILD_DIR))/qml python3 tests/lock-ui.py
 
 install:
 	python3 scripts/install-shell.py --prefix '$(PREFIX)' --destdir '$(DESTDIR)' --build-dir '$(BUILD_DIR)' --qml-dir '$(QMLDIR)'
