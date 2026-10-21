@@ -268,9 +268,14 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         elif path == source / "scripts/bingux-greeter-session":
             write_generated(
                 destination,
-                path.read_text().replace(
-                    "/usr/local/share/bingux/greeter/gnoblin.lua",
-                    shlex.quote(str(prefix / "share/bingux/greeter/gnoblin.lua")),
+                path.read_text()
+                .replace(
+                    "GREETER_LUA=/usr/local/share/bingux/greeter/gnoblin.lua",
+                    "GREETER_LUA=" + shlex.quote(str(prefix / "share/bingux/greeter/gnoblin.lua")),
+                )
+                .replace(
+                    "SESSION_BIN=/usr/local/bin/bingux-session",
+                    "SESSION_BIN=" + shlex.quote(str(prefix / "bin/bingux-session")),
                 ),
                 executable=True,
             )

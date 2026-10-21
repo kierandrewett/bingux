@@ -10,8 +10,9 @@
 //! bingux-session biometrics USER SERVICE  PAM biometric methods that can serve USER
 //! bingux-session remember USER SESSION    store the last successful login choice
 //! bingux-session recall                   read the stored login choice
+//! bingux-session greeter-background       Lua that paints the remembered account's wallpaper
 //! bingux-session wallpaper                the calling user's wallpaper from bingux-config
-//! bingux-session export                   publish the calling user's greeter snapshot
+//! bingux-session export                   publish the greeter snapshot and Gnoblin background
 //! ```
 
 mod accounts;
@@ -22,7 +23,7 @@ mod state;
 
 use std::{env, io::Write, process};
 
-const USAGE: &str = "usage: bingux-session users | sessions | biometrics USER SERVICE | remember USER SESSION | recall | wallpaper | export";
+const USAGE: &str = "usage: bingux-session users | sessions | biometrics USER SERVICE | remember USER SESSION | recall | greeter-background | wallpaper | export";
 
 fn main() {
     let arguments: Vec<String> = env::args().skip(1).collect();
@@ -39,13 +40,39 @@ fn main() {
             }
         },
         ["recall"] => serde_json::to_string(&state::recall()),
+        ["greeter-background"] => {
+            let catalog = accounts::Catalog::read();
+            let remembered = state::recall().user;
+            let account = catalog
+                .users
+                .iter()
+                .find(|account| account.name == remembered && !account.wallpaper.is_empty())
+                .or_else(|| {
+                    catalog
+                        .users
+                        .iter()
+                        .find(|account| !account.wallpaper.is_empty())
+                });
+            let wallpaper = account
+                .map(|account| account.wallpaper.as_str())
+                .unwrap_or("");
+            print!("{}", snapshot::greeter_background_lua(wallpaper));
+            return;
+        }
         ["wallpaper"] => serde_json::to_string(
             &serde_json::json!({ "wallpaper": snapshot::configured_wallpaper() }),
         ),
         ["export"] => match accounts::current_user_name() {
             Some(user) => {
-                match snapshot::export(&snapshot::root(), &user, &snapshot::configured_wallpaper())
+                let wallpaper = snapshot::configured_wallpaper();
+                if let Err(error) =
+                    snapshot::write_background_dropin(&snapshot::config_home(), &wallpaper)
                 {
+                    eprintln!(
+                        "bingux-session: could not write the Gnoblin background drop-in: {error}"
+                    );
+                }
+                match snapshot::export(&snapshot::root(), &user, &wallpaper) {
                     Ok(result) => serde_json::to_string(&result),
                     Err(error) => {
                         eprintln!("bingux-session: could not export the greeter snapshot: {error}");

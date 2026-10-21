@@ -6,9 +6,28 @@
 # autostarts bingux-greeter from the packaged greeter configuration. The
 # installer rewrites the paths below for its selected prefix.
 set -eu
+# shellcheck disable=SC3045 # dash and bash both accept -c; no core dumps from the login screen
 ulimit -c 0
 
 # greetd does not set the session type; Gnoblin needs it to accept the login.
 export XDG_SESSION_TYPE=wayland
 GNOBLIN="${BINGUX_GREETER_COMPOSITOR:-gnoblin}"
-exec "$GNOBLIN" --greeter --config /usr/local/share/bingux/greeter/gnoblin.lua "$@"
+GREETER_LUA=/usr/local/share/bingux/greeter/gnoblin.lua
+SESSION_BIN=/usr/local/bin/bingux-session
+
+# The compositor paints the remembered account's wallpaper under the greeter
+# so its first frame is the picture, not black. The generated file lives in
+# the greeter account's runtime directory and loads the packaged
+# configuration first; if bingux-session fails the packaged file is used as is.
+config="$GREETER_LUA"
+runtime="${XDG_RUNTIME_DIR:-}"
+if [ -n "$runtime" ] && [ -d "$runtime" ] && background="$("$SESSION_BIN" greeter-background 2>/dev/null)"; then
+    mkdir -p "$runtime/bingux-greeter"
+    config="$runtime/bingux-greeter/gnoblin.lua"
+    {
+        printf 'gnoblin.load(%s)\n' "\"$GREETER_LUA\""
+        printf '%s' "$background"
+    } >"$config.tmp"
+    mv "$config.tmp" "$config"
+fi
+exec "$GNOBLIN" --greeter --config "$config" "$@"
