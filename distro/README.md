@@ -51,9 +51,12 @@ distro/build.sh --gnoblin ~/dev/gnoblin
   the release tag with a staged patch; restore the pinned revision with
   `git -C subprojects/mutter reset --hard && git -C subprojects/mutter checkout <pin>`
   before the next run.
-- The ISO step needs about 10 GB free under podman's storage (the container
-  `/tmp` holds the live root). A full disk shows as `could not extract ...
-(Write failed)` from pacstrap.
+- The build stages the live root and the compile trees in the container's
+  `/tmp`, several GB, which `build.sh` mounts as a 20 GB tmpfs
+  (`BINGUX_BUILD_TMPFS` sets the size; `0` uses the container's disk instead,
+  which needs about 10 GB free). A full disk shows as `could not extract ...
+(Write failed)` from pacstrap or `Image size exceeds free space` from
+  xorriso.
 
 The image lands in `distro/out/bingux-os-<date>-x86_64.iso`.
 

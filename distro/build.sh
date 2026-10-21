@@ -72,8 +72,19 @@ if [ "$need_gnoblin" = 1 ]; then
     rm -rf "$release"
 fi
 
+# The build stages the live root and the compile trees under /tmp, several GB.
+# On a nearly full disk that is the first thing to run out, so keep it in
+# memory: BINGUX_BUILD_TMPFS sets the size (default 20g); 0 uses the
+# container's own disk-backed /tmp.
+tmpfs_size="${BINGUX_BUILD_TMPFS:-20g}"
+tmpfs_args=()
+if [ "$tmpfs_size" != 0 ]; then
+    tmpfs_args=(--tmpfs "/tmp:rw,exec,mode=1777,size=$tmpfs_size")
+fi
+
 echo "[distro] building in an $ENGINE archlinux container"
 exec "$ENGINE" run --rm --privileged \
+    "${tmpfs_args[@]}" \
     -v "$ROOT:/work:Z" \
     -e JOBS="${JOBS:-$(nproc)}" \
     docker.io/library/archlinux:latest \
