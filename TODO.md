@@ -51,6 +51,19 @@ work belongs in Git history and does not stay here as a second changelog.
       UEFI; a BIOS-only machine is not supported yet.
 - [ ] Let `bingux-os-install` pick the disk from a list, and offer encryption.
 
+## Boot and handover baseline
+
+- [x] Five back-to-back `tests/distro-boot.py` runs on one ISO (`distro/out/baseline/`):
+      runs 1, 3, 5 passed; run 2 failed 8 checks and run 4 failed 13. Run 4 never
+      painted a session after the password was submitted; run 2's session checks
+      failed although the session painted late (first session frame at 423 s).
+- [ ] Make the greeter sign-in reliable: runs 2 and 4 both failed the session
+      checks, and run 4 also failed the lock checks.
+- [ ] Verify the GL renderer (`virtio-vga-gl`) in QEMU. Not verified: the QEMU log
+      was empty and no probe ran.
+- [ ] Re-run `tests/distro-install.py` on an ISO that contains `bingux-installer`;
+      the current image predates the package and the test cannot pass on it.
+
 ## Shell maintenance
 
 - [x] Build Quickshell into `bingux-shell` and run the shells from the packed

@@ -1,23 +1,50 @@
 """QEMU harness shared by tests/distro-boot.py and tests/distro-install.py.
 
-One Vm wraps one QEMU process: the HMP monitor (screenshots and key presses),
-an optional serial console with a root shell (the live image has one) and the
-disk or ISO to boot. Nothing here knows about Bingux; the tests do.
+One Vm wraps one QEMU process and boots it the way a machine does: the ISO
+goes on as `-cdrom` and the guest's own boot loader runs, with OVMF for UEFI
+(the default) or SeaBIOS with `uefi=False`. Nothing is extracted from the ISO
+and no kernel command line is written, so the menu, initramfs and splash all
+show on the screen.
+
+Sockets under the VM's work directory:
+
+- monitor.sock: HMP, for key presses.
+- qmp.sock: a second control socket, used only by the capture thread of
+  distro_capture.Recorder (10 fps screendumps).
+- vnc.sock: VNC, used by the same recorder for full-rate scanout updates.
+- serial.sock: the serial console, when `serial=True`.
+
+Serial console without `console=ttyS0`: the live image's serial-getty autologin
+is wired by a unit drop-in that `multi-user.target` wants. The harness passes
+that drop-in as a systemd credential through SMBIOS type 11 on its own QEMU
+command line. The image is unchanged and real hardware never sees it.
+
+Screens are read from the recorder's newest frame (numpy RGB) and never
+through a file on the disk. Nothing here knows about Bingux; the tests do.
 """
 
-from pathlib import Path
+import base64
 import os
+from pathlib import Path
 import shutil
 import socket
 import subprocess
+import tempfile
 import time
+
+from distro_capture import Recorder
 
 ROOT = Path(__file__).resolve().parent.parent
 OVMF_CODE = Path(os.environ.get("BINGUX_DISTRO_OVMF_CODE", "/usr/share/edk2/ovmf/OVMF_CODE.fd"))
 OVMF_VARS = Path(os.environ.get("BINGUX_DISTRO_OVMF_VARS", "/usr/share/edk2/ovmf/OVMF_VARS.fd"))
+RENDER_NODE = Path(os.environ.get("BINGUX_DISTRO_RENDER_NODE", "/dev/dri/renderD128"))
 
 # QEMU key names for characters that are not their own name.
 KEY_NAMES = {" ": "spc", "-": "minus", ".": "dot", "_": "shift-minus", "/": "slash", "@": "shift-2"}
+
+# Makes multi-user.target want the serial getty on ttyS0; the image's own
+# autologin drop-in for that getty then gives the root shell.
+SERIAL_GETTY_DROPIN = "[Unit]\nWants=serial-getty@ttyS0.service\n"
 
 
 def find_iso(argument=None):
@@ -27,133 +54,73 @@ def find_iso(argument=None):
     return candidates[-1] if candidates else None
 
 
-def region_brightness(image, geometry):
-    """Mean brightness (0 to 1) of a crop of a screenshot, or 0 if unreadable."""
-    result = subprocess.run(
-        ["magick", str(image), "-crop", geometry, "+repage", "-colorspace", "Gray", "-format", "%[fx:mean]", "info:"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    try:
-        return float(result.stdout.strip())
-    except ValueError:
-        return 0.0
-
-
-def bright_pixels(image, geometry, threshold="90%"):
-    """Number of near-white pixels in a crop; the greeter's clock is the only thing that paints them."""
-    result = subprocess.run(
-        [
-            "magick",
-            str(image),
-            "-crop",
-            geometry,
-            "+repage",
-            "-colorspace",
-            "Gray",
-            "-threshold",
-            threshold,
-            "-format",
-            "%[fx:mean*w*h]",
-            "info:",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    try:
-        return float(result.stdout.strip())
-    except ValueError:
-        return 0.0
-
-
-def blue_lead(image, geometry):
-    """How far blue leads red (0 to 1) over a crop: the default wallpaper is a blue gradient; black and grey have none."""
-    values = []
-    for channel in ("B", "R"):
-        result = subprocess.run(
-            [
-                "magick",
-                str(image),
-                "-crop",
-                geometry,
-                "+repage",
-                "-channel",
-                channel,
-                "-separate",
-                "-format",
-                "%[fx:mean]",
-                "info:",
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        try:
-            values.append(float(result.stdout.strip()))
-        except ValueError:
-            return 0.0
-    return values[0] - values[1]
-
-
-# The top bar of a session: the date and time at its centre are white text on
-# a dark strip, and below it the wallpaper shows.
-BAR_CLOCK_REGION = "160x24+560+4"
-DESKTOP_REGION = "1280x700+0+60"
-
-
-def session_painted(image):
-    """True when the screenshot shows a Bingux session: the bar's clock text and the blue wallpaper below it."""
-    return bright_pixels(image, BAR_CLOCK_REGION) > 100 and blue_lead(image, DESKTOP_REGION) > 0.05
-
-
 def missing_tools(*tools):
     return [tool for tool in tools if shutil.which(tool) is None]
 
 
+def display_args():
+    """GPU and display for the guest.
+
+    `egl-headless` with virtio-vga-gl gives the guest a virgl 3D device, so the
+    compositor's blur and motion run on the GPU path as they do on hardware.
+    It needs the host render node; without one, or with
+    BINGUX_DISTRO_DISPLAY=sw, the guest gets the software VGA device.
+    """
+    if os.environ.get("BINGUX_DISTRO_DISPLAY", "gl") == "gl" and os.access(RENDER_NODE, os.R_OK | os.W_OK):
+        return ["-device", "virtio-vga-gl", "-display", f"egl-headless,rendernode={RENDER_NODE}"]
+    return ["-device", "virtio-vga", "-display", "none"]
+
+
 class Vm:
-    def __init__(self, work, *, iso=None, disk=None, uefi=False, memory=None, serial=False, shares=(), vars_path=None, kernel=None, initrd=None, cmdline=None):
+    def __init__(self, work, *, iso=None, disk=None, uefi=True, memory=None, serial=False, vars_path=None, record=None):
+        """`record`: directory for flow.mp4, timeline.json and frame-events.jsonl.
+
+        Without it the recording goes to the work directory, which the caller removes.
+        """
         self.work = Path(work)
+        self.work.mkdir(parents=True, exist_ok=True)
         self.iso = iso
         self.disk = disk
         self.uefi = uefi
         self.memory = memory or os.environ.get("BINGUX_DISTRO_MEMORY", "4G")
         self.serial_enabled = serial
-        self.shares = list(shares)
-        self.kernel, self.initrd, self.cmdline = kernel, initrd, cmdline
+        self.record_dir = Path(record) if record else self.work / "record"
+        # A second boot of the same disk must see the first boot's boot entry.
+        self.vars_path = Path(vars_path) if vars_path else self.work / "OVMF_VARS.fd"
+        self.recorder = None
+        self.stopped = False
         self.process = None
+        self.t0 = None
         self.log = b""
         self._serial = None
         self._monitor = None
-        # A second boot of the same disk must see the first boot's boot entry.
-        self.vars_path = Path(vars_path) if vars_path else self.work / "OVMF_VARS.fd"
 
     def start(self):
         args = [
             "qemu-system-x86_64",
+            "-machine",
+            "q35",
             "-m",
             self.memory,
             "-smp",
             "4",
             *(["-enable-kvm"] if os.access("/dev/kvm", os.W_OK) else []),
-            "-display",
-            "none",
-            "-device",
-            "virtio-vga",
+            *display_args(),
+            "-vnc",
+            f"unix:{self.work / 'vnc.sock'}",
+            "-qmp",
+            f"unix:{self.work / 'qmp.sock'},server,nowait",
+            "-monitor",
+            f"unix:{self.work / 'monitor.sock'},server,nowait",
             "-netdev",
             "user,id=net0",
             "-device",
             "virtio-net-pci,netdev=net0",
-            "-monitor",
-            f"unix:{self.work / 'monitor.sock'},server,nowait",
         ]
         if self.uefi:
             if not self.vars_path.exists():
                 shutil.copy(OVMF_VARS, self.vars_path)
             args += [
-                "-machine",
-                "q35",
                 "-drive",
                 f"if=pflash,format=raw,readonly=on,file={OVMF_CODE}",
                 "-drive",
@@ -161,44 +128,29 @@ class Vm:
             ]
         if self.disk:
             args += ["-drive", f"file={self.disk},if=virtio,format=qcow2"]
-        for number, directory in enumerate(self.shares):
-            args += [
-                "-virtfs",
-                f"local,path={directory},mount_tag=share{number},security_model=none,id=share{number}",
-            ]
         if self.iso:
-            kernel = self._extract("arch/boot/x86_64/vmlinuz-linux")
-            initrd = self._extract("arch/boot/x86_64/initramfs-linux.img")
-            label = subprocess.run(
-                ["blkid", "-o", "value", "-s", "LABEL", str(self.iso)], capture_output=True, text=True, check=False
-            ).stdout.strip()
-            # The kernel command line is ours so the console can be the serial port.
-            args += [
-                "-cdrom",
-                str(self.iso),
-                "-kernel",
-                str(kernel),
-                "-initrd",
-                str(initrd),
-                "-append",
-                f"archisobasedir=arch archisolabel={label} console=ttyS0,115200 console=tty1",
-            ]
-        if self.kernel:
-            # Boot a kernel from the host, for a disk whose own bootloader has no serial console.
-            args += ["-kernel", str(self.kernel), "-initrd", str(self.initrd), "-append", self.cmdline]
+            args += ["-cdrom", str(self.iso)]
         if self.serial_enabled:
-            args += ["-serial", f"unix:{self.work / 'serial.sock'},server,nowait"]
-        self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+            credential = base64.b64encode(SERIAL_GETTY_DROPIN.encode()).decode()
+            args += [
+                "-smbios",
+                f"type=11,value=io.systemd.credential.binary:systemd.unit-dropin.multi-user.target={credential}",
+                "-serial",
+                f"unix:{self.work / 'serial.sock'},server,nowait",
+            ]
+        self.t0 = time.monotonic()
+        self.process = subprocess.Popen(
+            args, stdout=subprocess.DEVNULL, stderr=(self.work / "qemu.log").open("w"), text=True
+        )
         if self.serial_enabled:
             self._serial = self._connect("serial.sock")
             self._serial.settimeout(0.5)
         self._monitor = self._connect("monitor.sock")
         self._monitor.settimeout(2)
         self._monitor_read()
-
-    def _extract(self, member):
-        subprocess.run(["bsdtar", "-xf", str(self.iso), "-C", str(self.work), member], check=True)
-        return self.work / member
+        self.recorder = Recorder(self.record_dir, self.work / "frames", self.work / "qmp.sock", self.work / "vnc.sock")
+        self.recorder.start(self.t0)
+        self.recorder.mark("power on")
 
     def _connect(self, name):
         path = self.work / name
@@ -215,8 +167,11 @@ class Vm:
         return self.process is not None and self.process.poll() is None
 
     def stop(self):
-        if self.process is None:
+        if self.process is None or self.stopped:
             return
+        self.stopped = True
+        if self.recorder is not None:
+            self.recorder.stop()
         self.process.terminate()
         try:
             self.process.wait(timeout=15)
@@ -226,7 +181,7 @@ class Vm:
             if sock is not None:
                 sock.close()
 
-    # Monitor: screenshots and keys.
+    # Monitor: key presses.
 
     def _monitor_read(self):
         data = b""
@@ -257,29 +212,35 @@ class Vm:
                 self.key(KEY_NAMES.get(char, char))
             time.sleep(0.05)
 
-    def screenshot(self, path):
-        """Write a PNG of the current screen; returns True when it exists."""
-        ppm = self.work / "screen.ppm"
-        ppm.unlink(missing_ok=True)
-        self.monitor(f"screendump {ppm}")
-        for _ in range(20):
-            if ppm.exists() and ppm.stat().st_size > 0:
-                break
-            time.sleep(0.25)
-        if not ppm.exists():
-            return False
-        subprocess.run(["magick", str(ppm), str(path)], check=False)
-        return Path(path).exists()
+    # Screen.
 
-    def wait_screen(self, path, accept, attempts=60, delay=3):
-        """Take screenshots until accept(path) holds; True when it did, False when the VM ended or time ran out."""
+    def frame(self):
+        """The newest captured frame (H x W x 3 uint8 numpy array), or None before the first sample."""
+        return self.recorder.frame()
+
+    def still(self, path, frame=None, timeout=5):
+        """Save `frame` (default: the newest captured frame) as a PNG and return it, or None when none arrives in time."""
+        from PIL import Image
+
+        deadline = time.monotonic() + timeout
+        while frame is None and time.monotonic() < deadline:
+            frame = self.frame()
+            if frame is None:
+                time.sleep(0.1)
+        if frame is not None:
+            Image.fromarray(frame).save(path)
+        return frame
+
+    def wait_frame(self, accept, attempts=60, delay=3):
+        """Poll frames until accept(frame) holds; returns that frame, or None when the VM ended or time ran out."""
         for _ in range(attempts):
             if not self.alive():
-                return False
-            if self.screenshot(path) and accept(path):
-                return True
+                return None
+            frame = self.frame()
+            if frame is not None and accept(frame):
+                return frame
             time.sleep(delay)
-        return False
+        return None
 
     # Serial console: a root shell.
 
@@ -320,6 +281,7 @@ class Vm:
         """
         if not (self.wait_for("login:", timeout) or self.wait_for("archiso", 1) or self.wait_for("#", 60)):
             return False
+        self.recorder.mark("serial shell")
         setup = (
             b"\nunsetopt zle prompt_sp prompt_cr 2>/dev/null; stty -echo; PS1=''; PROMPT=''; RPROMPT=''; "
             b"export PAGER=cat SYSTEMD_PAGER=cat SYSTEMD_COLORS=0\n"
@@ -329,8 +291,7 @@ class Vm:
             time.sleep(2)
             self._drain(1)
             mark = len(self.log)
-            # The text of this command differs from what it prints, so seeing
-            # the printed form without the typed form means nothing echoed.
+            # The typed text is not what it prints, so the printed form alone proves no echo.
             self._serial.sendall(b"echo READY_$((40+2))\n")
             self._drain(3)
             seen = self.log[mark:]
@@ -340,9 +301,11 @@ class Vm:
 
     def run(self, command, timeout=30):
         """Run a shell command on the console and return its output."""
-        marker = f"__{int(time.time() * 1000) % 1000000}__"
+        self._runs = getattr(self, "_runs", 0) + 1
+        marker = f"BXDONE{self._runs}"
         start = len(self.log)
-        self._serial.sendall((command + f"\necho {marker[:3]}''{marker[3:]}\n").encode())
+        # `BX''DONE` is typed but prints as the marker, so the marker only shows in the output.
+        self._serial.sendall((command + f"\necho BX''DONE{self._runs}\n").encode())
         self.wait_for(marker, timeout)
         text = self.log[start:].decode(errors="replace").replace("\r", "")
         return text.split(marker, 1)[0].strip("\n")

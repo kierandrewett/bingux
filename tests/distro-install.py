@@ -4,13 +4,15 @@
 usage: tests/distro-install.py [ISO]   (default: newest distro/out/bingux-os-*.iso)
 
 1. Boot the live image in QEMU with OVMF (UEFI) and a blank 20 GiB disk.
-2. Run `bingux-os-install` (archinstall) over the serial console. The Bingux
-   OS packages come from the repository on the image; the base system comes
-   from the host's network through QEMU user networking, so this needs the
-   internet and takes a while.
-3. Mount the result and check the packages, the bootloader entry, the repository
+2. Run `bingux-installer --json probe` and check that the blank disk is offered,
+   is not the live medium, and that the firmware is UEFI.
+3. Write a plan (schema v1, distro/installer/README.md) and run
+   `bingux-installer --json install --plan -` over the serial console. The
+   installer daemon copies the live root filesystem and builds the bootloader and
+   initramfs in the target.
+4. Mount the result and check the packages, the bootloader entry, the repository
    section and the enabled units.
-4. Power off, boot the disk alone through its own bootloader, and check that
+5. Power off, boot the disk alone through its own bootloader, and check that
    the greeter appears, that the new account signs in and that the desktop
    shows its wallpaper.
 
@@ -29,13 +31,51 @@ import sys
 import tempfile
 import time
 
-from distro_vm import ROOT, Vm, bright_pixels, find_iso, missing_tools, session_painted
+from distro_capture import bright_count, session_painted
+from distro_vm import ROOT, Vm, find_iso, missing_tools
 
 USER = "tester"
 PASSWORD = "bingux-test-2026"
 CLOCK_REGION = "400x160+440+90"
 CLOCK_PIXELS = 500
+
+
+def clock_shown(frame):
+    return bright_count(frame, CLOCK_REGION) > CLOCK_PIXELS
+
+
 INSTALL_TIMEOUT = 3600
+
+
+def terminal_line(output):
+    """Return the last JSON object the installer printed, or None."""
+    for line in reversed(output.splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            try:
+                return json.loads(line)
+            except ValueError:
+                continue
+    return None
+
+
+def install_plan():
+    """The plan (schema v1) for the blank disk; see distro/installer/README.md."""
+    return {
+        "version": 1,
+        "disk": "/dev/vda",
+        "confirm_erase": "/dev/vda",
+        "firmware": "uefi",
+        "filesystem": "ext4",
+        "encryption": {"enabled": False},
+        "other_os": "refuse",
+        "hostname": "bingux-test",
+        "timezone": "Etc/UTC",
+        "locale": "en_US.UTF-8",
+        "keymap": "us",
+        "users": [{"name": USER, "password": PASSWORD, "admin": True, "full_name": "Test User"}],
+        "kernel_args": [],
+    }
 
 
 def main():
@@ -43,7 +83,7 @@ def main():
     if iso is None or not iso.is_file():
         print("no live image; run distro/build.sh first")
         return 1
-    missing = missing_tools("qemu-system-x86_64", "qemu-img", "bsdtar", "magick", "blkid")
+    missing = missing_tools("qemu-system-x86_64", "qemu-img", "ffmpeg", "blkid")
     if missing:
         print("missing tool: " + ", ".join(missing))
         return 1
@@ -67,24 +107,36 @@ def main():
         if checks["live image booted to a shell"]:
             checks["live image started in UEFI mode"] = live.run("test -d /sys/firmware/efi && echo yes") == "yes"
             checks["bingux repository is on the image"] = "bingux-os.db" in live.run("ls /opt/bingux-os/repo")
-            live.run(f"printf '%s' '{PASSWORD}' >/root/password && chmod 600 /root/password")
+            probe_out = live.run("bingux-installer --json probe 2>/dev/null", 120)
+            report.append(f"$ bingux-installer probe\n{probe_out}\n")
+            probe = terminal_line(probe_out) or {}
+            probed = probe.get("data", {}) if probe.get("ok") else {}
+            checks["installer daemon answers probe"] = bool(probe.get("ok"))
+            checks["UEFI firmware is detected"] = probed.get("firmware") == "uefi"
+            checks["blank disk is offered as an install target"] = any(
+                disk.get("path") == "/dev/vda" and not disk.get("is_live_medium")
+                for disk in probed.get("disks", [])
+            )
+            checks["installer finds every tool it needs"] = probed.get("tools_missing") == []
+            plan_json = json.dumps(install_plan(), separators=(",", ":"))
+            live.run(f"printf '%s' '{plan_json}' >/root/plan.json && chmod 600 /root/plan.json")
             started = time.monotonic()
-            # archinstall enters the new system through `systemd-run --pty`, so the
-            # installer needs a terminal, as it has on a console. `script`
+            # The installer needs a terminal, as it has on a console. `script`
             # provides one and keeps the transcript.
             live.run(
-                "script -qefc 'bingux-os-install --disk /dev/vda --user "
-                f"{USER} --password-file /root/password --yes' /root/install.log >/dev/null 2>&1 </dev/null &"
+                "script -qefc 'bingux-installer --json install --plan - </root/plan.json' "
+                "/root/install.log >/dev/null 2>&1 </dev/null &"
             )
             finished = live.poll(
-                "pgrep -c -f 'bingux-os-install|archinstall' || true",
+                "pgrep -c -f 'bingux-installer --json install' || true",
                 lambda output: output == "0",
                 attempts=INSTALL_TIMEOUT // 20,
                 delay=20,
             )
             install_log = live.run("tr '\\r' '\\n' </root/install.log | tail -n 400", 60)
             report.append(f"install took {int(time.monotonic() - started)} s, processes left: {finished}\n")
-            checks["installer finished successfully"] = 'COMMAND_EXIT_CODE="0"' in install_log
+            result = terminal_line(install_log) or {}
+            checks["installer finished successfully"] = bool(result.get("ok")) and 'COMMAND_EXIT_CODE="0"' in install_log
 
             if checks["installer finished successfully"]:
                 live.run("mount /dev/vda2 /mnt && mount /dev/vda1 /mnt/boot")
@@ -131,16 +183,12 @@ def main():
         if checks.get("installer finished successfully"):
             live.stop()
             (work / "installed").mkdir()
-            installed = Vm(work / "installed", disk=disk, uefi=True, vars_path=vars_file)
+            installed = Vm(work / "installed", disk=disk, vars_path=vars_file, record=out / "installed")
             installed.start()
-            greeter = out / "installed-greeter.png"
-            checks["installed system shows the greeter"] = installed.wait_screen(
-                greeter,
-                lambda path: bright_pixels(path, CLOCK_REGION) > CLOCK_PIXELS,
-                attempts=120,
-            )
-            if checks["installed system shows the greeter"]:
-                session = out / "installed-session.png"
+            frame = installed.wait_frame(clock_shown, attempts=120)
+            checks["installed system shows the greeter"] = frame is not None
+            if frame is not None:
+                installed.still(out / "installed-greeter.png", frame)
                 checks["installed account signs in to a desktop"] = False
                 # Keys typed while the greeter is still settling can be lost, and the
                 # greeter then says "Try again": type the password again.
@@ -148,7 +196,9 @@ def main():
                     time.sleep(10)
                     installed.type_text(PASSWORD)
                     installed.key("ret")
-                    if installed.wait_screen(session, session_painted, attempts=25):
+                    frame = installed.wait_frame(session_painted, attempts=25)
+                    if frame is not None:
+                        installed.still(out / "installed-session.png", frame)
                         checks["installed account signs in to a desktop"] = True
                         break
         (out / "report.txt").write_text("\n".join(report))
