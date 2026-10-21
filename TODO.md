@@ -18,8 +18,10 @@ work belongs in Git history and does not stay here as a second changelog.
 - [x] Shared `SessionScreen` for the lock screen and the greeter, with the
       session bar, session contexts and the capability gate.
 - [x] Compositor background on both sides of the login so no frame is black.
-- [ ] Answer Gnoblin's `gnoblinctl session lock` request by starting
-      `bingux-lock` from the shell (idle timeout and logind `Lock`).
+- [x] Answer Gnoblin's `gnoblinctl session lock` request by starting
+      `bingux-lock` from `bingux-statusd`.
+- [ ] Lock on idle timeout and on logind `Lock` (lid close, suspend). Both
+      reach Gnoblin as the same lock request; only the idle policy is missing.
 - [ ] Let `SessionBar` show the user's own extensions once an extension
       capability contract exists; today `contexts` is recorded only.
 - [ ] Verify the greeter on real hardware: fingerprint hint, multi-monitor,

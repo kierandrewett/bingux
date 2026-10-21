@@ -24,6 +24,13 @@ if [ ! -w "${HOME:-/}" ] || [ "${HOME:-/}" = / ]; then
     fi
     export HOME
 fi
+
+# logind keeps this account's user manager alive across a quick restart of the
+# login screen (log out, then greet again), and the helpers Gnoblin autostarted
+# for the old greeter are not tied to it. A second bingux-statusd refuses to
+# replace the first one's socket and Gnoblin then shows an error on the login
+# screen, so stop the old one first.
+pkill -x -u "$(id -u)" bingux-statusd 2>/dev/null || true
 GNOBLIN="${BINGUX_GREETER_COMPOSITOR:-gnoblin}"
 GREETER_LUA=/usr/local/share/bingux/greeter/gnoblin.lua
 SESSION_BIN=/usr/local/bin/bingux-session

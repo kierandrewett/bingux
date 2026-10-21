@@ -25,8 +25,14 @@ it lacks completion proof. Quickshell maps the protocol's compositor-sent
 lock-client crash while locked must leave the compositor locked and blanked.
 
 The packaged `bingux-lock.service` has no `[Install]` section and is not a
-dependency of `bingux.target`. It is intentionally inactive until the
-compositor-side gate and recovery path are enabled.
+dependency of `bingux.target`. `bingux-statusd`, which already holds the
+Gnoblin compositor socket, subscribes to `gnoblin.session.lock-requested` and
+answers it with `systemctl --user start --no-block bingux-lock.service`. That
+makes `gnoblinctl session lock`, `org.freedesktop.ScreenSaver.Lock` and
+`loginctl lock-session` show the lock screen. Starting a running unit does
+nothing, so repeated requests do not stack lock clients. Without `bingux.target`
+running there is no subscriber, and `gnoblinctl session lock` fails with
+`no session-lock client is subscribed to lock requests`.
 
 ## Authentication
 
