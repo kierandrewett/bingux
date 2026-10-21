@@ -3,8 +3,15 @@
 
 import json
 import sys
+from pathlib import Path
 
-from gi.repository import Gio, GLib
+TAG = "session-activity"
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bingux_runtime import require_gi  # noqa: E402
+
+require_gi(TAG, Gio="2.0", GLib="2.0")
+from gi.repository import Gio, GLib  # noqa: E402 - require_gi selects the typelib versions first.
 
 
 BUS_NAME = "org.gnome.Mutter.IdleMonitor"
@@ -66,9 +73,7 @@ def main():
         on_watch_fired,
     )
 
-    watch_ids["idle"] = call(
-        "AddIdleWatch", GLib.Variant("(t)", (threshold_ms,)), "(u)"
-    )[0]
+    watch_ids["idle"] = call("AddIdleWatch", GLib.Variant("(t)", (threshold_ms,)), "(u)")[0]
     add_active_watch()
     idle_ms = call("GetIdletime", GLib.Variant("()", ()), "(t)")[0]
     publish(idle_ms >= threshold_ms)

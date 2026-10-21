@@ -18,12 +18,15 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 from capture_clipboard import ClipboardError, copy_image_to_clipboard
-import gi
 
-gi.require_version("Gst", "1.0")
-gi.require_version("GdkPixbuf", "2.0")
-gi.require_version("GstVideo", "1.0")
-from gi.repository import Gio, GLib, Gst, GdkPixbuf, GstVideo  # noqa: E402 - Select GI versions before importing their modules.
+TAG = "capture"
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bingux_runtime import require_gi  # noqa: E402
+
+require_gi(TAG, Gst="1.0", GdkPixbuf="2.0", GstVideo="1.0", Gio="2.0", GLib="2.0")
+from gi.repository import Gio, GLib, Gst, GdkPixbuf, GstVideo  # noqa: E402 - require_gi selects the typelib versions first.
+
 
 PORTAL = "org.freedesktop.portal.Desktop"
 PORTAL_PATH = "/org/freedesktop/portal/desktop"

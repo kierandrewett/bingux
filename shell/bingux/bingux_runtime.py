@@ -72,13 +72,16 @@ def require_gi(tag, **versions):
         import gi
     except ImportError:
         fail(tag, "PyGObject (python3-gobject) is not installed.", code="unavailable")
+    from importlib import import_module
+
     try:
         for name, version in versions.items():
             gi.require_version(name, version)
-        from gi import repository
+        # gi.repository loads each namespace on first import, so attribute
+        # access alone is not enough.
+        return tuple(import_module(f"gi.repository.{name}") for name in versions)
     except (ValueError, ImportError) as error:
         fail(tag, f"GObject introspection data is missing: {error}", code="unavailable")
-    return tuple(getattr(repository, name) for name in versions)
 
 
 def run(command, timeout=10, *, input=None, check=False, env=None):

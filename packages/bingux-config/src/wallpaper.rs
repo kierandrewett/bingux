@@ -65,9 +65,22 @@ fn run_with_timeout(
     })
 }
 
-/// A `file://` URI for the configured GNOME wallpaper, or an empty string
-/// when none is usable.
+/// A `file://` URI for the wallpaper the shell should show, or an empty
+/// string when none is usable.
+///
+/// `desktop.wallpaper` in `bingux.toml` wins when it names a readable file;
+/// otherwise the GNOME background setting is used, which is where the
+/// portal and GNOME Settings write.
 pub fn wallpaper_uri() -> Result<String, Error> {
+    let configured = crate::load()
+        .ok()
+        .map(|loaded| loaded.config.desktop.wallpaper)
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .filter(|path| path.is_file());
+    if let Some(source) = configured {
+        return resolve(&source);
+    }
     for key in ["picture-uri-dark", "picture-uri"] {
         let mut command = Command::new("gsettings");
         command.args(["get", "org.gnome.desktop.background", key]);
@@ -88,16 +101,22 @@ pub fn wallpaper_uri() -> Result<String, Error> {
         if !source.is_file() {
             continue;
         }
-        let extension = source
-            .extension()
-            .map(|e| e.to_string_lossy().to_ascii_lowercase())
-            .unwrap_or_default();
-        if ["png", "jpg", "jpeg", "webp"].contains(&extension.as_str()) {
-            return Ok(file_uri(&source));
-        }
-        return convert(&source);
+        return resolve(&source);
     }
     Ok(String::new())
+}
+
+/// A URI Qt can load for `source`: the file itself for native formats, or a
+/// cached PNG conversion otherwise.
+fn resolve(source: &Path) -> Result<String, Error> {
+    let extension = source
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    if ["png", "jpg", "jpeg", "webp"].contains(&extension.as_str()) {
+        return Ok(file_uri(source));
+    }
+    convert(source)
 }
 
 fn convert(source: &Path) -> Result<String, Error> {

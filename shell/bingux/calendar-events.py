@@ -7,7 +7,15 @@ Recurrence and timezone expansion remain owned by Evolution Data Server.
 import json
 import sys
 import threading
-from gi.repository import Gio, GLib
+from pathlib import Path
+
+TAG = "calendar"
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bingux_runtime import require_gi  # noqa: E402
+
+require_gi(TAG, Gio="2.0", GLib="2.0")
+from gi.repository import Gio, GLib  # noqa: E402 - require_gi selects the typelib versions first.
 
 SERVICE = "org.gnome.Shell.CalendarServer"
 PATH = "/org/gnome/Shell/CalendarServer"
