@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Boot the Bingux OS live image in QEMU and check that the login screen is up.
+"""Boot the Bingux OS live image in QEMU, check the login screen, then sign in.
 
 usage: tests/distro-boot.py [ISO]   (default: newest distro/out/bingux-os-*.iso)
 
@@ -22,6 +22,24 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+# firstboot creates the live account with this password (distro/profile).
+LIVE_PASSWORD = "live"
+
+
+def region_brightness(image, geometry):
+    """Mean brightness (0 to 1) of a crop of the screenshot, or 0 if unreadable."""
+    result = subprocess.run(
+        ["magick", str(image), "-crop", geometry, "+repage", "-colorspace", "Gray", "-format", "%[fx:mean]", "info:"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    try:
+        return float(result.stdout.strip())
+    except ValueError:
+        return 0.0
 
 
 def find_iso(argument):
@@ -200,6 +218,42 @@ def main():
             if (work / "screen.ppm").exists():
                 subprocess.run(["magick", str(work / "screen.ppm"), str(out / "screen.png")], check=False)
                 checks["screenshot captured"] = (out / "screen.png").exists()
+            # Sign in as the live account through the greeter, the way a user
+            # would: type the password into the focused field and press Enter.
+            for char in LIVE_PASSWORD:
+                monitor(monitor_path, f"sendkey {char}")
+            monitor(monitor_path, "sendkey ret")
+            session_probes = {
+                "session compositor runs as the user": "pgrep -c -u live -x gnoblin",
+                "session shell runs as the user": "pgrep -c -u live -f '^/usr/bin/bingux( |$)'",
+                "session wallpaper service runs": "pgrep -c -u live -f bingux-wallpaper",
+                "logind session is wayland": "loginctl list-sessions --no-legend | grep -c live",
+            }
+            for _ in range(60):
+                count = serial.run("pgrep -c -u live -f '^/usr/bin/bingux( |$)'").strip()
+                if count.isdigit() and int(count) > 0:
+                    break
+                time.sleep(3)
+            time.sleep(10)
+            report += "\n"
+            for label, probe in session_probes.items():
+                output = serial.run(probe).strip()
+                report += f"$ {probe}\n{output}\n"
+                checks[label] = output.isdigit() and int(output) > 0
+            report += "$ journalctl -b (user session)\n" + serial.run(
+                "journalctl -b --no-pager -o short-iso _UID=$(id -u live) | tail -n 80", 60
+            )
+            report += "$ ps -u live\n" + serial.run("ps -u live -o pid=,args= | cut -c1-120", 30)
+            report += "$ gnoblin conf.d\n" + serial.run(
+                "ls /usr/share/gnoblin/conf.d /home/live/.config/gnoblin/conf.d 2>&1", 30
+            )
+            (out / "report.txt").write_text(report)
+            monitor(monitor_path, f"screendump {work / 'session.ppm'}")
+            if (work / "session.ppm").exists():
+                subprocess.run(["magick", str(work / "session.ppm"), str(out / "session.png")], check=False)
+                # Below the bar the compositor background shows through, so a
+                # black desktop means the wallpaper never painted.
+                checks["desktop wallpaper painted"] = region_brightness(out / "session.png", "1280x700+0+60") > 0.04
         (out / "serial.log").write_bytes(serial.log)
         (out / "checks.json").write_text(json.dumps(checks, indent=2) + "\n")
         qemu.terminate()
