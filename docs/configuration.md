@@ -63,7 +63,11 @@ one does not validate and keeps your edit next to it as
 `bingux.toml.rejected`.
 
 Commands that print JSON exist for the shell and the Settings application:
-`dump`, `save`, `import-layout` and `wallpaper`. `bingux-config --help` lists
+`dump`, `save`, `import-layout` and `wallpaper`. `wallpaper` prints a
+`file://` URI the shell can load: `desktop.wallpaper` when it names a readable
+file, otherwise `org.gnome.desktop.background`, where GNOME Settings and the
+wallpaper portal write. Formats Qt cannot decode are converted once into a
+cached PNG under `~/.cache/bingux/wallpaper`. `bingux-config --help` lists
 everything.
 
 ## Migration from settings.json

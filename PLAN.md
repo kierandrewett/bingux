@@ -26,7 +26,7 @@ phase keeps the tree working and lands as its own set of commits.
 - First run migrates an existing `settings.json` into `bingux.toml` and
   renames the old file to `settings.json.migrated`.
 - CLI: `dump` (JSON in the shape the shell expects), `get KEY`, `set KEY
-  VALUE`, `save` (stdin JSON patch), `check`, `path`, `defaults` (annotated
+VALUE`, `save` (stdin JSON patch), `check`, `path`, `defaults` (annotated
   TOML with every key), `wallpaper`, `import-layout`.
 - Consumers switch to the binary: `BinguxPreferences.qml` (helper command
   and watched path), `bingux-searchd` (library dependency), `preview_limits.py`
@@ -44,23 +44,30 @@ phase keeps the tree working and lands as its own set of commits.
   shell already passes: `network`, `bluetooth`, `sound`, `power`, `users`,
   `background`, `display`, `desktop`, `search`.
 - Pages and backends:
-  - Appearance: wallpaper (`desktop.wallpaper`), accent colour and colour
-    scheme (`gsettings org.gnome.desktop.interface`).
-  - Desktop: dock, sidebar, top bar, monitors, clock (`bingux-config`).
-  - Search: providers, engines, file locations, previews (`bingux-config`).
-  - Displays: `org.gnome.Mutter.DisplayConfig` over D-Bus.
-  - Sound: `wpctl` default devices and volumes.
-  - Network: `nmcli` Wi-Fi list, connect, forget, airplane mode.
-  - Bluetooth: `bluetoothctl` power, pair, connect, remove.
-  - Power: `powerprofilesctl`, UPower battery, idle delay.
-  - Keyboard and mouse: `gsettings org.gnome.desktop.peripherals` and
-    `org.gnome.desktop.input-sources`.
-  - Date and time: `timedatectl`.
-  - Users: AccountsService.
-  - About: hostname, OS, kernel, hardware, Bingux and Gnoblin versions.
+    - Appearance: wallpaper (`desktop.wallpaper`), accent colour and colour
+      scheme (`gsettings org.gnome.desktop.interface`).
+    - Desktop: dock, sidebar, top bar, monitors, clock (`bingux-config`).
+    - Search: providers, engines, file locations, previews (`bingux-config`).
+    - Displays: `org.gnome.Mutter.DisplayConfig` over D-Bus.
+    - Sound: `wpctl` default devices and volumes.
+    - Network: `nmcli` Wi-Fi list, connect, forget, airplane mode.
+    - Bluetooth: `bluetoothctl` power, pair, connect, remove.
+    - Power: `powerprofilesctl`, UPower battery, idle delay.
+    - Keyboard and mouse: `gsettings org.gnome.desktop.peripherals` for
+      pointer, touchpad and keyboard repeat. Gnoblin's Lua input settings
+      override these keys (`design/lean-runtime.md`, "explicit Lua value
+      overrides the current system preference"), so the page reads
+      `gnoblinctl --json config show` first and shows a row as read-only with
+      "Set by Gnoblin config" when the snapshot sets that field to anything
+      other than `inherit`. Input sources are read-only: in a Gnoblin session
+      the keymap list comes only from Lua `input_sources.sources`, and
+      `org.gnome.desktop.input-sources` is ignored.
+    - Date and time: `timedatectl`.
+    - Users: AccountsService.
+    - About: hostname, OS, kernel, hardware, Bingux and Gnoblin versions.
 - Shell integration: the five launch sites call `bingux-settings PANEL`
   without `XDG_CURRENT_DESKTOP=GNOME`. The desktop entry, `binguxctl
-  settings`, the Makefile, `install-shell.py` and the RPM install the binary.
+settings`, the Makefile, `install-shell.py` and the RPM install the binary.
 - Testing: headless `freya-testing` checks for the window shell and row
   components, then a QEMU run that installs the binary into a Gnoblin
   guest, opens it from the Control Centre and captures screenshots.
