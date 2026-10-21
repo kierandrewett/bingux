@@ -30,6 +30,7 @@ pub mod keyboard;
 pub mod mouse;
 pub mod network;
 pub mod power;
+pub mod privacy;
 pub mod search;
 pub mod sound;
 pub mod users;
@@ -48,12 +49,13 @@ pub enum PageId {
     Mouse,
     DateTime,
     Users,
+    Privacy,
     About,
 }
 
 impl PageId {
     /// Sidebar order.
-    pub const ALL: [PageId; 13] = [
+    pub const ALL: [PageId; 14] = [
         PageId::Network,
         PageId::Bluetooth,
         PageId::Appearance,
@@ -66,6 +68,7 @@ impl PageId {
         PageId::Mouse,
         PageId::DateTime,
         PageId::Users,
+        PageId::Privacy,
         PageId::About,
     ];
 
@@ -83,6 +86,7 @@ impl PageId {
             Self::Mouse => "Mouse and Touchpad",
             Self::DateTime => "Date and Time",
             Self::Users => "Users",
+            Self::Privacy => "Privacy",
             Self::About => "About",
         }
     }
@@ -102,6 +106,7 @@ impl PageId {
             Self::Mouse => "Pointer speed, scrolling and touchpad gestures",
             Self::DateTime => "Clock, time zone and automatic time",
             Self::Users => "Accounts on this computer",
+            Self::Privacy => "Portal permissions for apps: screenshots, screen sharing and input",
             Self::About => "This computer, the system and versions",
         }
     }
@@ -121,6 +126,7 @@ impl PageId {
             Self::Mouse => "touchpad trackpad pointer scrolling tap",
             Self::DateTime => "clock time zone ntp format",
             Self::Users => "accounts password login avatar",
+            Self::Privacy => "portal permissions screenshot screen capture sharing input access",
             Self::About => "version kernel hardware memory disk gnoblin",
         }
     }
@@ -139,6 +145,7 @@ impl PageId {
             Self::Keyboard | Self::Mouse => [0.50, 0.50, 0.55],
             Self::DateTime => [0.93, 0.36, 0.00],
             Self::Users => [0.57, 0.26, 0.68],
+            Self::Privacy => [0.35, 0.36, 0.80],
             Self::About => [0.44, 0.51, 0.59],
         }
     }
@@ -157,6 +164,7 @@ impl PageId {
             Self::Mouse => Icon::Mouse,
             Self::DateTime => Icon::Clock,
             Self::Users => Icon::Users,
+            Self::Privacy => Icon::PreferencesSystem,
             Self::About => Icon::About,
         }
     }
@@ -176,6 +184,7 @@ impl PageId {
             Self::Mouse => "mouse",
             Self::DateTime => "datetime",
             Self::Users => "users",
+            Self::Privacy => "privacy",
             Self::About => "about",
         }
     }
@@ -198,6 +207,7 @@ impl PageId {
             "mouse" => Self::Mouse,
             "datetime" => Self::DateTime,
             "users" | "user-accounts" => Self::Users,
+            "privacy" => Self::Privacy,
             "about" | "info-overview" => Self::About,
             _ => return None,
         })
@@ -219,6 +229,7 @@ impl PageId {
             Self::Mouse => mouse::MousePage.into(),
             Self::DateTime => datetime::DateTimePage.into(),
             Self::Users => users::UsersPage.into(),
+            Self::Privacy => privacy::PrivacyPage.into(),
             Self::About => about::AboutPage.into(),
         }
     }
