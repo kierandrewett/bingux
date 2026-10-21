@@ -59,6 +59,12 @@ The image lands in `distro/out/bingux-os-<date>-x86_64.iso`.
 
 ## What the image does
 
+The login screen, then the desktop after signing in (both from the headless
+QEMU runs of the tests below):
+
+![The Bingux login screen](../docs/images/bingux-os-login.webp)
+![The Bingux desktop after signing in](../docs/images/bingux-os-desktop.webp)
+
 - `greetd` is the display manager; it starts `bingux-greeter-session`, so the
   first thing on screen is the Bingux login screen on a Gnoblin greeter
   compositor. The account is `live` with password `live`, created by
