@@ -7,9 +7,11 @@ The only changes are scroll feel for a desktop:
 - `freya-winit/src/bingux_scroll.rs` and `renderer.rs`: the wheel step is 64 px
   per notch (upstream 53) and touchpad movement is 1x (upstream 2x).
   `BINGUX_WHEEL_STEP` and `BINGUX_TOUCHPAD_FACTOR` override them.
-- `freya-components/src/scrollviews/use_scroll_controller.rs`: a wheel scroll
-  eases out over 30 ms (upstream 60 ms on desktop).
-  `BINGUX_SCROLL_SMOOTHING` overrides it, in seconds.
+- `freya-components/src/scrollviews/use_scroll_controller.rs`: wheel and
+  keyboard scrolls use an adaptive spring after Firefox's smooth scrolling: a
+  motion starts quickly, glides softly while wheel events keep coming and
+  settles fast once they stop (upstream: one fixed 60 ms spring).
+  `BINGUX_SCROLL_SPEED` scales it (1 default, 2 twice as quick).
 
 Both crates are MIT licensed by the Freya authors. Tests and examples are not
 copied. Drop this directory and the patch entries when upstream exposes these

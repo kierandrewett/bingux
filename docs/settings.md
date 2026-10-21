@@ -51,11 +51,13 @@ border and shadow, so the app window itself is square and opaque. See
 
 ## Scrolling
 
-A wheel notch scrolls 64 px and eases out over 30 ms; touchpad movement
-follows the fingers 1 to 1. Dragging the page does not scroll it. To tune the
-feel without a rebuild, set `BINGUX_WHEEL_STEP` (pixels per notch),
-`BINGUX_TOUCHPAD_FACTOR` (touchpad speed, 1 is direct) or
-`BINGUX_SCROLL_SMOOTHING` (seconds, 0.01 to 0.6) before starting Settings.
+A wheel notch scrolls 64 px. The motion follows Firefox's smooth scrolling: it
+starts quickly, glides softly while the wheel keeps turning and settles fast
+once it stops. Touchpad movement follows the fingers 1 to 1. Dragging the page
+does not scroll it. To tune the feel without a rebuild, set `BINGUX_WHEEL_STEP`
+(pixels per notch), `BINGUX_TOUCHPAD_FACTOR` (touchpad speed, 1 is direct) or
+`BINGUX_SCROLL_SPEED` (1 is the default, 2 is twice as quick, 0.5 twice as
+soft; 0.25 to 8) before starting Settings.
 These come from a small patch to Freya kept in `packages/vendor`.
 
 ## Font

@@ -245,16 +245,7 @@ pub(crate) trait ScrollFeel {
 
 impl ScrollFeel for TargetPlatform {
     fn scroll_smoothing_time(&self) -> f32 {
-        // Bingux patch: a wheel notch eases out over about 30 ms instead of
-        // snapping in 60 ms. BINGUX_SCROLL_SMOOTHING sets the seconds.
-        static SECONDS: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
-        *SECONDS.get_or_init(|| {
-            std::env::var("BINGUX_SCROLL_SMOOTHING")
-                .ok()
-                .and_then(|value| value.parse::<f32>().ok())
-                .filter(|value| value.is_finite())
-                .map_or(0.03, |value| value.clamp(0.01, 0.6))
-        })
+        if self.is_mobile() { 0.1 } else { 0.06 }
     }
 
     fn scroll_fling_time(&self) -> f32 {
@@ -268,6 +259,36 @@ pub(crate) struct SmoothDamp {
     position: Point2D,
     velocity: Vector2D,
     smooth_time: f32,
+    /// Bingux patch: wheel and keyboard scrolls use an adaptive spring (see
+    /// `adaptive_omega`) instead of the fixed `smooth_time`.
+    adaptive: bool,
+    /// Whether this scroll started a new motion (no wheel event just before).
+    motion_begin: bool,
+    last_event: Option<std::time::Instant>,
+}
+
+/// Bingux patch: spring rates in 1/s, after Firefox's smooth wheel scrolling
+/// (msdPhysics). A motion starts quickly, glides softly while wheel events keep
+/// coming and settles fast once they stop, so a scroll neither lingers nor
+/// snaps. `BINGUX_SCROLL_SPEED` scales all three (default 1; 2 is twice as
+/// quick, 0.5 twice as soft).
+const BEGIN_OMEGA: f32 = 35.0;
+const CONTINUOUS_OMEGA: f32 = 14.0;
+const SETTLE_OMEGA: f32 = 60.0;
+/// Seconds without a wheel event after which the scroll settles.
+const SETTLE_AFTER: f32 = 0.08;
+/// Seconds between wheel events within which a motion counts as continuous.
+const CONTINUOUS_WITHIN: f32 = 0.12;
+
+fn speed_scale() -> f32 {
+    static SCALE: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
+    *SCALE.get_or_init(|| {
+        std::env::var("BINGUX_SCROLL_SPEED")
+            .ok()
+            .and_then(|value| value.parse::<f32>().ok())
+            .filter(|value| value.is_finite())
+            .map_or(1.0, |value| value.clamp(0.25, 8.0))
+    })
 }
 
 impl SmoothDamp {
@@ -276,12 +297,33 @@ impl SmoothDamp {
             position: Point2D::zero(),
             velocity: Vector2D::zero(),
             smooth_time: TargetPlatform::Unknown.scroll_smoothing_time(),
+            adaptive: false,
+            motion_begin: true,
+            last_event: None,
         }
+    }
+
+    fn adaptive_omega(&self) -> f32 {
+        let idle = self
+            .last_event
+            .map_or(f32::MAX, |event| event.elapsed().as_secs_f32());
+        let omega = if idle > SETTLE_AFTER {
+            SETTLE_OMEGA
+        } else if self.motion_begin {
+            BEGIN_OMEGA
+        } else {
+            CONTINUOUS_OMEGA
+        };
+        omega * speed_scale()
     }
 
     /// Returns whether it has settled onto `target`.
     fn advance(&mut self, target: Point2D, elapsed_seconds: f32) -> bool {
-        let omega = 2.0 / self.smooth_time;
+        let omega = if self.adaptive {
+            self.adaptive_omega()
+        } else {
+            2.0 / self.smooth_time
+        };
         let decay = (-omega * elapsed_seconds).exp();
         let change = self.position - target;
         let linear_term = (self.velocity + change * omega) * elapsed_seconds;
@@ -358,6 +400,14 @@ impl ScrollController {
         {
             let mut damp = self.damp.write();
             damp.smooth_time = smooth_time;
+            damp.adaptive = velocity.is_none();
+            if damp.adaptive {
+                let gap = damp
+                    .last_event
+                    .map_or(f32::MAX, |event| event.elapsed().as_secs_f32());
+                damp.motion_begin = !is_animating || gap > CONTINUOUS_WITHIN;
+                damp.last_event = Some(std::time::Instant::now());
+            }
             if let Some(velocity) = velocity {
                 damp.velocity = velocity;
             }
