@@ -52,6 +52,9 @@ Scope {
     property int countdown: 0
     property rect recordingRegion: Qt.rect(0, 0, 0, 0)
     property string recordingTarget: ""
+    property var requests: new Map()
+    property string activeRequest: ""
+    property bool desktopPending: false
     readonly property bool recording: state === "recording"
     readonly property bool busy: ["countdown", "starting", "recording", "finalizing"].includes(state)
     readonly property string elapsedText: Math.floor(elapsed / 60).toString() + ":" + (elapsed % 60).toString().padStart(2, "0")
@@ -224,6 +227,7 @@ Scope {
             send({
                 command: "cancel"
             });
+            finishRequest("cancelled");
         }
     }
     function stop(hoveredAt = 0) {
@@ -232,9 +236,175 @@ Scope {
             hoveredAt: hoveredAt
         });
     }
+    function requestIdError(id) {
+        if (!/^[A-Za-z0-9._-]{1,64}$/.test(id))
+            return "Invalid request ID";
+        pruneRequests();
+        return requests.has(id) ? "Request ID already used" : "";
+    }
+    function rememberRequest(id, outcome, path = "", message = "") {
+        requests.set(id, {
+            id: id,
+            state: outcome,
+            path: path,
+            message: message,
+            updated: Date.now()
+        });
+        pruneRequests();
+    }
+    function pruneRequests() {
+        // Finished requests live for ten minutes, at most 15 besides the active one.
+        const cutoff = Date.now() - 600000;
+        const finished = Array.from(requests.values()).filter(entry => entry.id !== activeRequest && entry.updated >= cutoff).sort((a, b) => b.updated - a.updated).slice(0, 15).map(entry => entry.id);
+        for (const entry of Array.from(requests.values()))
+            if (entry.id !== activeRequest && !finished.includes(entry.id))
+                requests.delete(entry.id);
+    }
+    function finishRequest(outcome, path = "", message = "") {
+        if (!activeRequest)
+            return;
+        const id = activeRequest;
+        activeRequest = "";
+        desktopPending = false;
+        rememberRequest(id, outcome, path, message);
+    }
+    function takeRequested() {
+        // Requests capture a region or a whole screen only; the backend never opens a picker for them.
+        if (preferences.target === "window") {
+            finishRequest("error", "", "Window capture is not available for requests");
+            close();
+            return;
+        }
+        const s = activeScreen;
+        captureSession.requested = false;
+        opened = false;
+        state = "countdown";
+        optionsOpen = false;
+        send({
+            command: "capture",
+            kind: "screenshot",
+            target: preferences.target === "screen" ? "screen" : "region",
+            screen: s.name,
+            previewToken: root.previewToken,
+            region: {
+                x: Math.round(s.x + region.x),
+                y: Math.round(s.y + region.y),
+                width: Math.round(region.width),
+                height: Math.round(region.height)
+            },
+            cursor: false,
+            copy: false,
+            delay: 0,
+            format: "png",
+            backend: "auto",
+            portal: true
+        });
+    }
+    function beginInteractiveRequest(id, mode) {
+        if (mode !== "screenshot")
+            return {
+                ok: false,
+                error: "Unknown capture mode"
+            };
+        const error = requestIdError(id);
+        if (error)
+            return {
+                ok: false,
+                error: error
+            };
+        if (busy || opened || state === "preparing")
+            return {
+                ok: false,
+                error: "A capture is already in progress"
+            };
+        if (preferences.target === "window")
+            return {
+                ok: false,
+                error: "Window capture is not available for requests"
+            };
+        activeRequest = id;
+        rememberRequest(id, "pending");
+        open();
+        return {
+            ok: true
+        };
+    }
+    function beginDesktopRequest(id) {
+        const error = requestIdError(id);
+        if (error)
+            return {
+                ok: false,
+                error: error
+            };
+        if (busy || opened || state === "preparing")
+            return {
+                ok: false,
+                error: "A capture is already in progress"
+            };
+        activeRequest = id;
+        rememberRequest(id, "pending");
+        captureSession.requested = false;
+        // The desktop capture needs the recorder worker, so it waits for the worker's ready event.
+        state = "preparing";
+        desktopPending = true;
+        if (!worker.running)
+            worker.running = true;
+        if (ready)
+            sendDesktopCapture();
+        return {
+            ok: true
+        };
+    }
+    function sendDesktopCapture() {
+        // No target screen: grim captures every output as one desktop image, with no picker.
+        desktopPending = false;
+        state = "starting";
+        send({
+            command: "capture",
+            kind: "screenshot",
+            target: "screen",
+            previewToken: "",
+            cursor: false,
+            copy: false,
+            delay: 0,
+            format: "png",
+            backend: "auto",
+            portal: true
+        });
+    }
+    function requestStatus(id) {
+        pruneRequests();
+        const entry = requests.get(id);
+        return {
+            id: id,
+            state: entry ? entry.state : "unknown",
+            path: entry ? entry.path : "",
+            message: entry ? entry.message : ""
+        };
+    }
+    function cancelRequest(id) {
+        if (!activeRequest || id !== activeRequest)
+            return {
+                ok: false,
+                error: "Request is not pending"
+            };
+        if (busy)
+            send({
+                command: "cancel"
+            });
+        else
+            close();
+        return {
+            ok: true
+        };
+    }
     function take() {
         if (!ready || busy)
             return;
+        if (activeRequest) {
+            takeRequested();
+            return;
+        }
         if (preferences.target === "window" && (!capabilities.window || (directWindowPicker && !selectedWindow)))
             return;
         const s = activeScreen;
@@ -273,7 +443,9 @@ Scope {
         if (event.event === "ready") {
             capabilities = event;
             ready = true;
-            if (state === "preparing")
+            if (desktopPending)
+                sendDesktopCapture();
+            else if (state === "preparing")
                 preparePreview();
         } else if (event.event === "preview") {
             if (state !== "preparing" || event.request !== previewRequest)
@@ -307,6 +479,7 @@ Scope {
             savedPath = event.path;
             partialPath = "";
             message = (event.kind === "recording" ? "Recording saved" : "Screenshot saved") + (event.copied ? " · Copied to clipboard" : "");
+            finishRequest("saved", event.path);
             if (!event.notified)
                 console.warn("Capture saved; desktop notification acknowledgement pending or unavailable");
         } else if (event.event === "error") {
@@ -314,9 +487,12 @@ Scope {
             state = "error";
             message = event.message;
             partialPath = event.partial || "";
+            finishRequest("error", "", event.message);
             notifyError();
-        } else if (event.event === "cancelled" && state !== "preparing") {
-            state = "idle";
+        } else if (event.event === "cancelled") {
+            if (state !== "preparing")
+                state = "idle";
+            finishRequest("cancelled");
         }
     }
     Process {
@@ -342,6 +518,7 @@ Scope {
             }
             if (wasActive)
                 root.notifyError();
+            root.finishRequest("error", "", root.message);
         }
     }
     IpcHandler {
@@ -400,6 +577,11 @@ Scope {
                     ok: false,
                     error: "Open the capture selector before taking a capture"
                 });
+            if (root.activeRequest && preferences.target === "window")
+                return JSON.stringify({
+                    ok: false,
+                    error: "Window capture is not available for requests"
+                });
             if (preferences.target === "window" && !root.capabilities.window)
                 return JSON.stringify({
                     ok: false,
@@ -425,6 +607,18 @@ Scope {
                 });
             else
                 root.close();
+        }
+        function requestInteractive(id: string, mode: string): string {
+            return JSON.stringify(root.beginInteractiveRequest(id, mode || "screenshot"));
+        }
+        function requestDesktop(id: string): string {
+            return JSON.stringify(root.beginDesktopRequest(id));
+        }
+        function requestResult(id: string): string {
+            return JSON.stringify(root.requestStatus(id));
+        }
+        function cancelRequest(id: string): string {
+            return JSON.stringify(root.cancelRequest(id));
         }
         function status(): string {
             return JSON.stringify({

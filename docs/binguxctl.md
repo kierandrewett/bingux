@@ -12,6 +12,10 @@ binguxctl capture take                    # Press Capture with the current selec
 binguxctl capture stop                    # Finish the current recording
 binguxctl capture cancel
 binguxctl capture status                  # JSON, including savedPath and elapsed time
+binguxctl capture request photo-1 --interactive   # Choose a region; prints JSON
+binguxctl capture request photo-2 --desktop       # Capture every output; prints JSON
+binguxctl capture result photo-1                  # JSON: pending, saved, cancelled, error or unknown
+binguxctl capture cancel-request photo-1          # Cancel a pending request
 binguxctl search query "firefox"
 binguxctl controls open
 binguxctl calendar toggle
@@ -37,6 +41,8 @@ behaviour: open/close the selector, cancel a countdown, or stop a recording.
 `capture take` requires a ready selector. `--mode` and `--target` apply only to
 `capture open`; omitted options retain the UI preferences. Capturing and setting
 Do Not Disturb are asynchronous; their status commands report the resulting state.
+
+`capture request ID --interactive` opens the region selector for a request and `capture request ID --desktop` captures every output without a picker. Both print `{"ok":true}` or `{"ok":false,"error":"..."}` at once. `capture result ID` prints `{"id":"ID","state":"pending|saved|cancelled|error|unknown","path":"...","message":"..."}`; `unknown` means no such request. `capture cancel-request ID` cancels a pending request. IDs are 1 to 64 letters, digits, dots, underscores or dashes. Only one capture runs at a time. Requests never copy to the clipboard or send a notification. A request made while the target preference is window fails, because requests capture regions or screens only.
 
 Search, calendar, controls, metrics, keyboard and notifications accept `open`,
 `close`, `toggle` and `status`. `sidebar` also supports `popout`, `dock`, `select`

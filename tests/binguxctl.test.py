@@ -49,6 +49,22 @@ class ControlCommands(unittest.TestCase):
         )
         self.assertEqual(self.route(["capture", "toggle"]), ["call", "--", "capture", "open"])
 
+    def test_capture_request_routes_to_shell_methods(self):
+        self.assertEqual(
+            self.route(["capture", "request", "photo-1", "--interactive"]),
+            ["call", "--", "capture", "requestInteractive", "photo-1", "screenshot"],
+        )
+        self.assertEqual(
+            self.route(["capture", "request", "photo-1", "--desktop", "--mode", "screenshot"]),
+            ["call", "--", "capture", "requestDesktop", "photo-1"],
+        )
+        self.assertEqual(
+            self.route(["capture", "result", "photo-1"]), ["call", "--", "capture", "requestResult", "photo-1"]
+        )
+        self.assertEqual(
+            self.route(["capture", "cancel-request", "photo-1"]), ["call", "--", "capture", "cancelRequest", "photo-1"]
+        )
+
     def test_identify_sends_ordered_connectors_and_hide(self):
         self.assertEqual(
             self.route(["identify", "show", "DP-1", "HDMI-A-1"]),
@@ -169,6 +185,14 @@ class ControlCommands(unittest.TestCase):
             ["controls", "show", "dnd", "--input"],
             ["vpn", "connect"],
             ["vpn", "list", "tailscale"],
+            ["capture", "request", "bad id", "--interactive"],
+            ["capture", "request", "photo-1"],
+            ["capture", "request", "photo-1", "--interactive", "--desktop"],
+            ["capture", "request", "photo-1", "--interactive", "--mode", "recording"],
+            ["capture", "request", "photo-1", "--desktop", "--target", "screen"],
+            ["capture", "result"],
+            ["capture", "cancel-request", "photo-1", "--desktop"],
+            ["capture", "open", "photo-1"],
         ):
             with self.subTest(words=words), contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 self.route(words)
