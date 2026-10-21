@@ -33,8 +33,8 @@ package() {
         install -Dm644 "$unit" -t "$pkgdir/usr/lib/systemd/system/"
     done
     # Group bingux-install gates the socket; created by systemd-sysusers.
-    install -Dm644 systemd/bingux-installer.conf "$pkgdir/usr/lib/sysusers.d/bingux-installer.conf"
+    install -Dm644 systemd/bingux-installer.sysusers "$pkgdir/usr/lib/sysusers.d/bingux-installer.conf"
 
     install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
-    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
 }
