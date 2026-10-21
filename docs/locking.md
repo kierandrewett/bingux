@@ -14,14 +14,15 @@ and creates a lock surface for each output. `WlSessionLock.secure` becomes true
 only when Quickshell receives the compositor's confirmation that every output
 is covered.
 
-On authentication success the client requests `unlock_and_destroy`, then queues
-`wl_display.sync` on Quickshell's existing Wayland connection. The callback is
-ordered after the unlock request, so it proves the compositor processed that
-request before the client exits. A failed sync is never replaced with a timer:
-the client remains alive because it lacks completion proof. Quickshell maps the
-protocol's compositor-sent `finished` event to `secure=false`; an externally
-finished lock exits then. A lock-client crash while locked must leave the
-compositor locked and blanked.
+On authentication success the screen plays its exit (controls fade, the
+wallpaper pushes in) and only then calls `finish()`, which requests
+`unlock_and_destroy` and queues `wl_display.sync` on Quickshell's existing
+Wayland connection. The callback is ordered after the unlock request, so it
+proves the compositor processed that request before the client exits. A
+failed sync is never replaced with a timer: the client remains alive because
+it lacks completion proof. Quickshell maps the protocol's compositor-sent
+`finished` event to `secure=false`; an externally finished lock exits then. A
+lock-client crash while locked must leave the compositor locked and blanked.
 
 The packaged `bingux-lock.service` has no `[Install]` section and is not a
 dependency of `bingux.target`. It is intentionally inactive until the
@@ -29,11 +30,13 @@ compositor-side gate and recovery path are enabled.
 
 ## Authentication
 
-`LockScreen.qml` uses Quickshell's asynchronous `PamContext`, configured as
-`bingux-lock`. It renders PAM's actual sequence of messages and accepts both
-visible and hidden responses, so password changes, one-time codes and other
-multi-prompt stacks work without assuming a single password prompt. Responses
-are cleared immediately and never logged.
+`LockAuthentication.qml` uses Quickshell's asynchronous `PamContext`,
+configured as `bingux-lock`. It renders PAM's actual sequence of messages and
+accepts both visible and hidden responses, so password changes, one-time codes
+and other multi-prompt stacks work without assuming a single password prompt.
+Responses are cleared immediately and never logged. When fprintd reports an
+enrolled finger, a second, fingerprint-only conversation (`bingux-lock-fingerprint`)
+runs beside the password one; either method unlocks.
 
 The Fedora RPM installs `/etc/pam.d/bingux-lock` as a `%config(noreplace)`
 file containing `auth include system-auth`. This follows the administrator's
@@ -42,23 +45,62 @@ fingerprint, smart-card and failure-lock configuration before enabling it.
 Other distributions must provide an equivalent dedicated
 `bingux-lock` PAM service; copying GDM's PAM file is not a portable contract.
 
-## Appearance and timeout
+## Appearance
 
-The dedicated client reads `~/.config/bingux/lock-theme.json`. It accepts only
-hex colours, a local absolute background-image path, and a 12-hour clock flag.
-It never writes this file and does not read the normal Bingux settings store.
+The lock screen and the login greeter share `SessionScreen.qml`. There is no
+separate lock theme file. The screen shows:
 
-```json
-{
-    "background": "#111318",
-    "surface": "#261f232b",
-    "text": "#ffffff",
-    "mutedText": "#c7cbd5",
-    "accent": "#3584e4",
-    "backgroundImage": "/home/me/Pictures/lock.jpg",
-    "useTwelveHourClock": false
-}
-```
+- the user's wallpaper, resolved by `bingux-session wallpaper` from the Bingux
+  configuration (`desktop.wallpaper`, then the GNOME background setting). With
+  no wallpaper the backdrop is a deep tint of the system accent colour;
+- the date and clock at the top, in the locale's 12- or 24-hour format;
+- the account picture (or a monogram), display name, a hint or status line,
+  and a frosted password field at the bottom;
+- the session bar at the top (next section).
+
+Surfaces are translucent white with a blur of the wallpaper behind them. On
+software rendering (`BINGUX_SOFTWARE_RENDERING=1`) blur and shadows are off and
+the surfaces are plain translucent tints. Motion follows `BINGUX_REDUCED_MOTION`.
+
+### Session bar
+
+The bar at the top of the lock screen is built from the same widget table as
+the desktop bar (`shell/bingux/DesktopLayout.js`), in the user's saved
+`top-right` order, filtered by each widget's `contexts`. Only these survive on
+the lock screen:
+
+| Widget     | Lock screen                                                                 |
+| ---------- | --------------------------------------------------------------------------- |
+| `keyboard` | Current layout; the menu switches layouts through `gnoblinctl input select` |
+| `controls` | Network and battery status; a menu with volume, Sleep, Restart, Shut Down   |
+
+Search, tray, notifications, recording, monitors and extensions never appear.
+Menus are drawn inside the lock surface itself: lock surfaces cannot parent
+popup windows.
+
+`SessionServices.allows(capability)` gates every action a widget could take.
+On the lock screen only `volume` and `power` are granted; on the greeter only
+`power`. Launching applications, search, tray menus, settings, notification
+content and media control are refused with a `[session]` log line. The
+contract test `tests/session-context.test.py` checks that every action path
+consults the gate and that every widget declares its contexts.
+
+### Transitions
+
+The clock and the account slide in on the first frame. After a successful
+unlock the controls fade, the identity shrinks slightly, the dim overlay lifts
+and the wallpaper pushes in over `Theme.sessionExitMotion` (360 ms), then the
+client sends `unlock_and_destroy`. The desktop that appears underneath shows
+the same wallpaper, so the hand-over reads as the shell returning rather than
+a cut. `tests/lock-ui.py` drives this path inside a headless Sway session.
+
+## Idle timeout
+
+Bingux does not own idle policy. Gnoblin's `gnoblin-idle` service asks the
+subscribed shell client to lock (`gnoblinctl session lock`) on the configured
+idle timeout and on logind's `Lock` signal, and refuses both in greeter
+sessions. Bingux answering that request with `bingux-lock` is still open; see
+`TODO.md`. The hypridle example below is for other compositors.
 
 ### Optional hypridle integration
 

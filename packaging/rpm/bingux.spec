@@ -60,7 +60,7 @@ that provide the layer-shell protocols.
 %install
 %make_install PREFIX=%{_prefix} DESTDIR=%{buildroot} BUILD_DIR=build QMLDIR=%{_libdir}/bingux/qml
 
-for unit in bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service bingux-lock.service; do
+for unit in bingux.target bingux.service bingux-searchd.service bingux-statusd.service bingux-search-ui.service bingux-switcher-ui.service bingux-capture-ui.service bingux-emoji-ui.service bingux-lock.service bingux-greeter-export.service bingux-greeter-export.path; do
     sed -e 's|/usr/lib64|%{_libdir}|g' packaging/systemd/$unit > %{buildroot}%{_userunitdir}/$unit
 done
 install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bingux-lock
@@ -78,11 +78,14 @@ install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bin
 %license %{_datadir}/licenses/adwaita-icon-theme/COPYING
 %license %{_datadir}/licenses/adwaita-icon-theme/COPYING_CCBYSA3
 %license %{_datadir}/licenses/adwaita-icon-theme/COPYING_LGPL
-%doc README.md docs/extensions.md docs/locking.md
+%doc README.md docs/extensions.md docs/locking.md docs/login-screen.md
 %{_bindir}/bingux
 %{_bindir}/bingux-capture-ui
 %{_bindir}/bingux-lock
 %{_bindir}/bingux-emoji-ui
+%{_bindir}/bingux-greeter
+%{_bindir}/bingux-greeter-session
+%{_bindir}/bingux-session
 %{_bindir}/bingux-wallpaper
 %{_bindir}/bingux-popouts
 %{_bindir}/bingux-search-ui
@@ -101,7 +104,10 @@ install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bin
 %{_datadir}/gnoblin/conf.d/bingux.lua
 %{_datadir}/gnoblin/scripts/bingux-text-input.js
 %{_userunitdir}/bingux*.service
+%{_userunitdir}/bingux*.path
 %{_userunitdir}/bingux.target
+%{_datadir}/polkit-1/rules.d/50-bingux-greeter.rules
+%{_tmpfilesdir}/bingux-greeter.conf
 %config(noreplace) %{_sysconfdir}/pam.d/bingux-lock
 
 %changelog

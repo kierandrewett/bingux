@@ -1,0 +1,11 @@
+[Unit]
+Description=Publish this account's wallpaper for the Bingux login screen
+# The greeter runs as the greetd account and cannot read home directories.
+# This copies the resolved wallpaper into /var/lib/bingux/greeter/<user>/,
+# a directory only this account can write.
+PartOf=bingux.target
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bingux-session export

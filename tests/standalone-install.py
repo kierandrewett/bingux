@@ -27,6 +27,7 @@ class InstallTest(unittest.TestCase):
                 "bingux-frame",
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
+                "cargo/release/bingux-session",
             ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -103,6 +104,7 @@ class InstallTest(unittest.TestCase):
                 "bingux-frame",
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
+                "cargo/release/bingux-session",
             ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -169,10 +171,21 @@ class InstallTest(unittest.TestCase):
             self.assertIn("WantedBy=gnoblin-session.target", target_unit)
             self.assertNotIn("gnome-session@gnoblin.target", target_unit)
             self.assertNotIn("WantedBy=graphical-session.target", target_unit)
-            # Only the helper daemons are pulled in. The shell and its surfaces come from
-            # Gnoblin's Lua autostart, so wanting them here would start a second copy.
+            # Only the helper daemons and the greeter wallpaper export are pulled in. The
+            # shell and its surfaces come from Gnoblin's Lua autostart, so wanting them
+            # here would start a second copy.
             wants = next(line for line in target_unit.splitlines() if line.startswith("Wants="))
-            self.assertEqual(set(wants[len("Wants=") :].split()), {"bingux-searchd.service", "bingux-statusd.service"})
+            self.assertEqual(
+                set(wants[len("Wants=") :].split()),
+                {
+                    "bingux-searchd.service",
+                    "bingux-statusd.service",
+                    "bingux-greeter-export.service",
+                    "bingux-greeter-export.path",
+                },
+            )
+            self.assertTrue((stage / "usr/lib/systemd/user/bingux-greeter-export.path").is_file())
+            self.assertTrue((stage / "usr/lib/tmpfiles.d/bingux-greeter.conf").is_file())
 
     def test_missing_build_fails_before_install(self):
         with tempfile.TemporaryDirectory() as name:
@@ -198,6 +211,7 @@ class InstallTest(unittest.TestCase):
                 "bingux-frame",
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
+                "cargo/release/bingux-session",
             ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -329,6 +343,7 @@ class InstallTest(unittest.TestCase):
                 "bingux-frame",
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
+                "cargo/release/bingux-session",
             ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -386,6 +401,7 @@ class InstallTest(unittest.TestCase):
                 "bingux-frame",
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
+                "cargo/release/bingux-session",
             ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
