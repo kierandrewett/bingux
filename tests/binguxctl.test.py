@@ -49,6 +49,22 @@ class ControlCommands(unittest.TestCase):
         )
         self.assertEqual(self.route(["capture", "toggle"]), ["call", "--", "capture", "open"])
 
+    def test_identify_sends_ordered_connectors_and_hide(self):
+        self.assertEqual(
+            self.route(["identify", "show", "DP-1", "HDMI-A-1"]),
+            ["call", "--", "identify", "show", '["DP-1", "HDMI-A-1"]'],
+        )
+        self.assertEqual(self.route(["identify", "hide"]), ["call", "--", "identify", "hide"])
+        for words in (
+            ["identify", "show"],
+            ["identify", "show", "DP-1", "DP-1"],
+            ["identify", "show", "bad name"],
+            ["identify", "show", *[f"O-{number}" for number in range(17)]],
+        ):
+            with self.subTest(words=words), self.assertRaises(SystemExit):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    self.route(words)
+
     def test_text_stays_one_argument_without_shell_interpretation(self):
         text = 'notes; $(touch /tmp/never) "quoted"'
         self.assertEqual(self.route(["search", "query", text]), ["call", "--", "search", "query", text])

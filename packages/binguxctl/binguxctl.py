@@ -153,6 +153,11 @@ def parser():
         default="",
         help="Panel name, for example sound, network, display or appearance",
     )
+    identify = commands.add_parser("identify", help="Label each display with its number for a few seconds")
+    identify_actions = identify.add_subparsers(dest="action", required=True)
+    identify_show = identify_actions.add_parser("show", help="Label the named displays in the order given")
+    identify_show.add_argument("connectors", nargs="+", metavar="CONNECTOR", help="Connector names, for example DP-1")
+    identify_actions.add_parser("hide", help="Remove display labels now")
     ipc = commands.add_parser("ipc", help="Call any public IPC method directly")
     ipc.add_argument("target")
     ipc.add_argument("method")
@@ -334,6 +339,18 @@ def invocation(args, cli):
         elif args.value is not None:
             cli.error(f"sidebar {action} takes no argument")
         call = ["sidebar", "hide" if action == "close" else action] + ([args.value] if args.value else [])
+    elif command == "identify":
+        if action == "hide":
+            call = ["identify", "hide"]
+        else:
+            connectors = args.connectors
+            if len(connectors) > 16:
+                cli.error("identify takes at most 16 connectors")
+            if len(set(connectors)) != len(connectors):
+                cli.error("identify connectors must be unique")
+            if not all(re.fullmatch(r"[A-Za-z0-9._-]{1,128}", connector) for connector in connectors):
+                cli.error("identify connectors use letters, digits, dot, underscore and dash")
+            call = ["identify", "show", json.dumps(connectors)]
     elif command == "ipc":
         call = [args.target, args.method, *args.arguments]
     else:
