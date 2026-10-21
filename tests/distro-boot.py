@@ -26,7 +26,7 @@ import sys
 import tempfile
 import time
 
-from distro_vm import ROOT, Vm, bright_pixels, find_iso, missing_tools, region_brightness
+from distro_vm import ROOT, Vm, bright_pixels, find_iso, missing_tools, session_painted
 
 # bingux-os-firstboot creates the live account with this password.
 LIVE_USER = "live"
@@ -35,8 +35,6 @@ LIVE_PASSWORD = "live"
 # else on either screen, and nothing on the desktop, is near white.
 CLOCK_REGION = "400x160+440+90"
 CLOCK_PIXELS = 500
-# Below the bar the wallpaper shows; black means it never painted.
-DESKTOP_REGION = "1280x700+0+60"
 SHELL_PATTERN = "'^/usr/bin/bingux( |$)'"
 LOCK_STATE = 'gnoblinctl status | grep -o \'"lock_state":"[a-z]*"\''
 
@@ -112,9 +110,7 @@ def main():
             )
             time.sleep(10)
             report.append("$ ps -u live\n" + vm.run(f"ps -u {LIVE_USER} -o pid=,args= | cut -c1-120") + "\n")
-            checks["desktop wallpaper painted"] = shot("session") and (
-                region_brightness(out / "session.png", DESKTOP_REGION) > 0.04
-            )
+            checks["desktop shows the bar and wallpaper"] = shot("session") and session_painted(out / "session.png")
 
             # Lock: the request reaches statusd, which starts the lock client.
             report.append(
@@ -128,10 +124,11 @@ def main():
                 attempts=20,
                 delay=2,
             )
-            time.sleep(3)
-            checks["lock screen shows the clock"] = shot("locked") and (
-                bright_pixels(out / "locked.png", CLOCK_REGION) > CLOCK_PIXELS
+            # The lock client takes the lock first and paints its screen after.
+            checks["lock screen shows the clock"] = vm.wait_screen(
+                out / "locked.png", lambda path: bright_pixels(path, CLOCK_REGION) > CLOCK_PIXELS, attempts=40
             )
+            time.sleep(2)
             vm.type_text(LIVE_PASSWORD)
             vm.key("ret")
             probe(
@@ -143,10 +140,7 @@ def main():
                 delay=2,
             )
             time.sleep(3)
-            checks["desktop back after unlock"] = shot("unlocked") and (
-                region_brightness(out / "unlocked.png", DESKTOP_REGION) > 0.04
-                and bright_pixels(out / "unlocked.png", CLOCK_REGION) < CLOCK_PIXELS
-            )
+            checks["desktop back after unlock"] = vm.wait_screen(out / "unlocked.png", session_painted, attempts=20)
 
             # Log out: back to the greeter, with a single statusd and no error.
             report.append(

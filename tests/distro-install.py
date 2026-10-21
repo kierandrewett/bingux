@@ -29,25 +29,13 @@ import sys
 import tempfile
 import time
 
-from distro_vm import ROOT, Vm, bright_pixels, find_iso, missing_tools, region_brightness
+from distro_vm import ROOT, Vm, bright_pixels, find_iso, missing_tools, session_painted
 
 USER = "tester"
 PASSWORD = "bingux-test-2026"
 CLOCK_REGION = "400x160+440+90"
 CLOCK_PIXELS = 500
-DESKTOP_REGION = "1280x700+0+60"
 INSTALL_TIMEOUT = 3600
-
-
-def wait_for_screen(vm, path, accept, attempts, delay=5):
-    """Take screenshots until accept(path) holds; returns True when it did."""
-    for _ in range(attempts):
-        if not vm.alive():
-            return False
-        if vm.screenshot(path) and accept(path):
-            return True
-        time.sleep(delay)
-    return False
 
 
 def main():
@@ -81,13 +69,22 @@ def main():
             checks["bingux repository is on the image"] = "bingux-os.db" in live.run("ls /opt/bingux-os/repo")
             live.run(f"printf '%s' '{PASSWORD}' >/root/password && chmod 600 /root/password")
             started = time.monotonic()
-            install_log = live.run(
-                f"bingux-os-install --disk /dev/vda --user {USER} --password-file /root/password --yes 2>&1; "
-                "echo INSTALL_EXIT=$?",
-                INSTALL_TIMEOUT,
+            # archinstall enters the new system through `systemd-run --pty`, so the
+            # installer needs a terminal, as it has on a console. `script`
+            # provides one and keeps the transcript.
+            live.run(
+                "script -qefc 'bingux-os-install --disk /dev/vda --user "
+                f"{USER} --password-file /root/password --yes' /root/install.log >/dev/null 2>&1 </dev/null &"
             )
-            report.append(f"install took {int(time.monotonic() - started)} s\n")
-            checks["installer finished successfully"] = "INSTALL_EXIT=0" in install_log
+            finished = live.poll(
+                "pgrep -c -f 'bingux-os-install|archinstall' || true",
+                lambda output: output == "0",
+                attempts=INSTALL_TIMEOUT // 20,
+                delay=20,
+            )
+            install_log = live.run("tr '\\r' '\\n' </root/install.log | tail -n 400", 60)
+            report.append(f"install took {int(time.monotonic() - started)} s, processes left: {finished}\n")
+            checks["installer finished successfully"] = 'COMMAND_EXIT_CODE="0"' in install_log
 
             if checks["installer finished successfully"]:
                 live.run("mount /dev/vda2 /mnt && mount /dev/vda1 /mnt/boot")
@@ -137,8 +134,7 @@ def main():
             installed = Vm(work / "installed", disk=disk, uefi=True, vars_path=vars_file)
             installed.start()
             greeter = out / "installed-greeter.png"
-            checks["installed system shows the greeter"] = wait_for_screen(
-                installed,
+            checks["installed system shows the greeter"] = installed.wait_screen(
                 greeter,
                 lambda path: bright_pixels(path, CLOCK_REGION) > CLOCK_PIXELS,
                 attempts=120,
@@ -148,13 +144,9 @@ def main():
                 installed.type_text(PASSWORD)
                 installed.key("ret")
                 session = out / "installed-session.png"
-                checks["installed account signs in to a desktop"] = wait_for_screen(
-                    installed,
+                checks["installed account signs in to a desktop"] = installed.wait_screen(
                     session,
-                    lambda path: (
-                        region_brightness(path, DESKTOP_REGION) > 0.04
-                        and bright_pixels(path, CLOCK_REGION) < CLOCK_PIXELS
-                    ),
+                    session_painted,
                     attempts=60,
                 )
         (out / "report.txt").write_text("\n".join(report))

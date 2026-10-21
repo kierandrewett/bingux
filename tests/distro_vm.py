@@ -68,12 +68,52 @@ def bright_pixels(image, geometry, threshold="90%"):
         return 0.0
 
 
+def blue_lead(image, geometry):
+    """How far blue leads red (0 to 1) over a crop: the default wallpaper is a blue gradient; black and grey have none."""
+    values = []
+    for channel in ("B", "R"):
+        result = subprocess.run(
+            [
+                "magick",
+                str(image),
+                "-crop",
+                geometry,
+                "+repage",
+                "-channel",
+                channel,
+                "-separate",
+                "-format",
+                "%[fx:mean]",
+                "info:",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        try:
+            values.append(float(result.stdout.strip()))
+        except ValueError:
+            return 0.0
+    return values[0] - values[1]
+
+
+# The top bar of a session: the date and time at its centre are white text on
+# a dark strip, and below it the wallpaper shows.
+BAR_CLOCK_REGION = "160x24+560+4"
+DESKTOP_REGION = "1280x700+0+60"
+
+
+def session_painted(image):
+    """True when the screenshot shows a Bingux session: the bar's clock text and the blue wallpaper below it."""
+    return bright_pixels(image, BAR_CLOCK_REGION) > 100 and blue_lead(image, DESKTOP_REGION) > 0.05
+
+
 def missing_tools(*tools):
     return [tool for tool in tools if shutil.which(tool) is None]
 
 
 class Vm:
-    def __init__(self, work, *, iso=None, disk=None, uefi=False, memory=None, serial=False, shares=(), vars_path=None):
+    def __init__(self, work, *, iso=None, disk=None, uefi=False, memory=None, serial=False, shares=(), vars_path=None, kernel=None, initrd=None, cmdline=None):
         self.work = Path(work)
         self.iso = iso
         self.disk = disk
@@ -81,6 +121,7 @@ class Vm:
         self.memory = memory or os.environ.get("BINGUX_DISTRO_MEMORY", "4G")
         self.serial_enabled = serial
         self.shares = list(shares)
+        self.kernel, self.initrd, self.cmdline = kernel, initrd, cmdline
         self.process = None
         self.log = b""
         self._serial = None
@@ -142,6 +183,9 @@ class Vm:
                 "-append",
                 f"archisobasedir=arch archisolabel={label} console=ttyS0,115200 console=tty1",
             ]
+        if self.kernel:
+            # Boot a kernel from the host, for a disk whose own bootloader has no serial console.
+            args += ["-kernel", str(self.kernel), "-initrd", str(self.initrd), "-append", self.cmdline]
         if self.serial_enabled:
             args += ["-serial", f"unix:{self.work / 'serial.sock'},server,nowait"]
         self.process = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
@@ -226,6 +270,16 @@ class Vm:
             return False
         subprocess.run(["magick", str(ppm), str(path)], check=False)
         return Path(path).exists()
+
+    def wait_screen(self, path, accept, attempts=60, delay=3):
+        """Take screenshots until accept(path) holds; True when it did, False when the VM ended or time ran out."""
+        for _ in range(attempts):
+            if not self.alive():
+                return False
+            if self.screenshot(path) and accept(path):
+                return True
+            time.sleep(delay)
+        return False
 
     # Serial console: a root shell.
 
