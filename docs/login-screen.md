@@ -106,10 +106,22 @@ Once greetd accepts the credentials the screen plays its exit over
 `Theme.sessionExitMotion` (360 ms): the controls fade, the identity shrinks,
 the dim overlay lifts and the wallpaper pushes in. Only then does the greeter
 call `Greetd.launch`, after `bingux-session remember` has returned. greetd
-ends the greeter session and starts Gnoblin for the user; Gnoblin's user
-session autostarts `bingux-wallpaper` first so the same picture is the first
-thing drawn. The gap between the two compositors is Gnoblin's modeset; keeping
-it short is tracked on the Gnoblin side.
+ends the greeter session and starts Gnoblin for the user.
+
+Neither compositor shows black in between:
+
+- The greeter's compositor paints the remembered account's wallpaper as its
+  `compositor.background`. `bingux-greeter-session` asks
+  `bingux-session greeter-background` for that Lua, writes it after a
+  `gnoblin.load` of the packaged greeter configuration into the greeter
+  account's runtime directory, and passes the file to `gnoblin --greeter`.
+- The user's compositor paints the same picture from
+  `~/.config/gnoblin/conf.d/bingux-background.lua`, which
+  `bingux-session export` writes beside the greeter snapshot. The installer's
+  `init.lua` loads `conf.d/**/*.lua`.
+
+What remains is the modeset between the two compositors, which is the
+kernel's and the display's, not the shell's.
 
 ## Testing
 
