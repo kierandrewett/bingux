@@ -57,7 +57,10 @@ fn main() {
             let wallpaper = account
                 .map(|account| account.wallpaper.as_str())
                 .unwrap_or("");
-            print!("{}", snapshot::greeter_background_lua(wallpaper));
+            print!(
+                "{}",
+                snapshot::greeter_background_lua(&snapshot::greeter_image(wallpaper))
+            );
             return;
         }
         ["wallpaper"] => serde_json::to_string(

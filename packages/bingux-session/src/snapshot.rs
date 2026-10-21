@@ -212,6 +212,21 @@ pub fn write_background_dropin(config_home: &Path, wallpaper: &str) -> io::Resul
     Ok(target)
 }
 
+/// The image the login screen should paint: the blurred, dimmed twin written
+/// beside the account's snapshot wallpaper when it exists, else the plain
+/// wallpaper. The compositor background and the greeter client both use this
+/// path, so software-rendered machines show the same blur.
+pub fn greeter_image(wallpaper: &str) -> String {
+    if let Some(twin) = Path::new(wallpaper)
+        .parent()
+        .map(|directory| directory.join(BLURRED_WALLPAPER_FILE))
+        .filter(|twin| twin.is_file())
+    {
+        return twin.display().to_string();
+    }
+    wallpaper.to_string()
+}
+
 /// Lua for the greeter compositor: the remembered account's exported
 /// wallpaper as `compositor.background`, so the login screen's compositor
 /// paints it before the greeter client maps. With no remembered account the
@@ -272,6 +287,21 @@ mod tests {
         let cleared = export(&root, "ada", "").unwrap();
         assert_eq!(cleared.wallpaper, "");
         assert!(!root.join("ada/wallpaper").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn greeter_image_prefers_the_blurred_twin_beside_the_snapshot() {
+        let root = std::env::temp_dir().join(format!("bingux-session-twin-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let plain = root.join("wallpaper");
+        fs::write(&plain, b"plain").unwrap();
+        let plain_text = plain.display().to_string();
+        assert_eq!(greeter_image(&plain_text), plain_text);
+        let twin = root.join(BLURRED_WALLPAPER_FILE);
+        fs::write(&twin, b"blur").unwrap();
+        assert_eq!(greeter_image(&plain_text), twin.display().to_string());
+        assert_eq!(greeter_image(""), "");
         fs::remove_dir_all(root).unwrap();
     }
 
