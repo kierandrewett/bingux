@@ -7,6 +7,7 @@ use std::{
     io::{BufRead, BufReader, Write},
     os::unix::net::UnixStream,
     path::PathBuf,
+    process::Command,
     sync::mpsc::SyncSender,
     thread,
     time::Duration,
@@ -24,9 +25,12 @@ const PRIVACY_API_MINOR: u64 = 17;
 const EVENTS_API_MINOR: u64 = 9;
 const OSD_API_MINOR: u64 = 27;
 const MONITORS_API_MINOR: u64 = 1;
+const LOCK_API_MINOR: u64 = 21;
 
 const PRIVACY_EVENT: &str = "gnoblin.privacy.changed";
 const OSD_EVENT: &str = "gnoblin.osd.requested";
+const LOCK_EVENT: &str = "gnoblin.session.lock-requested";
+const LOCK_UNIT: &str = "bingux-lock.service";
 
 /// Start the compositor-socket subscriber for Gnoblin state and OSD requests.
 pub fn start_state_subscriber(sender: SyncSender<Event>) {
@@ -226,6 +230,7 @@ fn subscribe_to_gnoblin(
                 )?;
                 publish_state(&state, sender)?;
             }
+            LOCK_EVENT => start_lock_client(),
             OSD_EVENT => {
                 if let Some(request) = osd_request_from_event(&record, &monitors) {
                     sender
@@ -295,7 +300,27 @@ fn supported_events(api_minor: u64, available: &BTreeSet<String>) -> Vec<&'stati
     if api_minor >= OSD_API_MINOR && available.contains(OSD_EVENT) {
         events.push(OSD_EVENT);
     }
+    if api_minor >= LOCK_API_MINOR && available.contains(LOCK_EVENT) {
+        events.push(LOCK_EVENT);
+    }
     events
+}
+
+/// Answer a Gnoblin lock request by starting the Bingux lock client. Gnoblin
+/// starts no locker itself; the client takes the lock over ext-session-lock-v1.
+/// The unit start is a no-op while a lock client is already running, so a
+/// second request does not stack lockers.
+fn start_lock_client() {
+    match Command::new("systemctl")
+        .args(["--user", "start", "--no-block", LOCK_UNIT])
+        .status()
+    {
+        Ok(status) if status.success() => {}
+        Ok(status) => eprintln!("[bingux-statusd] could not start {LOCK_UNIT}: {status}"),
+        Err(error) => {
+            eprintln!("[bingux-statusd] could not run systemctl for {LOCK_UNIT}: {error}")
+        }
+    }
 }
 
 fn send_api_read(
@@ -617,14 +642,23 @@ mod tests {
         let available = BTreeSet::from([
             "gnoblin.privacy.changed".to_owned(),
             "gnoblin.osd.requested".to_owned(),
+            "gnoblin.session.lock-requested".to_owned(),
         ]);
         assert_eq!(
-            supported_events(26, &available),
+            supported_events(20, &available),
             vec!["gnoblin.privacy.changed"]
         );
         assert_eq!(
+            supported_events(26, &available),
+            vec!["gnoblin.privacy.changed", "gnoblin.session.lock-requested"]
+        );
+        assert_eq!(
             supported_events(27, &available),
-            vec!["gnoblin.privacy.changed", "gnoblin.osd.requested"]
+            vec![
+                "gnoblin.privacy.changed",
+                "gnoblin.osd.requested",
+                "gnoblin.session.lock-requested"
+            ]
         );
     }
 
