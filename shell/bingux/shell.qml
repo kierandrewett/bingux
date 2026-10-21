@@ -820,6 +820,8 @@ ShellRoot {
         }
         function chosen(item) {
             const name = item.widgetId || controlNames[defaultControls.indexOf(item)];
+            if (!DesktopLayout.allowed(name, SessionContext.mode))
+                return false;
             return customLayout ? DesktopLayout.placement(DesktopEditing.desktop, name) !== "" : name !== "workspaces" && !DesktopLayout.widget(name)?.panel && !name.startsWith("control-") && !name.startsWith("controls-");
         }
         function zoneFor(item) {

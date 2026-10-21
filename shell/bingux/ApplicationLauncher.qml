@@ -21,6 +21,8 @@ Item {
         onWindowSnapshot: windows => root.nativeWindows = windows
     }
     function launch(command, prepareCommand) {
+        if (!SessionServices.allows("launch"))
+            return;
         focusRetry.stop();
         attempts = 0;
         pendingCommand = prepareCommand && prepareCommand.length ? command : [];

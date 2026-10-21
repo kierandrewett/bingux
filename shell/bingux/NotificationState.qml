@@ -195,6 +195,8 @@ Scope {
     }
 
     function activate(entry) {
+        if (!SessionServices.allows("notificationContent"))
+            return false;
         const action = entry.actions.find(action => action.defaultAction && action.action && typeof action.action.invoke === "function");
         const target = activationTarget(entry);
         if (action) {

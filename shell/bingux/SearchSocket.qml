@@ -277,7 +277,7 @@ QtObject {
     }
 
     function activate(resultId) {
-        if (!isValidOpaqueResultId(resultId))
+        if (!isValidOpaqueResultId(resultId) || !SessionServices.allows("search"))
             return "";
 
         const requestId = nextRequestId("a");

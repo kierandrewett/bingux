@@ -1381,6 +1381,8 @@ PanelWindow {
     }
 
     function launchAction(group, actionId, source) {
+        if (!SessionServices.allows("launch"))
+            return;
         const desktopId = group.desktopEntry.id;
         root.withLaunchActivation(source, token => {
             Quickshell.execDetached(root.applicationLaunchCommand(desktopId, ["--notify-errors", "--action=" + actionId], token));
@@ -1388,6 +1390,8 @@ PanelWindow {
     }
 
     function launch(group, newWindow, source) {
+        if (!SessionServices.allows("launch"))
+            return;
         const serial = ++root.launchSequence;
         root.clearLaunchFailure(group.id);
         root.launchAttempts = Object.assign({}, root.launchAttempts, {

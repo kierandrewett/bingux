@@ -66,7 +66,9 @@ Scope {
         command: ["python3", decodeURIComponent(Qt.resolvedUrl("extensions.py").toString().replace("file://", "")), "list"]
         // With nothing enabled there are no widgets to place, so the scan can
         // wait until the desktop is up instead of delaying start-up.
-        running: root.anyEnabled || Startup.settled
+        // The lock screen and the greeter never load extensions: an
+        // extension sees the whole shell through `unstable`.
+        running: !SessionContext.restricted && (root.anyEnabled || Startup.settled)
         stdout: StdioCollector {
             onStreamFinished: {
                 try {

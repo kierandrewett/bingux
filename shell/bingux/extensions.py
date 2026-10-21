@@ -9,6 +9,9 @@ import re
 import tempfile
 
 ID = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
+# Session contexts a widget may declare. Only "desktop" is honoured today: the
+# lock screen and the greeter never load extensions (see docs/extensions.md).
+CONTEXTS = ("desktop", "locked", "greeter")
 
 
 def config_path():
@@ -64,12 +67,21 @@ def manifest(folder):
         seen.add(widget["id"])
         if not isinstance(widget.get("name"), str) or not widget["name"].strip():
             raise ValueError("Each widget needs a name")
+        contexts = widget.get("contexts", ["desktop"])
+        if (
+            not isinstance(contexts, list)
+            or not contexts
+            or any(context not in CONTEXTS for context in contexts)
+            or len(set(contexts)) != len(contexts)
+        ):
+            raise ValueError("contexts must list distinct values from " + ", ".join(CONTEXTS))
         result["widgets"].append(
             dict(
                 widget,
                 id=f"extension:{data['id']}/{widget['id']}",
                 extensionId=data["id"],
                 label=widget["name"],
+                contexts=contexts,
                 source=component(folder, widget.get("component")),
                 previewSource=component(folder, widget.get("preview", widget.get("component"))),
             )

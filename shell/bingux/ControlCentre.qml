@@ -154,6 +154,8 @@ ShellPopup {
     keyboardInteractive: true
 
     function settings(panel) {
+        if (!SessionServices.allows("settings"))
+            return;
         Quickshell.execDetached(["python3", decodeURIComponent(Qt.resolvedUrl("application_spawn.py").toString().replace(/^file:\/\//, "")), "--", "env", "XDG_CURRENT_DESKTOP=GNOME", "gnome-control-center", panel]);
         visible = false;
     }
@@ -209,6 +211,8 @@ ShellPopup {
                 onSettingsRequested: panel => root.settings(panel)
                 onDetailRequested: (page, trigger, audioTab) => root.openDetail(page, trigger, audioTab)
                 onLockRequested: {
+                    if (!SessionServices.allows("lock"))
+                        return;
                     Quickshell.execDetached(["bingux-lock"]);
                     root.visible = false;
                 }
