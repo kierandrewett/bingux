@@ -10,6 +10,7 @@ use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
@@ -211,14 +212,8 @@ pub fn save(path: &Path, store: &Store) -> Result<(), StoreError> {
         .unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir)?;
     let file_name = path.file_name().unwrap_or_default().to_string_lossy();
-    let temp = dir.join(format!(".{file_name}.{}.tmp", std::process::id()));
+    let (temp, mut file) = create_temp(dir, &file_name)?;
     let result = (|| -> io::Result<()> {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(&temp)?;
         file.write_all(text.as_bytes())?;
         file.sync_all()?;
         drop(file);
@@ -229,6 +224,39 @@ pub fn save(path: &Path, store: &Store) -> Result<(), StoreError> {
         let _ = std::fs::remove_file(&temp);
     }
     result.map_err(StoreError::from)
+}
+
+/// Per-process counter that gives each temp file its own name.
+static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+const TEMP_ATTEMPTS: usize = 8;
+
+/// Creates a new temp file beside the store. `create_new` never reuses a leftover
+/// file or follows a symlink planted at the name, so no stale file is truncated.
+fn create_temp(dir: &Path, file_name: &str) -> io::Result<(PathBuf, std::fs::File)> {
+    let mut last_error = None;
+    for _ in 0..TEMP_ATTEMPTS {
+        let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let temp = temp_path(dir, file_name, sequence);
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&temp)
+        {
+            Ok(file) => return Ok((temp, file)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => last_error = Some(error),
+            Err(error) => return Err(error),
+        }
+    }
+    Err(last_error
+        .unwrap_or_else(|| io::Error::new(io::ErrorKind::AlreadyExists, "no free temp name")))
+}
+
+fn temp_path(dir: &Path, file_name: &str, sequence: u64) -> PathBuf {
+    dir.join(format!(
+        ".{file_name}.{}.{sequence}.tmp",
+        std::process::id()
+    ))
 }
 
 #[cfg(test)]
@@ -334,6 +362,19 @@ clipboard = true
             .filter(|e| e.file_name().to_string_lossy().ends_with(".tmp"))
             .collect();
         assert!(leftovers.is_empty());
+    }
+
+    #[test]
+    fn temp_files_never_follow_or_reuse_existing_paths() {
+        let dir = tempdir();
+        let next = TEMP_SEQUENCE.load(Ordering::Relaxed);
+        let target = dir.join("target");
+        std::fs::write(&target, "keep").unwrap();
+        let planted = temp_path(&dir, "portal-permissions.toml", next);
+        std::os::unix::fs::symlink(&target, &planted).unwrap();
+        let (temp, _file) = create_temp(&dir, "portal-permissions.toml").unwrap();
+        assert_ne!(temp, planted);
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "keep");
     }
 
     fn tempdir() -> PathBuf {
