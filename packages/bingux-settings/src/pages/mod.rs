@@ -14,6 +14,7 @@ pub mod bluetooth;
 pub mod datetime;
 pub mod desktop;
 pub mod displays;
+pub mod gnoblin;
 pub mod keyboard;
 pub mod mouse;
 pub mod network;

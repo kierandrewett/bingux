@@ -23,8 +23,8 @@ audio, and power indicators. Run `bingux-config set desktop.clock_seconds true`
 to show seconds; the clock then redraws
 every second. Bingux is not a compositor and does not modify GNOME Shell UI.
 Right-click empty wallpaper for Change Background… or Display Settings, which
-open the matching GNOME Settings pages. Windows, panels and the dock keep their
-own pointer menus.
+open the matching pages of [Bingux Settings](settings.md). Windows, panels and
+the dock keep their own pointer menus.
 
 The tray uses `QsMenuAnchor` for left and right menu actions. Pixmap-only tray items, including the disconnected Tailscale item in the validation VM, use a visible local glyph fallback when the layer-shell icon provider cannot render the image URL.
 The reference implementation uses Quickshell 0.2.1 for layer-shell surfaces. Quickshell supplies `zwlr_layer_shell_v1`, `zwlr_foreign_toplevel_manager_v1`, StatusNotifierItem menus, desktop-entry actions, and the desktop-notification service used by this shell. Bingux pins the exact Quickshell package through its flake lock.

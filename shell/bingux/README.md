@@ -64,9 +64,9 @@ animation for each menu. Tray, keyboard, dock, calendar, and control-centre menu
 all use this component.
 
 Right-click empty wallpaper for Change Background… or Display Settings, which
-open the background or display page in GNOME Settings (gnome-control-center). The
-menu opens at the pointer, clamps to the screen edges, and closes on Escape or
-a press outside.
+open the `background` or `display` page of Bingux Settings (`bingux-settings`,
+see `docs/settings.md`). The menu opens at the pointer, clamps to the screen
+edges, and closes on Escape or a press outside.
 
 Run `QUICKSHELL_BIN=/path/to/matching/quickshell tests/popup-motion.sh` for real
 window, pointer, keyboard, interruption, and reopening checks. Repeat with

@@ -47,6 +47,19 @@ Requires:       /usr/bin/qs
 Requires:       systemd
 Requires:       wl-clipboard
 Requires:       xdg-utils
+# Desktop-wide settings (accent, colour scheme, background, idle delay) live
+# in GSettings; dconf keeps them across logins. glib2 provides gsettings.
+Requires:       dconf
+Requires:       glib2
+# Backends the Settings application drives. Each page reports a readable
+# error when its tool is missing, so these are recommendations.
+Recommends:     NetworkManager
+Recommends:     accountsservice
+Recommends:     bluez
+Recommends:     power-profiles-daemon
+Recommends:     upower
+Recommends:     wireplumber
+Recommends:     zenity
 
 %systemd_requires
 

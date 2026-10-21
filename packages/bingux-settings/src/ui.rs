@@ -218,7 +218,7 @@ impl Component for ValueText {
             .font_size(14.0)
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis)
-            .max_width(Size::px(280.0))
+            .max_width(Size::px(360.0))
     }
 }
 
@@ -562,7 +562,8 @@ impl Component for IconButton {
     }
 }
 
-/// A single-line section separator with a label, used inside pages.
+/// A group-style heading for content that is not a boxed group, such as a
+/// status block. Looks the same as a `Group` title.
 pub fn section_label(text: impl Into<String>) -> Element {
     let text = text.into();
     SectionLabel { text }.into()
@@ -578,9 +579,9 @@ impl Component for SectionLabel {
         let tokens = use_tokens();
         label()
             .text(self.text.clone())
-            .color(tokens.muted)
-            .font_size(12.0)
+            .color(tokens.text)
+            .font_size(15.0)
             .font_weight(FontWeight::SEMI_BOLD)
-            .margin((8.0, 0.0, 8.0, 4.0))
+            .margin((0.0, 0.0, 8.0, 4.0))
     }
 }

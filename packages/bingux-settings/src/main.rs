@@ -37,7 +37,7 @@ fn main() {
             .with_window(
                 WindowConfig::new(move || app::App { initial })
                     .with_title("Settings")
-                    .with_app_id("org.bingux.Settings")
+                    .with_app_id("bingux-settings")
                     .with_decorations(false)
                     .with_transparency(true)
                     .with_size(width as f64, height as f64)
