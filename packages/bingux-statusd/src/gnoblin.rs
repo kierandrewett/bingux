@@ -76,6 +76,13 @@ fn subscribe_to_gnoblin(
     let methods = string_set(hello.get("methods"));
     let events = string_set(hello.get("events"));
 
+    // Gnoblin keeps one API version per connection, the one of the latest
+    // request, and delivers lock requests and OSD events only while it is
+    // high enough (lock 1.21, OSD 1.27). Every request therefore carries the
+    // same version, the highest this client needs, instead of the lowest each
+    // call would accept: the input and privacy reads used to drop it to 1.6
+    // and 1.17 right after the subscription and silently ended it.
+    let wire_minor = api_minor.min(OSD_API_MINOR);
     let subscribed_events = supported_events(api_minor, &events);
     let mut initial_subscriptions = BTreeSet::new();
     let expected_events: BTreeSet<String> = subscribed_events
@@ -87,7 +94,7 @@ fn subscribe_to_gnoblin(
             &mut writer,
             &json!({
                 "op": "events",
-                "api_version": {"major": API_MAJOR, "minor": api_minor.min(OSD_API_MINOR)},
+                "api_version": {"major": API_MAJOR, "minor": wire_minor},
                 "events": subscribed_events,
             }),
         )?;
@@ -99,7 +106,7 @@ fn subscribe_to_gnoblin(
             &mut writer,
             &json!({
                 "op": "monitors",
-                "api_version": {"major": API_MAJOR, "minor": MONITORS_API_MINOR},
+                "api_version": {"major": API_MAJOR, "minor": wire_minor},
             }),
         )?;
         initial_subscriptions.insert("monitors");
@@ -107,30 +114,20 @@ fn subscribe_to_gnoblin(
 
     let mut requested_reads = BTreeSet::new();
     if api_minor >= INPUT_API_MINOR && methods.contains("input.sources") {
-        send_api_read(
-            &mut writer,
-            "input-sources",
-            INPUT_API_MINOR,
-            "input.sources",
-        )?;
+        send_api_read(&mut writer, "input-sources", wire_minor, "input.sources")?;
         requested_reads.insert("input-sources");
     }
     if api_minor >= INPUT_API_MINOR && methods.contains("input.current_source") {
         send_api_read(
             &mut writer,
             "input-current-source",
-            INPUT_API_MINOR,
+            wire_minor,
             "input.current_source",
         )?;
         requested_reads.insert("input-current-source");
     }
     if api_minor >= PRIVACY_API_MINOR && methods.contains("privacy.state") {
-        send_api_read(
-            &mut writer,
-            "privacy-state",
-            PRIVACY_API_MINOR,
-            "privacy.state",
-        )?;
+        send_api_read(&mut writer, "privacy-state", wire_minor, "privacy.state")?;
         requested_reads.insert("privacy-state");
     }
 
