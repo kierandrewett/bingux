@@ -161,10 +161,8 @@ SessionOsd 1.0 SessionOsd.qml
 SessionAvatar 1.0 SessionAvatar.qml
 SessionLink 1.0 SessionLink.qml
 SessionGlass 1.0 SessionGlass.qml
-SessionPopover 1.0 SessionPopover.qml
 SessionRow 1.0 SessionRow.qml
 SessionShadow 1.0 SessionShadow.qml
-SessionBar 1.0 SessionBar.qml
 StatusBar 1.0 StatusBar.qml
 SessionSlider 1.0 SessionSlider.qml
 LockAuthentication 1.0 LockAuthentication.qml

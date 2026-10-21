@@ -62,7 +62,6 @@ class SessionContextTest(unittest.TestCase):
             "ControlCentre.qml": 'SessionServices.allows("settings")',
             "SessionPower.qml": 'SessionServices.allows("power")',
             "NotificationState.qml": 'SessionServices.allows("notificationContent")',
-            "SessionBar.qml": 'SessionServices.allows("power")',
         }
         for name, needle in expected.items():
             self.assertIn(needle, (SHELL / name).read_text(), name)

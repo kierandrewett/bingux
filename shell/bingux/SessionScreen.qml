@@ -155,9 +155,10 @@ Item {
         }
     }
 
-    // The locked-down top bar: keyboard layout, status and power. Menus open
-    // inside this surface, above everything else on the screen.
-    SessionBar {
+    // The locked-down top bar is the desktop StatusBar in the locked context:
+    // DesktopLayout and SessionServices decide which widgets appear. Popups the
+    // desktop opens from it have no host window here, so they stay closed.
+    StatusBar {
         id: bar
         objectName: "sessionBar"
         anchors.top: parent.top
@@ -165,10 +166,7 @@ Item {
         anchors.right: parent.right
         z: 20
         visible: root.showBar
-        interactive: root.interactive
-        backdrop: backdrop
         metrics: root.metrics
-        gnoblinCtlPath: root.gnoblinCtlPath
         opacity: root.showingControls ? 1 : 0
         Behavior on opacity {
             NumberAnimation {
@@ -183,16 +181,6 @@ Item {
         z: 25
         osdState: root.osdState
         outputName: root.outputName
-    }
-    // A click anywhere else closes the bar's menus.
-    MouseArea {
-        anchors.fill: parent
-        z: 19
-        visible: bar.openMenu !== ""
-        onClicked: {
-            bar.closeMenus();
-            root.focusPrompt();
-        }
     }
 
     SessionShadow {

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Check that StatusBar draws the same top bar as the production desktop.
 
-Runs tests/status-bar.qml (StatusBar alone, metrics unavailable) under headless
+Runs tests/status-bar.qml (StatusBar alone, with the same hermetic session bus and
+fake metrics as desktop-baseline.py) under headless
 sway and compares the top strip with tests/fixtures/desktop-baseline/top-bar.png,
 the bar of the production shell. The clock and the CPU/RAM readout are masked
 the same way desktop-baseline.py masks them.
@@ -48,6 +49,7 @@ def capture_bar(shot=None):
     work.mkdir()
     runtime = home / "run"
     runtime.mkdir(mode=0o700)
+    metrics = baseline.fake_metrics(runtime)
     sway_config = home / "sway.conf"
     sway_config.write_text(f"output {OUTPUT} resolution {SIZE[0]}x{SIZE[1]}\n")
     base = os.environ | {
@@ -57,6 +59,7 @@ def capture_bar(shot=None):
         "WLR_RENDERER": "gles2",
         "WLR_LIBINPUT_NO_DEVICES": "1",
         "BINGUX_SOFTWARE_RENDERING": os.environ.get("BINGUX_SOFTWARE_RENDERING", "1"),
+        "DBUS_SYSTEM_BUS_ADDRESS": baseline.SYSTEM_BUS,
     }
     base.pop("DISPLAY", None)
     base.pop("WAYLAND_DISPLAY", None)
@@ -85,12 +88,14 @@ def capture_bar(shot=None):
             client.wait(timeout=5)
         sway.terminate()
         sway.wait(timeout=5)
+        metrics.stop.set()
         shutil.rmtree(home, ignore_errors=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--shot", metavar="PATH", help="also save the full harness frame to PATH")
+    baseline.ensure_hermetic()
     arguments = parser.parse_args()
     if not REFERENCE.is_file():
         raise SystemExit(f"status-bar-parity: missing reference {REFERENCE}")
