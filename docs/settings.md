@@ -57,6 +57,17 @@ Sans is not installed. GNOME's font setting is not read. Set it on the
 Appearance page or with `bingux-config set appearance.font_family Cantarell`.
 The shell follows the change at once; Bingux Settings reads it at start.
 
+## Where a setting is stored
+
+A setting that GNOME already defines stays in GSettings, because GTK
+applications, the portal and Gnoblin read that key: accent colour, colour
+scheme, night light, key repeat, pointer options, power timeouts and the clock
+format. Bingux Settings writes the key and does not copy it anywhere else. A
+setting that GNOME does not define goes in `bingux.toml`, written through
+`bingux-config`: the wallpaper, dock, sidebar, search and the font. A new
+setting follows the same rule. Without gsettings the pages that need it say so
+and the rest keep working.
+
 ## Gnoblin and GSettings
 
 Gnoblin's Lua configuration can set pointer, touchpad and keyboard options.
