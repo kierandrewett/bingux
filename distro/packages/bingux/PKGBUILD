@@ -9,12 +9,16 @@ pkgdesc='Wayland desktop shell, lock screen and login greeter for Gnoblin'
 arch=('x86_64')
 url='https://github.com/kierandrewett/bingux'
 license=('GPL-3.0-or-later' 'LGPL-3.0-or-later' 'CC-BY-SA-3.0')
+# bingux-settings is a Freya (Skia on wgpu) application: it needs the
+# Vulkan loader, fontconfig and xkbcommon at build and run time.
 makedepends=('cargo' 'gcc' 'make' 'pkgconf' 'qt6-base' 'qt6-declarative' 'qt6-wayland' 'qt6-tools'
-    'wayland' 'wayland-protocols' 'libpulse' 'gtk4' 'libadwaita' 'python')
+    'wayland' 'wayland-protocols' 'libpulse' 'gtk4' 'libadwaita' 'python' 'clang' 'fontconfig'
+    'freetype2' 'libxkbcommon' 'vulkan-headers' 'vulkan-icd-loader')
 depends=('quickshell' 'gnoblin' 'greetd' 'qt6-declarative' 'qt6-wayland' 'qt6-svg'
     'gnome-control-center' 'gnome-session' 'gnome-settings-daemon' 'gtk3' 'gtk4' 'libadwaita'
     'python' 'python-cairo' 'python-gobject' 'python-pillow' 'python-yaml' 'ffmpeg'
-    'wl-clipboard' 'xdg-utils' 'networkmanager' 'upower' 'pipewire' 'fprintd' 'polkit')
+    'wl-clipboard' 'xdg-utils' 'networkmanager' 'upower' 'pipewire' 'fprintd' 'polkit'
+    'fontconfig' 'freetype2' 'libxkbcommon' 'vulkan-icd-loader')
 options=('!debug')
 source=("$pkgname-$pkgver.tar.xz")
 sha256sums=('SKIP')
