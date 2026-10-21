@@ -4,7 +4,8 @@
 The fake server speaks greetd's IPC (native-endian u32 length + JSON). It
 expects one wrong password, then the right one, then a start_session whose
 command and environment come from the Gnoblin wayland-sessions entry. A
-screenshot of the failure state is written to BINGUX_GREETER_SHOT when set.
+screenshot of each visual state is written to BINGUX_GREETER_SHOTS (default
+build/kiosk-shots).
 """
 
 import json
@@ -124,6 +125,10 @@ def main():
         subprocess.run(
             ["magick", "-size", "64x40", "gradient:#1b2a4a-#62a0ea", str(wallpaper)], check=False, capture_output=True
         )
+    # The blurred twin the greeter shows behind the card; the compositor
+    # background uses the same file.
+    if wallpaper.exists():
+        shutil.copy(wallpaper, home / "wallpaper-blur")
     users = {
         "users": [
             {
@@ -153,6 +158,8 @@ def main():
 
     sway_config = home / "sway.conf"
     sway_config.write_text("output HEADLESS-1 resolution 1280x800\n")
+    ack = home / "greeter-ui.ack"
+    ack.write_text("0")
     environment = os.environ | {
         "HOME": str(home),
         "XDG_RUNTIME_DIR": str(runtime),
@@ -165,6 +172,7 @@ def main():
         "BINGUX_SOFTWARE_RENDERING": os.environ.get("BINGUX_SOFTWARE_RENDERING", "1"),
         "QT_QPA_PLATFORM": "wayland",
         "PATH": str(bin_dir) + ":" + os.environ.get("PATH", ""),
+        "GREETER_UI_ACK": str(ack),
     }
     environment.pop("DISPLAY", None)
     sway = subprocess.Popen(
@@ -195,27 +203,45 @@ def main():
             stderr=subprocess.STDOUT,
             text=True,
         )
-        shot = os.environ.get("BINGUX_GREETER_SHOT")
-        deadline = time.monotonic() + 25
-        # Capture the failure state once the fake server has rejected a password.
-        shot_done = False
+        shots_dir = Path(os.environ.get("BINGUX_GREETER_SHOTS", ROOT / "build/kiosk-shots"))
+        shots_dir.mkdir(parents=True, exist_ok=True)
+        lines = []
+        captured = []
+        acks = [0]
+
+        def read_output():
+            # Each "GREETER_UI_SHOT <name>" marker is grabbed once the frame
+            # is settled, then the QML is resumed by rewriting the ack file.
+            for line in greeter.stdout:
+                lines.append(line)
+                if "GREETER_UI_SHOT " in line:
+                    name = line.split("GREETER_UI_SHOT ", 1)[1].strip()
+                    time.sleep(0.3)
+                    target = shots_dir / (name + ".png")
+                    subprocess.run(["grim", str(target)], env=environment, check=False)
+                    captured.append(name)
+                    acks[0] += 1
+                    ack.write_text(str(acks[0]))
+
+        reader = threading.Thread(target=read_output, daemon=True)
+        reader.start()
+        deadline = time.monotonic() + 120
         while time.monotonic() < deadline and greeter.poll() is None:
-            rejected = any(r.get("type") == "post_auth_message_response" for r in greetd.requests)
-            if shot and rejected and not shot_done:
-                time.sleep(0.8)
-                subprocess.run(["grim", shot], env=environment, check=False)
-                shot_done = True
             time.sleep(0.1)
         try:
-            output, _ = greeter.communicate(timeout=5)
+            greeter.wait(timeout=5)
         except subprocess.TimeoutExpired:
             greeter.kill()
-            output, _ = greeter.communicate()
+            greeter.wait()
+        reader.join(timeout=10)
+        output = "".join(lines)
         print(output)
         print("greeter exit code:", greeter.returncode)
         started = greetd.started or {}
         checks = {
             "greeter passed": "GREETER_UI_PASSED" in output,
+            "all shots captured": captured
+            == ["idle", "typing", "wrong-password", "accounts", "sessions", "control-centre", "typed-password"],
             "exit code": greeter.returncode == 0,
             "no server failures": not greetd.failures,
             "start_session command": started.get("cmd") == ["/bin/true", "--from-test"],

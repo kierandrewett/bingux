@@ -141,7 +141,10 @@ kernel's and the display's, not the shell's.
 
 - `tests/greeter-ui.py` speaks greetd's IPC from a fake server, rejects one
   password, accepts the next and checks the `start_session` command and
-  environment. `BINGUX_GREETER_SHOT=/path.png` captures the failure state;
+  environment. Each screenshot is taken once the harness has written
+  `GREETER_UI_ACK`, so the frame is settled; the top-bar pill's control
+  centre is captured too. `BINGUX_GREETER_SHOT=/path.png` captures the
+  failure state;
   `BINGUX_GREETER_WALLPAPER=/path.jpg` uses a real wallpaper;
   `BINGUX_SOFTWARE_RENDERING=0` renders blur and shadows.
 - `tests/lock-ui.py` does the same for the lock screen through

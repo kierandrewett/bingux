@@ -96,6 +96,8 @@ work belongs in Git history and does not stay here as a second changelog.
       masked. Tolerance: 0.2% of pixels, each channel moving by at most 8.
       Run `QML_IMPORT_PATH=build/qml QS_TEST_BIN=build/bingux-shell/quickshell/src/bingux-shell python3 tests/desktop-baseline.py`; add `--update` to
       regenerate the references after an intended visual change.
+- [ ] `tests/desktop-baseline.py` top-bar drift (542 px, 1.32%) fails on HEAD too; the reference is stale or the readout is not masked. Pre-existing.
+- [ ] `tests/lock-ui.py` volume-key step can fail headless (pipewire Errno 112); it passed on HEAD and on the tree when re-run.
 
 ## Extensions
 

@@ -56,6 +56,7 @@ ShellRoot {
                 authentication: greeterAuthentication
                 catalog: greeterCatalog
                 metrics: sessionMetrics
+                hostWindow: window
                 interactive: window.primary
             }
         }
