@@ -2,7 +2,7 @@
 
 use freya::prelude::*;
 
-use crate::surface::{CONTROL_HEIGHT, FONT_SMALL, focus_border, surface_color, use_tokens};
+use crate::surface::{CONTROL_HEIGHT, FONT_SIZE, focus_border, surface_color, use_tokens};
 
 /// The shell's segmented control: a quiet `elevated` rail where only the
 /// selected segment is raised.
@@ -64,7 +64,7 @@ impl Component for Segment {
         let key = self.key.clone();
         let on_select = self.on_select.clone();
         let base = if self.selected {
-            tokens.hover
+            tokens.elevated_pressed
         } else {
             Color::TRANSPARENT
         };
@@ -103,7 +103,7 @@ impl Component for Segment {
                     } else {
                         tokens.muted
                     })
-                    .font_size(FONT_SMALL)
+                    .font_size(FONT_SIZE)
                     .max_lines(1),
             )
     }

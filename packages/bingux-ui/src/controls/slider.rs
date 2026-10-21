@@ -1,13 +1,16 @@
-//! The shell's slider (`SeekSlider.qml`).
+//! The slider: an accent-filled track and a round white handle.
 
 use freya::animation::*;
 use freya::prelude::*;
 
 use crate::surface::{CONTROL_HEIGHT, FONT_SMALL, ROW_RADIUS, focus_border, use_tokens};
 
-/// The shell's slider: a 6 px track that thickens to 8 px while dragging,
-/// filled in text colour and accent while interacting, with a thin tick as
-/// the handle.
+const TRACK: f32 = 6.0;
+const HANDLE: f32 = 20.0;
+
+/// A 6 px track filled with the accent up to a 20 px white handle that
+/// grows to 22 px while dragging. The handle stays inside the track, so
+/// 0 and 100 are the ends of the travel.
 #[derive(PartialEq)]
 pub struct Slider {
     value: f64,
@@ -65,14 +68,17 @@ impl Component for Slider {
         let value = self.value;
         let enabled = self.enabled;
         let motion = tokens.motion(120);
-        let track_anim =
-            use_animation_transition(if dragging() { 8.0 } else { 6.0 }, move |from, to| {
+        let handle_anim = use_animation_transition(
+            if dragging() { HANDLE + 2.0 } else { HANDLE },
+            move |from, to| {
                 AnimNum::new(from, to)
                     .time(motion)
                     .function(Function::Expo)
                     .ease(Ease::Out)
-            });
-        let track_height = track_anim.get().value();
+            },
+        );
+        let handle = handle_anim.get().value();
+        let travel = (self.width - HANDLE).max(1.0);
         let step = self.step;
         let snap = move |percent: f64| -> f64 {
             match step {
@@ -80,19 +86,11 @@ impl Component for Slider {
                 None => percent,
             }
         };
-        let fill_color = if dragging() {
-            tokens.accent
-        } else {
-            tokens.text
-        };
 
         let percent_at = move |x: f64| -> f64 {
-            let width = size.read().width() as f64;
-            if width <= 0.0 {
-                0.0
-            } else {
-                snap((x / width * 100.0).clamp(0.0, 100.0))
-            }
+            let half = HANDLE as f64 / 2.0;
+            let travel = travel as f64;
+            snap(((x - half) / travel * 100.0).clamp(0.0, 100.0))
         };
         let on_pointer_down = {
             let on_moved = on_moved.clone();
@@ -163,25 +161,47 @@ impl Component for Slider {
             .child(
                 rect()
                     .width(Size::fill())
-                    .height(Size::px(track_height))
-                    .corner_radius(track_height / 2.0)
-                    .background(tokens.outline)
+                    .height(Size::px(HANDLE + 2.0))
+                    .main_align(Alignment::Center)
                     .child(
                         rect()
-                            .width(Size::percent(value as f32))
-                            .height(Size::fill())
-                            .corner_radius(track_height / 2.0)
-                            .background(fill_color)
-                            .main_align(Alignment::End)
-                            .direction(Direction::Horizontal)
-                            .cross_align(Alignment::Center)
+                            .width(Size::fill())
+                            .height(Size::px(TRACK))
+                            .corner_radius(TRACK / 2.0)
+                            .background(tokens.outline),
+                    )
+                    .child(
+                        rect()
+                            .position(Position::new_absolute().top(1.0).left(0.0))
+                            .width(Size::px(HANDLE / 2.0 + travel * (value as f32 / 100.0)))
+                            .height(Size::px(HANDLE))
+                            .main_align(Alignment::Center)
                             .child(
                                 rect()
-                                    .width(Size::px(2.0))
-                                    .height(Size::px((track_height - 2.0).max(2.0)))
-                                    .corner_radius(1.0)
-                                    .margin((0.0, 2.0, 0.0, 0.0))
-                                    .background(tokens.bg),
+                                    .width(Size::fill())
+                                    .height(Size::px(TRACK))
+                                    .corner_radius(TRACK / 2.0)
+                                    .background(tokens.accent),
+                            ),
+                    )
+                    .child(
+                        rect()
+                            .position(
+                                Position::new_absolute()
+                                    .top(1.0 + (HANDLE - handle) / 2.0)
+                                    .left(
+                                        travel * (value as f32 / 100.0) - (handle - HANDLE) / 2.0,
+                                    ),
+                            )
+                            .width(Size::px(handle))
+                            .height(Size::px(handle))
+                            .corner_radius(handle / 2.0)
+                            .background(Color::WHITE)
+                            .shadow(
+                                Shadow::new()
+                                    .y(1.0)
+                                    .blur(3.0)
+                                    .color(Color::BLACK.with_af32(0.35)),
                             ),
                     ),
             );

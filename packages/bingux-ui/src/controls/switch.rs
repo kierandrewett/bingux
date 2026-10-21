@@ -1,4 +1,4 @@
-//! The shell's switch (`ControlSwitch.qml`).
+//! The switch: a 44 x 24 track, accent when on, with a 20 px white thumb.
 
 use accesskit::Toggled;
 use freya::animation::*;
@@ -6,7 +6,8 @@ use freya::prelude::*;
 
 use crate::surface::{is_activation_key, use_tokens};
 
-/// The shell's switch: a 36 x 20 track, accent when on, with a 16 px thumb.
+/// A 44 x 24 track that is the accent when on and a neutral grey when off.
+/// The 20 px thumb is white in both states.
 #[derive(PartialEq)]
 pub struct Switch {
     on: bool,
@@ -38,20 +39,15 @@ impl Component for Switch {
         let focus = use_focus(a11y_id);
         let on = self.on;
         let on_toggle = self.on_toggle.clone();
-        let track = if on { tokens.accent } else { tokens.elevated };
-        let thumb = if on { Color::WHITE } else { tokens.text };
+        let track = if on { tokens.accent } else { tokens.outline };
+        let thumb = Color::WHITE;
         let border = if focus() == Focus::Keyboard {
             Border::new()
-                .width(1.0)
-                .alignment(BorderAlignment::Inner)
-                .fill(tokens.text)
-        } else if on {
-            Border::new()
+                .width(2.0)
+                .alignment(BorderAlignment::Outer)
+                .fill(tokens.accent)
         } else {
             Border::new()
-                .width(1.0)
-                .alignment(BorderAlignment::Inner)
-                .fill(tokens.outline)
         };
         let overlay = if self.enabled && pressing() {
             Color::BLACK.with_af32(0.16)
@@ -60,12 +56,12 @@ impl Component for Switch {
         } else {
             Color::TRANSPARENT
         };
-        let thumb_width = if pressing() { 18.0 } else { 16.0 };
+        let thumb_width = if pressing() { 22.0 } else { 20.0 };
         // Thumb travel and track colour ease over 100 ms (Expo out), like the
         // shell's `ControlSwitch.qml` behaviours; zero under reduced motion.
         let motion = tokens.motion(100);
         let thumb_x = use_animation_transition(
-            if on { 36.0 - thumb_width - 2.0 } else { 2.0 },
+            if on { 44.0 - thumb_width - 2.0 } else { 2.0 },
             move |from, to| {
                 AnimNum::new(from, to)
                     .time(motion)
@@ -87,9 +83,9 @@ impl Component for Switch {
             .a11y_enabled(self.enabled)
             .a11y_role(AccessibilityRole::Switch)
             .a11y_builder(move |builder| builder.set_toggled(Toggled::from(on)))
-            .width(Size::px(36.0))
-            .height(Size::px(20.0))
-            .corner_radius(10.0)
+            .width(Size::px(44.0))
+            .height(Size::px(24.0))
+            .corner_radius(12.0)
             .background(track)
             .maybe(!self.enabled, |element| element.opacity(0.45))
             .border(border)
@@ -125,13 +121,13 @@ impl Component for Switch {
                         }
                     })
             })
-            .child(rect().expanded().corner_radius(10.0).background(overlay))
+            .child(rect().expanded().corner_radius(12.0).background(overlay))
             .child(
                 rect()
                     .position(Position::new_absolute().top(2.0).left(thumb_left))
                     .width(Size::px(thumb_width))
-                    .height(Size::px(16.0))
-                    .corner_radius(8.0)
+                    .height(Size::px(20.0))
+                    .corner_radius(10.0)
                     .background(thumb),
             )
     }

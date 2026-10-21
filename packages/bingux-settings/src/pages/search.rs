@@ -12,7 +12,7 @@ use crate::icons::Icon;
 use crate::pages::bingux_config;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Overlays, ResponseKind, Row, Status, choice_row, dialog, icon_button, page_title,
+    Group, Overlays, ResponseKind, Row, Status, choice_row, dialog, icon_button, page_column,
     primary_button, row, slider_row, status, switch, switch_row, text_row, use_overlays,
 };
 
@@ -556,9 +556,7 @@ impl Component for SearchPage {
         use_hook(move || reload(ctx));
 
         let Some(loaded) = model.read().clone() else {
-            return rect()
-                .width(Size::fill())
-                .child(page_title("Search"))
+            return page_column()
                 .child(status(Status::Loading(
                     "Reading the search settings.".into(),
                 )))
@@ -568,15 +566,13 @@ impl Component for SearchPage {
         let data = match loaded {
             Ok(data) => data,
             Err(e) => {
-                return rect()
-                    .width(Size::fill())
-                    .child(page_title("Search"))
+                return page_column()
                     .child(status(Status::Error(e.0)).action("Try again", move |_| reload(ctx)))
                     .into_element();
             }
         };
 
-        let mut page = rect().width(Size::fill()).child(page_title("Search"));
+        let mut page = page_column();
 
         if let Some(message) = error.read().clone() {
             page = page.child(status(Status::Error(message)));

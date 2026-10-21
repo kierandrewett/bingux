@@ -4,7 +4,10 @@ use freya::prelude::*;
 
 use crate::controls::button::action_button;
 use crate::controls::progress::{SpinnerSize, spinner};
-use crate::surface::{CORNER, FONT_HEADING, FONT_SIZE, FONT_SMALL, TALL_ROW_HEIGHT, use_tokens};
+use crate::icons::{self, Icon};
+use crate::surface::{
+    CORNER, FONT_HEADING, FONT_SIZE, FONT_SMALL, ROW_HEIGHT, ROW_PADDING, use_tokens,
+};
 
 /// A short muted explanation under a title or group.
 pub fn caption(text: impl Into<String>) -> Element {
@@ -23,7 +26,7 @@ impl Component for CaptionText {
         paragraph()
             .color(tokens.muted)
             .font_size(FONT_SMALL)
-            .margin((0.0, 16.0, 8.0, 16.0))
+            .margin((0.0, 0.0, 0.0, ROW_PADDING))
             .child(self.text.clone())
     }
 }
@@ -35,6 +38,7 @@ impl Component for CaptionText {
 pub struct Group {
     title: Option<String>,
     description: Option<String>,
+    trailing: Option<Element>,
     rows: Vec<Element>,
 }
 
@@ -43,6 +47,7 @@ impl Group {
         Self {
             title: title.into(),
             description: None,
+            trailing: None,
             rows: Vec::new(),
         }
     }
@@ -50,6 +55,13 @@ impl Group {
     pub fn description(mut self, text: impl Into<String>) -> Self {
         let text = text.into();
         self.description = (!text.is_empty()).then_some(text);
+        self
+    }
+
+    /// An element at the right end of the title line, such as a refresh
+    /// button.
+    pub fn trailing(mut self, element: impl Into<Element>) -> Self {
+        self.trailing = Some(element.into());
         self
     }
 
@@ -78,28 +90,43 @@ impl Component for Group {
                     rect()
                         .width(Size::fill())
                         .height(Size::px(1.0))
-                        .margin((0.0, 0.0, 0.0, 12.0))
-                        .background(tokens.text.with_af32(0.07))
+                        .background(tokens.separator)
                         .into(),
                 );
             }
             children.push(row.clone());
         }
+        // The page column owns the space between groups; a group has no
+        // outer margin. The title and description line up with row text.
+        let heading = (self.title.is_some() || self.description.is_some()).then(|| {
+            rect()
+                .width(Size::fill())
+                .direction(Direction::Horizontal)
+                .content(Content::Flex)
+                .cross_align(Alignment::Center)
+                .child(
+                    rect()
+                        .width(Size::flex(1.0))
+                        .spacing(2.0)
+                        .maybe_child(
+                            self.title
+                                .as_ref()
+                                .map(|title| section_label(title.clone())),
+                        )
+                        .maybe_child(self.description.as_ref().map(|text| caption(text.clone()))),
+                )
+                .maybe_child(self.trailing.clone())
+        });
         rect()
             .width(Size::fill())
-            .margin((0.0, 0.0, 20.0, 0.0))
-            .maybe_child(
-                self.title
-                    .as_ref()
-                    .map(|title| section_label(title.clone())),
-            )
-            .maybe_child(self.description.as_ref().map(|text| caption(text.clone())))
+            .spacing(8.0)
+            .maybe_child(heading)
             .child(
                 rect()
                     .width(Size::fill())
                     .background(tokens.card)
                     .corner_radius(CORNER)
-                    .padding(4.0)
+                    .overflow(Overflow::Clip)
                     .children(children),
             )
     }
@@ -122,9 +149,9 @@ impl Component for SectionLabel {
         label()
             .text(self.text.clone())
             .color(tokens.text)
-            .font_size(13.0)
-            .font_weight(FontWeight::SEMI_BOLD)
-            .margin((0.0, 0.0, 6.0, 16.0))
+            .font_size(FONT_HEADING)
+            .font_weight(FontWeight::BOLD)
+            .margin((0.0, 0.0, 0.0, ROW_PADDING))
     }
 }
 
@@ -162,16 +189,18 @@ impl StatusBlock {
 impl Component for StatusBlock {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let (text, color) = match &self.status {
-            Status::Loading(text) | Status::Empty(text) => (text.clone(), tokens.muted),
-            Status::Error(text) => (text.clone(), tokens.danger),
-            Status::Info(text) => (text.clone(), tokens.text),
+        let (text, color, glyph) = match &self.status {
+            Status::Loading(text) => (text.clone(), tokens.muted, None),
+            Status::Empty(text) => (text.clone(), tokens.muted, None),
+            Status::Error(text) => (text.clone(), tokens.danger, Some(Icon::DialogError)),
+            Status::Info(text) => (text.clone(), tokens.text, None),
         };
+        // A status is a row on its own card, the same height and padding as
+        // every other row, so a page with a message looks like a page.
         rect()
             .width(Size::fill())
-            .min_height(Size::px(TALL_ROW_HEIGHT))
-            .padding((8.0, 16.0))
-            .margin((0.0, 0.0, 16.0, 0.0))
+            .min_height(Size::px(ROW_HEIGHT - 16.0))
+            .padding((8.0, ROW_PADDING))
             .spacing(12.0)
             .background(tokens.card)
             .corner_radius(CORNER)
@@ -181,12 +210,19 @@ impl Component for StatusBlock {
             .maybe_child(
                 matches!(self.status, Status::Loading(_)).then(|| spinner(SpinnerSize::Small)),
             )
+            .maybe_child(glyph.map(|glyph| icons::icon(glyph, 18.0, color)))
             .child(
-                paragraph()
+                rect()
                     .width(Size::flex(1.0))
-                    .color(color)
-                    .font_size(FONT_SIZE)
-                    .child(text),
+                    .min_height(Size::px(ROW_HEIGHT - 16.0))
+                    .main_align(Alignment::Center)
+                    .child(
+                        label()
+                            .color(color)
+                            .font_size(FONT_SIZE)
+                            .max_lines(4)
+                            .text(text),
+                    ),
             )
             .maybe_child(self.action.as_ref().map(|(label, on_press)| {
                 let on_press = on_press.clone();

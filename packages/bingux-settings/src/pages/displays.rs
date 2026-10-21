@@ -12,7 +12,7 @@ use freya::prelude::*;
 use crate::pages::gnoblin;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Status, caption, choice_row, page_title, primary_button, row, slider_row, status,
+    Group, Status, caption, choice_row, page_column, primary_button, row, slider_row, status,
     switch_row,
 };
 
@@ -1166,7 +1166,7 @@ impl Component for DisplaysPage {
         let night_ticket = use_state::<u64>(|| 0);
         use_hook(move || background(model, load));
 
-        let mut page = rect().width(Size::fill()).child(page_title("Displays"));
+        let mut page = page_column();
         let Some(loaded) = model.read().clone() else {
             return page.child(status(Status::Loading("Reading displays.".into())));
         };

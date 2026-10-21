@@ -72,12 +72,8 @@ impl Component for HeaderBar {
         let title = label()
             .text(self.title.clone())
             .width(Size::flex(1.0))
-            .font_size(15.0)
-            .font_weight(if self.centered {
-                FontWeight::BOLD
-            } else {
-                FontWeight::SEMI_BOLD
-            })
+            .font_size(14.0)
+            .font_weight(FontWeight::BOLD)
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis)
             .text_align(if self.centered {

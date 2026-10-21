@@ -1,11 +1,9 @@
 //! Bingux UI: the design system for Bingux's Freya applications.
 //!
-//! The visual language is the Bingux shell's (`shell/bingux/*.qml`): one
-//! quiet interaction surface, 36 x 20 switches, 6 px sliders, pill
-//! secondary actions, segmented controls and coloured icon tiles. The
-//! component vocabulary follows libadwaita (preference groups and rows,
-//! header bars, status pages, navigation split views) and macOS System
-//! Settings (sidebar search, profile card, icon tiles).
+//! One visual system, the GNOME Settings one: opaque layered greys, boxed
+//! preference groups of 50 px rows, monochrome sidebar icons, a single
+//! accent colour and one control size. Accent colours follow the Bingux
+//! shell's `Theme.qml`. `DESIGN.md` lists the rules every component keeps.
 //!
 //! Every component reads its colours from [`theme::Tokens`], provided by
 //! [`theme::provide_tokens`] at the window root and read with
@@ -13,7 +11,6 @@
 
 pub mod controls;
 pub mod group;
-pub mod hero;
 pub mod icons;
 pub mod layout;
 pub mod rows;
@@ -28,17 +25,16 @@ pub mod theme;
 pub mod prelude {
     pub use crate::controls::*;
     pub use crate::group::{Group, Status, StatusBlock, caption, heading, section_label, status};
-    pub use crate::hero::{Hero, hero};
-    pub use crate::icons::{Icon, icon, icon_tile};
-    pub use crate::layout::{card, clamp, divider, hstack, spacer, vstack};
+    pub use crate::icons::{Icon, icon};
+    pub use crate::layout::{card, clamp, divider, hstack, page_column, spacer, vstack};
     pub use crate::rows::{
         EntryRow, ExpanderRow, Row, choice_row, entry_row, expander_row, property_row, row,
         slider_row, switch_row, text_row,
     };
     pub use crate::shell::{
         Banner, BannerKind, Dialog, HeaderBar, NavItem, NavigationSplitView, OverlayHost, Overlays,
-        ProfileCard, ResponseKind, SearchField, StatusPage, WindowControls, banner, dialog,
-        status_page, use_overlays,
+        ResponseKind, SearchField, StatusPage, WindowControls, banner, dialog, status_page,
+        use_overlays,
     };
     pub use crate::surface::{CORNER, ROW_HEIGHT, TALL_ROW_HEIGHT, use_tokens};
     pub use crate::theme::{Scheme, SharedTokens, Tokens, provide_tokens};

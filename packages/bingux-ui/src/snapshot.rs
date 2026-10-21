@@ -27,7 +27,7 @@ impl Snapshot {
     /// system has it (`fc-match "Adwaita Sans"`).
     pub fn new(app: impl Fn() -> Element + 'static, size: SnapshotSize) -> Self {
         let (mut runner, ()) = TestingRunner::new(app, Size2D::new(size.0, size.1), |_| {}, 1.0);
-        if let Some(font) = system_font(FONT_FAMILY) {
+        if let Some(font) = crate::theme::system_font(FONT_FAMILY) {
             runner.set_fonts([(FONT_FAMILY, font.as_slice())].into_iter().collect());
             runner.set_default_fonts(&[FONT_FAMILY.into()]);
         }
@@ -85,27 +85,4 @@ pub fn snapshot(
     Snapshot::new(app, size)
         .settle(Duration::from_millis(settle_ms))
         .save(path);
-}
-
-/// The bytes of the font fontconfig resolves `family` to, if the match is
-/// genuinely that family.
-fn system_font(family: &str) -> Option<Vec<u8>> {
-    let output = std::process::Command::new("fc-match")
-        .args(["-f", "%{family}\n%{file}", family])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let text = String::from_utf8_lossy(&output.stdout);
-    let mut lines = text.lines();
-    let matched = lines.next()?;
-    let file = lines.next()?;
-    if !matched
-        .split(',')
-        .any(|name| name.eq_ignore_ascii_case(family))
-    {
-        return None;
-    }
-    std::fs::read(file.trim()).ok()
 }

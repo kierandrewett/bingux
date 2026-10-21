@@ -8,7 +8,7 @@ use freya::prelude::*;
 
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
-    Group, Status, choice_row, page_title, row, slider, slider_row, status, switch_row,
+    Group, Status, choice_row, page_column, row, slider, slider_row, status, switch_row,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -453,22 +453,19 @@ impl Component for SoundPage {
         });
 
         let Some(loaded) = model.read().clone() else {
-            return rect()
-                .width(Size::fill())
-                .child(page_title("Sound"))
-                .child(status(Status::Loading("Reading audio devices.".into())));
+            return page_column().child(status(Status::Loading("Reading audio devices.".into())));
         };
         let data = match loaded {
             Ok(data) => data,
             Err(e) => {
-                return rect().width(Size::fill()).child(page_title("Sound")).child(
+                return page_column().child(
                     status(Status::Error(e.0))
                         .action("Try again", move |_| background(model, load)),
                 );
             }
         };
 
-        let mut page = rect().width(Size::fill()).child(page_title("Sound"));
+        let mut page = page_column();
         if let Some(message) = error.read().clone() {
             page = page.child(status(Status::Error(message)));
         }

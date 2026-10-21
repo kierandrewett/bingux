@@ -38,8 +38,9 @@ VALUE`, `save` (stdin JSON patch), `check`, `path`, `defaults` (annotated
 ## Phase 2: Settings application (`packages/bingux-settings`)
 
 - Freya 0.5.0-rc.10. Borderless window with a 47 px header bar, 260 px
-  sidebar, overlay sidebar below 740 px, 600 px page column, boxed groups,
-  48/64 px rows. Tokens come from `shell/bingux/Theme.qml`.
+  sidebar, overlay sidebar below 740 px, 640 px page column, boxed groups,
+  50/62 px rows. Accent colours come from `shell/bingux/Theme.qml`; surfaces
+  are opaque greys. `docs/bingux-ui.md` lists the design rules.
 - Launch contract: `bingux-settings [PANEL]`. Panels match the names the
   shell already passes: `network`, `bluetooth`, `sound`, `power`, `users`,
   `background`, `display`, `desktop`, `search`.

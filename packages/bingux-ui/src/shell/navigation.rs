@@ -1,26 +1,25 @@
-//! The navigation split view: a dark sidebar with a search field, an
-//! optional profile card and a list of destinations with coloured icon
-//! tiles, beside a lighter content column with its own header bar.
+//! The navigation split view: a sidebar with a search field and a flat list
+//! of destinations beside the page column, each with its own header bar,
+//! like GNOME Settings. Destination icons are monochrome and the selected
+//! destination has a neutral fill; colour is reserved for the accent in
+//! controls.
 //!
-//! The sidebar follows macOS System Settings; the content column follows
-//! GNOME. Below [`SIDEBAR_OVERLAY_BELOW`] the sidebar becomes an overlay
-//! opened from the content header.
+//! Below [`SIDEBAR_OVERLAY_BELOW`] the sidebar becomes an overlay opened
+//! from the content header.
 
 use freya::animation::*;
 use freya::prelude::*;
 
 use crate::controls::{icon_button, search_field};
-use crate::icons::{self, Icon, icon_tile};
+use crate::icons::{self, Icon};
 use crate::shell::window::{HeaderBar, WindowControls};
-use crate::surface::{is_activation_key, use_tokens};
+use crate::surface::{focus_border, is_activation_key, surface_color, use_tokens};
 use crate::theme::{SIDEBAR_OVERLAY_BELOW, SIDEBAR_WIDTH, WINDOW_CONTROL_BUTTON};
 
 /// One sidebar destination.
 pub trait NavItem: Copy + PartialEq + 'static {
     fn title(self) -> &'static str;
     fn icon(self) -> Icon;
-    /// Base colour of the icon tile.
-    fn tile_rgb(self) -> [f32; 3];
     /// Extra words the search field matches, space separated.
     fn keywords(self) -> &'static str {
         ""
@@ -34,7 +33,6 @@ pub struct NavigationSplitView<T: NavItem> {
     pub items: Vec<T>,
     pub selected: State<T>,
     pub content: Element,
-    pub profile: Option<ProfileCard<T>>,
     pub page_width: f32,
 }
 
@@ -50,14 +48,8 @@ impl<T: NavItem> NavigationSplitView<T> {
             items,
             selected,
             content: content.into(),
-            profile: None,
             page_width: 640.0,
         }
-    }
-
-    pub fn profile(mut self, card: ProfileCard<T>) -> Self {
-        self.profile = Some(card);
-        self
     }
 
     pub fn page_width(mut self, width: f32) -> Self {
@@ -93,9 +85,9 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             query,
             sidebar_open,
             overlay,
-            profile: self.profile.clone(),
         };
         let header = HeaderBar::new(selected().title())
+            .background(tokens.bg)
             .maybe(narrow, |bar| {
                 bar.leading(
                     icon_button(Icon::SidebarShow, move |_| {
@@ -111,7 +103,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             .expanded()
             .direction(Direction::Horizontal)
             .content(Content::Flex)
-            .background(tokens.surface)
+            .background(tokens.bg)
             .maybe_child((!narrow).then(|| sidebar(false)))
             .child(
                 rect()
@@ -124,7 +116,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                                 rect()
                                     .width(Size::fill())
                                     .cross_align(Alignment::Center)
-                                    .padding((8.0, 24.0, 24.0, 24.0))
+                                    .padding((16.0, 24.0, 32.0, 24.0))
                                     .child(
                                         rect()
                                             .width(Size::px(self.page_width))
@@ -171,7 +163,6 @@ struct Sidebar<T: NavItem> {
     query: State<String>,
     sidebar_open: State<bool>,
     overlay: bool,
-    profile: Option<ProfileCard<T>>,
 }
 
 impl<T: NavItem> Component for Sidebar<T> {
@@ -197,7 +188,7 @@ impl<T: NavItem> Component for Sidebar<T> {
             .collect();
         let header = HeaderBar::new(self.app_title.clone())
             .centered()
-            .background(tokens.bg)
+            .background(tokens.sidebar)
             .leading(rect().width(Size::px(WINDOW_CONTROL_BUTTON)))
             .trailing(if overlay {
                 Element::from(
@@ -215,7 +206,7 @@ impl<T: NavItem> Component for Sidebar<T> {
         rect()
             .width(Size::px(SIDEBAR_WIDTH))
             .height(Size::fill())
-            .background(tokens.bg)
+            .background(tokens.sidebar)
             .border(
                 Border::new()
                     .width(BorderWidth {
@@ -225,23 +216,17 @@ impl<T: NavItem> Component for Sidebar<T> {
                         left: 0.0,
                     })
                     .alignment(BorderAlignment::Inner)
-                    .fill(tokens.bar_divider),
+                    .fill(tokens.separator),
             )
             .child(header)
             .child(SearchField { query })
-            .maybe_child(self.profile.clone().map(|card| ProfileCardView {
-                card,
-                selected,
-                sidebar_open,
-                overlay,
-            }))
             .child(
                 rect().width(Size::fill()).height(Size::flex(1.0)).child(
                     ScrollView::new().child(
                         rect()
                             .width(Size::fill())
                             .padding((4.0, 10.0, 12.0, 10.0))
-                            .spacing(1.0)
+                            .spacing(2.0)
                             .children(visible.iter().map(|item| {
                                 Element::from(NavEntry {
                                     item: *item,
@@ -279,114 +264,6 @@ impl Component for SearchField {
     }
 }
 
-/// A card at the top of the sidebar with an initials avatar, a name and a
-/// subtitle; pressing it selects `target`.
-#[derive(Clone, PartialEq)]
-pub struct ProfileCard<T: NavItem> {
-    pub name: String,
-    pub subtitle: String,
-    pub target: T,
-}
-
-#[derive(PartialEq)]
-struct ProfileCardView<T: NavItem> {
-    card: ProfileCard<T>,
-    selected: State<T>,
-    sidebar_open: State<bool>,
-    overlay: bool,
-}
-
-/// Up to two initials for an avatar, from the first and last word.
-pub fn initials(name: &str) -> String {
-    let words: Vec<&str> = name.split_whitespace().collect();
-    let letters: String = match words.as_slice() {
-        [] => String::new(),
-        [only] => only.chars().take(1).collect(),
-        [first, .., last] => first.chars().take(1).chain(last.chars().take(1)).collect(),
-    };
-    letters.to_uppercase()
-}
-
-impl<T: NavItem> Component for ProfileCardView<T> {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let mut hovering = use_state(|| false);
-        let mut selected = self.selected;
-        let mut sidebar_open = self.sidebar_open;
-        let overlay = self.overlay;
-        let target = self.card.target;
-        let is_selected = selected() == target;
-        let background = if hovering() {
-            tokens.hover.with_af32(0.42)
-        } else if is_selected {
-            tokens.selection.with_af32(0.44)
-        } else {
-            Color::TRANSPARENT
-        };
-        rect()
-            .width(Size::fill())
-            .padding((0.0, 10.0, 8.0, 10.0))
-            .child(
-                rect()
-                    .width(Size::fill())
-                    .height(Size::px(60.0))
-                    .direction(Direction::Horizontal)
-                    .content(Content::Flex)
-                    .cross_align(Alignment::Center)
-                    .spacing(12.0)
-                    .padding((0.0, 10.0))
-                    .corner_radius(10.0)
-                    .background(background)
-                    .cursor(CursorIcon::Pointer)
-                    .a11y_role(AccessibilityRole::Button)
-                    .on_pointer_enter(move |_| hovering.set(true))
-                    .on_pointer_leave(move |_| hovering.set(false))
-                    .on_press(move |_: Event<PressEventData>| {
-                        selected.set(target);
-                        if overlay {
-                            sidebar_open.set(false);
-                        }
-                    })
-                    .child(
-                        rect()
-                            .width(Size::px(40.0))
-                            .height(Size::px(40.0))
-                            .corner_radius(20.0)
-                            .background(tokens.accent)
-                            .center()
-                            .child(
-                                label()
-                                    .text(initials(&self.card.name))
-                                    .color(tokens.accent_foreground)
-                                    .font_size(15.0)
-                                    .font_weight(FontWeight::SEMI_BOLD),
-                            ),
-                    )
-                    .child(
-                        rect()
-                            .width(Size::flex(1.0))
-                            .spacing(1.0)
-                            .child(
-                                label()
-                                    .text(self.card.name.clone())
-                                    .font_size(14.0)
-                                    .font_weight(FontWeight::SEMI_BOLD)
-                                    .max_lines(1)
-                                    .text_overflow(TextOverflow::Ellipsis),
-                            )
-                            .child(
-                                label()
-                                    .text(self.card.subtitle.clone())
-                                    .color(tokens.muted)
-                                    .font_size(12.0)
-                                    .max_lines(1),
-                            ),
-                    )
-                    .child(icons::icon(Icon::GoNext, 12.0, tokens.muted)),
-            )
-    }
-}
-
 #[derive(PartialEq)]
 struct NavEntry<T: NavItem> {
     item: T,
@@ -410,27 +287,14 @@ impl<T: NavItem> Component for NavEntry<T> {
         let mut sidebar_open = self.sidebar_open;
         let overlay = self.overlay;
         let is_selected = selected() == item;
-        let background = if is_selected {
-            if pressing() {
-                Color::lerp(tokens.accent, Color::BLACK, 0.16)
-            } else {
-                tokens.accent
-            }
-        } else if pressing() {
-            tokens.pressed.with_af32(0.72)
-        } else if hovering() {
-            tokens.hover.with_af32(0.42)
-        } else {
-            Color::TRANSPARENT
-        };
-        let border = if focus() == Focus::Keyboard {
-            Border::new()
-                .width(1.0)
-                .alignment(BorderAlignment::Inner)
-                .fill(tokens.text)
-        } else {
-            Border::new()
-        };
+        let background = surface_color(
+            &tokens,
+            Color::TRANSPARENT,
+            hovering(),
+            pressing(),
+            is_selected,
+        );
+        let border = focus_border(&tokens, focus());
         rect()
             .a11y_id(a11y_id)
             .a11y_focusable(true)
@@ -440,8 +304,8 @@ impl<T: NavItem> Component for NavEntry<T> {
             .height(Size::px(36.0))
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
-            .spacing(10.0)
-            .padding((0.0, 8.0))
+            .spacing(12.0)
+            .padding((0.0, 12.0))
             .corner_radius(8.0)
             .background(background)
             .border(border)
@@ -482,15 +346,11 @@ impl<T: NavItem> Component for NavEntry<T> {
                     selected.set(target);
                 }
             })
-            .child(icon_tile(item.icon(), item.tile_rgb(), 24.0))
+            .child(icons::icon(item.icon(), 18.0, tokens.text))
             .child(
                 label()
                     .text(item.title())
-                    .color(if is_selected {
-                        tokens.accent_foreground
-                    } else {
-                        tokens.text
-                    })
+                    .color(tokens.text)
                     .font_size(14.0)
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),

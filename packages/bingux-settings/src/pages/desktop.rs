@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use crate::ui::{Group, Row, Status, choice_row, page_title, row, slider, status, switch_row};
+use crate::ui::{Group, Row, Status, choice_row, page_column, row, slider, status, switch_row};
 use freya::prelude::*;
 
 use crate::pages::bingux_config;
@@ -237,31 +237,23 @@ impl Component for DesktopPage {
         };
 
         let Some(loaded) = model.read().clone() else {
-            return rect()
-                .width(Size::fill())
-                .child(page_title("Desktop"))
-                .child(status(Status::Loading(
-                    "Reading the shell configuration.".into(),
-                )));
+            return page_column().child(status(Status::Loading(
+                "Reading the shell configuration.".into(),
+            )));
         };
         let m = match loaded {
             Ok(model_value) => model_value,
             Err(failure) => {
-                return rect()
-                    .width(Size::fill())
-                    .child(page_title("Desktop"))
-                    .child(
-                        status(Status::Error(failure.0))
-                            .action("Try again", move |_| background(model, load)),
-                    );
+                return page_column().child(
+                    status(Status::Error(failure.0))
+                        .action("Try again", move |_| background(model, load)),
+                );
             }
         };
         let edge = m.sidebar_edge.clone().unwrap_or_else(|| "auto".to_string());
         let failure = error.read().clone();
 
-        rect()
-            .width(Size::fill())
-            .child(page_title("Desktop"))
+        page_column()
             .maybe_child(failure.map(|message| status(Status::Error(message))))
             .child(
                 Group::titled("Dock")

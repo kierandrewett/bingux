@@ -7,7 +7,7 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::system::{self, CommandError, CommandResult, background, background_then};
-use crate::ui::{Group, Status, choice_row, page_title, row, section_label, status, switch_row};
+use crate::ui::{Group, Status, choice_row, page_column, row, section_label, status, switch_row};
 
 const SESSION: &str = "org.gnome.desktop.session";
 const SCREENSAVER: &str = "org.gnome.desktop.screensaver";
@@ -191,13 +191,10 @@ impl Component for PowerPage {
         use_hook(move || background(loaded, load));
 
         let Some(model) = loaded.read().clone() else {
-            return rect()
-                .width(Size::fill())
-                .child(page_title("Power"))
-                .child(status(Status::Loading("Reading power settings.".into())));
+            return page_column().child(status(Status::Loading("Reading power settings.".into())));
         };
 
-        let mut page = rect().width(Size::fill()).child(page_title("Power"));
+        let mut page = page_column();
         if let Some(message) = error.read().clone() {
             page = page.child(status(Status::Error(message)));
         }

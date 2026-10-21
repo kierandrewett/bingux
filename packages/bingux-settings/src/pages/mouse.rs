@@ -8,7 +8,7 @@ use freya::prelude::*;
 
 use crate::pages::gnoblin::{self, Json};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
-use crate::ui::{Group, Row, Status, choice_row, page_title, row, slider_row, status, switch_row};
+use crate::ui::{Group, Row, Status, choice_row, page_column, row, slider_row, status, switch_row};
 
 const MOUSE: &str = "org.gnome.desktop.peripherals.mouse";
 const TOUCHPAD: &str = "org.gnome.desktop.peripherals.touchpad";
@@ -204,21 +204,16 @@ impl Component for MousePage {
         use_hook(move || background(loaded, load));
 
         let Some(result) = loaded.read().clone() else {
-            return rect()
-                .width(Size::fill())
-                .child(page_title("Mouse and Touchpad"))
+            return page_column()
                 .child(status(Status::Loading("Reading pointer settings.".into())));
         };
         let model = match result {
             Ok(model) => model,
             Err(e) => {
-                return rect()
-                    .width(Size::fill())
-                    .child(page_title("Mouse and Touchpad"))
-                    .child(
-                        status(Status::Error(e.0))
-                            .action("Try again", move |_| background(loaded, load)),
-                    );
+                return page_column().child(
+                    status(Status::Error(e.0))
+                        .action("Try again", move |_| background(loaded, load)),
+                );
             }
         };
 
@@ -282,9 +277,7 @@ impl Component for MousePage {
                 )
         });
 
-        rect()
-            .width(Size::fill())
-            .child(page_title("Mouse and Touchpad"))
+        page_column()
             .maybe_child(
                 error
                     .read()

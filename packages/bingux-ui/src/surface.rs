@@ -1,9 +1,10 @@
-//! The one quiet interaction surface every control shares.
+//! Sizes and the interaction surface every control shares.
 //!
-//! Mirrors `ControlCentreButtonSurface.qml`: a transparent base with a
-//! hover layer, a pressed layer, a selection layer and a keyboard-focus
-//! outline. Idle outlines are not used; they turn lists into a grid of
-//! boxes.
+//! One scale for the whole library. A row is 50 px, or 62 px with a
+//! subtitle; a control is 34 px; a group and a card have a 12 px radius and
+//! a row or button 8 px. Interaction is a transparent base with a white
+//! hover layer, a stronger pressed layer and a 2 px keyboard-focus ring.
+//! Idle outlines are not used; they turn lists into a grid of boxes.
 
 use freya::prelude::*;
 
@@ -13,13 +14,15 @@ use crate::theme::{SharedTokens, Tokens};
 pub const CORNER: f32 = 12.0;
 /// Hover radius of rows and buttons inside a group.
 pub const ROW_RADIUS: f32 = 8.0;
-pub const CONTROL_HEIGHT: f32 = 32.0;
-pub const BUTTON_HEIGHT: f32 = 36.0;
-pub const ROW_HEIGHT: f32 = 44.0;
-pub const TALL_ROW_HEIGHT: f32 = 60.0;
+pub const CONTROL_HEIGHT: f32 = 34.0;
+pub const BUTTON_HEIGHT: f32 = 34.0;
+pub const ROW_HEIGHT: f32 = 50.0;
+pub const TALL_ROW_HEIGHT: f32 = 62.0;
+/// Horizontal padding inside a row and of group titles, so text lines up.
+pub const ROW_PADDING: f32 = 16.0;
 pub const FONT_SIZE: f32 = 14.0;
 pub const FONT_SMALL: f32 = 12.0;
-pub const FONT_HEADING: f32 = 16.0;
+pub const FONT_HEADING: f32 = 14.0;
 
 /// The live palette the window root provided. Reading it subscribes the
 /// component to accent and colour-scheme changes.
@@ -30,7 +33,7 @@ pub fn use_tokens() -> Tokens {
 pub fn focus_border(tokens: &Tokens, focus: Focus) -> Border {
     if focus == Focus::Keyboard {
         Border::new()
-            .width(1.0)
+            .width(2.0)
             .alignment(BorderAlignment::Inner)
             .fill(tokens.accent)
     } else {
@@ -47,11 +50,11 @@ pub fn surface_color(
     selected: bool,
 ) -> Color {
     if pressing {
-        tokens.pressed.with_af32(0.72)
+        tokens.pressed
     } else if hovering {
-        tokens.hover.with_af32(0.42)
+        tokens.hover
     } else if selected {
-        tokens.selection.with_af32(0.44)
+        tokens.selection
     } else {
         base
     }

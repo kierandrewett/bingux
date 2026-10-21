@@ -1,8 +1,10 @@
-//! Design tokens for the Settings window.
+//! Design tokens for Bingux application windows.
 //!
-//! Every value mirrors `shell/bingux/Theme.qml` so the Settings window looks
-//! like the rest of the Bingux shell. Nothing outside this module hard-codes a
-//! colour, size, radius or duration; components read them from [`Tokens`].
+//! Accent colours and the colour-scheme rule follow `shell/bingux/Theme.qml`.
+//! Surfaces are opaque: an application window has no blurred backdrop, so
+//! every layer is a fixed grey and interaction states are white overlays.
+//! Nothing outside this module hard-codes a colour, size, radius or duration;
+//! components read them from [`Tokens`].
 
 use freya::prelude::*;
 
@@ -36,8 +38,6 @@ pub const SIDEBAR_OVERLAY_BELOW: f32 = 740.0;
 /// Window default and minimum size.
 pub const WINDOW_SIZE: (f32, f32) = (1000.0, 740.0);
 pub const WINDOW_MIN_SIZE: (f32, f32) = (520.0, 420.0);
-/// Corner radius of the window frame; zero when maximised.
-pub const WINDOW_RADIUS: f32 = 12.0;
 
 /// Window-control circle diameter and button size.
 pub const WINDOW_CONTROL_CIRCLE: f32 = 24.0;
@@ -133,12 +133,21 @@ pub struct Tokens {
     pub accent_name: &'static str,
     pub scheme: Scheme,
     pub reduced_motion: bool,
+    /// Page background.
     pub bg: Color,
+    /// Window frame and header bars.
     pub surface: Color,
+    /// Sidebar background.
+    pub sidebar: Color,
+    /// Fill of buttons, fields and dropdowns that sit on a card or the page.
     pub elevated: Color,
-    /// Group surface for lists on the page column. `elevated` is tuned for
-    /// a blurred popup backdrop; the opaque page needs a little more lift.
+    pub elevated_hover: Color,
+    pub elevated_pressed: Color,
+    /// Hairline between rows and between panes.
+    pub separator: Color,
+    /// Group surface for lists on the page.
     pub card: Color,
+    /// Overlays for pointer hover, press and the selected sidebar item.
     pub hover: Color,
     pub pressed: Color,
     pub selection: Color,
@@ -166,25 +175,29 @@ impl Tokens {
             accent_name,
             scheme,
             reduced_motion,
-            bg: rgba(0.086, 0.086, 0.086, 0.961),
-            surface: rgba(0.188, 0.188, 0.188, 0.941),
-            elevated: rgba(0.25, 0.25, 0.27, 0.28),
-            card: rgba(0.25, 0.25, 0.27, 0.5),
-            hover: rgba(0.42, 0.42, 0.44, 0.34),
-            pressed: rgba(0.52, 0.52, 0.54, 0.46),
-            selection: accent.with_a(71),
+            bg: rgba(0.141, 0.141, 0.141, 1.0),
+            surface: rgba(0.141, 0.141, 0.141, 1.0),
+            sidebar: rgba(0.169, 0.169, 0.169, 1.0),
+            elevated: rgba(1.0, 1.0, 1.0, 0.10),
+            elevated_hover: rgba(1.0, 1.0, 1.0, 0.15),
+            elevated_pressed: rgba(1.0, 1.0, 1.0, 0.20),
+            separator: rgba(1.0, 1.0, 1.0, 0.08),
+            card: rgba(0.200, 0.200, 0.200, 1.0),
+            hover: rgba(1.0, 1.0, 1.0, 0.06),
+            pressed: rgba(1.0, 1.0, 1.0, 0.11),
+            selection: rgba(1.0, 1.0, 1.0, 0.10),
             border: rgba(1.0, 1.0, 1.0, 1.0),
-            outline: rgba(0.314, 0.314, 0.314, 0.75),
-            text: rgba(0.980, 0.980, 0.980, 1.0),
-            muted: rgba(0.690, 0.690, 0.690, 1.0),
-            bar_divider: rgba(1.0, 1.0, 1.0, 32.0 / 255.0),
+            outline: rgba(1.0, 1.0, 1.0, 0.22),
+            text: rgba(1.0, 1.0, 1.0, 1.0),
+            muted: rgba(1.0, 1.0, 1.0, 0.62),
+            bar_divider: rgba(1.0, 1.0, 1.0, 0.08),
             success: rgba(0.561, 0.941, 0.643, 1.0),
             warning: rgba(0.976, 0.941, 0.420, 1.0),
             danger: rgba(1.0, 0.482, 0.388, 1.0),
             accent_foreground: rgba(1.0, 1.0, 1.0, 1.0),
             tooltip_surface: rgba(0.12, 0.12, 0.13, 0.82),
             tooltip_outline: rgba(1.0, 1.0, 1.0, 0.16),
-            popover: rgba(0.125, 0.125, 0.133, 1.0),
+            popover: rgba(0.220, 0.220, 0.220, 1.0),
         }
     }
 
@@ -354,4 +367,43 @@ pub fn watch_appearance(mut tokens: State<Tokens>) {
             }
         }
     });
+}
+
+/// The bytes of the font fontconfig resolves `family` to, if the match is
+/// genuinely that family.
+pub fn system_font(family: &str) -> Option<Vec<u8>> {
+    let output = std::process::Command::new("fc-match")
+        .args(["-f", "%{family}\n%{file}", family])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut lines = text.lines();
+    let matched = lines.next()?;
+    let file = lines.next()?;
+    if !matched
+        .split(',')
+        .any(|name| name.eq_ignore_ascii_case(family))
+    {
+        return None;
+    }
+    std::fs::read(file.trim()).ok()
+}
+
+/// Registers [`FONT_FAMILY`] with Freya from its font file.
+///
+/// Adwaita Sans is a variable font. Freya picks the weight axis for fonts it
+/// loads itself, but for a system font the text engine asks for Bold, gets
+/// the Regular instance and fakes the weight by smearing the outlines, which
+/// looks heavy and blotchy. Loading the file gives real instances for every
+/// weight. Without the font installed the system fallback is used.
+pub fn with_font(config: LaunchConfig) -> LaunchConfig {
+    match system_font(FONT_FAMILY) {
+        Some(bytes) => config
+            .with_font(FONT_FAMILY, bytes)
+            .with_default_font(FONT_FAMILY),
+        None => config,
+    }
 }

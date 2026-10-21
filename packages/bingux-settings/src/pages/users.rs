@@ -12,7 +12,7 @@ use freya::prelude::*;
 use crate::icons::{self, Icon};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::theme::Tokens;
-use crate::ui::{Group, Status, TALL_ROW_HEIGHT, page_title, row, status, text_row, use_tokens};
+use crate::ui::{Group, Status, TALL_ROW_HEIGHT, page_column, row, status, text_row, use_tokens};
 
 const ACCOUNTS: &str = "org.freedesktop.Accounts";
 const ACCOUNTS_PATH: &str = "/org/freedesktop/Accounts";
@@ -194,15 +194,12 @@ impl Component for UsersPage {
         use_hook(move || background(model, load));
 
         let Some(loaded) = model.read().clone() else {
-            return rect()
-                .width(Size::fill())
-                .child(page_title("Users"))
-                .child(status(Status::Loading("Reading user accounts.".into())));
+            return page_column().child(status(Status::Loading("Reading user accounts.".into())));
         };
         let accounts = match loaded {
             Ok(accounts) => accounts,
             Err(e) => {
-                return rect().width(Size::fill()).child(page_title("Users")).child(
+                return page_column().child(
                     status(Status::Error(e.0))
                         .action("Try again", move |_| background(model, load)),
                 );
@@ -224,10 +221,7 @@ impl Component for UsersPage {
             .clone()
             .map(|message| status(Status::Error(message)));
 
-        let page = rect()
-            .width(Size::fill())
-            .child(page_title(title))
-            .maybe_child(banner);
+        let page = page_column().maybe_child(banner);
 
         match selected_account {
             Some(account) => {
@@ -258,7 +252,7 @@ impl Component for UsersPage {
                 });
                 page.child(Group::new(None).row(back))
                     .child(
-                        Group::titled("Account")
+                        Group::titled(&title)
                             .row(name_row)
                             .row(row("User name").value(account.user_name.clone()))
                             .row(row("Account type").value(if account.administrator {

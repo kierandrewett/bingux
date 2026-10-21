@@ -10,7 +10,7 @@ use freya::prelude::*;
 use crate::system::{self, CommandError, background, background_then};
 use crate::theme::Tokens;
 use crate::ui::{
-    Group, Overlays, ResponseKind, Row, Status, dialog, page_title, row, row_button, status,
+    Group, Overlays, ResponseKind, Row, Status, dialog, page_column, row, row_button, status,
     switch_row, use_overlays, use_tokens,
 };
 
@@ -331,27 +331,20 @@ impl Component for BluetoothPage {
         });
 
         let Some(loaded) = model.read().clone() else {
-            return rect()
-                .width(Size::fill())
-                .child(page_title("Bluetooth"))
+            return page_column()
                 .child(status(Status::Loading("Reading Bluetooth devices.".into())));
         };
         let data = match loaded {
             Ok(data) => data,
             Err(e) => {
-                return rect()
-                    .width(Size::fill())
-                    .child(page_title("Bluetooth"))
-                    .child(
-                        status(Status::Error(e.0))
-                            .action("Try again", move |_| background(model, load)),
-                    );
+                return page_column().child(
+                    status(Status::Error(e.0))
+                        .action("Try again", move |_| background(model, load)),
+                );
             }
         };
         let Some(adapter) = data.adapter else {
-            return rect()
-                .width(Size::fill())
-                .child(page_title("Bluetooth"))
+            return page_column()
                 .child(status(Status::Empty("No Bluetooth adapter found.".into())));
         };
 
@@ -366,7 +359,7 @@ impl Component for BluetoothPage {
             overlays,
         };
 
-        let mut page = rect().width(Size::fill()).child(page_title("Bluetooth"));
+        let mut page = page_column();
         if let Some(message) = error.read().clone() {
             page = page.child(status(Status::Error(message)));
         }

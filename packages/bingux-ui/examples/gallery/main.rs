@@ -10,11 +10,8 @@ use pages::{Gallery, Page};
 fn main() {
     let (width, height) = bingux_ui::theme::WINDOW_SIZE;
     launch(
-        LaunchConfig::new()
-            .with_plugin(
-                freya::borderless::BorderlessPlugin::new()
-                    .with_corner_radius(bingux_ui::theme::WINDOW_RADIUS),
-            )
+        bingux_ui::theme::with_font(LaunchConfig::new())
+            .with_plugin(freya::borderless::BorderlessPlugin::new())
             .with_window(
                 WindowConfig::new(|| Gallery {
                     initial: Page::Controls,
@@ -22,7 +19,6 @@ fn main() {
                 .with_title("Bingux UI gallery")
                 .with_app_id("bingux-ui-gallery")
                 .with_decorations(false)
-                .with_transparency(true)
                 .with_size(width as f64, height as f64),
             ),
     );

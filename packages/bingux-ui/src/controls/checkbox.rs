@@ -300,9 +300,9 @@ impl Component for RadioButton {
         let fill = if selected {
             tokens.accent
         } else if pressing() {
-            tokens.pressed.with_af32(0.72)
+            tokens.pressed
         } else if hovering() {
-            tokens.hover.with_af32(0.42)
+            tokens.hover
         } else {
             Color::TRANSPARENT
         };

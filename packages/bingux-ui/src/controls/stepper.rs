@@ -119,14 +119,7 @@ impl Component for Stepper {
             .corner_radius(ROW_RADIUS)
             .background(tokens.elevated)
             .maybe(!enabled, |element| element.opacity(0.45))
-            .border(if focus() == Focus::Keyboard {
-                focus_border(&tokens, focus())
-            } else {
-                Border::new()
-                    .width(1.0)
-                    .alignment(BorderAlignment::Inner)
-                    .fill(tokens.outline)
-            })
+            .border(focus_border(&tokens, focus()))
             .padding((0.0, 2.0))
             .maybe(enabled, |element| element.on_key_down(on_key_down))
             .child(step_button(Icon::ListRemove, can_decrement, move |_| {

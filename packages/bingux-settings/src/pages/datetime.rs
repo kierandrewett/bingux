@@ -8,7 +8,7 @@ use freya::prelude::*;
 
 use crate::pages::bingux_config;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
-use crate::ui::{Group, Status, choice_row, page_title, row, status, switch_row, text_row};
+use crate::ui::{Group, Status, choice_row, page_column, row, status, switch_row, text_row};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const INTERFACE: &str = "org.gnome.desktop.interface";
@@ -142,20 +142,15 @@ impl Component for DateTimePage {
         });
 
         let Some(loaded) = model.read().clone() else {
-            return rect()
-                .width(Size::fill())
-                .child(page_title("Date and Time"))
-                .child(status(Status::Loading(
-                    "Reading the clock settings.".into(),
-                )));
+            return page_column().child(status(Status::Loading(
+                "Reading the clock settings.".into(),
+            )));
         };
 
         let model_data = match loaded {
             Ok(data) => data,
             Err(e) => {
-                return rect()
-                    .width(Size::fill())
-                    .child(page_title("Date and Time"))
+                return page_column()
                     .child(status(Status::Error(e.0)).action("Try again", move |_| reload(ctx)));
             }
         };
@@ -170,9 +165,7 @@ impl Component for DateTimePage {
         let zone_caption = format!("Current: {}", model_data.timezone);
         let clock_format = model_data.clock_format.clone();
 
-        let mut page = rect()
-            .width(Size::fill())
-            .child(page_title("Date and Time"));
+        let mut page = page_column();
 
         if let Some(message) = error.read().clone() {
             page = page.child(status(Status::Error(message)));

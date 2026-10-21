@@ -15,23 +15,6 @@ pub(crate) use bingux_ui::theme;
 pub(crate) mod ui {
     pub use bingux_ui::prelude::*;
     pub use bingux_ui::surface::use_tokens;
-
-    use crate::pages::PageId;
-    use freya::prelude::Element;
-
-    /// The page hero for the page whose title is `text`.
-    pub fn page_title(text: impl Into<String>) -> Element {
-        let text = text.into();
-        let page = PageId::ALL.into_iter().find(|id| id.title() == text);
-        let hero = hero(text.clone());
-        match page {
-            Some(page) => hero
-                .icon(page.icon(), page.tile_rgb())
-                .description(page.description())
-                .into(),
-            None => hero.into(),
-        }
-    }
 }
 
 use freya::prelude::*;
@@ -67,17 +50,16 @@ fn main() {
     let initial = PageId::from_panel(&panel).unwrap_or(PageId::ALL[0]);
     let (width, height) = theme::WINDOW_SIZE;
     let (min_width, min_height) = theme::WINDOW_MIN_SIZE;
+    // Gnoblin draws the window's corners, border and shadow, so the window is
+    // opaque and square.
     launch(
-        LaunchConfig::new()
-            .with_plugin(
-                freya::borderless::BorderlessPlugin::new().with_corner_radius(theme::WINDOW_RADIUS),
-            )
+        theme::with_font(LaunchConfig::new())
+            .with_plugin(freya::borderless::BorderlessPlugin::new())
             .with_window(
                 WindowConfig::new(move || app::App { initial })
                     .with_title("Settings")
                     .with_app_id("bingux-settings")
                     .with_decorations(false)
-                    .with_transparency(true)
                     .with_size(width as f64, height as f64)
                     .with_min_size(min_width as f64, min_height as f64),
             ),

@@ -6,7 +6,7 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::system::{self, background};
-use crate::ui::{Group, Status, page_title, property_row, status};
+use crate::ui::{Group, Status, page_column, property_row, status};
 
 #[derive(Clone, PartialEq)]
 struct Facts {
@@ -127,17 +127,12 @@ impl Component for AboutPage {
         use_hook(move || background(facts, collect));
 
         let Some(facts) = facts.read().clone() else {
-            return rect()
-                .width(Size::fill())
-                .child(page_title("About"))
-                .child(status(Status::Loading(
-                    "Reading system information.".into(),
-                )));
+            return page_column().child(status(Status::Loading(
+                "Reading system information.".into(),
+            )));
         };
 
-        rect()
-            .width(Size::fill())
-            .child(page_title("About"))
+        page_column()
             .child(
                 Group::titled("Device")
                     .row(property_row("Device name", facts.hostname))

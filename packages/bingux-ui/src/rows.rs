@@ -14,7 +14,7 @@ use crate::controls::switch::switch;
 use crate::controls::text_field::text_field;
 use crate::icons::{self, Icon};
 use crate::surface::{
-    FONT_SIZE, FONT_SMALL, ROW_HEIGHT, ROW_RADIUS, TALL_ROW_HEIGHT, focus_border, surface_color,
+    FONT_SIZE, FONT_SMALL, ROW_HEIGHT, ROW_PADDING, TALL_ROW_HEIGHT, focus_border, surface_color,
     use_tokens,
 };
 
@@ -32,7 +32,6 @@ pub struct Row {
     selected: bool,
     badge: Option<String>,
     destructive: bool,
-    tile_rgb: Option<[f32; 3]>,
 }
 
 pub fn row(title: impl Into<String>) -> Row {
@@ -47,7 +46,6 @@ pub fn row(title: impl Into<String>) -> Row {
         selected: false,
         badge: None,
         destructive: false,
-        tile_rgb: None,
     }
 }
 
@@ -84,7 +82,7 @@ impl Row {
         self
     }
 
-    /// A restrained selection fill and an accent checkmark.
+    /// An accent checkmark.
     pub fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
         self
@@ -99,13 +97,6 @@ impl Row {
     pub fn badge(mut self, text: impl Into<String>) -> Self {
         let text = text.into();
         self.badge = (!text.is_empty()).then_some(text);
-        self
-    }
-
-    /// Draw the leading icon in a 24 px coloured tile, like the sidebar.
-    pub fn leading_tile(mut self, icon: Icon, rgb: [f32; 3]) -> Self {
-        self.leading = Some(icon);
-        self.tile_rgb = Some(rgb);
         self
     }
 
@@ -136,7 +127,7 @@ impl Component for ValueText {
         label()
             .text(self.text.clone())
             .color(tokens.muted)
-            .font_size(FONT_SMALL)
+            .font_size(FONT_SIZE)
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis)
             .max_width(Size::px(340.0))
@@ -161,7 +152,7 @@ impl Component for Row {
             Color::TRANSPARENT,
             interactive && hovering(),
             interactive && pressing(),
-            self.selected,
+            false,
         );
         let text_color = if !self.enabled {
             tokens.muted
@@ -170,11 +161,7 @@ impl Component for Row {
         } else {
             tokens.text
         };
-        let icon_color = if self.selected {
-            tokens.accent
-        } else {
-            tokens.muted
-        };
+        let icon_color = tokens.muted;
 
         let title = label()
             .text(self.title.clone())
@@ -207,8 +194,11 @@ impl Component for Row {
                 )
                 .into(),
         };
+        // Freya centres children against the content height, not against
+        // `min_height`, so the column carries the row's inner height itself.
         let text_column = rect()
             .width(Size::flex(1.0))
+            .height(Size::px(height - 16.0))
             .main_align(Alignment::Center)
             .spacing(1.0)
             .child(title_line)
@@ -235,9 +225,8 @@ impl Component for Row {
             .direction(Direction::Horizontal)
             .content(Content::Flex)
             .cross_align(Alignment::Center)
-            .padding((6.0, 12.0))
-            .spacing(10.0)
-            .corner_radius(ROW_RADIUS)
+            .padding((8.0, ROW_PADDING))
+            .spacing(12.0)
             .background(background)
             .border(focus_border(&tokens, focus()))
             .maybe(interactive, |element| {
@@ -257,10 +246,10 @@ impl Component for Row {
                         a11y_id.request_focus();
                     })
             })
-            .maybe_child(self.leading.map(|leading| match self.tile_rgb {
-                Some(rgb) => Element::from(icons::icon_tile(leading, rgb, 24.0)),
-                None => Element::from(icons::icon(leading, 18.0, icon_color)),
-            }))
+            .maybe_child(
+                self.leading
+                    .map(|leading| icons::icon(leading, 18.0, icon_color)),
+            )
             .child(text_column)
             .maybe_child(self.trailing.clone())
             .maybe_child(

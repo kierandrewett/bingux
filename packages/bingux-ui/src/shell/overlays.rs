@@ -411,7 +411,7 @@ impl Component for ToastAction {
             .corner_radius(14.0)
             .center()
             .background(if hovering() {
-                tokens.hover.with_af32(0.42)
+                tokens.hover
             } else {
                 Color::TRANSPARENT
             })

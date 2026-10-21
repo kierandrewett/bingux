@@ -6,7 +6,7 @@ pub mod overlays;
 pub mod status_page;
 pub mod window;
 
-pub use navigation::{NavItem, NavigationSplitView, ProfileCard, SearchField};
+pub use navigation::{NavItem, NavigationSplitView, SearchField};
 pub use overlays::{
     Dialog, DialogResponse, OverlayHost, Overlays, ResponseKind, Toast, dialog, use_overlays,
 };

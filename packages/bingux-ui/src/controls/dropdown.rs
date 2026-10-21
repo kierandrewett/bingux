@@ -148,13 +148,13 @@ impl Component for Dropdown {
             .cross_align(Alignment::Center)
             .main_align(Alignment::SpaceBetween)
             .corner_radius(ROW_RADIUS)
-            .background(surface_color(
-                &tokens,
-                tokens.elevated,
-                enabled && hovering(),
-                enabled && pressing(),
-                false,
-            ))
+            .background(if enabled && pressing() {
+                tokens.elevated_pressed
+            } else if enabled && hovering() {
+                tokens.elevated_hover
+            } else {
+                tokens.elevated
+            })
             .border(focus_border(&tokens, focus()))
             .on_sized(move |event: Event<SizedEventData>| {
                 button_width.set_if_modified(event.area.width())

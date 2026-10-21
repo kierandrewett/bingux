@@ -10,7 +10,7 @@ use freya::prelude::*;
 
 use crate::pages::gnoblin::{self, InputSource, Json};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
-use crate::ui::{Group, Status, page_title, row, row_button, slider_row, status, switch_row};
+use crate::ui::{Group, Status, page_column, row, row_button, slider_row, status, switch_row};
 
 const KEYBOARD: &str = "org.gnome.desktop.peripherals.keyboard";
 const DELAY_RANGE: (f64, f64) = (100.0, 2000.0);
@@ -85,21 +85,16 @@ impl Component for KeyboardPage {
         use_hook(move || background(loaded, load));
 
         let Some(result) = loaded.read().clone() else {
-            return rect()
-                .width(Size::fill())
-                .child(page_title("Keyboard"))
+            return page_column()
                 .child(status(Status::Loading("Reading keyboard settings.".into())));
         };
         let model = match result {
             Ok(model) => model,
             Err(e) => {
-                return rect()
-                    .width(Size::fill())
-                    .child(page_title("Keyboard"))
-                    .child(
-                        status(Status::Error(e.0))
-                            .action("Try again", move |_| background(loaded, load)),
-                    );
+                return page_column().child(
+                    status(Status::Error(e.0))
+                        .action("Try again", move |_| background(loaded, load)),
+                );
             }
         };
 
@@ -217,9 +212,7 @@ impl Component for KeyboardPage {
         };
         let shortcuts = Group::titled("Shortcuts").row(shortcuts_row);
 
-        rect()
-            .width(Size::fill())
-            .child(page_title("Keyboard"))
+        page_column()
             .maybe_child(
                 error
                     .read()

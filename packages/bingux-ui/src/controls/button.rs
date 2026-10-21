@@ -6,8 +6,8 @@ use freya::prelude::*;
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
 use crate::surface::{
-    BUTTON_HEIGHT, CONTROL_HEIGHT, FONT_SIZE, FONT_SMALL, ROW_RADIUS, focus_border,
-    is_activation_key, surface_color, use_tokens,
+    BUTTON_HEIGHT, CONTROL_HEIGHT, FONT_SIZE, ROW_RADIUS, focus_border, is_activation_key,
+    surface_color, use_tokens,
 };
 
 /// The shell's `ActionButton`: 36 px tall on `elevated` at radius 8.
@@ -113,10 +113,18 @@ impl Component for ActionButton {
             } else {
                 base
             }
+        } else if self.flat {
+            if pressing() {
+                tokens.pressed
+            } else if hovering() {
+                tokens.hover
+            } else {
+                base
+            }
         } else if pressing() {
-            tokens.pressed
+            tokens.elevated_pressed
         } else if hovering() {
-            tokens.hover
+            tokens.elevated_hover
         } else {
             base
         };
@@ -210,7 +218,7 @@ pub fn primary_button(
     button
 }
 
-/// A small muted pill for a row's secondary action (`ControlRow` actionLabel).
+/// A row's secondary action: the same filled button as every other control.
 #[derive(PartialEq)]
 pub struct RowButton {
     text: String,
@@ -248,16 +256,18 @@ impl Component for RowButton {
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Button)
             .height(Size::px(CONTROL_HEIGHT))
-            .padding((0.0, 8.0))
+            .padding((0.0, 14.0))
             .center()
-            .corner_radius(7.0)
-            .background(surface_color(
-                &tokens,
-                Color::TRANSPARENT,
-                hovering(),
-                pressing(),
-                false,
-            ))
+            .corner_radius(ROW_RADIUS)
+            .background(if self.prominent {
+                surface_color(&tokens, Color::TRANSPARENT, hovering(), pressing(), false)
+            } else if pressing() {
+                tokens.elevated_pressed
+            } else if hovering() {
+                tokens.elevated_hover
+            } else {
+                tokens.elevated
+            })
             .border(focus_border(&tokens, focus()))
             .cursor(CursorIcon::Pointer)
             .on_pointer_enter(move |_| hovering.set(true))
@@ -284,12 +294,8 @@ impl Component for RowButton {
             .child(
                 label()
                     .text(self.text.clone())
-                    .color(if self.prominent {
-                        tokens.text
-                    } else {
-                        tokens.muted
-                    })
-                    .font_size(FONT_SMALL)
+                    .color(tokens.text)
+                    .font_size(FONT_SIZE)
                     .font_weight(if self.prominent {
                         FontWeight::SEMI_BOLD
                     } else {

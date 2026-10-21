@@ -14,7 +14,7 @@ use freya::prelude::*;
 use crate::pages::bingux_config;
 use crate::system::{self, CommandError, background, background_then, which};
 use crate::theme::{Scheme, SharedTokens, Tokens, accent_for, accent_names, read_gsettings};
-use crate::ui::{Group, Status, choice_row, page_title, row, row_button, status, use_tokens};
+use crate::ui::{Group, Status, choice_row, page_column, row, row_button, status, use_tokens};
 
 const INTERFACE: &str = "org.gnome.desktop.interface";
 const WALLPAPER_KEY: &str = "desktop.wallpaper";
@@ -223,23 +223,16 @@ impl Component for AppearancePage {
         let tokens = use_tokens();
 
         let Some(loaded) = model.read().clone() else {
-            return rect()
-                .width(Size::fill())
-                .child(page_title("Appearance"))
-                .child(status(Status::Loading(
-                    "Reading appearance settings.".into(),
-                )));
+            return page_column().child(status(Status::Loading(
+                "Reading appearance settings.".into(),
+            )));
         };
         let model_value = match loaded {
             Ok(value) => value,
             Err(failure) => {
-                return rect()
-                    .width(Size::fill())
-                    .child(page_title("Appearance"))
-                    .child(
-                        status(Status::Error(failure.0))
-                            .action("Try again", move |_| reload(model)),
-                    );
+                return page_column().child(
+                    status(Status::Error(failure.0)).action("Try again", move |_| reload(model)),
+                );
             }
         };
 
@@ -270,9 +263,7 @@ impl Component for AppearancePage {
 
         let reduced_motion = if tokens.reduced_motion { "On" } else { "Off" };
 
-        rect()
-            .width(Size::fill())
-            .child(page_title("Appearance"))
+        page_column()
             .maybe_child(
                 error
                     .read()

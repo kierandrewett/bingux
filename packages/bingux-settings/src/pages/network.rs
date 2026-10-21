@@ -10,8 +10,8 @@ use crate::icons::{self, Icon};
 use crate::system::{self, CommandError, background, background_then};
 use crate::theme::Tokens;
 use crate::ui::{
-    Group, Overlays, ResponseKind, Status, dialog, icon_button, page_title, primary_button, row,
-    row_button, section_label, status, switch_row, text_row, use_overlays, use_tokens,
+    Group, Overlays, ResponseKind, Status, dialog, icon_button, page_column, primary_button, row,
+    row_button, status, switch_row, text_row, use_overlays, use_tokens,
 };
 
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
@@ -354,10 +354,7 @@ impl Ui {
 }
 
 fn page(children: Vec<Element>) -> impl IntoElement {
-    rect()
-        .width(Size::fill())
-        .child(page_title("Network"))
-        .children(children)
+    page_column().children(children)
 }
 
 /// One row per network, plus the password row under the selected one.
@@ -512,28 +509,25 @@ impl Component for NetworkPage {
         } else if !model.wifi_on {
             blocks.push(Element::from(status(Status::Empty("Wi-Fi is off.".into()))));
         } else {
-            blocks.push(Element::from(
-                rect()
-                    .width(Size::fill())
-                    .direction(Direction::Horizontal)
-                    .content(Content::Flex)
-                    .cross_align(Alignment::Center)
-                    .child(
-                        rect()
-                            .width(Size::flex(1.0))
-                            .child(section_label("Wi-Fi networks")),
-                    )
-                    .child(icon_button(Icon::Refresh, move |_| ui.rescan()).tooltip("Refresh")),
-            ));
+            let refresh = icon_button(Icon::Refresh, move |_| ui.rescan()).tooltip("Refresh");
             if model.networks.is_empty() {
-                blocks.push(Element::from(status(Status::Empty(
-                    "No Wi-Fi networks found. Press refresh to scan again.".into(),
-                ))));
+                blocks.push(Element::from(
+                    Group::titled("Wi-Fi networks").trailing(refresh).row(
+                        row("No Wi-Fi networks found").subtitle("Press refresh to scan again."),
+                    ),
+                ));
             } else {
                 let selected_ssid = ui.selected.read().clone();
-                blocks.push(Element::from(Group::new(None::<String>).rows(
-                    network_rows(ui, &model.networks, selected_ssid.as_deref(), tokens),
-                )));
+                blocks.push(Element::from(
+                    Group::titled("Wi-Fi networks")
+                        .trailing(refresh)
+                        .rows(network_rows(
+                            ui,
+                            &model.networks,
+                            selected_ssid.as_deref(),
+                            tokens,
+                        )),
+                ));
             }
         }
 

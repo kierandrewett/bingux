@@ -121,7 +121,7 @@ impl Component for TextField {
         let outline = if invalid {
             tokens.danger
         } else {
-            tokens.outline
+            Color::TRANSPARENT
         };
         let focus_outline = if invalid {
             tokens.danger

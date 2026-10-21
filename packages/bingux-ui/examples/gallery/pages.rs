@@ -46,17 +46,6 @@ impl NavItem for Page {
             Page::Icons => Icon::Appearance,
         }
     }
-
-    fn tile_rgb(self) -> [f32; 3] {
-        match self {
-            Page::Controls => [0.208, 0.518, 0.894],
-            Page::Buttons => [0.227, 0.580, 0.290],
-            Page::Rows => [0.569, 0.255, 0.675],
-            Page::Feedback => [0.929, 0.357, 0.000],
-            Page::Typography => [0.435, 0.514, 0.588],
-            Page::Icons => [0.835, 0.380, 0.600],
-        }
-    }
 }
 
 #[derive(PartialEq)]
@@ -68,7 +57,6 @@ impl Component for Gallery {
     fn render(&self) -> impl IntoElement {
         let tokens = provide_tokens();
         let page = use_state(|| self.initial);
-        let maximized = freya::borderless::use_maximized();
         let content: Element = match page() {
             Page::Controls => ControlsPage.into(),
             Page::Buttons => ButtonsPage.into(),
@@ -81,12 +69,6 @@ impl Component for Gallery {
             .expanded()
             .color(tokens.text)
             .font_family(bingux_ui::theme::FONT_FAMILY)
-            .corner_radius(if maximized() {
-                0.0
-            } else {
-                bingux_ui::theme::WINDOW_RADIUS
-            })
-            .overflow(Overflow::Clip)
             .child(OverlayHost::new(NavigationSplitView::new(
                 "Gallery",
                 Page::ALL.to_vec(),
@@ -94,13 +76,6 @@ impl Component for Gallery {
                 content,
             )))
     }
-}
-
-fn page(title: &str, description: &str) -> Rect {
-    rect()
-        .width(Size::fill())
-        .spacing(20.0)
-        .child(hero(title).description(description))
 }
 
 #[derive(PartialEq)]
@@ -116,77 +91,77 @@ impl Component for ControlsPage {
         let mut count = use_state(|| 3_i64);
         let mut segment = use_state(|| "light".to_string());
         let mut language = use_state(|| "en".to_string());
-        page(
-            "Controls",
-            "Every control shares the one quiet interaction surface.",
-        )
-        .child(
-            Group::new("Switch".to_string())
-                .row(switch_row("Enabled", on(), move |next| on.set(next)))
-                .row(row("Disabled").trailing(switch(true, |_| {}).enabled(false)))
-                .row(row("Checkbox").trailing(
-                    checkbox(check(), move |next: bool| check.set(next.into())).text("Remember"),
-                ))
-                .row(row("Mixed checkbox").trailing(checkbox(CheckState::Mixed, |_| {})))
-                .row(row("Disabled checkbox").trailing(checkbox(true, |_| {}).enabled(false))),
-        )
-        .child(
-            Group::new("Slider".to_string())
-                .row(slider_row("Volume", volume(), move |next| volume.set(next)))
-                .row(
-                    row("Stepped, with value").trailing(
-                        slider(stepped(), move |next| stepped.set(next))
-                            .step(10.0)
-                            .show_value(),
+        page_column()
+            .child(
+                Group::new("Switch".to_string())
+                    .row(switch_row("Enabled", on(), move |next| on.set(next)))
+                    .row(row("Disabled").trailing(switch(true, |_| {}).enabled(false)))
+                    .row(
+                        row("Checkbox").trailing(
+                            checkbox(check(), move |next: bool| check.set(next.into()))
+                                .text("Remember"),
+                        ),
+                    )
+                    .row(row("Mixed checkbox").trailing(checkbox(CheckState::Mixed, |_| {})))
+                    .row(row("Disabled checkbox").trailing(checkbox(true, |_| {}).enabled(false))),
+            )
+            .child(
+                Group::new("Slider".to_string())
+                    .row(slider_row("Volume", volume(), move |next| volume.set(next)))
+                    .row(
+                        row("Stepped, with value").trailing(
+                            slider(stepped(), move |next| stepped.set(next))
+                                .step(10.0)
+                                .show_value(),
+                        ),
+                    )
+                    .row(row("Disabled").trailing(slider(30.0, |_| {}).enabled(false))),
+            )
+            .child(
+                Group::new("Choice".to_string())
+                    .row(
+                        row("Radio group").subtitle("Horizontal layout").trailing(
+                            radio_group(
+                                vec![
+                                    ("small".into(), "Small".into()),
+                                    ("medium".into(), "Medium".into()),
+                                    ("large".into(), "Large".into()),
+                                ],
+                                radio.read().clone(),
+                                move |key: String| radio.set(key),
+                            )
+                            .horizontal(),
+                        ),
+                    )
+                    .row(choice_row(
+                        "Segmented",
+                        vec![
+                            ("light".into(), "Light".into()),
+                            ("dark".into(), "Dark".into()),
+                            ("auto".into(), "Auto".into()),
+                        ],
+                        &segment.read().clone(),
+                        move |key: String| segment.set(key),
+                    ))
+                    .row(choice_row(
+                        "Dropdown",
+                        vec![
+                            ("en".into(), "English (United Kingdom)".into()),
+                            ("fr".into(), "French (France)".into()),
+                            ("de".into(), "German (Germany)".into()),
+                            ("es".into(), "Spanish (Spain)".into()),
+                        ],
+                        &language.read().clone(),
+                        move |key: String| language.set(key),
+                    ))
+                    .row(
+                        row("Stepper").trailing(
+                            stepper(count(), move |next| count.set(next))
+                                .range(0, 10)
+                                .suffix(" items"),
+                        ),
                     ),
-                )
-                .row(row("Disabled").trailing(slider(30.0, |_| {}).enabled(false))),
-        )
-        .child(
-            Group::new("Choice".to_string())
-                .row(
-                    row("Radio group").subtitle("Horizontal layout").trailing(
-                        radio_group(
-                            vec![
-                                ("small".into(), "Small".into()),
-                                ("medium".into(), "Medium".into()),
-                                ("large".into(), "Large".into()),
-                            ],
-                            radio.read().clone(),
-                            move |key: String| radio.set(key),
-                        )
-                        .horizontal(),
-                    ),
-                )
-                .row(choice_row(
-                    "Segmented",
-                    vec![
-                        ("light".into(), "Light".into()),
-                        ("dark".into(), "Dark".into()),
-                        ("auto".into(), "Auto".into()),
-                    ],
-                    &segment.read().clone(),
-                    move |key: String| segment.set(key),
-                ))
-                .row(choice_row(
-                    "Dropdown",
-                    vec![
-                        ("en".into(), "English (United Kingdom)".into()),
-                        ("fr".into(), "French (France)".into()),
-                        ("de".into(), "German (Germany)".into()),
-                        ("es".into(), "Spanish (Spain)".into()),
-                    ],
-                    &language.read().clone(),
-                    move |key: String| language.set(key),
-                ))
-                .row(
-                    row("Stepper").trailing(
-                        stepper(count(), move |next| count.set(next))
-                            .range(0, 10)
-                            .suffix(" items"),
-                    ),
-                ),
-        )
+            )
     }
 }
 
@@ -200,48 +175,45 @@ impl Component for ButtonsPage {
         let query = use_state(|| "wifi".to_string());
         let secret = use_state(|| "hunter2".to_string());
         let bad = use_state(|| "relative/path".to_string());
-        page(
-            "Buttons",
-            "Thirty-six pixel actions on the elevated surface.",
-        )
-        .child(
-            rect()
-                .direction(Direction::Horizontal)
-                .spacing(10.0)
-                .cross_align(Alignment::Center)
-                .child(action_button("Action", |_| {}))
-                .child(action_button("With icon", |_| {}).icon(Icon::Folder))
-                .child(primary_button("Primary", |_| {}))
-                .child(action_button("Flat", |_| {}).flat())
-                .child(action_button("Destructive", |_| {}).destructive())
-                .child(action_button("Loading", |_| {}).loading(true))
-                .child(action_button("Disabled", |_| {}).enabled(false)),
-        )
-        .child(
-            rect()
-                .direction(Direction::Horizontal)
-                .spacing(10.0)
-                .cross_align(Alignment::Center)
-                .child(icon_button(Icon::Refresh, |_| {}).tooltip("Refresh"))
-                .child(icon_button(Icon::Delete, |_| {}).tooltip("Delete").danger())
-                .child(icon_button(Icon::OpenMenu, |_| {}).tooltip("Menu"))
-                .child(row_button("Row pill", |_| {}))
-                .child(
-                    label()
-                        .text("Icon buttons and the row pill")
-                        .color(tokens.muted),
-                ),
-        )
-        .child(
-            Group::new("Text fields".to_string())
-                .row(row("Plain").trailing(text_field(plain, |_| {}).placeholder("Type here")))
-                .row(row("Search").trailing(search_field(query, |_| {})))
-                .row(row("Password").trailing(text_field(secret, |_| {}).password()))
-                .row(row("Invalid").trailing(
-                    text_field(bad, |_| {}).invalid(Some("Enter an absolute path.".into())),
-                ))
-                .row(row("Disabled").trailing(text_field(plain, |_| {}).enabled(false))),
-        )
+        page_column()
+            .child(
+                rect()
+                    .direction(Direction::Horizontal)
+                    .spacing(10.0)
+                    .cross_align(Alignment::Center)
+                    .child(action_button("Action", |_| {}))
+                    .child(action_button("With icon", |_| {}).icon(Icon::Folder))
+                    .child(primary_button("Primary", |_| {}))
+                    .child(action_button("Flat", |_| {}).flat())
+                    .child(action_button("Destructive", |_| {}).destructive())
+                    .child(action_button("Loading", |_| {}).loading(true))
+                    .child(action_button("Disabled", |_| {}).enabled(false)),
+            )
+            .child(
+                rect()
+                    .direction(Direction::Horizontal)
+                    .spacing(10.0)
+                    .cross_align(Alignment::Center)
+                    .child(icon_button(Icon::Refresh, |_| {}).tooltip("Refresh"))
+                    .child(icon_button(Icon::Delete, |_| {}).tooltip("Delete").danger())
+                    .child(icon_button(Icon::OpenMenu, |_| {}).tooltip("Menu"))
+                    .child(row_button("Row pill", |_| {}))
+                    .child(
+                        label()
+                            .text("Icon buttons and the row pill")
+                            .color(tokens.muted),
+                    ),
+            )
+            .child(
+                Group::new("Text fields".to_string())
+                    .row(row("Plain").trailing(text_field(plain, |_| {}).placeholder("Type here")))
+                    .row(row("Search").trailing(search_field(query, |_| {})))
+                    .row(row("Password").trailing(text_field(secret, |_| {}).password()))
+                    .row(row("Invalid").trailing(
+                        text_field(bad, |_| {}).invalid(Some("Enter an absolute path.".into())),
+                    ))
+                    .row(row("Disabled").trailing(text_field(plain, |_| {}).enabled(false))),
+            )
     }
 }
 
@@ -252,56 +224,52 @@ impl Component for RowsPage {
     fn render(&self) -> impl IntoElement {
         let mut name = use_state(|| "Bingux".to_string());
         let mut committed = use_state(|| "Workstation".to_string());
-        page(
-            "Rows and groups",
-            "Preference groups hold 44 px rows; 60 px with a subtitle.",
-        )
-        .child(
-            Group::new("Plain rows".to_string())
-                .description("Groups take an optional description.")
-                .row(row("Title only"))
-                .row(row("With subtitle").subtitle("Secondary text in the muted colour"))
-                .row(row("With value").value("Value"))
-                .row(row("Navigates").navigates().on_press(|_| {})),
-        )
-        .child(
-            Group::new("Decorated".to_string())
-                .row(row("Leading icon").leading(Icon::Network))
-                .row(row("Leading tile").leading_tile(Icon::Bluetooth, [0.208, 0.518, 0.894]))
-                .row(row("Badge").badge("3"))
-                .row(row("Selected").selected(true).on_press(|_| {}))
-                .row(row("Destructive").destructive().on_press(|_| {}))
-                .row(row("Disabled").enabled(false)),
-        )
-        .child(
-            Group::new("Editable".to_string())
-                .row(text_row("Name", name, move |next: String| name.set(next)))
-                .row(entry_row(
-                    "Entry row",
-                    committed.read().clone(),
-                    move |next: String| committed.set(next),
-                ))
-                .row(row("Action").trailing(row_button("Change", |_| {}))),
-        )
-        .child(
-            Group::new("Expander and properties".to_string())
-                .row(
-                    expander_row(
-                        "Advanced",
-                        vec![
-                            switch_row("Option one", true, |_| {}).into(),
-                            switch_row("Option two", false, |_| {}).into(),
-                        ],
+        page_column()
+            .child(
+                Group::new("Plain rows".to_string())
+                    .description("Groups take an optional description.")
+                    .row(row("Title only"))
+                    .row(row("With subtitle").subtitle("Secondary text in the muted colour"))
+                    .row(row("With value").value("Value"))
+                    .row(row("Navigates").navigates().on_press(|_| {})),
+            )
+            .child(
+                Group::new("Decorated".to_string())
+                    .row(row("Leading icon").leading(Icon::Network))
+                    .row(row("Badge").badge("3"))
+                    .row(row("Selected").selected(true).on_press(|_| {}))
+                    .row(row("Destructive").destructive().on_press(|_| {}))
+                    .row(row("Disabled").enabled(false)),
+            )
+            .child(
+                Group::new("Editable".to_string())
+                    .row(text_row("Name", name, move |next: String| name.set(next)))
+                    .row(entry_row(
+                        "Entry row",
+                        committed.read().clone(),
+                        move |next: String| committed.set(next),
+                    ))
+                    .row(row("Action").trailing(row_button("Change", |_| {}))),
+            )
+            .child(
+                Group::new("Expander and properties".to_string())
+                    .row(
+                        expander_row(
+                            "Advanced",
+                            vec![
+                                switch_row("Option one", true, |_| {}).into(),
+                                switch_row("Option two", false, |_| {}).into(),
+                            ],
+                        )
+                        .subtitle("Press to reveal two rows")
+                        .expanded(true),
                     )
-                    .subtitle("Press to reveal two rows")
-                    .expanded(true),
-                )
-                .row(property_row("Kernel", "6.12.0-100.fc43.x86_64"))
-                .row(property_row(
-                    "Processor",
-                    "AMD Ryzen 7 5800X 8-Core Processor with a long name that wraps",
-                )),
-        )
+                    .row(property_row("Kernel", "6.12.0-100.fc43.x86_64"))
+                    .row(property_row(
+                        "Processor",
+                        "AMD Ryzen 7 5800X 8-Core Processor with a long name that wraps",
+                    )),
+            )
     }
 }
 
@@ -314,10 +282,7 @@ impl Component for FeedbackPage {
         let mut progress = use_state(|| 0.35_f64);
         let mut notice = use_state(|| true);
         let overlays = use_overlays();
-        page(
-            "Feedback",
-            "Progress, spinners, banners, toasts and dialogs.",
-        )
+        page_column()
         .child(
             banner("Updates are ready to install.")
                 .visible(notice())
@@ -400,7 +365,7 @@ struct TypographyPage;
 impl Component for TypographyPage {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        page("Typography", "Adwaita Sans at the shell's sizes.")
+        page_column()
             .child(
                 label()
                     .text("Hero title, 24 bold")
@@ -434,11 +399,7 @@ struct IconsPage;
 impl Component for IconsPage {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        page(
-            "Icons",
-            "Bundled Adwaita symbolic icons, recoloured at draw time.",
-        )
-        .child(
+        page_column().child(
             rect()
                 .width(Size::fill())
                 .direction(Direction::Horizontal)

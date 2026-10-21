@@ -56,3 +56,9 @@ pub fn clamp(max_width: f32, child: impl Into<Element>) -> Rect {
                 .child(child.into()),
         )
 }
+
+/// The root of a settings page: full width, with the standard 24 px between
+/// groups. Groups and status rows carry no outer margin of their own.
+pub fn page_column() -> Rect {
+    rect().width(Size::fill()).spacing(24.0)
+}
