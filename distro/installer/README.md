@@ -144,5 +144,16 @@ sd-vconsole block [sd-encrypt] filesystems fsck`), built with `mkinitcpio -P` in
 
 - Unit tests: `distro/installer/tests/unit` (`cd distro/installer && python3 -m pytest -q tests/unit`).
   No root, no blivet, no real disks.
-- VM and matrix tests (QEMU live ISO, UEFI and BIOS, ext4 and btrfs, encrypted and not): see
-  `distro/installer/tests/vm/README.md` and `distro/installer/tests/matrix`, owned by the VM slice.
+- Install matrix: `distro/installer/tests/matrix/run.py --iso <live.iso> [--case NAME ...]`, built on
+  the `vmdrive` driver in `tests/vm`. Each case boots the live ISO in QEMU with a blank 10 GiB
+  virtio disk (kept under `~/.cache`, deleted after the case), writes a plan, runs
+  `bingux-installer --json probe` and `install --plan`, powers off, then boots the disk alone and
+  checks the root filesystem, LUKS (encrypted cases), the created user in `wheel`, and `greetd` active,
+  with a greeter screenshot. Cases: `uefi-ext4`, `uefi-btrfs`, `uefi-luks-ext4`, `bios-ext4`,
+  `bios-btrfs`, and `bios-luks-ext4`, which must be refused with `unsupported` and leave the disk blank.
+- Artifacts: `distro/out/installer-backend/matrix/<case>/{install,boot}/` (serial transcript, command
+  log, screenshots) and `distro/out/installer-backend/matrix/<case>/results.json`. Exit status is 0 only
+  when every case passes.
+- The serial getty autologins root, so the boot checks run as root and the user is checked with
+  `runuser` and group membership. A password login through the console is not exercised.
+- Driver API and smoke test: `tests/vm/README.md`.

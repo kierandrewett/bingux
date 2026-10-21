@@ -37,6 +37,8 @@ Exit status is 0 only if every check passes. Options: `--timeout` (shell wait, d
   `on_line(line)` streams complete output lines as they arrive. `check=True` raises `CommandFailed`
   on non-zero rc.
 - `send(text)`: raw text to the serial console, no newline added.
+- `wait_for(needle, timeout=300) -> bool`: waits for `needle` in serial output produced after the call
+  (for example `login:` or `assphrase`). Call it right after `start()` for prompts that appear during boot.
 - `screenshot(path)`: QMP `screendump`, converted to PNG with the built-in encoder.
 - `poweroff(timeout=120)`: ACPI power button via QMP; kills QEMU if it has not exited.
 - `kill()`, `close()`, `alive()`: process and cleanup control.

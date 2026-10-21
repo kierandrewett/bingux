@@ -231,6 +231,20 @@ class LiveVm:
         """Send raw text to the serial console. No newline is added."""
         self._send(text.encode())
 
+    def wait_for(self, needle, timeout=300):
+        """Wait until `needle` appears in serial output produced after this call. True if it did."""
+        mark = len(self._serial_log)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self._seen(needle.encode(), mark):
+                return True
+            try:
+                self._pump(0.5)
+            except EOFError:
+                return False
+        self.event(f"timed out waiting for {needle!r}")
+        return False
+
     def screenshot(self, path):
         """Save the guest screen to `path` as PNG (QMP screendump to a PPM in scratch, converted, PPM removed)."""
         ppm = self.scratch / "screen.ppm"

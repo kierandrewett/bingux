@@ -1,0 +1,207 @@
+"""Install matrix for bingux-installer on the live ISO.
+
+For each case: boot the live ISO with a blank 10 GiB virtio disk, write a plan through the serial
+shell, run `bingux-installer --json probe` and `install`, power off, then boot the installed disk
+alone and check the installed system (root filesystem, LUKS, the created user, the greetd greeter).
+
+BIOS with encryption must be refused by the daemon (`unsupported`) and the disk must stay blank.
+
+The serial getty autologins root (GETTY_DROPIN in vmdrive/vm.py), so the boot checks run as root;
+the created user is checked with runuser and wheel membership, not a password login.
+
+Usage: python3 run.py --iso PATH [--case NAME ...] [--out DIR] [--disk-dir DIR]
+Exit status is 0 only when every case passes. Artifacts: OUT/<case>/{install,boot}/ and results.json.
+"""
+
+import argparse
+import base64
+import json
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parent / "vm"))
+
+from vmdrive.checks import Checks  # noqa: E402
+from vmdrive.vm import LiveVm  # noqa: E402
+
+DISK_BYTES = 10 * 1024**3
+DISK = "/dev/vda"
+USER = "tester"
+USER_PASSWORD = "tester-pass-1"
+LUKS_PASSPHRASE = "luks-pass-123"
+DEFAULT_OUT = HERE.parents[2] / "out" / "installer-backend" / "matrix"
+DEFAULT_DISK_DIR = Path.home() / ".cache" / "bingux-installer-matrix"
+
+# name: (firmware, filesystem, encrypted)
+CASES = {
+    "uefi-ext4": ("uefi", "ext4", False),
+    "uefi-btrfs": ("uefi", "btrfs", False),
+    "uefi-luks-ext4": ("uefi", "ext4", True),
+    "bios-ext4": ("bios", "ext4", False),
+    "bios-btrfs": ("bios", "btrfs", False),
+    "bios-luks-ext4": ("bios", "ext4", True),
+}
+REFUSED = {"bios-luks-ext4"}
+
+
+def make_plan(firmware, filesystem, encrypted):
+    encryption = {"enabled": encrypted}
+    if encrypted:
+        encryption["passphrase"] = LUKS_PASSPHRASE
+    return {
+        "version": 1,
+        "disk": DISK,
+        "confirm_erase": DISK,
+        "firmware": firmware,
+        "filesystem": filesystem,
+        "encryption": encryption,
+        "other_os": "refuse",
+        "hostname": "bingux-test",
+        "timezone": "Europe/London",
+        "locale": "en_GB.UTF-8",
+        "keymap": "uk",
+        "users": [{"name": USER, "password": USER_PASSWORD, "admin": True, "full_name": "Tester"}],
+        "kernel_args": ["console=ttyS0"],
+    }
+
+
+def last_json(text):
+    """The last line of `text` that parses as a JSON object, or None."""
+    for line in reversed(text.splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            try:
+                value = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(value, dict):
+                return value
+    return None
+
+
+def install_phase(vm, checks, name, firmware, filesystem, encrypted):
+    """Boot the live ISO, run probe and install. True when the install reports ok."""
+    if not checks.expect(vm.wait_for_shell(timeout=600), f"{name}: live root shell up"):
+        return False
+    payload = base64.b64encode(json.dumps(make_plan(firmware, filesystem, encrypted)).encode()).decode()
+    rc, _ = vm.run(f"printf %s {payload} | base64 -d > /tmp/plan.json", timeout=60)
+    checks.expect(rc == 0, f"{name}: plan written to the guest", f"rc={rc}")
+
+    rc, probe_out = vm.run("bingux-installer --json probe", timeout=180)
+    probe = last_json(probe_out) or {}
+    data = probe.get("data", {})
+    target = next((d for d in data.get("disks", []) if d.get("path") == DISK), None)
+    checks.expect(
+        probe.get("event") == "result" and data.get("firmware") == firmware
+        and target is not None and target.get("is_live_medium") is False,
+        f"{name}: probe reports {firmware} firmware and {DISK} as an install target",
+        f"rc={rc} probe={probe}",
+    )
+
+    rc, install_out = vm.run("bingux-installer --json install --plan /tmp/plan.json", timeout=2400)
+    result = last_json(install_out) or {}
+    if name in REFUSED:
+        refused = result.get("event") == "error" and result.get("code") == "unsupported"
+        checks.expect(refused, f"{name}: install refused with code unsupported", f"rc={rc} result={result}")
+        rc, lines = vm.run(f"lsblk -dn -o NAME {DISK}", timeout=60)
+        checks.expect(rc == 0 and lines.strip() == "vda", f"{name}: disk left blank after the refusal",
+                      f"rc={rc} lsblk={lines!r}")
+        rc, parts = vm.run(f"lsblk -rn -o TYPE {DISK}", timeout=60)
+        checks.expect(rc == 0 and parts.split() == ["disk"], f"{name}: no partitions created",
+                      f"rc={rc} types={parts!r}")
+        return False
+
+    data = result.get("data", {})
+    ok = result.get("event") == "result" and result.get("ok") is True
+    checks.expect(ok, f"{name}: install result ok", f"rc={rc} result={result}")
+    checks.expect(data.get("filesystem") == filesystem and data.get("firmware") == firmware,
+                  f"{name}: install reports {firmware} and {filesystem}", f"data={data}")
+    return ok
+
+
+def boot_phase(vm, checks, name, firmware, filesystem, encrypted, out):
+    """Boot the installed disk alone and check the installed system."""
+    if encrypted:
+        # Must be called right after start(): the prompt is matched from this point on.
+        if checks.expect(vm.wait_for("assphrase", timeout=600), f"{name}: LUKS passphrase prompt"):
+            vm.send(LUKS_PASSPHRASE + "\n")
+    if not checks.expect(vm.wait_for_shell(timeout=900), f"{name}: installed system root shell up"):
+        return
+
+    rc, who = vm.run(f"runuser -u {USER} -- id -un", timeout=120)
+    checks.expect(rc == 0 and who.strip() == USER, f"{name}: created user runs commands", f"rc={rc} out={who!r}")
+    rc, groups = vm.run(f"id -nG {USER}", timeout=60)
+    checks.expect(rc == 0 and "wheel" in groups.split(), f"{name}: admin user is in wheel", f"out={groups!r}")
+
+    rc, fstype = vm.run("findmnt -n -o FSTYPE /", timeout=60)
+    checks.expect(rc == 0 and fstype.strip() == filesystem, f"{name}: root is {filesystem}",
+                  f"rc={rc} out={fstype!r}")
+    if encrypted:
+        rc, types = vm.run(f"lsblk -rn -o TYPE {DISK}", timeout=60)
+        checks.expect(rc == 0 and "crypt" in types.split(), f"{name}: root sits on LUKS", f"out={types!r}")
+
+    state = "unknown"
+    for _ in range(24):
+        rc, state_out = vm.run("systemctl is-active greetd", timeout=60)
+        state = state_out.strip().splitlines()[-1] if state_out.strip() else "unknown"
+        if state == "active":
+            break
+    checks.expect(state == "active", f"{name}: greetd greeter active", f"state={state!r}")
+    rc, failed = vm.run("systemctl --failed --no-legend", timeout=60)
+    (out / "failed-units.txt").write_text(failed + "\n", encoding="utf-8")
+    vm.screenshot(out / "greeter.png")
+    checks.expect((out / "greeter.png").stat().st_size > 0, f"{name}: greeter screenshot written")
+
+
+def run_case(name, iso, out_root, disk_dir, checks):
+    firmware, filesystem, encrypted = CASES[name]
+    out = out_root / name
+    disk_dir.mkdir(parents=True, exist_ok=True)
+    disk = disk_dir / f"{name}.qcow2"
+    disk.unlink(missing_ok=True)
+
+    installed = False
+    with LiveVm(out / "install") as vm:
+        vm.start(iso=iso, disks=[(disk, DISK_BYTES)], firmware=firmware)
+        installed = install_phase(vm, checks, name, firmware, filesystem, encrypted)
+        if installed:
+            vm.run("sync", timeout=120)
+            vm.poweroff()
+            checks.expect(not vm.alive(), f"{name}: live guest powered off")
+    if installed:
+        with LiveVm(out / "boot") as vm:
+            vm.start(iso=None, disks=[(disk, DISK_BYTES)], firmware=firmware)
+            boot_phase(vm, checks, name, firmware, filesystem, encrypted, out)
+            vm.poweroff()
+    disk.unlink(missing_ok=True)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="matrix", description=__doc__.split("\n")[0])
+    parser.add_argument("--iso", required=True, help="live ISO to boot as -cdrom")
+    parser.add_argument("--case", action="append", choices=sorted(CASES), help="case to run (repeatable)")
+    parser.add_argument("--out", default=str(DEFAULT_OUT), help="artifact root")
+    parser.add_argument("--disk-dir", default=str(DEFAULT_DISK_DIR),
+                        help="target disk images (large; removed after each case)")
+    args = parser.parse_args(argv)
+
+    out_root = Path(args.out)
+    out_root.mkdir(parents=True, exist_ok=True)
+    overall = True
+    for name in args.case or list(CASES):
+        out = out_root / name
+        out.mkdir(parents=True, exist_ok=True)
+        checks = Checks(out)
+        try:
+            run_case(name, Path(args.iso), out_root, Path(args.disk_dir), checks)
+        except Exception as error:  # reported as a failed check; artifacts are kept
+            checks.expect(False, f"{name}: driver completed without error", repr(error))
+        finally:
+            checks.save()
+        overall = overall and checks.ok
+    return 0 if overall else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
