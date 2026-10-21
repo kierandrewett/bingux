@@ -24,6 +24,9 @@ distro/
 distro/build.sh --gnoblin ~/dev/gnoblin
 ```
 
+- The Gnoblin checkout must contain greeter mode (`gnoblin --greeter`), which
+  is on the `feat/greeter-mode` branch until it reaches Gnoblin's `main`, and
+  the session-lock frame-callback fix (`a05f29ae`).
 - Both checkouts must be committed: the Bingux archive comes from
   `scripts/make-source-archive.sh` and the Gnoblin bundle from Gnoblin's
   `scripts/build-release-assets.sh --source-only`, which archive `HEAD`.

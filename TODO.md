@@ -20,6 +20,11 @@ work belongs in Git history and does not stay here as a second changelog.
 - [x] Compositor background on both sides of the login so no frame is black.
 - [x] Answer Gnoblin's `gnoblinctl session lock` request by starting
       `bingux-lock` from `bingux-statusd`.
+- [ ] The locked screen is black in the QEMU test (virtio-vga, software GL):
+      Gnoblin reports `locked` and the Bingux lock client (and swaylock) run and
+      commit frames, but the screen dump shows nothing. Reported to the Gnoblin
+      session; `tests/distro-boot.py` fails its lock-screen checks until that is
+      understood. On real hardware it is untested.
 - [ ] Lock on idle timeout and on logind `Lock` (lid close, suspend). Both
       reach Gnoblin as the same lock request; only the idle policy is missing.
 - [ ] Let `SessionBar` show the user's own extensions once an extension
@@ -29,10 +34,17 @@ work belongs in Git history and does not stay here as a second changelog.
 
 ## Bingux OS
 
-- [x] Build the live image (`distro/build.sh`) and run `tests/distro-boot.py`
-      (rootless podman; the boot test reaches the Bingux login screen).
-- [ ] Boot the image on real hardware and install with archinstall.
-- [ ] Publish the pacman repository the image is built from.
+- [x] Build the live image (`distro/build.sh`) and run `tests/distro-boot.py`:
+      greeter, sign-in, wallpaper, lock, unlock and log out in headless QEMU.
+- [x] Install to a blank virtual disk with `bingux-os-install` (archinstall),
+      boot it through its own bootloader and sign in: `tests/distro-install.py`.
+- [x] Document how the pacman repository is published
+      (`distro/publish-repo.sh`, `distro/README.md`).
+- [ ] Publish the repository for real and sign its packages and database; today
+      it is unsigned (`SigLevel = Optional TrustAll`).
+- [ ] Boot the image on real hardware and install there. The installer needs
+      UEFI; a BIOS-only machine is not supported yet.
+- [ ] Let `bingux-os-install` pick the disk from a list, and offer encryption.
 
 ## Shell maintenance
 
