@@ -61,6 +61,27 @@ fn main() {
         .save(&path);
     println!("[snapshot] wrote {path}");
 
+    // A control inside a card under the pointer.
+    let mut shot = Snapshot::new(
+        move || {
+            Element::from(
+                rect()
+                    .expanded()
+                    .background(Color::from_rgb(28, 28, 32))
+                    .child(Gallery {
+                        initial: Page::Controls,
+                    }),
+            )
+        },
+        size,
+    );
+    let path = format!("{out}/controls-hover.png");
+    shot.settle(std::time::Duration::from_millis(400))
+        .hover(850.0, 606.0)
+        .settle(std::time::Duration::from_millis(200))
+        .save(&path);
+    println!("[snapshot] wrote {path}");
+
     // The alert dialog open, then a toast after it is dismissed.
     let mut shot = Snapshot::new(
         move || {
