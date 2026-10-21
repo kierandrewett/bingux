@@ -76,6 +76,8 @@ PreviewSpinner 1.0 PreviewSpinner.qml
 PreviewDatabase 1.0 PreviewDatabase.qml
 DocumentPreviewRequest 1.0 DocumentPreviewRequest.qml
 DockWindowIndicators 1.0 DockWindowIndicators.qml
+DockWindowActions 1.0 DockWindowActions.qml
+DockWindowMenu 1.0 DockWindowMenu.qml
 
 DockNotifications 1.0 DockNotifications.qml
 

@@ -480,6 +480,35 @@ PanelWindow {
         screen: root.screen
         anchorBottom: root.dockTopFromBottom
     }
+    DockWindowActions {
+        id: windowBridge
+    }
+    Loader {
+        id: windowMenuLoader
+        active: false
+        asynchronous: false
+    }
+    readonly property var windowMenu: windowMenuLoader.item
+    function ensureWindowMenu() {
+        if (!windowMenu) {
+            windowMenuLoader.setSource(Qt.resolvedUrl("DockWindowMenu.qml"), {
+                objectName: "dockWindowMenu",
+                bridge: windowBridge,
+                screen: Qt.binding(() => root.screen)
+            });
+            windowMenuLoader.active = true;
+            if (!windowMenu)
+                console.warn("Dock window menu failed to load:", windowMenuLoader.source.toString());
+        }
+        return windowMenu;
+    }
+    // point is in screen coordinates: the window menu's popup is screen-sized.
+    function openWindowActions(toplevel, x, y) {
+        if (!ensureWindowMenu())
+            return;
+        closeMenus();
+        windowMenu.openFor(toplevel, x, y, "");
+    }
     Loader {
         id: folderPopupLoader
         active: false

@@ -226,6 +226,10 @@ ShellPopup {
                     navigation: menuNavigation
                     selectedWindow: !isLoading && !!modelData && (modelData.activated || (appMenu.visible && !ToplevelManager.activeToplevel && dock.lastActiveWindow === modelData))
 
+                    onActionsRequested: point => {
+                        if (!isLoading && modelData)
+                            dock.openWindowActions(modelData, point.x, point.y);
+                    }
                     onCloseRequested: {
                         if (isLoading) {
                             dock.cancelLaunch(button.currentGroup.id);
@@ -269,6 +273,7 @@ ShellPopup {
         property var navigation: null
         property bool selectedWindow: false
 
+        signal actionsRequested(point point)
         signal closeRequested
         signal triggered
 
@@ -310,6 +315,41 @@ ShellPopup {
                     text: action.label
                     textFormat: Text.PlainText
                     verticalAlignment: Text.AlignVCenter
+                }
+                ActionButton {
+                    id: windowActions
+
+                    Accessible.name: "Window actions for " + action.label
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.preferredHeight: 28
+                    Layout.preferredWidth: 28
+                    enabled: !action.closing
+                    flat: true
+                    horizontalPadding: Theme.spaceSmall
+                    hoverEnabled: true
+                    objectName: "windowActionsButton"
+                    showFocusRing: action.navigation !== null && action.navigation.keyboardNavigation
+                    visible: action.closable && !action.loading
+
+                    background: Rectangle {
+                        border.color: Theme.accent
+                        border.width: windowActions.showFocusRing && windowActions.activeFocus ? 2 : 0
+                        color: windowActions.down ? Qt.lighter(Theme.pressed, 1.2) : windowActions.hovered ? Theme.pressed : "transparent"
+                        radius: windowActions.cornerRadius
+                    }
+                    contentItem: Text {
+                        anchors.centerIn: parent
+                        color: Theme.text
+                        font.pixelSize: 16
+                        text: "\u22ef"
+                    }
+
+                    onClicked: {
+                        if (action.navigation)
+                            action.navigation.pointerActivate();
+                        const point = windowActions.mapToItem(appMenu.contentItem, width / 2, height / 2);
+                        action.actionsRequested(point);
+                    }
                 }
                 ActionButton {
                     id: closeWindow
