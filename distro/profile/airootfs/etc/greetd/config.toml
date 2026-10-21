@@ -1,0 +1,9 @@
+# Bingux OS: greetd starts the Bingux login screen on Gnoblin.
+# bingux-greeter-session comes from the bingux package.
+
+[terminal]
+vt = 1
+
+[default_session]
+command = "bingux-greeter-session"
+user = "greeter"

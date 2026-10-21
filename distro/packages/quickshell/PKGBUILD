@@ -1,0 +1,51 @@
+# Quickshell 0.2.1 with the Bingux runtime patches from
+# packages/bingux-quickshell applied (see its README for what each fixes).
+# Derived from the AUR quickshell package.
+# shellcheck shell=bash disable=SC2034,SC2154
+pkgname=quickshell
+pkgver=0.2.1
+pkgrel=2
+pkgdesc='Flexible toolkit for making desktop shells with QtQuick (Bingux runtime patches)'
+arch=('x86_64')
+url='https://git.outfoxxed.me/quickshell/quickshell'
+options=('!strip' '!debug')
+license=('LGPL-3.0-only')
+depends=('qt6-declarative' 'qt6-base' 'jemalloc' 'qt6-svg' 'libpipewire' 'libxcb' 'wayland'
+    'libdrm' 'mesa' 'polkit' 'pam')
+makedepends=('spirv-tools' 'qt6-shadertools' 'wayland' 'wayland-protocols' 'cli11' 'ninja' 'cmake'
+    'pkgconf')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz"
+    'allocator-background-reclaim.patch'
+    'child-pdeathsig.patch'
+    'clipping-window.patch'
+    'greetd-cancel-reply.patch'
+    'ipc-connection-lifetime.patch'
+    'layer-initial-state.patch'
+    'local-files.patch')
+sha256sums=('a7e0a1029ff69d0f3b5788e042463735bacafd5fc369b1382143ffbd9d497964'
+    'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+prepare() {
+    cd "$srcdir/$pkgname" || return
+    for patch in "$srcdir"/*.patch; do
+        patch -p1 -i "$patch"
+    done
+}
+
+build() {
+    cd "$srcdir/$pkgname" || return
+    cmake -GNinja -B build \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DDISTRIBUTOR="Bingux OS (package: quickshell)" \
+        -DDISTRIBUTOR_DEBUGINFO_AVAILABLE=NO \
+        -DCRASH_REPORTER=OFF \
+        -DINSTALL_QML_PREFIX=lib/qt6/qml
+    cmake --build build
+}
+
+package() {
+    cd "$srcdir/$pkgname" || return
+    DESTDIR="$pkgdir" cmake --install build
+    install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+}

@@ -1,0 +1,38 @@
+# Bingux desktop shell, lock screen and login greeter for Gnoblin.
+# Built by distro/container-build.sh from the source archive that
+# scripts/make-source-archive.sh produces (distro/sources/bingux-*.tar.xz).
+# shellcheck shell=bash disable=SC2034,SC2154
+pkgname=bingux
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Wayland desktop shell, lock screen and login greeter for Gnoblin'
+arch=('x86_64')
+url='https://github.com/kierandrewett/bingux'
+license=('GPL-3.0-or-later' 'LGPL-3.0-or-later' 'CC-BY-SA-3.0')
+makedepends=('cargo' 'gcc' 'make' 'pkgconf' 'qt6-base' 'qt6-declarative' 'qt6-wayland' 'qt6-tools'
+    'wayland' 'wayland-protocols' 'libpulse' 'gtk4' 'libadwaita' 'python')
+depends=('quickshell' 'gnoblin' 'greetd' 'qt6-declarative' 'qt6-wayland' 'qt6-svg'
+    'gnome-control-center' 'gnome-session' 'gnome-settings-daemon' 'gtk3' 'gtk4' 'libadwaita'
+    'python' 'python-cairo' 'python-gobject' 'python-pillow' 'python-yaml' 'ffmpeg'
+    'wl-clipboard' 'xdg-utils' 'networkmanager' 'upower' 'pipewire' 'fprintd' 'polkit')
+options=('!debug')
+source=("$pkgname-$pkgver.tar.xz")
+sha256sums=('SKIP')
+
+build() {
+    cd "$srcdir/$pkgname-$pkgver" || return
+    make BUILD_DIR=build JOBS="$(nproc)"
+}
+
+package() {
+    cd "$srcdir/$pkgname-$pkgver" || return
+    make install PREFIX=/usr DESTDIR="$pkgdir" BUILD_DIR=build QMLDIR=/usr/lib/bingux/qml
+    # The installer writes units for /usr/lib64 prefixes; Arch uses /usr/lib.
+    for unit in packaging/systemd/bingux*.service packaging/systemd/bingux*.path packaging/systemd/bingux.target; do
+        sed -e 's|/usr/lib64|/usr/lib|g' "$unit" >"$pkgdir/usr/lib/systemd/user/$(basename "$unit")"
+    done
+    install -Dpm 0644 packaging/pam/bingux-lock "$pkgdir/etc/pam.d/bingux-lock"
+    install -Dpm 0644 packaging/pam/bingux-lock-fingerprint "$pkgdir/etc/pam.d/bingux-lock-fingerprint"
+    install -Dpm 0644 packaging/greetd/config.toml "$pkgdir/usr/share/bingux/greeter/greetd.toml"
+    install -Dpm 0644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+}

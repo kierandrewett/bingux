@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Build Bingux OS from any Linux host with podman or docker.
+#
+# usage: distro/build.sh [--gnoblin PATH] [--step all|packages|iso]
+#
+# 1. Produces the source inputs under distro/sources/:
+#    - the Bingux source archive from this checkout (committed tree)
+#    - the Gnoblin source bundle and PKGBUILD from the Gnoblin checkout
+#      (`--gnoblin`, default ../gnoblin; must be a committed tree)
+# 2. Runs distro/container-build.sh in an archlinux container, which builds
+#    the packages into distro/out/repo and the live image into distro/out.
+#
+# mkarchiso needs loop devices and squashfs; the container runs privileged.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+GNOBLIN="${GNOBLIN_ROOT:-$ROOT/../gnoblin}"
+STEP=all
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --gnoblin)
+            GNOBLIN="$2"
+            shift 2
+            ;;
+        --step)
+            STEP="$2"
+            shift 2
+            ;;
+        *)
+            echo "usage: distro/build.sh [--gnoblin PATH] [--step all|packages|iso]" >&2
+            exit 2
+            ;;
+    esac
+done
+GNOBLIN="$(cd "$GNOBLIN" && pwd)"
+
+if command -v podman >/dev/null 2>&1; then
+    ENGINE=podman
+elif command -v docker >/dev/null 2>&1; then
+    ENGINE=docker
+else
+    echo "distro/build.sh: podman or docker is required" >&2
+    exit 1
+fi
+
+SOURCES="$ROOT/distro/sources"
+mkdir -p "$SOURCES" "$ROOT/distro/out"
+
+if [ "$STEP" != iso ]; then
+    version="$(sed -n 's/^VERSION ?= //p' "$ROOT/Makefile")"
+    echo "[distro] Bingux source archive $version"
+    rm -f "$SOURCES"/bingux-*.tar.xz
+    (cd "$ROOT" && bash scripts/make-source-archive.sh "$version" "distro/sources/bingux-$version.tar.xz")
+
+    echo "[distro] Gnoblin source bundle from $GNOBLIN"
+    rm -f "$SOURCES"/gnoblin-*
+    release="$(mktemp -d)"
+    rmdir "$release"
+    (cd "$GNOBLIN" && bash scripts/build-release-assets.sh "$release" "" --source-only)
+    cp "$release"/gnoblin-*-source.tar.xz "$release"/gnoblin-*.PKGBUILD "$SOURCES/"
+    rm -rf "$release"
+fi
+
+echo "[distro] building in an $ENGINE archlinux container"
+exec "$ENGINE" run --rm --privileged \
+    -v "$ROOT:/work:Z" \
+    -e JOBS="${JOBS:-$(nproc)}" \
+    docker.io/library/archlinux:latest \
+    bash /work/distro/container-build.sh "$STEP"
