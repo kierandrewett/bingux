@@ -11,11 +11,14 @@ import re
 import signal
 import time
 import subprocess
-import gi
 
-gi.require_version("Gio", "2.0")
-gi.require_version("GioUnix", "2.0")
-from gi.repository import Gio, GioUnix, GLib  # noqa: E402 - Select GI versions before importing their modules.
+TAG = "launch-application"
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bingux_runtime import require_gi  # noqa: E402
+
+require_gi(TAG, Gio="2.0", GioUnix="2.0", GLib="2.0")
+from gi.repository import Gio, GioUnix, GLib  # noqa: E402 - require_gi selects the typelib versions first.
 
 
 FEEDBACK_PATH = None

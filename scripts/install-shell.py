@@ -38,6 +38,19 @@ def write_launcher(path, contents):
     path.chmod(0o755)
 
 
+def resolve_tool(name):
+    """Absolute path of a desktop tool the shell calls, resolved at install time.
+
+    Package builds run in a build root that lacks runtime tools, so a missing
+    tool falls back to the distribution path the package depends on.
+    """
+    path = shutil.which(name)
+    if path is None:
+        path = f"/usr/bin/{name}"
+        print(f"install-shell: {name} is not on PATH; the search config will use {path}", file=sys.stderr)
+    return path
+
+
 def resolve_quickshell(no_systemd):
     """Find a Quickshell binary compatible with the selected Gnoblin runtime.
 
@@ -160,7 +173,8 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         build / "cargo/release/bingux-searchd": prefix / "bin/bingux-searchd",
         build / "cargo/release/bingux-statusd": prefix / "bin/bingux-statusd",
         build / "cargo/release/bingux-settings": prefix / "bin/bingux-settings",
-        source / "packages/bingux-settings/bingux-settings.desktop": prefix / "share/applications/bingux-settings.desktop",
+        source / "packages/bingux-settings/bingux-settings.desktop": prefix
+        / "share/applications/bingux-settings.desktop",
         source / "scripts/bingux-clipboard-paste": prefix / "bin/bingux-clipboard-paste",
         source / "packaging/gnoblin/bingux.lua": prefix / "share/gnoblin/conf.d/bingux.lua",
     }
@@ -284,7 +298,9 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     # finds its own binaries even when ~/.local/bin is not on PATH.
     common += "export BINGUX_PYTHON=${BINGUX_PYTHON:-" + shlex.quote(str(Path(sys.executable))) + "}\n"
     common += "export BINGUX_CONFIG_BIN=${BINGUX_CONFIG_BIN:-" + shlex.quote(str(prefix / "bin/bingux-config")) + "}\n"
-    common += "export BINGUX_SETTINGS_BIN=${BINGUX_SETTINGS_BIN:-" + shlex.quote(str(prefix / "bin/bingux-settings")) + "}\n"
+    common += (
+        "export BINGUX_SETTINGS_BIN=${BINGUX_SETTINGS_BIN:-" + shlex.quote(str(prefix / "bin/bingux-settings")) + "}\n"
+    )
     common += "export PATH=" + shlex.quote(str(prefix / "bin")) + ':"$PATH"\n'
     wrappers = {
         "bingux": 'exec "${BINGUX_QUICKSHELL:-qs}" -p "$BINGUX_CONFIG_PATH" "$@"\n',
@@ -312,7 +328,9 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     }
     if managed:
         wrappers["bingux-uninstall"] = (
-            "exec python3 "
+            "exec "
+            + shlex.quote(sys.executable)
+            + " "
             + shlex.quote(str(prefix / "libexec/bingux/install-shell.py"))
             + " --user --uninstall --prefix "
             + shlex.quote(str(prefix))
@@ -335,8 +353,8 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
                     # remains valid when the user does not have python3 on PATH.
                     "applicationLauncher": [str(Path(sys.executable)), str(shell / "launch-application.py")],
                     "steamGameCatalog": [str(Path(sys.executable)), str(shell / "steam-games.py"), "--search"],
-                    "fileOpener": ["/usr/bin/xdg-open"],
-                    "clipboard": ["/usr/bin/wl-copy"],
+                    "fileOpener": [resolve_tool("xdg-open")],
+                    "clipboard": [resolve_tool("wl-copy")],
                 },
             },
             indent=2,
@@ -352,7 +370,7 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     write_launcher(
         search_service,
         "#!/bin/sh\nset -eu\n"
-        + 'config="${XDG_CONFIG_HOME:-$HOME/.config}/bingux/search.json"\n'
+        + 'config="${XDG_CONFIG_HOME:-${HOME:?}/.config}/bingux/search.json"\n'
         + '[ -f "$config" ] || config='
         + shlex.quote(str(prefix / "share/bingux/search.json"))
         + "\n"

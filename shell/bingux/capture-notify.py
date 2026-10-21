@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """A capture's notification/actions outlive capture-worker and shell reloads."""
 
+import os
 from pathlib import Path
 import sys
 import uuid
 
-from gi.repository import Gio, GLib
-from capture_clipboard import ClipboardError, copy_image_to_clipboard
+TAG = "capture-notify"
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bingux_runtime import require_gi  # noqa: E402
+
+require_gi(TAG, Gio="2.0", GLib="2.0")
+from gi.repository import Gio, GLib  # noqa: E402 - require_gi selects the typelib versions first.
+from capture_clipboard import ClipboardError, copy_image_to_clipboard  # noqa: E402
 
 NOTIFICATIONS = "org.freedesktop.Notifications"
 NOTIFICATION_PATH = "/org/freedesktop/Notifications"
@@ -176,8 +183,11 @@ class CaptureNotification:
             print("notified", flush=True)
         except BrokenPipeError:
             # A slow server may accept after the capture worker's acknowledgement timeout.
-            # Keep the notification actions alive even if the worker moved on.
-            sys.stdout = None
+            # Keep the notification actions alive even if the worker moved on, and point
+            # stdout at /dev/null so the interpreter's exit-time flush does not fail.
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+            os.close(devnull)
         # A resident notification stays in the history until it is dismissed, so no
         # close signal may ever arrive. Without a limit every screenshot leaves a
         # process behind for the whole session.

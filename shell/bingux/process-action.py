@@ -3,15 +3,32 @@
 
 import argparse
 import json
+from pathlib import Path
 import sys
 import os
 import signal
 import subprocess
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bingux_runtime import HelperError  # noqa: E402
+
+WL_COPY_TIMEOUT_SECONDS = 3
+
+
+def copy_to_clipboard(text):
+    # wl-copy forks a clipboard server that inherits its pipes, so output is
+    # not captured: capturing would wait for that server to exit.
+    try:
+        subprocess.run(["wl-copy", text], check=True, timeout=WL_COPY_TIMEOUT_SECONDS, stdout=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        raise HelperError(f"wl-copy did not answer within {WL_COPY_TIMEOUT_SECONDS} seconds.", code="timeout") from None
+    except FileNotFoundError:
+        raise HelperError("wl-copy is not installed.", code="unavailable") from None
+
 
 def act(pid, start_time, action):
     if action == "copy":
-        subprocess.run(["wl-copy", str(pid)], check=True)
+        copy_to_clipboard(str(pid))
         return "PID copied"
     signals = {"pause": signal.SIGSTOP, "resume": signal.SIGCONT, "end": signal.SIGTERM, "kill": signal.SIGKILL}
     if pid <= 1 or start_time <= 0 or action not in signals:
@@ -38,7 +55,7 @@ def act_batch(processes, action):
         raise ValueError("Invalid process selection")
     processes = list({(int(p["pid"]), int(p["startTime"])) for p in processes})
     if action == "copy":
-        subprocess.run(["wl-copy", "\n".join(str(pid) for pid, _ in processes)], check=True)
+        copy_to_clipboard("\n".join(str(pid) for pid, _ in processes))
         return "PID copied" if len(processes) == 1 else f"{len(processes)} PIDs copied"
     if len(processes) == 1:
         return act(*processes[0], action)
@@ -75,6 +92,9 @@ if __name__ == "__main__":
         raise SystemExit(1)
     except ProcessLookupError:
         print("The selected process has exited")
+        raise SystemExit(1)
+    except HelperError as error:
+        print(str(error))
         raise SystemExit(1)
     except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as error:
         print(str(error))

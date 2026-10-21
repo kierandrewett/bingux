@@ -5,6 +5,12 @@ import ast
 import json
 from pathlib import Path
 import subprocess
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bingux_runtime import log  # noqa: E402
+
+TAG = "import-snap-layouts"
 
 try:
     schema = Path.home() / ".local/share/gnome-shell/extensions/tilingshell@ferrarodomenico.com/schemas"
@@ -25,5 +31,7 @@ try:
             }
         )
     )
-except (OSError, ValueError, SyntaxError, subprocess.SubprocessError):
+except (OSError, ValueError, SyntaxError, subprocess.SubprocessError) as error:
+    # The caller parses stdout as JSON, so the empty object stays; the reason goes to the journal.
+    log(TAG, f"Could not read the Tiling Shell settings: {error}")
     print("{}")
