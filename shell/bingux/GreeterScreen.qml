@@ -199,17 +199,6 @@ KioskScreen {
                     source: root.accountImage
                     name: root.accountDisplayName
                 }
-                Text {
-                    Layout.fillWidth: true
-                    visible: !root.customUser
-                    text: root.accountDisplayName
-                    color: Theme.text
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSmall + 2
-                    font.weight: Font.DemiBold
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideRight
-                }
 
                 RowLayout {
                     Layout.fillWidth: true

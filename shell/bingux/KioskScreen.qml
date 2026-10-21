@@ -117,16 +117,12 @@ Item {
             pendingOpen = true;
     }
 
-    SystemIndicators {
-        id: indicators
-    }
-
     LazyLoader {
         id: centreLoader
         active: root.controlCentreWanted
         ControlCentre {
             objectName: "kioskControlCentre"
-            indicators: indicators
+            indicators: statusBar.indicators
             anchorWindow: root.hostWindow
             anchorItem: statusBar
             screen: root.hostWindow ? root.hostWindow.screen : null

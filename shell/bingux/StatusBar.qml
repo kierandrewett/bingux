@@ -25,6 +25,16 @@ Item {
     property var hostWindow: null
     property string gnoblinCtlPath: "gnoblinctl"
     property string timeoutPath: "timeout"
+    // Data-only system indicators for the control centre. Always present, so the
+    // control centre has state even when the controls pill is not loaded. Does not
+    // draw and does not claim status monitoring; the pill's instance does.
+    readonly property var indicators: dataIndicators
+    SystemIndicators {
+        id: dataIndicators
+        visible: false
+        reportsStatus: false
+        timeoutPath: root.timeoutPath
+    }
     // Saved desktop layout; null uses the packaged defaults.
     property var layout: DesktopEditing.desktop?.layout ?? null
     property bool metricsEnabled: true

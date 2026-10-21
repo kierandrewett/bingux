@@ -12,7 +12,10 @@ Item {
     readonly property int controlSize: 24
     property string timeoutPath: "timeout"
     property var services: ControlCentreServices
+    // False for a data-only instance that must not claim status monitoring.
+    property bool reportsStatus: true
     Binding {
+        when: root.reportsStatus
         target: root.services
         property: "statusVisible"
         value: root.visible
