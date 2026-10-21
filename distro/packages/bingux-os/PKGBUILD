@@ -19,10 +19,14 @@ sha256sums=('SKIP' 'SKIP' 'SKIP')
 
 build() {
     magick -size 2560x1600 gradient:'#2b3a67-#101523' -attenuate 0.15 +noise Gaussian -quality 92 default.jpg
+    # The login screen and lock background use a pre-blurred, dimmed twin. The
+    # blur and dim come from bingux-session, so the twin matches the export.
+    bingux-session blur-wallpaper default.jpg default-blur.jpg
 }
 
 package() {
     install -Dm644 default.jpg "$pkgdir/usr/share/backgrounds/bingux-os/default.jpg"
+    install -Dm644 default-blur.jpg "$pkgdir/usr/share/backgrounds/bingux-os/default-blur.jpg"
     # New accounts start a Gnoblin session that loads the Bingux drop-ins.
     install -Dm644 init.lua "$pkgdir/etc/skel/.config/gnoblin/init.lua"
     # Bingux reads the GNOME background setting when desktop.wallpaper is unset.
