@@ -20,6 +20,22 @@ UNITS = (
 )
 
 
+class UnitFilesTest(unittest.TestCase):
+    """Every packaged service must run without core dumps and restart after a crash."""
+
+    def test_services_disable_cores_and_restart_on_failure(self):
+        services = sorted((ROOT / "packaging/systemd").glob("*.service"))
+        self.assertTrue(services)
+        for path in services:
+            lines = path.read_text().splitlines()
+            self.assertIn("LimitCORE=0", lines, path.name)
+            if path.name == "bingux-lock.service":
+                # The lock client is a manual diagnostic unit and must not respawn.
+                self.assertIn("Restart=no", lines)
+            else:
+                self.assertIn("Restart=on-failure", lines, path.name)
+
+
 @unittest.skipUnless(shutil.which("rpmspec"), "rpmspec is not installed")
 class RpmPackageTest(unittest.TestCase):
     @classmethod

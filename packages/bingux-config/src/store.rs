@@ -153,7 +153,7 @@ fn read_tree(path: &Path) -> Result<Value, Error> {
 fn finish(tree: Value) -> Result<Loaded, Error> {
     validate::check_shape(&tree, &schema_tree())?;
     let merged = merge_defaults(&tree);
-    validate::validate(&merged, None)?;
+    validate::validate(&merged, None, false)?;
     let config = serde_json::from_value(merged.clone()).map_err(|error| Error::Invalid {
         path: String::new(),
         message: error.to_string(),
@@ -354,7 +354,8 @@ fn write_patch(patch: &Value) -> Result<Loaded, Error> {
             }
         }
     }
-    let executable = validate::validate(&candidate, Some(&current.tree))?;
+    let touches_ai = patch.pointer("/search/ai").is_some();
+    let executable = validate::validate(&candidate, Some(&current.tree), touches_ai)?;
     let mut patch = patch.clone();
     if let Some(executable) = executable
         && let Some(ai) = patch

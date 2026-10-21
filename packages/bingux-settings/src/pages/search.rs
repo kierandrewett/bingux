@@ -9,14 +9,14 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::icons::Icon;
+use crate::pages::bingux_config;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Row, Status, choice_row, icon_button, page_title, primary_button, row, slider_row,
-    status, switch_row, text_row,
+    Group, Overlays, ResponseKind, Row, Status, choice_row, dialog, icon_button, page_title,
+    primary_button, row, slider_row, status, switch, switch_row, text_row, use_overlays,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(5);
-const BINGUX_CONFIG_FALLBACK: &str = "/var/tmp/bingux-config-target/debug/bingux-config";
 const PROVIDERS: [(&str, &str); 7] = [
     ("applications", "Applications"),
     ("files", "Files"),
@@ -61,6 +61,7 @@ struct Model {
 struct Ctx {
     model: State<Option<Result<Model, CommandError>>>,
     error: State<Option<String>>,
+    overlays: Overlays,
 }
 
 /// A parsed JSON value. Only what `bingux-config dump` produces is supported.
@@ -364,17 +365,8 @@ fn parse_dump(text: &str) -> Result<Model, CommandError> {
 }
 
 fn load() -> Result<Model, CommandError> {
-    let dump = system::run(bingux_config(), &["dump"], TIMEOUT)?;
+    let dump = system::run(&bingux_config(), &["dump"], TIMEOUT)?;
     parse_dump(&dump)
-}
-
-/// `bingux-config` from PATH, else the host build used during development.
-fn bingux_config() -> &'static str {
-    if system::which("bingux-config") {
-        "bingux-config"
-    } else {
-        BINGUX_CONFIG_FALLBACK
-    }
 }
 
 /// Quotes `value` as a TOML basic string.
@@ -449,7 +441,7 @@ fn set_args(key: &str, value: String) -> Vec<String> {
 
 fn run_config(args: Vec<String>) -> CommandResult {
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    system::run(bingux_config(), &refs, TIMEOUT)
+    system::run(&bingux_config(), &refs, TIMEOUT)
 }
 
 fn reload(ctx: Ctx) {
@@ -538,7 +530,7 @@ fn save_megabytes(ctx: Ctx, draft: State<i64>, mut busy: State<bool>, value: i64
             busy.set(false);
             if ok {
                 reload(ctx);
-                let latest = draft.read().clone();
+                let latest = *draft.read();
                 if latest != value {
                     save_megabytes(ctx, draft, busy, latest);
                 }
@@ -554,7 +546,12 @@ impl Component for SearchPage {
     fn render(&self) -> impl IntoElement {
         let model = use_state::<Option<Result<Model, CommandError>>>(|| None);
         let error = use_state::<Option<String>>(|| None);
-        let ctx = Ctx { model, error };
+        let overlays = use_overlays();
+        let ctx = Ctx {
+            model,
+            error,
+            overlays,
+        };
 
         use_hook(move || reload(ctx));
 
@@ -672,15 +669,30 @@ fn engine_row(engine: Engine, engines: &[Engine], default: &str, ctx: Ctx) -> Ro
         .collect();
     let default_for_toggle = default.to_string();
     let default_for_remove = default.to_string();
+    let engine_name = engine.name.clone();
     let trailing = rect()
         .direction(Direction::Horizontal)
-        .child(Switch::new().toggled(engine.enabled).on_toggle(move |_| {
+        .cross_align(Alignment::Center)
+        .child(switch(engine.enabled, move |_: bool| {
             write_engines(ctx, &default_for_toggle, toggled.clone());
         }))
         .child(
             rect().margin((0.0, 0.0, 0.0, 8.0)).child(
                 icon_button(Icon::Delete, move |_| {
-                    write_engines(ctx, &default_for_remove, without.clone());
+                    let default = default_for_remove.clone();
+                    let without = without.clone();
+                    ctx.overlays.show_dialog(
+                        dialog(
+                            format!("Remove {}?", engine_name),
+                            "Its shortcut stops working. You can add the engine again later.",
+                        )
+                        .cancel("Cancel")
+                        .response(
+                            "Remove",
+                            ResponseKind::Destructive,
+                            move |_| write_engines(ctx, &default, without.clone()),
+                        ),
+                    );
                 })
                 .tooltip("Remove engine"),
             ),
@@ -748,8 +760,9 @@ impl Component for AddEngine {
                     .subtitle("Lowercase letters, digits and hyphens."),
             )
             .row(
-                text_row("URL", url, |_: String| {}).subtitle(
-                    "Must contain {query} once, for example https://example.com/?q={query}",
+                row("URL").subtitle("Must contain {query} once.").trailing(
+                    crate::ui::text_field(url, |_: String| {})
+                        .placeholder("https://example.com/?q={query}"),
                 ),
             )
             .row(row("Add engine").trailing(primary_button("Add", add)))
@@ -768,14 +781,29 @@ fn files_group(data: &Model, ctx: Ctx) -> Group {
             for root in roots {
                 let remaining: Vec<String> =
                     roots.iter().filter(|item| *item != root).cloned().collect();
+                let folder = root.clone();
                 let trailing = rect().child(
                     icon_button(Icon::Delete, move |_| {
-                        let args = if remaining.is_empty() {
-                            vec!["unset".into(), "search.file_roots".into()]
-                        } else {
-                            set_args("search.file_roots", string_array(&remaining))
-                        };
-                        commit(ctx, args);
+                        let remaining = remaining.clone();
+                        ctx.overlays.show_dialog(
+                            dialog(
+                                format!("Stop searching {folder}?"),
+                                "Files in this folder no longer appear in search results.",
+                            )
+                            .cancel("Cancel")
+                            .response(
+                                "Remove",
+                                ResponseKind::Destructive,
+                                move |_| {
+                                    let args = if remaining.is_empty() {
+                                        vec!["unset".into(), "search.file_roots".into()]
+                                    } else {
+                                        set_args("search.file_roots", string_array(&remaining))
+                                    };
+                                    commit(ctx, args);
+                                },
+                            ),
+                        );
                     })
                     .tooltip("Remove folder"),
                 );
@@ -802,7 +830,7 @@ impl Component for FileRootAdd {
         let roots = self.roots.clone();
         let ctx = self.ctx;
 
-        let add = move |_| {
+        let add = EventHandler::new(move |_: ()| {
             let mut path = path;
             let text = path.read().trim().to_string();
             let mut error = ctx.error;
@@ -829,14 +857,18 @@ impl Component for FileRootAdd {
                     }
                 },
             );
-        };
+        });
+        let submit = add.clone();
 
         row("Add folder")
             .subtitle("Absolute path of an existing folder.")
             .trailing(
                 rect()
                     .direction(Direction::Horizontal)
-                    .child(Input::new(path).width(Size::px(260.0)))
+                    .child(
+                        crate::ui::text_field(path, move |_: String| submit.call(()))
+                            .placeholder("/home/user/Documents"),
+                    )
                     .child(
                         rect()
                             .margin((0.0, 0.0, 0.0, 8.0))
@@ -880,7 +912,7 @@ impl Component for MaxMegabytes {
         let draft = use_state(|| self.current);
         let busy = use_state(|| false);
         let ctx = self.ctx;
-        let shown = draft.read().clone();
+        let shown = *draft.read();
 
         slider_row(
             "Largest previewed file",
@@ -889,7 +921,7 @@ impl Component for MaxMegabytes {
                 let value = megabytes_from_percent(percent);
                 let mut draft = draft;
                 draft.set(value);
-                if !busy.read().clone() {
+                if !*busy.read() {
                     save_megabytes(ctx, draft, busy, value);
                 }
             },

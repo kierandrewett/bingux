@@ -7,7 +7,9 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::system::{self, CommandError, background, background_then};
-use crate::ui::{Group, Status, choice_row, page_title, row, slider_row, status, switch_row};
+use crate::ui::{
+    Group, Status, choice_row, page_title, row, slider, slider_row, status, switch_row,
+};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const POLL: Duration = Duration::from_secs(5);
@@ -60,9 +62,12 @@ struct Level {
 
 #[derive(Clone, PartialEq)]
 struct Stream {
+    id: u32,
     name: String,
     playing_to: Vec<String>,
     recording_from: Vec<String>,
+    /// The stream's own volume, when WirePlumber reports one.
+    level: Option<(f64, bool)>,
 }
 
 impl Stream {
@@ -93,8 +98,9 @@ struct Model {
 
 #[derive(Clone, Copy)]
 struct VolumeQueue {
-    /// The newest requested `(device id, percent)`; older requests are dropped.
-    pending: State<Option<(u32, u32)>>,
+    /// The newest requested percent per node id; an older request for the
+    /// same node is dropped.
+    pending: State<Vec<(u32, u32)>>,
     /// Whether a `set-volume` is running.
     busy: State<bool>,
 }
@@ -191,16 +197,18 @@ fn parse_status(text: &str) -> Model {
             Some(Section::Sources) => model.inputs.extend(parse_device(body)),
             Some(Section::Streams) => {
                 let indent = id_column(line);
-                let Some((_id, rest)) = entry(body) else {
+                let Some((id, rest)) = entry(body) else {
                     continue;
                 };
                 // Application nodes sit at the first entry's indent; their
                 // port lines are indented further and carry the links.
                 if *node_indent.get_or_insert(indent) == indent {
                     model.streams.push(Stream {
+                        id,
                         name: rest.to_string(),
                         playing_to: Vec::new(),
                         recording_from: Vec::new(),
+                        level: None,
                     });
                     current = Some(model.streams.len() - 1);
                 } else if let Some(stream) = current.and_then(|i| model.streams.get_mut(i)) {
@@ -242,6 +250,13 @@ fn load() -> Result<Model, CommandError> {
     let mut model = parse_status(&text);
     model.output = read_level(Kind::Output, &model.outputs)?;
     model.input = read_level(Kind::Input, &model.inputs)?;
+    for stream in &mut model.streams {
+        // A stream without a volume control (monitor-only nodes) is shown
+        // without a slider rather than failing the page.
+        stream.level = system::run("wpctl", &["get-volume", &stream.id.to_string()], TIMEOUT)
+            .ok()
+            .and_then(|text| parse_volume(&text));
+    }
     Ok(model)
 }
 
@@ -286,11 +301,18 @@ fn update_level(
 }
 
 /// Volume writes are coalesced: while one `set-volume` runs, a newer slider
-/// position replaces the pending one, so the last position always wins.
+/// position for the same node replaces the pending one, so the last
+/// position always wins and a drag never queues a write per pixel.
 fn set_volume(queue: VolumeQueue, error: State<Option<String>>, id: u32, percent: u32) {
     let mut pending = queue.pending;
     let mut busy = queue.busy;
-    pending.set(Some((id, percent)));
+    {
+        let mut list = pending.write();
+        match list.iter_mut().find(|(node, _)| *node == id) {
+            Some(entry) => entry.1 = percent,
+            None => list.push((id, percent)),
+        }
+    }
     if !*busy.read() {
         busy.set(true);
         push_volume(queue, error);
@@ -300,8 +322,14 @@ fn set_volume(queue: VolumeQueue, error: State<Option<String>>, id: u32, percent
 fn push_volume(queue: VolumeQueue, mut error: State<Option<String>>) {
     let mut pending = queue.pending;
     let mut busy = queue.busy;
-    let next = *pending.read();
-    pending.set(None);
+    let next = {
+        let mut list = pending.write();
+        if list.is_empty() {
+            None
+        } else {
+            Some(list.remove(0))
+        }
+    };
     let Some((id, percent)) = next else {
         busy.set(false);
         return;
@@ -320,6 +348,19 @@ fn push_volume(queue: VolumeQueue, mut error: State<Option<String>>) {
             push_volume(queue, error);
         },
     );
+}
+
+/// Optimistic slider position for an application stream until the next poll.
+fn update_stream(mut model: State<Option<Result<Model, CommandError>>>, id: u32, volume: f64) {
+    let mut guard = model.write();
+    let Some(Ok(loaded)) = guard.as_mut() else {
+        return;
+    };
+    if let Some(stream) = loaded.streams.iter_mut().find(|stream| stream.id == id) {
+        if let Some(level) = stream.level.as_mut() {
+            level.0 = volume;
+        }
+    }
 }
 
 fn channel_group(
@@ -396,12 +437,8 @@ impl Component for SoundPage {
     fn render(&self) -> impl IntoElement {
         let model = use_state::<Option<Result<Model, CommandError>>>(|| None);
         let error = use_state::<Option<String>>(|| None);
-        let output_queue = VolumeQueue {
-            pending: use_state(|| None),
-            busy: use_state(|| false),
-        };
-        let input_queue = VolumeQueue {
-            pending: use_state(|| None),
+        let queue = VolumeQueue {
+            pending: use_state(Vec::new),
             busy: use_state(|| false),
         };
 
@@ -443,7 +480,7 @@ impl Component for SoundPage {
                 data.output.clone(),
                 model,
                 error,
-                output_queue,
+                queue,
             ))
             .child(channel_group(
                 Kind::Input,
@@ -451,7 +488,7 @@ impl Component for SoundPage {
                 data.input.clone(),
                 model,
                 error,
-                input_queue,
+                queue,
             ));
 
         if data.streams.is_empty() {
@@ -459,12 +496,23 @@ impl Component for SoundPage {
                 "No applications are playing or recording audio.".into(),
             )));
         } else {
-            page =
-                page.child(
-                    Group::titled("Applications").rows(data.streams.iter().map(|stream| {
-                        Element::from(row(stream.name.clone()).value(stream.summary()))
-                    })),
-                );
+            page = page.child(Group::titled("Applications").rows(data.streams.iter().map(
+                |stream| {
+                    let id = stream.id;
+                    let base = row(stream.name.clone()).subtitle(stream.summary());
+                    match stream.level {
+                        Some((volume, _)) => Element::from(base.trailing(slider(
+                            (volume * 100.0).min(100.0),
+                            move |value: f64| {
+                                let percent = value.round().clamp(0.0, 100.0) as u32;
+                                update_stream(model, id, f64::from(percent) / 100.0);
+                                set_volume(queue, error, id, percent);
+                            },
+                        ))),
+                        None => Element::from(base),
+                    }
+                },
+            )));
         }
         page
     }

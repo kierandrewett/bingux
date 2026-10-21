@@ -7,14 +7,32 @@ import math
 from pathlib import Path
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
 
 
+def default_quickshell():
+    """Pick the Quickshell executable: BINGUX_QUICKSHELL, then the first of the
+    names scripts/install-shell.py also detects, then plain `qs` so a missing
+    runtime fails with the usual "not found" message naming that command."""
+    configured = os.environ.get("BINGUX_QUICKSHELL")
+    if configured:
+        return configured
+    for candidate in ("gnoblin-quickshell", "qs", "quickshell"):
+        if shutil.which(candidate):
+            return candidate
+    return "qs"
+
+
 def parser():
     result = argparse.ArgumentParser(prog="binguxctl", description=__doc__)
-    result.add_argument("--quickshell", default=os.environ.get("BINGUX_QUICKSHELL", "qs"), help="Quickshell executable")
+    result.add_argument(
+        "--quickshell",
+        default=default_quickshell(),
+        help="Quickshell executable (default: BINGUX_QUICKSHELL, else gnoblin-quickshell, qs or quickshell on PATH)",
+    )
     result.add_argument(
         "--any-display",
         action="store_true",

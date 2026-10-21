@@ -726,7 +726,12 @@ fn engine_url_ok(text: &str) -> bool {
 
 /// Validate the AI section and return the resolved executable when one is
 /// configured, so the caller can persist it like the Python helper did.
-fn validate_ai(search: &Value) -> Result<Option<String>, Error> {
+///
+/// Whether the harness is installed is a property of this machine, not of
+/// the file, so it is enforced only when `require_installed` is set (on a
+/// write). A saved or migrated config whose harness is now missing still
+/// loads; the search service reports the missing program when it is used.
+fn validate_ai(search: &Value, require_installed: bool) -> Result<Option<String>, Error> {
     let ai = &search["ai"];
     if ai.is_null() {
         return Ok(None);
@@ -755,13 +760,16 @@ fn validate_ai(search: &Value) -> Result<Option<String>, Error> {
     let usable = executable
         .as_deref()
         .is_some_and(|e| Path::new(e).is_absolute() && is_executable(Path::new(e)));
-    if !usable {
+    if usable {
+        return Ok(executable);
+    }
+    if require_installed {
         return Err(invalid(
             path,
             "The selected CLI is not installed or executable.",
         ));
     }
-    Ok(executable)
+    Ok(None)
 }
 
 fn is_executable(path: &Path) -> bool {
@@ -830,12 +838,19 @@ pub fn check_shape(tree: &Value, defaults: &Value) -> Result<(), Error> {
 }
 
 /// Validate a complete tree (defaults already merged). `previous` is the
-/// tree currently on disk when validating a proposed write. Returns the
-/// resolved AI executable so the caller can store it.
-pub fn validate(tree: &Value, previous: Option<&Value>) -> Result<Option<String>, Error> {
+/// tree currently on disk when validating a proposed write, and
+/// `require_ai_installed` is set when that write changes `search.ai`, so a
+/// harness that was removed after being chosen blocks only new AI settings,
+/// not loads or unrelated writes. Returns the resolved AI executable so the
+/// caller can store it.
+pub fn validate(
+    tree: &Value,
+    previous: Option<&Value>,
+    require_ai_installed: bool,
+) -> Result<Option<String>, Error> {
     validate_search(&tree["search"])?;
     validate_desktop(&tree["desktop"], previous.map(|p| &p["desktop"]))?;
-    let executable = validate_ai(&tree["search"])?;
+    let executable = validate_ai(&tree["search"], require_ai_installed)?;
     validate_previews(&tree["previews"])?;
     validate_privacy(&tree["privacy"])?;
     Ok(executable)

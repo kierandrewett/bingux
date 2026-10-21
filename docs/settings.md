@@ -23,19 +23,19 @@ Settings has no store of its own. Every page reads and writes the system
 that owns the setting, so changes made elsewhere show up here and the other
 way round.
 
-| Page | Backend | Notes |
-| --- | --- | --- |
-| Appearance | `bingux-config desktop.wallpaper`, GSettings `org.gnome.desktop.interface` | Accent colour and colour scheme are the keys GTK apps and the portal read. The window recolours at once. |
-| Desktop, Search | `bingux-config` (`~/.config/bingux/bingux.toml`) | Same validation as `bingux-config set`. See [configuration](configuration.md). |
-| Displays | `org.gnome.Mutter.DisplayConfig` over D-Bus, GSettings night light | Apply writes a persistent layout (`~/.config/monitors.xml`). |
-| Sound | `wpctl` (WirePlumber) | Default devices, volumes, mute, application streams. |
-| Network | `nmcli` (NetworkManager) | Wi-Fi, wired status, airplane mode. |
-| Bluetooth | `bluetoothctl` (BlueZ) | Power, scan, pair, connect, remove. |
-| Power | `powerprofilesctl`, `upower`, GSettings session and screensaver | Blank screen and lock delays. |
-| Keyboard, Mouse | GSettings `org.gnome.desktop.peripherals.*`, `gnoblinctl input` | See the Gnoblin note below. |
-| Date and Time | `timedatectl`, GSettings clock format, `bingux-config desktop.clock_seconds` | Time zone and manual time may ask for authorisation. |
-| Users | AccountsService over D-Bus | Full name changes may ask for authorisation. |
-| About | `/etc/os-release`, DMI, `gnoblinctl --version` | Read-only. |
+| Page            | Backend                                                                      | Notes                                                                                                    |
+| --------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Appearance      | `bingux-config desktop.wallpaper`, GSettings `org.gnome.desktop.interface`   | Accent colour and colour scheme are the keys GTK apps and the portal read. The window recolours at once. |
+| Desktop, Search | `bingux-config` (`~/.config/bingux/bingux.toml`)                             | Same validation as `bingux-config set`. See [configuration](configuration.md).                           |
+| Displays        | `org.gnome.Mutter.DisplayConfig` over D-Bus, GSettings night light           | Apply writes a persistent layout (`~/.config/monitors.xml`).                                             |
+| Sound           | `wpctl` (WirePlumber)                                                        | Default devices, volumes, mute, and a volume slider for each application stream.                         |
+| Network         | `nmcli` (NetworkManager)                                                     | Wi-Fi, wired status, airplane mode.                                                                      |
+| Bluetooth       | `bluetoothctl` (BlueZ)                                                       | Power, scan, pair, connect, remove.                                                                      |
+| Power           | `powerprofilesctl`, `upower`, GSettings session and screensaver              | Blank screen and lock delays.                                                                            |
+| Keyboard, Mouse | GSettings `org.gnome.desktop.peripherals.*`, `gnoblinctl input`              | See the Gnoblin note below.                                                                              |
+| Date and Time   | `timedatectl`, GSettings clock format, `bingux-config desktop.clock_seconds` | Time zone and manual time may ask for authorisation.                                                     |
+| Users           | AccountsService over D-Bus                                                   | Full name changes may ask for authorisation.                                                             |
+| About           | `/etc/os-release`, DMI, `gnoblinctl --version`                               | Read-only.                                                                                               |
 
 Each page shows a readable error when its tool is missing or refuses the
 request, and a Try again action where that makes sense.
@@ -48,7 +48,10 @@ the matching GSettings key. The Keyboard and Mouse pages read the committed
 snapshot (`gnoblinctl --json config show`) and show such rows read-only with
 "Set by Gnoblin config". Keyboard layouts come only from Gnoblin's
 `input_sources`; the Keyboard page lists and selects them with
-`gnoblinctl input`.
+`gnoblinctl input`. Keyboard shortcuts are set in the same Lua file; the
+Keyboard page's Open config action opens it with `xdg-open`, and
+`gnoblinctl config reload` applies the edit. When Gnoblin is not running
+these rows say so in one line.
 
 GSettings needs a persistent backend (`dconf`) for values to survive logout.
 The Bingux package requires it.
@@ -60,7 +63,31 @@ cargo build --manifest-path packages/bingux-settings/Cargo.toml
 BINGUX_SETTINGS_BIN=target/debug/bingux-settings binguxctl settings sound
 ```
 
+Pages find `bingux-config` through `BINGUX_CONFIG_BIN` when that is set,
+else on `PATH`, else beside the `bingux-settings` binary, which is where
+`make` and the package put it.
+
 `make` builds the release binary with the other packages and
-`scripts/install-shell.py` installs it with its desktop entry. The icons under
-`packages/bingux-settings/icons/` are Adwaita symbolic icons with the
-hard-coded fill removed so the app can recolour them; see `icons/COPYING`.
+`scripts/install-shell.py` installs it with its desktop entry. The window is
+built from [bingux-ui](bingux-ui.md), the design system crate that holds the
+theme, icons, rows, controls and overlays; the app itself contains only the
+pages and their backends.
+
+To check every page without a compositor, build with the `snapshot` feature
+and render the pages to PNG files. Each page reads the real system, so the
+images show what the machine running the command reports:
+
+```sh
+cargo run --manifest-path packages/bingux-settings/Cargo.toml --features snapshot -- \
+    --snapshot /tmp/bingux-settings-snapshots            # every page
+cargo run --manifest-path packages/bingux-settings/Cargo.toml --features snapshot -- \
+    --snapshot /tmp/bingux-settings-snapshots sound,about # some pages
+```
+
+Set `BINGUX_SETTINGS_SNAPSHOT_CLICK="x,y[;x,y]"` to click those window
+points after the page loads and before the capture. This drives a real
+write; for example clicking the Repeat keys switch on the Keyboard page
+changes `org.gnome.desktop.peripherals.keyboard repeat`, which `gsettings
+get` then shows. Set `BINGUX_SETTINGS_SNAPSHOT_SIZE="WxH"` to capture at
+another window size, for example `600x640` for the overlay sidebar or
+`1000x1500` to see a whole long page.

@@ -137,6 +137,11 @@ model = "sonnet"          # optional, passed to the harness
 # executable = "/usr/local/bin/claude"   # optional; found on PATH when omitted
 ```
 
+`bingux-config set` and `save` refuse a change to `search.ai` when the chosen
+program is not installed. Loading a file whose harness has since been removed
+still works, and other writes are unaffected; the search service reports the
+missing program when you ask the assistant a question.
+
 ### `[previews]`
 
 | Key             | Type | Default | Accepted values                      |

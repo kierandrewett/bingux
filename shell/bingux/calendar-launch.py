@@ -6,9 +6,15 @@ import datetime
 import locale
 import os
 from pathlib import Path
+import sys
 import time
-from gi.repository import Gio, GLib
-from application_spawn import spawn_detached
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bingux_runtime import require_gi  # noqa: E402
+
+require_gi("calendar-launch", Gio="2.0", GLib="2.0")
+from gi.repository import Gio, GLib  # noqa: E402 - require_gi selects the typelib versions first.
+from application_spawn import spawn_detached  # noqa: E402
 
 
 def calendar_locale(bus):

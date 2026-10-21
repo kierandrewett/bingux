@@ -36,6 +36,10 @@ native libraries, Qt Quick/QML, the submodules and user-systemd
 prerequisites. The managed install target runs this check automatically and
 explains missing dependencies before starting the build.
 
+`make doctor` also lists optional features that this host cannot provide, such
+as YAML front matter in previews without PyYAML or Night Light without
+`gnome-settings-daemon`. These notes do not fail the check.
+
 Use `make install-user` for a checked source installation. Calling
 `scripts/install-shell.py` directly bypasses prerequisite validation and is
 not a safe way to resolve a failed doctor check.

@@ -534,7 +534,17 @@ dependencies = [
 name = "bingux-settings"
 version = "0.1.0"
 dependencies = [
+ "bingux-ui",
  "freya",
+]
+
+[[package]]
+name = "bingux-ui"
+version = "0.1.0"
+dependencies = [
+ "accesskit",
+ "freya",
+ "freya-testing",
 ]
 
 [[package]]
@@ -1423,6 +1433,22 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "freya-testing"
+version = "0.5.0-rc.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5998006ec254258acd419b7eb477b1cceece2e075a0b8c9fe44023e22f94fc2d"
+dependencies = [
+ "accesskit",
+ "freya-clipboard",
+ "freya-components",
+ "freya-core",
+ "freya-engine",
+ "futures-channel",
+ "ragnarok",
+ "torin",
 ]
 
 [[package]]

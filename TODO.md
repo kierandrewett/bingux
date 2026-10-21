@@ -46,9 +46,10 @@ work belongs in Git history and does not stay here as a second changelog.
       camera and control-centre state into `bingux-statusd`, capture and preview
       last. `Python.helper()` and `BINGUX_HELPER_DIR` go when the last file
       goes, with `python-gobject` and friends.
-- [ ] Point the live tests that still default `QS_TEST_BIN` to `qs` at the
-      built `bingux-shell`.
-- [ ] Keep every long-running helper at core limit zero and test crash recovery.
+- [x] Replace remaining direct `qs` launches with the installed launcher or an
+      explicit `BINGUX_QUICKSHELL` value.
+- [x] Move optional Python helpers behind clear feature checks.
+- [x] Keep every long-running helper at core limit zero and test crash recovery.
 - [ ] Record real hardware evidence for the OSD producer path.
 
 ## Extensions
@@ -65,5 +66,5 @@ work belongs in Git history and does not stay here as a second changelog.
 
 - [x] Keep the standalone build and install path as the public entry point.
 - [x] Keep extension documentation separate from shell implementation details.
-- [ ] Add a short troubleshooting page for Qt, layer-shell and helper sockets.
+- [x] Add a short troubleshooting page for Qt, layer-shell and helper sockets.
 - [x] Add a contributor guide with formatting, tests and package checks.

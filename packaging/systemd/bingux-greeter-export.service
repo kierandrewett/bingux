@@ -9,3 +9,6 @@ After=graphical-session.target
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/bingux-session export
+LimitCORE=0
+Restart=on-failure
+RestartSec=3

@@ -9,8 +9,13 @@ import shutil
 import subprocess
 import sys
 import urllib.request
+from pathlib import Path
 
-from gi.repository import Gio, GLib
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from bingux_runtime import require_gi  # noqa: E402
+
+require_gi("control-centre", Gio="2.0", GLib="2.0")
+from gi.repository import Gio, GLib  # noqa: E402 - require_gi selects the typelib versions first.
 
 POWER_SERVICES = [
     ("org.freedesktop.UPower.PowerProfiles", "/org/freedesktop/UPower/PowerProfiles"),

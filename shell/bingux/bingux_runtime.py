@@ -61,6 +61,34 @@ def fail(tag, message, code="error", exit_code=1):
     raise SystemExit(exit_code)
 
 
+# Python modules a helper can need, with the Fedora package that provides each.
+# scripts/check-dependencies.py reports the same names.
+PYTHON_MODULE_PACKAGES = {
+    "cairo": "python3-cairo",
+    "PIL": "python3-pillow",
+    "yaml": "python3-pyyaml",
+}
+
+
+def require_modules(tag, *names):
+    """Import plain Python modules or fail with the package that provides them.
+
+    `cairo, Image = require_modules("preview-document", "cairo", "PIL.Image")`
+    returns the imported modules in order. A missing module produces a
+    structured `unavailable` error that names the package, not a traceback.
+    """
+    from importlib import import_module
+
+    modules = []
+    for name in names:
+        try:
+            modules.append(import_module(name))
+        except ImportError:
+            package = PYTHON_MODULE_PACKAGES.get(name.split(".")[0], name)
+            fail(tag, f"Python module {name} is missing; install {package}.", code="unavailable")
+    return tuple(modules)
+
+
 def require_gi(tag, **versions):
     """Import `gi.repository` modules or fail with a readable message.
 

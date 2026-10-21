@@ -25,6 +25,7 @@ BUILD_OUTPUTS = (
     "cargo/release/bingux-statusd",
     "cargo/release/bingux-session",
     "cargo/release/bingux-config",
+    "cargo/release/bingux-helper",
     "cargo/release/bingux-settings",
 )
 

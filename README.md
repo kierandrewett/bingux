@@ -63,6 +63,8 @@ See [desktop panels](docs/popup-loading.md) for first opening and dismissal.
 See the [login screen](docs/login-screen.md) and [secure session locking](docs/locking.md)
 for the greeter and the lock screen, and [Bingux OS](distro/README.md) for the live image.
 For shell behaviour and configuration, see the [shell guide](shell/bingux/README.md).
+If something does not start or shows no data, see [troubleshooting](docs/troubleshooting.md).
+
 [Bingux Settings](docs/settings.md) is the graphical front for shell and
 system settings; [configuration](docs/configuration.md) covers the file and CLI.
 
@@ -71,6 +73,7 @@ system settings; [configuration](docs/configuration.md) covers the file and CLI.
 - `shell/bingux/`: desktop UI and Python helpers.
 - `packages/bingux-config/`: configuration schema, `bingux.toml` store and CLI.
 - `packages/bingux-settings/`: the Settings application.
+- `packages/bingux-ui/`: the design system crate for Bingux's Freya applications.
 - `packages/`: search and metrics daemons, native plugins and helper programs.
 - `tests/`: component, input and integration checks.
 - `scripts/test-desktop`: starts an isolated nested desktop for testing.

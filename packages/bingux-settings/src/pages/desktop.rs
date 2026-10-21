@@ -3,16 +3,13 @@
 //! written through `bingux-config set|unset|save`; the shell file is the
 //! source of truth, so the model is reloaded after every successful write.
 
-use std::path::Path;
 use std::time::Duration;
 
-use crate::ui::{Group, Row, Status, choice_row, page_title, row, status, switch_row};
+use crate::ui::{Group, Row, Status, choice_row, page_title, row, slider, status, switch_row};
 use freya::prelude::*;
 
+use crate::pages::bingux_config;
 use crate::system::{self, CommandError, background, background_then};
-
-/// Host build location, used when `bingux-config` is not on PATH.
-const HOST_FALLBACK: &str = "/var/tmp/bingux-config-target/debug/bingux-config";
 
 /// Control Centre tiles: the camelCase key in `dump` and its label.
 const TILES: [(&str, &str); 5] = [
@@ -127,17 +124,8 @@ fn size_for_percent(percent: f64) -> u32 {
     (DOCK_SIZE_MIN + percent.clamp(0.0, 100.0) / 100.0 * DOCK_SIZE_RANGE).round() as u32
 }
 
-/// `bingux-config` on PATH, else the host build.
-fn config_program() -> String {
-    if system::which("bingux-config") || !Path::new(HOST_FALLBACK).is_file() {
-        "bingux-config".to_string()
-    } else {
-        HOST_FALLBACK.to_string()
-    }
-}
-
 fn load() -> Result<Model, CommandError> {
-    let text = system::run(&config_program(), &["dump"], Duration::from_secs(5))?;
+    let text = system::run(&bingux_config(), &["dump"], Duration::from_secs(5))?;
     let json =
         Json::parse(&text).map_err(|error| CommandError(format!("bingux-config dump: {error}")))?;
     Model::from_json(&json).map_err(CommandError)
@@ -151,7 +139,7 @@ enum Change {
 }
 
 fn apply(change: &Change) -> Result<(), CommandError> {
-    let program = config_program();
+    let program = bingux_config();
     let timeout = Duration::from_secs(5);
     let result = match change {
         Change::Set(key, value) => system::run(&program, &["set", *key, value.as_str()], timeout),
@@ -224,12 +212,11 @@ fn dock_size_row(ctx: Ctx, size: u32) -> Row {
                     release_dock_size(ctx, size)
                 })
                 .child(
-                    Slider::new(move |value: f64| {
+                    slider(percent, move |value: f64| {
                         let mut pending = ctx.pending;
                         pending.set(Some(value));
                     })
-                    .value(percent)
-                    .size(Size::fill()),
+                    .width(220.0),
                 ),
         )
 }

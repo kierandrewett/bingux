@@ -2,6 +2,7 @@
 """Check the prerequisites needed to build and install Bingux."""
 
 import argparse
+import importlib.util
 from pathlib import Path
 import shutil
 import subprocess
@@ -27,6 +28,33 @@ def check_qt_modules(qmake, source):
     detail = (result.stderr or result.stdout).strip().splitlines()
     detail = detail[-1] if detail else "qmake could not load Qt Quick/QML"
     return f"Qt Quick/QML modules are unavailable ({detail})"
+
+
+# Helpers that need these degrade with a message when they are missing, so a
+# missing one never fails the check. Keep in step with PYTHON_MODULE_PACKAGES in
+# shell/bingux/bingux_runtime.py.
+OPTIONAL_PYTHON_FEATURES = (
+    ("gi", "python3-gobject", "Control Centre, calendar and most helpers"),
+    ("cairo", "python3-cairo", "document previews"),
+    ("PIL", "python3-pillow", "document and image previews"),
+    ("yaml", "python3-pyyaml", "YAML frontmatter in Markdown previews"),
+)
+
+
+def optional_notes():
+    """Describe features that will be unavailable on this host, without failing."""
+    notes = [
+        f"{package} is not installed: {feature} will be unavailable"
+        for module, package, feature in OPTIONAL_PYTHON_FEATURES
+        if importlib.util.find_spec(module) is None
+    ]
+    if available("gsettings"):
+        schemas = subprocess.run(
+            ["gsettings", "list-schemas"], capture_output=True, text=True, check=False, timeout=10
+        ).stdout.split()
+        if "org.gnome.settings-daemon.plugins.color" not in schemas:
+            notes.append("gnome-settings-daemon is not installed: the Night Light control will show Unavailable")
+    return notes
 
 
 def print_platform_hint():
@@ -90,6 +118,10 @@ def main():
         print("\nInstall the matching build dependencies, then rerun: make doctor")
         return 1
     print("Bingux prerequisites are ready.")
+    if notes := optional_notes():
+        print("Optional features not available:")
+        for note in notes:
+            print(f"  - {note}")
     return 0
 
 
