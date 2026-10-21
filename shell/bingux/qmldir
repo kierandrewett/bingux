@@ -3,6 +3,7 @@ singleton Theme 1.0 Theme.qml
 singleton Startup 1.0 Startup.qml
 singleton AdwaitaIcons 1.0 AdwaitaIcons.qml
 singleton LaunchFeedback 1.0 LaunchFeedback.qml
+singleton Python 1.0 Python.qml
 ActionButton 1.0 ActionButton.qml
 WidgetFace 1.0 WidgetFace.qml
 AppIcon 1.0 AppIcon.qml
@@ -23,7 +24,6 @@ MenuNavigator 1.0 MenuNavigator.qml
 NotificationState 1.0 NotificationState.qml
 SessionActivity 1.0 SessionActivity.qml
 NotificationSurface 1.0 NotificationSurface.qml
-NotificationTestButton 1.0 NotificationTestButton.qml
 OsdState 1.0 OsdState.qml
 NotRespondingDialog 1.0 NotRespondingDialog.qml
 OsdSurface 1.0 OsdSurface.qml

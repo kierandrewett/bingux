@@ -33,9 +33,11 @@ $(BUILD_DIR)/bingux-frame: packages/bingux-frame/paint-gtk.c packages/bingux-fra
 	bash packages/bingux-frame/build.sh $(BUILD_DIR)
 
 daemons:
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-config/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-searchd/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-statusd/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-session/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path packages/bingux-settings/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
 
 doctor-build:
 	python3 scripts/check-dependencies.py --qmake '$(QMAKE)' --cargo '$(CARGO)' --cc '$(CC)' --pkg-config '$(PKG_CONFIG)'
@@ -50,6 +52,8 @@ check: doctor-build native daemons
 	python3 scripts/generate-adwaita-icon-index.py --check
 	cd $(BUILD_DIR)/text && $(QMAKE) $(ROOT)/packages/bingux-text-layout/spacing-test.pro -o Makefile.tests && $(MAKE) -f Makefile.tests
 	QT_QPA_PLATFORM=offscreen $(BUILD_DIR)/text/spacing-test
+	$(CARGO) test --locked --manifest-path packages/bingux-config/Cargo.toml --target-dir $(abspath $(BUILD_DIR))/cargo
+	BINGUX_CONFIG_BIN=$(abspath $(BUILD_DIR))/cargo/release/bingux-config python3 tests/bingux-config.test.py
 	$(CARGO) test --locked --manifest-path packages/bingux-searchd/Cargo.toml --lib
 	$(CARGO) test --locked --manifest-path packages/bingux-statusd/Cargo.toml
 	$(CARGO) test --locked --manifest-path packages/bingux-session/Cargo.toml

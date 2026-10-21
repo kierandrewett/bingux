@@ -61,7 +61,7 @@ The focus handoff runs after the search layer unmaps, so closing the popout
 cannot restore the previously focused window over the browser. Browser identity
 comes from the OS default and desktop startup class, never a hard-coded browser.
 The bounded handoff prefers the window whose title contains the search term.
-`qs -p shell/bingux/SearchWebOpenTest.qml --no-color` is an opt-in live test: it
+`tests/qml/run.sh SearchWebOpenTest.qml` is an opt-in live test: it
 opens a real search and requires its browser window to become active, not merely
 a successful spawn or portal response.
 
@@ -103,7 +103,7 @@ they do not duplicate fonts, padding, colors or borders. Search uses OS symbolic
 icons (`edit-clear-symbolic` with a close fallback, and `go-next-symbolic`) rather
 than text glyphs for clear and open actions. Search retains the shared tooltip
 only for the clear button. `MarqueeText.qml` owns the selection dwell timer and
-loop/reset behavior; run `qs -p shell/bingux/SearchMarqueeTest.qml` (also with
+loop/reset behavior; run `tests/qml/run.sh SearchMarqueeTest.qml` (also with
 `BINGUX_REDUCED_MOTION=1`) for the native timing regression.
 
 Grouping explicitly retains the incoming relevance order using each row's original
@@ -295,14 +295,14 @@ no matches, selection movement, closing and immediate reopening.
 ## Explicit AI search
 
 Bingux reads search and desktop preferences from
-`$XDG_CONFIG_HOME/bingux/settings.json` (normally `~/.config/bingux/settings.json`).
-The file is validated by `shell/bingux/settings-backend.py`; managed search configuration
+`~/.config/bingux/bingux.toml` (see [configuration](configuration.md)).
+The file is validated by `bingux-config`; managed search configuration
 remains separate. Searchd reloads its configuration when its user service restarts.
 
-AI is disabled by default. Set the `search.ai` object to choose `pi` or `claude`,
+AI is disabled by default. Set the `[search.ai]` table to choose `pi` or `claude`,
 with optional model and executable values. Existing CLI authentication is reused; Bingux
-does not read or store credentials. The supported fields and validation are defined by
-`DEFAULTS` and `validate()` in `shell/bingux/settings-backend.py`. Enter `! your question` in search, then press Enter.
+does not read or store credentials. The supported fields are listed in
+[configuration](configuration.md). Enter `! your question` in search, then press Enter.
 Typing the prompt does not invoke a harness or send it to external search providers.
 The older `?` prefix remains compatible. Follow-ups in the open conversation do
 not need another prefix. Closing search cancels the request and resets its connection, clearing both the UI

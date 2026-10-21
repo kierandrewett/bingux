@@ -1,24 +1,36 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import test from "node:test";
 const model = vm.createContext({});
 vm.runInContext(readFileSync(new URL("../shell/bingux/ControlLayout.js", import.meta.url), "utf8"), model);
 const plain = (value) => JSON.parse(JSON.stringify(value));
 test("frontend and backend import exactly the same native groups", () => {
-    const backend = fileURLToPath(new URL("../shell/bingux/settings-backend.py", import.meta.url));
-    const output = execFileSync(
-        "python3",
-        [
-            "-c",
-            'import importlib.util,json,sys; s=importlib.util.spec_from_file_location("settings",sys.argv[1]); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); print(json.dumps(m.native_control_layout()))',
-            backend,
-        ],
-        { encoding: "utf8" },
-    );
-    assert.deepEqual(plain(model.defaults()), JSON.parse(output));
+    // Mirrors CONTROL_GROUPS in packages/bingux-config/src/validate.rs; bingux-config
+    // does not expose the native groups in `dump` (controlLayout is null there).
+    const native = {
+        version: 1,
+        groups: {
+            "control-centre": [
+                "controls-header",
+                "controls-audio",
+                "control-divider",
+                "controls-tiles",
+                "control-media",
+                "control-customise",
+            ],
+            "controls-header": [
+                "control-account",
+                "control-header-space",
+                "control-battery",
+                "control-settings",
+                "control-session",
+                "control-lock",
+            ],
+            "controls-audio": ["control-volume", "control-microphone"],
+        },
+    };
+    assert.deepEqual(plain(model.defaults()), native);
 });
 test("reordering a group preserves its components and all other native groups", () => {
     const original = model.defaults();

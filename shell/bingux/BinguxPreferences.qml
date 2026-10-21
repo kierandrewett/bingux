@@ -50,8 +50,11 @@ Singleton {
                 "widgetOptions": {}
             }
         })
-    readonly property string path: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/bingux/settings.json"
-    readonly property var helper: Quickshell.env("BINGUX_SETTINGS_HELPER") ? [Quickshell.env("BINGUX_SETTINGS_HELPER")] : ["python3", decodeURIComponent(Qt.resolvedUrl("settings-backend.py").toString().replace(/^file:\/\//, ""))]
+    readonly property string path: (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/bingux/bingux.toml"
+    // bingux-config owns the schema, validation and the TOML file. The shell
+    // only speaks its JSON protocol, so manual edits and graphical edits share
+    // one set of rules.
+    readonly property var helper: [Python.config]
     property int wallpaperRevision: 0
     property string wallpaperUrl: ""
     readonly property string wallpaperPath: data.desktop.wallpaper || ""
@@ -66,30 +69,15 @@ Singleton {
         else
             reader.running = true;
     }
-    // Parse the settings file in place so start-up does not wait for a Python
-    // process. The helper still validates the same file straight afterwards and
-    // replaces this data only when it disagrees.
-    function loadQuickly(text) {
-        if (loaded)
+    // The first read happens at once: the binary starts in milliseconds and
+    // the defaults above keep the shell usable until it replies.
+    property string lastNotifiedError: ""
+    function reportError(message) {
+        layoutError = message;
+        if (!loaded || message === lastNotifiedError)
             return;
-        try {
-            const parsed = text.trim() ? JSON.parse(text) : {};
-            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-                return;
-            const merged = {};
-            for (const key of Object.keys(parsed)) {
-                if (!(key in data) || !parsed[key] || typeof parsed[key] !== "object" || Array.isArray(parsed[key]))
-                    return;
-                for (const name of Object.keys(parsed[key])) {
-                    if (!(name in data[key]))
-                        return;
-                }
-            }
-            for (const key of Object.keys(data))
-                merged[key] = Object.assign({}, data[key], parsed[key] || {});
-            data = merged;
-            loaded = true;
-        } catch (_) {}
+        lastNotifiedError = message;
+        ShellNotifications.send("Settings file has a problem", message + " Run `bingux-config check` after editing " + path + ".");
     }
     function reloadWallpaper() {
         wallpaperRevision++;
@@ -109,29 +97,12 @@ Singleton {
         wallpaperReader.running = true;
     }
     Component.onCompleted: {
-        let text = "";
-        try {
-            text = file.text();
-        } catch (_) {}
-        loadQuickly(text);
+        reload();
         reloadWallpaper();
     }
-    // The helper validates the file once the desktop is up.
     property bool verifyPending: false
     function verify() {
-        if (Startup.settled)
-            reload();
-        else
-            verifyPending = true;
-    }
-    Connections {
-        target: Startup
-        function onSettledChanged() {
-            if (Startup.settled && root.verifyPending) {
-                root.verifyPending = false;
-                root.reload();
-            }
-        }
+        reload();
     }
     onWallpaperPathChanged: reloadWallpaper()
     function saveLayout(layout) {
@@ -247,7 +218,7 @@ Singleton {
                         root.data = next;
                     root.layoutError = "";
                 } catch (error) {
-                    root.layoutError = error.message || "Could not load desktop settings.";
+                    root.reportError(error.message || "Could not load desktop settings.");
                 }
                 root.loaded = true;
             }
@@ -279,20 +250,14 @@ Singleton {
             }
         }
     }
+    // Manual edits to the TOML file are picked up through the watcher; the
+    // binary re-validates on every change.
     FileView {
         id: file
         path: root.path
-        blockLoading: true
+        blockLoading: false
         watchChanges: true
         printErrors: false
         onFileChanged: root.reload()
-        onLoadFailed: {
-            root.loadQuickly("");
-            root.verify();
-        }
-        onLoaded: {
-            root.loadQuickly(file.text());
-            root.verify();
-        }
     }
 }

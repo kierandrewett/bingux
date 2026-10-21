@@ -425,9 +425,7 @@ pub fn import_layout(snapshot: &Value) -> Result<Loaded, Error> {
         migrate_legacy(&path)?;
     }
     let current = finish(read_tree(&path)?)?;
-    let desktop = current.tree["desktop"]
-        .as_object()
-        .expect("desktop section");
+    let desktop = &current.tree["desktop"];
     let already_imported = desktop["layout_version"].as_i64() == Some(1);
     if already_imported && !desktop["control_layout"].is_null() {
         return Ok(current);
@@ -516,6 +514,7 @@ pub fn defaults_document() -> String {
             let example = match doc.key {
                 "sidebar_edge" => "\"left\"",
                 "file_roots" => "[\"/home/user/Documents\"]",
+                "ai" => "{ harness = \"claude\", model = \"sonnet\" }",
                 _ => "\"\"",
             };
             if !document.contains_table(doc.section) {

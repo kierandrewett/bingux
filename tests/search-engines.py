@@ -54,18 +54,15 @@ with tempfile.TemporaryDirectory() as directory:
     }
     for disabled in (False, True):
         engines[1]["enabled"] = not disabled
-        (base / "config/bingux/settings.json").write_text(
-            json.dumps(
-                {
-                    "search": {
-                        "engines": engines,
-                        "defaultEngine": "default",
-                        "disabledProviders": ["applications", "files", "external"],
-                        "fileRoots": [],
-                    }
-                }
-            )
-        )
+        lines = [
+            "[search]",
+            f"disabled_providers = {json.dumps(['applications', 'files', 'external'])}",
+            'default_engine = "default"',
+            "file_roots = []",
+        ]
+        for engine in engines:
+            lines += ["", "[[search.engines]]"] + [f"{key} = {json.dumps(value)}" for key, value in engine.items()]
+        (base / "config/bingux/bingux.toml").write_text("\n".join(lines) + "\n")
         daemon = subprocess.Popen(
             [str(binary), "--config", str(path)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
         )

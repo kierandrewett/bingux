@@ -233,3 +233,19 @@ controls and preferences that have not loaded yet return errors.
 including Mullvad, Tailscale and saved NetworkManager VPNs when available.
 Connect and disconnect require an exact returned ID and respect the backend's
 availability and busy state. Use `vpn status` to check completion and errors.
+
+## Settings
+
+```sh
+binguxctl settings                        # Open the first settings page
+binguxctl settings appearance
+binguxctl settings desktop
+binguxctl settings search
+```
+
+`settings [PANEL]` launches `bingux-settings PANEL` detached and returns
+immediately. Panels are `appearance`, `background`, `desktop`, `search`,
+`display`, `sound`, `network`, `bluetooth`, `power`, `keyboard`, `mouse`,
+`datetime`, `users` and `about`. An unknown or omitted panel opens the first
+page. Set `BINGUX_SETTINGS_BIN` to run a development build instead of the
+installed `bingux-settings` executable.

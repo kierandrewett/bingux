@@ -340,6 +340,11 @@ pub const KEY_DOCS: &[KeyDoc] = &[
         accepted: "Array of up to 32 absolute directories. Remove the key for the defaults.",
     },
     KeyDoc {
+        section: "search",
+        key: "ai",
+        accepted: "Table with harness (\"pi\" or \"claude\") and optional model and executable. Remove it to disable the assistant.",
+    },
+    KeyDoc {
         section: "previews",
         key: "enabled",
         accepted: "true or false. Preview files in search results.",

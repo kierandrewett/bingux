@@ -28,6 +28,8 @@ class InstallTest(unittest.TestCase):
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
                 "cargo/release/bingux-session",
+                "cargo/release/bingux-config",
+                "cargo/release/bingux-settings",
             ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -105,6 +107,8 @@ class InstallTest(unittest.TestCase):
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
                 "cargo/release/bingux-session",
+                "cargo/release/bingux-config",
+                "cargo/release/bingux-settings",
             ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -212,6 +216,8 @@ class InstallTest(unittest.TestCase):
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
                 "cargo/release/bingux-session",
+                "cargo/release/bingux-config",
+                "cargo/release/bingux-settings",
             ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -344,6 +350,8 @@ class InstallTest(unittest.TestCase):
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
                 "cargo/release/bingux-session",
+                "cargo/release/bingux-config",
+                "cargo/release/bingux-settings",
             ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -402,6 +410,8 @@ class InstallTest(unittest.TestCase):
                 "cargo/release/bingux-searchd",
                 "cargo/release/bingux-statusd",
                 "cargo/release/bingux-session",
+                "cargo/release/bingux-config",
+                "cargo/release/bingux-settings",
             ):
                 path = build / filename
                 path.parent.mkdir(parents=True, exist_ok=True)
