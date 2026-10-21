@@ -1,0 +1,542 @@
+use std::{
+    borrow::Cow,
+    fmt::Debug,
+    future::Future,
+    io::Cursor,
+    pin::Pin,
+};
+
+use bytes::Bytes;
+use freya_core::{
+    integration::*,
+    prelude::Color,
+};
+use image::ImageReader;
+use winit::{
+    event_loop::ActiveEventLoop,
+    window::{
+        Icon,
+        Window,
+        WindowAttributes,
+        WindowId,
+    },
+};
+
+use crate::{
+    plugins::{
+        FreyaPlugin,
+        PluginsManager,
+    },
+    renderer::LaunchProxy,
+};
+
+pub type WindowBuilderHook =
+    Box<dyn FnOnce(WindowAttributes, &ActiveEventLoop) -> WindowAttributes>;
+pub type WindowHandleHook = Box<dyn FnOnce(&mut Window)>;
+
+/// Preferred GPU type, with fallback to other available hardware.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GpuPreference {
+    /// Prefer an integrated GPU.
+    #[default]
+    PreferIntegrated,
+    /// Prefer a discrete GPU.
+    PreferDiscrete,
+}
+
+/// Graphics driver preference a window asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RendererPreference {
+    #[default]
+    Auto,
+    Software,
+    OpenGl,
+    Vulkan {
+        gpu_preference: GpuPreference,
+    },
+}
+
+impl RendererPreference {
+    /// Return the Vulkan GPU preference or the default for other renderers.
+    pub fn gpu_preference(self) -> GpuPreference {
+        match self {
+            Self::Vulkan { gpu_preference } => gpu_preference,
+            _ => GpuPreference::default(),
+        }
+    }
+
+    pub(crate) fn as_name(self) -> Option<&'static str> {
+        match self {
+            Self::Auto => None,
+            Self::Software => Some("software"),
+            Self::OpenGl => Some("opengl"),
+            Self::Vulkan { .. } => Some("vulkan"),
+        }
+    }
+}
+
+/// Decision returned by the `on_close` hook to determine whether a window should close.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CloseDecision {
+    /// Close the window.
+    #[default]
+    Close,
+    /// Keep the window open.
+    KeepOpen,
+}
+
+/// Hook called when a window close is requested.
+/// Returns a [`CloseDecision`] to determine whether the window should actually close.
+pub type OnCloseHook = Box<dyn FnMut(crate::renderer::RendererContext, WindowId) -> CloseDecision>;
+
+/// Configuration for a Window.
+pub struct WindowConfig {
+    /// Root component for the window app.
+    pub(crate) app: AppComponent,
+    pub(crate) root_context: Option<Box<dyn FnOnce()>>,
+    /// Size of the Window.
+    pub(crate) size: (f64, f64),
+    /// Minimum size of the Window.
+    pub(crate) min_size: Option<(f64, f64)>,
+    /// Maximum size of the Window.
+    pub(crate) max_size: Option<(f64, f64)>,
+    /// Enable Window decorations.
+    pub(crate) decorations: bool,
+    /// Title for the Window.
+    pub(crate) title: &'static str,
+    /// Make the Window transparent or not.
+    pub(crate) transparent: bool,
+    /// Background color of the Window.
+    pub(crate) background: Color,
+    /// Enable Window resizable behaviour.
+    pub(crate) resizable: bool,
+    /// Custom scale factor for the Window.
+    pub(crate) custom_scale_factor: f64,
+    /// Icon for the Window.
+    pub(crate) icon: Option<Icon>,
+    /// Application ID for the Window.
+    pub(crate) app_id: Option<String>,
+    /// Preferred graphics backend for the Window.
+    pub(crate) renderer: RendererPreference,
+    /// Hook function called with the Window Attributes.
+    pub(crate) window_attributes_hook: Option<WindowBuilderHook>,
+    /// Hook function called with the Window.
+    pub(crate) window_handle_hook: Option<WindowHandleHook>,
+    /// Hook function called when the window is requested to close.
+    pub(crate) on_close: Option<OnCloseHook>,
+}
+
+impl Debug for WindowConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WindowConfig")
+            .field("size", &self.size)
+            .field("min_size", &self.min_size)
+            .field("max_size", &self.max_size)
+            .field("decorations", &self.decorations)
+            .field("title", &self.title)
+            .field("transparent", &self.transparent)
+            .field("background", &self.background)
+            .field("resizable", &self.resizable)
+            .field("custom_scale_factor", &self.custom_scale_factor)
+            .field("icon", &self.icon)
+            .field("app_id", &self.app_id)
+            .field("renderer", &self.renderer)
+            .finish()
+    }
+}
+
+impl WindowConfig {
+    /// Create a window with the given app.
+    pub fn new(app: impl Into<AppComponent>) -> Self {
+        Self::new_with_defaults(app.into())
+    }
+
+    /// Create a window using an `App` directly.
+    pub fn new_app(app: impl App + 'static) -> Self {
+        Self::new_with_defaults(AppComponent::new(app))
+    }
+
+    fn new_with_defaults(app: impl Into<AppComponent>) -> Self {
+        Self {
+            app: app.into(),
+            root_context: None,
+            size: (700.0, 500.0),
+            min_size: None,
+            max_size: None,
+            decorations: true,
+            title: "Freya",
+            transparent: false,
+            background: Color::WHITE,
+            resizable: true,
+            custom_scale_factor: 1.0,
+            icon: None,
+            app_id: None,
+            renderer: RendererPreference::default(),
+            window_attributes_hook: None,
+            window_handle_hook: None,
+            on_close: None,
+        }
+    }
+
+    /// Provide a context to the window's root before its first render.
+    pub fn with_root_context<T: Clone + 'static>(mut self, value: T) -> Self {
+        self.root_context = Some(Box::new(move || {
+            freya_core::prelude::provide_root_context(value);
+        }));
+        self
+    }
+
+    /// Specify a Window size.
+    pub fn with_size(mut self, width: f64, height: f64) -> Self {
+        self.size = (width, height);
+        self
+    }
+
+    /// Specify a minimum Window size.
+    pub fn with_min_size(mut self, min_width: f64, min_height: f64) -> Self {
+        self.min_size = Some((min_width, min_height));
+        self
+    }
+
+    /// Specify a maximum Window size.
+    pub fn with_max_size(mut self, max_width: f64, max_height: f64) -> Self {
+        self.max_size = Some((max_width, max_height));
+        self
+    }
+
+    /// Whether the Window will have decorations or not.
+    pub fn with_decorations(mut self, decorations: bool) -> Self {
+        self.decorations = decorations;
+        self
+    }
+
+    /// Specify the Window title.
+    pub fn with_title(mut self, title: &'static str) -> Self {
+        self.title = title;
+        self
+    }
+
+    /// Make the Window transparent or not.
+    pub fn with_transparency(mut self, transparency: bool) -> Self {
+        self.transparent = transparency;
+        self
+    }
+
+    /// Specify the Window's background color.
+    pub fn with_background(mut self, background: impl Into<Color>) -> Self {
+        self.background = background.into();
+        self
+    }
+
+    /// Is Window resizable.
+    pub fn with_resizable(mut self, resizable: bool) -> Self {
+        self.resizable = resizable;
+        self
+    }
+
+    /// Specify a custom scale factor for the Window, multiplied with the OS
+    /// scale factor. Defaults to `1.0`.
+    pub fn with_custom_scale_factor(mut self, custom_scale_factor: f64) -> Self {
+        self.custom_scale_factor = custom_scale_factor;
+        self
+    }
+
+    /// Specify the Window icon. Use [`LaunchConfig::window_icon`] to load the icon from bytes.
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use freya::prelude::*;
+    /// const ICON: &[u8] = include_bytes!("../../../examples/freya_icon.png");
+    ///
+    /// WindowConfig::new(app).with_icon(LaunchConfig::window_icon(ICON));
+    /// # fn app() -> impl IntoElement { "" }
+    /// ```
+    pub fn with_icon(mut self, icon: Icon) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
+    /// Set the application ID for the Window, should match the `.desktop` file of your program.
+    pub fn with_app_id(mut self, app_id: impl Into<String>) -> Self {
+        self.app_id = Some(app_id.into());
+        self
+    }
+
+    /// Prefer a graphics backend for this Window, overriding `FREYA_RENDERER`.
+    pub fn with_renderer(mut self, renderer: RendererPreference) -> Self {
+        self.renderer = renderer;
+        self
+    }
+
+    /// Register a Window Attributes hook.
+    pub fn with_window_attributes(
+        mut self,
+        window_attributes_hook: impl FnOnce(WindowAttributes, &ActiveEventLoop) -> WindowAttributes
+        + 'static,
+    ) -> Self {
+        self.window_attributes_hook = Some(Box::new(window_attributes_hook));
+        self
+    }
+
+    /// Register a Window handle hook.
+    pub fn with_window_handle(
+        mut self,
+        window_handle_hook: impl FnOnce(&mut Window) + 'static,
+    ) -> Self {
+        self.window_handle_hook = Some(Box::new(window_handle_hook));
+        self
+    }
+
+    /// Register an on-close hook that is called when the window is requested to close by the user.
+    pub fn with_on_close(
+        mut self,
+        on_close: impl FnMut(crate::renderer::RendererContext, WindowId) -> CloseDecision + 'static,
+    ) -> Self {
+        self.on_close = Some(Box::new(on_close));
+        self
+    }
+}
+
+/// GPU resource cache limit used by the renderer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GpuResourceCacheLimit {
+    /// 128 MiB for applications with low graphics resource usage.
+    Small,
+    /// 256 MiB, matching Skia's default cache limit.
+    #[default]
+    Normal,
+    /// 1 GiB for applications with large graphics resource usage.
+    Large,
+    /// A custom limit in bytes.
+    Custom(usize),
+}
+
+impl From<usize> for GpuResourceCacheLimit {
+    fn from(bytes: usize) -> Self {
+        Self::Custom(bytes)
+    }
+}
+
+impl GpuResourceCacheLimit {
+    /// Creates a custom cache limit from a number of mebibytes.
+    pub const fn from_mb(megabytes: usize) -> Self {
+        Self::Custom(megabytes * 1024 * 1024)
+    }
+
+    /// Returns the cache limit in bytes.
+    pub const fn bytes(self) -> usize {
+        match self {
+            Self::Small => 128 * 1024 * 1024,
+            Self::Normal => 256 * 1024 * 1024,
+            Self::Large => 1024 * 1024 * 1024,
+            Self::Custom(bytes) => bytes,
+        }
+    }
+}
+
+pub type EmbeddedFonts = Vec<(Cow<'static, str>, Bytes)>;
+#[cfg(feature = "tray")]
+pub type TrayIconGetter = Box<dyn FnOnce() -> tray_icon::TrayIcon + Send>;
+#[cfg(feature = "tray")]
+pub type TrayHandler =
+    Box<dyn FnMut(crate::tray_icon::TrayEvent, crate::renderer::RendererContext)>;
+
+pub type TaskHandler =
+    Box<dyn FnOnce(crate::renderer::LaunchProxy) -> Pin<Box<dyn Future<Output = ()>>> + 'static>;
+
+pub type GlobalContextInserter = Box<dyn FnOnce(&GlobalContexts)>;
+
+/// Configuration for the initial state of the application.
+///
+/// Use this to register windows, plugins, fonts, and other settings
+/// that should be ready before the application starts.
+pub struct LaunchConfig {
+    pub(crate) windows_configs: Vec<WindowConfig>,
+    #[cfg(feature = "tray")]
+    pub(crate) tray: (Option<TrayIconGetter>, Option<TrayHandler>),
+    pub(crate) plugins: PluginsManager,
+    pub(crate) embedded_fonts: EmbeddedFonts,
+    pub(crate) fallback_fonts: Vec<Cow<'static, str>>,
+    pub(crate) tasks: Vec<TaskHandler>,
+    pub(crate) globals: Vec<GlobalContextInserter>,
+    pub(crate) exit_on_close: bool,
+    pub(crate) event_loop: Option<winit::event_loop::EventLoop<crate::renderer::NativeEvent>>,
+    pub(crate) gpu_resource_cache_limit: usize,
+}
+
+impl Default for LaunchConfig {
+    fn default() -> Self {
+        LaunchConfig {
+            windows_configs: Vec::default(),
+            #[cfg(feature = "tray")]
+            tray: (None, None),
+            plugins: PluginsManager::default(),
+            embedded_fonts: Default::default(),
+            fallback_fonts: default_fonts(),
+            tasks: Vec::new(),
+            globals: Vec::new(),
+            exit_on_close: true,
+            event_loop: None,
+            gpu_resource_cache_limit: GpuResourceCacheLimit::default().bytes(),
+        }
+    }
+}
+
+impl LaunchConfig {
+    pub fn new() -> LaunchConfig {
+        LaunchConfig::default()
+    }
+
+    /// Load a window icon from image bytes. Pass the result to [`WindowConfig::with_icon`].
+    pub fn window_icon(icon: &[u8]) -> Icon {
+        let reader = ImageReader::new(Cursor::new(icon))
+            .with_guessed_format()
+            .expect("Cursor io never fails");
+        let image = reader
+            .decode()
+            .expect("Failed to open icon path")
+            .into_rgba8();
+        let (width, height) = image.dimensions();
+        let rgba = image.into_raw();
+        Icon::from_rgba(rgba, width, height).expect("Failed to open icon")
+    }
+
+    #[cfg(feature = "tray")]
+    pub fn tray_icon(icon: &[u8]) -> tray_icon::Icon {
+        let reader = ImageReader::new(Cursor::new(icon))
+            .with_guessed_format()
+            .expect("Cursor io never fails");
+        let image = reader
+            .decode()
+            .expect("Failed to open icon path")
+            .into_rgba8();
+        let (width, height) = image.dimensions();
+        let rgba = image.into_raw();
+        tray_icon::Icon::from_rgba(rgba, width, height).expect("Failed to open icon")
+    }
+}
+
+impl LaunchConfig {
+    /// Register a window configuration. You can call this multiple times.
+    ///
+    /// To create windows dynamically after the application has started,
+    /// see [`crate::extensions::WinitPlatformExt::launch_window()`].
+    pub fn with_window(mut self, window_config: WindowConfig) -> Self {
+        self.windows_configs.push(window_config);
+        self
+    }
+
+    /// Register a tray icon and its handler.
+    #[cfg(feature = "tray")]
+    pub fn with_tray(
+        mut self,
+        tray_icon: impl FnOnce() -> tray_icon::TrayIcon + 'static + Send,
+        tray_handler: impl FnMut(crate::tray_icon::TrayEvent, crate::renderer::RendererContext)
+        + 'static,
+    ) -> Self {
+        self.tray = (Some(Box::new(tray_icon)), Some(Box::new(tray_handler)));
+        self
+    }
+
+    /// Register a plugin. Replaces any existing plugin with the same ID.
+    pub fn with_plugin(mut self, plugin: impl FreyaPlugin + 'static) -> Self {
+        self.plugins.add_plugin(plugin);
+        self
+    }
+
+    /// Embed a font.
+    pub fn with_font(
+        mut self,
+        font_name: impl Into<Cow<'static, str>>,
+        font: impl Into<Bytes>,
+    ) -> Self {
+        self.embedded_fonts.push((font_name.into(), font.into()));
+        self
+    }
+
+    /// Register a fallback font. Will be used if the default fonts are not available.
+    pub fn with_fallback_font(mut self, font_family: impl Into<Cow<'static, str>>) -> Self {
+        self.fallback_fonts.push(font_family.into());
+        self
+    }
+
+    /// Register a default font. Will be used if found.
+    pub fn with_default_font(mut self, font_name: impl Into<Cow<'static, str>>) -> Self {
+        self.fallback_fonts.insert(0, font_name.into());
+        self
+    }
+
+    /// Register a value in the [`GlobalContexts`], shared by all the windows.
+    ///
+    /// ```rust,no_run
+    /// # use freya::prelude::*;
+    /// #[derive(Clone)]
+    /// struct AppName(String);
+    ///
+    /// fn main() {
+    ///     launch(
+    ///         LaunchConfig::new()
+    ///             .with_global_context(AppName("Freya".to_string()))
+    ///             .with_window(WindowConfig::new(app)),
+    ///     )
+    /// }
+    ///
+    /// fn app() -> impl IntoElement {
+    ///     let app_name = GlobalContexts::get().get_context::<AppName>();
+    ///
+    ///     label().text(app_name.0)
+    /// }
+    /// ```
+    pub fn with_global_context<T: Clone + 'static>(mut self, value: T) -> Self {
+        self.globals.push(Box::new(move |global_contexts| {
+            global_contexts.insert_context(value);
+        }));
+        self
+    }
+
+    /// Whether to exit the event loop when all windows are closed. Defaults to `true`.
+    /// Set to `false` to keep the event loop alive even when no windows remain.
+    pub fn with_exit_on_close(mut self, exit_on_close: bool) -> Self {
+        self.exit_on_close = exit_on_close;
+        self
+    }
+
+    /// Register an async task that starts on the app launch.
+    ///
+    /// ```rust,no_run
+    /// # use freya::prelude::*;
+    /// let config = LaunchConfig::new().with_task(|proxy| async move {
+    ///     let _ = proxy
+    ///         .post_callback(|renderer| renderer.launch_window(WindowConfig::new(|| "Hello!")))
+    ///         .await;
+    /// });
+    /// ```
+    pub fn with_task<F, Fut>(mut self, task: F) -> Self
+    where
+        F: FnOnce(LaunchProxy) -> Fut + 'static,
+        Fut: Future<Output = ()> + 'static,
+    {
+        self.tasks
+            .push(Box::new(move |proxy| Box::pin(task(proxy))));
+        self
+    }
+
+    /// Provide a custom winit [EventLoop](winit::event_loop::EventLoop) to use instead of the default one.
+    /// This allows configuring platform-specific options on the event loop builder before passing it.
+    pub fn with_event_loop(
+        mut self,
+        event_loop: winit::event_loop::EventLoop<crate::renderer::NativeEvent>,
+    ) -> Self {
+        self.event_loop = Some(event_loop);
+        self
+    }
+
+    /// Set the Skia GPU resource cache limit applied to every window. Defaults to [`GpuResourceCacheLimit::Normal`].
+    pub fn with_gpu_resource_cache_limit(
+        mut self,
+        gpu_resource_cache_limit: impl Into<GpuResourceCacheLimit>,
+    ) -> Self {
+        self.gpu_resource_cache_limit = gpu_resource_cache_limit.into().bytes();
+        self
+    }
+}

@@ -1,0 +1,337 @@
+use freya_core::prelude::*;
+use torin::prelude::*;
+
+use crate::{
+    define_theme,
+    get_theme,
+};
+
+define_theme! {
+    %[component]
+    pub Slider {
+        %[fields]
+        background: Color,
+        thumb_background: Color,
+        thumb_inner_background: Color,
+        border_fill: Color,
+    }
+}
+
+/// Slider component.
+///
+/// You must pass a percentage from 0.0 to 100.0 and listen for value changes with `on_moved` and then decide if this changes are applicable,
+/// and if so, apply them.
+///
+/// # Example
+/// ```rust
+/// # use freya::prelude::*;
+/// fn app() -> impl IntoElement {
+///     let mut percentage = use_state(|| 25.0);
+///
+///     Slider::new(move |per| percentage.set(per)).value(percentage())
+/// }
+/// ```
+/// See the [interactive components demo](https://freyaui.dev/demo).
+#[derive(Clone, PartialEq)]
+pub struct Slider {
+    pub(crate) theme: Option<SliderThemePartial>,
+    value: f64,
+    on_moved: EventHandler<f64>,
+    size: Size,
+    direction: Direction,
+    enabled: bool,
+    scroll_enabled: bool,
+    cursor_icon: Option<CursorIcon>,
+    step: Option<f64>,
+    key: DiffKey,
+}
+
+impl KeyExt for Slider {
+    fn write_key(&mut self) -> &mut DiffKey {
+        &mut self.key
+    }
+}
+
+impl Slider {
+    pub fn new(on_moved: impl Into<EventHandler<f64>>) -> Self {
+        Self {
+            theme: None,
+            value: 0.0,
+            on_moved: on_moved.into(),
+            size: Size::fill(),
+            direction: Direction::Horizontal,
+            enabled: true,
+            scroll_enabled: true,
+            cursor_icon: None,
+            step: None,
+            key: DiffKey::None,
+        }
+    }
+
+    pub fn enabled(mut self, enabled: impl Into<bool>) -> Self {
+        self.enabled = enabled.into();
+        self
+    }
+
+    /// Control whether the value can be changed by scrolling with the mouse wheel. Enabled by default.
+    ///
+    /// You might want to disable it when the slider is inside a scrollable container.
+    pub fn scroll_enabled(mut self, scroll_enabled: impl Into<bool>) -> Self {
+        self.scroll_enabled = scroll_enabled.into();
+        self
+    }
+
+    pub fn value(mut self, value: f64) -> Self {
+        self.value = value.clamp(0.0, 100.0);
+        self
+    }
+
+    pub fn theme(mut self, theme: SliderThemePartial) -> Self {
+        self.theme = Some(theme);
+        self
+    }
+
+    pub fn size(mut self, size: Size) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn direction(mut self, direction: Direction) -> Self {
+        self.direction = direction;
+        self
+    }
+
+    /// Override the cursor icon shown when hovering over this component while enabled.
+    pub fn cursor(mut self, cursor_icon: impl Into<Option<CursorIcon>>) -> Self {
+        self.cursor_icon = cursor_icon.into();
+        self
+    }
+
+    /// Snap the values emitted by `on_moved` to multiples of the given step.
+    pub fn step(mut self, step: f64) -> Self {
+        self.step = Some(step);
+        self
+    }
+}
+
+impl Component for Slider {
+    fn render(&self) -> impl IntoElement {
+        let theme = get_theme!(&self.theme, SliderThemePreference, "slider");
+        let a11y_id = use_a11y();
+        let focus = use_focus(a11y_id);
+        let mut clicking = use_state(|| false);
+        let mut size = use_state(Area::default);
+
+        let direction_is_vertical = self.direction == Direction::Vertical;
+        let value = self.value;
+        let on_moved = self.on_moved.clone();
+
+        let step = self.step.filter(|step| *step > 0.0);
+        let snap = move |value: f64| -> f64 {
+            let value = value.clamp(0.0, 100.0);
+            match step {
+                Some(step) => ((value / step).round() * step).min(100.0),
+                None => value,
+            }
+        };
+        let keyboard_step = step.unwrap_or(4.0);
+
+        let on_key_down = {
+            let on_moved = self.on_moved.clone();
+            move |e: Event<KeyboardEventData>| match e.key {
+                Key::Named(NamedKey::ArrowLeft) if !direction_is_vertical => {
+                    e.stop_propagation();
+                    on_moved.call(snap(value - keyboard_step));
+                }
+                Key::Named(NamedKey::ArrowRight) if !direction_is_vertical => {
+                    e.stop_propagation();
+                    on_moved.call(snap(value + keyboard_step));
+                }
+                Key::Named(NamedKey::ArrowUp) if direction_is_vertical => {
+                    e.stop_propagation();
+                    on_moved.call(snap(value + keyboard_step));
+                }
+                Key::Named(NamedKey::ArrowDown) if direction_is_vertical => {
+                    e.stop_propagation();
+                    on_moved.call(snap(value - keyboard_step));
+                }
+                _ => {}
+            }
+        };
+
+        let calc_percentage = move |x: f64, y: f64| -> f64 {
+            let pct = if direction_is_vertical {
+                let y = y - 8.0;
+                100. - (y / (size.read().height() as f64 - 15.0) * 100.0)
+            } else {
+                let x = x - 8.0;
+                x / (size.read().width() as f64 - 15.) * 100.0
+            };
+            snap(pct)
+        };
+
+        let on_pointer_down = {
+            let on_moved = self.on_moved.clone();
+            move |e: Event<PointerEventData>| {
+                if !e.data().is_primary() {
+                    return;
+                }
+                a11y_id.request_focus();
+                clicking.set(true);
+                e.stop_propagation();
+                let coordinates = e.element_location();
+                on_moved.call(calc_percentage(coordinates.x, coordinates.y));
+            }
+        };
+
+        let on_global_pointer_up = move |_: Event<PointerEventData>| {
+            clicking.set(false);
+        };
+
+        let on_capture_global_pointer_move = move |e: Event<PointerEventData>| {
+            if *clicking.peek() {
+                e.prevent_default();
+                let coordinates = e.global_location();
+                on_moved.call(calc_percentage(
+                    coordinates.x - size.read().min_x() as f64,
+                    coordinates.y - size.read().min_y() as f64,
+                ));
+            }
+        };
+
+        let on_wheel = {
+            let on_moved = self.on_moved.clone();
+            move |e: Event<WheelEventData>| {
+                if e.delta_y == 0.0 {
+                    return;
+                }
+                e.stop_propagation();
+                let delta = match step {
+                    Some(step) => step * e.delta_y.signum(),
+                    None => e.delta_y * 0.1,
+                };
+                on_moved.call(snap(value + delta));
+            }
+        };
+
+        let border = if focus() == Focus::Keyboard {
+            Border::new()
+                .fill(theme.border_fill)
+                .width(2.)
+                .alignment(BorderAlignment::Inner)
+        } else {
+            Border::new()
+                .fill(Color::TRANSPARENT)
+                .width(0.)
+                .alignment(BorderAlignment::Inner)
+        };
+
+        let (slider_width, slider_height) = if direction_is_vertical {
+            (Size::auto(), self.size.clone())
+        } else {
+            (self.size.clone(), Size::auto())
+        };
+
+        let (inner_slider_width, inner_slider_height) = if direction_is_vertical {
+            (Size::px(6.), self.size.clone())
+        } else {
+            (self.size.clone(), Size::px(6.))
+        };
+
+        let track_size = Size::func_data(
+            move |ctx| Some(value as f32 / 100. * (ctx.parent - 15.)),
+            &(value as i32),
+        );
+
+        let (track_width, track_height) = if direction_is_vertical {
+            (Size::px(6.), track_size)
+        } else {
+            (track_size, Size::px(6.))
+        };
+
+        let (thumb_offset_x, thumb_offset_y) = if direction_is_vertical {
+            (-6., 3.)
+        } else {
+            (-3., -6.)
+        };
+
+        let thumb_main_align = if direction_is_vertical {
+            Alignment::end()
+        } else {
+            Alignment::start()
+        };
+
+        let padding = if direction_is_vertical {
+            (0., 8.)
+        } else {
+            (8., 0.)
+        };
+
+        let thumb = rect()
+            .width(Size::fill())
+            .offset_x(thumb_offset_x)
+            .offset_y(thumb_offset_y)
+            .child(
+                rect()
+                    .width(Size::px(18.))
+                    .height(Size::px(18.))
+                    .corner_radius(50.)
+                    .background(theme.thumb_background.mul_if(!self.enabled, 0.85))
+                    .padding(4.)
+                    .child(
+                        rect()
+                            .expanded()
+                            .background(theme.thumb_inner_background.mul_if(!self.enabled, 0.85))
+                            .corner_radius(50.),
+                    ),
+            );
+
+        let track = rect()
+            .width(track_width)
+            .height(track_height)
+            .background(theme.thumb_inner_background.mul_if(!self.enabled, 0.85))
+            .corner_radius(50.);
+
+        rect()
+            .a11y_id(a11y_id)
+            .a11y_enabled(self.enabled)
+            .a11y_focusable(self.enabled)
+            .a11y_role(AccessibilityRole::Slider)
+            .on_sized(move |e: Event<SizedEventData>| size.set(e.area))
+            .maybe(self.enabled, |rect| {
+                rect.on_key_down(on_key_down)
+                    .on_pointer_down(on_pointer_down)
+                    .on_capture_global_pointer_move(on_capture_global_pointer_move)
+                    .on_global_pointer_up(on_global_pointer_up)
+                    .maybe(self.scroll_enabled, |el| el.on_wheel(on_wheel))
+            })
+            .cursor(if self.enabled {
+                self.cursor_icon
+            } else {
+                CursorIcon::NotAllowed.into()
+            })
+            .border(border)
+            .corner_radius(50.)
+            .padding(padding)
+            .width(slider_width)
+            .height(slider_height)
+            .child(
+                rect()
+                    .width(inner_slider_width)
+                    .height(inner_slider_height)
+                    .background(theme.background.mul_if(!self.enabled, 0.85))
+                    .corner_radius(50.)
+                    .direction(self.direction)
+                    .main_align(thumb_main_align)
+                    .children(if direction_is_vertical {
+                        vec![thumb, track]
+                    } else {
+                        vec![track, thumb]
+                    }),
+            )
+    }
+
+    fn render_key(&self) -> DiffKey {
+        self.key.clone().or(self.default_key())
+    }
+}

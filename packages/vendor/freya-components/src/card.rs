@@ -1,0 +1,296 @@
+use freya_core::prelude::*;
+use torin::gaps::Gaps;
+
+use crate::{
+    define_theme,
+    get_theme,
+};
+
+define_theme! {
+    for = Card;
+    theme_field = theme_layout;
+
+    %[component]
+    pub CardLayout {
+        %[fields]
+        corner_radius: CornerRadius,
+        padding: Gaps,
+    }
+}
+
+define_theme! {
+    for = Card;
+    theme_field = theme_colors;
+
+    %[component]
+    pub CardColors {
+        %[fields]
+        background: Color,
+        hover_background: Color,
+        border_fill: Color,
+        color: Color,
+        shadow: Color,
+    }
+}
+
+/// Style variants for the Card component.
+#[derive(Clone, PartialEq)]
+pub enum CardStyleVariant {
+    Filled,
+    Outline,
+}
+
+/// Layout variants for the Card component.
+#[derive(Clone, PartialEq)]
+pub enum CardLayoutVariant {
+    Normal,
+    Compact,
+}
+
+/// A container component with styling variants.
+///
+/// # Example
+///
+/// ```rust
+/// # use freya::prelude::*;
+/// fn app() -> impl IntoElement {
+///     Card::new()
+///         .width(Size::percent(75.))
+///         .height(Size::percent(75.))
+///         .child("Hello, World!")
+/// }
+/// ```
+///
+/// See the [interactive components demo](https://freyaui.dev/demo).
+#[derive(Clone, PartialEq)]
+pub struct Card {
+    pub(crate) theme_colors: Option<CardColorsThemePartial>,
+    pub(crate) theme_layout: Option<CardLayoutThemePartial>,
+    layout: LayoutData,
+    accessibility: AccessibilityData,
+    elements: Vec<Element>,
+    on_press: Option<EventHandler<Event<PressEventData>>>,
+    key: DiffKey,
+    style_variant: CardStyleVariant,
+    layout_variant: CardLayoutVariant,
+    hoverable: bool,
+    cursor_icon: Option<CursorIcon>,
+}
+
+impl Default for Card {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ChildrenExt for Card {
+    fn get_children(&mut self) -> &mut Vec<Element> {
+        &mut self.elements
+    }
+}
+
+impl KeyExt for Card {
+    fn write_key(&mut self) -> &mut DiffKey {
+        &mut self.key
+    }
+}
+
+impl LayoutExt for Card {
+    fn get_layout(&mut self) -> &mut LayoutData {
+        &mut self.layout
+    }
+}
+
+impl ContainerSizeExt for Card {}
+
+impl ContainerPositionExt for Card {}
+
+impl ContainerConstraintsExt for Card {}
+
+impl ContainerWithContentExt for Card {}
+
+impl AccessibilityExt for Card {
+    fn get_accessibility_data(&mut self) -> &mut AccessibilityData {
+        &mut self.accessibility
+    }
+}
+
+impl CornerRadiusExt for Card {
+    fn with_corner_radius(self, corner_radius: f32) -> Self {
+        self.corner_radius(corner_radius)
+    }
+}
+
+impl Card {
+    pub fn new() -> Self {
+        Self {
+            theme_colors: None,
+            theme_layout: None,
+            layout: LayoutData::default(),
+            accessibility: AccessibilityData::default(),
+            style_variant: CardStyleVariant::Outline,
+            layout_variant: CardLayoutVariant::Normal,
+            on_press: None,
+            elements: Vec::default(),
+            hoverable: false,
+            cursor_icon: None,
+            key: DiffKey::None,
+        }
+    }
+
+    /// Get the current layout variant.
+    pub fn get_layout_variant(&self) -> &CardLayoutVariant {
+        &self.layout_variant
+    }
+
+    /// Get the layout theme override.
+    pub fn get_theme_layout(&self) -> Option<&CardLayoutThemePartial> {
+        self.theme_layout.as_ref()
+    }
+
+    /// Set the style variant.
+    pub fn style_variant(mut self, style_variant: impl Into<CardStyleVariant>) -> Self {
+        self.style_variant = style_variant.into();
+        self
+    }
+
+    /// Set the layout variant.
+    pub fn layout_variant(mut self, layout_variant: impl Into<CardLayoutVariant>) -> Self {
+        self.layout_variant = layout_variant.into();
+        self
+    }
+
+    /// Set whether the card should respond to hover interactions.
+    pub fn hoverable(mut self, hoverable: impl Into<bool>) -> Self {
+        self.hoverable = hoverable.into();
+        self
+    }
+
+    /// Set the press event handler.
+    pub fn on_press(mut self, on_press: impl Into<EventHandler<Event<PressEventData>>>) -> Self {
+        self.on_press = Some(on_press.into());
+        self
+    }
+
+    /// Set custom color theme.
+    pub fn theme_colors(mut self, theme: CardColorsThemePartial) -> Self {
+        self.theme_colors = Some(theme);
+        self
+    }
+
+    /// Set custom layout theme.
+    pub fn theme_layout(mut self, theme: CardLayoutThemePartial) -> Self {
+        self.theme_layout = Some(theme);
+        self
+    }
+
+    /// Shortcut for [Self::style_variant] with [CardStyleVariant::Filled].
+    pub fn filled(self) -> Self {
+        self.style_variant(CardStyleVariant::Filled)
+    }
+
+    /// Shortcut for [Self::style_variant] with [CardStyleVariant::Outline].
+    pub fn outline(self) -> Self {
+        self.style_variant(CardStyleVariant::Outline)
+    }
+
+    /// Shortcut for [Self::layout_variant] with [CardLayoutVariant::Compact].
+    pub fn compact(self) -> Self {
+        self.layout_variant(CardLayoutVariant::Compact)
+    }
+
+    /// Override the cursor icon shown when hovering over this component while hoverable.
+    pub fn cursor(mut self, cursor_icon: impl Into<Option<CursorIcon>>) -> Self {
+        self.cursor_icon = cursor_icon.into();
+        self
+    }
+}
+
+impl Component for Card {
+    fn render(&self) -> impl IntoElement {
+        let mut hovering = use_state(|| false);
+        let a11y_id = use_a11y();
+        let focus = use_focus(a11y_id);
+
+        let is_hoverable = self.hoverable;
+
+        let theme_colors = match self.style_variant {
+            CardStyleVariant::Filled => {
+                get_theme!(&self.theme_colors, CardColorsThemePreference, "filled_card")
+            }
+            CardStyleVariant::Outline => get_theme!(
+                &self.theme_colors,
+                CardColorsThemePreference,
+                "outline_card"
+            ),
+        };
+        let theme_layout = match self.layout_variant {
+            CardLayoutVariant::Normal => {
+                get_theme!(&self.theme_layout, CardLayoutThemePreference, "card_layout")
+            }
+            CardLayoutVariant::Compact => get_theme!(
+                &self.theme_layout,
+                CardLayoutThemePreference,
+                "compact_card_layout"
+            ),
+        };
+
+        let border = if focus() == Focus::Keyboard {
+            Border::new()
+                .fill(theme_colors.border_fill)
+                .width(2.)
+                .alignment(BorderAlignment::Inner)
+        } else {
+            Border::new()
+                .fill(theme_colors.border_fill)
+                .width(1.)
+                .alignment(BorderAlignment::Inner)
+        };
+
+        let background = if is_hoverable && hovering() {
+            theme_colors.hover_background
+        } else {
+            theme_colors.background
+        };
+
+        let shadow = if is_hoverable && hovering() {
+            Some(Shadow::new().y(4.).blur(8.).color(theme_colors.shadow))
+        } else {
+            None
+        };
+
+        rect()
+            .layout(self.layout.clone())
+            .overflow(Overflow::Clip)
+            .a11y_id(a11y_id)
+            .a11y_focusable(is_hoverable)
+            .a11y_role(AccessibilityRole::GenericContainer)
+            .accessibility(self.accessibility.clone())
+            .background(background)
+            .border(border)
+            .padding(theme_layout.padding)
+            .corner_radius(theme_layout.corner_radius)
+            .color(theme_colors.color)
+            .map(shadow, |rect, shadow| rect.shadow(shadow))
+            .map(self.on_press.clone(), |rect, on_press| {
+                rect.on_press(move |e: Event<PressEventData>| {
+                    a11y_id.request_focus();
+                    on_press.call(e);
+                })
+            })
+            .maybe(is_hoverable, |rect| {
+                rect.cursor(self.cursor_icon)
+                    .on_pointer_enter(move |_| {
+                        hovering.set(true);
+                    })
+                    .on_pointer_leave(move |_| {
+                        hovering.set_if_modified(false);
+                    })
+            })
+            .children(self.elements.clone())
+    }
+
+    fn render_key(&self) -> DiffKey {
+        self.key.clone().or(self.default_key())
+    }
+}

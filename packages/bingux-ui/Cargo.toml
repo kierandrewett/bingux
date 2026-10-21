@@ -18,3 +18,8 @@ testing = ["dep:freya-testing"]
 freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar"] }
 freya-testing = { version = "0.5.0-rc.10", optional = true }
 accesskit = "0.24"
+
+# Desktop scroll feel; see ../vendor/README.md.
+[patch.crates-io]
+freya-winit = { path = "../vendor/freya-winit" }
+freya-components = { path = "../vendor/freya-components" }

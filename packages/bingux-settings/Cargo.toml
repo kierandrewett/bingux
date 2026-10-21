@@ -18,3 +18,8 @@ snapshot = ["bingux-ui/testing"]
 [dependencies]
 freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar"] }
 bingux-ui = { path = "../bingux-ui" }
+
+# Desktop scroll feel; see ../vendor/README.md.
+[patch.crates-io]
+freya-winit = { path = "../vendor/freya-winit" }
+freya-components = { path = "../vendor/freya-components" }

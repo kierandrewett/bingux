@@ -1,0 +1,183 @@
+use freya_animation::prelude::*;
+use freya_core::prelude::*;
+use torin::prelude::*;
+
+use crate::{
+    define_theme,
+    get_theme,
+    icons::{
+        IconThemePartialExt,
+        tick::TickIcon,
+    },
+};
+
+define_theme! {
+    %[component]
+    pub Checkbox {
+        %[fields]
+        unselected_fill: Color,
+        selected_fill: Color,
+        selected_icon_fill: Color,
+        border_fill: Color,
+    }
+}
+
+/// Checkbox component.
+///
+/// # Example
+///
+/// ```rust
+/// # use std::collections::HashSet;
+/// # use freya::prelude::*;
+/// fn app() -> impl IntoElement {
+///     let mut checked = use_state(|| false);
+///
+///     rect()
+///         .spacing(8.)
+///         .child(
+///             Tile::new()
+///                 .on_select(move |_| checked.toggle())
+///                 .child(Checkbox::new().selected(checked()))
+///                 .leading("Click to check"),
+///         )
+///         .child(
+///             Tile::new()
+///                 .on_select(move |_| checked.toggle())
+///                 .child(Checkbox::new().selected(!checked()))
+///                 .child("Click to check"),
+///         )
+/// }
+/// ```
+///
+/// See the [interactive components demo](https://freyaui.dev/demo).
+#[derive(Clone, PartialEq)]
+pub struct Checkbox {
+    pub(crate) theme: Option<CheckboxThemePartial>,
+    selected: bool,
+    key: DiffKey,
+    size: f32,
+}
+
+impl KeyExt for Checkbox {
+    fn write_key(&mut self) -> &mut DiffKey {
+        &mut self.key
+    }
+}
+
+impl Default for Checkbox {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Checkbox {
+    pub fn new() -> Self {
+        Self {
+            selected: false,
+            theme: None,
+            key: DiffKey::None,
+            size: 20.,
+        }
+    }
+
+    pub fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    pub fn theme(mut self, theme: CheckboxThemePartial) -> Self {
+        self.theme = Some(theme);
+        self
+    }
+
+    pub fn size(mut self, size: f32) -> Self {
+        self.size = size;
+        self
+    }
+}
+
+impl Component for Checkbox {
+    fn render(&self) -> impl IntoElement {
+        let a11y_id = use_a11y();
+        let focus = use_focus(a11y_id);
+        let CheckboxTheme {
+            border_fill,
+            unselected_fill,
+            selected_fill,
+            selected_icon_fill,
+        } = get_theme!(&self.theme, CheckboxThemePreference, "checkbox");
+
+        let animation = use_animation_with_dependencies(&self.selected, move |conf, selected| {
+            conf.on_change(OnChange::Rerun);
+            conf.on_creation(OnCreation::Finish);
+
+            let scale = AnimNum::new(0.6, 1.)
+                .time(350)
+                .ease(Ease::Out)
+                .function(Function::Expo);
+            let opacity = AnimNum::new(0., 1.)
+                .time(350)
+                .ease(Ease::Out)
+                .function(Function::Expo);
+
+            if *selected {
+                (scale, opacity)
+            } else {
+                (scale.into_reversed(), opacity.into_reversed())
+            }
+        });
+
+        let (scale, opacity) = animation.read().value();
+
+        let (background, fill) = if self.selected {
+            (selected_fill, selected_fill)
+        } else {
+            (Color::TRANSPARENT, unselected_fill)
+        };
+
+        let border = Border::new()
+            .fill(fill)
+            .width(2.)
+            .alignment(BorderAlignment::Inner);
+
+        let focused_border = (focus() == Focus::Keyboard).then(|| {
+            Border::new()
+                .fill(border_fill)
+                .width((self.size * 0.15).ceil())
+                .alignment(BorderAlignment::Outer)
+        });
+
+        rect()
+            .a11y_id(a11y_id)
+            .a11y_focusable(Focusable::Enabled)
+            .a11y_role(AccessibilityRole::CheckBox)
+            .width(Size::px(self.size))
+            .height(Size::px(self.size))
+            .padding(Gaps::new_all(4.0))
+            .main_align(Alignment::center())
+            .cross_align(Alignment::center())
+            .corner_radius(CornerRadius::new_all(self.size * 0.24))
+            .border(border)
+            .border(focused_border)
+            .background(background)
+            .on_key_down({
+                move |e: Event<KeyboardEventData>| {
+                    if !e.is_press_event() {
+                        e.stop_propagation();
+                    }
+                }
+            })
+            .maybe_child((self.selected || opacity > 0.).then(|| {
+                rect().opacity(opacity).scale(scale).child(
+                    TickIcon::new()
+                        .width(Size::px(self.size * 0.7))
+                        .height(Size::px(self.size * 0.7))
+                        .fill(selected_icon_fill),
+                )
+            }))
+    }
+
+    fn render_key(&self) -> DiffKey {
+        self.key.clone().or(self.default_key())
+    }
+}

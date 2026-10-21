@@ -1,0 +1,379 @@
+use freya_core::prelude::*;
+use torin::{
+    gaps::Gaps,
+    size::Size,
+};
+
+use crate::{
+    define_theme,
+    get_theme,
+};
+
+define_theme! {
+    for = Button;
+    theme_field = theme_layout;
+
+    %[component]
+    pub ButtonLayout {
+        %[fields]
+        margin: Gaps,
+        corner_radius: CornerRadius,
+        width: Size,
+        height: Size,
+        padding: Gaps,
+    }
+}
+
+define_theme! {
+    for = Button;
+    theme_field = theme_colors;
+
+    %[component]
+    pub ButtonColors {
+        %[fields]
+        background: Color,
+        hover_background: Color,
+        border_fill: Color,
+        focus_border_fill: Color,
+        color: Color,
+    }
+}
+
+#[derive(Clone, PartialEq)]
+pub enum ButtonStyleVariant {
+    Normal,
+    Filled,
+    Outline,
+    Flat,
+}
+
+#[derive(Clone, PartialEq)]
+pub enum ButtonLayoutVariant {
+    Normal,
+    Compact,
+    Expanded,
+}
+
+/// Simply a button.
+///
+/// ## **Normal**
+///
+/// ```rust
+/// # use freya::prelude::*;
+/// fn app() -> impl IntoElement {
+///     Button::new()
+///         .on_press(|_| println!("Pressed!"))
+///         .child("Press me")
+/// }
+/// ```
+/// ## **Filled**
+///
+/// ```rust
+/// # use freya::prelude::*;
+/// fn app() -> impl IntoElement {
+///     Button::new()
+///         .on_press(|_| println!("Pressed!"))
+///         .filled()
+///         .child("Press me")
+/// }
+/// ```
+/// ## **Outline**
+///
+/// ```rust
+/// # use freya::prelude::*;
+/// fn app() -> impl IntoElement {
+///     Button::new()
+///         .on_press(|_| println!("Pressed!"))
+///         .outline()
+///         .child("Press me")
+/// }
+/// ```
+/// ## **Flat**
+///
+/// ```rust
+/// # use freya::prelude::*;
+/// fn app() -> impl IntoElement {
+///     Button::new()
+///         .on_press(|_| println!("Pressed!"))
+///         .flat()
+///         .child("Press me")
+/// }
+/// ```
+///
+/// See the [interactive components demo](https://freyaui.dev/demo).
+#[derive(Clone, PartialEq)]
+pub struct Button {
+    pub(crate) theme_colors: Option<ButtonColorsThemePartial>,
+    pub(crate) theme_layout: Option<ButtonLayoutThemePartial>,
+    elements: Vec<Element>,
+    on_press: Option<EventHandler<Event<PressEventData>>>,
+    on_secondary_down: Option<EventHandler<Event<PressEventData>>>,
+    on_pointer_down: Option<EventHandler<Event<PointerEventData>>>,
+    key: DiffKey,
+    style_variant: ButtonStyleVariant,
+    layout_variant: ButtonLayoutVariant,
+    enabled: bool,
+    focusable: bool,
+    cursor_icon: Option<CursorIcon>,
+}
+
+impl Default for Button {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ChildrenExt for Button {
+    fn get_children(&mut self) -> &mut Vec<Element> {
+        &mut self.elements
+    }
+}
+
+impl KeyExt for Button {
+    fn write_key(&mut self) -> &mut DiffKey {
+        &mut self.key
+    }
+}
+
+impl Button {
+    pub fn new() -> Self {
+        Self {
+            theme_colors: None,
+            theme_layout: None,
+            style_variant: ButtonStyleVariant::Normal,
+            layout_variant: ButtonLayoutVariant::Normal,
+            on_press: None,
+            on_secondary_down: None,
+            on_pointer_down: None,
+            elements: Vec::default(),
+            enabled: true,
+            focusable: true,
+            cursor_icon: None,
+            key: DiffKey::None,
+        }
+    }
+
+    pub fn get_layout_variant(&self) -> &ButtonLayoutVariant {
+        &self.layout_variant
+    }
+
+    pub fn get_theme_layout(&self) -> Option<&ButtonLayoutThemePartial> {
+        self.theme_layout.as_ref()
+    }
+
+    pub fn enabled(mut self, enabled: impl Into<bool>) -> Self {
+        self.enabled = enabled.into();
+        self
+    }
+
+    pub fn focusable(mut self, focusable: impl Into<bool>) -> Self {
+        self.focusable = focusable.into();
+        self
+    }
+
+    pub fn style_variant(mut self, style_variant: impl Into<ButtonStyleVariant>) -> Self {
+        self.style_variant = style_variant.into();
+        self
+    }
+
+    pub fn layout_variant(mut self, layout_variant: impl Into<ButtonLayoutVariant>) -> Self {
+        self.layout_variant = layout_variant.into();
+        self
+    }
+
+    pub fn on_press(mut self, on_press: impl Into<EventHandler<Event<PressEventData>>>) -> Self {
+        self.on_press = Some(on_press.into());
+        self
+    }
+
+    pub fn on_secondary_down(
+        mut self,
+        on_secondary_down: impl Into<EventHandler<Event<PressEventData>>>,
+    ) -> Self {
+        self.on_secondary_down = Some(on_secondary_down.into());
+        self
+    }
+
+    pub fn on_pointer_down(
+        mut self,
+        on_pointer_down: impl Into<EventHandler<Event<PointerEventData>>>,
+    ) -> Self {
+        self.on_pointer_down = Some(on_pointer_down.into());
+        self
+    }
+
+    pub fn theme_colors(mut self, theme: ButtonColorsThemePartial) -> Self {
+        self.theme_colors = Some(theme);
+        self
+    }
+
+    pub fn theme_layout(mut self, theme: ButtonLayoutThemePartial) -> Self {
+        self.theme_layout = Some(theme);
+        self
+    }
+
+    /// Shortcut for [Self::theme_layout] and [ButtonLayoutVariant::Compact].
+    pub fn compact(self) -> Self {
+        self.layout_variant(ButtonLayoutVariant::Compact)
+    }
+
+    /// Shortcut for [Self::theme_layout] and [ButtonLayoutVariant::Expanded].
+    pub fn expanded(self) -> Self {
+        self.layout_variant(ButtonLayoutVariant::Expanded)
+    }
+
+    /// Shortcut for [Self::style_variant] and [ButtonStyleVariant::Filled].
+    pub fn filled(self) -> Self {
+        self.style_variant(ButtonStyleVariant::Filled)
+    }
+
+    /// Shortcut for [Self::style_variant] and [ButtonStyleVariant::Outline].
+    pub fn outline(self) -> Self {
+        self.style_variant(ButtonStyleVariant::Outline)
+    }
+
+    /// Shortcut for [Self::style_variant] and [ButtonStyleVariant::Flat].
+    pub fn flat(self) -> Self {
+        self.style_variant(ButtonStyleVariant::Flat)
+    }
+
+    /// Override the cursor icon shown when hovering over the button while enabled.
+    pub fn cursor(mut self, cursor_icon: impl Into<Option<CursorIcon>>) -> Self {
+        self.cursor_icon = cursor_icon.into();
+        self
+    }
+}
+
+impl CornerRadiusExt for Button {
+    fn with_corner_radius(self, corner_radius: f32) -> Self {
+        self.corner_radius(corner_radius)
+    }
+}
+
+impl Component for Button {
+    fn render(&self) -> impl IntoElement {
+        let mut hovering = use_state(|| false);
+        let a11y_id = use_a11y();
+        let focus = use_focus(a11y_id);
+
+        let enabled = use_reactive(&self.enabled);
+
+        let theme_colors = match self.style_variant {
+            ButtonStyleVariant::Normal => {
+                get_theme!(&self.theme_colors, ButtonColorsThemePreference, "button")
+            }
+            ButtonStyleVariant::Outline => get_theme!(
+                &self.theme_colors,
+                ButtonColorsThemePreference,
+                "outline_button"
+            ),
+            ButtonStyleVariant::Filled => get_theme!(
+                &self.theme_colors,
+                ButtonColorsThemePreference,
+                "filled_button"
+            ),
+            ButtonStyleVariant::Flat => get_theme!(
+                &self.theme_colors,
+                ButtonColorsThemePreference,
+                "flat_button"
+            ),
+        };
+        let theme_layout = match self.layout_variant {
+            ButtonLayoutVariant::Normal => get_theme!(
+                &self.theme_layout,
+                ButtonLayoutThemePreference,
+                "button_layout"
+            ),
+            ButtonLayoutVariant::Compact => get_theme!(
+                &self.theme_layout,
+                ButtonLayoutThemePreference,
+                "compact_button_layout"
+            ),
+            ButtonLayoutVariant::Expanded => get_theme!(
+                &self.theme_layout,
+                ButtonLayoutThemePreference,
+                "expanded_button_layout"
+            ),
+        };
+
+        let border = if focus() == Focus::Keyboard {
+            Border::new()
+                .fill(theme_colors.focus_border_fill)
+                .width(2.)
+                .alignment(BorderAlignment::Inner)
+        } else {
+            Border::new()
+                .fill(theme_colors.border_fill.mul_if(!self.enabled, 0.9))
+                .width(1.)
+                .alignment(BorderAlignment::Inner)
+        };
+        let background = if enabled() && hovering() {
+            theme_colors.hover_background
+        } else {
+            theme_colors.background
+        };
+
+        rect()
+            .overflow(Overflow::Clip)
+            .a11y_id(a11y_id)
+            .a11y_enabled(self.enabled)
+            .a11y_focusable(self.enabled && self.focusable)
+            .a11y_role(AccessibilityRole::Button)
+            .background(background.mul_if(!self.enabled, 0.9))
+            .border(border)
+            .padding(theme_layout.padding)
+            .corner_radius(theme_layout.corner_radius)
+            .width(theme_layout.width)
+            .height(theme_layout.height)
+            .color(theme_colors.color.mul_if(!self.enabled, 0.9))
+            .center()
+            .maybe(self.enabled, |rect| {
+                rect.map(self.on_pointer_down.clone(), |rect, on_pointer_down| {
+                    rect.on_pointer_down(move |e: Event<PointerEventData>| {
+                        on_pointer_down.call(e);
+                    })
+                })
+                .map(self.on_secondary_down.clone(), |el, on_secondary_down| {
+                    el.on_secondary_down(move |e: Event<PressEventData>| {
+                        on_secondary_down.call(e);
+                    })
+                })
+                .on_all_press({
+                    let on_press = self.on_press.clone();
+                    move |e: Event<PressEventData>| {
+                        a11y_id.request_focus();
+                        match e.data() {
+                            PressEventData::Mouse(data) => {
+                                if data.button == Some(MouseButton::Left)
+                                    && let Some(handler) = &on_press
+                                {
+                                    handler.call(e);
+                                }
+                            }
+                            PressEventData::Touch(_)
+                            | PressEventData::Keyboard(_)
+                            | PressEventData::Accessibility(_) => {
+                                if let Some(handler) = &on_press {
+                                    handler.call(e);
+                                }
+                            }
+                        }
+                    }
+                })
+                .on_pointer_over(move |_| {
+                    hovering.set(true);
+                })
+                .on_pointer_out(move |_| hovering.set_if_modified(false))
+            })
+            .cursor(if self.enabled {
+                self.cursor_icon
+            } else {
+                CursorIcon::NotAllowed.into()
+            })
+            .children(self.elements.clone())
+    }
+
+    fn render_key(&self) -> DiffKey {
+        self.key.clone().or(self.default_key())
+    }
+}

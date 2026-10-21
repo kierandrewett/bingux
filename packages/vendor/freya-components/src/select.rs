@@ -1,0 +1,305 @@
+use freya_animation::prelude::*;
+use freya_core::prelude::*;
+use torin::prelude::*;
+
+use crate::{
+    define_theme,
+    get_theme,
+    icons::{
+        IconThemePartialExt,
+        arrow::ArrowIcon,
+    },
+    menu::MenuGroup,
+};
+
+define_theme! {
+    %[component]
+    pub Select {
+        %[fields]
+        width: Size,
+        margin: Gaps,
+        select_background: Color,
+        background_button: Color,
+        hover_background: Color,
+        border_fill: Color,
+        focus_border_fill: Color,
+        arrow_fill: Color,
+        color: Color,
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Clone, Copy)]
+pub enum SelectStatus {
+    #[default]
+    Idle,
+    Hovering,
+}
+
+/// Select between different items component.
+///
+/// # Example
+///
+/// ```rust
+/// # use freya::prelude::*;
+/// fn app() -> impl IntoElement {
+///     let values = use_hook(|| {
+///         vec![
+///             "Rust".to_string(),
+///             "Turbofish".to_string(),
+///             "Crabs".to_string(),
+///         ]
+///     });
+///     let mut selected_select = use_state(|| 0);
+///
+///     Select::new()
+///         .selected_item(values[selected_select()].to_string())
+///         .children(values.iter().enumerate().map(|(i, val)| {
+///             MenuItem::new()
+///                 .selected(selected_select() == i)
+///                 .on_press(move |_| selected_select.set(i))
+///                 .child(val.to_string())
+///         }))
+/// }
+/// ```
+///
+/// See the [interactive components demo](https://freyaui.dev/demo).
+#[derive(Clone, PartialEq)]
+pub struct Select {
+    pub(crate) theme: Option<SelectThemePartial>,
+    selected_item: Option<Element>,
+    children: Vec<Element>,
+    cursor_icon: Option<CursorIcon>,
+    key: DiffKey,
+}
+
+impl ChildrenExt for Select {
+    fn get_children(&mut self) -> &mut Vec<Element> {
+        &mut self.children
+    }
+}
+
+impl KeyExt for Select {
+    fn write_key(&mut self) -> &mut DiffKey {
+        &mut self.key
+    }
+}
+
+impl Default for Select {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Select {
+    pub fn new() -> Self {
+        Self {
+            theme: None,
+            selected_item: None,
+            children: Vec::new(),
+            cursor_icon: None,
+            key: DiffKey::None,
+        }
+    }
+
+    pub fn theme(mut self, theme: SelectThemePartial) -> Self {
+        self.theme = Some(theme);
+        self
+    }
+
+    pub fn selected_item(mut self, item: impl Into<Element>) -> Self {
+        self.selected_item = Some(item.into());
+        self
+    }
+
+    /// Override the cursor icon shown when hovering over this component.
+    pub fn cursor(mut self, cursor_icon: impl Into<Option<CursorIcon>>) -> Self {
+        self.cursor_icon = cursor_icon.into();
+        self
+    }
+}
+
+impl Component for Select {
+    fn render(&self) -> impl IntoElement {
+        let theme = get_theme!(&self.theme, SelectThemePreference, "select");
+        let a11y_id = use_a11y();
+        let focus = use_focus(a11y_id);
+        let mut status = use_state(SelectStatus::default);
+        let mut open = use_state(|| false);
+        let mut button_area = use_state(|| None::<Area>);
+        let mut list_size = use_state(|| None::<Size2D>);
+        use_provide_context(|| MenuGroup { group_id: a11y_id });
+
+        let focused = use_memo(move || {
+            a11y_id.is_focused()
+                || Platform::get()
+                    .current_window()
+                    .focused_accessibility_node
+                    .read()
+                    .member_of()
+                    == Some(a11y_id)
+        });
+        let visible = open() && focused();
+
+        let animation = use_animation_with_dependencies(&visible, move |conf, visible| {
+            conf.on_change(OnChange::Rerun);
+            conf.on_creation(OnCreation::Finish);
+
+            let opacity = AnimNum::new(0., 1.)
+                .time(90)
+                .ease(Ease::Out)
+                .function(Function::Quad);
+            let offset_y = AnimNum::new(-3., 1.)
+                .time(90)
+                .ease(Ease::Out)
+                .function(Function::Quad);
+            if *visible {
+                (opacity, offset_y)
+            } else {
+                (opacity.into_reversed(), offset_y.into_reversed())
+            }
+        });
+
+        let (opacity, slide) = animation.read().value();
+
+        // Clear the list size when the select dropdown is not rendered
+        if !visible && opacity == 0. && list_size().is_some() {
+            let _ = list_size.take();
+            open.set_if_modified(false);
+        }
+
+        let on_press = move |e: Event<PressEventData>| {
+            if a11y_id.is_focused() {
+                open.toggle();
+            } else {
+                a11y_id.request_focus();
+                open.set(true);
+            }
+            // Prevent global mouse up
+            e.prevent_default();
+            e.stop_propagation();
+        };
+
+        let on_pointer_enter = move |_| {
+            *status.write() = SelectStatus::Hovering;
+        };
+
+        let on_pointer_leave = move |_| {
+            *status.write() = SelectStatus::Idle;
+        };
+
+        // Close the select if clicked anywhere
+        let on_global_pointer_up = move |_: Event<PointerEventData>| {
+            open.set_if_modified(false);
+        };
+
+        let on_global_key_down = move |e: Event<KeyboardEventData>| match e.key {
+            Key::Named(NamedKey::Escape) => {
+                open.set_if_modified(false);
+            }
+            Key::Named(NamedKey::Enter) if a11y_id.is_focused() => {
+                open.toggle();
+            }
+            _ => {}
+        };
+
+        let offset_y = match (button_area(), list_size()) {
+            (Some(button), Some(list)) => {
+                let root_height = Platform::get().current_window().root_size.peek().height;
+                let space_below = root_height - button.max_y();
+                let space_above = button.min_y();
+                let flips = list.height > space_below && list.height <= space_above;
+                if flips {
+                    -(button.height() + list.height) - slide
+                } else {
+                    slide
+                }
+            }
+            _ => slide,
+        };
+
+        let opacity = if list_size().is_some() { opacity } else { 0. };
+
+        let background = match *status.read() {
+            SelectStatus::Hovering => theme.hover_background,
+            SelectStatus::Idle => theme.background_button,
+        };
+
+        let border = if focus() == Focus::Keyboard {
+            Border::new()
+                .fill(theme.focus_border_fill)
+                .width(2.)
+                .alignment(BorderAlignment::Inner)
+        } else {
+            Border::new()
+                .fill(theme.border_fill)
+                .width(1.)
+                .alignment(BorderAlignment::Inner)
+        };
+
+        rect()
+            .child(
+                rect()
+                    .a11y_id(a11y_id)
+                    .a11y_member_of(a11y_id)
+                    .a11y_role(AccessibilityRole::ListBox)
+                    .a11y_focusable(Focusable::Enabled)
+                    .on_pointer_enter(on_pointer_enter)
+                    .on_pointer_leave(on_pointer_leave)
+                    .cursor(self.cursor_icon)
+                    .on_press(on_press)
+                    .on_global_key_down(on_global_key_down)
+                    .on_global_pointer_up(on_global_pointer_up)
+                    .on_sized(move |e: Event<SizedEventData>| {
+                        button_area.set_if_modified(Some(e.area));
+                    })
+                    .width(theme.width)
+                    .margin(theme.margin)
+                    .background(background)
+                    .padding((8., 18., 8., 18.))
+                    .border(border)
+                    .horizontal()
+                    .center()
+                    .color(theme.color)
+                    .corner_radius(8.)
+                    .maybe_child(self.selected_item.clone())
+                    .child(
+                        ArrowIcon::new()
+                            .margin((0., 0., 0., 8.))
+                            .rotate(0.)
+                            .fill(theme.arrow_fill),
+                    ),
+            )
+            .maybe_child((visible || opacity > 0.).then(|| {
+                rect().height(Size::px(0.)).width(Size::px(0.)).child(
+                    rect()
+                        .width(Size::window_percent(100.))
+                        .margin(Gaps::new(4., 0., 4., 0.))
+                        .offset_y(offset_y)
+                        .on_sized(move |e: Event<SizedEventData>| {
+                            list_size.set_if_modified(Some(e.area.size));
+                        })
+                        .child(
+                            rect()
+                                .layer(Layer::Overlay)
+                                .border(
+                                    Border::new()
+                                        .fill(theme.border_fill)
+                                        .width(1.)
+                                        .alignment(BorderAlignment::Inner),
+                                )
+                                .overflow(Overflow::Clip)
+                                .corner_radius(10.)
+                                .background(theme.select_background)
+                                .padding(6.)
+                                .content(Content::Fit)
+                                .opacity(opacity)
+                                .children(self.children.clone()),
+                        ),
+                )
+            }))
+    }
+
+    fn render_key(&self) -> DiffKey {
+        self.key.clone().or(self.default_key())
+    }
+}
