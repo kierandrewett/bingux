@@ -249,6 +249,7 @@ mode. `BINGUX_REDUCED_MOTION=1` continues to disable motion independently.
 - Notifications and on-screen displays are overlay surfaces with no keyboard focus.
 - All icon controls have at least a 24 by 24 pixel pointer target.
 - Search supports typing, Up and Down, Enter, and Escape. Escape closes the surface and clears transient selection.
+- Search command mode: a query whose first non-space character is `>` runs a program with arguments. The text after `>` is split into argv with shell-style quoting (single quotes, double quotes, and backslash escapes); no shell is started, so pipes, redirections, globs, and variable expansion are not interpreted. The result is labelled `Commands` with the subtitle `Run command` and is never mixed with applications or web results. Enter runs it. Escape clears the command text, and a second Escape closes the surface. If the program cannot be started, the surface shows `Could not run <command>.` and the launch feedback is cleared.
 - The tray uses StatusNotifierItem and DBusMenu support. Right-click menus must come from the item when it exposes one.
 - A profile with `bingux.networking.tailscale.enable` starts the official
   `tailscale systray` client as the profile user. It publishes a
@@ -587,6 +588,27 @@ two choices: **Wait** hides it until the window changes state again, and **Force
 window recovers or goes away. If the kill command fails, the dialog stays open and the shell logs the
 exit code. The dialog needs Gnoblin with `window.kill`; the ping timeout is
 `window_management.check_alive_timeout`.
+
+## First-login introduction
+
+`FirstLoginIntro.qml` shows a card of the shortcuts this desktop configures:
+Super for search, Super+period for emoji, Alt+S for capture, Alt+Tab and Super+Tab
+for windows, Super+Space for input sources, Super+Z for snap layouts, and the
+wallpaper, clock and indicator menus. **Open Settings** opens Bingux Settings and
+**Got it** closes it; Escape is the same as Got it. The card is an overlay that
+takes keyboard focus only while open and never delays startup or shortcuts.
+
+Completion is stored as `first-login/intro.json` in the shell's Quickshell state
+directory (`Quickshell.statePath`), containing `{"version":1,"completed":true}`.
+Only a dismissal records completion, so closing the shell without dismissing shows
+the card again on the next login. On the first run with no state file, the shell
+checks for the files only user action writes (`bingux.toml`, `switcher.json`,
+`extensions.json`, Control Centre controls, emoji recents). If any exist, the
+card is recorded as complete without being shown. Reduced motion
+(`BINGUX_REDUCED_MOTION=1`) removes the fade.
+
+Reopen it with `binguxctl ipc introduction show`, or from Settings, Desktop,
+Introduction. `binguxctl ipc introduction dismiss` closes it and records completion.
 
 ## Keyboard layout switcher
 

@@ -40,6 +40,10 @@ way round.
 Each page shows a readable error when its tool is missing or refuses the
 request, and a Try again action where that makes sense.
 
+Desktop has an Introduction group with a **Show introduction** action. It asks the
+running shell to reopen the first-login guide (`binguxctl ipc introduction show`),
+so it needs a running Bingux shell and reports an error otherwise.
+
 ## Gnoblin and GSettings
 
 Gnoblin's Lua configuration can set pointer, touchpad and keyboard options.

@@ -352,6 +352,8 @@ ShellRoot {
 
     NotRespondingDialog {}
 
+    FirstLoginIntro {}
+
     OsdSurface {
         state: osdState
         dockSafeInset: dock.dockTopFromBottom + Theme.dockPadding

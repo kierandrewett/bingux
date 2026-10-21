@@ -23,6 +23,7 @@ binguxctl sidebar edge right
 binguxctl keyboard next
 binguxctl emoji open
 binguxctl privacy status
+binguxctl ipc introduction show          # Open the first-login introduction
 binguxctl status
 binguxctl reload
 ```

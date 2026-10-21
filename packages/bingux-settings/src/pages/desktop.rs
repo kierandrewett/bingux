@@ -5,7 +5,9 @@
 
 use std::time::Duration;
 
-use crate::ui::{Group, Row, Status, choice_row, page_title, row, slider, status, switch_row};
+use crate::ui::{
+    Group, Row, Status, choice_row, page_title, row, row_button, slider, status, switch_row,
+};
 use freya::prelude::*;
 
 use crate::pages::bingux_config;
@@ -181,6 +183,24 @@ fn write(ctx: Ctx, change: Change) {
                     pending.set(None);
                 }
             }
+        },
+    );
+}
+
+/// Reopen the first-login introduction in the running shell.
+fn show_introduction(mut error: State<Option<String>>) {
+    background_then(
+        || {
+            let program = system::locate("binguxctl");
+            system::run(
+                &program,
+                &["ipc", "introduction", "show"],
+                Duration::from_secs(5),
+            )
+        },
+        move |result| match result {
+            Ok(_) => error.set(None),
+            Err(failure) => error.set(Some(failure.0)),
         },
     );
 }
@@ -374,6 +394,15 @@ impl Component for DesktopPage {
                         write(ctx, Change::Set("privacy.public_ip_lookup", on.to_string()))
                     })
                     .subtitle("Ask ipapi.co for the public address in the Control Centre."),
+                ),
+            )
+            .child(
+                Group::titled("Introduction").row(
+                    row("Shortcuts and shell tour")
+                        .subtitle("Show the first-login guide to this desktop's shortcuts again.")
+                        .trailing(row_button("Show introduction", move |_| {
+                            show_introduction(error)
+                        })),
                 ),
             )
     }
