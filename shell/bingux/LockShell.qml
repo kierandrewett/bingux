@@ -20,8 +20,10 @@ ShellRoot {
     }
 
     // Keyboard layouts for the session bar, from the user's bingux-statusd.
+    // Named apart from SessionScreen.metrics: the lock surface is its own
+    // component, where that property would shadow an id of the same name.
     Metrics {
-        id: metrics
+        id: sessionMetrics
     }
 
     LockAuthentication {
@@ -71,7 +73,7 @@ ShellRoot {
             SessionScreen {
                 anchors.fill: parent
                 authentication: lockAuthentication
-                metrics: metrics
+                metrics: sessionMetrics
                 ready: lock.secure
                 accountName: lockAuthentication.userName
                 accountDisplayName: lockAuthentication.userDisplayName

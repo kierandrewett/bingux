@@ -18,15 +18,15 @@ ShellRoot {
     // Keyboard layouts for the session bar; the greeter session runs its own
     // bingux-statusd (see packaging/gnoblin/greeter.lua).
     Metrics {
-        id: metrics
+        id: sessionMetrics
     }
 
     GreeterAuthentication {
-        id: authentication
+        id: greeterAuthentication
     }
 
     GreeterCatalog {
-        id: catalog
+        id: greeterCatalog
     }
 
     Variants {
@@ -47,11 +47,14 @@ ShellRoot {
                 left: true
                 right: true
             }
+            // Variants instantiates this window as its own component, where
+            // the screen's property names shadow same-named ids of this file.
+            // The ids above are therefore distinct from the property names.
             GreeterScreen {
                 anchors.fill: parent
-                authentication: authentication
-                catalog: catalog
-                metrics: metrics
+                authentication: greeterAuthentication
+                catalog: greeterCatalog
+                metrics: sessionMetrics
                 interactive: window.primary
             }
         }
