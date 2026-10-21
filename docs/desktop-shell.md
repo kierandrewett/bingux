@@ -124,6 +124,12 @@ each logical monitor from the compositor's monitor list and sends none while the
 compositor is unavailable. There is no producer for display or keyboard
 brightness: Gnoblin binds no brightness keys and reads no backlight.
 
+The OSD card is one component, `OsdCard.qml`. The desktop surface places it on
+each output above the dock. The lock screen places its own copy in the middle of
+each lock surface and handles the volume keys itself, because the desktop
+surface is hidden behind the lock and Gnoblin's key bindings do not run while
+locked. See [Volume keys and feedback](locking.md#volume-keys-and-feedback).
+
 `osd-bridge.js` is a separate GNOME Shell compatibility adapter. It remains
 for GNOME Shell sessions, including older Gnoblin builds that do not publish
 the native event. It checks for native support before patching the Shell OSD

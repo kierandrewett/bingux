@@ -26,6 +26,7 @@ NotificationState 1.0 NotificationState.qml
 SessionActivity 1.0 SessionActivity.qml
 NotificationSurface 1.0 NotificationSurface.qml
 OsdState 1.0 OsdState.qml
+OsdCard 1.0 OsdCard.qml
 NotRespondingDialog 1.0 NotRespondingDialog.qml
 OsdSurface 1.0 OsdSurface.qml
 WorkspaceChangeState 1.0 WorkspaceChangeState.qml
@@ -152,6 +153,7 @@ singleton CompositorEnvironment 1.0 CompositorEnvironment.qml
 singleton SessionContext 1.0 SessionContext.qml
 singleton SessionServices 1.0 SessionServices.qml
 SessionScreen 1.0 SessionScreen.qml
+SessionOsd 1.0 SessionOsd.qml
 SessionAvatar 1.0 SessionAvatar.qml
 SessionLink 1.0 SessionLink.qml
 SessionGlass 1.0 SessionGlass.qml

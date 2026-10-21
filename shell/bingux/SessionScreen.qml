@@ -38,6 +38,11 @@ Item {
     // keyboard layout menu and may be null.
     property bool showBar: true
     property var metrics: null
+    // An OsdState for volume feedback, and the output this screen covers.
+    // With no state the screen ignores the volume keys and shows no OSD, as
+    // on the greeter.
+    property var osdState: null
+    property string outputName: ""
     property string gnoblinCtlPath: "gnoblinctl"
     property alias leadingContent: leading.data
     property alias cornerLeadingContent: cornerLeading.data
@@ -170,6 +175,14 @@ Item {
                 duration: root.leaving ? Theme.sessionExitMotion : Theme.sessionEnterMotion
             }
         }
+    }
+    Keys.forwardTo: [osd]
+    SessionOsd {
+        id: osd
+        anchors.fill: parent
+        z: 25
+        osdState: root.osdState
+        outputName: root.outputName
     }
     // A click anywhere else closes the bar's menus.
     MouseArea {

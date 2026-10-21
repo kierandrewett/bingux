@@ -16,7 +16,7 @@ import QtQuick
 //   lock                start the lock client
 //   notificationContent show notification bodies and actions
 //   mediaControl        play, pause, skip
-//   volume              change the output volume
+//   volume              change the output volume or mute the microphone
 //   network             switch networks, join Wi-Fi
 //   doNotDisturb        toggle Do Not Disturb
 //

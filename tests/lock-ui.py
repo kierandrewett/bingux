@@ -2,7 +2,10 @@
 """Run the lock screen inside a headless Sway session.
 
 tests/lock-ui.qml locks the session with ext-session-lock-v1, rejects one
-password, accepts the next, plays the exit and unlocks. Sway is started with
+password, takes the volume, mute and microphone keys, shows a statusd OSD
+record, accepts the next password, plays the exit and unlocks. The keys are
+typed on a virtual keyboard with wtype, and the record is sent on a stand-in
+for bingux-statusd's osd-v2.sock. Sway is started with
 its GLES renderer: with the pixman renderer the Qt lock client never gets a
 second frame and stalls. A screenshot of the locked state is written to
 BINGUX_LOCK_SHOT when set; BINGUX_LOCK_WALLPAPER points at a real image.
@@ -11,12 +14,15 @@ The Bingux.Wayland plugin (bingux-wayland-sync) must be importable: build it
 with `make native` or point QML_IMPORT_PATH at an installed copy.
 """
 
+import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -36,7 +42,7 @@ def import_path():
 
 
 def main():
-    for tool in ("sway", "grim", QS):
+    for tool in ("sway", "grim", "wtype", QS):
         if shutil.which(tool) is None:
             print("missing tool: " + tool)
             return 1
@@ -81,6 +87,21 @@ def main():
         qml.write_text(
             (ROOT / "tests/lock-ui.qml").read_text().replace("../shell/bingux", (ROOT / "shell/bingux").as_uri())
         )
+        # Stand-in for bingux-statusd: one client, newline-delimited records.
+        osd_dir = runtime / "bingux"
+        osd_dir.mkdir(mode=0o700)
+        osd_server = socket.socket(socket.AF_UNIX)
+        osd_server.bind(str(osd_dir / "osd-v2.sock"))
+        osd_server.listen(1)
+        osd_peers = []
+        threading.Thread(target=lambda: osd_peers.append(osd_server.accept()[0]), daemon=True).start()
+
+        # The seat needs a keyboard before the lock client binds it, or the
+        # client never gets keyboard focus. A virtual keyboard lives as long
+        # as its wtype process, so this one only sleeps.
+        keyboard_holder = subprocess.Popen(["wtype", "-s", "30000"], env=environment)
+        time.sleep(0.5)
+
         client = subprocess.Popen(
             [QS, "-p", str(qml)],
             env=environment,
@@ -88,19 +109,55 @@ def main():
             stderr=subprocess.STDOUT,
             text=True,
         )
+        lines = []
         shot = os.environ.get("BINGUX_LOCK_SHOT")
-        if shot:
-            # The locked state holds for 1.5 s after the rejected password.
-            time.sleep(2.0)
-            subprocess.run(["grim", shot], env=environment, check=False)
+
+        def drive():
+            for line in client.stdout:
+                lines.append(line)
+                if "LOCK_UI_AWAIT_KEYS" in line:
+                    # Up, then Mute, then the microphone key, in one process so
+                    # the keymap is uploaded once. The first pause lets the
+                    # client apply that keymap before the first key.
+                    subprocess.run(
+                        [
+                            "wtype", "-s", "400",
+                            "-k", "XF86AudioRaiseVolume", "-s", "150",
+                            "-k", "XF86AudioMute", "-s", "150",
+                            "-k", "XF86AudioMicMute", "-s", "300",
+                        ],
+                        env=environment,
+                        check=False,
+                    )
+                    record = {
+                        "protocolVersion": 2,
+                        "type": "osd",
+                        "monitorIndex": 0,
+                        "outputNames": ["HEADLESS-1"],
+                        "icon": "audio-volume-high-symbolic",
+                        "label": "Speakers",
+                        "level": 0.55,
+                        "maxLevel": 1.0,
+                    }
+                    if osd_peers:
+                        osd_peers[0].sendall((json.dumps(record) + "\n").encode())
+                elif "LOCK_UI_OSD_SHOWN" in line and shot:
+                    subprocess.run(["grim", shot], env=environment, check=False)
+
+        reader = threading.Thread(target=drive, daemon=True)
+        reader.start()
         try:
-            output, _ = client.communicate(timeout=25)
+            client.wait(timeout=25)
         except subprocess.TimeoutExpired:
             client.kill()
-            output, _ = client.communicate()
+            client.wait()
+        keyboard_holder.terminate()
+        reader.join(timeout=5)
+        output = "".join(lines)
         print(output)
         print("lock exit code:", client.returncode)
         checks = {
+            "keys and OSD": "LOCK_UI_OSD_SHOWN" in output,
             "lock passed": "LOCK_UI_PASSED" in output,
             "exit code": client.returncode == 0,
             "no failure": "LOCK_UI_FAILED" not in output,
