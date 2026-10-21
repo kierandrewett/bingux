@@ -13,8 +13,9 @@ depends=('bingux' 'gnoblin' 'greetd' 'networkmanager' 'glib2')
 # The default wallpaper is generated, not checked in.
 makedepends=('imagemagick')
 install=bingux-os.install
-source=('init.lua' 'bingux-os.gschema.override')
-sha256sums=('SKIP' 'SKIP')
+backup=('etc/pacman.d/bingux-os-mirrorlist')
+source=('init.lua' 'bingux-os.gschema.override' 'bingux-os-mirrorlist')
+sha256sums=('SKIP' 'SKIP' 'SKIP')
 
 build() {
     magick -size 2560x1600 gradient:'#2b3a67-#101523' -attenuate 0.15 +noise Gaussian -quality 92 default.jpg
@@ -26,4 +27,6 @@ package() {
     install -Dm644 init.lua "$pkgdir/etc/skel/.config/gnoblin/init.lua"
     # Bingux reads the GNOME background setting when desktop.wallpaper is unset.
     install -Dm644 bingux-os.gschema.override "$pkgdir/usr/share/glib-2.0/schemas/90_bingux-os.gschema.override"
+    # Where pacman fetches Bingux OS packages from; see distro/README.md.
+    install -Dm644 bingux-os-mirrorlist "$pkgdir/etc/pacman.d/bingux-os-mirrorlist"
 }

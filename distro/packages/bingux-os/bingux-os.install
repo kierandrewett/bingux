@@ -8,7 +8,16 @@ install_greeter_config() {
     fi
 }
 
+# The [bingux-os] repository, so pacman -Syu keeps the desktop up to date. The
+# live image and archinstall copy this section into the installed system.
+install_repository() {
+    if ! grep -q '^\[bingux-os\]' /etc/pacman.conf; then
+        printf '\n[bingux-os]\nSigLevel = Optional TrustAll\nInclude = /etc/pacman.d/bingux-os-mirrorlist\n' >>/etc/pacman.conf
+    fi
+}
+
 post_install() {
+    install_repository
     install_greeter_config
     systemctl enable greetd.service NetworkManager.service >/dev/null 2>&1 || true
     systemctl set-default graphical.target >/dev/null 2>&1 || true

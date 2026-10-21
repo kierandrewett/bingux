@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+"""Install Bingux OS onto a disk with archinstall.
+
+Wipes the whole disk: a 512 MiB EFI system partition (FAT32, mounted at /boot)
+and an ext4 root partition for the rest. The system boots through
+systemd-boot, so the live image must itself have started in UEFI mode.
+
+It installs the `bingux-os` package, which pulls in Gnoblin, the Bingux shell,
+the login screen and NetworkManager. Run `archinstall` directly for anything
+else (other layouts, encryption, extra packages); add `bingux-os` to its
+additional packages.
+
+    bingux-os-install --disk /dev/vda --user kieran
+"""
+
+import argparse
+import getpass
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import uuid
+
+MIB = 1024 * 1024
+BOOT_SIZE_MIB = 512
+# GPT keeps a backup table at the end of the disk, and the first partition
+# starts 1 MiB in; the root partition leaves the tail free.
+GPT_TAIL_MIB = 2
+PACKAGES = ["bingux-os", "sudo", "nano"]
+
+
+def fail(message):
+    print(f"bingux-os-install: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+def lsblk(disk, *columns):
+    result = subprocess.run(["lsblk", "-bdno", ",".join(columns), disk], capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        fail(f"{disk} is not a block device")
+    return result.stdout.split()
+
+
+def mounted_partitions(disk):
+    result = subprocess.run(["lsblk", "-nro", "MOUNTPOINTS", disk], capture_output=True, text=True, check=False)
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+def size(value, unit, sector):
+    return {"sector_size": {"unit": "B", "value": sector}, "unit": unit, "value": value}
+
+
+def disk_config(disk, total_bytes, sector):
+    root_mib = total_bytes // MIB - 1 - BOOT_SIZE_MIB - GPT_TAIL_MIB
+    if root_mib < 4096:
+        fail(f"{disk} is too small; Bingux OS needs at least 5 GiB")
+    common = {"btrfs": [], "dev_path": None, "mount_options": [], "status": "create", "type": "primary"}
+    return {
+        "config_type": "default_layout",
+        "device_modifications": [
+            {
+                "device": disk,
+                "wipe": True,
+                "partitions": [
+                    {
+                        **common,
+                        "flags": ["boot", "esp"],
+                        "fs_type": "fat32",
+                        "mountpoint": "/boot",
+                        "obj_id": str(uuid.uuid4()),
+                        "start": size(1, "MiB", sector),
+                        "size": size(BOOT_SIZE_MIB, "MiB", sector),
+                    },
+                    {
+                        **common,
+                        "flags": [],
+                        "fs_type": "ext4",
+                        "mountpoint": "/",
+                        "obj_id": str(uuid.uuid4()),
+                        "start": size(1 + BOOT_SIZE_MIB, "MiB", sector),
+                        "size": size(root_mib, "MiB", sector),
+                    },
+                ],
+            }
+        ],
+    }
+
+
+def password_hash(password):
+    result = subprocess.run(
+        ["openssl", "passwd", "-6", "-stdin"], input=password, capture_output=True, text=True, check=False
+    )
+    if result.returncode != 0:
+        fail("could not hash the password: " + result.stderr.strip())
+    return result.stdout.strip()
+
+
+def read_password(args):
+    if args.password_file:
+        with open(args.password_file, encoding="utf-8") as handle:
+            return handle.read().rstrip("\n")
+    first = getpass.getpass(f"Password for {args.user}: ")
+    if first != getpass.getpass("Repeat the password: "):
+        fail("the passwords do not match")
+    return first
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Install Bingux OS onto a disk (erases it).")
+    parser.add_argument("--disk", required=True, help="whole disk to erase, for example /dev/vda")
+    parser.add_argument("--user", required=True, help="account to create (administrator)")
+    parser.add_argument("--password-file", help="read the password from this file instead of asking")
+    parser.add_argument("--hostname", default="bingux")
+    parser.add_argument("--timezone", default="UTC")
+    parser.add_argument("--locale", default="en_US.UTF-8", help="system language, for example en_GB.UTF-8")
+    parser.add_argument("--keyboard", default="us", help="console keyboard layout")
+    parser.add_argument("--yes", action="store_true", help="do not ask before erasing the disk")
+    args = parser.parse_args()
+
+    if os.geteuid() != 0:
+        fail("run as root")
+    if not os.path.isdir("/sys/firmware/efi"):
+        fail("this system did not start in UEFI mode; the installer needs UEFI (systemd-boot)")
+    if not args.user.isidentifier() or args.user != args.user.lower() or args.user == "root":
+        fail("the user name must be lower case letters, digits and underscores, and not root")
+    total, sector, kind = lsblk(args.disk, "SIZE", "LOG-SEC", "TYPE")
+    if kind != "disk":
+        fail(f"{args.disk} is a {kind}; give the whole disk")
+    if mounted_partitions(args.disk):
+        fail(f"{args.disk} has mounted partitions; it may be the disk this system runs from")
+    if not args.yes:
+        print(f"This ERASES {args.disk} ({int(total) // MIB} MiB) and installs Bingux OS.")
+        if input(f"Type the disk name ({args.disk}) to continue: ").strip() != args.disk:
+            fail("cancelled")
+
+    password = read_password(args)
+    config = {
+        "archinstall-language": "English",
+        "bootloader_config": {"bootloader": "Systemd-boot", "uki": False, "removable": False},
+        "disk_config": disk_config(args.disk, int(total), int(sector)),
+        "hostname": args.hostname,
+        "kernels": ["linux"],
+        "locale_config": {"kb_layout": args.keyboard, "sys_enc": "UTF-8", "sys_lang": args.locale},
+        "network_config": {"type": "nm"},
+        "ntp": True,
+        "packages": PACKAGES,
+        "silent": True,
+        "swap": {"enabled": True, "algorithm": "zstd"},
+        "timezone": args.timezone,
+    }
+    credentials = {"users": [{"username": args.user, "enc_password": password_hash(password), "sudo": True}]}
+
+    with tempfile.TemporaryDirectory(prefix="bingux-os-install-") as directory:
+        os.chmod(directory, 0o700)
+        config_path = os.path.join(directory, "config.json")
+        credentials_path = os.path.join(directory, "creds.json")
+        for path, data in ((config_path, config), (credentials_path, credentials)):
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(data, handle, indent=2)
+        command = ["archinstall", "--config", config_path, "--creds", credentials_path, "--silent"]
+        print("bingux-os-install: running " + " ".join(command[:2]) + " ...", flush=True)
+        return subprocess.run(command, check=False).returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main())

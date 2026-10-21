@@ -138,6 +138,11 @@ build_iso() {
     printf '\n[bingux-os]\nSigLevel = Optional TrustAll\nServer = file://%s\n' "$REPO" >>"$profile/pacman.conf"
     # Login screen, wallpaper and skel come from the bingux-os package, which
     # archinstall installs as well.
+    # The repository travels on the image so the installer finds the Bingux OS
+    # packages without the network (profile/airootfs/etc/pacman.d/bingux-os-mirrorlist).
+    local repo_copy="$profile/airootfs/opt/bingux-os/repo"
+    mkdir -p "$repo_copy"
+    cp -aL "$REPO"/. "$repo_copy"/
     log "building the live image (this takes a while)"
     mkdir -p "$OUT"
     mkarchiso -v -w "$STAGE/iso-work" -o "$OUT" "$profile"
