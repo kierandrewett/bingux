@@ -40,6 +40,15 @@ way round.
 Each page shows a readable error when its tool is missing or refuses the
 request, and a Try again action where that makes sense.
 
+## Window frame
+
+Bingux Settings draws its own header bar with the page title and the
+minimise, maximise and close buttons, because the sidebar and header form one
+layout. It does not ask for server decorations, so Gnoblin's `auto` frame mode
+adds no titlebar. Gnoblin still clips the window and draws the corners,
+border and shadow, so the app window itself is square and opaque. See
+[window frames](window-frames.md).
+
 ## Font
 
 Bingux Settings and the shell use `appearance.font_family` from `bingux.toml`.
