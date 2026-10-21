@@ -13,11 +13,11 @@ depends=('bingux' 'gnoblin' 'greetd' 'networkmanager' 'glib2' 'plymouth')
 # The default wallpaper is generated, not checked in; build() calls bingux-session.
 makedepends=('imagemagick' 'bingux')
 install=bingux-os.install
-backup=('etc/pacman.d/bingux-os-mirrorlist' 'etc/plymouth/plymouthd.conf')
+backup=('etc/pacman.d/bingux-os-mirrorlist')
 source=('init.lua' 'bingux-os.gschema.override' 'bingux-os-mirrorlist'
-        'bingux.plymouth' 'bingux.script' 'plymouthd.conf'
+        'bingux.plymouth' 'bingux.script'
         'bingux-os-release' 'bingux-os-issue' 'bingux-os-release.hook')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 build() {
     magick -size 2560x1600 gradient:'#2b3a67-#101523' -attenuate 0.15 +noise Gaussian -quality 92 default.jpg
@@ -42,10 +42,10 @@ package() {
     ln -s /usr/lib/systemd/user/dbus-broker.service "$pkgdir/etc/systemd/user/default.target.wants/dbus-broker.service"
     # Where pacman fetches Bingux OS packages from; see distro/README.md.
     install -Dm644 bingux-os-mirrorlist "$pkgdir/etc/pacman.d/bingux-os-mirrorlist"
-    # Boot splash: the theme, and the daemon config that selects it.
+    # Boot splash theme. plymouth owns /etc/plymouth/plymouthd.conf, so the
+    # install hook selects this theme with plymouth-set-default-theme.
     install -Dm644 bingux.plymouth "$pkgdir/usr/share/plymouth/themes/bingux/bingux.plymouth"
     install -Dm644 bingux.script "$pkgdir/usr/share/plymouth/themes/bingux/bingux.script"
-    install -Dm644 plymouthd.conf "$pkgdir/etc/plymouth/plymouthd.conf"
     # Identity files: the release files say Bingux OS. The alpm hook copies
     # them into place after every transaction that touches filesystem or this package.
     install -Dm644 bingux-os-release "$pkgdir/usr/share/bingux/release/os-release"
