@@ -1,0 +1,22 @@
+# The Bingux login screen replaces greetd's stock configuration. bingux
+# ships the configuration as /usr/share/bingux/greeter/greetd.toml so there is
+# one copy; a configuration the administrator has already changed is kept.
+install_greeter_config() {
+    local config=/etc/greetd/config.toml
+    if [ ! -e "$config" ] || ! grep -q '^command *=' "$config" || grep -q 'agreety' "$config"; then
+        install -Dm644 /usr/share/bingux/greeter/greetd.toml "$config"
+    fi
+}
+
+post_install() {
+    install_greeter_config
+    systemctl enable greetd.service NetworkManager.service >/dev/null 2>&1 || true
+    systemctl set-default graphical.target >/dev/null 2>&1 || true
+    # Bingux's helper daemons (status, search, lock requests) follow every
+    # Gnoblin session; the unit has no preset on Arch.
+    systemctl --global enable bingux.target >/dev/null 2>&1 || true
+}
+
+post_upgrade() {
+    install_greeter_config
+}

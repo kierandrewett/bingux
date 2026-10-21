@@ -1,0 +1,29 @@
+# Bingux OS defaults: what turns an Arch install with Gnoblin and Bingux into
+# Bingux OS. The live image and archinstall both install this one package, so
+# the two never drift apart.
+# shellcheck shell=bash disable=SC2034,SC2154
+pkgname=bingux-os
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Bingux OS defaults: login screen, default wallpaper and session setup'
+arch=('any')
+url='https://github.com/kierandrewett/bingux'
+license=('GPL-3.0-or-later')
+depends=('bingux' 'gnoblin' 'greetd' 'networkmanager' 'glib2')
+# The default wallpaper is generated, not checked in.
+makedepends=('imagemagick')
+install=bingux-os.install
+source=('init.lua' 'bingux-os.gschema.override')
+sha256sums=('SKIP' 'SKIP')
+
+build() {
+    magick -size 2560x1600 gradient:'#2b3a67-#101523' -attenuate 0.15 +noise Gaussian -quality 92 default.jpg
+}
+
+package() {
+    install -Dm644 default.jpg "$pkgdir/usr/share/backgrounds/bingux-os/default.jpg"
+    # New accounts start a Gnoblin session that loads the Bingux drop-ins.
+    install -Dm644 init.lua "$pkgdir/etc/skel/.config/gnoblin/init.lua"
+    # Bingux reads the GNOME background setting when desktop.wallpaper is unset.
+    install -Dm644 bingux-os.gschema.override "$pkgdir/usr/share/glib-2.0/schemas/90_bingux-os.gschema.override"
+}

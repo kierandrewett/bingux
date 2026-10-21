@@ -82,6 +82,7 @@ xorg-xwayland
 # Session: Gnoblin compositor, Bingux shell, greetd login manager
 gnoblin
 bingux
+bingux-os
 greetd
 polkit
 polkit-gnome

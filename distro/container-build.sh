@@ -124,6 +124,7 @@ register_repo() {
 build_packages() {
     build_package gnoblin
     build_package bingux
+    build_package bingux-os
 }
 
 # archiso's releng profile supplies the boot loaders and the base
@@ -135,13 +136,8 @@ build_iso() {
     cp -r /usr/share/archiso/configs/releng "$profile"
     cp -a "$DISTRO/profile/." "$profile/"
     printf '\n[bingux-os]\nSigLevel = Optional TrustAll\nServer = file://%s\n' "$REPO" >>"$profile/pacman.conf"
-    # The default wallpaper is generated, not checked in: a deep two-tone
-    # gradient the greeter and the first session share.
-    local backgrounds="$profile/airootfs/usr/share/backgrounds/bingux-os"
-    mkdir -p "$backgrounds"
-    magick -size 2560x1600 gradient:'#2b3a67-#101523' -attenuate 0.15 +noise Gaussian -quality 92 "$backgrounds/default.jpg"
-    # Users created by archinstall and the live account get the Gnoblin
-    # init.lua from /etc/skel; root needs nothing.
+    # Login screen, wallpaper and skel come from the bingux-os package, which
+    # archinstall installs as well.
     log "building the live image (this takes a while)"
     mkdir -p "$OUT"
     mkarchiso -v -w "$STAGE/iso-work" -o "$OUT" "$profile"

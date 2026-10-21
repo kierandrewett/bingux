@@ -46,12 +46,23 @@ fi
 SOURCES="$ROOT/distro/sources"
 mkdir -p "$SOURCES" "$ROOT/distro/out"
 
-if [ "$STEP" != iso ]; then
+# Each source input is regenerated only for the steps that build from it, so a
+# quick `--step package:bingux-os` needs neither a clean tree nor Gnoblin.
+case "$STEP" in
+    all | packages) need_bingux=1 need_gnoblin=1 ;;
+    package:bingux) need_bingux=1 need_gnoblin=0 ;;
+    package:gnoblin) need_bingux=0 need_gnoblin=1 ;;
+    *) need_bingux=0 need_gnoblin=0 ;;
+esac
+
+if [ "$need_bingux" = 1 ]; then
     version="$(sed -n 's/^VERSION ?= //p' "$ROOT/Makefile")"
     echo "[distro] Bingux source archive $version"
     rm -f "$SOURCES"/bingux-*.tar.xz
     (cd "$ROOT" && bash scripts/make-source-archive.sh "$version" "distro/sources/bingux-$version.tar.xz")
+fi
 
+if [ "$need_gnoblin" = 1 ]; then
     echo "[distro] Gnoblin source bundle from $GNOBLIN"
     rm -f "$SOURCES"/gnoblin-*
     release="$(mktemp -d)"
