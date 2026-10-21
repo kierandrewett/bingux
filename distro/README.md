@@ -34,6 +34,17 @@ distro/build.sh --gnoblin ~/dev/gnoblin
   that repository, which is the quick loop for PKGBUILD changes.
 - Expect an hour or more the first time: Mutter and bingux-shell (Quickshell
   built into the Bingux binary) compile from source. `JOBS` limits parallelism.
+- Gnoblin's source bundle applies its Mutter patch series with `git am` in
+  the Gnoblin checkout, so commit signing applies to it. If the signing key
+  is not unlocked, run with signing disabled for that process only:
+  `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false distro/build.sh ...`.
+  A failed `git am` leaves `subprojects/mutter` in the Gnoblin checkout on
+  the release tag with a staged patch; restore the pinned revision with
+  `git -C subprojects/mutter reset --hard && git -C subprojects/mutter checkout <pin>`
+  before the next run.
+- The ISO step needs about 10 GB free under podman's storage (the container
+  `/tmp` holds the live root). A full disk shows as `could not extract ...
+(Write failed)` from pacstrap.
 
 The image lands in `distro/out/bingux-os-<date>-x86_64.iso`.
 
