@@ -3,6 +3,7 @@
 use freya::prelude::*;
 
 use crate::controls::button::action_button;
+use crate::controls::progress::{SpinnerSize, spinner};
 use crate::surface::{CORNER, FONT_HEADING, FONT_SIZE, FONT_SMALL, TALL_ROW_HEIGHT, use_tokens};
 
 /// A short muted explanation under a title or group.
@@ -178,7 +179,7 @@ impl Component for StatusBlock {
             .content(Content::Flex)
             .cross_align(Alignment::Center)
             .maybe_child(
-                matches!(self.status, Status::Loading(_)).then(|| CircularLoader::new().size(16.0)),
+                matches!(self.status, Status::Loading(_)).then(|| spinner(SpinnerSize::Small)),
             )
             .child(
                 paragraph()

@@ -7,7 +7,7 @@ use freya::prelude::*;
 
 use crate::theme::rgba;
 
-/// Every icon the Settings window draws.
+/// Every bundled icon. Names follow the Adwaita symbolic icon they embed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icon {
     GoPrevious,
@@ -34,9 +34,67 @@ pub enum Icon {
     Refresh,
     Delete,
     Check,
+    ListAdd,
+    ListRemove,
+    PanDown,
+    PanUp,
+    PanEnd,
+    EditClear,
+    DialogInformation,
+    DialogWarning,
+    DialogError,
+    EditCopy,
+    Folder,
+    DocumentOpen,
+    OpenMenu,
+    ViewMore,
+    UserTrash,
 }
 
 impl Icon {
+    /// Every icon, in declaration order.
+    pub const ALL: [Icon; 39] = [
+        Self::GoPrevious,
+        Self::GoNext,
+        Self::SidebarShow,
+        Self::Computer,
+        Self::PreferencesSystem,
+        Self::Display,
+        Self::WindowClose,
+        Self::WindowMinimize,
+        Self::WindowMaximize,
+        Self::WindowRestore,
+        Self::Appearance,
+        Self::Search,
+        Self::Network,
+        Self::Bluetooth,
+        Self::Sound,
+        Self::Power,
+        Self::Keyboard,
+        Self::Mouse,
+        Self::Clock,
+        Self::Users,
+        Self::About,
+        Self::Refresh,
+        Self::Delete,
+        Self::Check,
+        Self::ListAdd,
+        Self::ListRemove,
+        Self::PanDown,
+        Self::PanUp,
+        Self::PanEnd,
+        Self::EditClear,
+        Self::DialogInformation,
+        Self::DialogWarning,
+        Self::DialogError,
+        Self::EditCopy,
+        Self::Folder,
+        Self::DocumentOpen,
+        Self::OpenMenu,
+        Self::ViewMore,
+        Self::UserTrash,
+    ];
+
     /// The embedded SVG source for this icon.
     pub fn bytes(self) -> &'static [u8] {
         match self {
@@ -66,6 +124,21 @@ impl Icon {
             Self::Refresh => include_bytes!("../icons/view-refresh-symbolic.svg"),
             Self::Delete => include_bytes!("../icons/edit-delete-symbolic.svg"),
             Self::Check => include_bytes!("../icons/object-select-symbolic.svg"),
+            Self::ListAdd => include_bytes!("../icons/list-add-symbolic.svg"),
+            Self::ListRemove => include_bytes!("../icons/list-remove-symbolic.svg"),
+            Self::PanDown => include_bytes!("../icons/pan-down-symbolic.svg"),
+            Self::PanUp => include_bytes!("../icons/pan-up-symbolic.svg"),
+            Self::PanEnd => include_bytes!("../icons/pan-end-symbolic.svg"),
+            Self::EditClear => include_bytes!("../icons/edit-clear-symbolic.svg"),
+            Self::DialogInformation => include_bytes!("../icons/dialog-information-symbolic.svg"),
+            Self::DialogWarning => include_bytes!("../icons/dialog-warning-symbolic.svg"),
+            Self::DialogError => include_bytes!("../icons/dialog-error-symbolic.svg"),
+            Self::EditCopy => include_bytes!("../icons/edit-copy-symbolic.svg"),
+            Self::Folder => include_bytes!("../icons/folder-symbolic.svg"),
+            Self::DocumentOpen => include_bytes!("../icons/document-open-symbolic.svg"),
+            Self::OpenMenu => include_bytes!("../icons/open-menu-symbolic.svg"),
+            Self::ViewMore => include_bytes!("../icons/view-more-symbolic.svg"),
+            Self::UserTrash => include_bytes!("../icons/user-trash-symbolic.svg"),
         }
     }
 }

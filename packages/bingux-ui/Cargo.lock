@@ -534,6 +534,7 @@ dependencies = [
 name = "bingux-ui"
 version = "0.1.0"
 dependencies = [
+ "accesskit",
  "freya",
  "freya-testing",
 ]

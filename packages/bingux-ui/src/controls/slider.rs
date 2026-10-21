@@ -1,8 +1,9 @@
 //! The shell's slider (`SeekSlider.qml`).
 
+use freya::animation::*;
 use freya::prelude::*;
 
-use crate::surface::{CONTROL_HEIGHT, ROW_RADIUS, focus_border, use_tokens};
+use crate::surface::{CONTROL_HEIGHT, FONT_SMALL, ROW_RADIUS, focus_border, use_tokens};
 
 /// The shell's slider: a 6 px track that thickens to 8 px while dragging,
 /// filled in text colour and accent while interacting, with a thin tick as
@@ -13,6 +14,8 @@ pub struct Slider {
     enabled: bool,
     on_moved: EventHandler<f64>,
     width: f32,
+    step: Option<f64>,
+    show_value: bool,
 }
 
 pub fn slider(value: f64, on_moved: impl Into<EventHandler<f64>>) -> Slider {
@@ -21,6 +24,8 @@ pub fn slider(value: f64, on_moved: impl Into<EventHandler<f64>>) -> Slider {
         enabled: true,
         on_moved: on_moved.into(),
         width: 220.0,
+        step: None,
+        show_value: false,
     }
 }
 
@@ -32,6 +37,19 @@ impl Slider {
 
     pub fn width(mut self, width: f32) -> Self {
         self.width = width;
+        self
+    }
+
+    /// Snap reported values to multiples of `step` percent (keyboard arrows
+    /// also move by this step).
+    pub fn step(mut self, step: f64) -> Self {
+        self.step = Some(step.max(0.1));
+        self
+    }
+
+    /// Show the rounded percentage in a 12 px muted label after the track.
+    pub fn show_value(mut self) -> Self {
+        self.show_value = true;
         self
     }
 }
@@ -46,10 +64,23 @@ impl Component for Slider {
         let on_moved = self.on_moved.clone();
         let value = self.value;
         let enabled = self.enabled;
-        let track_height = if dragging() { 8.0 } else { 6.0 };
-        let fill_color = if !enabled {
-            tokens.muted
-        } else if dragging() {
+        let motion = tokens.motion(120);
+        let track_anim =
+            use_animation_transition(if dragging() { 8.0 } else { 6.0 }, move |from, to| {
+                AnimNum::new(from, to)
+                    .time(motion)
+                    .function(Function::Expo)
+                    .ease(Ease::Out)
+            });
+        let track_height = track_anim.get().value();
+        let step = self.step;
+        let snap = move |percent: f64| -> f64 {
+            match step {
+                Some(step) => ((percent / step).round() * step).clamp(0.0, 100.0),
+                None => percent,
+            }
+        };
+        let fill_color = if dragging() {
             tokens.accent
         } else {
             tokens.text
@@ -60,7 +91,7 @@ impl Component for Slider {
             if width <= 0.0 {
                 0.0
             } else {
-                (x / width * 100.0).clamp(0.0, 100.0)
+                snap((x / width * 100.0).clamp(0.0, 100.0))
             }
         };
         let on_pointer_down = {
@@ -88,16 +119,19 @@ impl Component for Slider {
         let on_key_down = {
             let on_moved = on_moved.clone();
             move |event: Event<KeyboardEventData>| {
-                let step = match event.key {
-                    Key::Named(NamedKey::ArrowLeft) | Key::Named(NamedKey::ArrowDown) => -5.0,
-                    Key::Named(NamedKey::ArrowRight) | Key::Named(NamedKey::ArrowUp) => 5.0,
+                let delta = step.unwrap_or(5.0);
+                let delta = match event.key {
+                    Key::Named(NamedKey::ArrowLeft) | Key::Named(NamedKey::ArrowDown) => -delta,
+                    Key::Named(NamedKey::ArrowRight) | Key::Named(NamedKey::ArrowUp) => delta,
+                    Key::Named(NamedKey::Home) => -value,
+                    Key::Named(NamedKey::End) => 100.0 - value,
                     _ => return,
                 };
-                on_moved.call((value + step).clamp(0.0, 100.0));
+                on_moved.call(snap((value + delta).clamp(0.0, 100.0)));
             }
         };
 
-        rect()
+        let track = rect()
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)
@@ -112,6 +146,7 @@ impl Component for Slider {
             .main_align(Alignment::Center)
             .corner_radius(ROW_RADIUS)
             .border(focus_border(&tokens, focus()))
+            .maybe(!enabled, |element| element.opacity(0.45))
             .cursor(if enabled {
                 CursorIcon::Pointer
             } else {
@@ -149,6 +184,23 @@ impl Component for Slider {
                                     .background(tokens.bg),
                             ),
                     ),
+            );
+        if !self.show_value {
+            return Element::from(track);
+        }
+        rect()
+            .direction(Direction::Horizontal)
+            .cross_align(Alignment::Center)
+            .spacing(10.0)
+            .child(track)
+            .child(
+                label()
+                    .text(format!("{}%", value.round() as i64))
+                    .font_size(FONT_SMALL)
+                    .color(tokens.muted)
+                    .min_width(Size::px(36.0))
+                    .text_align(TextAlign::End),
             )
+            .into()
     }
 }

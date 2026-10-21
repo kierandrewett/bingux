@@ -4,11 +4,14 @@
 //! and trailing content. Convenience constructors pair a row with a
 //! switch, slider, choice or text field.
 
+use freya::animation::*;
 use freya::prelude::*;
 
+use crate::controls::dropdown::dropdown;
 use crate::controls::segmented::segmented;
 use crate::controls::slider::slider;
 use crate::controls::switch::switch;
+use crate::controls::text_field::text_field;
 use crate::icons::{self, Icon};
 use crate::surface::{
     FONT_SIZE, FONT_SMALL, ROW_HEIGHT, ROW_RADIUS, TALL_ROW_HEIGHT, focus_border, surface_color,
@@ -27,6 +30,9 @@ pub struct Row {
     enabled: bool,
     navigates: bool,
     selected: bool,
+    badge: Option<String>,
+    destructive: bool,
+    tile_rgb: Option<[f32; 3]>,
 }
 
 pub fn row(title: impl Into<String>) -> Row {
@@ -39,6 +45,9 @@ pub fn row(title: impl Into<String>) -> Row {
         enabled: true,
         navigates: false,
         selected: false,
+        badge: None,
+        destructive: false,
+        tile_rgb: None,
     }
 }
 
@@ -83,6 +92,26 @@ impl Row {
 
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
+        self
+    }
+
+    /// A small rounded count or status badge after the title.
+    pub fn badge(mut self, text: impl Into<String>) -> Self {
+        let text = text.into();
+        self.badge = (!text.is_empty()).then_some(text);
+        self
+    }
+
+    /// Draw the leading icon in a 24 px coloured tile, like the sidebar.
+    pub fn leading_tile(mut self, icon: Icon, rgb: [f32; 3]) -> Self {
+        self.leading = Some(icon);
+        self.tile_rgb = Some(rgb);
+        self
+    }
+
+    /// A danger-coloured title, for rows such as "Remove" or "Forget".
+    pub fn destructive(mut self) -> Self {
+        self.destructive = true;
         self
     }
 
@@ -134,10 +163,12 @@ impl Component for Row {
             interactive && pressing(),
             self.selected,
         );
-        let text_color = if self.enabled {
-            tokens.text
-        } else {
+        let text_color = if !self.enabled {
             tokens.muted
+        } else if self.destructive {
+            tokens.danger
+        } else {
+            tokens.text
         };
         let icon_color = if self.selected {
             tokens.accent
@@ -145,18 +176,42 @@ impl Component for Row {
             tokens.muted
         };
 
+        let title = label()
+            .text(self.title.clone())
+            .color(text_color)
+            .font_size(FONT_SIZE)
+            .max_lines(1)
+            .text_overflow(TextOverflow::Ellipsis);
+        let title_line: Element = match &self.badge {
+            None => title.into(),
+            Some(badge) => rect()
+                .direction(Direction::Horizontal)
+                .cross_align(Alignment::Center)
+                .spacing(8.0)
+                .child(title)
+                .child(
+                    rect()
+                        .height(Size::px(18.0))
+                        .padding((0.0, 7.0))
+                        .corner_radius(9.0)
+                        .background(tokens.accent.with_af32(0.18))
+                        .center()
+                        .child(
+                            label()
+                                .text(badge.clone())
+                                .color(tokens.accent)
+                                .font_size(11.0)
+                                .font_weight(FontWeight::SEMI_BOLD)
+                                .max_lines(1),
+                        ),
+                )
+                .into(),
+        };
         let text_column = rect()
             .width(Size::flex(1.0))
             .main_align(Alignment::Center)
             .spacing(1.0)
-            .child(
-                label()
-                    .text(self.title.clone())
-                    .color(text_color)
-                    .font_size(FONT_SIZE)
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis),
-            )
+            .child(title_line)
             .maybe_child(self.subtitle.as_ref().map(|subtitle| {
                 label()
                     .text(subtitle.clone())
@@ -176,11 +231,11 @@ impl Component for Row {
                 AccessibilityRole::GenericContainer
             })
             .width(Size::fill())
-            .height(Size::px(height))
+            .min_height(Size::px(height))
             .direction(Direction::Horizontal)
             .content(Content::Flex)
             .cross_align(Alignment::Center)
-            .padding((0.0, 12.0))
+            .padding((6.0, 12.0))
             .spacing(10.0)
             .corner_radius(ROW_RADIUS)
             .background(background)
@@ -202,10 +257,10 @@ impl Component for Row {
                         a11y_id.request_focus();
                     })
             })
-            .maybe_child(
-                self.leading
-                    .map(|leading| icons::icon(leading, 18.0, icon_color)),
-            )
+            .maybe_child(self.leading.map(|leading| match self.tile_rgb {
+                Some(rgb) => Element::from(icons::icon_tile(leading, rgb, 24.0)),
+                None => Element::from(icons::icon(leading, 18.0, icon_color)),
+            }))
             .child(text_column)
             .maybe_child(self.trailing.clone())
             .maybe_child(
@@ -254,20 +309,7 @@ pub fn choice_row(
     if short {
         return row(title).trailing(segmented(options, selected, on_select));
     }
-    let current = options
-        .iter()
-        .find(|(key, _)| key == selected)
-        .map(|(_, label)| label.clone())
-        .unwrap_or_else(|| selected.to_string());
-    let items = options.into_iter().map(|(key, label)| {
-        let on_select = on_select.clone();
-        let is_selected = key == selected;
-        MenuItem::new()
-            .selected(is_selected)
-            .on_press(move |_| on_select.call(key.clone()))
-            .child(label)
-    });
-    row(title).trailing(Select::new().selected_item(current).children(items))
+    row(title).trailing(dropdown(options, selected, on_select))
 }
 
 /// A row with a text field on the right; `on_submit` fires on Enter.
@@ -276,10 +318,161 @@ pub fn text_row(
     value: State<String>,
     on_submit: impl Into<EventHandler<String>>,
 ) -> Row {
-    let on_submit = on_submit.into();
-    row(title).trailing(
-        Input::new(value)
-            .width(Size::px(260.0))
-            .on_submit(move |text: String| on_submit.call(text)),
-    )
+    row(title).trailing(text_field(value, on_submit))
+}
+
+/// A read-only fact: title on the left, value on the right, for About
+/// pages. Long values wrap onto further lines instead of truncating.
+pub fn property_row(title: impl Into<String>, value: impl Into<String>) -> Row {
+    let value = value.into();
+    row(title).trailing(PropertyValue { text: value })
+}
+
+#[derive(PartialEq)]
+struct PropertyValue {
+    text: String,
+}
+
+impl Component for PropertyValue {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        paragraph()
+            .width(Size::percent(55.0))
+            .color(tokens.muted)
+            .font_size(FONT_SIZE)
+            .text_align(TextAlign::End)
+            .child(self.text.clone())
+    }
+}
+
+/// A row whose trailing text is editable in place: click to edit, Enter
+/// commits through `on_commit`, Escape restores the last committed value.
+pub fn entry_row(
+    title: impl Into<String>,
+    value: impl Into<String>,
+    on_commit: impl Into<EventHandler<String>>,
+) -> EntryRow {
+    EntryRow {
+        title: title.into(),
+        value: value.into(),
+        placeholder: None,
+        on_commit: on_commit.into(),
+    }
+}
+
+/// See [`entry_row`].
+#[derive(PartialEq)]
+pub struct EntryRow {
+    title: String,
+    value: String,
+    placeholder: Option<String>,
+    on_commit: EventHandler<String>,
+}
+
+impl EntryRow {
+    pub fn placeholder(mut self, text: impl Into<String>) -> Self {
+        self.placeholder = Some(text.into());
+        self
+    }
+}
+
+impl Component for EntryRow {
+    fn render(&self) -> impl IntoElement {
+        let committed = self.value.clone();
+        let draft = use_state(|| committed.clone());
+        let on_commit = self.on_commit.clone();
+        let field = text_field(draft, move |text: String| on_commit.call(text))
+            .width(260.0)
+            .maybe_placeholder(self.placeholder.clone())
+            .revert_to(committed);
+        row(self.title.clone()).trailing(field)
+    }
+}
+
+/// A row that reveals child rows below it when pressed. The chevron
+/// rotates and the children fade in over 160 ms (none under reduced
+/// motion).
+pub fn expander_row(title: impl Into<String>, children: Vec<Element>) -> ExpanderRow {
+    ExpanderRow {
+        title: title.into(),
+        subtitle: None,
+        children,
+        expanded: None,
+    }
+}
+
+/// See [`expander_row`].
+#[derive(PartialEq)]
+pub struct ExpanderRow {
+    title: String,
+    subtitle: Option<String>,
+    children: Vec<Element>,
+    expanded: Option<bool>,
+}
+
+impl ExpanderRow {
+    pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
+        self.subtitle = Some(subtitle.into());
+        self
+    }
+
+    /// Start expanded (the row still toggles).
+    pub fn expanded(mut self, expanded: bool) -> Self {
+        self.expanded = Some(expanded);
+        self
+    }
+}
+
+impl Component for ExpanderRow {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let initial = self.expanded.unwrap_or(false);
+        let mut open = use_state(move || initial);
+        let motion = tokens.motion(160);
+        let reveal = use_animation_transition(if open() { 1.0 } else { 0.0 }, move |from, to| {
+            AnimNum::new(from, to)
+                .time(motion)
+                .function(Function::Cubic)
+                .ease(Ease::Out)
+        });
+        let progress = reveal.get().value();
+        let chevron =
+            rect()
+                .rotate(progress * 90.0)
+                .child(icons::icon(Icon::GoNext, 12.0, tokens.muted));
+        let header = row(self.title.clone())
+            .maybe_subtitle(self.subtitle.clone())
+            .trailing(chevron)
+            .on_press(move |_| open.set(!open()));
+        let mut children = Vec::with_capacity(self.children.len() * 2);
+        for (index, child) in self.children.iter().enumerate() {
+            if index > 0 {
+                children.push(
+                    rect()
+                        .width(Size::fill())
+                        .height(Size::px(1.0))
+                        .margin((0.0, 0.0, 0.0, 12.0))
+                        .background(tokens.text.with_af32(0.07))
+                        .into(),
+                );
+            }
+            children.push(child.clone());
+        }
+        rect()
+            .width(Size::fill())
+            .child(header)
+            .maybe_child((progress > 0.0).then(|| {
+                rect()
+                    .width(Size::fill())
+                    .opacity(progress)
+                    .padding((0.0, 0.0, 0.0, 16.0))
+                    .child(
+                        rect()
+                            .width(Size::fill())
+                            .height(Size::px(1.0))
+                            .background(tokens.text.with_af32(0.07)),
+                    )
+                    .children(children)
+            }))
+    }
 }

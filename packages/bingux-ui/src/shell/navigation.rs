@@ -6,12 +6,13 @@
 //! GNOME. Below [`SIDEBAR_OVERLAY_BELOW`] the sidebar becomes an overlay
 //! opened from the content header.
 
+use freya::animation::*;
 use freya::prelude::*;
 
-use crate::controls::icon_button;
+use crate::controls::{icon_button, search_field};
 use crate::icons::{self, Icon, icon_tile};
 use crate::shell::window::{HeaderBar, WindowControls};
-use crate::surface::use_tokens;
+use crate::surface::{is_activation_key, use_tokens};
 use crate::theme::{SIDEBAR_OVERLAY_BELOW, SIDEBAR_WIDTH, WINDOW_CONTROL_BUTTON};
 
 /// One sidebar destination.
@@ -73,6 +74,18 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let width = Platform::get().current_window().root_size.read().width;
         let narrow = width < SIDEBAR_OVERLAY_BELOW;
         let selected = self.selected;
+        // The overlay sidebar slides in over 160 ms while the scrim fades.
+        let motion = tokens.motion(160);
+        let overlay_anim = use_animation_transition(
+            if narrow && sidebar_open() { 1.0 } else { 0.0 },
+            move |from, to| {
+                AnimNum::new(from, to)
+                    .time(motion)
+                    .function(Function::Expo)
+                    .ease(Ease::Out)
+            },
+        );
+        let overlay_progress = overlay_anim.get().value();
         let sidebar = |overlay: bool| Sidebar {
             app_title: self.app_title.clone(),
             items: self.items.clone(),
@@ -122,22 +135,31 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                         ),
                     ),
             )
-            .maybe_child((narrow && sidebar_open()).then(|| {
-                rect()
-                    .position(Position::new_absolute().top(0.0).left(0.0))
-                    .width(Size::fill())
-                    .height(Size::fill())
-                    .direction(Direction::Horizontal)
-                    .content(Content::Flex)
-                    .child(sidebar(true))
-                    .child(
-                        rect()
-                            .width(Size::flex(1.0))
-                            .height(Size::fill())
-                            .background(Color::from_af32rgb(0.4, 0, 0, 0))
-                            .on_press(move |_: Event<PressEventData>| sidebar_open.set(false)),
-                    )
-            }))
+            .maybe_child(
+                (narrow && (sidebar_open() || overlay_progress > 0.0)).then(|| {
+                    rect()
+                        .position(Position::new_absolute().top(0.0).left(0.0))
+                        .width(Size::fill())
+                        .height(Size::fill())
+                        .direction(Direction::Horizontal)
+                        .content(Content::Flex)
+                        .layer(Layer::Overlay)
+                        .child(
+                            rect()
+                                .width(Size::px(SIDEBAR_WIDTH))
+                                .height(Size::fill())
+                                .offset_x(-SIDEBAR_WIDTH * (1.0 - overlay_progress))
+                                .child(sidebar(true)),
+                        )
+                        .child(
+                            rect()
+                                .width(Size::flex(1.0))
+                                .height(Size::fill())
+                                .background(Color::BLACK.with_af32(0.4 * overlay_progress))
+                                .on_press(move |_: Event<PressEventData>| sidebar_open.set(false)),
+                        )
+                }),
+            )
     }
 }
 
@@ -223,6 +245,7 @@ impl<T: NavItem> Component for Sidebar<T> {
                             .children(visible.iter().map(|item| {
                                 Element::from(NavEntry {
                                     item: *item,
+                                    siblings: visible.clone(),
                                     selected,
                                     sidebar_open,
                                     overlay,
@@ -249,38 +272,10 @@ pub struct SearchField {
 
 impl Component for SearchField {
     fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
         rect()
             .width(Size::fill())
             .padding((2.0, 12.0, 10.0, 12.0))
-            .child(
-                rect()
-                    .width(Size::fill())
-                    .height(Size::px(32.0))
-                    .direction(Direction::Horizontal)
-                    .content(Content::Flex)
-                    .cross_align(Alignment::Center)
-                    .spacing(6.0)
-                    .padding((0.0, 10.0))
-                    .corner_radius(9.0)
-                    .background(tokens.elevated)
-                    .border(
-                        Border::new()
-                            .width(1.0)
-                            .alignment(BorderAlignment::Inner)
-                            .fill(tokens.outline),
-                    )
-                    .child(icons::icon(Icon::Search, 14.0, tokens.muted))
-                    .child(
-                        rect().width(Size::flex(1.0)).child(
-                            Input::new(self.query)
-                                .flat()
-                                .compact()
-                                .placeholder("Search")
-                                .width(Size::fill()),
-                        ),
-                    ),
-            )
+            .child(search_field(self.query, |_| {}).width(SIDEBAR_WIDTH - 24.0))
     }
 }
 
@@ -395,6 +390,8 @@ impl<T: NavItem> Component for ProfileCardView<T> {
 #[derive(PartialEq)]
 struct NavEntry<T: NavItem> {
     item: T,
+    /// The items currently listed, for Up and Down.
+    siblings: Vec<T>,
     selected: State<T>,
     sidebar_open: State<bool>,
     overlay: bool,
@@ -408,6 +405,7 @@ impl<T: NavItem> Component for NavEntry<T> {
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
         let item = self.item;
+        let siblings = self.siblings.clone();
         let mut selected = self.selected;
         let mut sidebar_open = self.sidebar_open;
         let overlay = self.overlay;
@@ -461,6 +459,28 @@ impl<T: NavItem> Component for NavEntry<T> {
                     sidebar_open.set(false);
                 }
                 a11y_id.request_focus();
+            })
+            .on_key_down(move |event: Event<KeyboardEventData>| {
+                // Walk from the selected item, not this entry: focus stays
+                // here while repeated arrows move the selection on.
+                let position = siblings.iter().position(|other| *other == selected());
+                let target = match &event.key {
+                    key if is_activation_key(key) => Some(item),
+                    Key::Named(NamedKey::ArrowDown) => {
+                        position.and_then(|index| siblings.get(index + 1)).copied()
+                    }
+                    Key::Named(NamedKey::ArrowUp) => position
+                        .and_then(|index| index.checked_sub(1))
+                        .and_then(|index| siblings.get(index))
+                        .copied(),
+                    Key::Named(NamedKey::Home) => siblings.first().copied(),
+                    Key::Named(NamedKey::End) => siblings.last().copied(),
+                    _ => None,
+                };
+                if let Some(target) = target {
+                    event.stop_propagation();
+                    selected.set(target);
+                }
             })
             .child(icon_tile(item.icon(), item.tile_rgb(), 24.0))
             .child(

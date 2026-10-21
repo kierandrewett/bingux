@@ -153,6 +153,8 @@ pub struct Tokens {
     pub accent_foreground: Color,
     pub tooltip_surface: Color,
     pub tooltip_outline: Color,
+    /// Opaque surface for menus and popovers that float over content.
+    pub popover: Color,
 }
 
 impl Tokens {
@@ -182,6 +184,7 @@ impl Tokens {
             accent_foreground: rgba(1.0, 1.0, 1.0, 1.0),
             tooltip_surface: rgba(0.12, 0.12, 0.13, 0.82),
             tooltip_outline: rgba(1.0, 1.0, 1.0, 0.16),
+            popover: rgba(0.125, 0.125, 0.133, 1.0),
         }
     }
 

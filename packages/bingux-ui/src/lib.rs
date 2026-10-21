@@ -15,9 +15,12 @@ pub mod controls;
 pub mod group;
 pub mod hero;
 pub mod icons;
+pub mod layout;
 pub mod rows;
 pub mod runtime;
 pub mod shell;
+#[cfg(feature = "testing")]
+pub mod snapshot;
 pub mod surface;
 pub mod theme;
 
@@ -27,9 +30,15 @@ pub mod prelude {
     pub use crate::group::{Group, Status, StatusBlock, caption, heading, section_label, status};
     pub use crate::hero::{Hero, hero};
     pub use crate::icons::{Icon, icon, icon_tile};
-    pub use crate::rows::{Row, choice_row, row, slider_row, switch_row, text_row};
+    pub use crate::layout::{card, clamp, divider, hstack, spacer, vstack};
+    pub use crate::rows::{
+        EntryRow, ExpanderRow, Row, choice_row, entry_row, expander_row, property_row, row,
+        slider_row, switch_row, text_row,
+    };
     pub use crate::shell::{
-        HeaderBar, NavItem, NavigationSplitView, ProfileCard, SearchField, WindowControls,
+        Banner, BannerKind, Dialog, HeaderBar, NavItem, NavigationSplitView, OverlayHost, Overlays,
+        ProfileCard, ResponseKind, SearchField, StatusPage, WindowControls, banner, dialog,
+        status_page, use_overlays,
     };
     pub use crate::surface::{CORNER, ROW_HEIGHT, TALL_ROW_HEIGHT, use_tokens};
     pub use crate::theme::{Scheme, SharedTokens, Tokens, provide_tokens};

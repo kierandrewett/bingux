@@ -1,8 +1,10 @@
 //! The shell's switch (`ControlSwitch.qml`).
 
+use accesskit::Toggled;
+use freya::animation::*;
 use freya::prelude::*;
 
-use crate::surface::use_tokens;
+use crate::surface::{is_activation_key, use_tokens};
 
 /// The shell's switch: a 36 x 20 track, accent when on, with a 16 px thumb.
 #[derive(PartialEq)]
@@ -59,15 +61,37 @@ impl Component for Switch {
             Color::TRANSPARENT
         };
         let thumb_width = if pressing() { 18.0 } else { 16.0 };
+        // Thumb travel and track colour ease over 100 ms (Expo out), like the
+        // shell's `ControlSwitch.qml` behaviours; zero under reduced motion.
+        let motion = tokens.motion(100);
+        let thumb_x = use_animation_transition(
+            if on { 36.0 - thumb_width - 2.0 } else { 2.0 },
+            move |from, to| {
+                AnimNum::new(from, to)
+                    .time(motion)
+                    .function(Function::Expo)
+                    .ease(Ease::Out)
+            },
+        );
+        let track_color = use_animation_transition(track, move |from, to| {
+            AnimColor::new(from, to)
+                .time(motion)
+                .function(Function::Expo)
+                .ease(Ease::Out)
+        });
+        let track = track_color.get().value();
+        let thumb_left = thumb_x.get().value();
         rect()
             .a11y_id(a11y_id)
             .a11y_focusable(self.enabled)
             .a11y_enabled(self.enabled)
             .a11y_role(AccessibilityRole::Switch)
+            .a11y_builder(move |builder| builder.set_toggled(Toggled::from(on)))
             .width(Size::px(36.0))
             .height(Size::px(20.0))
             .corner_radius(10.0)
-            .background(track.mul_if(!self.enabled, 0.45))
+            .background(track)
+            .maybe(!self.enabled, |element| element.opacity(0.45))
             .border(border)
             .cursor(if self.enabled {
                 CursorIcon::Pointer
@@ -86,20 +110,25 @@ impl Component for Switch {
                         pressing.set(true);
                     })
                     .on_global_pointer_up(move |_| pressing.set_if_modified(false))
-                    .on_press(move |event: Event<PressEventData>| {
-                        event.stop_propagation();
-                        on_toggle.call(!on);
-                        a11y_id.request_focus();
+                    .on_press({
+                        let on_toggle = on_toggle.clone();
+                        move |event: Event<PressEventData>| {
+                            event.stop_propagation();
+                            on_toggle.call(!on);
+                            a11y_id.request_focus();
+                        }
+                    })
+                    .on_key_down(move |event: Event<KeyboardEventData>| {
+                        if is_activation_key(&event.key) {
+                            event.stop_propagation();
+                            on_toggle.call(!on);
+                        }
                     })
             })
             .child(rect().expanded().corner_radius(10.0).background(overlay))
             .child(
                 rect()
-                    .position(Position::new_absolute().top(2.0).left(if on {
-                        36.0 - thumb_width - 2.0
-                    } else {
-                        2.0
-                    }))
+                    .position(Position::new_absolute().top(2.0).left(thumb_left))
                     .width(Size::px(thumb_width))
                     .height(Size::px(16.0))
                     .corner_radius(8.0)

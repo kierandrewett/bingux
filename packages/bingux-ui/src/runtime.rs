@@ -168,3 +168,19 @@ pub fn which(program: &str) -> bool {
         .map(|path| std::env::split_paths(&path).any(|dir| dir.join(program).is_file()))
         .unwrap_or(false)
 }
+
+/// The command to run for a companion program: `program` when it is on
+/// PATH, else the copy beside the current executable (a build directory or
+/// an install prefix), else `program` so that running it still reports
+/// "is not installed".
+pub fn locate(program: &str) -> String {
+    if which(program) {
+        return program.to_string();
+    }
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(program)))
+        .filter(|path| path.is_file())
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|| program.to_string())
+}

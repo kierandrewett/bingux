@@ -101,3 +101,13 @@ impl Interaction {
             .on_global_pointer_up(move |_| pressing.set_if_modified(false))
     }
 }
+
+/// Enter and Space activate buttons, switches and other pressable controls
+/// from the keyboard.
+pub fn is_activation_key(key: &Key) -> bool {
+    match key {
+        Key::Named(NamedKey::Enter) => true,
+        Key::Character(text) => text == " ",
+        _ => false,
+    }
+}
