@@ -41,7 +41,7 @@ pub const WINDOW_RADIUS: f32 = 12.0;
 
 /// Window-control circle diameter and button size.
 pub const WINDOW_CONTROL_CIRCLE: f32 = 24.0;
-pub const WINDOW_CONTROL_BUTTON: f32 = 34.0;
+pub const WINDOW_CONTROL_BUTTON: f32 = 32.0;
 
 /// Accent names understood by GNOME's `accent-color` key, with the same RGB
 /// values as `Theme.qml`'s `accentColorFor` table.
@@ -136,6 +136,9 @@ pub struct Tokens {
     pub bg: Color,
     pub surface: Color,
     pub elevated: Color,
+    /// Group surface for lists on the page column. `elevated` is tuned for
+    /// a blurred popup backdrop; the opaque page needs a little more lift.
+    pub card: Color,
     pub hover: Color,
     pub pressed: Color,
     pub selection: Color,
@@ -164,6 +167,7 @@ impl Tokens {
             bg: rgba(0.086, 0.086, 0.086, 0.961),
             surface: rgba(0.188, 0.188, 0.188, 0.941),
             elevated: rgba(0.25, 0.25, 0.27, 0.28),
+            card: rgba(0.25, 0.25, 0.27, 0.5),
             hover: rgba(0.42, 0.42, 0.44, 0.34),
             pressed: rgba(0.52, 0.52, 0.54, 0.46),
             selection: accent.with_a(71),
@@ -231,6 +235,22 @@ pub fn load_tokens() -> Tokens {
 /// `crate::ui::use_tokens`.
 #[derive(Clone, Copy, PartialEq)]
 pub struct SharedTokens(pub State<Tokens>);
+
+/// Loads the tokens, provides them as root context, bridges them into
+/// Freya's component theme and follows live accent changes. Call once in
+/// the window root's `render`; it uses hooks. Returns the current tokens.
+pub fn provide_tokens() -> Tokens {
+    let tokens = use_hook(|| SharedTokens(State::create(load_tokens())));
+    use_hook(move || watch_appearance(tokens.0));
+    use_provide_root_context(|| tokens);
+    let current = *tokens.0.read();
+    let mut theme_state = use_init_theme(|| freya_theme(&current));
+    use_side_effect(move || {
+        let tokens = *tokens.0.read();
+        theme_state.set(freya_theme(&tokens));
+    });
+    current
+}
 
 /// Builds Freya's component theme from the tokens so built-in controls
 /// (switches, sliders, selects, inputs) use the Bingux palette.

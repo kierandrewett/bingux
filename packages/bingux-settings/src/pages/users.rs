@@ -171,7 +171,8 @@ fn change_password() -> Result<(), CommandError> {
 }
 
 /// Up to two capital letters: the first letter of the first and last words.
-fn initials(name: &str) -> String {
+/// Up to two initials for an avatar, from the first and last word.
+pub fn initials(name: &str) -> String {
     let words: Vec<&str> = name.split_whitespace().collect();
     let letters: String = match words.as_slice() {
         [] => String::new(),

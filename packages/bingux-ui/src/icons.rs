@@ -5,6 +5,8 @@
 
 use freya::prelude::*;
 
+use crate::theme::rgba;
+
 /// Every icon the Settings window draws.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icon {
@@ -74,4 +76,24 @@ pub fn icon(icon: Icon, size: f32, color: Color) -> SvgViewer {
         .width(Size::px(size))
         .height(Size::px(size))
         .fill(color)
+}
+
+/// A rounded square in a category colour with a white symbolic icon, as in
+/// macOS System Settings' sidebar.
+pub fn icon_tile(glyph: Icon, rgb: [f32; 3], size: f32) -> Rect {
+    let base = rgba(rgb[0], rgb[1], rgb[2], 1.0);
+    rect()
+        .width(Size::px(size))
+        .height(Size::px(size))
+        .corner_radius(size * 0.28)
+        .background(base)
+        .center()
+        .child(
+            rect()
+                .expanded()
+                .corner_radius(size * 0.28)
+                .background(Color::WHITE.with_af32(0.10))
+                .center()
+                .child(icon(glyph, size * 0.56, Color::WHITE)),
+        )
 }

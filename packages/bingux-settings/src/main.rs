@@ -6,11 +6,33 @@
 //! first page.
 
 mod app;
-mod icons;
 mod pages;
-mod system;
-mod theme;
-mod ui;
+
+/// Pages were written against these module paths; they map onto bingux-ui.
+pub(crate) use bingux_ui::icons;
+pub(crate) use bingux_ui::runtime as system;
+pub(crate) use bingux_ui::theme;
+pub(crate) mod ui {
+    pub use bingux_ui::prelude::*;
+    pub use bingux_ui::surface::use_tokens;
+
+    use crate::pages::PageId;
+    use freya::prelude::Element;
+
+    /// The page hero for the page whose title is `text`.
+    pub fn page_title(text: impl Into<String>) -> Element {
+        let text = text.into();
+        let page = PageId::ALL.into_iter().find(|id| id.title() == text);
+        let hero = hero(text.clone());
+        match page {
+            Some(page) => hero
+                .icon(page.icon(), page.tile_rgb())
+                .description(page.description())
+                .into(),
+            None => hero.into(),
+        }
+    }
+}
 
 use freya::prelude::*;
 

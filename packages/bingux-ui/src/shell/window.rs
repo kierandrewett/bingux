@@ -1,0 +1,204 @@
+//! Borderless window chrome: a header bar that drags the window and the
+//! minimise, maximise and close controls drawn as quiet circles.
+
+use freya::prelude::*;
+
+use crate::icons::{self, Icon};
+use crate::surface::use_tokens;
+use crate::theme::{HEADER_HEIGHT, WINDOW_CONTROL_BUTTON, WINDOW_CONTROL_CIRCLE};
+
+/// Run `callback` with the winit window of the current Freya window.
+pub fn with_window(callback: impl FnOnce(&mut freya::winit::window::Window) + 'static) {
+    Platform::get().with_window(Platform::window_id(), callback);
+}
+
+/// Starts a compositor move when the primary mouse button goes down on a
+/// header bar. Controls inside the bar stop propagation first.
+pub fn drag_on_pointer_down(event: Event<PointerEventData>) {
+    if matches!(event.data(), PointerEventData::Mouse(_)) && event.data().is_primary() {
+        with_window(|window| {
+            let _ = window.drag_window();
+        });
+    }
+}
+
+/// A header bar: optional leading element, a title that fills the middle,
+/// and trailing elements. Dragging the bar moves the window.
+#[derive(PartialEq)]
+pub struct HeaderBar {
+    title: String,
+    centered: bool,
+    leading: Vec<Element>,
+    trailing: Vec<Element>,
+    background: Option<Color>,
+}
+
+impl HeaderBar {
+    pub fn new(title: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            centered: false,
+            leading: Vec::new(),
+            trailing: Vec::new(),
+            background: None,
+        }
+    }
+
+    /// Centre the title, as the sidebar header does.
+    pub fn centered(mut self) -> Self {
+        self.centered = true;
+        self
+    }
+
+    pub fn leading(mut self, element: impl Into<Element>) -> Self {
+        self.leading.push(element.into());
+        self
+    }
+
+    pub fn trailing(mut self, element: impl Into<Element>) -> Self {
+        self.trailing.push(element.into());
+        self
+    }
+
+    pub fn background(mut self, color: Color) -> Self {
+        self.background = Some(color);
+        self
+    }
+}
+
+impl Component for HeaderBar {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let title = label()
+            .text(self.title.clone())
+            .width(Size::flex(1.0))
+            .font_size(15.0)
+            .font_weight(if self.centered {
+                FontWeight::BOLD
+            } else {
+                FontWeight::SEMI_BOLD
+            })
+            .max_lines(1)
+            .text_overflow(TextOverflow::Ellipsis)
+            .text_align(if self.centered {
+                TextAlign::Center
+            } else {
+                TextAlign::Left
+            });
+        rect()
+            .width(Size::fill())
+            .height(Size::px(HEADER_HEIGHT))
+            .direction(Direction::Horizontal)
+            .content(Content::Flex)
+            .cross_align(Alignment::Center)
+            .padding((
+                0.0,
+                8.0,
+                0.0,
+                if self.leading.is_empty() { 12.0 } else { 8.0 },
+            ))
+            .spacing(4.0)
+            .background(self.background.unwrap_or(tokens.surface))
+            .on_pointer_down(drag_on_pointer_down)
+            .children(self.leading.clone())
+            .child(title)
+            .children(self.trailing.clone())
+    }
+}
+
+/// Minimise, maximise/restore and close, drawn as 24 px circles.
+#[derive(PartialEq)]
+pub struct WindowControls;
+
+impl Component for WindowControls {
+    fn render(&self) -> impl IntoElement {
+        let maximized = freya::borderless::use_maximized();
+        rect()
+            .direction(Direction::Horizontal)
+            .cross_align(Alignment::Center)
+            .spacing(4.0)
+            .child(WindowControl {
+                icon: Icon::WindowMinimize,
+                tooltip: "Minimise",
+                danger: false,
+                action: Action::Minimize,
+            })
+            .child(WindowControl {
+                icon: if maximized() {
+                    Icon::WindowRestore
+                } else {
+                    Icon::WindowMaximize
+                },
+                tooltip: if maximized() { "Restore" } else { "Maximise" },
+                danger: false,
+                action: Action::ToggleMaximize,
+            })
+            .child(WindowControl {
+                icon: Icon::WindowClose,
+                tooltip: "Close",
+                danger: true,
+                action: Action::Close,
+            })
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Action {
+    Minimize,
+    ToggleMaximize,
+    Close,
+}
+
+#[derive(PartialEq)]
+struct WindowControl {
+    icon: Icon,
+    tooltip: &'static str,
+    danger: bool,
+    action: Action,
+}
+
+impl Component for WindowControl {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let mut hovering = use_state(|| false);
+        let action = self.action;
+        let circle = if hovering() {
+            if self.danger {
+                tokens.danger
+            } else {
+                tokens.hover
+            }
+        } else {
+            tokens.elevated
+        };
+        rect()
+            .width(Size::px(WINDOW_CONTROL_BUTTON))
+            .height(Size::px(WINDOW_CONTROL_BUTTON))
+            .center()
+            .cursor(CursorIcon::Pointer)
+            .a11y_role(AccessibilityRole::Button)
+            .a11y_alt(self.tooltip)
+            .on_pointer_enter(move |_| hovering.set(true))
+            .on_pointer_leave(move |_| hovering.set(false))
+            .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
+            .on_press(move |event: Event<PressEventData>| {
+                event.stop_propagation();
+                match action {
+                    Action::Minimize => with_window(|window| window.set_minimized(true)),
+                    Action::ToggleMaximize => {
+                        with_window(|window| window.set_maximized(!window.is_maximized()))
+                    }
+                    Action::Close => Platform::get().close_window(Platform::window_id()),
+                }
+            })
+            .child(
+                rect()
+                    .width(Size::px(WINDOW_CONTROL_CIRCLE))
+                    .height(Size::px(WINDOW_CONTROL_CIRCLE))
+                    .corner_radius(WINDOW_CONTROL_CIRCLE / 2.0)
+                    .background(circle)
+                    .center()
+                    .child(icons::icon(self.icon, 12.0, tokens.text)),
+            )
+    }
+}

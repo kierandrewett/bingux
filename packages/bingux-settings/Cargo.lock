@@ -534,6 +534,14 @@ dependencies = [
 name = "bingux-settings"
 version = "0.1.0"
 dependencies = [
+ "bingux-ui",
+ "freya",
+]
+
+[[package]]
+name = "bingux-ui"
+version = "0.1.0"
+dependencies = [
  "freya",
 ]
 
