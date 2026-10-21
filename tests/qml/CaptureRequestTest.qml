@@ -9,6 +9,11 @@ ShellRoot {
         path: Quickshell.env("BINGUX_CAPTURE_TEST_RESULTS")
     }
     Timer {
+        id: finish
+        interval: 300
+        onTriggered: Qt.quit()
+    }
+    Timer {
         interval: 15000
         running: true
         onTriggered: Qt.quit()
@@ -41,7 +46,7 @@ ShellRoot {
             compare(capture.requestStatus("active-1").state, "cancelled");
             compare(capture.activeRequest, "");
             report.setText("PASS: request ID validation, duplicate reservation, pending and cancelled states, unknown IDs\n");
-            Qt.quit();
+            finish.start();
         }
     }
 }
