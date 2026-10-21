@@ -190,7 +190,6 @@ impl Component for TextField {
                     .height(Size::px(BOX_SM))
                     .corner_radius(RADIUS_LG)
                     .center()
-                    .cursor(CursorIcon::Pointer)
                     .on_press(move |event: Event<PressEventData>| {
                         event.stop_propagation();
                         value.set(String::new());

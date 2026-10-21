@@ -80,7 +80,6 @@ impl Component for Segment {
             .corner_radius(RADIUS)
             .background(surface_color(&tokens, base, hovering(), pressing(), false))
             .border(focus_border(&tokens, focus()))
-            .cursor(CursorIcon::Pointer)
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| {
                 hovering.set(false);

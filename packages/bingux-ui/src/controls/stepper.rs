@@ -179,11 +179,6 @@ impl Component for StepButton {
             } else {
                 Color::TRANSPARENT
             })
-            .cursor(if enabled {
-                CursorIcon::Pointer
-            } else {
-                CursorIcon::NotAllowed
-            })
             .maybe(enabled, |element| {
                 element
                     .on_pointer_enter(move |_| hovering.set(true))

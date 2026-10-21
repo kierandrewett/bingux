@@ -226,7 +226,6 @@ impl Component for Banner {
                                 .height(Size::px(BOX_MD))
                                 .corner_radius(RADIUS_LG)
                                 .center()
-                                .cursor(CursorIcon::Pointer)
                                 .a11y_role(AccessibilityRole::Button)
                                 .a11y_alt("Dismiss")
                                 .on_press(move |event: Event<PressEventData>| {

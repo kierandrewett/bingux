@@ -154,11 +154,6 @@ impl Component for ActionButton {
             .background(background)
             .maybe(!self.enabled, |element| element.opacity(0.5))
             .border(border)
-            .cursor(if enabled {
-                CursorIcon::Pointer
-            } else {
-                CursorIcon::NotAllowed
-            })
             .maybe(enabled, |element| {
                 element
                     .on_pointer_enter(move |_| hovering.set(true))
@@ -263,7 +258,6 @@ impl Component for RowButton {
                 tokens.elevated
             })
             .border(focus_border(&tokens, focus()))
-            .cursor(CursorIcon::Pointer)
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| {
                 hovering.set(false);
@@ -365,7 +359,6 @@ impl Component for IconButton {
             .corner_radius(RADIUS)
             .background(background)
             .border(focus_border(&tokens, focus()))
-            .cursor(CursorIcon::Pointer)
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| {
                 hovering.set(false);

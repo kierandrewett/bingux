@@ -224,7 +224,6 @@ fn swatch(
             .center()
             .corner_radius(BOX_LG / 2.0)
             .border(border)
-            .cursor(CursorIcon::Pointer)
             .on_press(on_press)
             .child(
                 rect()

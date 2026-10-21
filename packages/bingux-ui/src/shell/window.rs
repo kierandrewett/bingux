@@ -169,7 +169,6 @@ impl Component for WindowControl {
             .corner_radius(WINDOW_CONTROL_BUTTON / 2.0)
             .background(circle)
             .center()
-            .cursor(CursorIcon::Pointer)
             .a11y_role(AccessibilityRole::Button)
             .a11y_alt(self.tooltip)
             .on_pointer_enter(move |_| hovering.set(true))

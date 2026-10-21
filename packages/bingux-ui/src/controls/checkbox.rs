@@ -141,11 +141,6 @@ impl Component for Checkbox {
             .cross_align(Alignment::Center)
             .spacing(S2)
             .maybe(!enabled, |element| element.opacity(0.45))
-            .cursor(if enabled {
-                CursorIcon::Pointer
-            } else {
-                CursorIcon::NotAllowed
-            })
             .maybe(enabled, |element| {
                 let toggle_press = toggle.clone();
                 element
@@ -322,11 +317,6 @@ impl Component for RadioButton {
             .cross_align(Alignment::Center)
             .spacing(S2)
             .maybe(!enabled, |element| element.opacity(0.45))
-            .cursor(if enabled {
-                CursorIcon::Pointer
-            } else {
-                CursorIcon::NotAllowed
-            })
             .maybe(enabled, |element| {
                 let select_press = select.clone();
                 element

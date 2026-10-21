@@ -127,18 +127,21 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                     .maybe_child(show_pages)
                     .child(
                         rect().width(Size::fill()).height(Size::flex(1.0)).child(
-                            ScrollView::new().child(
-                                rect()
-                                    .width(Size::fill())
-                                    .cross_align(Alignment::Center)
-                                    .padding((S2, side, S5, side))
-                                    .child(
-                                        rect()
-                                            .width(Size::px(self.page_width))
-                                            .max_width(Size::fill())
-                                            .child(self.content.clone()),
-                                    ),
-                            ),
+                            ScrollView::new()
+                                .drag_scrolling(false)
+                                .auto_hide_scrollbars(false)
+                                .child(
+                                    rect()
+                                        .width(Size::fill())
+                                        .cross_align(Alignment::Center)
+                                        .padding((S2, side, S5, side))
+                                        .child(
+                                            rect()
+                                                .width(Size::px(self.page_width))
+                                                .max_width(Size::fill())
+                                                .child(self.content.clone()),
+                                        ),
+                                ),
                         ),
                     ),
             )
@@ -266,20 +269,23 @@ impl<T: NavItem> Component for Sidebar<T> {
             .child(search_band(query, field_width, close))
             .child(
                 rect().width(Size::fill()).height(Size::flex(1.0)).child(
-                    ScrollView::new().child(
-                        rect()
-                            .width(Size::fill())
-                            .padding((S2, S2, S4, S2))
-                            .spacing(S0)
-                            .children(entries)
-                            .maybe_child(visible.is_empty().then(|| {
-                                label()
-                                    .text("Nothing matches.")
-                                    .color(tokens.muted)
-                                    .font_size(TEXT_MD)
-                                    .margin((S3, GUTTER, 0.0, GUTTER))
-                            })),
-                    ),
+                    ScrollView::new()
+                        .drag_scrolling(false)
+                        .auto_hide_scrollbars(false)
+                        .child(
+                            rect()
+                                .width(Size::fill())
+                                .padding((S2, S2, S4, S2))
+                                .spacing(S0)
+                                .children(entries)
+                                .maybe_child(visible.is_empty().then(|| {
+                                    label()
+                                        .text("Nothing matches.")
+                                        .color(tokens.muted)
+                                        .font_size(TEXT_MD)
+                                        .margin((S3, GUTTER, 0.0, GUTTER))
+                                })),
+                        ),
                 ),
             )
     }
@@ -359,7 +365,6 @@ impl<T: NavItem> Component for NavEntry<T> {
             .corner_radius(RADIUS)
             .background(background)
             .border(focus_border(&tokens, focus()))
-            .cursor(CursorIcon::Pointer)
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| {
                 hovering.set(false);

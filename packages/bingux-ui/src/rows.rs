@@ -238,7 +238,6 @@ impl Component for Row {
             .border(focus_border(&tokens, focus()))
             .maybe(interactive, |element| {
                 element
-                    .cursor(CursorIcon::Pointer)
                     .on_pointer_enter(move |_| hovering.set(true))
                     .on_pointer_leave(move |_| {
                         hovering.set(false);

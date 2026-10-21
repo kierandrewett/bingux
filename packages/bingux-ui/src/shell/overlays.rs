@@ -380,7 +380,6 @@ impl Component for ToastLayer {
                             .height(Size::px(BOX_MD))
                             .corner_radius(RADIUS_LG)
                             .center()
-                            .cursor(CursorIcon::Pointer)
                             .a11y_role(AccessibilityRole::Button)
                             .a11y_alt("Dismiss")
                             .on_press(move |_: Event<PressEventData>| overlays.dismiss_toast(id))
@@ -418,7 +417,6 @@ impl Component for ToastAction {
             } else {
                 Color::TRANSPARENT
             })
-            .cursor(CursorIcon::Pointer)
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| hovering.set(false))
             .on_press(move |event: Event<PressEventData>| {

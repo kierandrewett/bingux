@@ -159,11 +159,6 @@ impl Component for Dropdown {
                 button_width.set_if_modified(event.area.width())
             })
             .maybe(!enabled, |element| element.opacity(0.45))
-            .cursor(if enabled {
-                CursorIcon::Pointer
-            } else {
-                CursorIcon::NotAllowed
-            })
             .maybe(enabled, |element| {
                 element
                     .on_pointer_enter(move |_| hovering.set(true))
@@ -297,7 +292,6 @@ impl Component for DropdownItem {
                 pressing(),
                 self.selected,
             ))
-            .cursor(CursorIcon::Pointer)
             .on_pointer_enter(move |_| {
                 hovering.set(true);
                 on_hover.call(true);

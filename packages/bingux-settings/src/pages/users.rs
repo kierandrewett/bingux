@@ -373,7 +373,6 @@ impl Component for AccountRow {
                 Color::TRANSPARENT
             })
             .a11y_role(AccessibilityRole::Button)
-            .cursor(CursorIcon::Pointer)
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| hovering.set(false))
             .on_press(move |_: Event<PressEventData>| on_press.call(()))

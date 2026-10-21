@@ -183,11 +183,6 @@ impl Component for Slider {
             .width(Size::px(self.width))
             .height(Size::px(HIT))
             .maybe(!enabled, |element| element.opacity(DISABLED_OPACITY))
-            .cursor(if enabled {
-                CursorIcon::Pointer
-            } else {
-                CursorIcon::NotAllowed
-            })
             .on_sized(move |event: Event<SizedEventData>| size.set(event.area))
             .maybe(enabled, |element| {
                 element
