@@ -1,3 +1,6 @@
 [submodule "subprojects/adwaita-icon-theme"]
 	path = subprojects/adwaita-icon-theme
 	url = https://github.com/GNOME/adwaita-icon-theme
+[submodule "packages/bingux-shell/quickshell"]
+	path = packages/bingux-shell/quickshell
+	url = https://git.outfoxxed.me/quickshell/quickshell.git
