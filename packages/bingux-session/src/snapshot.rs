@@ -6,6 +6,10 @@
 //! directory from tmpfiles; a snapshot counts only when its directory is owned
 //! by the account it names, so one user cannot dress up another's login tile.
 
+use image::{
+    ExtendedColorType, ImageEncoder, ImageReader, codecs::jpeg::JpegEncoder,
+    codecs::png::PngEncoder, imageops,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     fs, io,
@@ -21,6 +25,17 @@ const MAX_WALLPAPER_BYTES: u64 = 64 * 1024 * 1024;
 const BACKGROUND_DROPIN: &str = "bingux-background.lua";
 /// Shown where the image is missing or still decoding; the shell's base tone.
 const BACKGROUND_COLOR: &str = "#161616";
+/// Gaussian blur applied to the wallpaper behind the login screen, as the
+/// standard deviation in pixels of the source image. Used by the export and by
+/// the `blur-wallpaper` subcommand that builds the packaged twin.
+pub const WALLPAPER_BLUR_RADIUS: f32 = 32.0;
+/// Brightness of the blurred wallpaper: 1.0 keeps the picture, 0.0 is black.
+pub const WALLPAPER_DIM: f32 = 0.65;
+/// Name of the blurred copy written beside the snapshot wallpaper; the path to
+/// use for a blurred backdrop.
+pub const BLURRED_WALLPAPER_FILE: &str = "wallpaper-blur";
+/// JPEG quality of the blurred copy; blur hides detail, so this stays modest.
+const BLURRED_JPEG_QUALITY: u8 = 88;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Snapshot {
@@ -76,11 +91,82 @@ pub fn export(root: &Path, user: &str, wallpaper: &str) -> io::Result<Snapshot> 
     } else if target.exists() {
         fs::remove_file(&target)?;
     }
+    // The blurred twin sits beside the snapshot wallpaper. A failure to blur
+    // (an undecodable or unusual format) keeps the plain wallpaper, so it
+    // never fails the export; a stale twin is removed rather than shown.
+    let blurred = directory.join(BLURRED_WALLPAPER_FILE);
+    if snapshot.wallpaper.is_empty() {
+        remove_if_exists(&blurred)?;
+    } else if let Err(error) = write_blurred(&target, &blurred, BlurredFormat::Jpeg) {
+        eprintln!("bingux-session: could not blur the greeter wallpaper: {error}");
+        remove_if_exists(&blurred)?;
+    }
     let temporary = directory.join(".session.json.tmp");
     fs::write(&temporary, serde_json::to_string_pretty(&snapshot)? + "\n")?;
     fs::set_permissions(&temporary, fs::Permissions::from_mode(0o644))?;
     fs::rename(&temporary, directory.join(SESSION_FILE))?;
     Ok(snapshot)
+}
+
+/// Encoding of a blurred copy. The greeter's snapshot copy has no extension,
+/// so the export asks for JPEG explicitly rather than inferring it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlurredFormat {
+    Jpeg,
+    Png,
+}
+
+/// The encoding for a blurred copy written to `path`, judged by its extension.
+pub fn blurred_format(path: &Path) -> Option<BlurredFormat> {
+    match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
+        "jpg" | "jpeg" => Some(BlurredFormat::Jpeg),
+        "png" => Some(BlurredFormat::Png),
+        _ => None,
+    }
+}
+
+/// Writes a pre-blurred, dimmed copy of the image at `source` to `target`.
+/// The file is replaced in one rename, so a reader never sees half of it, and
+/// it is world-readable like the snapshot wallpaper it derives from.
+pub fn write_blurred(source: &Path, target: &Path, format: BlurredFormat) -> io::Result<()> {
+    let decoded = ImageReader::open(source)?
+        .with_guessed_format()?
+        .decode()
+        .map_err(io::Error::other)?;
+    let mut picture = imageops::blur(&decoded.to_rgb8(), WALLPAPER_BLUR_RADIUS);
+    for pixel in picture.pixels_mut() {
+        for channel in &mut pixel.0 {
+            *channel = (f32::from(*channel) * WALLPAPER_DIM).round() as u8;
+        }
+    }
+    let (width, height) = picture.dimensions();
+    let mut bytes = Vec::new();
+    let encoded = match format {
+        BlurredFormat::Jpeg => JpegEncoder::new_with_quality(&mut bytes, BLURRED_JPEG_QUALITY)
+            .write_image(picture.as_raw(), width, height, ExtendedColorType::Rgb8),
+        BlurredFormat::Png => PngEncoder::new(&mut bytes).write_image(
+            picture.as_raw(),
+            width,
+            height,
+            ExtendedColorType::Rgb8,
+        ),
+    };
+    encoded.map_err(io::Error::other)?;
+    let name = target
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let temporary = target.with_file_name(format!(".{name}.tmp"));
+    fs::write(&temporary, bytes)?;
+    fs::set_permissions(&temporary, fs::Permissions::from_mode(0o644))?;
+    fs::rename(&temporary, target)
+}
+
+fn remove_if_exists(path: &Path) -> io::Result<()> {
+    match fs::remove_file(path) {
+        Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
+    }
 }
 
 /// Reads a snapshot the greeter may trust for `user` with `uid`.
@@ -207,5 +293,41 @@ mod tests {
         let cleared = write_background_dropin(&root, "/does/not/exist.png").unwrap();
         assert!(!fs::read_to_string(cleared).unwrap().contains("image ="));
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn export_writes_a_dimmed_blur_beside_the_wallpaper() {
+        let root = std::env::temp_dir().join(format!("bingux-session-blur-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let image = root.join("white.png");
+        image::RgbImage::from_pixel(64, 64, image::Rgb([255, 255, 255]))
+            .save(&image)
+            .unwrap();
+        export(&root, "ada", image.to_str().unwrap()).unwrap();
+        let blurred = ImageReader::open(root.join("ada").join(BLURRED_WALLPAPER_FILE))
+            .unwrap()
+            .with_guessed_format()
+            .unwrap()
+            .decode()
+            .unwrap()
+            .to_rgb8();
+        // A flat picture stays flat under the blur, so only the dim shows.
+        let expected = (255.0 * WALLPAPER_DIM).round() as i32;
+        let centre = blurred.get_pixel(32, 32).0;
+        assert!((i32::from(centre[0]) - expected).abs() <= 3, "{centre:?}");
+        let cleared = export(&root, "ada", "").unwrap();
+        assert_eq!(cleared.wallpaper, "");
+        assert!(!root.join("ada").join(BLURRED_WALLPAPER_FILE).exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn blurred_format_follows_the_extension() {
+        assert_eq!(
+            blurred_format(Path::new("default-blur.jpg")),
+            Some(BlurredFormat::Jpeg)
+        );
+        assert_eq!(blurred_format(Path::new("x.PNG")), Some(BlurredFormat::Png));
+        assert_eq!(blurred_format(Path::new(BLURRED_WALLPAPER_FILE)), None);
     }
 }
