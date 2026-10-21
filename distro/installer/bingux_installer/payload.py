@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from .protocol import InstallerError
-from .runner import Runner
+from .runner import CommandError, Runner
 from .storage import StorageLayout
 
 SOURCE_SFS = "/run/archiso/bootmnt/arch/x86_64/airootfs.sfs"
@@ -40,17 +40,33 @@ def unmount_source(runner: Runner, mountpoint: Path) -> None:
 
 def copy_payload(runner: Runner, source: Path, target: Path,
                  on_percent: Callable[[int], None]) -> None:
-    """rsync the live system into the target, reporting whole-percent progress."""
+    """rsync the live system into the target, reporting whole-percent progress.
+
+    /boot is excluded: it is the vfat ESP mount point, which cannot hold the xattrs
+    the live tree carries (rsync then fails at the end with exit 23). The live
+    /boot is empty, so nothing is lost; the bootloader writes to the ESP.
+
+    A failure carries rsync's own error lines: the exit status alone does not say
+    which file or attribute could not be copied.
+    """
+    errors: list[str] = []
 
     def on_line(line: str) -> None:
         match = RSYNC_PERCENT.search(line)
         if match:
             on_percent(min(100, int(match.group(1))))
+        elif "rsync" in line or "failed" in line or "denied" in line:
+            errors.append(line.strip())
 
-    runner.stream(
-        ["rsync", "-aAXHS", "--numeric-ids", "--info=progress2", f"{source}/", f"{target}/"],
-        on_line,
-    )
+    try:
+        runner.stream(
+            ["rsync", "-aAXHS", "--numeric-ids", "--info=progress2", "--exclude=/boot",
+             f"{source}/", f"{target}/"],
+            on_line,
+        )
+    except CommandError as exc:
+        detail = " | ".join(errors[-8:]) or str(exc)
+        raise InstallerError("payload_failed", f"rsync failed ({exc}): {detail}") from exc
 
 
 def mount_target(runner: Runner, lay: StorageLayout, target: Path = TARGET_MNT, *,
