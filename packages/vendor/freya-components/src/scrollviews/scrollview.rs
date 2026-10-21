@@ -34,6 +34,9 @@ use crate::scrollviews::{
     use_scroll_controller,
 };
 
+/// Bingux patch: the most a wheel scroll may trail its target, in pixels.
+const MAX_WHEEL_LAG: f32 = 240.0;
+
 /// Scrollable area with bidirectional support and scrollbars.
 ///
 /// It renders all of its children and scrolls over them, which makes it a good fit for small or
@@ -302,11 +305,26 @@ impl Component for ScrollView {
             } else {
                 scroll_controller.stop();
             }
-            let (base_x, base_y) = if animate {
-                (corrected_scrolled_x, corrected_scrolled_y)
-            } else {
-                (rendered_position.x, rendered_position.y)
+            // Bingux patch: a wheel scroll can be interrupted. The new target
+            // starts from the content's current position when the wheel turns
+            // the other way (the old pending travel is dropped), and the
+            // content never trails its target by more than MAX_WHEEL_LAG, so
+            // a fast spin cannot queue up distance that keeps scrolling after
+            // the wheel stops.
+            let base = |target: f32, rendered: f32, movement: f32| -> f32 {
+                if !animate {
+                    return rendered;
+                }
+                let pending = target - rendered;
+                if (movement > 0.0 && pending < 0.0) || (movement < 0.0 && pending > 0.0) {
+                    return rendered;
+                }
+                rendered + pending.clamp(-MAX_WHEEL_LAG, MAX_WHEEL_LAG)
             };
+            let (base_x, base_y) = (
+                base(corrected_scrolled_x, rendered_position.x, x_movement),
+                base(corrected_scrolled_y, rendered_position.y, y_movement),
+            );
 
             // Vertical scroll
             let scroll_position_y = get_scroll_position_from_wheel(
