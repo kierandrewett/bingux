@@ -14,7 +14,7 @@ work belongs in Git history and does not stay here as a second changelog.
 
 ## Shell maintenance
 
-- [ ] Replace remaining direct `qs` launches with the installed launcher or an
+- [x] Replace remaining direct `qs` launches with the installed launcher or an
       explicit `BINGUX_QUICKSHELL` value.
 - [ ] Move optional Python helpers behind clear feature checks.
 - [ ] Keep every long-running helper at core limit zero and test crash recovery.

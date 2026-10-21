@@ -59,7 +59,8 @@ binguxctl --config bingux status
 ```
 
 The equivalent defaults are `BINGUX_QUICKSHELL`, `BINGUX_CONFIG_PATH` and
-`BINGUX_CONFIG_NAME`. Explicit options take precedence. Reload affects the shell;
+`BINGUX_CONFIG_NAME`. Without `BINGUX_QUICKSHELL`, `binguxctl` uses the first of
+`gnoblin-quickshell`, `qs` and `quickshell` found on `PATH`. Explicit options take precedence. Reload affects the shell;
 an active capture can be finalised by the outgoing capture worker.
 
 Screenshots play GNOME's `screen-capture` sound event after a successful save.

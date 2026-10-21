@@ -303,26 +303,18 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
     )
     common += "export PATH=" + shlex.quote(str(prefix / "bin")) + ':"$PATH"\n'
     wrappers = {
-        "bingux": 'exec "${BINGUX_QUICKSHELL:-qs}" -p "$BINGUX_CONFIG_PATH" "$@"\n',
-        "bingux-search-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
-        + shlex.quote(str(shell / "SearchShell.qml"))
-        + ' "$@"\n',
-        "bingux-switcher-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
+        "bingux": 'exec "$BINGUX_QUICKSHELL" -p "$BINGUX_CONFIG_PATH" "$@"\n',
+        "bingux-search-ui": 'exec "$BINGUX_QUICKSHELL" -p ' + shlex.quote(str(shell / "SearchShell.qml")) + ' "$@"\n',
+        "bingux-switcher-ui": 'exec "$BINGUX_QUICKSHELL" -p '
         + shlex.quote(str(shell / "SwitcherShell.qml"))
         + ' "$@"\n',
-        "bingux-emoji-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
-        + shlex.quote(str(shell / "EmojiShell.qml"))
-        + ' "$@"\n',
-        "bingux-capture-ui": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
-        + shlex.quote(str(shell / "CaptureShell.qml"))
-        + ' "$@"\n',
-        "bingux-popouts": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
-        + shlex.quote(str(shell / "PopoutsShell.qml"))
-        + ' "$@"\n',
-        "bingux-wallpaper": 'exec "${BINGUX_QUICKSHELL:-qs}" -p '
+        "bingux-emoji-ui": 'exec "$BINGUX_QUICKSHELL" -p ' + shlex.quote(str(shell / "EmojiShell.qml")) + ' "$@"\n',
+        "bingux-capture-ui": 'exec "$BINGUX_QUICKSHELL" -p ' + shlex.quote(str(shell / "CaptureShell.qml")) + ' "$@"\n',
+        "bingux-popouts": 'exec "$BINGUX_QUICKSHELL" -p ' + shlex.quote(str(shell / "PopoutsShell.qml")) + ' "$@"\n',
+        "bingux-wallpaper": 'exec "$BINGUX_QUICKSHELL" -p '
         + shlex.quote(str(shell / "WallpaperShell.qml"))
         + ' "$@"\n',
-        "bingux-lock": 'exec "${BINGUX_QUICKSHELL:-qs}" -p ' + shlex.quote(str(shell / "LockShell.qml")) + ' "$@"\n',
+        "bingux-lock": 'exec "$BINGUX_QUICKSHELL" -p ' + shlex.quote(str(shell / "LockShell.qml")) + ' "$@"\n',
         "binguxctl": 'exec "$BINGUX_PYTHON" ' + shlex.quote(str(prefix / "libexec/bingux/binguxctl.py")) + ' "$@"\n',
         "bingux-frame": "exec " + shlex.quote(str(prefix / "libexec/bingux/bingux-frame")) + ' "$@"\n',
     }
