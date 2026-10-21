@@ -61,6 +61,7 @@ Requires:       qt6-qtwayland
 Requires:       qt6-qtsvg
 Requires:       systemd
 Requires:       wl-clipboard
+Requires:       xdg-desktop-portal
 Requires:       xdg-utils
 # Desktop-wide settings (accent, colour scheme, background, idle delay) live
 # in GSettings; dconf keeps them across logins. glib2 provides gsettings.
@@ -149,6 +150,7 @@ install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bin
 %{_datadir}/gnoblin/conf.d/bingux.lua
 %{_datadir}/gnoblin/scripts/bingux-text-input.js
 %{_userunitdir}/bingux*.service
+%{_userunitdir}/xdg-desktop-portal-bingux.service
 %{_userunitdir}/bingux*.path
 %{_userunitdir}/bingux.target
 %{_datadir}/polkit-1/rules.d/50-bingux-greeter.rules

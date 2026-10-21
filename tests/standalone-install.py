@@ -204,6 +204,37 @@ class InstallTest(unittest.TestCase):
             )
             self.assertTrue((stage / "usr/lib/systemd/user/bingux-greeter-export.path").is_file())
             self.assertTrue((stage / "usr/lib/tmpfiles.d/bingux-greeter.conf").is_file())
+            portal_unit = (stage / "usr/lib/systemd/user/xdg-desktop-portal-bingux.service").read_text()
+            self.assertIn("ExecStart=/usr/libexec/bingux/xdg-desktop-portal-bingux", portal_unit)
+            self.assertIn("Environment=BINGUXCTL=/usr/bin/binguxctl", portal_unit)
+            portal_dbus = stage / "usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.bingux.service"
+            self.assertIn("Exec=/usr/libexec/bingux/xdg-desktop-portal-bingux", portal_dbus.read_text())
+
+    def test_portal_service_follows_a_non_usr_prefix(self):
+        with tempfile.TemporaryDirectory() as name:
+            base = Path(name)
+            build, stage = base / "build", base / "stage"
+            write_build_fixtures(build)
+            subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "scripts/install-shell.py"),
+                    "--prefix",
+                    "/opt/bingux",
+                    "--destdir",
+                    str(stage),
+                    "--build-dir",
+                    str(build),
+                ],
+                check=True,
+            )
+            prefix = stage / "opt/bingux"
+            dbus = (prefix / "share/dbus-1/services/org.freedesktop.impl.portal.desktop.bingux.service").read_text()
+            self.assertIn("Exec=/opt/bingux/libexec/bingux/xdg-desktop-portal-bingux", dbus)
+            self.assertNotIn("/usr/libexec", dbus)
+            unit = (prefix / "lib/systemd/user/xdg-desktop-portal-bingux.service").read_text()
+            self.assertIn("ExecStart=/opt/bingux/libexec/bingux/xdg-desktop-portal-bingux", unit)
+            self.assertIn("Environment=BINGUXCTL=/opt/bingux/bin/binguxctl", unit)
 
     def test_missing_build_fails_before_install(self):
         with tempfile.TemporaryDirectory() as name:

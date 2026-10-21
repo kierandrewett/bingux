@@ -277,6 +277,12 @@ def build_payload(source, build, prefix, qml, target, managed=False):
                     json.dumps("/usr/local/bin/" + name), json.dumps(str(prefix / ("bin/" + name)))
                 )
             write_generated(destination, generated)
+        elif path == source / "packaging/portal/org.freedesktop.impl.portal.desktop.bingux.service":
+            # D-Bus activation runs the installed backend, so Exec must follow the prefix.
+            write_generated(
+                destination,
+                path.read_text().replace("/usr/libexec/bingux", str(prefix / "libexec/bingux")),
+            )
         elif path == source / "scripts/bingux-greeter-session":
             write_generated(
                 destination,

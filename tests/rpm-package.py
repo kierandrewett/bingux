@@ -84,6 +84,12 @@ class RpmPackageTest(unittest.TestCase):
         self.assertTrue((ROOT / "packaging/gnoblin/bingux.lua").is_file())
         self.assertIn("/usr/share/gnoblin/conf.d/bingux.lua", self.spec)
 
+    def test_portal_backend_is_packaged_and_requires_the_portal(self):
+        # The backend unit is not covered by the bingux*.service glob, so name it.
+        self.assertIn("Requires:       xdg-desktop-portal\n", self.spec)
+        files = self.spec.split("\n%files\n", 1)[1].split("\n%changelog", 1)[0].splitlines()
+        self.assertIn("/usr/lib/systemd/user/xdg-desktop-portal-bingux.service", files)
+
 
 if __name__ == "__main__":
     unittest.main()
