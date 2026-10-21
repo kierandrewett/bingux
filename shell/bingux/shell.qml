@@ -403,9 +403,7 @@ ShellRoot {
             if (!target || !Number.isFinite(x) || !Number.isFinite(y))
                 return;
             root.closePanelsExcept(desktopMenuPopup);
-            desktopMenuPopup.screen = target;
-            desktopMenuPopup.requestedPosition = Qt.point(x, y);
-            desktopMenuPopup.visible = true;
+            desktopMenuPopup.openAt(target, x, y);
         }
         function status(): string {
             return JSON.stringify({

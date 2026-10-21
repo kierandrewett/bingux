@@ -28,6 +28,8 @@ NotificationSurface 1.0 NotificationSurface.qml
 OsdState 1.0 OsdState.qml
 NotRespondingDialog 1.0 NotRespondingDialog.qml
 OsdSurface 1.0 OsdSurface.qml
+WorkspaceChangeState 1.0 WorkspaceChangeState.qml
+WorkspaceChangeSurface 1.0 WorkspaceChangeSurface.qml
 Pill 1.0 Pill.qml
 ShortcutSession 1.0 ShortcutSession.qml
 WindowSwitcher 1.0 WindowSwitcher.qml
@@ -52,6 +54,7 @@ StatusIndicator 1.0 StatusIndicator.qml
 Tray 1.0 Tray.qml
 TrayMenu 1.0 TrayMenu.qml
 WindowMenu 1.0 WindowMenu.qml
+DesktopMenu 1.0 DesktopMenu.qml
 TerminalSidebar 1.0 TerminalSidebar.qml
 BarControlSurface 1.0 BarControlSurface.qml
 DockMediaControls 1.0 DockMediaControls.qml
