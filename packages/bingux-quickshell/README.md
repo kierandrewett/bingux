@@ -48,6 +48,13 @@ idle tracker, camera and microphone watchers and the appearance monitor
 running, and each restart added another set. Execute-and-detach commands are
 not affected.
 
+`desktop-action-ids.patch` keeps `DesktopAction.id` intact. The v0.2.1 desktop
+entry parser slices fixed length 16 of the matched `"Desktop Action "` group
+prefix, so a label like `proof` became `roof` and two action IDs with a shared
+suffix collapsed into one entry. Bingux hands the model DE action ID to GIO, so
+the raw value is meaningful. Quickshell fixed this in v0.3.0; retire this patch
+when the pinned submodule moves past 0.2.1.
+
 `ipc-connection-lifetime.patch` releases each server-side IPC connection after
 its local socket disconnects. Status clients open short-lived sockets, so
 retaining their parented connection objects also retains their socket buffers
