@@ -81,15 +81,15 @@ Singleton {
     }
     function reloadWallpaper() {
         wallpaperRevision++;
-        if (!wallpaperPath) {
-            wallpaperUrl = "";
-            return;
-        }
         // Formats Qt reads directly need no helper.
         if (wallpaperPath.startsWith("/") && /\.(png|jpe?g|webp)$/i.test(wallpaperPath)) {
             wallpaperUrl = "file://" + encodeURI(wallpaperPath).replace(/#/g, "%23").replace(/\?/g, "%3F");
             return;
         }
+        // Everything else, including no configured wallpaper, goes to the
+        // helper: it converts formats Qt cannot read, and with nothing set it
+        // falls back to the GNOME background setting (the default wallpaper of
+        // a distribution) or answers an empty URL when there is none.
         if (wallpaperReader.running) {
             wallpaperReader.pending = true;
             return;

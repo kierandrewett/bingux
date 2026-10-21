@@ -87,7 +87,7 @@ else changes; the keys below are the same settings with snake_case names.
 | `sidebar`               | bool   | `true`      | Show the edge sidebar.                                         |
 | `metrics`               | bool   | `true`      | Show system monitors in the top bar.                           |
 | `clock_seconds`         | bool   | `false`     | Show seconds in the clock.                                     |
-| `wallpaper`             | string | `""`        | Absolute image path, or empty for none.                        |
+| `wallpaper`             | string | `""`        | Absolute image path, or empty to use the GNOME background.     |
 | `sidebar_edge`          | string | not set     | `"left"`, `"right"` or `"top"`. Not set lets the shell choose. |
 | `dock_size`             | int    | `56`        | Icon size in pixels, 32 to 80.                                 |
 | `dock_alignment`        | string | `"center"`  | `"left"`, `"center"` or `"right"`.                             |
