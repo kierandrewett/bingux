@@ -27,6 +27,13 @@ package() {
     install -Dm644 init.lua "$pkgdir/etc/skel/.config/gnoblin/init.lua"
     # Bingux reads the GNOME background setting when desktop.wallpaper is unset.
     install -Dm644 bingux-os.gschema.override "$pkgdir/usr/share/glib-2.0/schemas/90_bingux-os.gschema.override"
+    # Start the user D-Bus broker with the user manager. Gnoblin asks the user
+    # bus whether systemd is there once, at the start of the session, and on a
+    # first login the broker is still being socket-activated by that very
+    # connection, so the answer is no and gnoblin-session.target (and with it
+    # bingux.target) never starts. A broker that is already running answers.
+    install -d "$pkgdir/etc/systemd/user/default.target.wants"
+    ln -s /usr/lib/systemd/user/dbus-broker.service "$pkgdir/etc/systemd/user/default.target.wants/dbus-broker.service"
     # Where pacman fetches Bingux OS packages from; see distro/README.md.
     install -Dm644 bingux-os-mirrorlist "$pkgdir/etc/pacman.d/bingux-os-mirrorlist"
 }
