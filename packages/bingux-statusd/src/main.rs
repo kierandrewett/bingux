@@ -5,9 +5,10 @@ mod gnoblin;
 mod record_allocation;
 
 use bingux_statusd::{
-    DesktopState, Metrics, OsdRequest, PAD_HELP_CLEAR_RECORD, PadHelpRequest, byte_rate,
-    cpu_percent, metrics_with_desktop_state_json, microphone::CaptureSnapshot, osd_json,
-    pad_help_json, parse_cpu_stat, parse_meminfo, parse_network_totals,
+    DesktopState, Metrics, OsdRequest, OsdTarget, PAD_HELP_CLEAR_RECORD, PadHelpRequest,
+    audio::Feedback, byte_rate, cpu_percent, metrics_with_desktop_state_json,
+    microphone::CaptureSnapshot, osd_json, pad_help_json, parse_cpu_stat, parse_meminfo,
+    parse_network_totals,
 };
 use std::{
     env,
@@ -41,6 +42,8 @@ pub(crate) enum Event {
     PadHelpClient(UnixStream),
     DesktopState(DesktopState),
     Microphone(CaptureSnapshot),
+    Audio(Feedback),
+    OsdTargets(Vec<OsdTarget>),
     OsdRequest(OsdRequest),
     PadHelpRequest(PadHelpRequest),
     PadHelpClear,
@@ -143,6 +146,8 @@ fn run() -> io::Result<()> {
         Event::PadHelpClient,
     );
     gnoblin::start_state_subscriber(sender.clone());
+    let audio_sender = sender.clone();
+    bingux_statusd::audio::start(move |feedback| audio_sender.send(Event::Audio(feedback)).is_ok());
     bingux_statusd::microphone::start(move |snapshot| {
         sender.send(Event::Microphone(snapshot)).is_ok()
     });
@@ -154,6 +159,7 @@ fn run() -> io::Result<()> {
     let mut latest_record = record_json(&latest_metrics, &desktop_state, &microphone)?;
     let mut metrics_clients = Vec::new();
     let mut osd_clients = Vec::new();
+    let mut osd_targets: Vec<OsdTarget> = Vec::new();
     let mut pad_help_clients = Vec::new();
     let mut next_sample = Instant::now() + SAMPLE_INTERVAL;
 
@@ -210,6 +216,25 @@ fn run() -> io::Result<()> {
                 microphone = snapshot;
                 latest_record = record_json(&latest_metrics, &desktop_state, &microphone)?;
                 publish_record(&mut metrics_clients, &latest_record);
+            }
+            Ok(Event::OsdTargets(targets)) => osd_targets = targets,
+            Ok(Event::Audio(feedback)) => {
+                // Nothing targets audio feedback, so it appears on every monitor.
+                for target in &osd_targets {
+                    let Some(request) = OsdRequest::new(
+                        target.monitor_index,
+                        target.output_names.clone(),
+                        feedback.icon.clone(),
+                        feedback.label.clone(),
+                        feedback.level,
+                        feedback.max_level,
+                    ) else {
+                        continue;
+                    };
+                    let record = osd_json(&request)
+                        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+                    publish_record(&mut osd_clients, &record);
+                }
             }
             Ok(Event::OsdRequest(request)) => {
                 let record = osd_json(&request)

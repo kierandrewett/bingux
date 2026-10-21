@@ -35,6 +35,27 @@ seed_existing_accounts() {
     done </etc/passwd
 }
 
+# The boot splash runs from the initramfs, so the plymouth hook has to be in
+# mkinitcpio's HOOKS. It goes after kms so the splash gets the graphics driver
+# before the root filesystem is mounted. A configuration that already has it is left alone.
+install_boot_splash() {
+    local config=/etc/mkinitcpio.conf
+    [ -f "$config" ] || return 0
+    grep -Eq '^HOOKS=.*\bplymouth\b' "$config" && return 0
+    grep -Eq '^HOOKS=.*\bkms\b' "$config" || return 0
+    sed -i -E '/^HOOKS=/ s/\bkms\b/kms plymouth/' "$config"
+    mkinitcpio -P >/dev/null 2>&1 || true
+}
+
+# The theme is selected in /etc/plymouth/plymouthd.conf, which the plymouth
+# package owns, so this package does not ship that file. plymouth-set-default-theme
+# writes the choice there and -R rebuilds the initramfs that carries the splash.
+install_splash_theme() {
+    grep -qs '^Theme=bingux$' /etc/plymouth/plymouthd.conf && return 0
+    command -v plymouth-set-default-theme >/dev/null 2>&1 || return 0
+    plymouth-set-default-theme -R bingux >/dev/null 2>&1 || true
+}
+
 post_install() {
     install_repository
     install_greeter_config
@@ -44,8 +65,12 @@ post_install() {
     # Bingux's helper daemons (status, search, lock requests) follow every
     # Gnoblin session; the unit has no preset on Arch.
     systemctl --global enable bingux.target >/dev/null 2>&1 || true
+    install_boot_splash
+    install_splash_theme
 }
 
 post_upgrade() {
     install_greeter_config
+    install_boot_splash
+    install_splash_theme
 }

@@ -111,6 +111,25 @@ OSD surface, so Bingux needs no OSD-disable setting. The compositor event
 contains no level value, so statusd sends `-1` for the level and maximum; the
 shell displays a status-only OSD without a level bar.
 
+Gnoblin raises no OSD event for volume or microphone changes. Its default key
+bindings run `wpctl` and nothing else. `bingux-statusd` therefore follows the
+default output and input itself with `pactl subscribe`, and sends a record when
+the level or mute state of the same default device changes. It does this for any
+source of the change: a key binding, the Sound settings page or an application.
+It sends nothing when the default device changes, because a different device has
+a different level. These records carry the level as a fraction of `maxLevel`
+(`1.0`, so `1.2` is 120 percent), a level of `0` while muted, and the device
+description as `label`. Nothing targets them, so statusd sends one record for
+each logical monitor from the compositor's monitor list and sends none while the
+compositor is unavailable. There is no producer for display or keyboard
+brightness: Gnoblin binds no brightness keys and reads no backlight.
+
+The OSD card is one component, `OsdCard.qml`. The desktop surface places it on
+each output above the dock. The lock screen places its own copy in the middle of
+each lock surface and handles the volume keys itself, because the desktop
+surface is hidden behind the lock and Gnoblin's key bindings do not run while
+locked. See [Volume keys and feedback](locking.md#volume-keys-and-feedback).
+
 `osd-bridge.js` is a separate GNOME Shell compatibility adapter. It remains
 for GNOME Shell sessions, including older Gnoblin builds that do not publish
 the native event. It checks for native support before patching the Shell OSD

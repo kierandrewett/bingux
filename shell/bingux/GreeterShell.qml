@@ -36,7 +36,8 @@ ShellRoot {
             required property var modelData
             readonly property bool primary: modelData === Quickshell.screens[0]
             screen: modelData
-            color: Theme.background
+            // The wallpaper layer in GreeterScreen is the background.
+            color: "transparent"
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.namespace: "bingux-greeter"
             WlrLayershell.layer: WlrLayer.Overlay
@@ -55,6 +56,7 @@ ShellRoot {
                 authentication: greeterAuthentication
                 catalog: greeterCatalog
                 metrics: sessionMetrics
+                hostWindow: window
                 interactive: window.primary
             }
         }

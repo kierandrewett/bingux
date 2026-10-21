@@ -4,7 +4,8 @@
 The fake server speaks greetd's IPC (native-endian u32 length + JSON). It
 expects one wrong password, then the right one, then a start_session whose
 command and environment come from the Gnoblin wayland-sessions entry. A
-screenshot of the failure state is written to BINGUX_GREETER_SHOT when set.
+screenshot of each visual state is written to BINGUX_GREETER_SHOTS (default
+build/kiosk-shots).
 """
 
 import json
@@ -22,6 +23,67 @@ import time
 ROOT = Path(__file__).resolve().parent.parent
 QS = os.environ.get("QS_TEST_BIN", "qs")
 SESSION_BIN = os.environ.get("BINGUX_SESSION_BIN", str(ROOT / "build/cargo/release/bingux-session"))
+
+def metrics_record(sample):
+    return (
+        json.dumps(
+            {
+                "protocolVersion": 1,
+                "type": "metrics",
+                "cpuPercent": 12.0,
+                "memoryTotalBytes": 8 << 30,
+                "memoryUsedBytes": 2 << 30,
+                "networkReceiveBytesPerSecond": 0,
+                "networkTransmitBytesPerSecond": 0,
+                "desktopStateAvailable": False,
+                "inputSources": [],
+                "currentInputSource": None,
+                "screenSharing": False,
+                "microphoneInUse": False,
+                "locationInUse": False,
+                "extra": {"sampledAtMs": sample},
+            },
+            separators=(",", ":"),
+        ).encode()
+        + b"\n"
+    )
+
+
+class FakeMetrics(threading.Thread):
+    """Serves metrics-v1 records so the status bar shows values, not '--'."""
+
+    def __init__(self, path):
+        super().__init__(daemon=True)
+        self.path = path
+        self.stop = threading.Event()
+
+    def run(self):
+        self.path.parent.mkdir(mode=0o700, exist_ok=True)
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        listener.bind(str(self.path))
+        listener.listen(4)
+        listener.settimeout(0.2)
+        with listener:
+            while not self.stop.is_set():
+                try:
+                    connection, _ = listener.accept()
+                except socket.timeout:
+                    continue
+                connection.settimeout(None)
+                threading.Thread(target=self.feed, args=(connection,), daemon=True).start()
+        self.path.unlink(missing_ok=True)
+
+    def feed(self, connection):
+        sample = 1
+        with connection:
+            while not self.stop.is_set():
+                try:
+                    connection.sendall(metrics_record(sample))
+                except OSError:
+                    return
+                sample += 1
+                self.stop.wait(1)
+
 
 
 class FakeGreetd(threading.Thread):
@@ -124,6 +186,10 @@ def main():
         subprocess.run(
             ["magick", "-size", "64x40", "gradient:#1b2a4a-#62a0ea", str(wallpaper)], check=False, capture_output=True
         )
+    # The blurred twin the greeter shows behind the card; the compositor
+    # background uses the same file.
+    if wallpaper.exists():
+        shutil.copy(wallpaper, home / "wallpaper-blur")
     users = {
         "users": [
             {
@@ -153,6 +219,8 @@ def main():
 
     sway_config = home / "sway.conf"
     sway_config.write_text("output HEADLESS-1 resolution 1280x800\n")
+    ack = home / "greeter-ui.ack"
+    ack.write_text("0")
     environment = os.environ | {
         "HOME": str(home),
         "XDG_RUNTIME_DIR": str(runtime),
@@ -165,6 +233,7 @@ def main():
         "BINGUX_SOFTWARE_RENDERING": os.environ.get("BINGUX_SOFTWARE_RENDERING", "1"),
         "QT_QPA_PLATFORM": "wayland",
         "PATH": str(bin_dir) + ":" + os.environ.get("PATH", ""),
+        "GREETER_UI_ACK": str(ack),
     }
     environment.pop("DISPLAY", None)
     sway = subprocess.Popen(
@@ -173,6 +242,8 @@ def main():
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    metrics = FakeMetrics(runtime / "bingux/metrics-v1.sock")
+    metrics.start()
     try:
         # Sway picks its own socket name; wait for it in the private runtime dir.
         for _ in range(100):
@@ -195,27 +266,60 @@ def main():
             stderr=subprocess.STDOUT,
             text=True,
         )
-        shot = os.environ.get("BINGUX_GREETER_SHOT")
-        deadline = time.monotonic() + 25
-        # Capture the failure state once the fake server has rejected a password.
-        shot_done = False
+        shots_dir = Path(os.environ.get("BINGUX_GREETER_SHOTS", ROOT / "build/kiosk-shots"))
+        shots_dir.mkdir(parents=True, exist_ok=True)
+        lines = []
+        captured = []
+        acks = [0]
+
+        def grab_settled(target):
+            # Popups lay out a few frames after they open; grab until two
+            # consecutive grabs match so the shot is not taken mid-layout.
+            previous = None
+            for _ in range(20):
+                time.sleep(0.3)
+                probe = target.with_suffix(".probe.png")
+                subprocess.run(["grim", str(probe)], env=environment, check=False)
+                current = probe.read_bytes() if probe.exists() else None
+                probe.unlink(missing_ok=True)
+                if current is not None and current == previous:
+                    target.write_bytes(current)
+                    return
+                previous = current
+            subprocess.run(["grim", str(target)], env=environment, check=False)
+
+        def read_output():
+            # Each "GREETER_UI_SHOT <name>" marker is grabbed once the frame
+            # is settled, then the QML is resumed by rewriting the ack file.
+            for line in greeter.stdout:
+                lines.append(line)
+                if "GREETER_UI_SHOT " in line:
+                    name = line.split("GREETER_UI_SHOT ", 1)[1].strip()
+                    target = shots_dir / (name + ".png")
+                    grab_settled(target)
+                    captured.append(name)
+                    acks[0] += 1
+                    ack.write_text(str(acks[0]))
+
+        reader = threading.Thread(target=read_output, daemon=True)
+        reader.start()
+        deadline = time.monotonic() + 120
         while time.monotonic() < deadline and greeter.poll() is None:
-            rejected = any(r.get("type") == "post_auth_message_response" for r in greetd.requests)
-            if shot and rejected and not shot_done:
-                time.sleep(0.8)
-                subprocess.run(["grim", shot], env=environment, check=False)
-                shot_done = True
             time.sleep(0.1)
         try:
-            output, _ = greeter.communicate(timeout=5)
+            greeter.wait(timeout=5)
         except subprocess.TimeoutExpired:
             greeter.kill()
-            output, _ = greeter.communicate()
+            greeter.wait()
+        reader.join(timeout=10)
+        output = "".join(lines)
         print(output)
         print("greeter exit code:", greeter.returncode)
         started = greetd.started or {}
         checks = {
             "greeter passed": "GREETER_UI_PASSED" in output,
+            "all shots captured": captured
+            == ["idle", "typing", "wrong-password", "accounts", "sessions", "control-centre", "typed-password"],
             "exit code": greeter.returncode == 0,
             "no server failures": not greetd.failures,
             "start_session command": started.get("cmd") == ["/bin/true", "--from-test"],
@@ -230,6 +334,7 @@ def main():
             print(greetd.failures)
         return 0 if all(checks.values()) else 1
     finally:
+        metrics.stop.set()
         sway.terminate()
         sway.wait(timeout=5)
         if os.environ.get("BINGUX_GREETER_KEEP"):

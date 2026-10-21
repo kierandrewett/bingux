@@ -12,7 +12,10 @@ Item {
     readonly property int controlSize: 24
     property string timeoutPath: "timeout"
     property var services: ControlCentreServices
+    // False for a data-only instance that must not claim status monitoring.
+    property bool reportsStatus: true
     Binding {
+        when: root.reportsStatus
         target: root.services
         property: "statusVisible"
         value: root.visible
@@ -68,7 +71,12 @@ Item {
                 active: service.keepAwake,
                 label: "Keep Awake: " + (service.keepAwake ? "On" : "Off")
             });
-        return rows;
+        const capabilities = {
+            microphone: "volume",
+            dnd: "doNotDisturb",
+            power: "power"
+        };
+        return rows.filter(row => SessionServices.permits(capabilities[row.key] || row.key));
     }
     readonly property string extraStatusDescription: extraIndicators.filter(indicator => indicator.active).map(indicator => indicator.label).join("\n")
     readonly property var audioSink: Pipewire.defaultAudioSink
@@ -278,7 +286,7 @@ Item {
         StatusIndicator {
             objectName: "controlStatus_bluetooth"
             slotSize: root.controlSize
-            shown: root.bluetoothAdapter !== null && root.bluetoothAdapter.enabled
+            shown: root.bluetoothAdapter !== null && root.bluetoothAdapter.enabled && SessionServices.permits("bluetooth")
             iconName: "bluetooth-active-symbolic"
             label: root.connectedBluetoothDevices > 0 ? "Bluetooth, " + root.connectedBluetoothDevices + " connected" : "Bluetooth on"
         }

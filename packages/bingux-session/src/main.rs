@@ -13,6 +13,7 @@
 //! bingux-session greeter-background       Lua that paints the remembered account's wallpaper
 //! bingux-session wallpaper                the calling user's wallpaper from bingux-config
 //! bingux-session export                   publish the greeter snapshot and Gnoblin background
+//! bingux-session blur-wallpaper SOURCE TARGET  write a pre-blurred, dimmed copy (packaging)
 //! ```
 
 mod accounts;
@@ -21,9 +22,9 @@ mod sessions;
 mod snapshot;
 mod state;
 
-use std::{env, io::Write, process};
+use std::{env, io::Write, path::Path, process};
 
-const USAGE: &str = "usage: bingux-session users | sessions | biometrics USER SERVICE | remember USER SESSION | recall | greeter-background | wallpaper | export";
+const USAGE: &str = "usage: bingux-session users | sessions | biometrics USER SERVICE | remember USER SESSION | recall | greeter-background | wallpaper | export | blur-wallpaper SOURCE TARGET";
 
 fn main() {
     let arguments: Vec<String> = env::args().skip(1).collect();
@@ -56,7 +57,10 @@ fn main() {
             let wallpaper = account
                 .map(|account| account.wallpaper.as_str())
                 .unwrap_or("");
-            print!("{}", snapshot::greeter_background_lua(wallpaper));
+            print!(
+                "{}",
+                snapshot::greeter_background_lua(&snapshot::greeter_image(wallpaper))
+            );
             return;
         }
         ["wallpaper"] => serde_json::to_string(
@@ -83,6 +87,21 @@ fn main() {
             None => {
                 eprintln!("bingux-session: the calling user is not in the password database");
                 process::exit(1);
+            }
+        },
+        ["blur-wallpaper", source, target] => match snapshot::blurred_format(Path::new(target)) {
+            Some(format) => {
+                match snapshot::write_blurred(Path::new(source), Path::new(target), format) {
+                    Ok(()) => serde_json::to_string(target),
+                    Err(error) => {
+                        eprintln!("bingux-session: could not blur {source}: {error}");
+                        process::exit(1);
+                    }
+                }
+            }
+            None => {
+                eprintln!("bingux-session: blur-wallpaper TARGET must end in .jpg, .jpeg or .png");
+                process::exit(2);
             }
         },
         _ => {

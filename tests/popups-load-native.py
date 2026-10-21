@@ -5,11 +5,14 @@ from pathlib import Path
 import argparse
 import json
 import socket
+import sys
 import subprocess
 import threading
 import time
 
 REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "tests/lib"))
+import shell_source  # noqa: E402
 parser = argparse.ArgumentParser(
     description="Exercise installed Bingux popup loading and reloads in a disposable native VM."
 )
@@ -131,7 +134,7 @@ target = args.shell_target or (
 original = guest("cat", target).encode()
 source = args.source.read_text()
 fixture = (REPO / "tests/popups-load-native.inc.qml").read_text()
-source = source.rstrip()[:-1] + fixture + "\n}\n"
+source = shell_source.insert_before_root_end(source.rstrip(), fixture + "\n") + "\n"
 write = "import sys;from pathlib import Path;Path(sys.argv[1]).write_bytes(sys.stdin.buffer.read())"
 records = []
 samples = []

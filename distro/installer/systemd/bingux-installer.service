@@ -1,0 +1,9 @@
+[Unit]
+Requires=bingux-installer.socket
+After=bingux-installer.socket
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/bingux-installer-daemon
+StandardOutput=journal
+StandardError=journal

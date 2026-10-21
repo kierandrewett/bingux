@@ -3,45 +3,83 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 
-// The login greeter: SessionScreen plus the account and session choice. One
-// GreeterAuthentication and one GreeterCatalog are shared by every output;
-// only the interactive output shows the controls.
-//
-// The selected account is front and centre with its password prompt, like a
-// lock screen. Other accounts sit in the bottom-left corner as a small stack
-// that opens a list; the session choice is a quiet icon in the bottom-right.
-// Power actions live in the session bar's control centre, not here.
-SessionScreen {
+// The login greeter on KioskScreen. The card holds three pages: "login" (the
+// account, its password prompt and the session link), "accounts" (switch user
+// or type a name) and "sessions" (the session list). Back and Escape return
+// to the page that opened the current one. One GreeterAuthentication and one
+// GreeterCatalog are shared by every output; only the interactive output
+// takes input and plays the hand-over.
+KioskScreen {
     id: root
 
+    required property var authentication
     required property var catalog
     property string selectedUser: ""
     property bool customUser: false
     property int sessionIndex: 0
-    property bool accountsOpen: false
-    property bool sessionsOpen: false
     readonly property var selectedSession: catalog.sessions.length > 0 ? catalog.sessions[Math.min(sessionIndex, catalog.sessions.length - 1)] : null
     readonly property var selectedAccount: catalog.users.find(user => user.name === root.selectedUser) ?? null
-    readonly property var otherAccounts: catalog.users.filter(user => user.name !== root.selectedUser || root.customUser)
     readonly property bool multipleAccounts: catalog.users.length > 1 || (catalog.users.length > 0 && customUser)
-
-    submitLabel: "Log in"
-    accountName: selectedUser
-    accountDisplayName: customUser ? "" : selectedAccount ? selectedAccount.displayName : selectedUser
-    accountImage: !customUser && selectedAccount && selectedAccount.icon ? "file://" + selectedAccount.icon : ""
-    // "Other" keeps the wallpaper of the account that was shown before it,
-    // so the screen does not cut to the plain tint while a name is typed.
+    // The password field, for the greeter UI test to type into.
+    readonly property var responseField: response
+    readonly property var pageStack: pages
+    readonly property bool ready: catalog.loaded && selectedUser !== "" && selectedSession !== null
+    readonly property bool promptOpen: authentication.responseRequired && !authentication.finishing
+    readonly property bool canSubmit: ready && interactive && promptOpen
+    readonly property string statusText: authentication.status !== "" ? authentication.status : authentication.hint
+    readonly property string accountDisplayName: customUser ? "" : selectedAccount ? selectedAccount.displayName : selectedUser
+    readonly property url accountImage: !customUser && selectedAccount && selectedAccount.icon ? "file://" + selectedAccount.icon : ""
+    // "Other" keeps the wallpaper of the account shown before it, so the
+    // screen does not cut to the plain tint while a name is typed.
     readonly property var wallpaperAccount: selectedAccount && selectedAccount.wallpaper ? selectedAccount : catalog.users.find(user => user.name === catalog.rememberedUser && user.wallpaper) ?? null
+
     wallpaper: wallpaperAccount ? "file://" + wallpaperAccount.wallpaper : ""
-    showAccount: !customUser
-    ready: catalog.loaded && selectedUser !== "" && selectedSession !== null
+    cardTitle: pages.current === "accounts" ? "Choose an account" : pages.current === "sessions" ? "Session" : customUser ? "Sign in" : accountDisplayName
+    backVisible: pages.canGoBack
+    primaryText: "Log in"
+    primaryVisible: pages.current === "login"
+    primaryEnabled: canSubmit && response.text.length > 0
+    secondaryText: "Switch user"
+    secondaryIcon: "avatar-default-symbolic"
+    secondaryVisible: pages.current === "login" && multipleAccounts && interactive
+    cardBodyHeight: 232
+
+    onPrimaryRequested: submitResponse()
+    onSecondaryRequested: pages.go("accounts")
+    onBackRequested: {
+        if (pages.back())
+            focusPrompt();
+    }
+
+    function submitResponse() {
+        if (!canSubmit)
+            return;
+        authentication.respond(response.text);
+        response.text = "";
+    }
+
+    function focusPrompt() {
+        if (!interactive)
+            return;
+        if (pages.current !== "login")
+            return;
+        if (customUser)
+            userName.forceActiveFocus();
+        else
+            response.forceActiveFocus();
+    }
+
+    function startWhenReady() {
+        if (ready && interactive && !authentication.active && !authentication.finishing)
+            authentication.start();
+    }
 
     function selectUser(name) {
-        accountsOpen = false;
         if (name === selectedUser && !customUser)
             return;
         if (authentication.active || authentication.finishing)
             authentication.cancel();
+        customUser = false;
         selectedUser = name;
         authentication.userName = name;
         authentication.start();
@@ -62,173 +100,219 @@ SessionScreen {
     }
 
     function openCustomUser() {
-        accountsOpen = false;
         if (authentication.active || authentication.finishing)
             authentication.cancel();
         customUser = true;
         selectedUser = "";
         userName.text = "";
+        pages.back();
         userName.forceActiveFocus();
     }
 
     onSelectedSessionChanged: authentication.session = selectedSession
+    onReadyChanged: startWhenReady()
 
+    Component.onCompleted: {
+        pages.replace("login");
+        if (catalog.loaded)
+            chooseInitialUser();
+        focusPrompt();
+        startWhenReady();
+    }
     Connections {
         target: root.catalog
         function onReady() {
             root.chooseInitialUser();
         }
     }
-    Component.onCompleted: if (catalog.loaded)
-        chooseInitialUser()
-
-    // Escape or a click outside closes an open list.
-    Keys.onEscapePressed: event => {
-        if (root.accountsOpen || root.sessionsOpen) {
-            root.accountsOpen = false;
-            root.sessionsOpen = false;
-            event.accepted = true;
-        }
-    }
-    MouseArea {
-        anchors.fill: parent
-        z: 5
-        visible: root.accountsOpen || root.sessionsOpen
-        onClicked: {
-            root.accountsOpen = false;
-            root.sessionsOpen = false;
+    Connections {
+        target: root.authentication
+        function onResponseRequested() {
+            response.text = "";
             root.focusPrompt();
         }
-    }
-
-    leadingContent: ColumnLayout {
-        width: parent.width
-        spacing: Theme.gap
-        visible: root.interactive && root.customUser
-
-        // "Other" account: a neutral avatar and a username field take the
-        // place of the account picture and name.
-        Rectangle {
-            Layout.alignment: Qt.AlignHCenter
-            width: 72
-            height: 72
-            radius: 36
-            color: root.glass
-            border.width: 1
-            border.color: root.glassOutline
-            SymbolicIcon {
-                anchors.centerIn: parent
-                implicitSize: 28
-                source: AdwaitaIcons.source("avatar-default-symbolic")
-                color: root.ink
-            }
-        }
-        TextField {
-            id: userName
-            objectName: "greeterUserName"
-            Layout.alignment: Qt.AlignHCenter
-            Layout.preferredWidth: 200
-            implicitHeight: 32
-            enabled: !root.authentication.finishing
-            placeholderText: "Username"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSmall + 1
-            color: root.ink
-            placeholderTextColor: root.inkMuted
-            selectByMouse: true
-            leftPadding: Theme.padding
-            Accessible.name: placeholderText
-            background: SessionGlass {
-                backdrop: root.backdrop
-                outline: userName.activeFocus ? Qt.rgba(1, 1, 1, 0.6) : root.glassOutline
-            }
-            onAccepted: {
-                const name = text.trim();
-                if (name !== "")
-                    root.selectUser(name);
-            }
+        // Credentials were accepted: the interactive output plays the exit,
+        // then hands over to the chosen session. finish() is idempotent.
+        function onFinishingChanged() {
+            if (root.authentication.finishing && root.interactive)
+                exit.start();
         }
     }
+    Timer {
+        id: exit
+        interval: Theme.sessionExitMotion
+        onTriggered: root.authentication.finish()
+    }
 
-    // Bottom left: the other accounts as a small stack of avatars. Clicking
-    // opens the full list with "Other…" for an account that is not listed.
-    cornerLeadingContent: Item {
-        id: accountSwitch
-        objectName: "greeterAccounts"
-        visible: root.multipleAccounts
-        implicitWidth: switchButton.implicitWidth
-        implicitHeight: switchButton.implicitHeight
+    KioskPageStack {
+        id: pages
+        objectName: "greeterPages"
+        anchors.fill: parent
 
-        AbstractButton {
-            id: switchButton
-            objectName: "greeterSwitchUser"
-            implicitWidth: switchRow.implicitWidth + 16
-            implicitHeight: 36
-            hoverEnabled: true
-            activeFocusOnTab: true
-            enabled: !root.authentication.finishing
-            Accessible.name: "Switch user"
-            onClicked: {
-                root.sessionsOpen = false;
-                root.accountsOpen = !root.accountsOpen;
-            }
-            background: Rectangle {
-                radius: height / 2
-                color: switchButton.down ? Qt.rgba(1, 1, 1, 0.3) : switchButton.hovered || root.accountsOpen ? Qt.rgba(1, 1, 1, 0.18) : Qt.rgba(1, 1, 1, 0.08)
-                border.width: 1
-                border.color: switchButton.visualFocus ? Qt.rgba(1, 1, 1, 0.5) : Qt.rgba(1, 1, 1, 0.12)
-                Behavior on color {
-                    ColorAnimation {
-                        duration: Theme.motion
-                    }
-                }
-            }
-            contentItem: Item {
-                Row {
-                    id: switchRow
-                    anchors.centerIn: parent
-                    spacing: 8
-                    // Up to three avatars, overlapping like a stack.
-                    Item {
+        // The login page: the account, its prompt and the session link.
+        KioskPage {
+            stack: pages
+            pageId: "login"
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: Theme.gap
+
+                // "Other": a neutral avatar and a username field take the
+                // place of the account picture and name.
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 84
+                    visible: root.customUser
+                    TextField {
+                        id: userName
+                        objectName: "greeterUserName"
+                        anchors.horizontalCenter: parent.horizontalCenter
                         anchors.verticalCenter: parent.verticalCenter
-                        width: Math.max(26, 26 + (Math.min(root.otherAccounts.length, 3) - 1) * 18)
-                        height: 26
-                        Repeater {
-                            model: root.otherAccounts.slice(0, 3)
-                            SessionAvatar {
-                                required property var modelData
-                                required property int index
-                                x: index * 18
-                                z: -index
-                                size: 26
-                                source: modelData.icon ? "file://" + modelData.icon : ""
-                                name: modelData.displayName
-                            }
+                        width: 240
+                        implicitHeight: 36
+                        enabled: !root.authentication.finishing
+                        placeholderText: "Username"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSmall + 1
+                        color: Theme.text
+                        placeholderTextColor: Theme.muted
+                        selectByMouse: true
+                        leftPadding: Theme.padding
+                        Accessible.name: placeholderText
+                        background: Rectangle {
+                            radius: height / 2
+                            color: Theme.elevated
+                            border.width: 1
+                            border.color: userName.activeFocus ? Theme.accent : Qt.rgba(1, 1, 1, 0.12)
+                        }
+                        onAccepted: {
+                            const name = text.trim();
+                            if (name !== "")
+                                root.selectUser(name);
                         }
                     }
+                }
+                SessionAvatar {
+                    Layout.alignment: Qt.AlignHCenter
+                    visible: !root.customUser
+                    size: 72
+                    source: root.accountImage
+                    name: root.accountDisplayName
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 8
+                    BusyIndicator {
+                        implicitWidth: 18
+                        implicitHeight: 18
+                        running: root.authentication.finishing || (root.authentication.active && !root.authentication.responseRequired)
+                        visible: running
+                    }
                     Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: root.customUser ? "Accounts" : "Switch user"
-                        color: root.ink
+                        objectName: "greeterStatus"
+                        Layout.fillWidth: true
+                        text: root.statusText
+                        color: root.authentication.statusIsError ? Theme.danger : Theme.muted
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSmall
-                        font.weight: Font.Medium
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                    }
+                }
+
+                TextField {
+                    id: response
+                    objectName: "greeterResponse"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 36
+                    visible: root.interactive
+                    enabled: root.canSubmit
+                    opacity: root.canSubmit ? 1 : 0.55
+                    placeholderText: root.promptOpen && root.authentication.prompt !== "" ? root.authentication.prompt : "Password"
+                    echoMode: root.authentication.responseVisible ? TextInput.Normal : TextInput.Password
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSmall + 1
+                    color: Theme.text
+                    placeholderTextColor: Theme.muted
+                    selectByMouse: false
+                    leftPadding: Theme.padding
+                    rightPadding: Theme.padding
+                    Accessible.name: placeholderText
+                    background: Rectangle {
+                        radius: height / 2
+                        color: Theme.elevated
+                        border.width: 1
+                        border.color: response.activeFocus ? Theme.accent : Qt.rgba(1, 1, 1, 0.12)
+                    }
+                    onAccepted: root.submitResponse()
+                    // A rejected attempt shakes the field.
+                    transform: Translate {
+                        id: shakeOffset
+                    }
+                    Connections {
+                        target: root.authentication
+                        function onStatusIsErrorChanged() {
+                            if (root.authentication.statusIsError)
+                                shake.restart();
+                        }
+                    }
+                    SequentialAnimation {
+                        id: shake
+                        loops: 1
+                        NumberAnimation {
+                            target: shakeOffset
+                            property: "x"
+                            to: -8
+                            duration: Theme.motion / 2
+                        }
+                        NumberAnimation {
+                            target: shakeOffset
+                            property: "x"
+                            to: 8
+                            duration: Theme.motion / 2
+                        }
+                        NumberAnimation {
+                            target: shakeOffset
+                            property: "x"
+                            to: 0
+                            duration: Theme.motion / 2
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: Theme.gap
+                    SessionLink {
+                        objectName: "sessionRetry"
+                        visible: root.interactive && root.ready && !root.authentication.active && !root.authentication.responseRequired && !root.authentication.finishing
+                        text: "Try again"
+                        onClicked: root.authentication.start()
+                    }
+                    SessionLink {
+                        objectName: "greeterSession"
+                        visible: root.catalog.sessions.length > 1
+                        iconName: "emblem-system-symbolic"
+                        text: root.selectedSession ? root.selectedSession.name : "Session"
+                        enabled: !root.authentication.finishing
+                        Accessible.name: "Session: " + (root.selectedSession ? root.selectedSession.name : "none")
+                        onClicked: pages.go("sessions")
                     }
                 }
             }
         }
 
-        SessionPopover {
-            objectName: "greeterAccountList"
-            anchors.left: parent.left
-            anchors.bottom: parent.top
-            anchors.bottomMargin: Theme.gap
-            open: root.accountsOpen
-            backdrop: root.backdrop
-            width: 260
+        // Switch user: the known accounts and "Other…".
+        KioskPage {
+            stack: pages
+            pageId: "accounts"
             ColumnLayout {
-                width: parent.width
-                spacing: 2
+                anchors.fill: parent
+                spacing: 4
+                objectName: "greeterAccountList"
                 Repeater {
                     model: root.catalog.users
                     SessionRow {
@@ -241,8 +325,8 @@ SessionScreen {
                         avatarSource: modelData.icon ? "file://" + modelData.icon : ""
                         avatarName: modelData.displayName
                         onClicked: {
-                            root.customUser = false;
                             root.selectUser(modelData.name);
+                            pages.back();
                         }
                     }
                 }
@@ -255,54 +339,20 @@ SessionScreen {
                     enabled: !root.authentication.finishing
                     onClicked: root.openCustomUser()
                 }
-            }
-        }
-    }
-
-    // Bottom right: the session choice. One session shows nothing; more than
-    // one shows a quiet icon that opens the list with the current one ticked.
-    cornerContent: Item {
-        objectName: "greeterSessions"
-        visible: root.catalog.sessions.length > 1
-        implicitWidth: sessionButton.implicitWidth
-        implicitHeight: sessionButton.implicitHeight
-
-        SessionLink {
-            id: sessionButton
-            objectName: "greeterSession"
-            iconName: "emblem-system-symbolic"
-            dimmed: !root.sessionsOpen
-            Accessible.name: "Session: " + (root.selectedSession ? root.selectedSession.name : "none")
-            enabled: !root.authentication.finishing
-            onClicked: {
-                root.accountsOpen = false;
-                root.sessionsOpen = !root.sessionsOpen;
-            }
-        }
-
-        SessionPopover {
-            objectName: "greeterSessionList"
-            anchors.right: parent.right
-            anchors.bottom: parent.top
-            anchors.bottomMargin: Theme.gap
-            open: root.sessionsOpen
-            backdrop: root.backdrop
-            width: 220
-            ColumnLayout {
-                width: parent.width
-                spacing: 2
-                Text {
-                    Layout.fillWidth: true
-                    Layout.leftMargin: 10
-                    Layout.bottomMargin: 4
-                    text: "Session"
-                    color: root.inkMuted
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSmall - 1
-                    font.weight: Font.DemiBold
-                    font.capitalization: Font.AllUppercase
-                    font.letterSpacing: 0.6
+                Item {
+                    Layout.fillHeight: true
                 }
+            }
+        }
+
+        // Session choice: the sessions the greetd catalog found.
+        KioskPage {
+            stack: pages
+            pageId: "sessions"
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 4
+                objectName: "greeterSessionList"
                 Repeater {
                     model: root.catalog.sessions
                     SessionRow {
@@ -315,10 +365,13 @@ SessionScreen {
                         enabled: !root.authentication.finishing
                         onClicked: {
                             root.sessionIndex = index;
-                            root.sessionsOpen = false;
+                            pages.back();
                             root.focusPrompt();
                         }
                     }
+                }
+                Item {
+                    Layout.fillHeight: true
                 }
             }
         }

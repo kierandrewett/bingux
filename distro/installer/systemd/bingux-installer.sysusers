@@ -1,0 +1,2 @@
+# Group allowed to talk to bingux-installer.sock (in addition to root).
+g bingux-install - -

@@ -1,0 +1,11 @@
+[Unit]
+
+[Socket]
+ListenStream=/run/bingux-installer.sock
+SocketUser=root
+SocketGroup=bingux-install
+SocketMode=0660
+Accept=no
+
+[Install]
+WantedBy=sockets.target

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Boot the Bingux OS live image in QEMU and exercise the whole session.
+"""Boot the Bingux OS live image from its firmware and exercise the whole session.
 
 usage: tests/distro-boot.py [ISO]   (default: newest distro/out/bingux-os-*.iso)
 
-The run covers what a user does on the live image:
+The image boots the way a machine does: OVMF runs the ISO's boot loader, and
+the boot menu, initramfs and splash are all on the recording. The run covers
+what a user does on the live image:
 
 1. the greeter comes up (greetd, Gnoblin in greeter mode, bingux-greeter);
 2. typing the live password starts a Gnoblin session with the Bingux shell and
@@ -11,11 +13,13 @@ The run covers what a user does on the live image:
 3. `gnoblinctl session lock` shows the lock screen, and the password unlocks it;
 4. `gnoblinctl session logout` returns to the greeter.
 
-The kernel and initramfs come from the ISO so the command line can add a
-serial console; the live image logs root in on it. Keys and screenshots go
-through the QEMU monitor. Artifacts land in BINGUX_DISTRO_OUT (default
-distro/out/boot-test/): checks.json, report.txt, serial.log and one PNG per
-step (greeter, session, locked, unlocked, logged-out).
+Keys go through the QEMU monitor, commands through the serial root shell.
+Checks read the captured frames, not files.
+
+Artifacts land in BINGUX_DISTRO_OUT (default distro/out/boot-test/):
+checks.json, report.txt, serial.log, timeline.json, frame-events.jsonl,
+flow.mp4 (10 fps) and one PNG per stage (greeter, session, locked, unlocked,
+logged-out).
 """
 
 import json
@@ -26,7 +30,8 @@ import sys
 import tempfile
 import time
 
-from distro_vm import ROOT, Vm, bright_pixels, find_iso, missing_tools, session_painted
+from distro_capture import bright_count, blue_lead, is_black, session_painted
+from distro_vm import ROOT, Vm, find_iso, missing_tools
 
 # bingux-os-firstboot creates the live account with this password.
 LIVE_USER = "live"
@@ -35,8 +40,23 @@ LIVE_PASSWORD = "live"
 # else on either screen, and nothing on the desktop, is near white.
 CLOCK_REGION = "400x160+440+90"
 CLOCK_PIXELS = 500
+# The bar's clock text, and a wallpaper-only strip below the bar.
+BAR_REGION = "160x24+560+4"
+WALLPAPER_REGION = "1280x700+0+60"
 SHELL_PATTERN = "'^/usr/bin/bingux( |$)'"
 LOCK_STATE = 'gnoblinctl status | grep -o \'"lock_state":"[a-z]*"\''
+
+
+def clock_shown(frame):
+    return bright_count(frame, CLOCK_REGION) > CLOCK_PIXELS
+
+
+def bar_visible(frame):
+    return bright_count(frame, BAR_REGION) > 100
+
+
+def wallpaper_visible(frame):
+    return blue_lead(frame, WALLPAPER_REGION) > 0.05
 
 
 def main():
@@ -44,7 +64,7 @@ def main():
     if iso is None or not iso.is_file():
         print("no live image; run distro/build.sh first")
         return 1
-    missing = missing_tools("qemu-system-x86_64", "bsdtar", "magick", "blkid")
+    missing = missing_tools("qemu-system-x86_64", "ffmpeg", "ffprobe")
     if missing:
         print("missing tool: " + ", ".join(missing))
         return 1
@@ -53,7 +73,7 @@ def main():
     for stale in out.glob("*.png"):
         stale.unlink()
     work = Path(tempfile.mkdtemp(prefix="bingux-os-boot-"))
-    vm = Vm(work, iso=iso, serial=True)
+    vm = Vm(work, iso=iso, serial=True, record=out)
     checks = {}
     report = []
 
@@ -63,14 +83,20 @@ def main():
         checks[label] = bool(accept(output))
         return output
 
-    def shot(name):
-        return vm.screenshot(out / f"{name}.png")
+    def shot(name, frame=None):
+        """Save a stage PNG (the given frame, else the newest one); returns the frame, or None."""
+        return vm.still(out / f"{name}.png", frame)
 
     def count(output):
         return output.isdigit() and int(output) > 0
 
     try:
         vm.start()
+        # Timeline hooks: the first frame with light on it, then each stage of the session.
+        vm.recorder.expect("first picture", lambda frame: not is_black(frame))
+        vm.recorder.expect("first greeter frame", clock_shown)
+        vm.recorder.expect("first session bar", bar_visible)
+        vm.recorder.expect("first session wallpaper", wallpaper_visible)
         checks["booted to a shell"] = vm.start_shell()
         if checks["booted to a shell"]:
             probe("greetd active", "systemctl is-active greetd", lambda o: o == "active", attempts=60, delay=2)
@@ -90,14 +116,26 @@ def main():
                 f"ls /var/lib/bingux/greeter/{LIVE_USER}",
                 lambda o: "wallpaper" in o,
             )
-            time.sleep(10)
-            checks["greeter shows the clock"] = shot("greeter") and (
-                bright_pixels(out / "greeter.png", CLOCK_REGION) > CLOCK_PIXELS
-            )
+            # Keys sent before the greeter is on screen are lost (baseline run 2 typed
+            # into the bare wallpaper), so wait for its clock rather than a timer.
+            frame = vm.wait_frame(clock_shown, attempts=60)
+            checks["greeter shows the clock"] = frame is not None
+            shot("greeter", frame)
+            vm.recorder.mark("greeter interactive")
+            # Give the greeter a moment to take keyboard focus after its first paint.
+            time.sleep(3)
 
             # Sign in the way a user would: type into the focused field.
+            vm.recorder.expect("first session frame", session_painted)
             vm.type_text(LIVE_PASSWORD)
             vm.key("ret")
+            vm.recorder.mark("password submitted")
+            # Still on the greeter after the wait: the keys were lost, so type again.
+            if vm.wait_frame(session_painted, attempts=20) is None:
+                greeter = vm.frame()
+                if greeter is not None and clock_shown(greeter):
+                    vm.type_text(LIVE_PASSWORD)
+                    vm.key("ret")
             probe("session shell runs as the user", f"pgrep -c -u {LIVE_USER} -f {SHELL_PATTERN}", count, attempts=60)
             probe("session compositor runs as the user", f"pgrep -c -u {LIVE_USER} -x gnoblin", count)
             probe("session wallpaper service runs", f"pgrep -c -u {LIVE_USER} -f bingux-wallpaper", count)
@@ -110,9 +148,11 @@ def main():
             )
             time.sleep(10)
             report.append("$ ps -u live\n" + vm.run(f"ps -u {LIVE_USER} -o pid=,args= | cut -c1-120") + "\n")
-            checks["desktop shows the bar and wallpaper"] = shot("session") and session_painted(out / "session.png")
+            frame = shot("session")
+            checks["desktop shows the bar and wallpaper"] = frame is not None and session_painted(frame)
 
             # Lock: the request reaches statusd, which starts the lock client.
+            vm.recorder.mark("lock requested")
             report.append(
                 "$ gnoblinctl session lock\n" + vm.run_as(LIVE_USER, "gnoblinctl session lock", timeout=30) + "\n"
             )
@@ -125,10 +165,12 @@ def main():
                 delay=2,
             )
             # The lock client takes the lock first and paints its screen after.
-            checks["lock screen shows the clock"] = vm.wait_screen(
-                out / "locked.png", lambda path: bright_pixels(path, CLOCK_REGION) > CLOCK_PIXELS, attempts=40
-            )
+            frame = vm.wait_frame(clock_shown, attempts=40)
+            checks["lock screen shows the clock"] = frame is not None
+            if frame is not None:
+                shot("locked", frame)
             time.sleep(2)
+            vm.recorder.mark("unlock submitted")
             vm.type_text(LIVE_PASSWORD)
             vm.key("ret")
             probe(
@@ -140,9 +182,13 @@ def main():
                 delay=2,
             )
             time.sleep(3)
-            checks["desktop back after unlock"] = vm.wait_screen(out / "unlocked.png", session_painted, attempts=20)
+            frame = vm.wait_frame(session_painted, attempts=20)
+            checks["desktop back after unlock"] = frame is not None
+            if frame is not None:
+                shot("unlocked", frame)
 
             # Log out: back to the greeter, with a single statusd and no error.
+            vm.recorder.mark("logout requested")
             report.append(
                 "$ gnoblinctl session logout\n" + vm.run_as(LIVE_USER, "gnoblinctl session logout", timeout=30) + "\n"
             )
@@ -157,9 +203,8 @@ def main():
             probe("bingux-greeter returns after log out", "pgrep -c -f bingux-greeter", count, attempts=45, delay=2)
             time.sleep(10)
             probe("one statusd in the greeter", "pgrep -c -u greeter -x bingux-statusd", lambda o: o == "1")
-            checks["greeter shows the clock after log out"] = shot("logged-out") and (
-                bright_pixels(out / "logged-out.png", CLOCK_REGION) > CLOCK_PIXELS
-            )
+            frame = shot("logged-out")
+            checks["greeter shows the clock after log out"] = frame is not None and clock_shown(frame)
             report.append(
                 "$ journalctl -b -u greetd\n"
                 + vm.run("journalctl -b -u greetd --no-pager -o cat | tail -n 30", 60)

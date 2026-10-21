@@ -1,6 +1,6 @@
 # Bingux OS
 
-An Arch Linux based live image whose desktop is Gnoblin (compositor) and
+A live image of Bingux OS: Arch Linux packages underneath, with Gnoblin
 Bingux (shell, lock screen and login screen). Everything here builds inside a
 stock `archlinux` container, so the host only needs podman or docker.
 
@@ -31,6 +31,11 @@ distro/build.sh --gnoblin ~/dev/gnoblin
 - Both checkouts must be committed: the Bingux archive comes from
   `scripts/make-source-archive.sh` and the Gnoblin bundle from Gnoblin's
   `scripts/build-release-assets.sh --source-only`, which archive `HEAD`.
+  `make-source-archive.sh` refuses a Bingux checkout with uncommitted tracked
+  edits. `BINGUX_ARCHIVE_FROM_HEAD=1` overrides that: it archives `HEAD`, ignores
+  the edits, and prints a warning with the commit id. Use it only when the
+  edits belong to other work in a shared checkout; the built image then matches
+  `HEAD`, not the working tree. The submodule pin check still applies.
 - The container runs privileged so that `pacstrap` and `mkarchiso` can mount
   the chroot's `/proc`, `/sys` and `/dev`. Rootless podman works: the build
   script makes `arch-chroot` bind the container's `/dev` because a user
@@ -89,26 +94,32 @@ QEMU runs of the tests below):
   `bingux.target`.
 - The Bingux OS pacman repository travels on the image in
   `/opt/bingux-os/repo`, so installing needs no network for those packages.
+- The image names itself Bingux OS: `/etc/os-release`, `/etc/issue`, the motd,
+  the boot menus (GRUB, syslinux, systemd-boot) and the Plymouth boot splash
+  (theme `bingux`, a gradient with the product name). The `bingux-os` package
+  ships the release files and the alpm hook `bingux-os-release.hook`, which puts
+  them in place after every transaction that touches `filesystem` or
+  `bingux-os`; `ID_LIKE=arch` keeps Arch tooling working. The package adds the
+  `plymouth` mkinitcpio hook after `kms`.
+- Still Arch: the package names, the pacman configuration, the Arch mirror list
+  the base system comes from, and the `arch` directory inside the ISO (its
+  `install_dir`, which the tooling expects).
 
 ## Install to disk
 
 Boot the image in UEFI mode, then:
 
 ```sh
-bingux-os-install --disk /dev/nvme0n1 --user kieran
+bingux-installer probe
+sudo bingux-installer install --plan plan.json
 ```
 
-This erases the whole disk (it asks you to type the disk name first; `--yes`
-skips that), creates a 512 MiB EFI partition and an ext4 root, installs the
-base system and `bingux-os` with archinstall and systemd-boot, creates the
-account with administrator rights and asks for its password (or reads
-`--password-file`). The base system comes from the Arch mirrors, so the
-machine needs a network connection. Other options: `--hostname`, `--timezone`,
-`--locale`, `--keyboard`.
-
-It supports UEFI only. For another layout, encryption or extra packages, run
-`archinstall` yourself and add `bingux-os` to the additional packages; its
-install hook does the rest.
+`probe` prints the disks as JSON. Write `plan.json` by hand: the v1 schema has
+the required keys `version`, `disk`, `confirm_erase`, `users`, `hostname`,
+`timezone`, `locale` and `keymap`, documented in `distro/installer/README.md`.
+`install` erases the disk named in the plan. The daemon,
+`bingux-installer-daemon`, is socket-activated. Interactive plan generation
+and a GUI installer are out of scope for v1. It supports UEFI only.
 
 `tests/distro-install.py` runs this end to end in QEMU: it installs onto a
 blank virtual disk, inspects the result, boots the disk alone and signs in.
@@ -141,6 +152,7 @@ To host it elsewhere, serve `distro/out/repo` over HTTPS and change the
 ```sh
 tests/distro-boot.py      # the live image: sign in, lock, unlock, log out
 tests/distro-install.py   # install to a virtual disk, boot it, sign in
+tests/distro-branding.py [--iso ISO] [--root DIR]   # no "Arch" in names the user sees
 ```
 
 Both start QEMU headless (KVM when `/dev/kvm` is writable), press keys and

@@ -85,11 +85,39 @@ Menus are drawn inside the lock surface itself: lock surfaces cannot parent
 popup windows.
 
 `SessionServices.allows(capability)` gates every action a widget could take.
-On the lock screen only `volume` and `power` are granted; on the greeter only
+On the lock screen only `volume` (output volume and microphone mute) and `power` are granted; on the greeter only
 `power`. Launching applications, search, tray menus, settings, notification
 content and media control are refused with a `[session]` log line. The
 contract test `tests/session-context.test.py` checks that every action path
 consults the gate and that every widget declares its contexts.
+
+### Volume keys and feedback
+
+Gnoblin's session lock isolates shortcut paths, so the `wpctl` key bindings that
+work on the desktop do not run while the screen is locked. The lock screen
+handles these keys itself, as ordinary key presses on the lock surface:
+
+| Key                    | Effect                                                   |
+| ---------------------- | -------------------------------------------------------- |
+| `XF86AudioRaiseVolume` | Raise the default output by 5 percent, up to 100 percent |
+| `XF86AudioLowerVolume` | Lower the default output by 5 percent                    |
+| `XF86AudioMute`        | Mute or unmute the default output                        |
+| `XF86AudioMicMute`     | Mute or unmute the default input                         |
+
+Raising or lowering the volume also unmutes the output, as the volume slider in
+the session bar menu does. The lock screen stops at 100 percent. The desktop
+key binding has no such limit.
+
+A key press only changes the audio device. The card then comes from the same
+record that `bingux-statusd` publishes for the desktop OSD (see
+[desktop-shell.md](desktop-shell.md)), so a change made with the slider in the
+session bar menu shows the card too. The card is centred on each output, between
+the clock and the password field, in the lock screen's own dark glass. A key that
+changes nothing, such as volume up at 100 percent, shows no card.
+
+Both need the `volume` capability, which the lock screen grants. There is no
+brightness feedback: Gnoblin binds no brightness keys and nothing reads the
+backlight. The greeter handles none of these keys.
 
 ### Transitions
 
@@ -98,7 +126,10 @@ unlock the controls fade, the identity shrinks slightly, the dim overlay lifts
 and the wallpaper pushes in over `Theme.sessionExitMotion` (360 ms), then the
 client sends `unlock_and_destroy`. The desktop that appears underneath shows
 the same wallpaper, so the hand-over reads as the shell returning rather than
-a cut. `tests/lock-ui.py` drives this path inside a headless Sway session.
+a cut. `tests/lock-ui.py` drives this path inside a headless Sway session. It
+also types the volume, mute and microphone keys on a virtual keyboard
+(`wtype`), checks that they reach the lock surface, and checks that the card
+shows a record sent on a stand-in for `osd-v2.sock`.
 
 ## Idle timeout
 

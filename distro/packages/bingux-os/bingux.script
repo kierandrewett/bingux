@@ -1,0 +1,18 @@
+// Bingux OS boot splash. Colours match the default wallpaper gradient
+// (#2b3a67 to #101523) so the splash hands over to the login screen without a jump.
+Window.SetBackgroundTopColor(0.169, 0.227, 0.404);
+Window.SetBackgroundBottomColor(0.063, 0.082, 0.137);
+
+title.image = Image.Text("Bingux OS", 1, 1, 1);
+title.sprite = Sprite(title.image);
+title.sprite.SetX(Window.GetX() + Window.GetWidth() / 2 - title.image.GetWidth() / 2);
+title.sprite.SetY(Window.GetY() + Window.GetHeight() / 2 - title.image.GetHeight() / 2);
+
+phase = 0;
+
+fun refresh_callback() {
+    phase += 0.08;
+    title.sprite.SetOpacity(0.55 + 0.45 * (Math.Sin(phase) * 0.5 + 0.5));
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);

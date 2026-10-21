@@ -1,24 +1,81 @@
 //@ pragma UseQApplication
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Greetd
 import Quickshell.Wayland
 import "../shell/bingux"
 
 // Drives the greeter against the fake greetd server from greeter-ui.py.
+// A shot prints "GREETER_UI_SHOT <name>" and pauses the script. The harness
+// grabs the screen and then rewrites the ack file, which resumes the script.
+// No timers: every state change happens after the previous screenshot is taken.
 // Prints GREETER_UI_PASSED once a wrong password is reported, a right one
 // reaches readyToLaunch, and the launch request has been acknowledged.
 ShellRoot {
     id: root
     property int step: 0
     property string wrongStatus: ""
+    property var pending: []
+    property bool paused: false
 
     function fail(message) {
         console.error("GREETER_UI_FAILED: " + message);
         Qt.exit(1);
     }
 
+    function queue(action) {
+        pending.push(action);
+        drain();
+    }
+
+    function drain() {
+        while (pending.length > 0 && !paused) {
+            var action = pending.shift();
+            action();
+        }
+    }
+
+    function shot(name) {
+        console.error("GREETER_UI_SHOT " + name);
+        paused = true;
+    }
+
+    // Hold the queue until predicate() is true, then shoot. Used where the
+    // shown state is reached asynchronously (lazily created popups).
+    function shotWhen(name, predicate) {
+        if (predicate()) {
+            shot(name);
+            return;
+        }
+        pending.unshift(() => shotWhen(name, predicate));
+        paused = true;
+        waitTimer.restart();
+    }
+
+    Timer {
+        id: waitTimer
+        interval: 100
+        repeat: false
+        onTriggered: { paused = false; root.drain(); }
+    }
+
     Component.onCompleted: SessionContext.enter("greeter")
+
+    // The harness rewrites this file after each screenshot to resume.
+    FileView {
+        path: Quickshell.env("GREETER_UI_ACK")
+        printErrors: false
+        watchChanges: true
+        onFileChanged: {
+            reload();
+            root.paused = false;
+            root.drain();
+        }
+    }
+    Metrics {
+        id: metrics
+    }
 
     GreeterAuthentication {
         id: authentication
@@ -30,7 +87,7 @@ ShellRoot {
 
     PanelWindow {
         id: window
-        color: Theme.background
+        color: "transparent"
         WlrLayershell.namespace: "bingux-greeter"
         anchors {
             top: true
@@ -43,12 +100,14 @@ ShellRoot {
             anchors.fill: parent
             authentication: authentication
             catalog: catalog
+            metrics: metrics
+            hostWindow: window
         }
     }
 
     Timer {
         id: watchdog
-        interval: 15000
+        interval: 90000
         running: true
         onTriggered: root.fail("timed out at step " + root.step + " state " + GreetdState.toString(Greetd.state) + " status '" + authentication.status + "'")
     }
@@ -66,7 +125,10 @@ ShellRoot {
                     root.fail("gnoblin session was not preferred");
                 if (authentication.prompt !== "Password")
                     root.fail("prompt was '" + authentication.prompt + "'");
-                authentication.respond("wrong");
+                root.queue(() => root.shot("idle"));
+                root.queue(() => { screen.responseField.text = "wro"; });
+                root.queue(() => root.shot("typing"));
+                root.queue(() => authentication.respond("wrong"));
             } else if (root.step === 1) {
                 // The failure keeps the prompt open and shows its text.
                 if (!authentication.statusIsError)
@@ -75,16 +137,22 @@ ShellRoot {
                 if (String(screen.wallpaper) === "")
                     root.fail("the selected account's wallpaper was not applied");
                 root.step = 2;
-                shot.running = true;
+                root.queue(() => root.shot("wrong-password"));
+                root.queue(() => screen.pageStack.go("accounts"));
+                root.queue(() => root.shot("accounts"));
+                root.queue(() => screen.pageStack.back());
+                root.queue(() => screen.pageStack.go("sessions"));
+                root.queue(() => root.shot("sessions"));
+                root.queue(() => screen.pageStack.back());
+                root.queue(() => screen.toggleControlCentre());
+                root.queue(() => root.shotWhen("control-centre", () => screen.controlCentreOpen));
+                root.queue(() => screen.toggleControlCentre());
+                root.queue(() => screen.focusPrompt());
+                root.queue(() => { screen.responseField.text = "secret"; });
+                root.queue(() => root.shot("typed-password"));
+                root.queue(() => authentication.respond("secret"));
             }
         }
-    }
-
-    // Give the harness a moment to screenshot the error state, then log in.
-    Timer {
-        id: shot
-        interval: 1500
-        onTriggered: authentication.respond("secret")
     }
 
     Connections {

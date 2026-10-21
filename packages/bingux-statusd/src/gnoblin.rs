@@ -1,6 +1,6 @@
 use crate::Event;
 use bingux_statusd::{
-    DesktopState, InputSource, OsdRequest, PadHelpButton, PadHelpDevice, PadHelpFeature,
+    DesktopState, InputSource, OsdRequest, OsdTarget, PadHelpButton, PadHelpDevice, PadHelpFeature,
     PadHelpFeatureKind, PadHelpModeGroup, PadHelpRequest, PrivacyState,
 };
 use serde_json::{Value, json};
@@ -55,6 +55,7 @@ fn run_state_subscriber(sender: SyncSender<Event>) {
             .send(Event::DesktopState(DesktopState::default()))
             .is_err()
             || sender.send(Event::PadHelpClear).is_err()
+            || sender.send(Event::OsdTargets(Vec::new())).is_err()
         {
             return;
         }
@@ -202,15 +203,18 @@ fn subscribe_to_gnoblin(
             "monitors" => {
                 monitors = parse_monitor_snapshot(&record);
                 initial_subscriptions.remove("monitors");
+                publish_osd_targets(&monitors, sender)?;
             }
             "gnoblin.monitor.added" | "gnoblin.monitor.changed" => {
                 if let Some(monitor) = record.get("monitor").and_then(parse_monitor) {
                     monitors.insert(monitor.id.clone(), monitor);
+                    publish_osd_targets(&monitors, sender)?;
                 }
             }
             "gnoblin.monitor.removed" => {
                 if let Some(id) = record.get("monitor_id").and_then(Value::as_str) {
                     monitors.remove(id);
+                    publish_osd_targets(&monitors, sender)?;
                 }
             }
             "gnoblin.input.sources-changed" => {
@@ -575,6 +579,9 @@ fn parse_monitor_snapshot(value: &Value) -> BTreeMap<String, Monitor> {
 struct Monitor {
     id: String,
     index: i32,
+    /// Physical connectors in the logical monitor. A record without the list
+    /// names only its canonical connector, as OSD events do.
+    output_names: Vec<String>,
 }
 
 fn parse_monitor(value: &Value) -> Option<Monitor> {
@@ -589,7 +596,26 @@ fn parse_monitor(value: &Value) -> Option<Monitor> {
     Some(Monitor {
         id: id.to_owned(),
         index: index as i32,
+        output_names: event_output_names(value, id),
     })
+}
+
+/// Tell the daemon which monitors exist, for audio feedback that no
+/// compositor event targets.
+fn publish_osd_targets(
+    monitors: &BTreeMap<String, Monitor>,
+    sender: &SyncSender<Event>,
+) -> Result<(), String> {
+    let targets = monitors
+        .values()
+        .map(|monitor| OsdTarget {
+            monitor_index: monitor.index,
+            output_names: monitor.output_names.clone(),
+        })
+        .collect();
+    sender
+        .send(Event::OsdTargets(targets))
+        .map_err(|_| "OSD receiver stopped".to_owned())
 }
 
 fn osd_request_from_event(

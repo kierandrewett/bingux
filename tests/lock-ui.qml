@@ -10,10 +10,40 @@ import "../shell/bingux"
 // secure, a wrong password must keep the prompt open, and the right one must
 // run the exit before finish() sends unlock_and_destroy. Prints
 // LOCK_UI_PASSED once the unlock round trip completes.
+//
+// Between the rejected and the accepted password the harness presses the
+// volume, mute and microphone keys on a virtual keyboard (LOCK_UI_AWAIT_KEYS)
+// and then publishes a statusd OSD record on osd-v2.sock. The keys must reach
+// the lock screen and change the audio stand-ins, and the card must show the
+// record (LOCK_UI_OSD_SHOWN).
 ShellRoot {
     id: root
     property int step: 0
     property real unlockAt: 0
+    // Set by the lock surface's SessionScreen: its id is not visible from here.
+    property var lockScreen: null
+
+    // Stand-ins for the default output and input. PipeWire is not running in
+    // the headless session.
+    QtObject {
+        id: sinkStub
+        property bool ready: true
+        property QtObject audio: QtObject {
+            property real volume: 0.5
+            property bool muted: true
+        }
+    }
+    QtObject {
+        id: sourceStub
+        property bool ready: true
+        property QtObject audio: QtObject {
+            property real volume: 1
+            property bool muted: false
+        }
+    }
+    OsdState {
+        id: lockOsd
+    }
 
     function fail(message) {
         console.error("LOCK_UI_FAILED: " + message);
@@ -93,9 +123,51 @@ ShellRoot {
                 if (!lockAuthentication.statusIsError)
                     root.fail("the wrong password was not reported");
                 root.step = 2;
-                shot.start();
+                const osd = findChildOf(root.lockScreen, "sessionOsd");
+                osd.sink = sinkStub;
+                osd.source = sourceStub;
+                console.error("LOCK_UI_AWAIT_KEYS");
             }
         }
+    }
+
+    // The harness publishes the OSD record after the keys. By then the three
+    // key presses have been handled, so the stand-ins show their effect.
+    Connections {
+        target: lockOsd
+        function onRequestsChanged() {
+            if (root.step !== 2)
+                return;
+            root.step = 3;
+            if (Math.abs(sinkStub.audio.volume - 0.55) > 0.001 || sinkStub.audio.muted !== true)
+                root.fail("volume keys: volume " + sinkStub.audio.volume + " muted " + sinkStub.audio.muted + ", expected 0.55 and muted after Up then Mute");
+            if (sourceStub.audio.muted !== true)
+                root.fail("the microphone key did not mute the input");
+            osdCheck.start();
+        }
+    }
+    Timer {
+        id: osdCheck
+        interval: 400
+        onTriggered: {
+            const card = findChildOf(root.lockScreen, "sessionOsd").card;
+            if (card.opacity !== 1 || !card.visible)
+                root.fail("the OSD card is not shown on the lock screen");
+            if (findChildOf(card, "osdTitle").text !== "Volume" || card.percentLabel !== "55%")
+                root.fail("the OSD card shows " + findChildOf(card, "osdTitle").text + " " + card.percentLabel);
+            console.error("LOCK_UI_OSD_SHOWN");
+            shot.start();
+        }
+    }
+    function findChildOf(item, name) {
+        for (const child of item.children) {
+            if (child.objectName === name)
+                return child;
+            const found = findChildOf(child, name);
+            if (found)
+                return found;
+        }
+        return null;
     }
 
     // Give the harness a moment to screenshot the locked state, then unlock.
@@ -121,9 +193,12 @@ ShellRoot {
             color: Theme.background
             SessionScreen {
                 id: screen
+                Component.onCompleted: root.lockScreen = screen
                 anchors.fill: parent
                 authentication: lockAuthentication
                 ready: lock.secure
+                osdState: lockOsd
+                outputName: Quickshell.screens[0].name
                 accountName: "luna"
                 accountDisplayName: "Luna Lovegood"
                 wallpaper: Quickshell.env("BINGUX_LOCK_WALLPAPER") !== "" ? "file://" + Quickshell.env("BINGUX_LOCK_WALLPAPER") : ""

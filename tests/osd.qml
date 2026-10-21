@@ -38,7 +38,7 @@ ShellRoot {
             waitForRendering(card);
             check(window.visible && !window.focusable && window.testMask.width === 0 && window.testMask.height === 0, "OSD shows without taking keyboard or pointer input");
             check(findChild(card, "osdTitle").text === "Volume" && findChild(card, "osdDetail").text === "Headphones", "Control and device labels have separate roles");
-            check(window.percentLabel === "65%", "Volume percentage is correct");
+            check(card.percentLabel === "65%", "Volume percentage is correct");
             const percentage = findChild(card, "osdPercent");
             tryCompare(percentage, "displayedValue", 65);
             check(Math.abs(card.x + card.width / 2 - window.width / 2) < 1, "Without sidebar OSD is centred on the output");
@@ -65,7 +65,7 @@ ShellRoot {
                 check(bar.width > bar.parent.width * .65 && bar.width < bar.parent.width * 1.25 / 1.5, "Level changes ease between values");
             }
             wait(160);
-            check(window.percentLabel === "125%", "Amplified volume is not incorrectly labelled as a percentage of the maximum");
+            check(card.percentLabel === "125%", "Amplified volume is not incorrectly labelled as a percentage of the maximum");
             tryCompare(percentage, "displayedValue", 125);
             check(percentage.label(percentage.displayedValue) === "125%", "Sliding percentages support values above 99");
             show("audio-volume-muted-symbolic", 0, 1, "Headphones");
@@ -75,7 +75,7 @@ ShellRoot {
             }
             check(findChild(card, "osdDetail").text === "Muted", "Mute is clearly labelled");
             show("display-brightness-symbolic", .72, 0, "");
-            check(window.hasLevel && window.percentLabel === "72%", "Brightness uses the default maximum when omitted by the compositor");
+            check(card.hasLevel && card.percentLabel === "72%", "Brightness uses the default maximum when omitted by the compositor");
             wait(180);
             tryCompare(percentage, "displayedValue", 72);
             card.grabToImage(result => result.saveToFile("/tmp/bingux-notification-polish/osd-brightness.png"));
@@ -95,13 +95,13 @@ ShellRoot {
             check(!findChild(card, "osdTrack").visible, "Status-only requests hide the level bar");
             show("action-unavailable-symbolic", -1, -1, "");
             wait(50);
-            check(window.iconOnly && card.width === card.height && card.width === Theme.osdIconTileSize + Theme.osdPadding * 2, "Unavailable actions use a compact square OSD");
+            check(card.iconOnly && card.width === card.height && card.width === Theme.osdIconTileSize + Theme.osdPadding * 2, "Unavailable actions use a compact square OSD");
             check(!findChild(card, "osdTitle").visible && !findChild(card, "osdDetail").visible && !findChild(card, "osdPercent").visible && !findChild(card, "osdTrack").visible, "Unavailable actions show only their icon");
             card.grabToImage(result => result.saveToFile("/tmp/bingux-notification-polish/osd-unavailable.png"));
             wait(50);
             show("audio-volume-high-symbolic", .65, 1, "Headphones");
             wait(50);
-            check(!window.iconOnly && card.width === Theme.osdWidth && findChild(card, "osdTitle").visible, "Volume restores the full OSD after an unavailable action");
+            check(!card.iconOnly && card.width === Theme.osdWidth && findChild(card, "osdTitle").visible, "Volume restores the full OSD after an unavailable action");
             tryVerify(() => !window.visible, 2200);
             check(card.opacity === 0, "OSD expires and fully unmaps");
             console.info("OSD_TEST_PASSED");
