@@ -1,6 +1,7 @@
 # Quickshell 0.2.1 with the Bingux runtime patches from
 # packages/bingux-quickshell applied (see its README for what each fixes).
-# Derived from the AUR quickshell package.
+# Derived from the AUR quickshell package. The Hyprland and i3 modules do not
+# compile against Qt 6.12 and Bingux runs on Gnoblin, so they are off.
 # shellcheck shell=bash disable=SC2034,SC2154
 pkgname=quickshell
 pkgver=0.2.1
@@ -41,6 +42,8 @@ build() {
         -DDISTRIBUTOR="Bingux OS (package: quickshell)" \
         -DDISTRIBUTOR_DEBUGINFO_AVAILABLE=NO \
         -DCRASH_REPORTER=OFF \
+        -DHYPRLAND=OFF \
+        -DI3=OFF \
         -DINSTALL_QML_PREFIX=lib/qt6/qml
     cmake --build build
 }
