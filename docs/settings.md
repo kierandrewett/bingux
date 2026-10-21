@@ -51,7 +51,7 @@ border and shadow, so the app window itself is square and opaque. See
 
 ## Scrolling
 
-A wheel notch scrolls 64 px and eases out over 130 ms; touchpad movement
+A wheel notch scrolls 64 px and eases out over 70 ms; touchpad movement
 follows the fingers 1 to 1. Dragging the page does not scroll it. To tune the
 feel without a rebuild, set `BINGUX_WHEEL_STEP` (pixels per notch),
 `BINGUX_TOUCHPAD_FACTOR` (touchpad speed, 1 is direct) or
