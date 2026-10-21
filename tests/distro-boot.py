@@ -1,120 +1,44 @@
 #!/usr/bin/env python3
-"""Boot the Bingux OS live image in QEMU, check the login screen, then sign in.
+"""Boot the Bingux OS live image in QEMU and exercise the whole session.
 
 usage: tests/distro-boot.py [ISO]   (default: newest distro/out/bingux-os-*.iso)
 
-The kernel and initramfs are taken from the ISO so the kernel command line
-can add a serial console. The live image's serial getty logs root in without
-a password; over it the test checks that greetd is active, that the Gnoblin
-greeter compositor and bingux-greeter are running, and takes a screenshot
-through the QEMU monitor. Artifacts go to BINGUX_DISTRO_OUT (default
-distro/out/boot-test/): serial.log, screen.png and checks.json.
+The run covers what a user does on the live image:
+
+1. the greeter comes up (greetd, Gnoblin in greeter mode, bingux-greeter);
+2. typing the live password starts a Gnoblin session with the Bingux shell and
+   the wallpaper;
+3. `gnoblinctl session lock` shows the lock screen, and the password unlocks it;
+4. `gnoblinctl session logout` returns to the greeter.
+
+The kernel and initramfs come from the ISO so the command line can add a
+serial console; the live image logs root in on it. Keys and screenshots go
+through the QEMU monitor. Artifacts land in BINGUX_DISTRO_OUT (default
+distro/out/boot-test/): checks.json, report.txt, serial.log and one PNG per
+step (greeter, session, locked, unlocked, logged-out).
 """
 
 import json
 import os
 from pathlib import Path
 import shutil
-import socket
-import subprocess
 import sys
 import tempfile
 import time
 
-ROOT = Path(__file__).resolve().parent.parent
+from distro_vm import ROOT, Vm, bright_pixels, find_iso, missing_tools, region_brightness
 
-
-# firstboot creates the live account with this password (distro/profile).
+# bingux-os-firstboot creates the live account with this password.
+LIVE_USER = "live"
 LIVE_PASSWORD = "live"
-
-
-def region_brightness(image, geometry):
-    """Mean brightness (0 to 1) of a crop of the screenshot, or 0 if unreadable."""
-    result = subprocess.run(
-        ["magick", str(image), "-crop", geometry, "+repage", "-colorspace", "Gray", "-format", "%[fx:mean]", "info:"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    try:
-        return float(result.stdout.strip())
-    except ValueError:
-        return 0.0
-
-
-def find_iso(argument):
-    if argument:
-        return Path(argument)
-    candidates = sorted((ROOT / "distro/out").glob("bingux-os-*.iso"))
-    return candidates[-1] if candidates else None
-
-
-def extract(iso, member, destination):
-    subprocess.run(["bsdtar", "-xf", str(iso), "-C", str(destination), member], check=True)
-    return destination / member
-
-
-def monitor(path, command):
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-        sock.connect(str(path))
-        sock.settimeout(5)
-        sock.recv(4096)
-        sock.sendall((command + "\n").encode())
-        time.sleep(1)
-        try:
-            sock.recv(4096)
-        except TimeoutError:
-            pass
-
-
-class Serial:
-    def __init__(self, path):
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        for _ in range(100):
-            try:
-                self.sock.connect(str(path))
-                break
-            except OSError:
-                time.sleep(0.2)
-        self.sock.settimeout(0.5)
-        self.log = b""
-
-    def read(self, deadline):
-        while time.monotonic() < deadline:
-            try:
-                chunk = self.sock.recv(4096)
-            except TimeoutError:
-                continue
-            if not chunk:
-                break
-            self.log += chunk
-            yield self.log
-
-    def wait_for(self, needle, timeout):
-        deadline = time.monotonic() + timeout
-        for log in self.read(deadline):
-            if needle.encode() in log:
-                return True
-        return needle.encode() in self.log
-
-    def run(self, command, timeout=30):
-        """Run a shell command over the console and return its output only.
-
-        The console echoes the command line, so the marker is split in the
-        command (`__DO''NE_...`) and only the shell's own echo of the finished
-        command prints it whole; the text before that echo line is dropped.
-        """
-        marker = f"__{int(time.time() * 1000) % 100000}__"
-        start = len(self.log)
-        self.sock.sendall((command + f"; echo {marker[:3]}''{marker[3:]}\n").encode())
-        self.wait_for(marker, timeout)
-        text = self.log[start:].decode(errors="replace").split(marker, 1)[0]
-        # The line editor echoes the command as it is typed and once more when
-        # it redraws the prompt; the output follows the last echo.
-        echoed = text.rfind(f"{marker[:3]}''{marker[3:]}")
-        if echoed >= 0:
-            text = text[text.find("\n", echoed) + 1 :]
-        return text
+# The date and clock at the top of the greeter and the lock screen; nothing
+# else on either screen, and nothing on the desktop, is near white.
+CLOCK_REGION = "400x160+440+90"
+CLOCK_PIXELS = 500
+# Below the bar the wallpaper shows; black means it never painted.
+DESKTOP_REGION = "1280x700+0+60"
+SHELL_PATTERN = "'^/usr/bin/bingux( |$)'"
+LOCK_STATE = 'gnoblinctl status | grep -o \'"lock_state":"[a-z]*"\''
 
 
 def main():
@@ -122,151 +46,154 @@ def main():
     if iso is None or not iso.is_file():
         print("no live image; run distro/build.sh first")
         return 1
-    for tool in ("qemu-system-x86_64", "bsdtar"):
-        if shutil.which(tool) is None:
-            print("missing tool: " + tool)
-            return 1
+    missing = missing_tools("qemu-system-x86_64", "bsdtar", "magick", "blkid")
+    if missing:
+        print("missing tool: " + ", ".join(missing))
+        return 1
     out = Path(os.environ.get("BINGUX_DISTRO_OUT", ROOT / "distro/out/boot-test"))
     out.mkdir(parents=True, exist_ok=True)
+    for stale in out.glob("*.png"):
+        stale.unlink()
     work = Path(tempfile.mkdtemp(prefix="bingux-os-boot-"))
+    vm = Vm(work, iso=iso, serial=True)
+    checks = {}
+    report = []
+
+    def probe(label, command, accept, *, as_user=None, attempts=1, delay=3):
+        output = vm.poll(command, accept, attempts=attempts, delay=delay, as_user=as_user)
+        report.append(f"$ {command}\n{output}\n")
+        checks[label] = bool(accept(output))
+        return output
+
+    def shot(name):
+        return vm.screenshot(out / f"{name}.png")
+
+    def count(output):
+        return output.isdigit() and int(output) > 0
+
     try:
-        kernel = extract(iso, "arch/boot/x86_64/vmlinuz-linux", work)
-        initrd = extract(iso, "arch/boot/x86_64/initramfs-linux.img", work)
-        label = subprocess.run(
-            ["blkid", "-o", "value", "-s", "LABEL", str(iso)], capture_output=True, text=True, check=False
-        ).stdout.strip()
-        serial_path = work / "serial.sock"
-        monitor_path = work / "monitor.sock"
-        qemu = subprocess.Popen(
-            [
-                "qemu-system-x86_64",
-                "-m",
-                os.environ.get("BINGUX_DISTRO_MEMORY", "4G"),
-                "-smp",
-                "4",
-                *(["-enable-kvm"] if os.access("/dev/kvm", os.W_OK) else []),
-                "-display",
-                "none",
-                "-device",
-                "virtio-vga",
-                "-cdrom",
-                str(iso),
-                "-kernel",
-                str(kernel),
-                "-initrd",
-                str(initrd),
-                "-append",
-                f"archisobasedir=arch archisolabel={label} console=ttyS0,115200 console=tty1",
-                "-serial",
-                f"unix:{serial_path},server,nowait",
-                "-monitor",
-                f"unix:{monitor_path},server,nowait",
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        serial = Serial(serial_path)
-        booted = serial.wait_for("login:", 300) or serial.wait_for("archiso", 1)
-        checks = {"booted to a shell": False}
-        if booted or serial.wait_for("#", 120):
-            checks["booted to a shell"] = True
-            # The greeter can take a moment after multi-user.target.
-            for _ in range(60):
-                if serial.run("systemctl is-active greetd").strip() == "active":
-                    break
-                time.sleep(2)
+        vm.start()
+        checks["booted to a shell"] = vm.start_shell()
+        if checks["booted to a shell"]:
+            probe("greetd active", "systemctl is-active greetd", lambda o: o == "active", attempts=60, delay=2)
             # The greeter client follows the compositor; on a software-rendered
             # VM that can take a while after greetd reports active.
-            for _ in range(45):
-                if "GREETER_UP" in serial.run("pgrep -f bingux-greeter >/dev/null && echo GREETER_UP"):
-                    break
-                time.sleep(2)
-            # One short command per probe: the console wraps long lines, which
-            # would put echoed fragments into the captured output.
-            probes = {
-                "greetd active": "systemctl is-active greetd",
-                "gnoblin greeter compositor running": "pgrep -c -f 'gnoblin --greeter'",
-                "bingux-greeter running": "pgrep -c -f bingux-greeter",
-                "live account exists": "id -u live",
-                "greeter wallpaper snapshot": "ls /var/lib/bingux/greeter/live",
-            }
-            report = ""
-            for label, probe in probes.items():
-                output = serial.run(probe).strip()
-                report += f"$ {probe}\n{output}\n"
-                if label == "greetd active":
-                    checks[label] = output == "active"
-                elif label == "greeter wallpaper snapshot":
-                    checks[label] = "wallpaper" in output
-                elif label == "live account exists":
-                    checks[label] = output.isdigit()
-                else:
-                    checks[label] = output.isdigit() and int(output) > 0
-            # Diagnostics for a failed boot, next to the screenshot.
-            report += "$ journalctl -b -u greetd\n" + serial.run(
-                "journalctl -b -u greetd --no-pager -o cat | tail -n 40", 60
+            probe(
+                "gnoblin greeter compositor running",
+                "pgrep -c -f 'gnoblin --greeter'",
+                count,
+                attempts=45,
+                delay=2,
             )
-            report += "$ journalctl -b -p err\n" + serial.run("journalctl -b -p err --no-pager -o cat | tail -n 40", 60)
-            report += "$ journalctl -b (greeter session)\n" + serial.run(
-                "journalctl -b --no-pager -o short-iso _UID=$(id -u greeter) | tail -n 80", 60
+            probe("bingux-greeter running", "pgrep -c -f bingux-greeter", count, attempts=45, delay=2)
+            probe("live account exists", f"id -u {LIVE_USER}", lambda o: o.isdigit())
+            probe(
+                "greeter wallpaper snapshot",
+                f"ls /var/lib/bingux/greeter/{LIVE_USER}",
+                lambda o: "wallpaper" in o,
             )
-            (out / "report.txt").write_text(report)
-            # Give the greeter time to paint its first frame.
             time.sleep(10)
-            monitor(monitor_path, f"screendump {work / 'screen.ppm'}")
-            if (work / "screen.ppm").exists():
-                subprocess.run(["magick", str(work / "screen.ppm"), str(out / "screen.png")], check=False)
-                checks["screenshot captured"] = (out / "screen.png").exists()
-            # Sign in as the live account through the greeter, the way a user
-            # would: type the password into the focused field and press Enter.
-            for char in LIVE_PASSWORD:
-                monitor(monitor_path, f"sendkey {char}")
-            monitor(monitor_path, "sendkey ret")
-            session_probes = {
-                "session compositor runs as the user": "pgrep -c -u live -x gnoblin",
-                "session shell runs as the user": "pgrep -c -u live -f '^/usr/bin/bingux( |$)'",
-                "session wallpaper service runs": "pgrep -c -u live -f bingux-wallpaper",
-                "logind session is wayland": "loginctl list-sessions --no-legend | grep -c live",
-            }
-            for _ in range(60):
-                count = serial.run("pgrep -c -u live -f '^/usr/bin/bingux( |$)'").strip()
-                if count.isdigit() and int(count) > 0:
-                    break
-                time.sleep(3)
+            checks["greeter shows the clock"] = shot("greeter") and (
+                bright_pixels(out / "greeter.png", CLOCK_REGION) > CLOCK_PIXELS
+            )
+
+            # Sign in the way a user would: type into the focused field.
+            vm.type_text(LIVE_PASSWORD)
+            vm.key("ret")
+            probe("session shell runs as the user", f"pgrep -c -u {LIVE_USER} -f {SHELL_PATTERN}", count, attempts=60)
+            probe("session compositor runs as the user", f"pgrep -c -u {LIVE_USER} -x gnoblin", count)
+            probe("session wallpaper service runs", f"pgrep -c -u {LIVE_USER} -f bingux-wallpaper", count)
+            probe("logind session exists", f"loginctl list-sessions --no-legend | grep -c {LIVE_USER}", count)
+            probe(
+                "status service runs in the session",
+                f"pgrep -c -u {LIVE_USER} -x bingux-statusd",
+                count,
+                attempts=20,
+            )
             time.sleep(10)
-            report += "\n"
-            for label, probe in session_probes.items():
-                output = serial.run(probe).strip()
-                report += f"$ {probe}\n{output}\n"
-                checks[label] = output.isdigit() and int(output) > 0
-            report += "$ journalctl -b (user session)\n" + serial.run(
-                "journalctl -b --no-pager -o short-iso _UID=$(id -u live) | tail -n 80", 60
+            report.append("$ ps -u live\n" + vm.run(f"ps -u {LIVE_USER} -o pid=,args= | cut -c1-120") + "\n")
+            checks["desktop wallpaper painted"] = shot("session") and (
+                region_brightness(out / "session.png", DESKTOP_REGION) > 0.04
             )
-            report += "$ ps -u live\n" + serial.run("ps -u live -o pid=,args= | cut -c1-120", 30)
-            report += "$ gnoblin conf.d\n" + serial.run(
-                "ls /usr/share/gnoblin/conf.d /home/live/.config/gnoblin/conf.d 2>&1", 30
+
+            # Lock: the request reaches statusd, which starts the lock client.
+            report.append(
+                "$ gnoblinctl session lock\n" + vm.run_as(LIVE_USER, "gnoblinctl session lock", timeout=30) + "\n"
             )
-            (out / "report.txt").write_text(report)
-            monitor(monitor_path, f"screendump {work / 'session.ppm'}")
-            if (work / "session.ppm").exists():
-                subprocess.run(["magick", str(work / "session.ppm"), str(out / "session.png")], check=False)
-                # Below the bar the compositor background shows through, so a
-                # black desktop means the wallpaper never painted.
-                checks["desktop wallpaper painted"] = region_brightness(out / "session.png", "1280x700+0+60") > 0.04
-        (out / "serial.log").write_bytes(serial.log)
+            probe(
+                "session locks on request",
+                LOCK_STATE,
+                lambda o: '"locked"' in o,
+                as_user=LIVE_USER,
+                attempts=20,
+                delay=2,
+            )
+            time.sleep(3)
+            checks["lock screen shows the clock"] = shot("locked") and (
+                bright_pixels(out / "locked.png", CLOCK_REGION) > CLOCK_PIXELS
+            )
+            vm.type_text(LIVE_PASSWORD)
+            vm.key("ret")
+            probe(
+                "session unlocks with the password",
+                LOCK_STATE,
+                lambda o: '"unlocked"' in o,
+                as_user=LIVE_USER,
+                attempts=20,
+                delay=2,
+            )
+            time.sleep(3)
+            checks["desktop back after unlock"] = shot("unlocked") and (
+                region_brightness(out / "unlocked.png", DESKTOP_REGION) > 0.04
+                and bright_pixels(out / "unlocked.png", CLOCK_REGION) < CLOCK_PIXELS
+            )
+
+            # Log out: back to the greeter, with a single statusd and no error.
+            report.append(
+                "$ gnoblinctl session logout\n" + vm.run_as(LIVE_USER, "gnoblinctl session logout", timeout=30) + "\n"
+            )
+            probe(
+                "user session ends on log out",
+                f"pgrep -c -u {LIVE_USER} -x gnoblin",
+                lambda o: o == "0",
+                attempts=30,
+                delay=2,
+            )
+            probe("greeter returns after log out", "pgrep -c -f 'gnoblin --greeter'", count, attempts=45, delay=2)
+            probe("bingux-greeter returns after log out", "pgrep -c -f bingux-greeter", count, attempts=45, delay=2)
+            time.sleep(10)
+            probe("one statusd in the greeter", "pgrep -c -u greeter -x bingux-statusd", lambda o: o == "1")
+            checks["greeter shows the clock after log out"] = shot("logged-out") and (
+                bright_pixels(out / "logged-out.png", CLOCK_REGION) > CLOCK_PIXELS
+            )
+            report.append(
+                "$ journalctl -b -u greetd\n"
+                + vm.run("journalctl -b -u greetd --no-pager -o cat | tail -n 30", 60)
+                + "\n"
+            )
+            report.append(
+                "$ journalctl -b -p err\n" + vm.run("journalctl -b -p err --no-pager -o cat | tail -n 40", 60) + "\n"
+            )
+            report.append(
+                "$ journalctl -b (user session)\n"
+                + vm.run(f"journalctl -b --no-pager -o short-iso _UID=$(id -u {LIVE_USER}) | tail -n 80", 60)
+                + "\n"
+            )
+            report.append(
+                "$ journalctl -b (greeter)\n"
+                + vm.run("journalctl -b --no-pager -o short-iso _UID=$(id -u greeter) | tail -n 80", 60)
+                + "\n"
+            )
+        (out / "report.txt").write_text("\n".join(report))
+        (out / "serial.log").write_bytes(vm.log)
         (out / "checks.json").write_text(json.dumps(checks, indent=2) + "\n")
-        qemu.terminate()
-        try:
-            qemu.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            qemu.kill()
-        for name, ok in checks.items():
-            print(("ok   " if ok else "FAIL ") + name)
-        print("artifacts:", out)
-        return 0 if checks and all(checks.values()) else 1
     finally:
+        vm.stop()
         shutil.rmtree(work, ignore_errors=True)
+    for name, ok in checks.items():
+        print(("ok   " if ok else "FAIL ") + name)
+    print("artifacts:", out)
+    return 0 if checks and all(checks.values()) else 1
 
 
 if __name__ == "__main__":
