@@ -163,6 +163,7 @@ def build_payload(source, build, prefix, qml, target, managed=False):
         build / "cargo/release/bingux-statusd": prefix / "bin/bingux-statusd",
         build / "cargo/release/bingux-session": prefix / "bin/bingux-session",
         build / "cargo/release/xdg-desktop-portal-bingux": prefix / "libexec/bingux/xdg-desktop-portal-bingux",
+        build / "cargo/release/bingux-global-shortcuts": prefix / "libexec/bingux/bingux-global-shortcuts",
         build / "cargo/release/bingux-settings": prefix / "bin/bingux-settings",
         source / "packages/bingux-settings/bingux-settings.desktop": prefix
         / "share/applications/bingux-settings.desktop",
@@ -176,6 +177,8 @@ def build_payload(source, build, prefix, qml, target, managed=False):
         source / "packaging/portal/bingux.portal": prefix / "share/xdg-desktop-portal/portals/bingux.portal",
         source / "packaging/portal/org.freedesktop.impl.portal.desktop.bingux.service": prefix
         / "share/dbus-1/services/org.freedesktop.impl.portal.desktop.bingux.service",
+        source / "packaging/portal/org.gnoblin.Shell.GlobalShortcutsProvider.service": prefix
+        / "share/dbus-1/services/org.gnoblin.Shell.GlobalShortcutsProvider.service",
     }
     missing = [str(path) for path in payload if not path.is_file()]
     if missing:
@@ -241,6 +244,7 @@ def build_payload(source, build, prefix, qml, target, managed=False):
             prefix / "libexec/bingux/bingux-image-clipboard",
             prefix / "libexec/bingux/bingux-frame",
             prefix / "libexec/bingux/xdg-desktop-portal-bingux",
+            prefix / "libexec/bingux/bingux-global-shortcuts",
         )
         if path == source / "packaging/gnoblin/bingux.lua":
             # GDM does not necessarily include the user's command-link folder
@@ -277,7 +281,10 @@ def build_payload(source, build, prefix, qml, target, managed=False):
                     json.dumps("/usr/local/bin/" + name), json.dumps(str(prefix / ("bin/" + name)))
                 )
             write_generated(destination, generated)
-        elif path == source / "packaging/portal/org.freedesktop.impl.portal.desktop.bingux.service":
+        elif path in (
+            source / "packaging/portal/org.freedesktop.impl.portal.desktop.bingux.service",
+            source / "packaging/portal/org.gnoblin.Shell.GlobalShortcutsProvider.service",
+        ):
             # D-Bus activation runs the installed backend, so Exec must follow the prefix.
             write_generated(
                 destination,
@@ -446,6 +453,7 @@ def integration_paths(prefix, managed=False):
         "bingux-greeter-export.service",
         "bingux-greeter-export.path",
         "xdg-desktop-portal-bingux.service",
+        "bingux-global-shortcuts.service",
     )
     bin_dir = Path(os.environ.get("XDG_BIN_HOME") or Path.home() / ".local/bin")
     config_dir = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
