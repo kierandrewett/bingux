@@ -52,11 +52,19 @@ ShellRoot {
             fail("firmware is " + InstallerState.firmware);
         if (InstallerState.disks.length !== 2 || InstallerState.disks[0].path !== "/dev/vda")
             fail("disks are " + JSON.stringify(InstallerState.disks));
+        if (!InstallerState.offers("filesystems", "xfs") || !InstallerState.offers("swap", "zram"))
+            fail("probe capabilities are " + JSON.stringify(InstallerState.capabilities));
         report("INSTALLER_UI_PROBE_OK");
         InstallerState.fullName = "Ada Lovelace";
         InstallerState.username = "ada";
         InstallerState.usernameEdited = true;
         InstallerState.password = "correct horse";
+        InstallerState.filesystem = "xfs";
+        InstallerState.swap = "zram";
+        InstallerState.ntp = false;
+        InstallerState.rootPasswordSet = true;
+        InstallerState.rootPassword = "root secret";
+        InstallerState.autoLogin = true;
         stage = 1;
         startInstall("/dev/vda");
     }

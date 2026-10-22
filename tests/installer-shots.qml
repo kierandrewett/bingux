@@ -53,6 +53,9 @@ ShellRoot {
         InstallerState.username = "ada";
         InstallerState.usernameEdited = true;
         InstallerState.password = "correct horse";
+        InstallerState.rootPasswordSet = true;
+        InstallerState.rootPassword = "root secret";
+        InstallerState.autoLogin = true;
         InstallerState.diskPath = "/dev/vda";
     }
 
@@ -94,7 +97,7 @@ ShellRoot {
         queue(() => root.shot("hostname"));
         queue(() => root.when(() => InstallerState.probeState === "ready", () => go("disk")));
         queue(() => root.shot("disk"));
-        queue(() => { InstallerState.diskPath = "/dev/vda"; go("storage"); });
+        queue(() => { InstallerState.diskPath = "/dev/vda"; InstallerState.filesystem = "xfs"; InstallerState.swap = "zram"; go("storage"); });
         queue(() => root.shot("storage"));
         queue(() => { root.fillAccount(); go("account"); });
         queue(() => root.shot("account"));

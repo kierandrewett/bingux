@@ -34,11 +34,18 @@ PROBE_RESULT = {
     "firmware": "uefi",
     "live_disk": None,
     "disks": [
-        {"path": "/dev/vda", "size_bytes": 8 * GIB, "model": "virtio", "removable": False, "is_live_medium": False, "other_os": []},
-        {"path": "/dev/vdb", "size_bytes": 8 * GIB, "model": "virtio", "removable": False, "is_live_medium": False, "other_os": []},
+        {"path": "/dev/vda", "size_bytes": 8 * GIB, "model": "virtio", "removable": False, "is_live_medium": False, "other_os": [], "partition_table": "gpt", "free_bytes": 8 * GIB, "partitions": []},
+        {"path": "/dev/vdb", "size_bytes": 8 * GIB, "model": "virtio", "removable": False, "is_live_medium": False, "other_os": [], "partition_table": "gpt", "free_bytes": 8 * GIB, "partitions": []},
     ],
     "tools_missing": [],
     "installer_version": "0.1.0",
+    "capabilities": {
+        "storage_modes": ["erase"],
+        "filesystems": ["ext4", "btrfs", "xfs"],
+        "swap": ["none", "zram", "file", "partition"],
+        "encryption": {"uefi": True, "bios": True},
+        "dual_boot": False,
+    },
 }
 
 
@@ -135,8 +142,14 @@ def check_plan(plan, disk):
         "disk": disk,
         "confirm_erase": disk,
         "firmware": "auto",
-        "filesystem": "ext4",
+        "filesystem": "xfs",
+        "storage": {"mode": "erase"},
         "encryption": {"enabled": False},
+        "swap": "zram",
+        "swap_bytes": None,
+        "ntp": False,
+        "root_password": "root secret",
+        "autologin": "ada",
         "other_os": "refuse",
         "hostname": "bingux",
         "timezone": "Europe/London",

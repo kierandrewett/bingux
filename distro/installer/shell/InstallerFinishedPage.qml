@@ -38,13 +38,5 @@ InstallerPage {
                 + (page.result.filesystem || InstallerState.filesystem)
                 + (page.result.firmware ? " for " + (page.result.firmware === "uefi" ? "UEFI" : "BIOS") + " firmware" : "") + "."
         }
-        InstallerText {
-            visible: InstallerState.ntp || InstallerState.autoLogin || InstallerState.rootPassword
-            text: "Some choices are not applied yet: " + [
-                InstallerState.ntp ? "automatic clock" : "",
-                InstallerState.autoLogin ? "automatic log in" : "",
-                InstallerState.rootPassword ? "root password" : ""
-            ].filter(Boolean).join(", ") + "."
-        }
     }
 }
