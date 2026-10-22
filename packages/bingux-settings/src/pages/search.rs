@@ -267,7 +267,7 @@ impl Parser {
 }
 
 fn missing(key: &str) -> CommandError {
-    CommandError(format!("bingux-config did not report {key}."))
+    CommandError(format!("The search setting {key} could not be read."))
 }
 
 fn json_text(object: &Json, key: &str) -> Result<String, CommandError> {

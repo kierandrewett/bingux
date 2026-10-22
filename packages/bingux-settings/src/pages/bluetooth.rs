@@ -86,9 +86,12 @@ fn field<'a>(text: &'a str, key: &str) -> Option<&'a str> {
 }
 
 fn flag(text: &str, key: &str) -> Result<bool, CommandError> {
-    field(text, key)
-        .map(|value| value == "yes")
-        .ok_or_else(|| CommandError(format!("bluetoothctl did not report {key}.")))
+    field(text, key).map(|value| value == "yes").ok_or_else(|| {
+        CommandError(format!(
+            "Bluetooth did not report its {} state.",
+            key.to_lowercase()
+        ))
+    })
 }
 
 /// `Battery Percentage` reads `0x5a (90)`; the percentage is in brackets.

@@ -494,3 +494,87 @@ impl Component for ExpanderRow {
             }))
     }
 }
+
+/// How many options a [`choice_list`] draws at once. A list of hundreds of
+/// time zones or fonts is narrowed by typing, not drawn whole.
+const CHOICE_LIST_LIMIT: usize = 60;
+
+/// A filter field above a card of options with a tick on the chosen one,
+/// for a subpage that picks one value from a long list (a time zone, a font).
+/// `options` are `(key, label)` pairs; `on_select` receives the chosen key.
+#[derive(PartialEq)]
+pub struct ChoiceList {
+    options: Vec<(String, String)>,
+    selected: String,
+    placeholder: String,
+    on_select: EventHandler<String>,
+}
+
+pub fn choice_list(
+    options: Vec<(String, String)>,
+    selected: impl Into<String>,
+    on_select: impl Into<EventHandler<String>>,
+) -> ChoiceList {
+    ChoiceList {
+        options,
+        selected: selected.into(),
+        placeholder: "Search".to_string(),
+        on_select: on_select.into(),
+    }
+}
+
+impl ChoiceList {
+    pub fn placeholder(mut self, text: impl Into<String>) -> Self {
+        self.placeholder = text.into();
+        self
+    }
+}
+
+impl Component for ChoiceList {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let query = use_state(String::new);
+        let needle = query.read().trim().to_lowercase();
+        let matching: Vec<&(String, String)> = self
+            .options
+            .iter()
+            .filter(|(key, label)| {
+                needle.is_empty()
+                    || label.to_lowercase().contains(&needle)
+                    || key.to_lowercase().contains(&needle)
+            })
+            .collect();
+        let hidden = matching.len().saturating_sub(CHOICE_LIST_LIMIT);
+        let rows = matching.iter().take(CHOICE_LIST_LIMIT).map(|(key, label)| {
+            let on_select = self.on_select.clone();
+            let chosen = key.clone();
+            Element::from(
+                row(label.clone())
+                    .selected(*key == self.selected)
+                    .on_press(move |_| on_select.call(chosen.clone())),
+            )
+        });
+        let mut list = crate::group::Group::new(None::<String>).rows(rows);
+        if matching.is_empty() {
+            list = list.row(crate::group::status(crate::group::Status::Empty(
+                "Nothing matches.".to_string(),
+            )));
+        }
+        rect()
+            .width(Size::fill())
+            .spacing(S5)
+            .child(
+                crate::controls::search_field(query, |_| {})
+                    .placeholder(self.placeholder.clone())
+                    .fill_width(),
+            )
+            .child(list)
+            .maybe_child((hidden > 0).then(|| {
+                label()
+                    .text(format!("{hidden} more. Keep typing to narrow the list."))
+                    .color(tokens.muted)
+                    .font_size(TEXT_SM)
+                    .margin((0.0, GUTTER))
+            }))
+    }
+}

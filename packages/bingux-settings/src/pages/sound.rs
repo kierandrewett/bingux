@@ -244,7 +244,7 @@ fn read_level(kind: Kind, devices: &[Device]) -> Result<Option<Level>, CommandEr
     };
     let text = system::run("wpctl", &["get-volume", kind.target()], TIMEOUT)?;
     let (volume, muted) = parse_volume(&text)
-        .ok_or_else(|| CommandError(format!("wpctl printed an unreadable volume: {text}")))?;
+        .ok_or_else(|| CommandError("The volume could not be read.".to_string()))?;
     Ok(Some(Level {
         id: default.id,
         volume,

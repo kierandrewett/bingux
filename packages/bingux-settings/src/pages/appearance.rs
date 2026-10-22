@@ -9,7 +9,6 @@
 //! shared palette at once, so the whole window recolours.
 
 use std::path::Path;
-use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use freya::prelude::*;
@@ -26,7 +25,6 @@ use bingux_ui::scale::*;
 const INTERFACE: &str = "org.gnome.desktop.interface";
 const WALLPAPER_KEY: &str = "desktop.wallpaper";
 const FONT_KEY: &str = "appearance.font_family";
-const IMAGE_PATTERNS: &str = "*.png *.jpg *.jpeg *.webp *.jxl *.avif";
 
 #[derive(Clone, PartialEq)]
 struct Model {
@@ -79,49 +77,10 @@ fn reload(mut model: State<Option<Loaded>>) {
     background(model, load);
 }
 
-/// Shows the file chooser and returns the picked path, or `None` when the
-/// user cancels. Uses zenity when present, otherwise kdialog.
-fn pick_image() -> Result<Option<String>, CommandError> {
-    let mut command = if which("zenity") {
-        let mut command = Command::new("zenity");
-        command
-            .arg("--file-selection")
-            .arg("--title=Choose a wallpaper")
-            .arg(format!("--file-filter=Images | {IMAGE_PATTERNS}"));
-        command
-    } else if which("kdialog") {
-        let mut command = Command::new("kdialog");
-        command
-            .args(["--title", "Choose a wallpaper", "--getopenfilename"])
-            .arg(std::env::var("HOME").unwrap_or_else(|_| ".".into()))
-            .arg(format!("Images ({IMAGE_PATTERNS})"));
-        command
-    } else {
-        return Err(CommandError(
-            "Neither zenity nor kdialog is installed.".into(),
-        ));
-    };
-    let output = command
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|error| CommandError(format!("Could not start the file chooser: {error}")))?;
-
-    if !output.status.success() {
-        // Both dialogs exit 1 with nothing on stderr when the user cancels.
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return match stderr.trim().lines().last() {
-            None => Ok(None),
-            Some(detail) => Err(CommandError(format!("File chooser: {}", detail.trim()))),
-        };
-    }
-    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    Ok((!path.is_empty()).then_some(path))
-}
-
 /// Opens the chooser, stores the picked file and reads the value back.
 /// Resolves to `None` when the user cancelled.
 fn choose_wallpaper() -> Result<Option<Model>, CommandError> {
-    let Some(path) = pick_image()? else {
+    let Some(path) = system::pick_path("Choose a wallpaper", system::Pick::Image)? else {
         return Ok(None);
     };
     config(&["set", WALLPAPER_KEY, path.as_str()])?;

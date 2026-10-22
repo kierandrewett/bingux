@@ -46,8 +46,9 @@ fn parse_timedatectl(text: &str) -> Result<(String, bool), CommandError> {
     }
     let timezone = timezone
         .filter(|zone| !zone.is_empty())
-        .ok_or_else(|| CommandError("timedatectl did not report a time zone.".into()))?;
-    let ntp = ntp.ok_or_else(|| CommandError("timedatectl did not report NTP state.".into()))?;
+        .ok_or_else(|| CommandError("The time zone could not be read.".into()))?;
+    let ntp =
+        ntp.ok_or_else(|| CommandError("Whether the clock sets itself could not be read.".into()))?;
     Ok((timezone, ntp))
 }
 

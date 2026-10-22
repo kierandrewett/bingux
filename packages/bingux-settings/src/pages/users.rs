@@ -128,9 +128,7 @@ fn bool_property(path: &str, name: &str) -> Result<bool, CommandError> {
 }
 
 fn unexpected(what: &str) -> CommandError {
-    CommandError(format!(
-        "The accounts service returned an unexpected {what}."
-    ))
+    CommandError(format!("The account {what} could not be read."))
 }
 
 /// Set the full name of the account at `path` through polkit.

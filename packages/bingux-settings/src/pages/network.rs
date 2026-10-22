@@ -6,11 +6,13 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
-use crate::icons::Icon;
+use crate::icons::{self, Icon};
+use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
-    Group, Overlays, ResponseKind, Status, dialog, icon_button, page_column, primary_button, row,
-    row_button, skeleton, status, switch_row, text_row, use_overlays,
+    Group, Overlays, ResponseKind, Status, action_button, centered_caption, dialog, heading,
+    icon_button, page_column, primary_button, row, skeleton, status, switch_row, text_row,
+    use_overlays, use_tokens,
 };
 use bingux_ui::scale::*;
 
@@ -46,6 +48,11 @@ struct Network {
     secured: bool,
     in_use: bool,
     saved: bool,
+    /// What the strongest access point reports for the network.
+    security: String,
+    channel: String,
+    frequency: String,
+    rate: String,
 }
 
 fn nmcli(args: &[&str], timeout: Duration) -> Result<String, CommandError> {
@@ -142,7 +149,13 @@ fn parse_networks(output: &str, saved: &[String]) -> Vec<Network> {
         let secured = !security.is_empty() && security != "--";
         let in_use = field(3).trim() == "*";
         if let Some(existing) = networks.iter_mut().find(|network| network.ssid == ssid) {
-            existing.signal = existing.signal.max(signal);
+            if signal > existing.signal {
+                existing.signal = signal;
+                existing.security = security.to_string();
+                existing.channel = field(5).to_string();
+                existing.frequency = field(6).to_string();
+                existing.rate = field(7).to_string();
+            }
             existing.secured |= secured;
             existing.in_use |= in_use;
             continue;
@@ -153,6 +166,10 @@ fn parse_networks(output: &str, saved: &[String]) -> Vec<Network> {
             secured,
             in_use,
             saved: saved.iter().any(|name| name == ssid),
+            security: security.to_string(),
+            channel: field(5).to_string(),
+            frequency: field(6).to_string(),
+            rate: field(7).to_string(),
         });
     }
     networks.sort_by(|a, b| {
@@ -186,7 +203,7 @@ fn load() -> Result<Model, CommandError> {
                 &[
                     "-t",
                     "-f",
-                    "SSID,SIGNAL,SECURITY,IN-USE,BSSID",
+                    "SSID,SIGNAL,SECURITY,IN-USE,BSSID,CHAN,FREQ,RATE",
                     "device",
                     "wifi",
                     "list",
@@ -232,6 +249,10 @@ fn connect_network(ssid: &str, password: Option<&str>) -> Result<(), CommandErro
     .map(|_| ())
 }
 
+fn disconnect_network(ssid: &str) -> Result<(), CommandError> {
+    nmcli(&["connection", "down", "id", ssid], QUICK).map(|_| ())
+}
+
 fn forget_network(ssid: &str) -> Result<(), CommandError> {
     nmcli(&["connection", "delete", "id", ssid], QUICK).map(|_| ())
 }
@@ -254,6 +275,7 @@ struct Ui {
     selected: State<Option<String>>,
     password: State<String>,
     overlays: Overlays,
+    navigator: Navigator,
 }
 
 impl Ui {
@@ -347,6 +369,11 @@ impl Ui {
                 self.forget(ssid.clone())
             }),
         );
+    }
+
+    fn disconnect(self, ssid: String) {
+        let label = format!("Disconnecting from {ssid}.");
+        self.act(&label, move || disconnect_network(&ssid), || {});
     }
 
     fn forget(self, ssid: String) {
@@ -454,17 +481,20 @@ fn network_rows(ui: Ui, networks: &[Network], selected: Option<&str>) -> Vec<Ele
         }
         let subtitle = parts.join(" · ");
 
-        let forget = network.saved.then(|| {
-            let ssid = network.ssid.clone();
-            Element::from(row_button("Forget", move |_| {
-                ui.confirm_forget(ssid.clone())
-            }))
-        });
+        let details = {
+            let route = Route::Network {
+                ssid: network.ssid.clone(),
+            };
+            Element::from(
+                icon_button(Icon::About, move |_| ui.navigator.push(route.clone()))
+                    .tooltip("Details"),
+            )
+        };
 
         let ssid = network.ssid.clone();
         let mut item = row(network.ssid.clone())
             .subtitle(subtitle)
-            .trailing(action_slot(forget));
+            .trailing(action_slot(Some(details)));
         if network.in_use {
             item = item.badge("Connected");
         } else if needs_password {
@@ -500,6 +530,19 @@ fn network_rows(ui: Ui, networks: &[Network], selected: Option<&str>) -> Vec<Ele
     rows
 }
 
+/// Read the network list now and every ten seconds while the page is open.
+fn use_polling(ui: Ui) {
+    use_hook(move || {
+        ui.reload();
+        spawn(async move {
+            loop {
+                timer(POLL_INTERVAL).await;
+                ui.reload();
+            }
+        });
+    });
+}
+
 #[derive(PartialEq)]
 pub struct NetworkPage;
 
@@ -518,17 +561,9 @@ impl Component for NetworkPage {
             selected,
             password,
             overlays,
+            navigator: use_navigator(),
         };
-
-        use_hook(move || {
-            ui.reload();
-            spawn(async move {
-                loop {
-                    timer(POLL_INTERVAL).await;
-                    ui.reload();
-                }
-            });
-        });
+        use_polling(ui);
 
         let loaded = model.read().clone();
         let Some(loaded) = loaded else {
@@ -570,6 +605,123 @@ impl Component for NetworkPage {
         blocks.push(wired_section(&model.wired));
 
         page(blocks)
+    }
+}
+
+/// One Wi-Fi network: its state and the action it allows, the password row
+/// when joining needs one, what NetworkManager reports about the strongest
+/// access point, and Forget for a saved network.
+#[derive(PartialEq)]
+pub struct NetworkDetailsPage {
+    pub ssid: String,
+}
+
+impl Component for NetworkDetailsPage {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let ui = Ui {
+            model: system::cached("network"),
+            busy: use_state::<Option<String>>(|| None),
+            action_error: use_state::<Option<String>>(|| None),
+            selected: use_state::<Option<String>>(|| None),
+            password: use_state::<String>(String::new),
+            overlays: use_overlays(),
+            navigator: use_navigator(),
+        };
+        use_polling(ui);
+
+        let Some(Ok(model)) = ui.model.read().clone() else {
+            return page_column().child(skeleton());
+        };
+        let mut page = page_column();
+        if let Some(text) = ui.busy.read().clone() {
+            page = page.child(status(Status::Loading(text)));
+        }
+        if let Some(text) = ui.action_error.read().clone() {
+            page = page.child(status(Status::Error(text)));
+        }
+        let Some(network) = model
+            .networks
+            .iter()
+            .find(|network| network.ssid == self.ssid)
+        else {
+            return page.child(status(Status::Info(
+                "This network is not in range.".to_string(),
+            )));
+        };
+
+        let idle = ui.busy.read().is_none();
+        let needs_password = network.secured && !network.saved && !network.in_use;
+        let ssid = network.ssid.clone();
+        let action = (idle && !(needs_password && ui.password.read().is_empty())).then(|| {
+            if network.in_use {
+                Element::from(
+                    action_button("Disconnect", move |_| ui.disconnect(ssid.clone())).compact(),
+                )
+            } else {
+                let password = needs_password.then(|| ui.password.read().clone());
+                Element::from(
+                    primary_button("Connect", move |_| {
+                        ui.connect(ssid.clone(), password.clone())
+                    })
+                    .compact(),
+                )
+            }
+        });
+        let state = if network.in_use {
+            "Connected"
+        } else if network.saved {
+            "Saved"
+        } else {
+            "Not saved"
+        };
+        let identity = rect()
+            .width(Size::fill())
+            .cross_align(Alignment::Center)
+            .spacing(S2)
+            .padding((S2, 0.0, S2, 0.0))
+            .child(icons::icon(Icon::Network, ICON_XL, tokens.muted))
+            .child(heading(network.ssid.clone()))
+            .child(centered_caption(state))
+            .maybe_child(action);
+
+        let join_ssid = network.ssid.clone();
+        let join = needs_password.then(|| {
+            Group::new(None::<String>).row(text_row(
+                "Password",
+                ui.password,
+                move |password: String| ui.connect(join_ssid.clone(), Some(password)),
+            ))
+        });
+
+        let mut details = Group::titled("Details")
+            .row(row("Signal").value(format!("{}%", network.signal)))
+            .row(row("Security").value(if network.secured {
+                network.security.clone()
+            } else {
+                "Open".to_string()
+            }));
+        for (title, value) in [
+            ("Frequency", &network.frequency),
+            ("Channel", &network.channel),
+            ("Speed", &network.rate),
+        ] {
+            if !value.is_empty() {
+                details = details.row(row(title).value(value.clone()));
+            }
+        }
+
+        let forget_ssid = network.ssid.clone();
+        page.child(identity)
+            .maybe_child(join)
+            .child(details)
+            .maybe_child(network.saved.then(|| {
+                Group::new(None::<String>).row(
+                    row("Forget network")
+                        .destructive()
+                        .on_press(move |_| ui.confirm_forget(forget_ssid.clone())),
+                )
+            }))
     }
 }
 

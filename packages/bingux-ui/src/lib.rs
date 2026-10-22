@@ -34,8 +34,8 @@ pub mod prelude {
     pub use crate::icons::{Icon, icon};
     pub use crate::layout::{card, clamp, divider, hstack, page_column, spacer, vstack};
     pub use crate::rows::{
-        EntryRow, ExpanderRow, Row, choice_row, entry_row, expander_row, property_row, row,
-        slider_row, switch_row, text_row,
+        ChoiceList, EntryRow, ExpanderRow, Row, choice_list, choice_row, entry_row, expander_row,
+        property_row, row, slider_row, switch_row, text_row,
     };
     pub use crate::scale::*;
     pub use crate::shell::{

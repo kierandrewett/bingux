@@ -35,11 +35,7 @@ fn gsettings_u32(key: &str) -> Result<f64, CommandError> {
     raw.trim()
         .trim_start_matches("uint32 ")
         .parse::<f64>()
-        .map_err(|_| {
-            CommandError(format!(
-                "gsettings returned an unexpected {key} value: {raw}"
-            ))
-        })
+        .map_err(|_| CommandError(format!("The keyboard {key} setting could not be read.")))
 }
 
 fn load() -> Result<Model, CommandError> {

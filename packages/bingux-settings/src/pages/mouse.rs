@@ -46,11 +46,9 @@ fn get_bool(schema: &str, key: &str) -> Result<bool, CommandError> {
 
 fn get_speed(schema: &str) -> Result<f64, CommandError> {
     let raw = system::gsettings_get(schema, "speed")?;
-    raw.trim().parse::<f64>().map_err(|_| {
-        CommandError(format!(
-            "gsettings returned an unexpected speed value: {raw}"
-        ))
-    })
+    raw.trim()
+        .parse::<f64>()
+        .map_err(|_| CommandError("The pointer speed could not be read.".to_string()))
 }
 
 fn load() -> Result<Model, CommandError> {

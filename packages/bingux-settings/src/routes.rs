@@ -7,7 +7,7 @@
 
 use freya::prelude::*;
 
-use crate::pages::{PageId, applications, bluetooth};
+use crate::pages::{PageId, applications, bluetooth, network};
 
 /// A page below a sidebar page.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -18,6 +18,8 @@ pub enum Route {
     DefaultApps,
     /// One Bluetooth device, by address, with its name for the header.
     Device { mac: String, name: String },
+    /// One Wi-Fi network, by name.
+    Network { ssid: String },
 }
 
 impl Route {
@@ -26,6 +28,7 @@ impl Route {
             Self::App { name, .. } => name.clone(),
             Self::DefaultApps => "Default applications".to_string(),
             Self::Device { name, .. } => name.clone(),
+            Self::Network { ssid } => ssid.clone(),
         }
     }
 
@@ -50,6 +53,7 @@ impl Route {
             Self::App { id, .. } => applications::AppPage { id: id.clone() }.into(),
             Self::DefaultApps => applications::DefaultAppsPage.into(),
             Self::Device { mac, .. } => bluetooth::BluetoothDevicePage { mac: mac.clone() }.into(),
+            Self::Network { ssid } => network::NetworkDetailsPage { ssid: ssid.clone() }.into(),
         }
     }
 }
