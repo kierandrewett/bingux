@@ -1069,7 +1069,8 @@ ShellRoot {
         margins.left: terminalSidebar.leftInset
         margins.right: terminalSidebar.rightInset
         // The bar slides down from above the screen edge once, when the dock first maps.
-        property real enterOffset: dock.startupReady ? 0 : Theme.barHeight
+        // A continued session already shows the bar where the greeter left it.
+        property real enterOffset: dock.startupReady || SessionContext.continuing ? 0 : Theme.barHeight
         Behavior on enterOffset {
             NumberAnimation {
                 duration: Theme.reducedMotion ? 0 : 360

@@ -135,6 +135,14 @@ Neither compositor shows black in between:
 What remains is the modeset between the two compositors, which is the
 kernel's and the display's, not the shell's.
 
+The greeter exports `BINGUX_CONTINUING=1` to the session it launches. When the
+desktop shell sees it (`SessionContext.continuing`), the wallpaper and top bar
+are already where the greeter left them: the wallpaper's first show skips the
+zoom and the bar skips its slide-in, so nothing enters again. The sharp wallpaper
+fades in over the blurred copy the compositor paints. Lock and kiosk shells
+ignore the flag. A desktop started without the variable (a cold start from
+another login path) keeps the zoom and slide-in.
+
 ## Testing
 
 `make check-session` runs both screens in headless Sway:
