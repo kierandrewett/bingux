@@ -85,6 +85,7 @@ QtObject {
                 InstallerState.disks = data.disks || [];
                 InstallerState.toolsMissing = data.tools_missing || [];
                 InstallerState.installerVersion = data.installer_version || "";
+                InstallerState.setCapabilities(data.capabilities);
                 InstallerState.probeState = "ready";
                 if (InstallerState.diskPath !== "" && !InstallerState.selectedDisk)
                     InstallerState.diskPath = "";

@@ -1,6 +1,6 @@
 .pragma library
 
-// Client-side mirror of the plan schema v1 rules in distro/installer/README.md.
+// Client-side mirror of the plan schema v2 rules in distro/installer/README.md.
 // The daemon has no validate op, so the UI checks every field before it offers
 // Continue; the daemon remains the authority and re-checks on install.
 
