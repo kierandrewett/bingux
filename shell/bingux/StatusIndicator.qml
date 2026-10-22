@@ -7,6 +7,8 @@ Item {
     property bool shown: false
     property string iconName: ""
     property string label: ""
+    // False when a restricted session context keeps the slot but disables it.
+    property bool available: true
     property int slotSize: 24
     property string retainedIcon: ""
     property real reveal: shown ? 1 : 0
@@ -34,7 +36,7 @@ Item {
     Item {
         width: root.slotSize
         height: root.slotSize
-        opacity: root.reveal
+        opacity: root.reveal * (root.available ? 1 : 0.4)
         transform: Translate {
             x: Theme.spaceSmall * (1 - root.reveal)
         }

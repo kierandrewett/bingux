@@ -112,6 +112,7 @@ Item {
 
     BarSearchButton {
         id: searchButton
+        objectName: "parityMask:search"
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
         presentation: root.appearance("search", "Search", "system-search-symbolic", true, false)
@@ -245,7 +246,9 @@ Item {
             count: root.notificationCount
             selected: root.notificationsOpen
             barWindow: root.hostWindow
-            visible: root.allowed("notifications")
+            objectName: "parityMask:notifications"
+            enabled: root.allowed("notifications")
+            opacity: enabled ? 1 : 0.4
             onClicked: root.notificationsRequested()
         }
     }
