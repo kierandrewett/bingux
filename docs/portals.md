@@ -250,8 +250,11 @@ the Gnoblin backend (`xdg-desktop-portal-gnoblin`) both installed. The ISO does
 not install the Gnoblin backend, so these results show what the interfaces do
 when both backends are present. They do not describe the ISO as shipped. A
 small Python client called each interface through `org.freedesktop.portal.Desktop`.
-The raw runs are `/var/tmp/portal-audit/probe-run1.jsonl` and `probe-run2.jsonl`
-on the build host.
+Where a call opened a dialog, the dialog was driven from the guest: a screenshot
+was taken over VNC and clicks were sent through Mutter's RemoteDesktop input.
+The first-pass raw runs are `/var/tmp/portal-audit/probe-run1.jsonl` and
+`probe-run2.jsonl` on the build host. The dialog run logs are in the guest at
+`/tmp/pd-*.run`.
 
 Screenshot through the Bingux backend:
 
@@ -268,29 +271,41 @@ A non-interactive request with no matching rule opens the selector, because the
 default level is `ask`. Add an `allow` rule for apps that must capture without a
 prompt.
 
+Interfaces that open a dialog, driven through the dialog:
+
+| Interface       | Request                          | Result                                                                                      | Verdict                   |
+| --------------- | -------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------- |
+| Account         | `GetUserInformation`             | Response 0 after Share. Returns id, name and image.                                         | Works                     |
+| FileChooser     | `OpenFile`                       | Response 0 after Open. Returns the chosen URI.                                              | Works                     |
+| FileChooser     | `SaveFile`                       | Response 0 after Save. Returns the URI. The portal does not write the file.                 | Works                     |
+| Print           | `PreparePrint`                   | Response 0 after Print to File. Returns print settings with `output-uri`.                   | Works                     |
+| Wallpaper       | `SetWallpaperURI`                | Permission prompt, then Response 0. The wallpaper setting changed and was restored.         | Works                     |
+| InputCapture    | `CreateSession`                  | Response 0 after Share with capture on. Returns `capabilities` and a session handle.        | Works                     |
+| ScreenCast      | `CreateSession`, `SelectSources` | Response 0, no dialog.                                                                      | Works                     |
+| ScreenCast      | `Start`                          | Response 0 after Share. Returns PipeWire node 47 (monitor, 1280x800).                       | Works                     |
+| RemoteDesktop   | `CreateSession`, `SelectDevices` | Response 0, no dialog.                                                                      | Works                     |
+| RemoteDesktop   | `Start`                          | Response 0 after the Remote Interaction toggle is on and Share is clicked. `devices` is 7.  | Works                     |
+| DynamicLauncher | `PrepareInstall`                 | Response 0 after Create. Returns the name and the 512px PNG icon.                           | Works                     |
+| AppChooser      | `OpenURI` with `ask=true`        | Dialog shows "No Apps Available" (no https handler). Cancel returns Response 1 after 132 s. | Partial: no app to choose |
+| Notification    | `AddNotification`                | Call returned with no error. No `org.freedesktop.Notifications` owner; nothing displayed.   | Unverified: display       |
+
+The DynamicLauncher failure in the first pass came from the probe's icon data,
+not from the interface. A 512px PNG passed when sent as a bytes icon.
+
 Other interfaces:
 
-| Interface       | Request                          | Result                                          | Verdict    |
-| --------------- | -------------------------------- | ----------------------------------------------- | ---------- |
-| Background      | `RequestBackground`              | Response 0                                      | Works      |
-| GlobalShortcuts | `CreateSession`                  | Response 0                                      | Works      |
-| GlobalShortcuts | `BindShortcuts`                  | Response 2: no owner of the shell provider name | Fails      |
-| Inhibit         | `Inhibit` and `Close`            | Accepted                                        | Works      |
-| Settings        | `ReadAll`, `Read`, `ReadOne`     | Values returned                                 | Works      |
-| Notification    | `AddNotification`                | Accepted. No notification server was running.   | Unverified |
-| Email           | `ComposeEmail`                   | Response 2: no mail client                      | Cancelled  |
-| RemoteDesktop   | `CreateSession`, `SelectDevices` | Response 0. `Start` got no response.            | Partial    |
-| ScreenCast      | `CreateSession`, `SelectSources` | Response 0. `Start` not tested.                 | Partial    |
-| Usb             | `EnumerateDevices`               | Empty list. The session call got no response.   | Partial    |
-| Clipboard       | `RequestClipboard`               | Access denied: needs a started session          | Fails      |
-| DynamicLauncher | `PrepareInstall`                 | Invalid argument: the icon failed validation    | Fails      |
-| Account         | `GetUserInformation`             | No response in 13 s: waiting for a dialog       | Unverified |
-| FileChooser     | `OpenFile`                       | No response in 13 s: waiting for a dialog       | Unverified |
-| InputCapture    | `CreateSession`                  | No response in 13 s: waiting for a dialog       | Unverified |
-| Print           | `PreparePrint`                   | No response in 13 s: waiting for a dialog       | Unverified |
-| Wallpaper       | `SetWallpaperURI`                | No response in 18 s                             | Unverified |
+| Interface       | Request                      | Result                                          | Verdict   |
+| --------------- | ---------------------------- | ----------------------------------------------- | --------- |
+| Background      | `RequestBackground`          | Response 0                                      | Works     |
+| GlobalShortcuts | `CreateSession`              | Response 0                                      | Works     |
+| GlobalShortcuts | `BindShortcuts`              | Response 2: no owner of the shell provider name | Fails     |
+| Inhibit         | `Inhibit` and `Close`        | Accepted                                        | Works     |
+| Settings        | `ReadAll`, `Read`, `ReadOne` | Values returned                                 | Works     |
+| Email           | `ComposeEmail`               | Response 2: no mail client                      | Cancelled |
+| Usb             | `EnumerateDevices`           | Empty list. The session call got no response.   | Partial   |
+| Clipboard       | `RequestClipboard`           | Access denied: needs a started session          | Fails     |
 
-Access, AppChooser and Lockdown are not exported by the frontend. Their dialogs
-could not be driven: the guest has no `xdotool`, `wmctrl` or `ydotool`. The
-DynamicLauncher failure may come from the probe's icon data and needs a rerun.
-Treat every row marked Fails or Unverified as not confirmed.
+Access, AppChooser and Lockdown are not exported by the frontend. AppChooser
+was reached through `OpenURI` with `ask=true` above. Access was not driven. The
+Clipboard row was not retested after a RemoteDesktop session started. Treat
+every row marked Fails, Partial or Unverified as not confirmed.
