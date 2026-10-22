@@ -155,6 +155,13 @@ another login path) keeps the zoom and slide-in.
 
 ## Start-up cost
 
+Gnoblin runs `systemctl --user start gnoblin-session.target` before it starts the
+process that sends the compositor its configuration, and the compositor gives up
+after 10 s without it. `bingux.target` sets `DefaultDependencies=no`, so that start
+does not wait for the helper units it wants (the wallpaper export takes about 4 s of
+CPU), and the wallpaper export runs in idle time. With the default the wait was 6.5 s
+on four busy CPUs and 14 to 22 s in the E2E boots; without it, 0.4 s.
+
 The greeter account has its own user manager, so the packaged `bingux.target`
 would start the user desktop helpers for it. The search, status, portal and
 wallpaper-export units carry `ConditionUser=!greeter` and `ConditionUser=!greetd`

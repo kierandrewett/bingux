@@ -11,6 +11,11 @@ After=graphical-session.target
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/bingux-session export
+# The export decodes and blurs a full-size wallpaper. It runs while the
+# compositor starts and takes only idle time, so the first frame comes first.
+Nice=19
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
 LimitCORE=0
 Restart=on-failure
 RestartSec=3
