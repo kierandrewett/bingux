@@ -43,18 +43,10 @@ ERROR_TITLE_MARKER = "could not"  # the error page title; checked as a fallback
 @dataclass
 class Word:
     text: str
-    def __init__(self, path):
-        self.conn = connect_vnc(path)
-        self.conn.settimeout(5)
-        # Pointer coordinates are in the server's current desktop size; the
-        # Installer keeps this in step with the newest frame.
-        self.size = (1280, 800)
-
-    def _send(self, buttons: int, x: float, y: float) -> None:
-        width, height = self.size
-        x = max(0, min(width - 1, int(round(x))))
-        y = max(0, min(height - 1, int(round(y))))
-        self.conn.send(struct.pack(">BBHH", 5, buttons, x, y))
+    x0: float
+    y0: float
+    x1: float
+    y1: float
     height: float
     conf: float
 
