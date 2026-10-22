@@ -397,9 +397,13 @@ def run_variant(name, variant, iso, out, work):
     finally:
         if pointer is not None:
             pointer.close()
-
+        if vm is not None and not flow_ok:
+            vm.stop()
     if flow_ok:
-        boot_installed(vm, variant, out, timeline, checks)
+        try:
+            boot_installed(vm, variant, out, timeline, checks)
+        finally:
+            vm.stop()
     if vm is not None:
         vm.stop()
         (out / "serial.log").write_bytes(vm.log)
