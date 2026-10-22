@@ -366,7 +366,11 @@ def boot_installed(vm, variant, out, timeline, checks):
     """After Restart, the same VM boots the installed disk: unlock, greeter, sign in."""
     checks["installed system booted with no installation medium attached"] = vm.medium() is None
     if variant["luks"]:
-        checks["passphrase prompt shown at boot"] = wait_for_text(vm, "passphrase", 180)
+        prompt = wait_for_text(vm, "passphrase", 180)
+        checks["passphrase prompt shown at boot"] = prompt
+        if not prompt and (frame := vm.frame()) is not None:
+            # Keep what the screen showed when the prompt was expected, to tell a missing prompt from a missed reading.
+            vm.still(out / "luks-prompt-timeout.png", frame)
         timeline.mark("typing the disk passphrase")
         vm.type_text(PASSPHRASE)
         vm.key("ret")
