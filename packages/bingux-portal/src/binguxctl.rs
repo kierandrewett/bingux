@@ -81,6 +81,13 @@ impl Ctl {
         parse_request_reply(&output)
     }
 
+    /// Calls `method` on the shell's `target` IPC object with string arguments.
+    pub async fn ipc(&self, target: &str, method: &str, args: &[&str]) -> Result<String, String> {
+        let mut argv = vec!["ipc", target, method];
+        argv.extend_from_slice(args);
+        self.run(&argv).await
+    }
+
     async fn run(&self, args: &[&str]) -> Result<String, String> {
         let child = Command::new(&self.program)
             .args(args)

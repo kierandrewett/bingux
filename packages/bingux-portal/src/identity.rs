@@ -108,18 +108,23 @@ pub fn exe_identity(exe: &Path) -> Option<Identity> {
     Some(Identity::HostExe(canonical.to_str()?.to_owned()))
 }
 
-/// Whether `caller` currently owns the desktop portal frontend name.
-pub async fn frontend_is(connection: &Connection, caller: &str) -> bool {
+/// Whether `caller` currently owns the bus name `name`.
+pub async fn owner_is(connection: &Connection, caller: &str, name: &str) -> bool {
     let Ok(proxy) = fdo::DBusProxy::new(connection).await else {
         return false;
     };
-    let Ok(frontend) = BusName::try_from(PORTAL_DESKTOP_NAME) else {
+    let Ok(name) = BusName::try_from(name) else {
         return false;
     };
-    match proxy.get_name_owner(frontend).await {
+    match proxy.get_name_owner(name).await {
         Ok(owner) => owner.as_str() == caller,
         Err(_) => false,
     }
+}
+
+/// Whether `caller` currently owns the desktop portal frontend name.
+pub async fn frontend_is(connection: &Connection, caller: &str) -> bool {
+    owner_is(connection, caller, PORTAL_DESKTOP_NAME).await
 }
 
 /// Resolves the requester identity, or `None` when the request must be refused.

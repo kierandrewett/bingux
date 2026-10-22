@@ -161,12 +161,27 @@ pub fn default_path() -> PathBuf {
     )
 }
 
-fn default_path_from(xdg_config_home: Option<OsString>, home: Option<OsString>) -> PathBuf {
-    let config_home = match xdg_config_home.filter(|v| !v.is_empty()) {
+/// Returns `name` inside the Bingux config directory from the environment.
+pub fn config_file(name: &str) -> PathBuf {
+    config_home_from(
+        std::env::var_os("XDG_CONFIG_HOME"),
+        std::env::var_os("HOME"),
+    )
+    .join("bingux")
+    .join(name)
+}
+
+fn config_home_from(xdg_config_home: Option<OsString>, home: Option<OsString>) -> PathBuf {
+    match xdg_config_home.filter(|v| !v.is_empty()) {
         Some(dir) => PathBuf::from(dir),
         None => PathBuf::from(home.unwrap_or_default()).join(".config"),
-    };
-    config_home.join("bingux").join(STORE_FILE_NAME)
+    }
+}
+
+fn default_path_from(xdg_config_home: Option<OsString>, home: Option<OsString>) -> PathBuf {
+    config_home_from(xdg_config_home, home)
+        .join("bingux")
+        .join(STORE_FILE_NAME)
 }
 
 /// Parses and validates the store text.
@@ -205,7 +220,11 @@ pub fn load_effective(path: &Path) -> Store {
 
 /// Writes the store to `path` atomically. The file is private to the user.
 pub fn save(path: &Path, store: &Store) -> Result<(), StoreError> {
-    let text = to_toml(store)?;
+    write_private(path, &to_toml(store)?)
+}
+
+/// Writes `text` to `path` atomically. The file is private to the user.
+pub fn write_private(path: &Path, text: &str) -> Result<(), StoreError> {
     let dir = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
