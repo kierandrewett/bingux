@@ -584,10 +584,6 @@ impl Component for SearchPage {
                 ctx,
             })
             .child(files_group(&data, ctx))
-            .child(FileRootAdd {
-                roots: data.file_roots.clone().unwrap_or_default(),
-                ctx,
-            })
             .child(previews_group(&data, ctx))
             .child(assistant_group(&data, ctx));
 
@@ -820,7 +816,10 @@ fn files_group(data: &Model, ctx: Ctx) -> Group {
             }
         }
     }
-    group
+    group.row(FileRootAdd {
+        roots: data.file_roots.clone().unwrap_or_default(),
+        ctx,
+    })
 }
 
 /// Adds a folder to the file search roots. The folder is chosen with the system file picker.
@@ -850,10 +849,7 @@ impl Component for FileRootAdd {
             );
         };
 
-        Group::titled("Add folder").row(action_row(
-            None,
-            primary_button("Choose folder", choose).compact(),
-        ))
+        row("Add a folder").trailing(primary_button("Choose folder", choose).compact())
     }
 }
 

@@ -382,14 +382,14 @@ impl Component for DesktopPage {
                     )),
             )
             .child(
-                Group::titled("Control Centre").rows(TILES.iter().enumerate().map(
-                    |(index, (_, label))| {
+                Group::titled("Control Centre")
+                    .description("Choose which tiles the Control Centre shows.")
+                    .rows(TILES.iter().enumerate().map(|(index, (_, label))| {
                         let tiles = m.tiles;
                         Element::from(switch_row(*label, tiles[index], move |on: bool| {
                             write(ctx, Change::Save(tiles_patch(tiles, index, on)))
                         }))
-                    },
-                )),
+                    })),
             )
             .child(
                 Group::titled("Privacy").row(

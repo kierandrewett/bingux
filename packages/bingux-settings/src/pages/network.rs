@@ -492,12 +492,17 @@ fn wired_section(wired: &[WiredDevice]) -> Element {
             "No wired network devices.".into(),
         )))));
     }
-    Element::from(group.rows(wired.iter().map(|device| {
-        Element::from(
-            row(device.name.clone())
-                .maybe_subtitle(Some(device.connection.clone()))
-                .value(wired_state(&device.state)),
-        )
+    // The connection's name ("Wired connection 1") says more than the
+    // interface name ("enp42s0"). Without a connection, say Ethernet.
+    Element::from(group.rows(wired.iter().enumerate().map(|(index, device)| {
+        let title = if !device.connection.is_empty() && device.connection != "--" {
+            device.connection.clone()
+        } else if wired.len() > 1 {
+            format!("Ethernet {}", index + 1)
+        } else {
+            "Ethernet".to_string()
+        };
+        Element::from(row(title).value(wired_state(&device.state)))
     })))
 }
 
