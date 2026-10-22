@@ -14,10 +14,10 @@ depends=('bingux' 'gnoblin' 'greetd' 'networkmanager' 'glib2' 'plymouth')
 makedepends=('imagemagick' 'bingux')
 install=bingux-os.install
 backup=('etc/pacman.d/bingux-os-mirrorlist')
-source=('init.lua' 'bingux-os.gschema.override' 'bingux-os-mirrorlist'
+source=('init.lua' 'bingux-background.lua' 'bingux-os.gschema.override' 'bingux-os-mirrorlist'
         'bingux.plymouth' 'bingux.script'
         'bingux-os-release' 'bingux-os-issue' 'bingux-os-release.hook')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 build() {
     magick -size 2560x1600 gradient:'#2b3a67-#101523' -attenuate 0.15 +noise Gaussian -quality 92 default.jpg
@@ -31,6 +31,9 @@ package() {
     install -Dm644 default-blur.jpg "$pkgdir/usr/share/backgrounds/bingux-os/default-blur.jpg"
     # New accounts start a Gnoblin session that loads the Bingux drop-ins.
     install -Dm644 init.lua "$pkgdir/etc/skel/.config/gnoblin/init.lua"
+    # A brand-new account's first compositor frame is the blurred default, not
+    # Gnoblin's grey. bingux-session export replaces this at the first session.
+    install -Dm644 bingux-background.lua "$pkgdir/etc/skel/.config/gnoblin/conf.d/bingux-background.lua"
     # Bingux reads the GNOME background setting when desktop.wallpaper is unset.
     install -Dm644 bingux-os.gschema.override "$pkgdir/usr/share/glib-2.0/schemas/90_bingux-os.gschema.override"
     # Start the user D-Bus broker with the user manager. Gnoblin asks the user
