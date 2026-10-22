@@ -1,6 +1,13 @@
 singleton InstallerState 1.0 InstallerState.qml
 InstallerClient 1.0 InstallerClient.qml
 InstallerField 1.0 InstallerField.qml
+InstallerHostnamePage 1.0 InstallerHostnamePage.qml
+InstallerKeyboardPage 1.0 InstallerKeyboardPage.qml
+InstallerNetworkPage 1.0 InstallerNetworkPage.qml
 InstallerPage 1.0 InstallerPage.qml
-InstallerWizard 1.0 InstallerWizard.qml
 InstallerShell 1.0 InstallerShell.qml
+InstallerSwitchRow 1.0 InstallerSwitchRow.qml
+InstallerText 1.0 InstallerText.qml
+InstallerTimezonePage 1.0 InstallerTimezonePage.qml
+InstallerWelcomePage 1.0 InstallerWelcomePage.qml
+InstallerWizard 1.0 InstallerWizard.qml
