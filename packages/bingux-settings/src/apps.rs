@@ -9,6 +9,8 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 use crate::system;
 
@@ -140,8 +142,32 @@ fn desktop_files(directory: &Path, prefix: &str, files: &mut Vec<(String, PathBu
     }
 }
 
-/// Every visible application, sorted by name.
+type Reused = Mutex<Option<(Instant, Vec<AppEntry>)>>;
+static LIST: LazyLock<Reused> = LazyLock::new(Default::default);
+
+/// Every visible application, sorted by name. The list is reused for 30
+/// seconds, so the Sound page's five-second poll does not read every desktop
+/// file each time; [`rescan`] reads them again.
 pub fn installed() -> Vec<AppEntry> {
+    if let Ok(list) = LIST.lock()
+        && let Some((read_at, apps)) = list.as_ref()
+        && read_at.elapsed() < Duration::from_secs(30)
+    {
+        return apps.clone();
+    }
+    rescan()
+}
+
+/// Read every desktop file now and replace the reused list.
+pub fn rescan() -> Vec<AppEntry> {
+    let apps = read_installed();
+    if let Ok(mut list) = LIST.lock() {
+        *list = Some((Instant::now(), apps.clone()));
+    }
+    apps
+}
+
+fn read_installed() -> Vec<AppEntry> {
     let suffixes = locale_suffixes();
     let mut seen: HashMap<String, ()> = HashMap::new();
     let mut apps = Vec::new();

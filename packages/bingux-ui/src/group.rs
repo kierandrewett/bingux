@@ -36,6 +36,29 @@ pub fn caption(text: impl Into<String>) -> Element {
     CaptionText { text }.into()
 }
 
+/// A caption centred under an icon and a name, at the head of a subpage.
+pub fn centered_caption(text: impl Into<String>) -> Element {
+    let text = text.into();
+    CenteredCaption { text }.into()
+}
+
+#[derive(PartialEq)]
+struct CenteredCaption {
+    text: String,
+}
+
+impl Component for CenteredCaption {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        paragraph()
+            .width(Size::fill())
+            .text_align(TextAlign::Center)
+            .color(tokens.muted)
+            .font_size(TEXT_SM)
+            .child(self.text.clone())
+    }
+}
+
 #[derive(PartialEq)]
 struct CaptionText {
     text: String,

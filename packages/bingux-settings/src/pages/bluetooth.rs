@@ -7,10 +7,13 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
+use crate::icons::{self, Icon};
+use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
-    Group, Overlays, ResponseKind, Row, Status, action_button, dialog, hstack, page_column,
-    primary_button, row, row_button, skeleton, status, switch_row, use_overlays,
+    Group, Overlays, ResponseKind, Row, Status, action_button, centered_caption, dialog, heading,
+    page_column, primary_button, row, row_button, skeleton, status, switch_row, use_overlays,
+    use_tokens,
 };
 use bingux_ui::scale::*;
 
@@ -31,7 +34,10 @@ struct Device {
     name: String,
     paired: bool,
     connected: bool,
+    trusted: bool,
     battery: Option<u8>,
+    /// The freedesktop icon name BlueZ reports, such as `audio-headset`.
+    icon: String,
 }
 
 #[derive(Clone, PartialEq)]
@@ -134,6 +140,8 @@ fn load() -> Result<Model, CommandError> {
             name: field(&info, "Alias").unwrap_or(known_name).to_string(),
             paired: flag(&info, "Paired")?,
             connected: flag(&info, "Connected")?,
+            trusted: flag(&info, "Trusted").unwrap_or(false),
+            icon: field(&info, "Icon").unwrap_or_default().to_string(),
             battery: field(&info, "Battery Percentage").and_then(battery),
         });
     }
@@ -234,83 +242,137 @@ fn device_status(device: &Device) -> String {
     }
 }
 
-/// One device: name, then its status and MAC, with the actions it allows.
-/// Pair applies to unpaired devices, Connect to paired ones and Disconnect
-/// to connected ones; Remove works on any device BlueZ knows. Pairing that
-/// needs a passkey fails with BlueZ's message because bluetoothctl has no
-/// agent here. The one accent action is Connect or Pair; the rest are quiet.
-fn device_row(device: &Device, ctx: Ctx) -> Row {
-    let disconnect_mac = device.mac.clone();
-    let disconnect_name = device.name.clone();
-    let connect_mac = device.mac.clone();
-    let connect_name = device.name.clone();
-    let remove_mac = device.mac.clone();
-    let remove_name = device.name.clone();
-    let pair_mac = device.mac.clone();
-    let pair_name = device.name.clone();
+/// The bundled glyph for the icon name BlueZ reports.
+fn device_icon(name: &str) -> Icon {
+    match name {
+        "audio-headphones" | "audio-headset" => Icon::Headphones,
+        "audio-card" | "audio-speakers" => Icon::Speakers,
+        "input-keyboard" => Icon::Keyboard,
+        "input-mouse" | "input-tablet" => Icon::Mouse,
+        "input-gaming" => Icon::Gamepad,
+        "phone" => Icon::Phone,
+        "computer" => Icon::Computer,
+        "video-display" => Icon::Display,
+        _ => Icon::Bluetooth,
+    }
+}
 
-    let trailing = hstack(S2)
-        .maybe_child((ctx.idle && ctx.powered && device.connected).then(|| {
-            action_button("Disconnect", move |_| {
-                perform(
-                    ctx,
-                    format!("Disconnecting from {disconnect_name}…"),
-                    args(&["disconnect", disconnect_mac.as_str()]),
-                    TIMEOUT,
-                )
-            })
-            .compact()
-        }))
-        .maybe_child(
-            (ctx.idle && ctx.powered && device.paired && !device.connected).then(|| {
-                primary_button("Connect", move |_| {
-                    perform(
-                        ctx,
-                        format!("Connecting to {connect_name}…"),
-                        args(&["connect", connect_mac.as_str()]),
-                        CONNECT_TIMEOUT,
-                    )
-                })
-                .compact()
-            }),
+/// What kind of device the icon name stands for, in words.
+fn device_kind(name: &str) -> &'static str {
+    match name {
+        "audio-headphones" | "audio-headset" => "Headphones",
+        "audio-card" | "audio-speakers" => "Speakers",
+        "input-keyboard" => "Keyboard",
+        "input-mouse" => "Mouse",
+        "input-tablet" => "Tablet",
+        "input-gaming" => "Game controller",
+        "phone" => "Phone",
+        "computer" => "Computer",
+        "video-display" => "Display",
+        _ => "Other",
+    }
+}
+
+/// The accent action a device allows: Pair for an unpaired one, Connect for
+/// a paired one and Disconnect for a connected one. Pairing that needs a
+/// passkey fails with BlueZ's message because bluetoothctl has no agent
+/// here. Nothing is shown while another action runs or Bluetooth is off.
+fn device_action(device: &Device, ctx: Ctx) -> Option<Element> {
+    if !(ctx.idle && ctx.powered) {
+        return None;
+    }
+    let mac = device.mac.clone();
+    let name = device.name.clone();
+    Some(if device.connected {
+        action_button("Disconnect", move |_| {
+            perform(
+                ctx,
+                format!("Disconnecting from {name}…"),
+                args(&["disconnect", mac.as_str()]),
+                TIMEOUT,
+            )
+        })
+        .compact()
+        .into()
+    } else if device.paired {
+        primary_button("Connect", move |_| {
+            perform(
+                ctx,
+                format!("Connecting to {name}…"),
+                args(&["connect", mac.as_str()]),
+                CONNECT_TIMEOUT,
+            )
+        })
+        .compact()
+        .into()
+    } else {
+        primary_button("Pair", move |_| {
+            perform(
+                ctx,
+                format!("Pairing with {name}…"),
+                args(&["--timeout", "30", "pair", mac.as_str()]),
+                CONNECT_TIMEOUT,
+            )
+        })
+        .compact()
+        .into()
+    })
+}
+
+/// Ask before removing a device, then remove it.
+fn confirm_remove(device: &Device, ctx: Ctx) {
+    let name = device.name.clone();
+    let mac = device.mac.clone();
+    ctx.overlays.show_dialog(
+        dialog(
+            format!("Remove \"{name}\"?"),
+            "The pairing is removed from this computer. Pair again to use it.",
         )
-        .maybe_child((ctx.idle && ctx.powered && !device.paired).then(|| {
-            primary_button("Pair", move |_| {
-                perform(
-                    ctx,
-                    format!("Pairing with {pair_name}…"),
-                    args(&["--timeout", "30", "pair", pair_mac.as_str()]),
-                    CONNECT_TIMEOUT,
-                )
-            })
-            .compact()
-        }))
-        .maybe_child(ctx.idle.then(|| {
-            action_button("Remove", move |_| {
-                let remove_name = remove_name.clone();
-                let remove_mac = remove_mac.clone();
-                ctx.overlays.show_dialog(
-                    dialog(
-                        format!("Remove \"{remove_name}\"?"),
-                        "The pairing is removed from this computer. Pair again to use it.",
-                    )
-                    .cancel("Cancel")
-                    .response("Remove", ResponseKind::Destructive, move |_| {
-                        perform(
-                            ctx,
-                            format!("Removing {remove_name}…"),
-                            args(&["remove", remove_mac.as_str()]),
-                            TIMEOUT,
-                        )
-                    }),
-                )
-            })
-            .compact()
-        }));
+        .cancel("Cancel")
+        .response("Remove", ResponseKind::Destructive, move |_| {
+            perform(
+                ctx,
+                format!("Removing {name}…"),
+                args(&["remove", mac.as_str()]),
+                TIMEOUT,
+            )
+        }),
+    );
+}
 
+/// One device in the list: its icon, name, status and address, the one
+/// action it allows, and a chevron to its page, where it can be removed.
+fn device_row(device: &Device, ctx: Ctx, open: impl Fn() + 'static) -> Row {
     row(device.name.clone())
+        .leading(device_icon(&device.icon))
         .subtitle(format!("{} · {}", device_status(device), device.mac))
-        .trailing(trailing)
+        .maybe_trailing(device_action(device, ctx))
+        .navigates()
+        .on_press(move |_| open())
+}
+
+/// Read BlueZ now and every five seconds while no action is running.
+fn use_polling(model: State<Loaded>, busy: State<Option<String>>) {
+    use_hook(move || {
+        background(model, load);
+        spawn(async move {
+            loop {
+                timer(POLL).await;
+                if busy.read().is_none() {
+                    background(model, load);
+                }
+            }
+        });
+    });
+}
+
+/// A list row that opens the device's page.
+fn open_row(device: &Device, ctx: Ctx, navigator: crate::routes::Navigator) -> Row {
+    let route = Route::Device {
+        mac: device.mac.clone(),
+        name: device.name.clone(),
+    };
+    device_row(device, ctx, move || navigator.push(route.clone()))
 }
 
 #[derive(PartialEq)]
@@ -319,21 +381,11 @@ pub struct BluetoothPage;
 impl Component for BluetoothPage {
     fn render(&self) -> impl IntoElement {
         let overlays = use_overlays();
+        let navigator = use_navigator();
         let model = system::cached("bluetooth");
         let error = use_state::<Option<String>>(|| None);
         let busy = use_state::<Option<String>>(|| None);
-
-        use_hook(move || {
-            background(model, load);
-            spawn(async move {
-                loop {
-                    timer(POLL).await;
-                    if busy.read().is_none() {
-                        background(model, load);
-                    }
-                }
-            });
-        });
+        use_polling(model, busy);
 
         let Some(loaded) = model.read().clone() else {
             return page_column().child(skeleton());
@@ -388,7 +440,7 @@ impl Component for BluetoothPage {
                     Group::titled("My devices").rows(
                         paired
                             .into_iter()
-                            .map(|device| Element::from(device_row(device, ctx))),
+                            .map(|device| Element::from(open_row(device, ctx, navigator))),
                     ),
                 );
             }
@@ -397,12 +449,97 @@ impl Component for BluetoothPage {
                     Group::titled("Other devices").rows(
                         other
                             .into_iter()
-                            .map(|device| Element::from(device_row(device, ctx))),
+                            .map(|device| Element::from(open_row(device, ctx, navigator))),
                     ),
                 );
             }
         }
         page
+    }
+}
+
+/// One device: its icon, name and status, the action it allows, what BlueZ
+/// reports about it, and Remove.
+#[derive(PartialEq)]
+pub struct BluetoothDevicePage {
+    pub mac: String,
+}
+
+impl Component for BluetoothDevicePage {
+    fn render(&self) -> impl IntoElement {
+        let overlays = use_overlays();
+        let navigator = use_navigator();
+        let tokens = use_tokens();
+        let model = system::cached("bluetooth");
+        let error = use_state::<Option<String>>(|| None);
+        let busy = use_state::<Option<String>>(|| None);
+        use_polling(model, busy);
+
+        // Go back to the list once BlueZ no longer knows the device.
+        let mac = self.mac.clone();
+        use_side_effect(move || {
+            if let Some(Ok(data)) = &*model.read()
+                && !data.devices.iter().any(|device| device.mac == mac)
+            {
+                navigator.pop();
+            }
+        });
+
+        let Some(Ok(data)) = model.read().clone() else {
+            return page_column().child(skeleton());
+        };
+        let Some(device) = data.devices.iter().find(|device| device.mac == self.mac) else {
+            return page_column();
+        };
+        let busy_message = busy.read().clone();
+        let ctx = Ctx {
+            model,
+            error,
+            busy,
+            powered: data.adapter.as_ref().is_some_and(|adapter| adapter.powered),
+            idle: busy_message.is_none(),
+            overlays,
+        };
+
+        let identity = rect()
+            .width(Size::fill())
+            .cross_align(Alignment::Center)
+            .spacing(S2)
+            .padding((S2, 0.0, S2, 0.0))
+            .child(icons::icon(
+                device_icon(&device.icon),
+                ICON_XL,
+                tokens.muted,
+            ))
+            .child(heading(device.name.clone()))
+            .child(centered_caption(device_status(device)))
+            .maybe_child(device_action(device, ctx));
+
+        let yes_no = |value: bool| if value { "Yes" } else { "No" };
+        let mut details = Group::titled("Details")
+            .row(row("Type").value(device_kind(&device.icon)))
+            .row(row("Address").value(device.mac.clone()))
+            .row(row("Paired").value(yes_no(device.paired)))
+            .row(row("Trusted").value(yes_no(device.trusted)));
+        if let Some(level) = device.battery {
+            details = details.row(row("Battery").value(format!("{level}%")));
+        }
+
+        let removable = device.clone();
+        let mut page = page_column();
+        if let Some(message) = error.read().clone() {
+            page = page.child(status(Status::Error(message)));
+        }
+        if let Some(message) = busy_message {
+            page = page.child(status(Status::Loading(message)));
+        }
+        page.child(identity).child(details).child(
+            Group::new(None::<String>).row(
+                row("Remove device")
+                    .destructive()
+                    .on_press(move |_| confirm_remove(&removable, ctx)),
+            ),
+        )
     }
 }
 

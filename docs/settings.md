@@ -56,6 +56,13 @@ The Sound page shows each application stream with the same icon. An
 application's icon comes from the icon the stream names when the icon theme
 has it, otherwise from the application's desktop entry.
 
+Bluetooth uses a subpage too. Each device in the list shows an icon for its
+type, its status and address, and the one action it allows (Pair, Connect or
+Disconnect). Pressing the row opens the device's page: the icon, name and
+status, the same action, the type, address, paired and trusted state and
+battery level BlueZ reports, and Remove device, which asks first and returns
+to the list when BlueZ no longer knows the device.
+
 A subpage replaces the page and puts a Back button and the subpage title in
 the header. Back, Alt+Left and the mouse Back button return to the page
 below; choosing another page in the sidebar closes the subpage.

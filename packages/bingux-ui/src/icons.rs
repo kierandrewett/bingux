@@ -50,11 +50,15 @@ pub enum Icon {
     UserTrash,
     Application,
     Applications,
+    Headphones,
+    Speakers,
+    Gamepad,
+    Phone,
 }
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 42] = [
+    pub const ALL: [Icon; 46] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -97,6 +101,10 @@ impl Icon {
         Self::UserTrash,
         Self::Application,
         Self::Applications,
+        Self::Headphones,
+        Self::Speakers,
+        Self::Gamepad,
+        Self::Phone,
     ];
 
     /// The embedded SVG source for this icon.
@@ -146,6 +154,10 @@ impl Icon {
             Self::UserTrash => include_bytes!("../icons/user-trash-symbolic.svg"),
             Self::Application => include_bytes!("../icons/application-x-executable-symbolic.svg"),
             Self::Applications => include_bytes!("../icons/view-app-grid-symbolic.svg"),
+            Self::Headphones => include_bytes!("../icons/audio-headphones-symbolic.svg"),
+            Self::Speakers => include_bytes!("../icons/audio-speakers-symbolic.svg"),
+            Self::Gamepad => include_bytes!("../icons/input-gaming-symbolic.svg"),
+            Self::Phone => include_bytes!("../icons/phone-symbolic.svg"),
         }
     }
 }

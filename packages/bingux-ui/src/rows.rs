@@ -70,6 +70,12 @@ impl Row {
         self
     }
 
+    /// Trailing content when there is any; a row without it has none.
+    pub fn maybe_trailing(mut self, trailing: Option<impl Into<Element>>) -> Self {
+        self.trailing = trailing.map(Into::into);
+        self
+    }
+
     pub fn leading(mut self, icon: Icon) -> Self {
         self.leading = Some(icon);
         self

@@ -102,7 +102,7 @@ fn parse_mime(text: &str) -> (Option<String>, Vec<String>) {
 }
 
 fn load() -> Result<Model, CommandError> {
-    let installed = apps::installed();
+    let installed = apps::rescan();
     let mut choices = Vec::new();
     for (index, kind) in KINDS.iter().enumerate() {
         let text = system::run("gio", &["mime", kind.mimes[0]], TIMEOUT)?;
@@ -220,7 +220,6 @@ impl Component for AppPage {
     fn render(&self) -> impl IntoElement {
         let model = system::use_cached("applications", load);
         let error = use_state::<Option<String>>(|| None);
-        let tokens = use_tokens();
         let Some(Ok(data)) = model.read().clone() else {
             return page_column().child(skeleton());
         };
@@ -252,15 +251,7 @@ impl Component for AppPage {
             .padding((S2, 0.0, S2, 0.0))
             .child(app_icon(app.icon.clone(), ICON_APP_LG))
             .child(heading(app.name.clone()))
-            .maybe_child((!app.comment.is_empty()).then(|| {
-                label()
-                    .text(app.comment.clone())
-                    .width(Size::fill())
-                    .color(tokens.muted)
-                    .font_size(TEXT_SM)
-                    .max_lines(2)
-                    .text_align(TextAlign::Center)
-            }))
+            .maybe_child((!app.comment.is_empty()).then(|| centered_caption(app.comment.clone())))
             .child(primary_button("Open", move |_| apps::launch(&launch)).compact());
 
         page_column()
