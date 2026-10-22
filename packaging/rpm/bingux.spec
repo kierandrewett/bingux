@@ -118,6 +118,7 @@ install -Dpm 0644 packaging/pam/bingux-lock %{buildroot}%{_sysconfdir}/pam.d/bin
 %{_bindir}/bingux-config
 %{_bindir}/bingux-settings
 %{_datadir}/applications/bingux-settings.desktop
+%{_datadir}/icons/hicolor/scalable/apps/bingux-settings.svg
 %{_libdir}/bingux/
 %{_libexecdir}/bingux/
 %{_datadir}/bingux/

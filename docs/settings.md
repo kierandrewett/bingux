@@ -17,6 +17,25 @@ Panels: `network`, `bluetooth`, `background` (Appearance), `desktop`,
 
 Set `BINGUX_REDUCED_MOTION=1` to disable animations.
 
+While Settings is open, right-click its dock icon to open Network,
+Bluetooth, Displays, Sound, Appearance or Power. These are the desktop
+entry's actions; each one runs `bingux-settings` with that panel, and the
+dock shows an application's actions only while it has a window.
+
+## App identity
+
+The dock, the window switcher, search results and notifications find the
+application icon from the desktop entry. `bingux-settings.desktop` sets
+`Icon=bingux-settings` and `StartupWMClass=bingux-settings`, and the window's
+app id is `bingux-settings`, so a running window groups under its dock icon.
+The icon is `packages/bingux-settings/bingux-settings.svg`, a full-colour
+128 x 128 icon in the Adwaita app-icon style the dock shows for other
+applications. `scripts/install-shell.py` and the RPM install it as
+`share/icons/hicolor/scalable/apps/bingux-settings.svg`; GTK finds it through
+`XDG_DATA_DIRS`, which the shell's launcher sets to include the install
+prefix. The window itself sets no icon, because Wayland takes it from the
+desktop entry.
+
 ## Where each setting lives
 
 Settings has no store of its own. Every page reads and writes the system

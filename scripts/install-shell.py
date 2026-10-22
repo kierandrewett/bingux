@@ -175,6 +175,8 @@ def build_payload(source, build, prefix, qml, target, quickshell="qs", managed=F
         build / "cargo/release/bingux-settings": prefix / "bin/bingux-settings",
         source / "packages/bingux-settings/bingux-settings.desktop": prefix
         / "share/applications/bingux-settings.desktop",
+        source / "packages/bingux-settings/bingux-settings.svg": prefix
+        / "share/icons/hicolor/scalable/apps/bingux-settings.svg",
         source / "scripts/bingux-clipboard-paste": prefix / "bin/bingux-clipboard-paste",
         source / "packaging/gnoblin/bingux.lua": prefix / "share/gnoblin/conf.d/bingux.lua",
     }
