@@ -84,7 +84,7 @@ InstallerPage {
         }
         InstallerSwitchRow {
             label: "Set the clock automatically"
-            note: "Recorded with the plan, but the installer does not apply it yet."
+            note: "Runs systemd-timesyncd in the installed system. Off disables it."
             checked: InstallerState.ntp
             onToggled: value => InstallerState.ntp = value
         }
