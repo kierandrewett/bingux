@@ -16,3 +16,25 @@ fun refresh_callback() {
 }
 
 Plymouth.SetRefreshFunction(refresh_callback);
+
+// The encrypted root asks for its passphrase through Plymouth. Without these
+// callbacks the splash keeps only the title, so the prompt is typed blind.
+prompt.sprite = Sprite();
+
+fun display_password_callback(text, bullets) {
+    stars = "";
+    for (i = 0; i < bullets; i += 1)
+        stars += "*";
+    prompt.image = Image.Text(text + " " + stars, 1, 1, 1);
+    prompt.sprite.SetImage(prompt.image);
+    prompt.sprite.SetX(Window.GetX() + Window.GetWidth() / 2 - prompt.image.GetWidth() / 2);
+    prompt.sprite.SetY(Window.GetY() + Window.GetHeight() * 0.6);
+    prompt.sprite.SetOpacity(1);
+}
+
+fun display_normal_callback() {
+    prompt.sprite.SetOpacity(0);
+}
+
+Plymouth.SetDisplayPasswordFunction(display_password_callback);
+Plymouth.SetDisplayNormalFunction(display_normal_callback);

@@ -133,13 +133,23 @@ def check_root(root, failures):
             check_text(rel, path.read_text(errors="replace"), failures)
 
     entries = root / "boot" / "loader" / "entries"
-    if not entries.exists():
-        failures.append("no boot loader entries under /boot/loader/entries")
-    for entry in sorted(entries.glob("*.conf")) if entries.exists() else []:
-        text = entry.read_text(errors="replace")
-        check_text(entry.name, text, failures)
-        if not all(opt in text for opt in SPLASH_OPTIONS):
-            failures.append(f"{entry.name}: no splash options")
+    if entries.exists():
+        for entry in sorted(entries.glob("*.conf")):
+            text = entry.read_text(errors="replace")
+            check_text(entry.name, text, failures)
+            if not all(opt in text for opt in SPLASH_OPTIONS):
+                failures.append(f"{entry.name}: no splash options")
+    else:
+        # BIOS installs boot GRUB: its menu and defaults carry the names and the splash options.
+        grub_cfg = root / "boot" / "grub" / "grub.cfg"
+        grub_default = root / "etc" / "default" / "grub"
+        if not grub_cfg.exists() or not grub_default.exists():
+            failures.append("no boot menu under /boot/loader/entries or /boot/grub/grub.cfg")
+        for path in (grub_cfg, grub_default):
+            if path.exists():
+                check_text(str(path.relative_to(root)), path.read_text(errors="replace"), failures)
+        if grub_default.exists() and not all(opt in grub_default.read_text(errors="replace") for opt in SPLASH_OPTIONS):
+            failures.append("etc/default/grub: no splash options")
 
     mkinitcpio = root / "etc" / "mkinitcpio.conf"
     if mkinitcpio.exists() and "plymouth" not in mkinitcpio.read_text():

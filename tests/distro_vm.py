@@ -9,6 +9,7 @@ show on the screen.
 Sockets under the VM's work directory:
 
 - monitor.sock: HMP, for key presses.
+- qmp.sock: QMP, for guest state, reset events and the removable drive.
 - vnc.sock: VNC, the only frame source for distro_capture.Recorder. QMP
   screendump is not used: it fails with "no surface" under virtio-vga-gl.
 - serial.sock: the serial console, when `serial=True`.
@@ -23,12 +24,15 @@ through a file on the disk. Nothing here knows about Bingux; the tests do.
 """
 
 import base64
+import json
 import os
+import queue
 from pathlib import Path
 import shutil
 import socket
 import subprocess
 import tempfile
+import threading
 import time
 
 from distro_capture import Recorder
@@ -70,6 +74,67 @@ def display_args():
     return ["-device", "virtio-vga", "-display", "none"]
 
 
+class Qmp:
+    """QMP on its own socket: framed JSON, so replies never mix with HMP prompts or key echo.
+
+    A reader thread keeps the socket drained and files replies and events apart.
+    Requests are serialized, so each reply belongs to the request that sent it.
+    """
+
+    def __init__(self, sock):
+        self.sock = sock
+        self._file = sock.makefile("rb")
+        self._replies = queue.Queue()
+        self._requests = threading.Lock()
+        self._events = []
+        self._changed = threading.Condition()
+        json.loads(self._file.readline())  # greeting
+        threading.Thread(target=self._read, daemon=True).start()
+        self.execute("qmp_capabilities")
+
+    def _read(self):
+        for line in self._file:
+            message = json.loads(line)
+            if "event" in message:
+                with self._changed:
+                    self._events.append(message)
+                    self._changed.notify_all()
+            else:
+                self._replies.put(message)
+        self._replies.put({"error": {"desc": "QMP socket closed"}})
+
+    def execute(self, command, arguments=None, timeout=60):
+        with self._requests:
+            request = {"execute": command}
+            if arguments is not None:
+                request["arguments"] = arguments
+            self.sock.sendall(json.dumps(request).encode() + b"\n")
+            try:
+                reply = self._replies.get(timeout=timeout)
+            except queue.Empty:
+                raise RuntimeError(f"QMP {command}: no reply within {timeout} s") from None
+        if "error" in reply:
+            raise RuntimeError(f"QMP {command}: {reply['error'].get('desc', reply['error'])}")
+        return reply.get("return")
+
+    def event_mark(self):
+        with self._changed:
+            return len(self._events)
+
+    def wait_event(self, name, since, timeout):
+        """True once event `name` has arrived after index `since` (from event_mark); False on timeout."""
+        deadline = time.monotonic() + timeout
+        with self._changed:
+            while True:
+                if any(event["event"] == name for event in self._events[since:]):
+                    return True
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                self._changed.wait(remaining)
+
+
+
 class Vm:
     def __init__(self, work, *, iso=None, disk=None, uefi=True, memory=None, serial=False, vars_path=None, record=None, pointer=False):
         """`record`: directory for flow.mp4, timeline.json and frame-events.jsonl.
@@ -95,6 +160,7 @@ class Vm:
         self.log = b""
         self._serial = None
         self._monitor = None
+        self._qmp = None
 
     def start(self):
         args = [
@@ -111,6 +177,8 @@ class Vm:
             f"unix:{self.work / 'vnc.sock'}",
             "-monitor",
             f"unix:{self.work / 'monitor.sock'},server,nowait",
+            "-qmp",
+            f"unix:{self.work / 'qmp.sock'},server,nowait",
             "-netdev",
             "user,id=net0",
             "-device",
@@ -146,9 +214,13 @@ class Vm:
         if self.serial_enabled:
             self._serial = self._connect("serial.sock")
             self._serial.settimeout(0.5)
+            # Read the console for the VM's whole life: an unread serial socket
+            # backs up QEMU's UART, which stalls a guest that prints to ttyS0.
+            threading.Thread(target=self._read_serial, daemon=True).start()
         self._monitor = self._connect("monitor.sock")
         self._monitor.settimeout(2)
         self._monitor_read()
+        self._qmp = Qmp(self._connect("qmp.sock"))
         self.recorder = Recorder(self.record_dir, self.work / "vnc.sock")
         self.recorder.start(self.t0)
         self.recorder.mark("power on")
@@ -178,9 +250,41 @@ class Vm:
             self.process.wait(timeout=15)
         except subprocess.TimeoutExpired:
             self.process.kill()
-        for sock in (self._serial, self._monitor):
+        for sock in (self._serial, self._monitor, self._qmp and self._qmp.sock):
             if sock is not None:
                 sock.close()
+
+    # QMP: guest state, reset events and the removable drive.
+
+    def event_mark(self):
+        return self._qmp.event_mark()
+
+    def wait_reset(self, since, timeout):
+        """True when the guest resets itself (its own reboot) after index `since`."""
+        return self._qmp.wait_event("RESET", since, timeout)
+
+    def system_reset(self):
+        self._qmp.execute("system_reset")
+
+    def medium(self):
+        """The drive id of an inserted installation ISO, or None when no medium is in a drive."""
+        for block in self._qmp.execute("query-block"):
+            inserted = block.get("inserted") or {}
+            if block.get("removable") and str(inserted.get("file", "")).endswith(".iso"):
+                return block["device"]
+        return None
+
+    def eject_medium(self):
+        """Take the installation ISO out of its drive, as a user does. Returns the drive id or None.
+
+        Done through the monitor: QMP `eject` does not find the -cdrom drive by its id on this QEMU.
+        """
+        device = self.medium()
+        if device is not None:
+            self.monitor(f"eject -f {device}")
+            if self.medium() is not None:
+                raise RuntimeError(f"installation medium {device} still attached after eject")
+        return device
 
     # Monitor: key presses.
 
@@ -245,16 +349,20 @@ class Vm:
 
     # Serial console: a root shell.
 
-    def _drain(self, seconds):
-        deadline = time.monotonic() + seconds
-        while time.monotonic() < deadline:
+    def _read_serial(self):
+        while True:
             try:
                 chunk = self._serial.recv(4096)
             except TimeoutError:
                 continue
+            except OSError:
+                break
             if not chunk:
                 break
             self.log += chunk
+
+    def _drain(self, seconds):
+        time.sleep(seconds)
 
     def wait_for(self, needle, timeout):
         deadline = time.monotonic() + timeout
@@ -262,13 +370,7 @@ class Vm:
         while time.monotonic() < deadline:
             if target in self.log:
                 return True
-            try:
-                chunk = self._serial.recv(4096)
-            except TimeoutError:
-                continue
-            if not chunk:
-                break
-            self.log += chunk
+            time.sleep(0.2)
         return target in self.log
 
     def start_shell(self, timeout=300):

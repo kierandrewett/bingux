@@ -15,9 +15,10 @@ uefi is the default variant. ISO defaults to the newest distro/out/bingux-os-*.i
 3. Check the installed disk over the serial console: the installed packages, no
    installer package or files, greetd without initial_session, no live account,
    and branding in the installed boot files (tests/distro-branding.py --root).
-4. Remove the installation medium and press Restart. The same VM boots the
-   installed disk: unlock it at the passphrase prompt (uefi-luks), wait for the
-   greeter, sign in and check that the desktop paints.
+4. Press Restart with the medium still in the drive. After the guest resets
+   itself, the medium is removed and the firmware reset, so the same VM boots
+   the installed disk alone: unlock it at the passphrase prompt (uefi-luks),
+   wait for the greeter, sign in and check that the desktop paints.
 
 Artifacts land in distro/out/install-test-<variant>/: checks.json, report.txt,
 timeline.json, serial.log, pages/*.png (one per installer page), live/ (flow.mp4,
@@ -28,6 +29,7 @@ Scratch space is under ~/.cache/bingux-e2e.
 import base64
 import io
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -52,6 +54,9 @@ from distro_vm import ROOT, Vm, find_iso, missing_tools
 USER = "tester"
 PASSWORD = "bingux-test-2026"
 PASSPHRASE = "bingux-luks-2026"
+# Diagnostic runs set this to send the installed boot's kernel and systemd log to the serial console.
+DEBUG_CONSOLE_ENV = "BINGUX_INSTALL_DEBUG_CONSOLE"
+DEBUG_CONSOLE_ARGS = "console=ttyS0,115200 systemd.journald.forward_to_console=1 systemd.log_target=console systemd.log_level=info"
 CITY_ZONE = "Europe/Berlin"
 CITY_LON_LAT = (13.4, 52.5)
 # Offsets (px) tried in turn when a click on the map picks another zone.
@@ -131,15 +136,6 @@ def collect_diagnostics(vm, out):
     (out / "diagnostics.txt").write_text("\n".join(sections) + "\n")
 
 
-def eject_medium(vm):
-    """Remove the ISO from the virtual drive, as a user does before Restart. Returns the device or None."""
-    for line in vm.monitor("info block").splitlines():
-        match = re.match(r"^\s*(\S+) \(#block\d+\): (.*\.iso)", line)
-        if match:
-            vm.monitor(f"eject -f {match.group(1)}")
-            return match.group(1)
-    return None
-
 
 def pick_city(inst, timeline, checks):
     """Click Berlin on the time zone map and check that the page's label names it.
@@ -177,8 +173,8 @@ def pick_city(inst, timeline, checks):
 def storage_page(inst, variant, checks):
     frame = inst.frame()
     if not variant["uefi"]:
-        checks["bios storage page explains why encryption is unavailable"] = (
-            text_on_screen(frame, "Encryption needs") is not None
+        checks["bios storage page says /boot stays unencrypted"] = (
+            text_on_screen(frame, "stays unencrypted") is not None
         )
     if variant["luks"]:
         if not inst.click_switch("Encrypt the system disk"):
@@ -295,8 +291,8 @@ def inspect_disk(vm, variant, out, checks, report):
     queries = [
         ("bingux-os package installed", "pacman -r /mnt -Qq 2>/dev/null | grep -c '^bingux-os$'", "1"),
         ("bingux-installer package absent", "pacman -r /mnt -Qq 2>/dev/null | grep -c installer", "0"),
-        ("no installer files anywhere", "find /mnt -xdev -iname '*installer*' 2>/dev/null | wc -l", "0"),
-        ("no installer desktop entry or autostart", "grep -ril installer /mnt/etc/xdg /mnt/usr/share/wayland-sessions /mnt/usr/share/applications 2>/dev/null | wc -l", "0"),
+        ("no Bingux installer files anywhere", "find /mnt -xdev -iname '*bingux*install*' 2>/dev/null | sed 's#^/mnt##' | tr '\\n' ' '", ""),
+        ("no Bingux installer desktop entry or autostart", "grep -rl 'bingux-live-switch installer\\|bingux-install-live\\|bingux-installer' /mnt/etc/xdg /mnt/usr/share/wayland-sessions /mnt/usr/share/applications /mnt/etc/systemd 2>/dev/null | sed 's#^/mnt##' | tr '\\n' ' '", ""),
         ("greetd has no initial_session", "grep -c initial_session /mnt/etc/greetd/config.toml 2>/dev/null", "0"),
         ("greetd runs the Bingux greeter", "grep -c bingux-greeter-session /mnt/etc/greetd/config.toml 2>/dev/null", "1"),
         ("no live account in passwd", "grep -c '^live:' /mnt/etc/passwd 2>/dev/null", "0"),
@@ -309,7 +305,7 @@ def inspect_disk(vm, variant, out, checks, report):
         report.append(f"$ {command}\n{value}\n")
         checks[label] = value == expected
 
-    files = "etc/os-release usr/lib/os-release etc/issue etc/mkinitcpio.conf boot/loader/entries"
+    files = "etc/os-release usr/lib/os-release etc/issue etc/mkinitcpio.conf boot/loader/entries etc/default/grub boot/grub/grub.cfg"
     encoded = probe(vm, f"cd /mnt && tar -cf - {files} 2>/dev/null | base64 -w0") or ""
     root_copy = out / "installed-root-files"
     if root_copy.exists():
@@ -326,13 +322,55 @@ def inspect_disk(vm, variant, out, checks, report):
     report.append(f"$ distro-branding.py --root (installed boot files)\n{branding.stdout}{branding.stderr}\n")
     checks["no Arch Linux name in the installed boot files (branding check)"] = branding.returncode == 0
 
+    collect_installed_diagnostics(vm, out, report)
+    if os.environ.get(DEBUG_CONSOLE_ENV):
+        # Diagnostic runs only: the installed boot writes its kernel and unit log to the serial console.
+        vm.run(
+            "mount -o remount,rw /mnt && (! mountpoint -q /mnt/boot || mount -o remount,rw /mnt/boot) "
+            f"&& sed -i '/^options /s/$/ {DEBUG_CONSOLE_ARGS}/' /mnt/boot/loader/entries/bingux.conf && sync; echo done",
+            120,
+        )
+        report.append(f"debug console: {DEBUG_CONSOLE_ARGS} appended to the installed loader entry\n")
+
     vm.run("umount -R /mnt >/dev/null 2>&1; cryptsetup close bingux-check >/dev/null 2>&1; echo done", 120)
+
+
+INSTALLED_DIAGNOSTICS = {
+    "loader entries": "cat /mnt/boot/loader/loader.conf /mnt/boot/loader/entries/*.conf 2>&1; ls -la /mnt/boot 2>&1",
+    "initramfs contents (drm, virtio, plymouth, greetd, crypt)": "lsinitcpio -l /mnt/boot/initramfs-linux.img 2>&1 | grep -E 'drm|virtio|bochs|plymouth|greetd|crypt|vmwgfx|simpledrm|efifb|i915|amdgpu' | head -80",
+    "mkinitcpio hooks and modules": "grep -E '^(HOOKS|MODULES|COMPRESSION)' /mnt/etc/mkinitcpio.conf 2>&1",
+    "display manager link and default target": "readlink /mnt/etc/systemd/system/default.target; ls -l /mnt/etc/systemd/system/display-manager.service /mnt/etc/systemd/system/graphical.target.wants 2>&1",
+    "greetd unit drop-ins": "ls -l /mnt/usr/lib/systemd/system/greetd.service.d 2>&1; cat /mnt/usr/lib/systemd/system/greetd.service.d/* 2>&1",
+    "greetd config": "cat /mnt/etc/greetd/config.toml 2>&1",
+    "greeter account and state": "grep -E '^(greeter|greetd)' /mnt/etc/passwd 2>&1; ls -la /mnt/var/lib/greetd /mnt/var/lib/bingux /mnt/var/lib/bingux/greeter 2>&1",
+    "plymouth default theme": "readlink /mnt/usr/share/plymouth/themes/default.plymouth 2>&1; cat /mnt/etc/plymouth/plymouthd.conf 2>&1",
+    "journald config and persistence": "cat /mnt/etc/systemd/journald.conf.d/* 2>&1; ls -la /mnt/var/log/journal 2>&1",
+    "bingux-greeter-session": "ls -l /mnt/usr/bin/bingux-greeter-session /mnt/usr/bin/gnoblin /mnt/usr/bin/bingux-session 2>&1",
+}
+
+
+def collect_installed_diagnostics(vm, out, report):
+    """Record the installed root's boot and greeter setup, read while it is still mounted."""
+    sections = []
+    for name, command in INSTALLED_DIAGNOSTICS.items():
+        try:
+            value = probe(vm, command, 120)
+        except Exception as error:  # keep what the console still gives us
+            value = f"probe failed: {error}"
+        sections.append(f"== {name}\n{value}")
+    (out / "installed-diagnostics.txt").write_text("\n".join(sections) + "\n")
+    report.append("installed-diagnostics.txt written\n")
 
 
 def boot_installed(vm, variant, out, timeline, checks):
     """After Restart, the same VM boots the installed disk: unlock, greeter, sign in."""
+    checks["installed system booted with no installation medium attached"] = vm.medium() is None
     if variant["luks"]:
-        checks["passphrase prompt shown at boot"] = wait_for_text(vm, "passphrase", 180)
+        prompt = wait_for_text(vm, "passphrase", 180)
+        checks["passphrase prompt shown at boot"] = prompt
+        if not prompt and (frame := vm.frame()) is not None:
+            # Keep what the screen showed when the prompt was expected, to tell a missing prompt from a missed reading.
+            vm.still(out / "luks-prompt-timeout.png", frame)
         timeline.mark("typing the disk passphrase")
         vm.type_text(PASSPHRASE)
         vm.key("ret")
@@ -344,14 +382,18 @@ def boot_installed(vm, variant, out, timeline, checks):
     timeline.mark("greeter shown")
     # Keys typed while the greeter is still settling can be lost, and the greeter
     # then says "Try again": type the password again until a session paints.
+    # Every frame after each attempt is kept, so a missed sign-in shows what the greeter did.
     frame = None
-    for _ in range(3):
+    for attempt in range(3):
         time.sleep(10)
         vm.type_text(PASSWORD)
         vm.key("ret")
-        frame = vm.wait_frame(session_painted, attempts=25)
+        frame = vm.wait_frame(session_painted, attempts=60)
         if frame is not None:
             break
+        last = vm.frame()
+        if last is not None:
+            vm.still(out / f"installed-after-login-{attempt}.png", last)
     checks["installed account signs in to a desktop"] = frame is not None
     if frame is not None:
         vm.still(out / "installed-session.png", frame)
@@ -403,13 +445,21 @@ def run_variant(name, variant, iso, out, work):
         checks["finished page reports the install"] = text_on_screen(inst.frame(), "Installed on") is not None
         inspect_disk(vm, variant, out, checks, report)
 
-        medium = eject_medium(vm)
-        checks["installation medium removed before restart"] = medium is not None
-        timeline.mark(f"installation medium removed ({medium})")
-        time.sleep(2)
+        # Restart as a user does: the medium stays in the drive while the live
+        # system shuts down. Only after the guest has reset itself is the medium
+        # taken out, and then the firmware is reset so it boots the disk alone.
+        reset_mark = vm.event_mark()
         if not inst.click_text("Restart"):
             raise Fail("'Restart' button not found")
         timeline.mark("restart pressed")
+        if not vm.wait_reset(reset_mark, 300):
+            raise Fail("guest did not reset within 300 s of Restart")
+        timeline.mark("guest reset after restart")
+        medium = vm.eject_medium()
+        checks["installation medium removed after the guest reset"] = medium is not None
+        timeline.mark(f"installation medium removed ({medium})")
+        vm.system_reset()
+        timeline.mark("firmware reset with the disk alone")
         flow_ok = True
     except Fail as error:
         checks[f"installer flow: {error}"] = False

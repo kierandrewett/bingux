@@ -50,6 +50,10 @@ work belongs in Git history and does not stay here as a second changelog.
 - [ ] Boot the image on real hardware and install there. The installer needs
       UEFI; a BIOS-only machine is not supported yet.
 - [ ] Let `bingux-os-install` pick the disk from a list, and offer encryption.
+- [ ] Ejecting the installation medium while the live session is still shutting down
+      hangs the shutdown: the live root squashfs is read from that device. The installer
+      test keeps the medium attached through Restart and ejects it only after the guest
+      has reset. Future option, not now: evaluate `copytoram` or `rd.live.ram`.
 
 ## Boot and handover baseline
 
