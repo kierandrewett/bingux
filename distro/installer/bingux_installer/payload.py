@@ -70,11 +70,18 @@ def copy_payload(runner: Runner, source: Path, target: Path,
     which file or attribute could not be copied.
     """
     errors: list[str] = []
+    last_percent = -1
 
     def on_line(line: str) -> None:
+        nonlocal last_percent
         match = RSYNC_PERCENT.search(line)
         if match:
-            on_percent(min(100, int(match.group(1))))
+            # rsync repeats the percentage on every progress update, many per second. Forward
+            # only changes: each event is a UI log entry, and a flood starves the UI thread.
+            percent = min(100, int(match.group(1)))
+            if percent != last_percent:
+                last_percent = percent
+                on_percent(percent)
         elif "rsync" in line or "failed" in line or "denied" in line:
             errors.append(line.strip())
 

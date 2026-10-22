@@ -33,3 +33,23 @@ def test_copy_kernel_missing_source_is_payload_failed(tmp_path) -> None:  # noqa
     with pytest.raises(InstallerError) as exc:
         payload.copy_kernel(tmp_path, str(tmp_path / "absent"))
     assert exc.value.code == "payload_failed"
+
+
+
+class _ProgressRunner:
+    """Feeds rsync-style progress2 lines to on_line, as Runner.stream does."""
+
+    def __init__(self, lines: list[str]) -> None:
+        self._lines = lines
+
+    def stream(self, argv, on_line, **kwargs):  # noqa: ANN001, ANN003, ANN201
+        for line in self._lines:
+            on_line(line)
+
+
+def test_copy_payload_reports_only_whole_percent_changes(tmp_path) -> None:  # noqa: ANN001
+    update = "    1,234,567  {pct}%   12.34MB/s    0:00:10 (xfr#{n}, to-chk=0/1)"
+    lines = [update.format(pct=pct, n=n) for pct in (0, 0, 0, 1, 1, 1, 2) for n in range(3)]
+    seen: list[int] = []
+    payload.copy_payload(_ProgressRunner(lines), tmp_path, tmp_path, seen.append)
+    assert seen == [0, 1, 2]
