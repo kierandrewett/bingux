@@ -78,6 +78,9 @@ GREETD_CONFIG = "etc/greetd/config.toml"
 GREETD_PACKAGED = "usr/share/bingux/greeter/greetd.toml"
 PLYMOUTH_HOOK = "usr/lib/initcpio/install/plymouth"
 HOOKS_RE = re.compile(r"^HOOKS=.*$", re.MULTILINE)
+ZRAM_CONF = "etc/systemd/zram-generator.conf"
+TIMESYNCD_UNIT = "systemd-timesyncd.service"
+MODULES_RE = re.compile(r"^MODULES=.*$", re.MULTILINE)
 
 
 # ---- pure renderers -------------------------------------------------------------
@@ -117,6 +120,13 @@ def rewrite_hooks(text: str, hooks: Sequence[str]) -> str:
     line = layout.hooks_line(tuple(hooks))
     if HOOKS_RE.search(text):
         return HOOKS_RE.sub(line, text, count=1)
+    return text.rstrip("\n") + "\n" + line + "\n"
+
+
+def rewrite_modules(text: str, modules: Sequence[str]) -> str:
+    line = layout.modules_line(tuple(modules))
+    if MODULES_RE.search(text):
+        return MODULES_RE.sub(line, text, count=1)
     return text.rstrip("\n") + "\n" + line + "\n"
 
 
@@ -229,6 +239,17 @@ def write_locale(runner: Runner, target: Path, plan: Plan) -> None:
     _write(target / "etc/vconsole.conf", render_vconsole(plan.keymap))
 
 
+def _hash_password(runner: Runner, password: str) -> str:
+    try:
+        digest = runner.run(["openssl", "passwd", "-6", "-stdin"],
+                            stdin=password + "\n").stdout.strip()
+    except CommandError as exc:
+        raise InstallerError("config_failed", "could not hash a password") from exc
+    if not digest:
+        raise InstallerError("config_failed", "password hashing produced no output")
+    return digest
+
+
 def create_users(runner: Runner, target: Path, plan: Plan) -> None:
     secrets = plan.secrets()
     lines = []
@@ -237,16 +258,46 @@ def create_users(runner: Runner, target: Path, plan: Plan) -> None:
         _chroot(runner, target, ["useradd", "-m", "-G", user_groups(user.admin),
                                  "-s", "/bin/bash", "-c", comment, user.name],
                 secrets=secrets)
-        try:
-            digest = runner.run(["openssl", "passwd", "-6", "-stdin"],
-                                stdin=user.password + "\n").stdout.strip()
-        except CommandError as exc:
-            raise InstallerError("config_failed", "could not hash a password") from exc
-        if not digest:
-            raise InstallerError("config_failed", "password hashing produced no output")
-        lines.append(f"{user.name}:{digest}\n")
+        lines.append(f"{user.name}:{_hash_password(runner, user.password)}\n")
+    if plan.root_password is not None:
+        lines.append(f"root:{_hash_password(runner, plan.root_password)}\n")
     _chroot(runner, target, ["chpasswd", "-e"], stdin="".join(lines), secrets=secrets)
-    _chroot(runner, target, ["passwd", "-l", "root"])
+    if plan.root_password is None:
+        _chroot(runner, target, ["passwd", "-l", "root"])
+
+
+def set_ntp(runner: Runner, target: Path, enabled: bool) -> None:
+    verb = "enable" if enabled else "disable"
+    _chroot(runner, target, ["systemctl", verb, TIMESYNCD_UNIT])
+
+
+def create_swapfile(runner: Runner, target: Path, size_bytes: int, filesystem: str) -> None:
+    """Create /swapfile in the target. btrfs needs its own helper: a plain file gets CoW."""
+    path = target / layout.SWAPFILE.lstrip("/")
+    try:
+        if filesystem == "btrfs":
+            runner.run(["btrfs", "filesystem", "mkswapfile", "--size", str(size_bytes), str(path)])
+        else:
+            runner.run(["fallocate", "-l", str(size_bytes), str(path)])
+            os.chmod(path, 0o600)
+            runner.run(["mkswap", str(path)])
+    except CommandError as exc:
+        raise InstallerError("config_failed", "could not create the swap file") from exc
+
+
+def write_swap(runner: Runner, target: Path, plan: Plan) -> None:
+    """zram gets a generator config; file gets /swapfile; partition and none write nothing."""
+    zram = target / ZRAM_CONF
+    if plan.swap == "zram":
+        _write(zram, layout.zram_conf())
+    elif zram.exists() or zram.is_symlink():
+        _remove(zram)
+    if plan.swap == "file":
+        create_swapfile(runner, target, plan.swap_bytes, plan.filesystem)
+
+
+def write_crypttab(target: Path, text: str) -> None:
+    _write(target / "etc/crypttab", text)
 
 
 def write_sudoers(target: Path, plan: Plan) -> None:
@@ -259,5 +310,8 @@ def write_initramfs(runner: Runner, target: Path, plan: Plan) -> None:
     text = conf.read_text(encoding="utf-8") if conf.exists() else ""
     plymouth = (target / PLYMOUTH_HOOK).exists()
     hooks = layout.mkinitcpio_hooks(encrypted=plan.encrypted, plymouth=plymouth)
-    _write(conf, rewrite_hooks(text, hooks))
+    text = rewrite_hooks(text, hooks)
+    if plan.filesystem == "xfs":
+        text = rewrite_modules(text, ("xfs",))
+    _write(conf, text)
     _chroot(runner, target, ["mkinitcpio", "-P"])

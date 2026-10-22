@@ -32,6 +32,8 @@ DISK_BYTES = 10 * 1024**3
 DISK = "/dev/vda"
 USER = "tester"
 USER_PASSWORD = "tester-pass-1"
+ROOT_PASSWORD = "root-pass-456"
+SWAP_BYTES = 2 * 1024**3
 LUKS_PASSPHRASE = "luks-pass-123"
 DEFAULT_OUT = HERE.parents[2] / "out" / "installer-backend" / "matrix"
 DEFAULT_DISK_DIR = Path.home() / ".cache" / "bingux-installer-matrix"
@@ -39,23 +41,31 @@ OVERLAY_LABEL = "BINGUXOV"  # volume id of the installer overlay CD
 OVERLAY_MOUNT = "/mnt/ov"
 OVERLAY_SCRATCH = Path("/tmp") / "bingux-installer-overlay"
 
-# name: (firmware, filesystem, encrypted)
+# name: (firmware, filesystem, encrypted, extra plan fields)
 CASES = {
-    "uefi-ext4": ("uefi", "ext4", False),
-    "uefi-btrfs": ("uefi", "btrfs", False),
-    "uefi-luks-ext4": ("uefi", "ext4", True),
-    "bios-ext4": ("bios", "ext4", False),
-    "bios-btrfs": ("bios", "btrfs", False),
-    "bios-luks-ext4": ("bios", "ext4", True),
+    "uefi-ext4": ("uefi", "ext4", False, {}),
+    "uefi-btrfs": ("uefi", "btrfs", False, {}),
+    "uefi-luks-ext4": ("uefi", "ext4", True, {}),
+    "bios-ext4": ("bios", "ext4", False, {}),
+    "bios-btrfs": ("bios", "btrfs", False, {}),
+    "bios-luks-ext4": ("bios", "ext4", True, {}),
+    # xfs root, timesyncd off, root password set
+    "uefi-xfs": ("uefi", "xfs", False, {"ntp": False, "root_password": ROOT_PASSWORD}),
+    # swap file on ext4, timesyncd on (default), root locked (default)
+    "uefi-ext4-swapfile": ("uefi", "ext4", False, {"swap": "file", "swap_bytes": SWAP_BYTES}),
+    # zram swap on btrfs
+    "uefi-btrfs-zram": ("uefi", "btrfs", False, {"swap": "zram"}),
+    # encrypted swap partition on LUKS root
+    "uefi-luks-ext4-swappart": ("uefi", "ext4", True, {"swap": "partition", "swap_bytes": SWAP_BYTES}),
 }
 REFUSED = {"bios-luks-ext4"}
 
 
-def make_plan(firmware, filesystem, encrypted):
+def make_plan(firmware, filesystem, encrypted, extra=None):
     encryption = {"enabled": encrypted}
     if encrypted:
         encryption["passphrase"] = LUKS_PASSPHRASE
-    return {
+    plan = {
         "version": 2,
         "disk": DISK,
         "confirm_erase": DISK,
@@ -70,6 +80,8 @@ def make_plan(firmware, filesystem, encrypted):
         "users": [{"name": USER, "password": USER_PASSWORD, "admin": True, "full_name": "Tester"}],
         "kernel_args": ["console=ttyS0"],
     }
+    plan.update(extra or {})
+    return plan
 
 ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[()][0-9A-Za-z]|\x1b[=>78]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
 
@@ -124,7 +136,7 @@ def build_overlay(src, scratch):
     return iso
 
 
-def install_phase(vm, checks, name, firmware, filesystem, encrypted, overlay=False):
+def install_phase(vm, checks, name, firmware, filesystem, encrypted, extra, overlay=False):
     """Boot the live ISO, run probe and install. True when the install reports ok."""
     prefix = f"PYTHONPATH={OVERLAY_MOUNT} " if overlay else ""
     if not checks.expect(vm.wait_for_shell(timeout=600), f"{name}: live root shell up"):
@@ -140,7 +152,7 @@ def install_phase(vm, checks, name, firmware, filesystem, encrypted, overlay=Fal
                        "base64 -d > /run/systemd/system/bingux-installer.service.d/overlay.conf && "
                        "systemctl daemon-reload && systemctl restart bingux-installer.service", timeout=120)
         checks.expect(rc == 0, f"{name}: daemon restarted on the overlay", f"rc={rc}")
-    payload = base64.b64encode(json.dumps(make_plan(firmware, filesystem, encrypted)).encode()).decode()
+    payload = base64.b64encode(json.dumps(make_plan(firmware, filesystem, encrypted, extra)).encode()).decode()
     rc, _ = vm.run(f"printf %s {payload} | base64 -d > /tmp/plan.json", timeout=60)
     checks.expect(rc == 0, f"{name}: plan written to the guest", f"rc={rc}")
 
@@ -187,7 +199,33 @@ def login_shell(vm, timeout):
     return vm.wait_for_shell(timeout=300, boot_delay=0)
 
 
-def boot_phase(vm, checks, name, firmware, filesystem, encrypted, out):
+def check_features(vm, checks, name, encrypted, extra):
+    """Options beyond the base install: ntp, root password, swap kind."""
+    rc, ntp = vm.run("systemctl is-enabled systemd-timesyncd.service; true", timeout=60)
+    want_ntp = "enabled" if extra.get("ntp", True) else "disabled"
+    checks.expect(ntp.strip().splitlines()[-1:] == [want_ntp], f"{name}: timesyncd is {want_ntp}",
+                  f"out={ntp!r}")
+    rc, root_state = vm.run("passwd -S root", timeout=60)
+    want_root = "P" if extra.get("root_password") else "L"
+    fields = root_state.split()
+    checks.expect(rc == 0 and len(fields) > 1 and fields[1] == want_root,
+                  f"{name}: root password {'set' if want_root == 'P' else 'locked'}",
+                  f"rc={rc} out={root_state!r}")
+    swap = extra.get("swap", "none")
+    if swap == "none":
+        return
+    if swap == "file":
+        want = "/swapfile"
+    elif swap == "zram":
+        want = "/dev/zram0"
+    else:
+        want = "/dev/mapper/bingux-swap" if encrypted else f"{DISK}2"
+    rc, active = vm.run("swapon --noheadings --show=NAME", timeout=60)
+    checks.expect(rc == 0 and want in active.split(), f"{name}: {swap} swap is active",
+                  f"rc={rc} active={active!r}")
+
+
+def boot_phase(vm, checks, name, firmware, filesystem, encrypted, extra, out):
     """Boot the installed disk alone and check the installed system."""
     if encrypted:
         # Must be called right after start(): the prompt is matched from this point on.
@@ -220,6 +258,8 @@ def boot_phase(vm, checks, name, firmware, filesystem, encrypted, out):
         rc, types = vm.run(f"lsblk -rn -o TYPE {DISK}", timeout=60)
         checks.expect(rc == 0 and "crypt" in types.split(), f"{name}: root sits on LUKS", f"out={types!r}")
 
+    check_features(vm, checks, name, encrypted, extra)
+
     state = "unknown"
     for _ in range(24):
         rc, state_out = vm.run("systemctl is-active greetd", timeout=60)
@@ -234,7 +274,7 @@ def boot_phase(vm, checks, name, firmware, filesystem, encrypted, out):
 
 
 def run_case(name, iso, out_root, disk_dir, checks, cdrom=None):
-    firmware, filesystem, encrypted = CASES[name]
+    firmware, filesystem, encrypted, extra = CASES[name]
     out = out_root / name
     disk_dir.mkdir(parents=True, exist_ok=True)
     disk = disk_dir / f"{name}.qcow2"
@@ -243,7 +283,7 @@ def run_case(name, iso, out_root, disk_dir, checks, cdrom=None):
     installed = False
     with LiveVm(out / "install") as vm:
         vm.start(iso=iso, disks=[(disk, DISK_BYTES)], firmware=firmware, cdrom=cdrom)
-        installed = install_phase(GuestVm(vm), checks, name, firmware, filesystem, encrypted,
+        installed = install_phase(GuestVm(vm), checks, name, firmware, filesystem, encrypted, extra,
                                   overlay=cdrom is not None)
         if installed:
             vm.run("sync", timeout=120)
@@ -252,7 +292,7 @@ def run_case(name, iso, out_root, disk_dir, checks, cdrom=None):
     if installed:
         with LiveVm(out / "boot") as vm:
             vm.start(iso=None, disks=[(disk, DISK_BYTES)], firmware=firmware)
-            boot_phase(GuestVm(vm), checks, name, firmware, filesystem, encrypted, out)
+            boot_phase(GuestVm(vm), checks, name, firmware, filesystem, encrypted, extra, out)
             vm.poweroff()
     disk.unlink(missing_ok=True)
 

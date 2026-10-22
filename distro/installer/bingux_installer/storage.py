@@ -21,6 +21,7 @@ class StorageLayout:
     luks_path: str | None  # partition carrying the LUKS header, when encrypted
     fs_path: str  # device the root filesystem lives on (mapper device or btrfs volume)
     luks_name: str | None  # open LUKS mapper after commit, e.g. luks-<uuid>; None when unencrypted
+    swap_path: str | None  # swap partition, when one was created
 
 
 def commit_layout(
@@ -31,6 +32,7 @@ def commit_layout(
     filesystem: str,
     encrypted: bool,
     passphrase: str,
+    swap_partition_bytes: int = 0,
 ) -> StorageLayout:  # pragma: no cover - needs python-blivet and a real disk
     """Initialise the GPT, create partitions, LUKS and filesystems. Destructive."""
     try:
@@ -43,7 +45,8 @@ def commit_layout(
     except ImportError as exc:
         raise InstallerError("missing_tool", "python-blivet is not importable") from exc
 
-    specs = {s.role: s for s in layout.partition_layout(uefi=uefi, size_bytes=size_bytes)}
+    specs = {s.role: s for s in layout.partition_layout(
+        uefi=uefi, size_bytes=size_bytes, swap_partition_bytes=swap_partition_bytes)}
     try:
         b = Blivet()
         b.reset()
@@ -63,6 +66,10 @@ def commit_layout(
             boot = b.new_partition(
                 fmt_type="biosboot", size=Size(specs["bios_boot"].size_bytes), parents=[dev])
         b.create_device(boot)
+        if specs.get("swap") is not None:
+            swap = b.new_partition(fmt_type="swap", size=Size(specs["swap"].size_bytes),
+                                   parents=[dev])
+            b.create_device(swap)
 
         root_kwargs: dict = {}
         if encrypted:
@@ -92,7 +99,8 @@ def commit_layout(
                 b.create_device(sub)
             fs_device = volume
         else:
-            b.format_device(container, get_format("ext4", device=container.path,
+            fs_type = "xfs" if filesystem == "xfs" else "ext4"
+            b.format_device(container, get_format(fs_type, device=container.path,
                                                   label=layout.ROOT_LABEL))
             fs_device = container
 
@@ -104,11 +112,15 @@ def commit_layout(
     except Exception as exc:  # blivet raises many exception types; keep the message only
         raise InstallerError("storage_failed", f"partitioning failed: {exc}") from exc
 
+    swap_path = None
+    if specs.get("swap") is not None:
+        swap_path = layout.partition_path(disk, specs["swap"].index)
     return StorageLayout(
         esp_path=layout.partition_path(disk, 1) if uefi else None,
-        luks_path=layout.partition_path(disk, 2) if encrypted else None,
+        luks_path=layout.partition_path(disk, specs["root"].index) if encrypted else None,
         fs_path=fs_device.path,
         luks_name=container.name if encrypted else None,
+        swap_path=swap_path,
     )
 
 

@@ -21,7 +21,7 @@ from .runner import CommandError, Runner
 LIVE_BOOTMNT = "/run/archiso/bootmnt"
 PROBE_ROOT = Path("/run/bingux-installer/probe")
 EFI_SYSFS = "/sys/firmware/efi"
-BASE_TOOLS = ("sgdisk", "mkfs.fat", "mkfs.ext4", "mkfs.btrfs", "rsync", "openssl",
+BASE_TOOLS = ("sgdisk", "mkfs.fat", "mkfs.ext4", "mkfs.btrfs", "mkfs.xfs", "rsync", "openssl",
               "mkinitcpio", "cryptsetup", "mount", "umount", "chroot")
 UEFI_TOOLS = ("bootctl",)
 BIOS_TOOLS = ("grub-install", "grub-mkconfig")

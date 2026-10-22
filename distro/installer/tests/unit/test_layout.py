@@ -109,3 +109,49 @@ def test_boot_text_renderers() -> None:
     assert layout.loader_entry(cmd).endswith(f"options {cmd}\n")
     assert 'GRUB_DISTRIBUTOR="Bingux OS"' in layout.grub_defaults(cmdline_text=cmd)
     assert f'GRUB_CMDLINE_LINUX_DEFAULT="{cmd}"' in layout.grub_defaults(cmdline_text=cmd)
+
+
+def test_swap_partition_sits_between_boot_and_root() -> None:
+    parts = layout.partition_layout(uefi=True, size_bytes=16 * GIB, swap_partition_bytes=2 * GIB)
+    assert [(p.index, p.role) for p in parts] == [(1, "esp"), (2, "swap"), (3, "root")]
+    assert parts[1].size_bytes == 2 * GIB and parts[2].size_bytes is None
+    bios = layout.partition_layout(uefi=False, size_bytes=16 * GIB, swap_partition_bytes=2 * GIB)
+    assert [(p.index, p.role) for p in bios] == [(1, "bios_boot"), (2, "swap"), (3, "root")]
+
+
+def test_no_swap_partition_by_default() -> None:
+    parts = layout.partition_layout(uefi=True, size_bytes=16 * GIB)
+    assert all(p.role != "swap" for p in parts)
+
+
+def test_fstab_xfs_root() -> None:
+    text = layout.fstab(root_fs_uuid=ROOT_UUID, filesystem="xfs", esp_uuid=ESP_UUID)
+    assert f"UUID={ROOT_UUID}\t/\txfs\tdefaults\t0\t0" in text
+
+
+def test_fstab_swapfile_and_encrypted_swap_entries() -> None:
+    text = layout.fstab(root_fs_uuid=ROOT_UUID, filesystem="ext4", esp_uuid=ESP_UUID,
+                        swap_source=layout.SWAPFILE)
+    assert "/swapfile\tnone\tswap\tdefaults\t0\t0" in text
+    text = layout.fstab(root_fs_uuid=ROOT_UUID, filesystem="ext4", esp_uuid=ESP_UUID,
+                        swap_source=f"/dev/mapper/{layout.SWAP_MAPPER}")
+    assert f"/dev/mapper/{layout.SWAP_MAPPER}\tnone\tswap\tdefaults\t0\t0" in text
+
+
+def test_crypttab_random_key_swap() -> None:
+    text = layout.crypttab(swap_partuuid="1234-abcd")
+    assert text.splitlines()[1] == (
+        f"{layout.SWAP_MAPPER}\tPARTUUID=1234-abcd\t/dev/urandom\t"
+        "swap,cipher=aes-xts-plain64,size=256")
+
+
+def test_zram_conf_is_half_ram_capped_at_4gib() -> None:
+    text = layout.zram_conf()
+    assert "[zram0]" in text
+    assert "zram-size = min(ram / 2, 4096)" in text
+    assert "compression-algorithm = zstd" in text
+
+
+def test_modules_line_renders_mkinitcpio_modules() -> None:
+    assert layout.modules_line(()) == "MODULES=()"
+    assert layout.modules_line(("xfs",)) == "MODULES=(xfs)"

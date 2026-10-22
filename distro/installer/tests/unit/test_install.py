@@ -62,27 +62,44 @@ def test_probe_is_refused_while_install_runs() -> None:
     assert exc.value.code == "busy"
 
 
-@pytest.mark.parametrize("changes", [
-    {"storage_mode": "free_space"},
-    {"storage_mode": "alongside"},
-    {"storage_mode": "manual"},
-    {"filesystem": "xfs"},
-    {"swap": "zram"},
-    {"ntp": False},
-])
-def test_unimplemented_plan_features_are_refused(changes: dict[str, object]) -> None:
-    from dataclasses import replace
-
-    from bingux_installer.install import _refuse_unimplemented
+def _base_plan():  # noqa: ANN202
     from bingux_installer.plan import validate_plan
 
-    plan = validate_plan(
+    return validate_plan(
         {"version": 2, "disk": "/dev/vda", "confirm_erase": "/dev/vda",
          "timezone": "Europe/London",
          "locale": "en_GB", "keymap": "uk", "hostname": "bingux",
          "users": [{"name": "kieran", "password": "correct horse", "admin": True}]},
         booted_firmware="uefi", timezone_exists=lambda _: True, locale_supported=lambda _: True)
-    _refuse_unimplemented(plan)
+
+
+@pytest.mark.parametrize("changes", [
+    {"storage_mode": "free_space"},
+    {"storage_mode": "alongside"},
+    {"storage_mode": "manual"},
+])
+def test_unimplemented_plan_features_are_refused(changes: dict[str, object]) -> None:
+    from dataclasses import replace
+
+    from bingux_installer.install import _refuse_unimplemented
+
+    _refuse_unimplemented(_base_plan())
     with pytest.raises(InstallerError) as exc:
-        _refuse_unimplemented(replace(plan, **changes))
+        _refuse_unimplemented(replace(_base_plan(), **changes))
     assert exc.value.code == "unsupported"
+
+
+@pytest.mark.parametrize("changes", [
+    {"filesystem": "xfs"},
+    {"swap": "zram"},
+    {"swap": "file", "swap_bytes": 2 * 1024 ** 3},
+    {"swap": "partition", "swap_bytes": 2 * 1024 ** 3},
+    {"ntp": False},
+    {"root_password": "root pass word"},
+])
+def test_implemented_plan_features_are_accepted(changes: dict[str, object]) -> None:
+    from dataclasses import replace
+
+    from bingux_installer.install import _refuse_unimplemented
+
+    _refuse_unimplemented(replace(_base_plan(), **changes))

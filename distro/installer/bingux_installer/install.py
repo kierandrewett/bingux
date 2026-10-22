@@ -228,12 +228,6 @@ def _refuse_unimplemented(plan: Plan) -> None:
     """
     if plan.storage_mode != "erase":
         raise InstallerError("unsupported", f"storage mode {plan.storage_mode} is not implemented yet")
-    if plan.filesystem == "xfs":
-        raise InstallerError("unsupported", "xfs is not implemented yet")
-    if plan.swap != "none":
-        raise InstallerError("unsupported", f"swap {plan.swap} is not implemented yet")
-    if not plan.ntp:
-        raise InstallerError("unsupported", "ntp false is not implemented yet")
 
 
 def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
@@ -278,11 +272,13 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
 
         env.state.begin_commit()
         phase("partition", None, f"erasing and partitioning {plan.disk}")
+        swap_partition_bytes = plan.swap_bytes if plan.swap == "partition" else 0
         lay = _guard(
             "storage_failed", storage.commit_layout,
             disk=plan.disk, size_bytes=disk.size_bytes, uefi=plan.uefi,
             filesystem=plan.filesystem, encrypted=plan.encrypted,
             passphrase=plan.encryption.passphrase,
+            swap_partition_bytes=swap_partition_bytes,
         )
         mounts.luks_name = lay.luks_name
         if plan.encrypted and lay.luks_path is None:
@@ -294,6 +290,21 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
                      if plan.encrypted else None)
         esp_uuid = (_guard("storage_failed", storage.blkid_value, runner, lay.esp_path, "UUID")
                     if plan.uefi else None)
+        if plan.swap == "partition" and lay.swap_path is None:
+            raise InstallerError("storage_failed", "swap partition was not created")
+        swap_source = None
+        crypttab_text = None
+        if plan.swap == "file":
+            swap_source = layout.SWAPFILE
+        elif plan.swap == "partition" and plan.encrypted:
+            swap_source = f"/dev/mapper/{layout.SWAP_MAPPER}"
+            swap_partuuid = _guard("storage_failed", storage.blkid_value, runner,
+                                   lay.swap_path, "PARTUUID")
+            crypttab_text = layout.crypttab(swap_partuuid=swap_partuuid)
+        elif plan.swap == "partition":
+            swap_uuid = _guard("storage_failed", storage.blkid_value, runner,
+                               lay.swap_path, "UUID")
+            swap_source = f"UUID={swap_uuid}"
 
         phase("mount", None, "mounting the target")
         _guard("payload_failed", payload.mount_target, runner, lay, env.target,
@@ -314,9 +325,14 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
         _guard("config_failed", configure.strip_live_and_packages, runner, env.target)
 
         phase("configure", None, "configuring the system")
-        fstab = layout.fstab(root_fs_uuid=root_uuid, filesystem=plan.filesystem, esp_uuid=esp_uuid)
+        fstab = layout.fstab(root_fs_uuid=root_uuid, filesystem=plan.filesystem, esp_uuid=esp_uuid,
+                             swap_source=swap_source)
         _guard("config_failed", configure.write_identity, env.target, plan, fstab_text=fstab)
         _guard("config_failed", configure.write_locale, runner, env.target, plan)
+        _guard("config_failed", configure.set_ntp, runner, env.target, plan.ntp)
+        _guard("config_failed", configure.write_swap, runner, env.target, plan)
+        if crypttab_text is not None:
+            _guard("config_failed", configure.write_crypttab, env.target, crypttab_text)
         _guard("config_failed", configure.create_users, runner, env.target, plan)
         _guard("config_failed", configure.write_sudoers, env.target, plan)
         _guard("config_failed", configure.write_initramfs, runner, env.target, plan)

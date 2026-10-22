@@ -20,6 +20,7 @@ dosfstools
 e2fsprogs
 btrfs-progs
 xfsprogs
+zram-generator
 f2fs-tools
 gptfdisk
 parted

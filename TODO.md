@@ -262,3 +262,14 @@ work belongs in Git history and does not stay here as a second changelog.
 - [x] Keep extension documentation separate from shell implementation details.
 - [x] Add a short troubleshooting page for Qt, layer-shell and helper sockets.
 - [x] Add a contributor guide with formatting, tests and package checks.
+
+## Installer backend features (plan schema v2)
+
+- [x] F1 storage and system options: xfs root, `ntp`, `root_password`, swap file, zram and swap
+      partition (encrypted swap via crypttab). Unit tests in `distro/installer/tests/unit`; matrix
+      cases `uefi-xfs`, `uefi-ext4-swapfile`, `uefi-btrfs-zram`, `uefi-luks-ext4-swappart` added.
+      Boot-to-greeter VM run pending: the ISO 48ef0dc predates schema v2, so it needs a rebuild.
+- [ ] F2 BIOS with LUKS2 root (GRUB, unencrypted `/boot`).
+- [ ] F3 autologin via greetd `initial_session` (installed config, user-disableable).
+- [ ] F4 `free_space` and `alongside` (blivet shrink: ext4, btrfs, NTFS; os-prober and systemd-boot entries).
+- [ ] F5 `manual` partitioning (explicit partition list, validated server-side).

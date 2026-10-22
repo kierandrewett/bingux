@@ -70,7 +70,7 @@ def test_detect_firmware_checks_efi_directory(tmp_path: Path) -> None:
 
 
 def test_missing_tools_reports_absent_uefi_tools_and_blivet() -> None:
-    present = {"sgdisk", "mkfs.fat", "mkfs.ext4", "mkfs.btrfs", "rsync", "openssl",
+    present = {"sgdisk", "mkfs.fat", "mkfs.ext4", "mkfs.btrfs", "mkfs.xfs", "rsync", "openssl",
                "cryptsetup", "bootctl", "mkinitcpio"}
     missing = probe.missing_tools(firmware="uefi", which=lambda n: "/x" if n in present else None,
                                   blivet_available=False)

@@ -22,6 +22,25 @@ autostarts `bingux-installer-ui`) or the normal live desktop.
 
 `tests/live-session.test.py` runs the loop and switch against a fake compositor.
 
+## Status
+
+Implemented (plan schema v2, covered by unit tests and the install matrix):
+
+- Filesystems: ext4, btrfs and xfs for the root (`filesystem`). xfs loads the `xfs` module into
+  the initramfs.
+- Storage mode `erase` on UEFI and BIOS, unencrypted and LUKS2 (UEFI only; see Planned).
+- `ntp`: `false` disables `systemd-timesyncd`.
+- `root_password`: a string sets the root password; `null` locks the root account.
+- `swap`: `zram` (zram-generator), `file` (`/swapfile`), `partition` (swap partition; encrypted
+  swap uses a random-key crypttab entry when the root is encrypted). `none` writes no swap.
+
+Planned (validated by the schema but refused with `unsupported` until the feature lands):
+
+- `storage.mode` `free_space`, `alongside` (shrink ext4, btrfs and NTFS) and `manual`.
+- `autologin`: greetd `initial_session` for the first user, with a setting to turn it off.
+- BIOS with LUKS2 root: the layout and GRUB notes below describe the target design.
+- Dual-boot entries (os-prober for GRUB; the shared ESP for systemd-boot).
+
 ## Failure list
 
 Every error code the daemon can return. "Left on disk" describes the state after the error.
@@ -34,11 +53,13 @@ unmount the payload and close the LUKS mapper before replying.
 | `not_permitted` | Peer uid is not 0 and is not in group `bingux-install` (or the group does not exist) | Nothing | `peer is not root or a member of bingux-install` |
 | `busy` | `install` or `probe` while another install runs (probe mounts partitions read-only, so it is refused too) | Nothing; the running install continues | `another installation is already running` |
 | `invalid_plan` | Any plan schema rule fails, unknown top-level key, `confirm_erase` mismatch, firmware not matching the booted firmware | Nothing | `invalid plan: <field>: <rule>` |
-| `unsupported` | `encryption.enabled` with BIOS firmware | Nothing | `encryption is not supported with BIOS firmware` |
+| `unsupported` | A plan feature that is validated but not implemented yet (`free_space`, `alongside`, `manual`, `autologin`, BIOS with LUKS2). Planned: a filesystem that cannot be used for the requested operation (for example `alongside` on an XFS partition) | Nothing | `<feature> is not implemented yet`; planned: `<fs> cannot be shrunk`, `<path> is not a GPT disk` |
+| `no_free_space` (planned) | `free_space`, `alongside` or manual `create` needs a region larger than the unallocated space | Nothing | `no unallocated region of at least <n> bytes on <path>` |
+| `shrink_failed` (planned) | Filesystem shrink or the partition resize failed. The shrink runs before the partition table is written | Filesystem may be smaller than its partition; the partition table is unchanged. Data is intact; re-run with a size from the probe | `shrink_failed: <tool> failed: <stderr tail>` |
 | `disk_not_found` | `disk` is not a whole-disk block device in the probe, or blivet does not see it | Nothing | `no disk <path> was found`, `blivet does not see <path>` |
 | `disk_is_live_medium` | `disk` holds the live ISO | Nothing | `<path> is the live medium` |
 | `disk_too_small` | Disk is under 8 GiB | Nothing | `disk is <n> bytes; at least 8589934592 bytes (8 GiB) is required` |
-| `other_os_present` | Probe found another OS on the disk and `other_os` is `refuse` | Nothing | `<path> holds <os list>; set other_os to allow to erase it` |
+| `other_os_present` | Probe found another OS on the disk and `other_os` is `refuse` (`erase` only) | Nothing | `<path> holds <os list>; set other_os to allow to erase it` |
 | `missing_tool` | A tool the install needs is not on `PATH` (checked before any write) | Nothing | `missing tools: <names>` |
 | `cancelled` | Cancel accepted before the commit point; checked between phases | Nothing (no write has happened) | `install cancelled before the disk was modified` |
 | `cancel_refused_after_commit` | `cancel` after the commit point | Install continues | `the disk is already being modified; cancel is refused` |
@@ -71,7 +92,7 @@ Requests:
 
 - `{"op":"probe"}`: firmware, disks, missing tools. Refused with `busy` during an install.
 - `{"op":"version"}`: `{"installer_version":"0.1.0","protocol":1}`.
-- `{"op":"install","plan":{...}}`: plan schema v1 below.
+- `{"op":"install","plan":{...}}`: plan schema v2 below.
 - `{"op":"cancel"}`: sent on a separate connection. Sets the cancel flag of the running install.
 
 Events (not terminal):
@@ -94,42 +115,79 @@ Install result data: `{"disk":...,"firmware":...,"filesystem":...}`. The daemon 
 The client CLI prints progress to stderr. `--json` prints the terminal line verbatim to stdout.
 Exit status: 0 on `result ok`, 1 on a server error or when the daemon cannot be reached, 2 on usage errors (bad arguments, unreadable or invalid plan file).
 
-## Plan schema v1
+## Plan schema v2
 
-A JSON object. Unknown top-level keys are refused (`invalid_plan`).
+A JSON object. Unknown top-level keys are refused (`invalid_plan`). Schema v1 is refused: `version`
+must be `2`.
 
-- `version`: `1` (required).
+- `version`: `2` (required).
 - `disk`: whole-disk block device, `/dev/...` (required). Must not be the live medium.
-- `confirm_erase`: must equal `disk` exactly (required). Everything on the disk is destroyed.
+- `confirm_erase`: must equal `disk` exactly. Required when `storage.mode` is `erase` or `manual`
+  (both may destroy data on the disk). Refused otherwise.
 - `firmware`: `"auto"` (default), `"uefi"` or `"bios"`. Must match the booted firmware unless `auto`.
-- `filesystem`: `"ext4"` (default) or `"btrfs"`. Btrfs creates subvolumes `@` (mounted at `/`) and `@home` (mounted at `/home`).
-- `encryption`: `{"enabled": false}` (default), or `{"enabled": true, "passphrase": "<8+ chars>"}` for LUKS2 around the root partition. Refused with `unsupported` under BIOS.
-- `other_os`: `"refuse"` (default) or `"allow"`.
+- `storage`: object (default `{"mode": "erase"}`). `mode` is one of (planned modes are refused
+  with `unsupported` until implemented):
+  - `erase`: wipe the disk and create the Bingux layout (below). `other_os` applies.
+  - `free_space` (planned): keep every existing partition. Create the Bingux partitions in the largest
+    unallocated region of a GPT disk. An existing ESP (UEFI) or BIOS boot partition is reused when
+    present; otherwise one is created. Refused with `no_free_space` when no region is large enough.
+  - `alongside` (planned): as `free_space`, after shrinking one existing partition: `"shrink": {"partition":
+    "/dev/sda3", "size_bytes": <n>}`. Supported filesystems: ext4, btrfs and NTFS (not mounted).
+    `size_bytes` must be at least the probe's `min_bytes` for that partition and smaller than its
+    current size.
+  - `manual` (planned): `"partitions": [...]`, an explicit list. Each entry is `{"device", "action", "role"}`
+    plus `"size_bytes"` for `create` and `"fs"` for `format`/`create` (see below). Validated before any write:
+    exactly one `root`; `esp` required under UEFI and `bios_boot` required under BIOS (both
+    `reuse` or `create`); `boot` required with LUKS under BIOS; `reuse` is allowed only for `esp`
+    and `home`; `create` sizes must fit the free space on the disk. `device` must be a partition
+    of `disk`.
+    - `action`: `reuse` (mount as-is, no mkfs), `format` (mkfs, destroys contents), `create` (new
+      partition in free space, then mkfs).
+    - `role`: `esp`, `bios_boot`, `boot`, `root`, `home`, `swap`.
+    - `fs`: `ext4`, `btrfs`, `xfs`, `vfat` (esp only), or `swap` (swap role only).
+- `filesystem`: `"ext4"` (default), `"btrfs"` or `"xfs"` for the root. Btrfs creates subvolumes `@`
+  (mounted at `/`) and `@home` (mounted at `/home`). XFS cannot be shrunk, so it cannot be used with
+  `alongside` on an existing XFS partition (planned with `alongside`).
+- `encryption`: `{"enabled": false}` (default), or `{"enabled": true, "passphrase": "<8+ chars>"}`.
+  LUKS2 wraps the root under both firmwares. See the BIOS notes in the layout section.
+- `swap`: `"none"` (default), `"zram"`, `"file"` or `"partition"`. `file` and `partition` take
+  `"swap_bytes"` (1 GiB to 64 GiB). In `erase`, `free_space` and `alongside` a `partition` swap is
+  created with that size. In `manual` the `swap` role partition is used and `swap_bytes` is refused.
+  `file` lives on the root filesystem.
+- `other_os`: `"refuse"` (default) or `"allow"`. Only meaningful for `storage.mode` `erase`.
 - `hostname`: RFC 1123 label, 1-63 characters.
 - `timezone`: `"Region/City"`, must exist under `/usr/share/zoneinfo`.
 - `locale`: `^[A-Za-z]{2,3}_[A-Za-z]{2}(\.UTF-8)?$`, must be listed in `/usr/share/i18n/SUPPORTED`.
 - `keymap`: `^[A-Za-z0-9_-]{1,64}$` (console keymap name).
+- `ntp`: `true` (default) enables `systemd-timesyncd`; `false` disables it.
 - `users`: non-empty list of `{"name","password","admin","full_name"}`. `name` matches `^[a-z_][a-z0-9_-]{0,31}$` and is not `root`. `password` is 8+ characters with no control characters. `full_name` is optional, at most 128 characters, with no control characters, `:` or `,`.
+- `root_password`: `null` (default, the root account is locked) or a string of 8+ characters with no control characters.
+- `autologin` (planned): `null` (default) or the name of a user in `users`. The greetd `initial_session` logs that user straight into the desktop session at boot; the greeter still serves every later login. Refused with `unsupported` until implemented.
 - `kernel_args`: optional list of strings, each matching `^[A-Za-z0-9_.=,:/+-]{1,200}$`. Refused if an argument starts with `root=`, `init=`, `rd.luks.` or `rootflags=`.
 
-The root account is always locked. Passwords are hashed with `openssl passwd -6 -stdin` and never
-appear on a command line or in a log.
+Passwords (`users`, `root_password`) are hashed with `openssl passwd -6 -stdin` and never appear on a
+command line or in a log.
 
-Example:
+Example (erase, btrfs with LUKS, zram):
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "disk": "/dev/vda",
   "confirm_erase": "/dev/vda",
+  "storage": {"mode": "erase"},
   "firmware": "auto",
   "filesystem": "btrfs",
-  "encryption": {"enabled": false},
+  "encryption": {"enabled": true, "passphrase": "correct horse battery"},
+  "swap": "zram",
   "other_os": "refuse",
   "hostname": "bingux-box",
   "timezone": "Europe/London",
   "locale": "en_GB.UTF-8",
   "keymap": "uk",
+  "ntp": true,
+  "root_password": null,
+  "autologin": null,
   "users": [
     {"name": "kieran", "password": "correct horse", "admin": true, "full_name": "Kieran"}
   ],
@@ -139,20 +197,31 @@ Example:
 
 ## Partition and boot layout
 
-GPT, whole disk, always.
+GPT, always. In `erase` mode the disk is repartitioned from scratch; in `free_space` and `alongside`
+the Bingux partitions are created in unallocated space and existing partitions are kept.
 
-- UEFI: p1 ESP, FAT32, 512 MiB, label `BINGUX_ESP`, mounted at `/boot` (`umask=0077`); p2 root for the rest.
-- BIOS: p1 BIOS boot, 1 MiB, flag `bios_grub`; p2 root for the rest. `/boot` lives on root.
-- Root: ext4 or btrfs, label `BINGUX_ROOT`. With encryption, LUKS2 on p2 with mapper name `bingux-root` and the filesystem inside it.
-- Minimum disk size 8 GiB.
-- No swap, no LVM, no RAID.
+- UEFI: ESP, FAT32, 512 MiB, label `BINGUX_ESP`, mounted at `/boot` (`umask=0077`); root for the rest.
+- BIOS, unencrypted: BIOS boot, 1 MiB, flag `bios_grub`; root for the rest. `/boot` lives on root.
+- BIOS, encrypted (planned): BIOS boot, 1 MiB; `/boot` ext4, 1 GiB, unencrypted, mounted at `/boot`; LUKS root
+  for the rest. Only the kernel, initramfs and GRUB live on `/boot`. GRUB then needs no
+  `cryptodisk` module and no LUKS2 PBKDF support, and the passphrase is prompted once, by the
+  initramfs. The UEFI ESP is unencrypted for the same reason.
+- Root: ext4, btrfs or xfs, label `BINGUX_ROOT`. With encryption, LUKS2 with mapper name
+  `bingux-root` and the filesystem inside it.
+- Swap: `zram` writes `/etc/systemd/zram-generator.conf` (`zram-size = min(ram / 2, 4096)`,
+  `compression-algorithm = zstd`). `file` creates `/swapfile` on the root filesystem (on btrfs with
+  `btrfs filesystem mkswapfile`). `partition` uses a swap partition.
+- Minimum disk size 8 GiB. No LVM, no RAID.
 
 Kernel command line: `rw`, then the root argument (`root=UUID=<fs>`, or with LUKS
 `rd.luks.name=<luks-uuid>=bingux-root root=/dev/mapper/bingux-root`), `rootflags=subvol=@` on btrfs,
 then `splash quiet loglevel=3 rd.udev.log_level=3 vt.global_cursor_default=0`, then `kernel_args`.
 
-Bootloader: UEFI uses `bootctl install --esp-path=/boot` with `loader/loader.conf` and an entry
-`bingux.conf`. BIOS uses GRUB (`grub-install --target=i386-pc --recheck`, `grub-mkconfig`).
+Bootloader (dual-boot entries are planned; see Status): UEFI uses `bootctl install --esp-path=/boot` with `loader/loader.conf` and an entry
+`bingux.conf`. systemd-boot lists a Windows Boot Manager on the same ESP automatically, so a shared
+ESP (`free_space`, `alongside`) gives a dual-boot menu with no extra entry. BIOS uses GRUB
+(`grub-install --target=i386-pc --recheck`, `grub-mkconfig`) with `GRUB_DISABLE_OS_PROBER=false`,
+so `os-prober` adds other OSes to the menu.
 
 Initramfs: systemd-based hooks (`base systemd autodetect microcode modconf kms [plymouth] keyboard
 sd-vconsole block [sd-encrypt] filesystems fsck`), built with `mkinitcpio -P` in the target.
@@ -168,6 +237,9 @@ sd-vconsole block [sd-encrypt] filesystems fsck`), built with `mkinitcpio -P` in
   checks the root filesystem, LUKS (encrypted cases), the created user in `wheel`, and `greetd` active,
   with a greeter screenshot. Cases: `uefi-ext4`, `uefi-btrfs`, `uefi-luks-ext4`, `bios-ext4`,
   `bios-btrfs`, and `bios-luks-ext4`, which must be refused with `unsupported` and leave the disk blank.
+  Feature cases: `uefi-xfs` (xfs root, `ntp` false, root password set), `uefi-ext4-swapfile`,
+  `uefi-btrfs-zram`, and `uefi-luks-ext4-swappart` (encrypted swap partition). Feature checks read
+  `systemd-timesyncd` enablement, `passwd -S root`, and `swapon` output.
 - Artifacts: `distro/out/installer-backend/matrix/<case>/{install,boot}/` (serial transcript, command
   log, screenshots) and `distro/out/installer-backend/matrix/<case>/results.json`. Exit status is 0 only
   when every case passes.

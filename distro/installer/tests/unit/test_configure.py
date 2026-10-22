@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from bingux_installer import configure
+from bingux_installer import configure, layout
 
 
 def test_enable_locale_gen_uncomments_existing_line() -> None:
@@ -54,3 +54,112 @@ def test_restore_greeter_config_fails_without_packaged_file(tmp_path) -> None:
 
     with pytest.raises(InstallerError):
         configure.restore_greeter_config(tmp_path)
+
+
+def test_rewrite_modules_replaces_or_appends() -> None:
+    assert configure.rewrite_modules("MODULES=()\nHOOKS=(base)\n", ("xfs",)) == (
+        "MODULES=(xfs)\nHOOKS=(base)\n")
+    assert configure.rewrite_modules("HOOKS=(base)\n", ("xfs",)) == "HOOKS=(base)\nMODULES=(xfs)\n"
+
+
+class RecordingRunner:
+    """Records argv and stdin; returns a fixed hash for openssl and empty output otherwise."""
+
+    def __init__(self, on_run=None) -> None:  # noqa: ANN001
+        self.calls: list[tuple[list[str], str | None]] = []
+        self.on_run = on_run
+
+    def run(self, argv, *, check=True, stdin=None):  # noqa: ANN001, ANN201
+        from bingux_installer.runner import CmdResult
+
+        self.calls.append((list(argv), stdin))
+        if self.on_run is not None:
+            self.on_run(argv)
+        digest = "$6$fake$hash" if argv[:2] == ["openssl", "passwd"] else ""
+        return CmdResult(0, digest, "")
+
+    def stream(self, argv, on_line, **kwargs):  # noqa: ANN001, ANN003
+        raise AssertionError("stream not expected")
+
+
+def _plan(**changes):  # noqa: ANN202
+    from dataclasses import replace
+
+    from bingux_installer.plan import validate_plan
+
+    raw = {"version": 2, "disk": "/dev/vda", "confirm_erase": "/dev/vda",
+           "timezone": "Europe/London", "locale": "en_GB", "keymap": "uk", "hostname": "bingux",
+           "users": [{"name": "kieran", "password": "correct horse", "admin": True}]}
+    plan = validate_plan(raw, booted_firmware="uefi", timezone_exists=lambda _: True,
+                         locale_supported=lambda _: True)
+    return replace(plan, **changes)
+
+
+def test_set_ntp_enables_or_disables_timesyncd(tmp_path) -> None:  # noqa: ANN001
+    runner = RecordingRunner()
+    configure.set_ntp(runner, tmp_path, True)
+    configure.set_ntp(runner, tmp_path, False)
+    assert [argv for argv, _ in runner.calls] == [
+        ["chroot", str(tmp_path), "systemctl", "enable", "systemd-timesyncd.service"],
+        ["chroot", str(tmp_path), "systemctl", "disable", "systemd-timesyncd.service"],
+    ]
+
+
+def test_write_swap_zram_writes_generator_conf(tmp_path) -> None:  # noqa: ANN001
+    runner = RecordingRunner()
+    configure.write_swap(runner, tmp_path, _plan(swap="zram"))
+    assert (tmp_path / configure.ZRAM_CONF).read_text() == layout.zram_conf()
+    assert runner.calls == []
+
+
+def test_write_swap_none_removes_stale_zram_conf(tmp_path) -> None:  # noqa: ANN001
+    stale = tmp_path / configure.ZRAM_CONF
+    stale.parent.mkdir(parents=True)
+    stale.write_text("[zram0]\n")
+    configure.write_swap(RecordingRunner(), tmp_path, _plan(swap="none"))
+    assert not stale.exists()
+
+
+def test_write_swap_file_ext4_uses_fallocate_and_mkswap(tmp_path) -> None:  # noqa: ANN001
+    def make(argv):  # noqa: ANN001, ANN202
+        if argv[0] == "fallocate":
+            (tmp_path / "swapfile").write_bytes(b"")
+
+    runner = RecordingRunner(on_run=make)
+    configure.write_swap(runner, tmp_path, _plan(swap="file", swap_bytes=2 * 1024**3))
+    argvs = [argv for argv, _ in runner.calls]
+    assert argvs == [
+        ["fallocate", "-l", str(2 * 1024**3), str(tmp_path / "swapfile")],
+        ["mkswap", str(tmp_path / "swapfile")],
+    ]
+    assert (tmp_path / "swapfile").stat().st_mode & 0o777 == 0o600
+
+
+def test_write_swap_file_btrfs_uses_mkswapfile(tmp_path) -> None:  # noqa: ANN001
+    runner = RecordingRunner()
+    configure.write_swap(runner, tmp_path, _plan(filesystem="btrfs", swap="file",
+                                                 swap_bytes=2 * 1024**3))
+    assert [argv for argv, _ in runner.calls] == [
+        ["btrfs", "filesystem", "mkswapfile", "--size", str(2 * 1024**3), str(tmp_path / "swapfile")],
+    ]
+
+
+def test_write_crypttab_writes_etc_file(tmp_path) -> None:  # noqa: ANN001
+    configure.write_crypttab(tmp_path, "swap-line\n")
+    assert (tmp_path / "etc/crypttab").read_text() == "swap-line\n"
+
+
+def test_create_users_sets_root_password_when_given(tmp_path) -> None:  # noqa: ANN001
+    runner = RecordingRunner()
+    configure.create_users(runner, tmp_path, _plan(root_password="root pass word"))
+    chpasswd = [stdin for argv, stdin in runner.calls if argv[:2] == ["chroot", str(tmp_path)]
+                and "chpasswd" in argv]
+    assert chpasswd == ["kieran:$6$fake$hash\nroot:$6$fake$hash\n"]
+    assert not any("passwd" in argv and "-l" in argv for argv, _ in runner.calls)
+
+
+def test_create_users_locks_root_without_root_password(tmp_path) -> None:  # noqa: ANN001
+    runner = RecordingRunner()
+    configure.create_users(runner, tmp_path, _plan())
+    assert [argv[-2:] for argv, _ in runner.calls if "passwd" in argv and "-l" in argv] == [
+        ["-l", "root"]]
