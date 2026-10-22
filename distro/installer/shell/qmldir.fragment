@@ -1,0 +1,6 @@
+singleton InstallerState 1.0 InstallerState.qml
+InstallerClient 1.0 InstallerClient.qml
+InstallerField 1.0 InstallerField.qml
+InstallerPage 1.0 InstallerPage.qml
+InstallerWizard 1.0 InstallerWizard.qml
+InstallerShell 1.0 InstallerShell.qml

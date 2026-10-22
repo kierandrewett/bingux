@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Check that every QML directory has a complete, accurate qmldir.
 
-For each tree (default: shell/bingux; any other tree may be passed, relative to
-the repo or absolute) and each directory under it that contains .qml files:
+For each tree (default: shell/bingux; a tree relative to the repo, or an absolute
+directory such as the merged tree from scripts/pack-shell.py --tree-out, with
+--entry for any extra entry file that tree's archive manifest names) and each
+directory under it that contains .qml files:
 
 - the directory has a qmldir;
 - every .qml file is listed, unless it is a scripts/pack-shell.py ENTRIES entry
@@ -12,7 +14,7 @@ the repo or absolute) and each directory under it that contains .qml files:
   file stem.
 
 `--committed` checks the HEAD tree (git archive into a temp dir), so uncommitted
-edits in the working tree do not decide the result.
+edits in the working tree do not decide the result; it accepts repo trees only.
 `--self-test` checks a copy of shell/bingux with three deliberate breaks.
 """
 
@@ -64,6 +66,7 @@ def qml_directories(tree):
 
 
 def check_directory(root, directory, entries):
+    """Problems in one QML directory; root is only used to name the directory."""
     rel = directory.relative_to(root)
     qmldir = directory / "qmldir"
     if not qmldir.is_file():
@@ -104,8 +107,7 @@ def check_directory(root, directory, entries):
     return problems
 
 
-def check_trees(root, trees):
-    entries = entry_files(root)
+def check_trees(root, trees, entries):
     problems = []
     for tree in trees:
         target = root / tree
@@ -117,17 +119,19 @@ def check_trees(root, trees):
     return problems
 
 
-def relative_trees(arguments):
-    trees = []
+def targets(arguments):
+    """(root, tree) pairs: repo-relative trees, or absolute directories checked as their own root."""
+    found = []
     for argument in arguments or DEFAULT_TREES:
         path = Path(argument)
-        if path.is_absolute():
-            try:
-                path = path.relative_to(REPO)
-            except ValueError:
-                raise SystemExit(f"qmldir-complete: {argument} is outside the repo")
-        trees.append(str(path))
-    return trees
+        if not path.is_absolute():
+            found.append((REPO, argument))
+            continue
+        try:
+            found.append((REPO, str(path.relative_to(REPO))))
+        except ValueError:
+            found.append((path, "."))
+    return found
 
 
 def committed_copy(trees):
@@ -154,7 +158,8 @@ def self_test():
         shutil.copy2(REPO / "scripts/pack-shell.py", scratch / "scripts/pack-shell.py")
         shutil.copytree(REPO / "shell/bingux", scratch / "shell/bingux")
         trees = ["shell/bingux"]
-        baseline = failures(check_trees(scratch, trees))
+        entries = entry_files(scratch)
+        baseline = failures(check_trees(scratch, trees, entries))
         if baseline:
             raise SystemExit(f"qmldir-complete self-test: pristine copy fails: {baseline[0]}")
         qmldir = scratch / "shell/bingux/qmldir"
@@ -166,7 +171,7 @@ def self_test():
         }
         for label, text in breaks.items():
             qmldir.write_text(text)
-            found = failures(check_trees(scratch, trees))
+            found = failures(check_trees(scratch, trees, entries))
             if not found:
                 raise SystemExit(f"qmldir-complete self-test: '{label}' was not detected")
             print(f"self-test detected {label}: {found[0]}")
@@ -179,23 +184,31 @@ def self_test():
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("trees", nargs="*", help="QML trees to check (default: shell/bingux)")
+    parser.add_argument("--entry", action="append", default=[], help="extra entry file name, e.g. InstallerShell.qml")
     parser.add_argument("--committed", action="store_true", help="check the HEAD tree, not the working tree")
     parser.add_argument("--self-test", action="store_true", help="prove the checks fail on deliberate breaks")
     arguments = parser.parse_args()
     if arguments.self_test:
         self_test()
         return
-    trees = relative_trees(arguments.trees)
+    entries = entry_files(REPO) | set(arguments.entry)
+    pairs = targets(arguments.trees)
     if arguments.committed:
+        if any(root != REPO for root, _ in pairs):
+            raise SystemExit("qmldir-complete: --committed takes repo trees only")
+        trees = [tree for _, tree in pairs]
         scratch = committed_copy(trees)
         try:
-            problems = check_trees(scratch, trees)
+            problems = check_trees(scratch, trees, entries)
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
         label = "HEAD"
     else:
-        problems = check_trees(REPO, trees)
+        problems = []
+        for root, tree in pairs:
+            problems.extend(check_trees(root, [tree], entries))
         label = "working tree"
+    trees = [tree for _, tree in pairs]
     for problem in problems:
         print(problem, file=sys.stderr)
     hard = failures(problems)
