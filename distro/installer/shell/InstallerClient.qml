@@ -35,7 +35,7 @@ QtObject {
                     finished = true;
                     if (onLost)
                         onLost();
-                    destroy();
+                    connection.destroy();
                 }
             }
             onError: function (_error) {
@@ -44,7 +44,7 @@ QtObject {
                 finished = true;
                 if (onLost)
                     onLost();
-                destroy();
+                connection.destroy();
             }
             parser: SplitParser {
                 onRead: function (line) {
@@ -62,7 +62,7 @@ QtObject {
                     if (connection.onLine)
                         connection.onLine(message);
                     if (terminal)
-                        destroy();
+                        connection.destroy();
                 }
             }
             Component.onCompleted: connected = true
