@@ -18,7 +18,8 @@ class CommandError(Exception):
         self.returncode = returncode
         self.stderr = stderr
         name = argv[0] if argv else "?"
-        super().__init__(f"{name} exited with status {returncode}")
+        detail = " ".join(stderr.split())[:300]
+        super().__init__(f"{name} exited with status {returncode}" + (f": {detail}" if detail else ""))
 
 
 @dataclass(frozen=True)
@@ -95,7 +96,7 @@ class SubprocessRunner:
         tail: list[str] = []
         buf = ""
         while True:
-            chunk = proc.stdout.read(4096)
+            chunk = proc.stdout.read1(4096)
             if not chunk:
                 break
             buf += chunk.decode("utf-8", errors="replace")

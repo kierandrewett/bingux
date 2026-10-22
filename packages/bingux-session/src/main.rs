@@ -69,14 +69,19 @@ fn main() {
         ["export"] => match accounts::current_user_name() {
             Some(user) => {
                 let wallpaper = snapshot::configured_wallpaper();
-                if let Err(error) =
-                    snapshot::write_background_dropin(&snapshot::config_home(), &wallpaper)
-                {
+                // The export writes the blurred twin that the drop-in names, so it
+                // runs first. A failed export still leaves a drop-in for the last twin.
+                let exported = snapshot::export(&snapshot::root(), &user, &wallpaper);
+                let directory = snapshot::root().join(&user);
+                if let Err(error) = snapshot::write_background_dropin(
+                    &snapshot::config_home(),
+                    &snapshot::handover_image(&directory),
+                ) {
                     eprintln!(
                         "bingux-session: could not write the Gnoblin background drop-in: {error}"
                     );
                 }
-                match snapshot::export(&snapshot::root(), &user, &wallpaper) {
+                match exported {
                     Ok(result) => serde_json::to_string(&result),
                     Err(error) => {
                         eprintln!("bingux-session: could not export the greeter snapshot: {error}");

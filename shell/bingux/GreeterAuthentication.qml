@@ -77,7 +77,9 @@ QtObject {
     }
 
     function launchEnvironment() {
-        const environment = ["XDG_SESSION_TYPE=wayland"];
+        // The wallpaper and bar this login screen shows stay on screen: the
+        // session must not enter them again (see SessionContext.continuing).
+        const environment = ["XDG_SESSION_TYPE=wayland", "BINGUX_CONTINUING=1"];
         if (session.id)
             environment.push("XDG_SESSION_DESKTOP=" + session.id);
         if (session.desktopNames)

@@ -82,6 +82,7 @@ ShellRoot {
                 anchors.fill: parent
                 authentication: lockAuthentication
                 metrics: sessionMetrics
+                hostWindow: lockSurface
                 osdState: lockOsd
                 outputName: lockSurface.screen ? lockSurface.screen.name : ""
                 ready: lock.secure

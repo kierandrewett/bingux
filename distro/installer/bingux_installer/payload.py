@@ -70,11 +70,18 @@ def copy_payload(runner: Runner, source: Path, target: Path,
     which file or attribute could not be copied.
     """
     errors: list[str] = []
+    last_percent = -1
 
     def on_line(line: str) -> None:
+        nonlocal last_percent
         match = RSYNC_PERCENT.search(line)
         if match:
-            on_percent(min(100, int(match.group(1))))
+            # rsync repeats the percentage on every progress update, many per second. Forward
+            # only changes: each event is a UI log entry, and a flood starves the UI thread.
+            percent = min(100, int(match.group(1)))
+            if percent != last_percent:
+                last_percent = percent
+                on_percent(percent)
         elif "rsync" in line or "failed" in line or "denied" in line:
             errors.append(line.strip())
 
@@ -89,22 +96,38 @@ def copy_payload(runner: Runner, source: Path, target: Path,
         raise InstallerError("payload_failed", f"rsync failed ({exc}): {detail}") from exc
 
 
-def mount_target(runner: Runner, lay: StorageLayout, target: Path = TARGET_MNT, *,
-                 uefi: bool, filesystem: str) -> None:
-    """Mount the installed root (and btrfs @home, and the ESP at target/boot)."""
+def _private_mountpoint(runner: Runner, target: Path) -> None:
+    """Make target a private mountpoint so the installed root's mounts never propagate.
+
+    /run is a shared mount, so a plain mount on target would be copied into every peer
+    mount namespace; the final umount -R in the daemon could then never release the
+    LUKS mapper. Binding target onto itself and marking it private stops that propagation.
+    """
     target.mkdir(parents=True, exist_ok=True)
+    runner.run(["mount", "--bind", str(target), str(target)])
+    runner.run(["mount", "--make-private", str(target)])
+
+
+def mount_target(runner: Runner, lay: StorageLayout, target: Path = TARGET_MNT, *,
+                 filesystem: str) -> None:
+    """Mount the installed root, /home (a btrfs @home subvolume or its own partition) and the
+    /boot partition at target/boot."""
+    _private_mountpoint(runner, target)
     if filesystem == "btrfs":
         runner.run(["mount", "-o", "subvol=@", lay.fs_path, str(target)])
-        (target / "home").mkdir(exist_ok=True)
-        runner.run(["mount", "-o", "subvol=@home", lay.fs_path, str(target / "home")])
     else:
         runner.run(["mount", lay.fs_path, str(target)])
-    if uefi:
-        if lay.esp_path is None:
-            raise InstallerError("storage_failed", "UEFI install has no ESP device")
+    if lay.home_path is not None:
+        (target / "home").mkdir(exist_ok=True)
+        runner.run(["mount", lay.home_path, str(target / "home")])
+    elif filesystem == "btrfs":
+        (target / "home").mkdir(exist_ok=True)
+        runner.run(["mount", "-o", "subvol=@home", lay.fs_path, str(target / "home")])
+    if lay.boot_path is not None:
         boot = target / "boot"
         boot.mkdir(exist_ok=True)
-        runner.run(["mount", "-o", "umask=0077", lay.esp_path, str(boot)])
+        options = ["-o", "umask=0077"] if lay.boot_fstype == "vfat" else []
+        runner.run(["mount", *options, lay.boot_path, str(boot)])
 
 
 def mount_chroot_binds(runner: Runner, target: Path = TARGET_MNT) -> None:

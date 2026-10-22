@@ -324,7 +324,7 @@ def main():
             "no server failures": not greetd.failures,
             "start_session command": started.get("cmd") == ["/bin/true", "--from-test"],
             "start_session env": sorted(started.get("env", []))
-            == ["XDG_CURRENT_DESKTOP=Gnoblin", "XDG_SESSION_DESKTOP=gnoblin", "XDG_SESSION_TYPE=wayland"],
+            == ["BINGUX_CONTINUING=1", "XDG_CURRENT_DESKTOP=Gnoblin", "XDG_SESSION_DESKTOP=gnoblin", "XDG_SESSION_TYPE=wayland"],
             "remembered choice": json.loads((state / "bingux/greeter.json").read_text())
             == {"user": "luna", "session": "gnoblin"},
         }

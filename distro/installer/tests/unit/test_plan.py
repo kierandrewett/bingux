@@ -1,4 +1,4 @@
-"""Plan schema v1 validation: positive and negative cases. Pure, no system files."""
+"""Plan schema v2 validation: positive and negative cases. Pure, no system files."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def base_user(**changes: object) -> dict[str, object]:
 
 def base_raw() -> dict[str, object]:
     return {
-        "version": 1,
+        "version": 2,
         "disk": "/dev/vda",
         "confirm_erase": "/dev/vda",
         "timezone": GOOD_TZ,
@@ -60,8 +60,11 @@ def rejects(code: str, booted: str = "uefi", **changes: object) -> None:
 def test_minimal_plan_gets_documented_defaults() -> None:
     plan = make()
     assert plan.firmware == "uefi"
+    assert plan.storage_mode == "erase"
     assert plan.filesystem == "ext4"
     assert plan.encryption.enabled is False
+    assert plan.swap == "none"
+    assert plan.ntp is True
     assert plan.other_os_allow is False
     assert plan.locale == GOOD_LOCALE
     assert plan.kernel_args == ()
@@ -79,12 +82,13 @@ def test_explicit_firmware_must_match_boot() -> None:
     rejects("invalid_plan", firmware="maybe")
 
 
-@pytest.mark.parametrize("changes", [{"version": 2}, {"version": True}, {"version": DROP}])
-def test_version_must_be_one(changes: dict[str, object]) -> None:
+@pytest.mark.parametrize("changes", [{"version": 1}, {"version": 3}, {"version": True},
+                                     {"version": DROP}])
+def test_version_must_be_two(changes: dict[str, object]) -> None:
     rejects("invalid_plan", **changes)
 
 
-@pytest.mark.parametrize("key", ["disk", "confirm_erase", "timezone", "locale", "keymap",
+@pytest.mark.parametrize("key", ["disk", "timezone", "locale", "keymap",
                                  "hostname", "users"])
 def test_required_keys_are_enforced(key: str) -> None:
     rejects("invalid_plan", **{key: DROP})
@@ -103,10 +107,13 @@ def test_confirm_erase_must_equal_disk() -> None:
     rejects("invalid_plan", confirm_erase="/dev/vdb")
 
 
-def test_encryption_is_refused_with_bios() -> None:
-    with pytest.raises(InstallerError) as exc:
-        make("bios", encryption={"enabled": True, "passphrase": "long enough"})
-    assert exc.value.code == "unsupported"
+def test_erase_requires_confirm_erase() -> None:
+    rejects("invalid_plan", confirm_erase=DROP)
+
+
+def test_encryption_is_accepted_with_bios() -> None:
+    plan = make("bios", encryption={"enabled": True, "passphrase": "long enough"})
+    assert plan.firmware == "bios" and plan.encrypted is True
 
 
 def test_encryption_enabled_keeps_passphrase_for_secrets() -> None:
@@ -125,14 +132,76 @@ def test_encryption_rejects_bad_shapes(encryption: dict[str, object]) -> None:
     rejects("invalid_plan", encryption=encryption)
 
 
-def test_filesystem_accepts_btrfs_and_rejects_others() -> None:
+def test_filesystem_accepts_ext4_btrfs_xfs_and_rejects_others() -> None:
     assert make(filesystem="btrfs").filesystem == "btrfs"
-    rejects("invalid_plan", filesystem="xfs")
+    assert make(filesystem="xfs").filesystem == "xfs"
+    rejects("invalid_plan", filesystem="zfs")
 
 
 def test_other_os_allow_sets_flag() -> None:
     assert make(other_os="allow").other_os_allow is True
     rejects("invalid_plan", other_os="maybe")
+
+
+def test_other_os_is_only_allowed_in_erase_mode() -> None:
+    rejects("invalid_plan", other_os="allow", storage={"mode": "free_space"},
+            confirm_erase=DROP)
+
+
+@pytest.mark.parametrize("swap", [
+    {"swap": "file"},
+    {"swap": "partition"},
+])
+def test_swap_file_and_partition_require_swap_bytes(swap: dict[str, object]) -> None:
+    rejects("invalid_plan", **swap)
+
+
+def test_swap_bytes_range_and_placement() -> None:
+    assert make(swap="zram").swap == "zram"
+    assert make(swap="file", swap_bytes=2 * 1024 ** 3).swap_bytes == 2 * 1024 ** 3
+    rejects("invalid_plan", swap="file", swap_bytes=1024 ** 2)
+    rejects("invalid_plan", swap="zram", swap_bytes=2 * 1024 ** 3)
+
+
+def test_ntp_must_be_a_boolean() -> None:
+    assert make(ntp=False).ntp is False
+    rejects("invalid_plan", ntp="yes")
+
+
+def test_free_space_needs_no_confirm_erase() -> None:
+    plan = make(storage={"mode": "free_space"}, confirm_erase=DROP)
+    assert plan.storage_mode == "free_space"
+    assert plan.destructive is False
+
+
+def test_unknown_storage_mode_is_refused() -> None:
+    rejects("invalid_plan", storage={"mode": "resize"}, confirm_erase=DROP)
+
+
+def test_alongside_requires_shrink_and_shrink_requires_alongside() -> None:
+    rejects("invalid_plan", storage={"mode": "alongside"}, confirm_erase=DROP)
+    rejects("invalid_plan", storage={"mode": "erase",
+                                     "shrink": {"partition": "/dev/vda2", "size_bytes": 1}})
+
+
+def test_alongside_accepts_shrink_of_own_partition() -> None:
+    plan = make(storage={"mode": "alongside",
+                         "shrink": {"partition": "/dev/vda2", "size_bytes": 20 * 1024 ** 3}},
+                confirm_erase=DROP)
+    assert plan.storage_mode == "alongside"
+    assert plan.shrink is not None and plan.shrink.partition == "/dev/vda2"
+    assert plan.destructive is False
+
+
+def test_alongside_rejects_partition_of_other_disk() -> None:
+    rejects("invalid_plan", storage={"mode": "alongside",
+                                     "shrink": {"partition": "/dev/vdb2", "size_bytes": 1}},
+            confirm_erase=DROP)
+
+
+def test_manual_requires_partitions_and_confirm_erase() -> None:
+    rejects("invalid_plan", storage={"mode": "manual", "partitions": []})
+    rejects("invalid_plan", storage={"mode": "manual", "partitions": [{}]}, confirm_erase=DROP)
 
 
 @pytest.mark.parametrize("hostname", ["", "-bingux", "bingux-", "under_score", "a" * 64])

@@ -6,9 +6,12 @@ ever appears on argv. Pure text renderers are separate so tests can check them.
 
 from __future__ import annotations
 
+import configparser
 import glob
+import json
 import os
 import re
+import shlex
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
@@ -74,8 +77,14 @@ ADMIN_GROUP = "wheel"
 SUDOERS_FILE = "etc/sudoers.d/10-bingux-wheel"
 SUDOERS_TEXT = "%wheel ALL=(ALL:ALL) ALL\n"
 LIVE_ONLY_PACKAGES = ("archinstall", "mkinitcpio-archiso", "bingux-installer", "python-blivet")
+GREETD_CONFIG = "etc/greetd/config.toml"
+GREETD_PACKAGED = "usr/share/bingux/greeter/greetd.toml"
+GREETD_GNOBLIN_SESSION = "usr/share/wayland-sessions/gnoblin.desktop"
 PLYMOUTH_HOOK = "usr/lib/initcpio/install/plymouth"
 HOOKS_RE = re.compile(r"^HOOKS=.*$", re.MULTILINE)
+ZRAM_CONF = "etc/systemd/zram-generator.conf"
+TIMESYNCD_UNIT = "systemd-timesyncd.service"
+MODULES_RE = re.compile(r"^MODULES=.*$", re.MULTILINE)
 
 
 # ---- pure renderers -------------------------------------------------------------
@@ -115,6 +124,13 @@ def rewrite_hooks(text: str, hooks: Sequence[str]) -> str:
     line = layout.hooks_line(tuple(hooks))
     if HOOKS_RE.search(text):
         return HOOKS_RE.sub(line, text, count=1)
+    return text.rstrip("\n") + "\n" + line + "\n"
+
+
+def rewrite_modules(text: str, modules: Sequence[str]) -> str:
+    line = layout.modules_line(tuple(modules))
+    if MODULES_RE.search(text):
+        return MODULES_RE.sub(line, text, count=1)
     return text.rstrip("\n") + "\n" + line + "\n"
 
 
@@ -182,8 +198,56 @@ def _installed_packages(runner: Runner, target: Path, names: Sequence[str]) -> l
 
 # ---- orchestration --------------------------------------------------------------
 
+def restore_greeter_config(target: Path) -> None:
+    """Replace the live greetd config with the packaged greeter configuration.
+
+    The live image's config starts the live session; the installed system must
+    get the copy bingux ships in /usr/share/bingux/greeter/greetd.toml."""
+    source = target / GREETD_PACKAGED
+    if not source.is_file():
+        raise InstallerError("config_failed", f"{GREETD_PACKAGED} is missing from the target")
+    dest = target / GREETD_CONFIG
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.is_symlink():
+        dest.unlink()
+    shutil.copyfile(source, dest)
+    os.chmod(dest, 0o644)
+
+
+def write_autologin(target: Path, plan: Plan) -> None:
+    """Start the first user's Gnoblin session at boot instead of the greeter.
+
+    The packaged configuration stays the default session, so logging out still shows the
+    greeter. The initial session runs the Exec of the Gnoblin wayland-sessions entry with
+    the login environment minus BINGUX_CONTINUING: that flag makes a session keep the
+    greeter's wallpaper and bar, and no greeter screen is shown before an autologin."""
+    if plan.autologin is None:
+        return
+    session = target / GREETD_GNOBLIN_SESSION
+    if not session.is_file():
+        raise InstallerError("config_failed", f"{GREETD_GNOBLIN_SESSION} is missing from the target")
+    entry = configparser.ConfigParser(interpolation=None)
+    try:
+        entry.read_string(session.read_text(encoding="utf-8"))
+        desktop = entry["Desktop Entry"]
+        exec_line = desktop["Exec"].strip()
+    except (configparser.Error, KeyError) as exc:
+        raise InstallerError("config_failed", f"{GREETD_GNOBLIN_SESSION} has no Exec line") from exc
+    environment = ["XDG_SESSION_TYPE=wayland",
+                   f"XDG_SESSION_DESKTOP={Path(GREETD_GNOBLIN_SESSION).stem}"]
+    desktop_names = desktop.get("DesktopNames", "").rstrip(";").strip()
+    if desktop_names:
+        environment.append(f"XDG_CURRENT_DESKTOP={desktop_names}")
+    command = shlex.join(["env", *environment]) + " " + exec_line
+    config = target / GREETD_CONFIG
+    block = (f"\n[initial_session]\ncommand = {json.dumps(command)}\n"
+             f"user = {json.dumps(plan.autologin)}\n")
+    _write(config, config.read_text(encoding="utf-8").rstrip("\n") + "\n" + block)
+
+
 def strip_live_and_packages(runner: Runner, target: Path) -> None:
     strip_live(target)
+    restore_greeter_config(target)
     installed = _installed_packages(runner, target, LIVE_ONLY_PACKAGES)
     if installed:
         _chroot(runner, target, ["pacman", "-Rns", "--noconfirm", *installed])
@@ -210,6 +274,17 @@ def write_locale(runner: Runner, target: Path, plan: Plan) -> None:
     _write(target / "etc/vconsole.conf", render_vconsole(plan.keymap))
 
 
+def _hash_password(runner: Runner, password: str) -> str:
+    try:
+        digest = runner.run(["openssl", "passwd", "-6", "-stdin"],
+                            stdin=password + "\n").stdout.strip()
+    except CommandError as exc:
+        raise InstallerError("config_failed", "could not hash a password") from exc
+    if not digest:
+        raise InstallerError("config_failed", "password hashing produced no output")
+    return digest
+
+
 def create_users(runner: Runner, target: Path, plan: Plan) -> None:
     secrets = plan.secrets()
     lines = []
@@ -218,16 +293,46 @@ def create_users(runner: Runner, target: Path, plan: Plan) -> None:
         _chroot(runner, target, ["useradd", "-m", "-G", user_groups(user.admin),
                                  "-s", "/bin/bash", "-c", comment, user.name],
                 secrets=secrets)
-        try:
-            digest = runner.run(["openssl", "passwd", "-6", "-stdin"],
-                                stdin=user.password + "\n").stdout.strip()
-        except CommandError as exc:
-            raise InstallerError("config_failed", "could not hash a password") from exc
-        if not digest:
-            raise InstallerError("config_failed", "password hashing produced no output")
-        lines.append(f"{user.name}:{digest}\n")
+        lines.append(f"{user.name}:{_hash_password(runner, user.password)}\n")
+    if plan.root_password is not None:
+        lines.append(f"root:{_hash_password(runner, plan.root_password)}\n")
     _chroot(runner, target, ["chpasswd", "-e"], stdin="".join(lines), secrets=secrets)
-    _chroot(runner, target, ["passwd", "-l", "root"])
+    if plan.root_password is None:
+        _chroot(runner, target, ["passwd", "-l", "root"])
+
+
+def set_ntp(runner: Runner, target: Path, enabled: bool) -> None:
+    verb = "enable" if enabled else "disable"
+    _chroot(runner, target, ["systemctl", verb, TIMESYNCD_UNIT])
+
+
+def create_swapfile(runner: Runner, target: Path, size_bytes: int, filesystem: str) -> None:
+    """Create /swapfile in the target. btrfs needs its own helper: a plain file gets CoW."""
+    path = target / layout.SWAPFILE.lstrip("/")
+    try:
+        if filesystem == "btrfs":
+            runner.run(["btrfs", "filesystem", "mkswapfile", "--size", str(size_bytes), str(path)])
+        else:
+            runner.run(["fallocate", "-l", str(size_bytes), str(path)])
+            os.chmod(path, 0o600)
+            runner.run(["mkswap", str(path)])
+    except CommandError as exc:
+        raise InstallerError("config_failed", "could not create the swap file") from exc
+
+
+def write_swap(runner: Runner, target: Path, plan: Plan) -> None:
+    """zram gets a generator config; file gets /swapfile; partition and none write nothing."""
+    zram = target / ZRAM_CONF
+    if plan.swap == "zram":
+        _write(zram, layout.zram_conf())
+    elif zram.exists() or zram.is_symlink():
+        _remove(zram)
+    if plan.swap == "file":
+        create_swapfile(runner, target, plan.swap_bytes, plan.filesystem)
+
+
+def write_crypttab(target: Path, text: str) -> None:
+    _write(target / "etc/crypttab", text)
 
 
 def write_sudoers(target: Path, plan: Plan) -> None:
@@ -240,5 +345,8 @@ def write_initramfs(runner: Runner, target: Path, plan: Plan) -> None:
     text = conf.read_text(encoding="utf-8") if conf.exists() else ""
     plymouth = (target / PLYMOUTH_HOOK).exists()
     hooks = layout.mkinitcpio_hooks(encrypted=plan.encrypted, plymouth=plymouth)
-    _write(conf, rewrite_hooks(text, hooks))
+    text = rewrite_hooks(text, hooks)
+    if plan.filesystem == "xfs":
+        text = rewrite_modules(text, ("xfs",))
+    _write(conf, text)
     _chroot(runner, target, ["mkinitcpio", "-P"])

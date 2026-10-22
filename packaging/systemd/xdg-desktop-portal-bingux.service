@@ -1,6 +1,9 @@
 [Unit]
 Description=Bingux desktop portal backend
 PartOf=bingux.target
+# The login screen's account never runs desktop applications.
+ConditionUser=!greeter
+ConditionUser=!greetd
 After=graphical-session.target
 
 [Service]

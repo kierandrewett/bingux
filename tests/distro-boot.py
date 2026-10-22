@@ -30,33 +30,23 @@ import sys
 import tempfile
 import time
 
-from distro_capture import bright_count, blue_lead, is_black, session_painted
+from distro_capture import bright_count, greeter_shown, is_black, session_painted
 from distro_vm import ROOT, Vm, find_iso, missing_tools
 
 # bingux-os-firstboot creates the live account with this password.
 LIVE_USER = "live"
 LIVE_PASSWORD = "live"
-# The date and clock at the top of the greeter and the lock screen; nothing
-# else on either screen, and nothing on the desktop, is near white.
-CLOCK_REGION = "400x160+440+90"
-CLOCK_PIXELS = 500
-# The bar's clock text, and a wallpaper-only strip below the bar.
-BAR_REGION = "160x24+560+4"
-WALLPAPER_REGION = "1280x700+0+60"
+# The lock screen's big clock. The desktop's bar clock is top-centre, and the
+# greeter has no clock in this box, so 2000 bright pixels separates the lock
+# screen (about 5800) from the desktop (about 860).
+LOCK_CLOCK_REGION = "400x160+440+90"
+LOCK_CLOCK_PIXELS = 2000
 SHELL_PATTERN = "'^/usr/bin/bingux( |$)'"
 LOCK_STATE = 'gnoblinctl status | grep -o \'"lock_state":"[a-z]*"\''
 
 
-def clock_shown(frame):
-    return bright_count(frame, CLOCK_REGION) > CLOCK_PIXELS
-
-
-def bar_visible(frame):
-    return bright_count(frame, BAR_REGION) > 100
-
-
-def wallpaper_visible(frame):
-    return blue_lead(frame, WALLPAPER_REGION) > 0.05
+def lock_clock_shown(frame):
+    return bright_count(frame, LOCK_CLOCK_REGION) > LOCK_CLOCK_PIXELS
 
 
 def main():
@@ -94,9 +84,8 @@ def main():
         vm.start()
         # Timeline hooks: the first frame with light on it, then each stage of the session.
         vm.recorder.expect("first picture", lambda frame: not is_black(frame))
-        vm.recorder.expect("first greeter frame", clock_shown)
-        vm.recorder.expect("first session bar", bar_visible)
-        vm.recorder.expect("first session wallpaper", wallpaper_visible)
+        vm.recorder.expect("first greeter frame", greeter_shown)
+        vm.recorder.expect("first session frame", session_painted)
         checks["booted to a shell"] = vm.start_shell()
         if checks["booted to a shell"]:
             probe("greetd active", "systemctl is-active greetd", lambda o: o == "active", attempts=60, delay=2)
@@ -118,22 +107,21 @@ def main():
             )
             # Keys sent before the greeter is on screen are lost (baseline run 2 typed
             # into the bare wallpaper), so wait for its clock rather than a timer.
-            frame = vm.wait_frame(clock_shown, attempts=60)
-            checks["greeter shows the clock"] = frame is not None
+            frame = vm.wait_frame(greeter_shown, attempts=60)
+            checks["greeter shows its login card"] = frame is not None
             shot("greeter", frame)
             vm.recorder.mark("greeter interactive")
             # Give the greeter a moment to take keyboard focus after its first paint.
             time.sleep(3)
 
             # Sign in the way a user would: type into the focused field.
-            vm.recorder.expect("first session frame", session_painted)
             vm.type_text(LIVE_PASSWORD)
             vm.key("ret")
             vm.recorder.mark("password submitted")
             # Still on the greeter after the wait: the keys were lost, so type again.
             if vm.wait_frame(session_painted, attempts=20) is None:
                 greeter = vm.frame()
-                if greeter is not None and clock_shown(greeter):
+                if greeter is not None and greeter_shown(greeter):
                     vm.type_text(LIVE_PASSWORD)
                     vm.key("ret")
             probe("session shell runs as the user", f"pgrep -c -u {LIVE_USER} -f {SHELL_PATTERN}", count, attempts=60)
@@ -165,7 +153,7 @@ def main():
                 delay=2,
             )
             # The lock client takes the lock first and paints its screen after.
-            frame = vm.wait_frame(clock_shown, attempts=40)
+            frame = vm.wait_frame(lock_clock_shown, attempts=40)
             checks["lock screen shows the clock"] = frame is not None
             if frame is not None:
                 shot("locked", frame)
@@ -204,7 +192,7 @@ def main():
             time.sleep(10)
             probe("one statusd in the greeter", "pgrep -c -u greeter -x bingux-statusd", lambda o: o == "1")
             frame = shot("logged-out")
-            checks["greeter shows the clock after log out"] = frame is not None and clock_shown(frame)
+            checks["greeter shows its login card after log out"] = frame is not None and greeter_shown(frame)
             report.append(
                 "$ journalctl -b -u greetd\n"
                 + vm.run("journalctl -b -u greetd --no-pager -o cat | tail -n 30", 60)

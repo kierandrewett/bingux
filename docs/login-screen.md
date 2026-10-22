@@ -94,6 +94,12 @@ is removed. The packaged default wallpaper gets the same treatment at build
 time: `bingux-session blur-wallpaper` writes `default-blur.jpg` beside
 `default.jpg`, and firstboot installs it for the live account as `wallpaper-blur`.
 
+A new account's first session has no snapshot yet. Its compositor paints the
+packaged `default-blur.jpg` from the skel drop-in (`bingux-background.lua`),
+which `useradd -m` copies into the account at creation, instead of Gnoblin's
+grey. The export replaces that drop-in during the session, and the change
+applies from the next login.
+
 ### Remembered choice
 
 After a successful login, `bingux-session remember USER SESSION` stores the
@@ -127,13 +133,44 @@ Neither compositor shows black in between:
   `bingux-session greeter-background` for that Lua, writes it after a
   `gnoblin.load` of the packaged greeter configuration into the greeter
   account's runtime directory, and passes the file to `gnoblin --greeter`.
-- The user's compositor paints the same picture from
-  `~/.config/gnoblin/conf.d/bingux-background.lua`, which
-  `bingux-session export` writes beside the greeter snapshot. The installer's
-  `init.lua` loads `conf.d/**/*.lua`.
+- The user's compositor paints the greeter's blurred copy from
+  `~/.config/gnoblin/conf.d/bingux-background.lua`. `bingux-session export`
+  writes that drop-in during the session (`bingux-greeter-export.service`, a
+  user unit started by `bingux.target`). It names the blurred twin beside the
+  account's snapshot, so the next login's compositor paints the picture the
+  greeter showed. The installer's `init.lua` loads `conf.d/**/*.lua`.
+- The desktop wallpaper then fades in sharp over that frame once it is ready.
+  The frame never goes black and the picture does not move.
 
 What remains is the modeset between the two compositors, which is the
 kernel's and the display's, not the shell's.
+
+The greeter exports `BINGUX_CONTINUING=1` to the session it launches. When the
+desktop shell sees it (`SessionContext.continuing`), the wallpaper and top bar
+are already where the greeter left them: the wallpaper's first show skips the
+zoom and the bar skips its slide-in, so nothing enters again. The sharp wallpaper
+fades in over the blurred copy the compositor paints. Lock and kiosk shells
+ignore the flag. A desktop started without the variable (a cold start from
+another login path) keeps the zoom and slide-in.
+
+## Start-up cost
+
+Gnoblin runs `systemctl --user start gnoblin-session.target` before it starts the
+process that sends the compositor its configuration, and the compositor gives up
+after 10 s without it. `bingux.target` sets `DefaultDependencies=no`, so that start
+does not wait for the helper units it wants (the wallpaper export takes about 4 s of
+CPU), and the wallpaper export runs in idle time. With the default the wait was 6.5 s
+on four busy CPUs and 14 to 22 s in the E2E boots; without it, 0.4 s.
+
+The greeter account has its own user manager, so the packaged `bingux.target`
+would start the user desktop helpers for it. The search, status, portal and
+wallpaper-export units carry `ConditionUser=!greeter` and `ConditionUser=!greetd`
+so they start only for real users. The greeter's Gnoblin autostart already runs
+the status service. The greeter's shell does not start the gsettings readers in
+`Theme.qml`: they run only in the desktop and lock shells. `bingux-os` ships
+`greetd.service.d/plymouth.conf`, which orders greetd after
+`plymouth-quit-wait.service`, so the greeter takes the display once the splash
+releases it. The GRUB menu waits 5 seconds (`distro/profile/grub`).
 
 ## Testing
 

@@ -82,7 +82,9 @@ the lock screen:
 
 Search, tray, notifications, recording, monitors and extensions never appear.
 Menus are drawn inside the lock surface itself: lock surfaces cannot parent
-popup windows.
+popup windows. `tests/lock-ui.py` opens the keyboard layout menu from the lock bar
+and checks that it maps on the lock surface; `BINGUX_LOCK_POPUP_SHOT` saves that
+frame.
 
 `SessionServices.allows(capability)` gates every action a widget could take.
 On the lock screen only `volume` (output volume and microphone mute) and `power` are granted; on the greeter only

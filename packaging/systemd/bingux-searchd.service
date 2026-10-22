@@ -1,6 +1,9 @@
 [Unit]
 Description=Bingux search service
 PartOf=bingux.target
+# The login screen's account runs its own user manager. It has no search to serve.
+ConditionUser=!greeter
+ConditionUser=!greetd
 After=graphical-session.target
 
 [Service]

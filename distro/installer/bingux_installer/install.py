@@ -7,14 +7,18 @@ so the two outcomes cannot interleave.
 
 from __future__ import annotations
 
+import copy
+import os
+import stat
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from . import __version__, bootloader, configure, layout, payload, probe, storage
-from .plan import Plan, validate_plan
+from .plan import HOME_FILESYSTEMS, Plan, validate_plan
 from .protocol import PROTOCOL_VERSION, InstallerError, progress, redact
 from .runner import Runner
 
@@ -99,6 +103,17 @@ def version_data() -> dict[str, Any]:
     return {"installer_version": __version__, "protocol": PROTOCOL_VERSION}
 
 
+# What this build carries out end to end (README "Status"). The UI offers a choice only
+# when it is listed here, so an entry is added only with its install implemented and tested.
+CAPABILITIES: dict[str, Any] = {
+    "storage_modes": ["erase", "free_space", "alongside", "manual"],
+    "filesystems": ["ext4", "btrfs", "xfs"],
+    "swap": ["none", "zram", "file", "partition"],
+    "encryption": {"uefi": True, "bios": True},
+    "dual_boot": False,
+}
+
+
 def run_probe(env: Env) -> dict[str, Any]:
     runner = env.runner
     if env.state.running:
@@ -113,6 +128,7 @@ def run_probe(env: Env) -> dict[str, Any]:
         "live_disk": probe.find_live_disk(doc, source),
         "disks": probe.disk_report(disks),
         "tools_missing": probe.missing_tools(firmware=firmware),
+        "capabilities": copy.deepcopy(CAPABILITIES),
         "installer_version": __version__,
     }
 
@@ -131,7 +147,54 @@ def _guard(code: str, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
 class _Mounts:
     target: bool = False
     source: bool = False
-    opened: bool = False  # LUKS mapper open after commit
+    luks_name: str | None = None  # open LUKS mapper after commit
+
+
+_CLOSE_RETRIES = 20
+_CLOSE_RETRY_DELAY = 0.5
+
+
+def _mapper_holders(runner: Runner, name: str) -> str:
+    """Describe the processes that hold the LUKS mapper's block device open. Used in errors only."""
+    try:
+        target = os.stat(f"/dev/mapper/{name}").st_rdev
+    except OSError:
+        return "device node missing"
+    holders: list[str] = []
+    for pid in (p for p in os.listdir("/proc") if p.isdigit()):
+        try:
+            fds = os.listdir(f"/proc/{pid}/fd")
+        except OSError:
+            continue
+        for fd in fds:
+            try:
+                st = os.stat(f"/proc/{pid}/fd/{fd}")
+            except OSError:
+                continue
+            if stat.S_ISBLK(st.st_mode) and st.st_rdev == target:
+                comm = Path(f"/proc/{pid}/comm").read_text(errors="replace").strip()
+                holders.append(f"{comm}[{pid}]")
+                break
+    dev = f"{os.major(target)}:{os.minor(target)}"
+    # A mount in another mount namespace is invisible to our own mountinfo; scan every process.
+    mounted: set[str] = set()
+    for pid in (p for p in os.listdir("/proc") if p.isdigit()):
+        try:
+            lines = Path(f"/proc/{pid}/mountinfo").read_text().splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            parts = line.split()
+            if parts[2] == dev:
+                mounted.add(f"pid {pid} at {parts[4]}")
+    if mounted:
+        holders.append("mounted at " + ", ".join(mounted))
+    sysfs = Path(f"/sys/dev/block/{dev}/holders")
+    if sysfs.is_dir():
+        holders.append("kernel holders " + ", ".join(sorted(p.name for p in sysfs.iterdir())))
+    dm = runner.run(["dmsetup", "info", "-c", "--noheadings", "-o", "open,name", name], check=False)
+    holders.append("dm " + (dm.stdout.strip() or dm.stderr.strip()))
+    return ", ".join(holders) or "no process (kernel holder)"
 
 
 def _teardown(env: Env, mounts: _Mounts, *, strict: bool) -> None:
@@ -142,6 +205,8 @@ def _teardown(env: Env, mounts: _Mounts, *, strict: bool) -> None:
     if mounts.target:
         runner.run(["sync"], check=False)
         result = runner.run(["umount", "-R", str(env.target)], check=False)
+        # Drop the private bind that payload._private_mountpoint left on the target.
+        runner.run(["umount", str(env.target)], check=False)
         if result.returncode != 0 and strict:
             left = runner.run(["findmnt", "-R", "-n", "-o", "TARGET", str(env.target)], check=False)
             detail = (result.stderr or "").strip()[-300:]
@@ -150,11 +215,96 @@ def _teardown(env: Env, mounts: _Mounts, *, strict: bool) -> None:
                 f"could not unmount {env.target}: {detail}; still mounted: {left.stdout.strip()}",
             )
         mounts.target = False
-    if mounts.opened:
-        result = runner.run(["cryptsetup", "close", layout.LUKS_NAME], check=False)
+    if mounts.luks_name:
+        # umount can return before the kernel drops the filesystem's last reference to the
+        # mapper, so a close right after it may still see the device busy. Retry briefly.
+        runner.run(["udevadm", "settle"], check=False)
+        result = runner.run(["cryptsetup", "close", mounts.luks_name], check=False)
+        for _ in range(_CLOSE_RETRIES):
+            if result.returncode == 0 or "in use" not in (result.stderr or ""):
+                break
+            time.sleep(_CLOSE_RETRY_DELAY)
+            result = runner.run(["cryptsetup", "close", mounts.luks_name], check=False)
         if result.returncode != 0 and strict:
-            raise InstallerError("storage_failed", "could not close the LUKS mapper")
-        mounts.opened = False
+            detail = (result.stderr or "").strip()[-300:]
+            holders = _mapper_holders(runner, mounts.luks_name)
+            raise InstallerError(
+                "storage_failed", f"could not close the LUKS mapper: {detail}; held by: {holders}")
+        mounts.luks_name = None
+
+
+def _refuse_unimplemented(plan: Plan) -> None:
+    """Refuse valid plan features the installer does not carry out yet.
+
+    Each one would otherwise be accepted and silently ignored, or would erase a disk the
+    user asked to keep. Removing an entry here is the only way it becomes reachable.
+    """
+    if plan.storage_mode not in CAPABILITIES["storage_modes"]:
+        raise InstallerError("unsupported", f"storage mode {plan.storage_mode} is not implemented yet")
+    if plan.storage_mode == "manual" and plan.encrypted and any(p.role == "home" for p in plan.partitions):
+        raise InstallerError("unsupported", "encryption with a separate home partition is not implemented yet")
+
+
+# Storage modes that keep the partitions already on the disk (other OS included).
+KEEPS_OTHER_OS = ("free_space", "alongside", "manual")
+
+
+@dataclass(frozen=True)
+class _Shrink:
+    part: layout.GptPartition  # the partition being shrunk, as it is in the GPT now
+    fstype: str
+    new_end: int  # last sector after the shrink
+
+
+def _plan_shrink(plan: Plan, disk: probe.DiskInfo, table: layout.GptTable) -> _Shrink:
+    """Check that the partition named by the plan can shrink to the requested size. Reads only."""
+    target = plan.shrink.partition
+    info = next((p for p in disk.partitions if p["path"] == target), None)
+    part = next((p for p in table.partitions
+                 if layout.partition_path(plan.disk, p.number) == target), None)
+    if info is None or part is None:
+        raise InstallerError("cannot_shrink", f"{target} is not a partition of {plan.disk}")
+    if info["mountpoint"]:
+        raise InstallerError("cannot_shrink", f"{target} is mounted; it must be unmounted to shrink")
+    fstype = info["fstype"]
+    if fstype not in probe.SHRINKABLE_FSTYPES:
+        raise InstallerError("cannot_shrink", f"{fstype or 'unknown'} cannot be shrunk")
+    min_bytes = info["min_bytes"]
+    if min_bytes is None:
+        raise InstallerError("cannot_shrink", f"the smallest size of {target} could not be read")
+    if plan.shrink.size_bytes < min_bytes:
+        raise InstallerError("cannot_shrink", f"{target} cannot shrink below {min_bytes} bytes")
+    new_end = layout.shrink_end_sector(part, plan.shrink.size_bytes, table.sector_size)
+    return _Shrink(part=part, fstype=fstype, new_end=new_end)
+
+
+def _plan_manual(plan: Plan, disk: probe.DiskInfo, table: layout.GptTable) -> tuple[
+        layout.FreePartition, ...]:
+    """Check the plan's partition list against the probed disk, then map it onto the GPT. Reads only."""
+    by_path = {p["path"]: p for p in disk.partitions}
+    entries: list[layout.ManualEntry] = []
+    for part in plan.partitions:
+        number = layout.partition_number(plan.disk, part.device)
+        if number is None:
+            raise InstallerError("invalid_plan", f"{part.device} is not a partition of {plan.disk}")
+        fs = part.fs
+        info = by_path.get(part.device)
+        if part.action != "create":
+            if info is None:
+                raise InstallerError("invalid_plan", f"{part.device} is not on {plan.disk}")
+            if part.action == "format" and info["mountpoint"]:
+                raise InstallerError("invalid_plan", f"{part.device} is mounted; unmount it to format it")
+            if part.action == "reuse" and part.role == "esp" and info["fstype"] != "vfat":
+                raise InstallerError("invalid_plan", f"{part.device} is not a vfat ESP; it cannot be reused")
+            if part.action == "reuse" and part.role == "home":
+                if info["fstype"] not in HOME_FILESYSTEMS:
+                    raise InstallerError("invalid_plan",
+                                         f"{part.device} holds {info['fstype'] or 'no'} filesystem; "
+                                         "a reused home needs ext4, btrfs or xfs")
+                fs = info["fstype"]
+        entries.append(layout.ManualEntry(number=number, role=part.role, action=part.action,
+                                          size_bytes=part.size_bytes, fs=fs))
+    return layout.manual_layout(table, tuple(entries), encrypted=plan.encrypted)
 
 
 def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
@@ -173,6 +323,7 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
             timezone_exists=system_timezone_exists,
             locale_supported=system_locale_supported,
         )
+        _refuse_unimplemented(plan)
         secrets = plan.secrets()
         doc = probe.list_block_devices(runner)
         live = probe.live_source_device(runner)
@@ -182,7 +333,7 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
         if disk.is_live_medium:
             raise InstallerError("disk_is_live_medium", f"{plan.disk} is the live medium")
         layout.check_disk_size(disk.size_bytes)
-        if disk.other_os and not plan.other_os_allow:
+        if disk.other_os and plan.storage_mode not in KEEPS_OTHER_OS and not plan.other_os_allow:
             raise InstallerError(
                 "other_os_present",
                 f"{plan.disk} holds {', '.join(disk.other_os)}; set other_os to allow to erase it",
@@ -196,28 +347,77 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
         _guard("payload_failed", payload.preflight, env.sfs)
         env.state.check_cancelled()
 
+        swap_partition_bytes = plan.swap_bytes if plan.swap == "partition" else 0
+        free_parts = None
+        shrink = None
+        if plan.storage_mode in ("free_space", "alongside", "manual"):
+            # Planned before the commit point: no_free_space, not_gpt and cannot_shrink fail with the disk untouched.
+            table = probe.read_gpt(runner, plan.disk)
+            if table is None:
+                raise InstallerError("not_gpt", f"{plan.disk} has no readable GPT; {plan.storage_mode} needs one")
+            if plan.storage_mode == "alongside":
+                shrink = _plan_shrink(plan, disk, table)
+                table = layout.shrink_table(table, shrink.part.number, shrink.new_end)
+            if plan.storage_mode == "manual":
+                free_parts = _plan_manual(plan, disk, table)
+            else:
+                free_parts = layout.free_space_layout(
+                    table, uefi=plan.uefi, encrypted=plan.encrypted,
+                    swap_partition_bytes=swap_partition_bytes)
         env.state.begin_commit()
-        phase("partition", None, f"erasing and partitioning {plan.disk}")
-        lay = _guard(
-            "storage_failed", storage.commit_layout,
-            disk=plan.disk, size_bytes=disk.size_bytes, uefi=plan.uefi,
-            filesystem=plan.filesystem, encrypted=plan.encrypted,
-            passphrase=plan.encryption.passphrase,
-        )
-        mounts.opened = plan.encrypted
+        if shrink is not None:
+            phase("shrink", None, f"shrinking {plan.shrink.partition}")
+            storage.shrink_partition(
+                runner=runner, disk=plan.disk, part=shrink.part, fstype=shrink.fstype,
+                size_bytes=plan.shrink.size_bytes, new_end=shrink.new_end)
+        if free_parts is None:
+            phase("partition", None, f"erasing and partitioning {plan.disk}")
+            lay = _guard(
+                "storage_failed", storage.commit_layout,
+                disk=plan.disk, size_bytes=disk.size_bytes, uefi=plan.uefi,
+                filesystem=plan.filesystem, encrypted=plan.encrypted,
+                passphrase=plan.encryption.passphrase,
+                swap_partition_bytes=swap_partition_bytes,
+            )
+        else:
+            phase("partition", None, f"partitioning the free space on {plan.disk}")
+            lay = _guard(
+                "storage_failed", storage.commit_partitions,
+                runner=runner, disk=plan.disk, partitions=free_parts,
+                filesystem=plan.filesystem, encrypted=plan.encrypted,
+                passphrase=plan.encryption.passphrase,
+            )
+        mounts.luks_name = lay.luks_name
         if plan.encrypted and lay.luks_path is None:
             raise InstallerError("storage_failed", "encrypted install has no LUKS partition")
-        if plan.uefi and lay.esp_path is None:
-            raise InstallerError("storage_failed", "UEFI install has no ESP partition")
+        if lay.boot_path is None and (plan.uefi or plan.encrypted):
+            raise InstallerError("storage_failed", "install has no /boot partition")
         root_uuid = _guard("storage_failed", storage.blkid_value, runner, lay.fs_path, "UUID")
         luks_uuid = (_guard("storage_failed", storage.blkid_value, runner, lay.luks_path, "UUID")
                      if plan.encrypted else None)
-        esp_uuid = (_guard("storage_failed", storage.blkid_value, runner, lay.esp_path, "UUID")
-                    if plan.uefi else None)
+        boot_uuid = (_guard("storage_failed", storage.blkid_value, runner, lay.boot_path, "UUID")
+                     if lay.boot_path else None)
+        home_uuid = (_guard("storage_failed", storage.blkid_value, runner, lay.home_path, "UUID")
+                     if lay.home_path else None)
+        if plan.swap == "partition" and lay.swap_path is None:
+            raise InstallerError("storage_failed", "swap partition was not created")
+        swap_source = None
+        crypttab_text = None
+        if plan.swap == "file":
+            swap_source = layout.SWAPFILE
+        elif plan.swap == "partition" and plan.encrypted:
+            swap_source = f"/dev/mapper/{layout.SWAP_MAPPER}"
+            swap_partuuid = _guard("storage_failed", storage.blkid_value, runner,
+                                   lay.swap_path, "PARTUUID")
+            crypttab_text = layout.crypttab(swap_partuuid=swap_partuuid)
+        elif plan.swap == "partition":
+            swap_uuid = _guard("storage_failed", storage.blkid_value, runner,
+                               lay.swap_path, "UUID")
+            swap_source = f"UUID={swap_uuid}"
 
         phase("mount", None, "mounting the target")
         _guard("payload_failed", payload.mount_target, runner, lay, env.target,
-               uefi=plan.uefi, filesystem=plan.filesystem)
+               filesystem=plan.filesystem)
         mounts.target = True
         _guard("payload_failed", payload.mount_source, runner, env.sfs, env.source)
         mounts.source = True
@@ -234,11 +434,19 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
         _guard("config_failed", configure.strip_live_and_packages, runner, env.target)
 
         phase("configure", None, "configuring the system")
-        fstab = layout.fstab(root_fs_uuid=root_uuid, filesystem=plan.filesystem, esp_uuid=esp_uuid)
+        fstab = layout.fstab(root_fs_uuid=root_uuid, filesystem=plan.filesystem,
+                             boot_uuid=boot_uuid, boot_fstype=lay.boot_fstype or "vfat",
+                             home_uuid=home_uuid, home_fstype=lay.home_fstype or "ext4",
+                             swap_source=swap_source)
         _guard("config_failed", configure.write_identity, env.target, plan, fstab_text=fstab)
         _guard("config_failed", configure.write_locale, runner, env.target, plan)
+        _guard("config_failed", configure.set_ntp, runner, env.target, plan.ntp)
+        _guard("config_failed", configure.write_swap, runner, env.target, plan)
+        if crypttab_text is not None:
+            _guard("config_failed", configure.write_crypttab, env.target, crypttab_text)
         _guard("config_failed", configure.create_users, runner, env.target, plan)
         _guard("config_failed", configure.write_sudoers, env.target, plan)
+        _guard("config_failed", configure.write_autologin, env.target, plan)
         _guard("config_failed", configure.write_initramfs, runner, env.target, plan)
 
         phase("bootloader", None, "installing the bootloader")

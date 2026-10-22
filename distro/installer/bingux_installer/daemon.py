@@ -108,7 +108,9 @@ class _Sink:
             return
         try:
             self._conn.sendall(encode(event))
-        except OSError:
+        except OSError as exc:
+            # The install keeps running without its client; say so, so a lost result is visible.
+            print(f"bingux-installer-daemon: client dropped, event not sent: {exc}", file=sys.stderr)
             self._open = False
 
 

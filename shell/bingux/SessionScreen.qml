@@ -38,6 +38,8 @@ Item {
     // keyboard layout menu and may be null.
     property bool showBar: true
     property var metrics: null
+    // The window the bar's popups anchor to (the lock surface on the lock screen).
+    property var hostWindow: null
     // An OsdState for volume feedback, and the output this screen covers.
     // With no state the screen ignores the volume keys and shows no OSD, as
     // on the greeter.
@@ -167,6 +169,7 @@ Item {
         z: 20
         visible: root.showBar
         metrics: root.metrics
+        hostWindow: root.hostWindow
         opacity: root.showingControls ? 1 : 0
         Behavior on opacity {
             NumberAnimation {

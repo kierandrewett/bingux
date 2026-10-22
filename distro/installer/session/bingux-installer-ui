@@ -1,0 +1,11 @@
+#!/bin/sh
+# Start the Bingux installer UI: the installer shell (InstallerShell.qml) from
+# the packed installer archive. installer.lua autostarts this inside the live
+# compositor; it talks to bingux-installer-daemon over its socket.
+set -eu
+
+ARCHIVE=${BINGUX_INSTALLER_ARCHIVE:-/usr/lib/bingux/bingux-installer.sxa}
+SHELL_BIN=${BINGUX_SHELL:-/usr/bin/bingux-shell}
+
+dir=$("$SHELL_BIN" --shell-dir --archive "$ARCHIVE")
+exec "$SHELL_BIN" -p "$dir/InstallerShell.qml"
