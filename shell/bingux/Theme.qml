@@ -294,7 +294,7 @@ QtObject {
     property Process accentReader: Process {
         id: accentReader
         command: ["gsettings", "get", "org.gnome.desktop.interface", "accent-color"]
-        running: true
+        running: !SessionContext.greeter && !SessionContext.kiosk
         stdout: StdioCollector {
             onStreamFinished: root.updateGnomeAccent(text)
         }
@@ -303,7 +303,7 @@ QtObject {
     property Process colorSchemeReader: Process {
         id: colorSchemeReader
         command: ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"]
-        running: true
+        running: !SessionContext.greeter && !SessionContext.kiosk
         stdout: StdioCollector {
             onStreamFinished: root.updateGnomeColorScheme(text)
         }
@@ -336,7 +336,7 @@ QtObject {
     // One long-lived monitor replaces re-reading both keys every second.
     property Process appearanceMonitor: Process {
         command: ["gsettings", "monitor", "org.gnome.desktop.interface"]
-        running: true
+        running: !SessionContext.greeter && !SessionContext.kiosk
         stdout: SplitParser {
             onRead: line => {
                 if (line.startsWith("accent-color:"))

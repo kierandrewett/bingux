@@ -4,6 +4,8 @@ Description=Publish this account's wallpaper for the Bingux login screen
 # This copies the resolved wallpaper into /var/lib/bingux/greeter/<user>/,
 # a directory only this account can write.
 PartOf=bingux.target
+ConditionUser=!greeter
+ConditionUser=!greetd
 After=graphical-session.target
 
 [Service]
