@@ -89,10 +89,22 @@ def copy_payload(runner: Runner, source: Path, target: Path,
         raise InstallerError("payload_failed", f"rsync failed ({exc}): {detail}") from exc
 
 
+def _private_mountpoint(runner: Runner, target: Path) -> None:
+    """Make target a private mountpoint so the installed root's mounts never propagate.
+
+    /run is a shared mount, so a plain mount on target would be copied into every peer
+    mount namespace; the final umount -R in the daemon could then never release the
+    LUKS mapper. Binding target onto itself and marking it private stops that propagation.
+    """
+    target.mkdir(parents=True, exist_ok=True)
+    runner.run(["mount", "--bind", str(target), str(target)])
+    runner.run(["mount", "--make-private", str(target)])
+
+
 def mount_target(runner: Runner, lay: StorageLayout, target: Path = TARGET_MNT, *,
                  uefi: bool, filesystem: str) -> None:
     """Mount the installed root (and btrfs @home, and the ESP at target/boot)."""
-    target.mkdir(parents=True, exist_ok=True)
+    _private_mountpoint(runner, target)
     if filesystem == "btrfs":
         runner.run(["mount", "-o", "subvol=@", lay.fs_path, str(target)])
         (target / "home").mkdir(exist_ok=True)

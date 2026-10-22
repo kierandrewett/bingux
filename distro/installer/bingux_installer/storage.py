@@ -20,6 +20,7 @@ class StorageLayout:
     esp_path: str | None  # /dev/sda1 for UEFI, None for BIOS
     luks_path: str | None  # partition carrying the LUKS header, when encrypted
     fs_path: str  # device the root filesystem lives on (mapper device or btrfs volume)
+    luks_name: str | None  # open LUKS mapper after commit, e.g. luks-<uuid>; None when unencrypted
 
 
 def commit_layout(
@@ -33,7 +34,7 @@ def commit_layout(
 ) -> StorageLayout:  # pragma: no cover - needs python-blivet and a real disk
     """Initialise the GPT, create partitions, LUKS and filesystems. Destructive."""
     try:
-        from blivet import Blivet
+        from blivet import Blivet, udev
         from blivet.devices import LUKSDevice
         from blivet.formats import get_format
         from blivet.formats.disklabel import DiskLabel
@@ -66,6 +67,8 @@ def commit_layout(
         root_kwargs: dict = {}
         if encrypted:
             root_kwargs = {"fmt_type": "luks", "fmt_args": {"passphrase": passphrase}}
+        elif filesystem == "btrfs":
+            root_kwargs = {"fmt_type": "btrfs"}
         root = b.new_partition(size=Size(ROOT_BASE_SIZE), grow=True, parents=[dev],
                                **root_kwargs)
         b.create_device(root)
@@ -76,7 +79,9 @@ def commit_layout(
 
         container = root
         if encrypted:
-            container = LUKSDevice(name=layout.LUKS_NAME, size=root.size, parents=[root])
+            # A btrfs volume needs a btrfs member format on its parent; ext4 is formatted below.
+            member = get_format("btrfs") if filesystem == "btrfs" else None
+            container = LUKSDevice(name=layout.LUKS_NAME, fmt=member, size=root.size, parents=[root])
             b.create_device(container)
 
         if filesystem == "btrfs":
@@ -85,13 +90,15 @@ def commit_layout(
             for name, mountpoint in layout.BTRFS_SUBVOLS:
                 sub = b.new_btrfs_sub_volume(name=name, parents=[volume], mountpoint=mountpoint)
                 b.create_device(sub)
-            fs_path = volume.path
+            fs_device = volume
         else:
             b.format_device(container, get_format("ext4", device=container.path,
                                                   label=layout.ROOT_LABEL))
-            fs_path = container.path
+            fs_device = container
 
         b.do_it()  # ---- commit point: the disk is written from here on ----
+        # dm-crypt mappings and filesystems appear through udev; the caller reads them next.
+        udev.settle()
     except InstallerError:
         raise
     except Exception as exc:  # blivet raises many exception types; keep the message only
@@ -100,7 +107,8 @@ def commit_layout(
     return StorageLayout(
         esp_path=layout.partition_path(disk, 1) if uefi else None,
         luks_path=layout.partition_path(disk, 2) if encrypted else None,
-        fs_path=fs_path,
+        fs_path=fs_device.path,
+        luks_name=container.name if encrypted else None,
     )
 
 

@@ -328,7 +328,17 @@ class LiveVm:
                 time.sleep(0.1)
 
     def _send(self, data):
-        self.serial.sendall(data)
+        """Send all of `data`, draining guest output whenever the socket is full.
+
+        QEMU stops reading our input while it is blocked writing output we have not read, so a plain
+        blocking send can deadlock against a guest that is printing (the bootloader menu does).
+        """
+        view = memoryview(data)
+        while view:
+            try:
+                view = view[self.serial.send(view):]
+            except socket.timeout:
+                self._pump(0.2)
 
     def _pump(self, seconds):
         """Read serial output for up to `seconds`. EOFError when the guest closed the console."""

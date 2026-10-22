@@ -16,6 +16,9 @@ Exit status is 0 only when every case passes. Artifacts: OUT/<case>/{install,boo
 import argparse
 import base64
 import json
+import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -32,6 +35,9 @@ USER_PASSWORD = "tester-pass-1"
 LUKS_PASSPHRASE = "luks-pass-123"
 DEFAULT_OUT = HERE.parents[2] / "out" / "installer-backend" / "matrix"
 DEFAULT_DISK_DIR = Path.home() / ".cache" / "bingux-installer-matrix"
+OVERLAY_LABEL = "BINGUXOV"  # volume id of the installer overlay CD
+OVERLAY_MOUNT = "/mnt/ov"
+OVERLAY_SCRATCH = Path("/tmp") / "bingux-installer-overlay"
 
 # name: (firmware, filesystem, encrypted)
 CASES = {
@@ -65,6 +71,32 @@ def make_plan(firmware, filesystem, encrypted):
         "kernel_args": ["console=ttyS0"],
     }
 
+ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[()][0-9A-Za-z]|\x1b[=>78]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
+
+
+def clean_output(text):
+    """Guest output without terminal escapes.
+
+    The shell's prompt integration prints OSC sequences after each command, so the next
+    command's output starts with the tail of the previous one (`...;exit=success ESC \\`).
+    """
+    text = re.sub(r"^[^\n]*?\x1b\\", "", text, count=1)
+    return ANSI.sub("", text)
+
+
+class GuestVm:
+    """LiveVm proxy whose run() returns output with terminal escapes removed."""
+
+    def __init__(self, vm):
+        self._vm = vm
+
+    def run(self, command, **kwargs):
+        rc, out = self._vm.run(command, **kwargs)
+        return rc, clean_output(out)
+
+    def __getattr__(self, name):
+        return getattr(self._vm, name)
+
 
 def last_json(text):
     """The last line of `text` that parses as a JSON object, or None."""
@@ -80,15 +112,39 @@ def last_json(text):
     return None
 
 
-def install_phase(vm, checks, name, firmware, filesystem, encrypted):
+def build_overlay(src, scratch):
+    """Pack src/bingux_installer into a data CD labelled OVERLAY_LABEL, so the guest runs this copy."""
+    staging = scratch / "root"
+    shutil.rmtree(scratch, ignore_errors=True)
+    shutil.copytree(src / "bingux_installer", staging / "bingux_installer",
+                    ignore=shutil.ignore_patterns("__pycache__"))
+    iso = scratch / "overlay.iso"
+    subprocess.run(["xorriso", "-as", "mkisofs", "-quiet", "-R", "-J", "-V", OVERLAY_LABEL,
+                    "-o", str(iso), str(staging)], check=True)
+    return iso
+
+
+def install_phase(vm, checks, name, firmware, filesystem, encrypted, overlay=False):
     """Boot the live ISO, run probe and install. True when the install reports ok."""
+    prefix = f"PYTHONPATH={OVERLAY_MOUNT} " if overlay else ""
     if not checks.expect(vm.wait_for_shell(timeout=600), f"{name}: live root shell up"):
         return False
+    if overlay:
+        rc, _ = vm.run(f"mkdir -p {OVERLAY_MOUNT} && mount -o ro LABEL={OVERLAY_LABEL} {OVERLAY_MOUNT}",
+                       timeout=60)
+        checks.expect(rc == 0, f"{name}: installer overlay mounted", f"rc={rc}")
+    if overlay:
+        # The install runs in the socket-activated daemon, not the CLI: give the daemon the overlay.
+        dropin = base64.b64encode(f"[Service]\nEnvironment=PYTHONPATH={OVERLAY_MOUNT}\n".encode()).decode()
+        rc, _ = vm.run(f"mkdir -p /run/systemd/system/bingux-installer.service.d && printf %s {dropin} | "
+                       "base64 -d > /run/systemd/system/bingux-installer.service.d/overlay.conf && "
+                       "systemctl daemon-reload && systemctl restart bingux-installer.service", timeout=120)
+        checks.expect(rc == 0, f"{name}: daemon restarted on the overlay", f"rc={rc}")
     payload = base64.b64encode(json.dumps(make_plan(firmware, filesystem, encrypted)).encode()).decode()
     rc, _ = vm.run(f"printf %s {payload} | base64 -d > /tmp/plan.json", timeout=60)
     checks.expect(rc == 0, f"{name}: plan written to the guest", f"rc={rc}")
 
-    rc, probe_out = vm.run("bingux-installer --json probe", timeout=180)
+    rc, probe_out = vm.run(f"{prefix}bingux-installer --json probe", timeout=180)
     probe = last_json(probe_out) or {}
     data = probe.get("data", {})
     target = next((d for d in data.get("disks", []) if d.get("path") == DISK), None)
@@ -99,7 +155,7 @@ def install_phase(vm, checks, name, firmware, filesystem, encrypted):
         f"rc={rc} probe={probe}",
     )
 
-    rc, install_out = vm.run("bingux-installer --json install --plan /tmp/plan.json", timeout=2400)
+    rc, install_out = vm.run(f"{prefix}bingux-installer --json install --plan /tmp/plan.json", timeout=2400)
     result = last_json(install_out) or {}
     if name in REFUSED:
         refused = result.get("event") == "error" and result.get("code") == "unsupported"
@@ -120,23 +176,34 @@ def install_phase(vm, checks, name, firmware, filesystem, encrypted):
     return ok
 
 
+def login_shell(vm, timeout):
+    """Log in as USER on the serial getty; the installed system has no autologin. True when a shell is up."""
+    if not vm.wait_for("login:", timeout=timeout):
+        return False
+    vm.send(USER + "\n")
+    if not vm.wait_for("assword:", timeout=60):
+        return False
+    vm.send(USER_PASSWORD + "\n")
+    return vm.wait_for_shell(timeout=300, boot_delay=0)
+
+
 def boot_phase(vm, checks, name, firmware, filesystem, encrypted, out):
     """Boot the installed disk alone and check the installed system."""
     if encrypted:
         # Must be called right after start(): the prompt is matched from this point on.
         if checks.expect(vm.wait_for("assphrase", timeout=600), f"{name}: LUKS passphrase prompt"):
             vm.send(LUKS_PASSPHRASE + "\n")
-    if not checks.expect(vm.wait_for_shell(timeout=900), f"{name}: installed system root shell up"):
+    if not checks.expect(login_shell(vm, timeout=900), f"{name}: installed system login as {USER}"):
         return
 
-    rc, who = vm.run(f"runuser -u {USER} -- id -un", timeout=120)
+    rc, who = vm.run("id -un", timeout=120)
     checks.expect(rc == 0 and who.strip() == USER, f"{name}: created user runs commands", f"rc={rc} out={who!r}")
     rc, groups = vm.run(f"id -nG {USER}", timeout=60)
     checks.expect(rc == 0 and "wheel" in groups.split(), f"{name}: admin user is in wheel", f"out={groups!r}")
     rc, greetd = vm.run("grep -c initial_session /etc/greetd/config.toml; "
                         "cmp -s /etc/greetd/config.toml /usr/share/bingux/greeter/greetd.toml && echo packaged",
                         timeout=60)
-    checks.expect(greetd.split()[:1] == ["0"] and greetd.split()[-1:] == ["packaged"],
+    checks.expect(greetd.split()[-2:] == ["0", "packaged"],
                   f"{name}: greetd config is the packaged greeter, no live session",
                   f"rc={rc} out={greetd!r}")
     rc, live_bits = vm.run("id live >/dev/null 2>&1 && echo live-user; "
@@ -166,7 +233,7 @@ def boot_phase(vm, checks, name, firmware, filesystem, encrypted, out):
     checks.expect((out / "greeter.png").stat().st_size > 0, f"{name}: greeter screenshot written")
 
 
-def run_case(name, iso, out_root, disk_dir, checks):
+def run_case(name, iso, out_root, disk_dir, checks, cdrom=None):
     firmware, filesystem, encrypted = CASES[name]
     out = out_root / name
     disk_dir.mkdir(parents=True, exist_ok=True)
@@ -175,8 +242,9 @@ def run_case(name, iso, out_root, disk_dir, checks):
 
     installed = False
     with LiveVm(out / "install") as vm:
-        vm.start(iso=iso, disks=[(disk, DISK_BYTES)], firmware=firmware)
-        installed = install_phase(vm, checks, name, firmware, filesystem, encrypted)
+        vm.start(iso=iso, disks=[(disk, DISK_BYTES)], firmware=firmware, cdrom=cdrom)
+        installed = install_phase(GuestVm(vm), checks, name, firmware, filesystem, encrypted,
+                                  overlay=cdrom is not None)
         if installed:
             vm.run("sync", timeout=120)
             vm.poweroff()
@@ -184,7 +252,7 @@ def run_case(name, iso, out_root, disk_dir, checks):
     if installed:
         with LiveVm(out / "boot") as vm:
             vm.start(iso=None, disks=[(disk, DISK_BYTES)], firmware=firmware)
-            boot_phase(vm, checks, name, firmware, filesystem, encrypted, out)
+            boot_phase(GuestVm(vm), checks, name, firmware, filesystem, encrypted, out)
             vm.poweroff()
     disk.unlink(missing_ok=True)
 
@@ -196,7 +264,9 @@ def main(argv=None):
     parser.add_argument("--out", default=str(DEFAULT_OUT), help="artifact root")
     parser.add_argument("--disk-dir", default=str(DEFAULT_DISK_DIR),
                         help="target disk images (large; removed after each case)")
+    parser.add_argument("--overlay", help="directory holding bingux_installer/: run it instead of the ISO copy")
     args = parser.parse_args(argv)
+    cdrom = build_overlay(Path(args.overlay), OVERLAY_SCRATCH) if args.overlay else None
 
     out_root = Path(args.out)
     out_root.mkdir(parents=True, exist_ok=True)
@@ -206,7 +276,7 @@ def main(argv=None):
         out.mkdir(parents=True, exist_ok=True)
         checks = Checks(out)
         try:
-            run_case(name, Path(args.iso), out_root, Path(args.disk_dir), checks)
+            run_case(name, Path(args.iso), out_root, Path(args.disk_dir), checks, cdrom)
         except Exception as error:  # reported as a failed check; artifacts are kept
             checks.expect(False, f"{name}: driver completed without error", repr(error))
         finally:

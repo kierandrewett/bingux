@@ -7,7 +7,10 @@ so the two outcomes cannot interleave.
 
 from __future__ import annotations
 
+import os
+import stat
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -131,7 +134,54 @@ def _guard(code: str, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
 class _Mounts:
     target: bool = False
     source: bool = False
-    opened: bool = False  # LUKS mapper open after commit
+    luks_name: str | None = None  # open LUKS mapper after commit
+
+
+_CLOSE_RETRIES = 20
+_CLOSE_RETRY_DELAY = 0.5
+
+
+def _mapper_holders(runner: Runner, name: str) -> str:
+    """Describe the processes that hold the LUKS mapper's block device open. Used in errors only."""
+    try:
+        target = os.stat(f"/dev/mapper/{name}").st_rdev
+    except OSError:
+        return "device node missing"
+    holders: list[str] = []
+    for pid in (p for p in os.listdir("/proc") if p.isdigit()):
+        try:
+            fds = os.listdir(f"/proc/{pid}/fd")
+        except OSError:
+            continue
+        for fd in fds:
+            try:
+                st = os.stat(f"/proc/{pid}/fd/{fd}")
+            except OSError:
+                continue
+            if stat.S_ISBLK(st.st_mode) and st.st_rdev == target:
+                comm = Path(f"/proc/{pid}/comm").read_text(errors="replace").strip()
+                holders.append(f"{comm}[{pid}]")
+                break
+    dev = f"{os.major(target)}:{os.minor(target)}"
+    # A mount in another mount namespace is invisible to our own mountinfo; scan every process.
+    mounted: set[str] = set()
+    for pid in (p for p in os.listdir("/proc") if p.isdigit()):
+        try:
+            lines = Path(f"/proc/{pid}/mountinfo").read_text().splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            parts = line.split()
+            if parts[2] == dev:
+                mounted.add(f"pid {pid} at {parts[4]}")
+    if mounted:
+        holders.append("mounted at " + ", ".join(mounted))
+    sysfs = Path(f"/sys/dev/block/{dev}/holders")
+    if sysfs.is_dir():
+        holders.append("kernel holders " + ", ".join(sorted(p.name for p in sysfs.iterdir())))
+    dm = runner.run(["dmsetup", "info", "-c", "--noheadings", "-o", "open,name", name], check=False)
+    holders.append("dm " + (dm.stdout.strip() or dm.stderr.strip()))
+    return ", ".join(holders) or "no process (kernel holder)"
 
 
 def _teardown(env: Env, mounts: _Mounts, *, strict: bool) -> None:
@@ -142,6 +192,8 @@ def _teardown(env: Env, mounts: _Mounts, *, strict: bool) -> None:
     if mounts.target:
         runner.run(["sync"], check=False)
         result = runner.run(["umount", "-R", str(env.target)], check=False)
+        # Drop the private bind that payload._private_mountpoint left on the target.
+        runner.run(["umount", str(env.target)], check=False)
         if result.returncode != 0 and strict:
             left = runner.run(["findmnt", "-R", "-n", "-o", "TARGET", str(env.target)], check=False)
             detail = (result.stderr or "").strip()[-300:]
@@ -150,11 +202,22 @@ def _teardown(env: Env, mounts: _Mounts, *, strict: bool) -> None:
                 f"could not unmount {env.target}: {detail}; still mounted: {left.stdout.strip()}",
             )
         mounts.target = False
-    if mounts.opened:
-        result = runner.run(["cryptsetup", "close", layout.LUKS_NAME], check=False)
+    if mounts.luks_name:
+        # umount can return before the kernel drops the filesystem's last reference to the
+        # mapper, so a close right after it may still see the device busy. Retry briefly.
+        runner.run(["udevadm", "settle"], check=False)
+        result = runner.run(["cryptsetup", "close", mounts.luks_name], check=False)
+        for _ in range(_CLOSE_RETRIES):
+            if result.returncode == 0 or "in use" not in (result.stderr or ""):
+                break
+            time.sleep(_CLOSE_RETRY_DELAY)
+            result = runner.run(["cryptsetup", "close", mounts.luks_name], check=False)
         if result.returncode != 0 and strict:
-            raise InstallerError("storage_failed", "could not close the LUKS mapper")
-        mounts.opened = False
+            detail = (result.stderr or "").strip()[-300:]
+            holders = _mapper_holders(runner, mounts.luks_name)
+            raise InstallerError(
+                "storage_failed", f"could not close the LUKS mapper: {detail}; held by: {holders}")
+        mounts.luks_name = None
 
 
 def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
@@ -204,7 +267,7 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
             filesystem=plan.filesystem, encrypted=plan.encrypted,
             passphrase=plan.encryption.passphrase,
         )
-        mounts.opened = plan.encrypted
+        mounts.luks_name = lay.luks_name
         if plan.encrypted and lay.luks_path is None:
             raise InstallerError("storage_failed", "encrypted install has no LUKS partition")
         if plan.uefi and lay.esp_path is None:
