@@ -63,16 +63,12 @@ def _norm(text: str) -> str:
     return re.sub(r"[^a-z0-9]", "", text.lower())
 
 
-def ocr_words(frame: np.ndarray, scale: int = 2, invert: bool = False) -> list[Word]:
-    """Word boxes in frame coordinates. Upscaled, since tesseract is weak on 14 px UI text."""
-    image = Image.fromarray(frame).convert("L")
-    if invert:
-        image = Image.fromarray(255 - np.asarray(image))
-    image = image.resize((image.width * scale, image.height * scale), Image.LANCZOS)
+def _tsv_words(image: Image.Image, scale: int, psm: str, y_offset: float = 0) -> list[Word]:
+    """Run tesseract on an already-upscaled image; boxes come back in frame coordinates."""
     with tempfile.NamedTemporaryFile(suffix=".png") as handle:
         image.save(handle.name)
         out = subprocess.run(
-            ["tesseract", handle.name, "stdout", "--psm", "11", "tsv"],
+            ["tesseract", handle.name, "stdout", "--psm", psm, "tsv"],
             capture_output=True,
             text=True,
             check=False,
@@ -90,13 +86,37 @@ def ocr_words(frame: np.ndarray, scale: int = 2, invert: bool = False) -> list[W
             Word(
                 text=cols[11].strip(),
                 x0=left / scale,
-                y0=top / scale,
+                y0=top / scale + y_offset,
                 x1=(left + width) / scale,
-                y1=(top + height) / scale,
+                y1=(top + height) / scale + y_offset,
                 height=height / scale,
                 conf=conf,
             )
         )
+    return words
+
+
+def ocr_words(frame: np.ndarray, scale: int = 2, invert: bool = False, binarize: bool = False) -> list[Word]:
+    """Word boxes in frame coordinates. Upscaled, since tesseract is weak on 14 px UI text."""
+    image = Image.fromarray(frame).convert("L")
+    if invert:
+        image = Image.fromarray(255 - np.asarray(image))
+    if binarize:
+        image = Image.fromarray(np.where(np.asarray(image) > 100, 0, 255).astype("uint8"))
+    image = image.resize((image.width * scale, image.height * scale), Image.LANCZOS)
+    return _tsv_words(image, scale, "11")
+
+
+def ocr_bands(frame: np.ndarray, height: int = 90, stride: int = 45, scale: int = 3) -> list[Word]:
+    """Binarized full-width bands read one line at a time. Page-level OCR misses light labels on
+    dark buttons (Continue); a thresholded band read with psm 7 finds them. About 4 s per frame."""
+    gray = Image.fromarray(frame).convert("L")
+    words: list[Word] = []
+    for top in range(0, gray.height - height + 1, stride):
+        band = gray.crop((0, top, gray.width, top + height))
+        binary = Image.fromarray(np.where(np.asarray(band) > 100, 0, 255).astype("uint8"))
+        image = binary.resize((band.width * scale, band.height * scale), Image.NEAREST)
+        words += _tsv_words(image, scale, "7", y_offset=top)
     return words
 
 
@@ -132,11 +152,13 @@ def find_phrase(words: list[Word], phrase: str) -> Word | None:
 
 
 def text_on_screen(frame: np.ndarray, phrase: str) -> Word | None:
-    """Look for `phrase` on a normal and on an inverted copy of the frame (light and dark text)."""
-    found = find_phrase(ocr_words(frame), phrase)
-    if found is None:
-        found = find_phrase(ocr_words(frame, invert=True), phrase)
-    return found
+    """Look for `phrase` on a normal, an inverted and a binarized copy of the frame, then in
+    thresholded bands (light labels on dark buttons). The bands are the slow last resort."""
+    for kwargs in ({}, {"invert": True}, {"binarize": True}):
+        found = find_phrase(ocr_words(frame, **kwargs), phrase)
+        if found is not None:
+            return found
+    return find_phrase(ocr_bands(frame), phrase)
 
 
 def page_title(frame: np.ndarray) -> str | None:
