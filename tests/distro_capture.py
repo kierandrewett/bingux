@@ -141,9 +141,30 @@ def boxes_match(a, b, tolerance=2):
     return all(abs(p - q) <= tolerance for p, q in zip(a, b))
 
 
+# Screen-state predicates shared by the boot test and installer tests. Each is
+# measured on boot stills (1280x800): the greeter's card title has 171 bright
+# pixels and no other state has more than 0; the session's top strip mean is
+# 42.6 against 30.5 on the greeter and 45.6 on the lock screen.
+GREETER_CARD_TITLE = "160x24+560+278"
+SESSION_STRIP = "200x28+300+0"
+
+
+def greeter_shown(frame):
+    """True on the kiosk greeter: the bright title of its login card."""
+    return bright_count(frame, GREETER_CARD_TITLE) > 100
+
+
 def session_painted(frame):
-    """True on a Bingux session: the bar's clock text on a dark strip and the blue wallpaper below it."""
-    return bright_count(frame, "160x24+560+4") > 100 and blue_lead(frame, "1280x700+0+60") > 0.05
+    """True on a Bingux session (desktop or lock): the bar's clock text over a lit strip and the blue wallpaper.
+
+    The bar clock text rules out the Plymouth splash (same blue, no text at the top) and the greeter
+    (lit clock text, but a flat dark strip).
+    """
+    return (
+        bright_count(frame, "160x24+560+4") > 100
+        and region_mean_luma(frame, SESSION_STRIP) >= 36.0
+        and blue_lead(frame, "1280x700+0+60") > 0.05
+    )
 
 
 # ---- recording -----------------------------------------------------------------

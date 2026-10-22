@@ -62,14 +62,17 @@ work belongs in Git history and does not stay here as a second changelog.
       sat at an empty field until a second typing. `tests/distro-boot.py` now waits
       for the greeter clock, and retypes once if the greeter is still up after a
       minute. Not re-run.
-- [ ] Run 4: the greeter never painted its clock; the screen was black from 167 s to
-      737 s and greetd never created a session for `live`. The harness cannot be
-      blamed for this one: it typed into a greeter that was not on screen. Find out
-      why the greeter output stays black.
-- [ ] Capture: QEMU `screendump` returned "no surface" for most frames in every run
-      (948 to 6231 errors), so most frames came from the VNC scanout fallback, and
-      black spans may be empty pictures. Fix the capture before frame timings count
-      as evidence.
+- [ ] Black greeter: run 4 (2026.10.21 ISO) never showed the greeter clock, black
+      from 167 s to 737 s. It recurred on the 2e59048 ISO: fin2 and fin3 never
+      showed the login card (13 checks failed each; no `first greeter frame` in
+      the timeline). fin1 and boots 2-3 passed. Cause open; `/tmp/h3/repro.py`
+      not yet run.
+- [x] Capture: frames come from the VNC framebuffer only (QMP screendump removed,
+      `tests/distro_capture.py`, commit 862e055).
+- [x] Session, greeter and lock detection (`tests/distro_capture.py`): greeter by
+      its login card; session by the bar clock text, a lit top strip and blue
+      wallpaper. The bar-text test rejects the Plymouth splash, which matched the
+      old session test. Lock by the lock clock box.
 - [ ] Verify the GL renderer (`virtio-vga-gl`) in QEMU. Not verified: no run records
       which display path was taken, and the serial log and reports contain no
       renderer string. Add a probe that reads the compositor's GL renderer.
