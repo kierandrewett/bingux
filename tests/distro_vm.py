@@ -71,10 +71,11 @@ def display_args():
 
 
 class Vm:
-    def __init__(self, work, *, iso=None, disk=None, uefi=True, memory=None, serial=False, vars_path=None, record=None):
+    def __init__(self, work, *, iso=None, disk=None, uefi=True, memory=None, serial=False, vars_path=None, record=None, pointer=False):
         """`record`: directory for flow.mp4, timeline.json and frame-events.jsonl.
 
         Without it the recording goes to the work directory, which the caller removes.
+        `pointer`: attach an absolute USB tablet so VNC pointer events reach the guest's screen.
         """
         self.work = Path(work)
         self.work.mkdir(parents=True, exist_ok=True)
@@ -90,6 +91,7 @@ class Vm:
         self.stopped = False
         self.process = None
         self.t0 = None
+        self.pointer = pointer
         self.log = b""
         self._serial = None
         self._monitor = None
@@ -114,6 +116,8 @@ class Vm:
             "-device",
             "virtio-net-pci,netdev=net0",
         ]
+        if self.pointer:
+            args += ["-device", "qemu-xhci", "-device", "usb-tablet"]
         if self.uefi:
             if not self.vars_path.exists():
                 shutil.copy(OVMF_VARS, self.vars_path)
