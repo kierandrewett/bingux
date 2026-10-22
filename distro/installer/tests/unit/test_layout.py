@@ -27,6 +27,13 @@ def test_bios_layout_has_bios_boot_then_root() -> None:
     assert parts[0].size_bytes == layout.BIOS_BOOT_BYTES
 
 
+def test_bios_encrypted_layout_has_unencrypted_boot_before_root() -> None:
+    parts = layout.partition_layout(uefi=False, size_bytes=16 * GIB, encrypted=True)
+    assert [(p.index, p.role) for p in parts] == [(1, "bios_boot"), (2, "boot"), (3, "root")]
+    assert parts[1].size_bytes == layout.BOOT_BYTES
+    assert parts[2].size_bytes is None
+
+
 def test_disk_below_eight_gib_is_too_small() -> None:
     with pytest.raises(InstallerError) as exc:
         layout.partition_layout(uefi=True, size_bytes=8 * GIB - 1)
@@ -76,17 +83,24 @@ def test_cmdline_requires_matching_uuid(kwargs: dict[str, object]) -> None:
 
 
 def test_fstab_ext4_with_esp() -> None:
-    text = layout.fstab(root_fs_uuid=ROOT_UUID, filesystem="ext4", esp_uuid=ESP_UUID)
+    text = layout.fstab(root_fs_uuid=ROOT_UUID, filesystem="ext4", boot_uuid=ESP_UUID)
     assert f"UUID={ROOT_UUID}\t/\text4\tdefaults\t0\t1" in text
     assert f"UUID={ESP_UUID}\t/boot\tvfat\tumask=0077\t0\t2" in text
     assert "\tswap\t" not in text
 
 
 def test_fstab_btrfs_has_root_and_home_subvolumes_and_no_esp_on_bios() -> None:
-    text = layout.fstab(root_fs_uuid=ROOT_UUID, filesystem="btrfs", esp_uuid=None)
+    text = layout.fstab(root_fs_uuid=ROOT_UUID, filesystem="btrfs", boot_uuid=None)
     assert f"UUID={ROOT_UUID}\t/\tbtrfs\tsubvol=@,defaults\t0\t0" in text
     assert f"UUID={ROOT_UUID}\t/home\tbtrfs\tsubvol=@home,defaults\t0\t0" in text
     assert "/boot" not in text
+
+
+def test_fstab_ext4_boot_partition_on_bios_encrypted() -> None:
+    text = layout.fstab(root_fs_uuid=ROOT_UUID, filesystem="ext4", boot_uuid=LUKS_UUID,
+                        boot_fstype="ext4")
+    assert f"UUID={LUKS_UUID}\t/boot\text4\tdefaults\t0\t2" in text
+    assert "vfat" not in text
 
 
 def test_mkinitcpio_hooks_order_with_encryption_and_plymouth() -> None:
@@ -125,15 +139,15 @@ def test_no_swap_partition_by_default() -> None:
 
 
 def test_fstab_xfs_root() -> None:
-    text = layout.fstab(root_fs_uuid=ROOT_UUID, filesystem="xfs", esp_uuid=ESP_UUID)
+    text = layout.fstab(root_fs_uuid=ROOT_UUID, filesystem="xfs", boot_uuid=ESP_UUID)
     assert f"UUID={ROOT_UUID}\t/\txfs\tdefaults\t0\t0" in text
 
 
 def test_fstab_swapfile_and_encrypted_swap_entries() -> None:
-    text = layout.fstab(root_fs_uuid=ROOT_UUID, filesystem="ext4", esp_uuid=ESP_UUID,
+    text = layout.fstab(root_fs_uuid=ROOT_UUID, filesystem="ext4", boot_uuid=ESP_UUID,
                         swap_source=layout.SWAPFILE)
     assert "/swapfile\tnone\tswap\tdefaults\t0\t0" in text
-    text = layout.fstab(root_fs_uuid=ROOT_UUID, filesystem="ext4", esp_uuid=ESP_UUID,
+    text = layout.fstab(root_fs_uuid=ROOT_UUID, filesystem="ext4", boot_uuid=ESP_UUID,
                         swap_source=f"/dev/mapper/{layout.SWAP_MAPPER}")
     assert f"/dev/mapper/{layout.SWAP_MAPPER}\tnone\tswap\tdefaults\t0\t0" in text
 

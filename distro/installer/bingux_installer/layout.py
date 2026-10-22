@@ -12,7 +12,9 @@ GIB = 1024 * MIB
 MIN_DISK_BYTES = 8 * GIB
 ESP_BYTES = 512 * MIB
 BIOS_BOOT_BYTES = 1 * MIB
+BOOT_BYTES = 1 * GIB  # unencrypted /boot under BIOS with an encrypted root
 ESP_LABEL = "BINGUX_ESP"
+BOOT_LABEL = "BINGUX_BOOT"
 ROOT_LABEL = "BINGUX_ROOT"
 LUKS_NAME = "bingux-root"
 BTRFS_SUBVOLS = (("@", "/"), ("@home", "/home"))
@@ -26,7 +28,7 @@ DISPLAY_CMDLINE = ("splash", "quiet", "loglevel=3", "rd.udev.log_level=3",
 @dataclass(frozen=True)
 class PartitionSpec:
     index: int  # 1-based GPT index
-    role: str  # "esp" | "bios_boot" | "root"
+    role: str  # "esp" | "bios_boot" | "boot" | "swap" | "root"
     size_bytes: int | None  # None means "grow to fill the rest of the disk"
 
 
@@ -38,16 +40,21 @@ def check_disk_size(size_bytes: int) -> None:
         )
 
 
-def partition_layout(*, uefi: bool, size_bytes: int,
+def partition_layout(*, uefi: bool, size_bytes: int, encrypted: bool = False,
                      swap_partition_bytes: int = 0) -> tuple[PartitionSpec, ...]:
     """Return the GPT partitions for the disk. Root always grows to fill the disk.
 
-    A swap partition, when asked for, sits between the boot partition and the root."""
+    BIOS with an encrypted root gets an unencrypted ext4 /boot after the BIOS boot partition:
+    GRUB reads the kernel and initramfs from it and never opens the LUKS container.
+    A swap partition, when asked for, sits between the boot partitions and the root."""
     check_disk_size(size_bytes)
     first = (PartitionSpec(index=1, role="esp", size_bytes=ESP_BYTES) if uefi
              else PartitionSpec(index=1, role="bios_boot", size_bytes=BIOS_BOOT_BYTES))
     specs = [first]
     index = 2
+    if not uefi and encrypted:
+        specs.append(PartitionSpec(index=index, role="boot", size_bytes=BOOT_BYTES))
+        index += 1
     if swap_partition_bytes:
         specs.append(PartitionSpec(index=index, role="swap", size_bytes=swap_partition_bytes))
         index += 1
@@ -92,10 +99,12 @@ def fstab(
     *,
     root_fs_uuid: str,
     filesystem: str,
-    esp_uuid: str | None,
+    boot_uuid: str | None,
+    boot_fstype: str = "vfat",
     swap_source: str | None = None,
 ) -> str:
-    """Render /etc/fstab. /boot only for UEFI (esp_uuid set); swap only when swap_source is set.
+    """Render /etc/fstab. /boot only when boot_uuid is set: a vfat ESP (UEFI) or an ext4 partition
+    (BIOS with encryption); swap only when swap_source is set.
 
     swap_source is the device column of the swap entry: a path to a swap file, a UUID=
     spec, or the mapper device of encrypted swap."""
@@ -110,8 +119,11 @@ def fstab(
         lines.append(f"UUID={root_fs_uuid}\t/\txfs\tdefaults\t0\t0")
     else:
         lines.append(f"UUID={root_fs_uuid}\t/\text4\tdefaults\t0\t1")
-    if esp_uuid:
-        lines.append(f"UUID={esp_uuid}\t/boot\tvfat\tumask=0077\t0\t2")
+    if boot_uuid:
+        if boot_fstype not in ("vfat", "ext4"):
+            raise ValueError(f"unsupported boot filesystem {boot_fstype!r}")
+        options = "umask=0077" if boot_fstype == "vfat" else "defaults"
+        lines.append(f"UUID={boot_uuid}\t/boot\t{boot_fstype}\t{options}\t0\t2")
     if swap_source:
         lines.append(f"{swap_source}\tnone\tswap\tdefaults\t0\t0")
     return "\n".join(lines) + "\n"

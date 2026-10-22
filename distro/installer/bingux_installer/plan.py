@@ -401,8 +401,6 @@ def validate_plan(
         raise _fail("filesystem", "must be ext4, btrfs or xfs")
 
     encryption = _check_encryption(raw.get("encryption"))
-    if encryption.enabled and firmware == "bios":
-        raise InstallerError("unsupported", "encryption is not supported with BIOS firmware")
 
     swap = raw.get("swap", "none")
     if swap not in SWAP_KINDS:

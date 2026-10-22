@@ -283,13 +283,13 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
         mounts.luks_name = lay.luks_name
         if plan.encrypted and lay.luks_path is None:
             raise InstallerError("storage_failed", "encrypted install has no LUKS partition")
-        if plan.uefi and lay.esp_path is None:
-            raise InstallerError("storage_failed", "UEFI install has no ESP partition")
+        if lay.boot_path is None and (plan.uefi or plan.encrypted):
+            raise InstallerError("storage_failed", "install has no /boot partition")
         root_uuid = _guard("storage_failed", storage.blkid_value, runner, lay.fs_path, "UUID")
         luks_uuid = (_guard("storage_failed", storage.blkid_value, runner, lay.luks_path, "UUID")
                      if plan.encrypted else None)
-        esp_uuid = (_guard("storage_failed", storage.blkid_value, runner, lay.esp_path, "UUID")
-                    if plan.uefi else None)
+        boot_uuid = (_guard("storage_failed", storage.blkid_value, runner, lay.boot_path, "UUID")
+                     if lay.boot_path else None)
         if plan.swap == "partition" and lay.swap_path is None:
             raise InstallerError("storage_failed", "swap partition was not created")
         swap_source = None
@@ -308,7 +308,7 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
 
         phase("mount", None, "mounting the target")
         _guard("payload_failed", payload.mount_target, runner, lay, env.target,
-               uefi=plan.uefi, filesystem=plan.filesystem)
+               filesystem=plan.filesystem)
         mounts.target = True
         _guard("payload_failed", payload.mount_source, runner, env.sfs, env.source)
         mounts.source = True
@@ -325,7 +325,8 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
         _guard("config_failed", configure.strip_live_and_packages, runner, env.target)
 
         phase("configure", None, "configuring the system")
-        fstab = layout.fstab(root_fs_uuid=root_uuid, filesystem=plan.filesystem, esp_uuid=esp_uuid,
+        fstab = layout.fstab(root_fs_uuid=root_uuid, filesystem=plan.filesystem,
+                             boot_uuid=boot_uuid, boot_fstype=lay.boot_fstype or "vfat",
                              swap_source=swap_source)
         _guard("config_failed", configure.write_identity, env.target, plan, fstab_text=fstab)
         _guard("config_failed", configure.write_locale, runner, env.target, plan)

@@ -17,7 +17,8 @@ ROOT_BASE_SIZE = "1GiB"  # growable root starts at 1 GiB and fills the disk
 
 @dataclass(frozen=True)
 class StorageLayout:
-    esp_path: str | None  # /dev/sda1 for UEFI, None for BIOS
+    boot_path: str | None  # /boot partition: the ESP (UEFI) or an ext4 partition (BIOS, encrypted)
+    boot_fstype: str | None  # "vfat" for the ESP, "ext4" for the BIOS /boot; None when no /boot
     luks_path: str | None  # partition carrying the LUKS header, when encrypted
     fs_path: str  # device the root filesystem lives on (mapper device or btrfs volume)
     luks_name: str | None  # open LUKS mapper after commit, e.g. luks-<uuid>; None when unencrypted
@@ -46,7 +47,8 @@ def commit_layout(
         raise InstallerError("missing_tool", "python-blivet is not importable") from exc
 
     specs = {s.role: s for s in layout.partition_layout(
-        uefi=uefi, size_bytes=size_bytes, swap_partition_bytes=swap_partition_bytes)}
+        uefi=uefi, size_bytes=size_bytes, encrypted=encrypted,
+        swap_partition_bytes=swap_partition_bytes)}
     try:
         b = Blivet()
         b.reset()
@@ -66,6 +68,11 @@ def commit_layout(
             boot = b.new_partition(
                 fmt_type="biosboot", size=Size(specs["bios_boot"].size_bytes), parents=[dev])
         b.create_device(boot)
+        if specs.get("boot") is not None:
+            ext_boot = b.new_partition(
+                fmt_type="ext4", fmt_args={"label": layout.BOOT_LABEL},
+                size=Size(specs["boot"].size_bytes), parents=[dev])
+            b.create_device(ext_boot)
         if specs.get("swap") is not None:
             swap = b.new_partition(fmt_type="swap", size=Size(specs["swap"].size_bytes),
                                    parents=[dev])
@@ -112,11 +119,17 @@ def commit_layout(
     except Exception as exc:  # blivet raises many exception types; keep the message only
         raise InstallerError("storage_failed", f"partitioning failed: {exc}") from exc
 
+    boot_path, boot_fstype = None, None
+    if uefi:
+        boot_path, boot_fstype = layout.partition_path(disk, specs["esp"].index), "vfat"
+    elif specs.get("boot") is not None:
+        boot_path, boot_fstype = layout.partition_path(disk, specs["boot"].index), "ext4"
     swap_path = None
     if specs.get("swap") is not None:
         swap_path = layout.partition_path(disk, specs["swap"].index)
     return StorageLayout(
-        esp_path=layout.partition_path(disk, 1) if uefi else None,
+        boot_path=boot_path,
+        boot_fstype=boot_fstype,
         luks_path=layout.partition_path(disk, specs["root"].index) if encrypted else None,
         fs_path=fs_device.path,
         luks_name=container.name if encrypted else None,

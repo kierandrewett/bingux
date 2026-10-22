@@ -102,8 +102,8 @@ def _private_mountpoint(runner: Runner, target: Path) -> None:
 
 
 def mount_target(runner: Runner, lay: StorageLayout, target: Path = TARGET_MNT, *,
-                 uefi: bool, filesystem: str) -> None:
-    """Mount the installed root (and btrfs @home, and the ESP at target/boot)."""
+                 filesystem: str) -> None:
+    """Mount the installed root (and btrfs @home, and the /boot partition at target/boot)."""
     _private_mountpoint(runner, target)
     if filesystem == "btrfs":
         runner.run(["mount", "-o", "subvol=@", lay.fs_path, str(target)])
@@ -111,12 +111,11 @@ def mount_target(runner: Runner, lay: StorageLayout, target: Path = TARGET_MNT, 
         runner.run(["mount", "-o", "subvol=@home", lay.fs_path, str(target / "home")])
     else:
         runner.run(["mount", lay.fs_path, str(target)])
-    if uefi:
-        if lay.esp_path is None:
-            raise InstallerError("storage_failed", "UEFI install has no ESP device")
+    if lay.boot_path is not None:
         boot = target / "boot"
         boot.mkdir(exist_ok=True)
-        runner.run(["mount", "-o", "umask=0077", lay.esp_path, str(boot)])
+        options = ["-o", "umask=0077"] if lay.boot_fstype == "vfat" else []
+        runner.run(["mount", *options, lay.boot_path, str(boot)])
 
 
 def mount_chroot_binds(runner: Runner, target: Path = TARGET_MNT) -> None:

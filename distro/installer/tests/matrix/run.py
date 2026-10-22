@@ -4,7 +4,7 @@ For each case: boot the live ISO with a blank 10 GiB virtio disk, write a plan t
 shell, run `bingux-installer --json probe` and `install`, power off, then boot the installed disk
 alone and check the installed system (root filesystem, LUKS, the created user, the greetd greeter).
 
-BIOS with encryption must be refused by the daemon (`unsupported`) and the disk must stay blank.
+BIOS with encryption installs an unencrypted ext4 /boot and a LUKS2 root; GRUB unlocks nothing and the initramfs prompts once.
 
 The serial getty autologins root (GETTY_DROPIN in vmdrive/vm.py), so the boot checks run as root;
 the created user is checked with runuser and wheel membership, not a password login.
@@ -58,7 +58,6 @@ CASES = {
     # encrypted swap partition on LUKS root
     "uefi-luks-ext4-swappart": ("uefi", "ext4", True, {"swap": "partition", "swap_bytes": SWAP_BYTES}),
 }
-REFUSED = {"bios-luks-ext4"}
 
 
 def make_plan(firmware, filesystem, encrypted, extra=None):
@@ -169,17 +168,6 @@ def install_phase(vm, checks, name, firmware, filesystem, encrypted, extra, over
 
     rc, install_out = vm.run(f"{prefix}bingux-installer --json install --plan /tmp/plan.json", timeout=2400)
     result = last_json(install_out) or {}
-    if name in REFUSED:
-        refused = result.get("event") == "error" and result.get("code") == "unsupported"
-        checks.expect(refused, f"{name}: install refused with code unsupported", f"rc={rc} result={result}")
-        rc, lines = vm.run(f"lsblk -dn -o NAME {DISK}", timeout=60)
-        checks.expect(rc == 0 and lines.strip() == "vda", f"{name}: disk left blank after the refusal",
-                      f"rc={rc} lsblk={lines!r}")
-        rc, parts = vm.run(f"lsblk -rn -o TYPE {DISK}", timeout=60)
-        checks.expect(rc == 0 and parts.split() == ["disk"], f"{name}: no partitions created",
-                      f"rc={rc} types={parts!r}")
-        return False
-
     data = result.get("data", {})
     ok = result.get("event") == "result" and result.get("ok") is True
     checks.expect(ok, f"{name}: install result ok", f"rc={rc} result={result}")

@@ -111,10 +111,9 @@ def test_erase_requires_confirm_erase() -> None:
     rejects("invalid_plan", confirm_erase=DROP)
 
 
-def test_encryption_is_refused_with_bios() -> None:
-    with pytest.raises(InstallerError) as exc:
-        make("bios", encryption={"enabled": True, "passphrase": "long enough"})
-    assert exc.value.code == "unsupported"
+def test_encryption_is_accepted_with_bios() -> None:
+    plan = make("bios", encryption={"enabled": True, "passphrase": "long enough"})
+    assert plan.firmware == "bios" and plan.encrypted is True
 
 
 def test_encryption_enabled_keeps_passphrase_for_secrets() -> None:

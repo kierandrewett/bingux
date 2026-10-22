@@ -28,7 +28,7 @@ Implemented (plan schema v2, covered by unit tests and the install matrix):
 
 - Filesystems: ext4, btrfs and xfs for the root (`filesystem`). xfs loads the `xfs` module into
   the initramfs.
-- Storage mode `erase` on UEFI and BIOS, unencrypted and LUKS2 (UEFI only; see Planned).
+- Storage mode `erase` on UEFI and BIOS, unencrypted and LUKS2. BIOS with LUKS2 keeps an unencrypted ext4 `/boot` (see the layout section).
 - `ntp`: `false` disables `systemd-timesyncd`.
 - `root_password`: a string sets the root password; `null` locks the root account.
 - `swap`: `zram` (zram-generator), `file` (`/swapfile`), `partition` (swap partition; encrypted
@@ -38,7 +38,6 @@ Planned (validated by the schema but refused with `unsupported` until the featur
 
 - `storage.mode` `free_space`, `alongside` (shrink ext4, btrfs and NTFS) and `manual`.
 - `autologin`: greetd `initial_session` for the first user, with a setting to turn it off.
-- BIOS with LUKS2 root: the layout and GRUB notes below describe the target design.
 - Dual-boot entries (os-prober for GRUB; the shared ESP for systemd-boot).
 
 ## Failure list
@@ -53,7 +52,7 @@ unmount the payload and close the LUKS mapper before replying.
 | `not_permitted` | Peer uid is not 0 and is not in group `bingux-install` (or the group does not exist) | Nothing | `peer is not root or a member of bingux-install` |
 | `busy` | `install` or `probe` while another install runs (probe mounts partitions read-only, so it is refused too) | Nothing; the running install continues | `another installation is already running` |
 | `invalid_plan` | Any plan schema rule fails, unknown top-level key, `confirm_erase` mismatch, firmware not matching the booted firmware | Nothing | `invalid plan: <field>: <rule>` |
-| `unsupported` | A plan feature that is validated but not implemented yet (`free_space`, `alongside`, `manual`, `autologin`, BIOS with LUKS2). Planned: a filesystem that cannot be used for the requested operation (for example `alongside` on an XFS partition) | Nothing | `<feature> is not implemented yet`; planned: `<fs> cannot be shrunk`, `<path> is not a GPT disk` |
+| `unsupported` | A plan feature that is validated but not implemented yet (`free_space`, `alongside`, `manual`, `autologin`). Planned: a filesystem that cannot be used for the requested operation (for example `alongside` on an XFS partition) | Nothing | `<feature> is not implemented yet`; planned: `<fs> cannot be shrunk`, `<path> is not a GPT disk` |
 | `no_free_space` (planned) | `free_space`, `alongside` or manual `create` needs a region larger than the unallocated space | Nothing | `no unallocated region of at least <n> bytes on <path>` |
 | `shrink_failed` (planned) | Filesystem shrink or the partition resize failed. The shrink runs before the partition table is written | Filesystem may be smaller than its partition; the partition table is unchanged. Data is intact; re-run with a size from the probe | `shrink_failed: <tool> failed: <stderr tail>` |
 | `disk_not_found` | `disk` is not a whole-disk block device in the probe, or blivet does not see it | Nothing | `no disk <path> was found`, `blivet does not see <path>` |
@@ -202,7 +201,7 @@ the Bingux partitions are created in unallocated space and existing partitions a
 
 - UEFI: ESP, FAT32, 512 MiB, label `BINGUX_ESP`, mounted at `/boot` (`umask=0077`); root for the rest.
 - BIOS, unencrypted: BIOS boot, 1 MiB, flag `bios_grub`; root for the rest. `/boot` lives on root.
-- BIOS, encrypted (planned): BIOS boot, 1 MiB; `/boot` ext4, 1 GiB, unencrypted, mounted at `/boot`; LUKS root
+- BIOS, encrypted: BIOS boot, 1 MiB; `/boot` ext4, 1 GiB, unencrypted, mounted at `/boot`; LUKS root
   for the rest. Only the kernel, initramfs and GRUB live on `/boot`. GRUB then needs no
   `cryptodisk` module and no LUKS2 PBKDF support, and the passphrase is prompted once, by the
   initramfs. The UEFI ESP is unencrypted for the same reason.
@@ -236,7 +235,7 @@ sd-vconsole block [sd-encrypt] filesystems fsck`), built with `mkinitcpio -P` in
   `bingux-installer --json probe` and `install --plan`, powers off, then boots the disk alone and
   checks the root filesystem, LUKS (encrypted cases), the created user in `wheel`, and `greetd` active,
   with a greeter screenshot. Cases: `uefi-ext4`, `uefi-btrfs`, `uefi-luks-ext4`, `bios-ext4`,
-  `bios-btrfs`, and `bios-luks-ext4`, which must be refused with `unsupported` and leave the disk blank.
+  `bios-btrfs`, and `bios-luks-ext4` (unencrypted ext4 `/boot`, LUKS2 root; boots to the greeter).
   Feature cases: `uefi-xfs` (xfs root, `ntp` false, root password set), `uefi-ext4-swapfile`,
   `uefi-btrfs-zram`, and `uefi-luks-ext4-swappart` (encrypted swap partition). Feature checks read
   `systemd-timesyncd` enablement, `passwd -S root`, and `swapon` output.
