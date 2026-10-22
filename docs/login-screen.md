@@ -94,6 +94,12 @@ is removed. The packaged default wallpaper gets the same treatment at build
 time: `bingux-session blur-wallpaper` writes `default-blur.jpg` beside
 `default.jpg`, and firstboot installs it for the live account as `wallpaper-blur`.
 
+A new account's first session has no snapshot yet. Its compositor paints the
+packaged `default-blur.jpg` from the skel drop-in (`bingux-background.lua`),
+which `useradd -m` copies into the account at creation, instead of Gnoblin's
+grey. The export replaces that drop-in during the session, and the change
+applies from the next login.
+
 ### Remembered choice
 
 After a successful login, `bingux-session remember USER SESSION` stores the
@@ -127,10 +133,14 @@ Neither compositor shows black in between:
   `bingux-session greeter-background` for that Lua, writes it after a
   `gnoblin.load` of the packaged greeter configuration into the greeter
   account's runtime directory, and passes the file to `gnoblin --greeter`.
-- The user's compositor paints the same picture from
-  `~/.config/gnoblin/conf.d/bingux-background.lua`, which
-  `bingux-session export` writes beside the greeter snapshot. The installer's
-  `init.lua` loads `conf.d/**/*.lua`.
+- The user's compositor paints the greeter's blurred copy from
+  `~/.config/gnoblin/conf.d/bingux-background.lua`. `bingux-session export`
+  writes that drop-in during the session (`bingux-greeter-export.service`, a
+  user unit started by `bingux.target`). It names the blurred twin beside the
+  account's snapshot, so the next login's compositor paints the picture the
+  greeter showed. The installer's `init.lua` loads `conf.d/**/*.lua`.
+- The desktop wallpaper then fades in sharp over that frame once it is ready.
+  The frame never goes black and the picture does not move.
 
 What remains is the modeset between the two compositors, which is the
 kernel's and the display's, not the shell's.
