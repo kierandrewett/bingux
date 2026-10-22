@@ -48,6 +48,7 @@ ShellRoot {
                 metrics: sessionMetrics
                 client: client
                 hostWindow: window
+                wallpaper: "file:///usr/share/backgrounds/bingux-os/default.jpg"
                 interactive: window.primary
             }
         }

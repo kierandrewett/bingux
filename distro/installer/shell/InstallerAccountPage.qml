@@ -7,7 +7,7 @@ InstallerPage {
     id: page
 
     title: "Your account"
-    bodyHeight: 620
+    bodyHeight: 530
 
     property string passwordConfirm: ""
 

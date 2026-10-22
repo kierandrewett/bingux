@@ -5,7 +5,7 @@ InstallerPage {
     id: page
 
     title: "Keyboard"
-    bodyHeight: 400
+    bodyHeight: 470
 
     function primary() {
         page.wizard.go("network");

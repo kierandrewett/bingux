@@ -11,7 +11,7 @@ InstallerPage {
     allowBack: false
     primaryText: "Restart"
     bodyHeight: 340
-    secondaryText: "Close installer"
+    secondaryText: "Keep trying Bingux"
     secondaryVisible: true
 
     readonly property var result: InstallerState.result || ({})
@@ -21,7 +21,7 @@ InstallerPage {
     }
 
     function secondary() {
-        Qt.quit();
+        Quickshell.execDetached(["bingux-live-switch", "live"]);
     }
 
     Column {

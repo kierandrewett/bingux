@@ -1,16 +1,24 @@
 import QtQuick
+import Quickshell
 
 // First page: the language. Choosing one also moves the keyboard and time
-// zone, which the following pages show and may change.
+// zone, which the following pages show and may change. "Try Bingux" leaves
+// the installer for the live desktop without installing anything.
 InstallerPage {
     id: page
 
     title: "Welcome to Bingux"
     allowBack: false
-    bodyHeight: 360
+    bodyHeight: 470
+    secondaryText: "Try Bingux"
+    secondaryVisible: true
 
     function primary() {
         page.wizard.go("keyboard");
+    }
+
+    function secondary() {
+        Quickshell.execDetached(["bingux-live-switch", "live"]);
     }
 
     Column {

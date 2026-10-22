@@ -154,6 +154,30 @@ def check_plan(plan, disk):
         raise SystemExit(f"plan user is {user!r}")
 
 
+def pack_tree(scratch):
+    """Packs shell/bingux and the installer overlay into scratch/tree and returns the tree."""
+    tree = scratch / "tree"
+    packed = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/pack-shell.py"),
+            "--overlay",
+            str(ROOT / "distro/installer/shell"),
+            "--entries",
+            '{"installer": "InstallerShell.qml"}',
+            "--tree-out",
+            str(tree),
+            str(scratch / "installer.sxa"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if packed.returncode:
+        raise SystemExit(f"pack-shell failed: {packed.stderr}")
+    return tree
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--shell", default=str(ROOT / "build/bingux-shell/quickshell/src/bingux-shell"))
@@ -161,25 +185,7 @@ def main():
     SCRATCH_BASE.mkdir(parents=True, exist_ok=True)
     scratch = Path(tempfile.mkdtemp(prefix="installer-ui-", dir=SCRATCH_BASE))
     try:
-        tree = scratch / "tree"
-        packed = subprocess.run(
-            [
-                sys.executable,
-                str(ROOT / "scripts/pack-shell.py"),
-                "--overlay",
-                str(ROOT / "distro/installer/shell"),
-                "--entries",
-                '{"installer": "InstallerShell.qml"}',
-                "--tree-out",
-                str(tree),
-                str(scratch / "installer.sxa"),
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if packed.returncode:
-            raise SystemExit(f"pack-shell failed: {packed.stderr}")
+        tree = pack_tree(scratch)
         shutil.copy(ROOT / "tests/installer-ui.qml", tree / "InstallerUiDriver.qml")
 
         # Flow: probe, install /dev/vda (success), install /dev/vdb (storage failure).
