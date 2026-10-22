@@ -1,10 +1,14 @@
-"""python-blivet adapter: partition, encrypt and format the target disk.
+"""Partition, encrypt and format the target disk.
 
-This is the only module that touches blivet, and blivet is imported lazily so the
-unit tests never need it. Commit point: the call to Blivet.do_it().
+commit_layout builds a fresh GPT through python-blivet (imported lazily, so the unit tests never
+need it). commit_free_space adds partitions to free space with sgdisk and formats them with mkfs;
+it never touches blivet and never writes a reused partition.
 """
 
 from __future__ import annotations
+
+import os
+import tempfile
 
 from dataclasses import dataclass
 
@@ -139,6 +143,94 @@ def commit_layout(
         luks_name=container.name if encrypted else None,
         swap_path=parts["swap"].path if "swap" in parts else None,
     )
+
+
+def commit_free_space(
+    *,
+    runner: Runner,
+    disk: str,
+    partitions: tuple[layout.FreePartition, ...],
+    filesystem: str,
+    encrypted: bool,
+    passphrase: str,
+) -> StorageLayout:
+    """Create the planned partitions in free space and format the new ones. Destructive only to
+    the new partitions: a reused partition (existing ESP or BIOS boot) is never written.
+    Commit point: the first sgdisk call. The passphrase goes on stdin only."""
+    paths = {p.role: layout.partition_path(disk, p.number) for p in partitions}
+    fresh = {p.role for p in partitions if not p.reuse}
+    root = paths["root"]
+    fs_path = f"/dev/mapper/{layout.LUKS_NAME}" if encrypted else root
+    args: list[str] = []
+    for p in partitions:
+        if not p.reuse:
+            args += [f"--new={p.number}:{p.start}:{p.end}", f"--typecode={p.number}:{p.code}",
+                     f"--change-name={p.number}:{p.name}"]
+    try:
+        runner.run(["sgdisk", *args, disk])
+    except CommandError as exc:
+        raise InstallerError("storage_failed", "sgdisk could not write the new partitions") from exc
+    _settle(runner)
+    try:
+        if "esp" in fresh:
+            runner.run(["mkfs.fat", "-F", "32", "-n", layout.ESP_LABEL, paths["esp"]])
+        if "boot" in fresh:
+            runner.run(["mkfs.ext4", "-F", "-L", layout.BOOT_LABEL, paths["boot"]])
+        if "swap" in fresh:
+            runner.run(["mkswap", paths["swap"]])
+        if encrypted:
+            runner.run(["cryptsetup", "luksFormat", "--batch-mode", "--key-file=-", root],
+                       stdin=passphrase)
+            runner.run(["cryptsetup", "open", "--key-file=-", root, layout.LUKS_NAME],
+                       stdin=passphrase)
+            _settle(runner)
+        if filesystem == "btrfs":
+            runner.run(["mkfs.btrfs", "-f", "-L", layout.ROOT_LABEL, fs_path])
+            _make_btrfs_subvolumes(runner, fs_path)
+        elif filesystem == "xfs":
+            runner.run(["mkfs.xfs", "-f", "-L", layout.ROOT_LABEL, fs_path])
+        else:
+            runner.run(["mkfs.ext4", "-F", "-L", layout.ROOT_LABEL, fs_path])
+    except CommandError as exc:
+        # Name the tool only: stderr can echo device details, and the passphrase must never leak.
+        raise InstallerError("storage_failed", f"{exc.argv[0]} failed (exit {exc.returncode})") from exc
+    _settle(runner)
+    if "esp" in paths:
+        boot_path, boot_fstype = paths["esp"], "vfat"
+    elif "boot" in paths:
+        boot_path, boot_fstype = paths["boot"], "ext4"
+    else:
+        boot_path, boot_fstype = None, None
+    return StorageLayout(
+        boot_path=boot_path,
+        boot_fstype=boot_fstype,
+        luks_path=root if encrypted else None,
+        fs_path=fs_path,
+        luks_name=layout.LUKS_NAME if encrypted else None,
+        swap_path=paths.get("swap"),
+    )
+
+
+def _settle(runner: Runner) -> None:
+    try:
+        runner.run(["udevadm", "settle"])
+    except CommandError as exc:
+        raise InstallerError("storage_failed", "udev did not settle after partitioning") from exc
+
+
+def _make_btrfs_subvolumes(runner: Runner, device: str) -> None:
+    """Create the top-level subvolumes through a temporary mount, then unmount it."""
+    mount_point = tempfile.mkdtemp(prefix="bingux-btrfs-")
+    try:
+        runner.run(["mount", device, mount_point])
+        try:
+            for name, _ in layout.BTRFS_SUBVOLS:
+                runner.run(["btrfs", "subvolume", "create", f"{mount_point}/{name}"])
+        finally:
+            runner.run(["umount", mount_point])
+    finally:
+        os.rmdir(mount_point)
+
 
 
 def blkid_value(runner: Runner, device: str, key: str) -> str:

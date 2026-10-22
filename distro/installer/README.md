@@ -29,6 +29,7 @@ Implemented (plan schema v2, covered by unit tests and the install matrix):
 - Filesystems: ext4, btrfs and xfs for the root (`filesystem`). xfs loads the `xfs` module into
   the initramfs.
 - Storage mode `erase` on UEFI and BIOS, unencrypted and LUKS2. BIOS with LUKS2 keeps an unencrypted ext4 `/boot` (see the layout section).
+- Storage mode `free_space` on a GPT disk, UEFI and BIOS, unencrypted and LUKS2: existing partitions are kept; an existing ESP or BIOS boot partition is reused and not written. Refused with `no_free_space` or `not_gpt`.
 - `ntp`: `false` disables `systemd-timesyncd`.
 - `root_password`: a string sets the root password; `null` locks the root account.
 - `swap`: `zram` (zram-generator), `file` (`/swapfile`), `partition` (swap partition; encrypted
@@ -37,7 +38,7 @@ Implemented (plan schema v2, covered by unit tests and the install matrix):
 
 Planned (validated by the schema but refused with `unsupported` until the feature lands):
 
-- `storage.mode` `free_space`, `alongside` (shrink ext4, btrfs and NTFS) and `manual`.
+- `storage.mode` `alongside` (shrink ext4, btrfs and NTFS) and `manual`.
 - Dual-boot entries (os-prober for GRUB; the shared ESP for systemd-boot).
 
 ## Failure list
@@ -52,8 +53,9 @@ unmount the payload and close the LUKS mapper before replying.
 | `not_permitted` | Peer uid is not 0 and is not in group `bingux-install` (or the group does not exist) | Nothing | `peer is not root or a member of bingux-install` |
 | `busy` | `install` or `probe` while another install runs (probe mounts partitions read-only, so it is refused too) | Nothing; the running install continues | `another installation is already running` |
 | `invalid_plan` | Any plan schema rule fails, unknown top-level key, `confirm_erase` mismatch, firmware not matching the booted firmware | Nothing | `invalid plan: <field>: <rule>` |
-| `unsupported` | A plan feature that is validated but not implemented yet (`free_space`, `alongside`, `manual`). Planned: a filesystem that cannot be used for the requested operation (for example `alongside` on an XFS partition) | Nothing | `<feature> is not implemented yet`; planned: `<fs> cannot be shrunk`, `<path> is not a GPT disk` |
-| `no_free_space` (planned) | `free_space`, `alongside` or manual `create` needs a region larger than the unallocated space | Nothing | `no unallocated region of at least <n> bytes on <path>` |
+| `unsupported` | A plan feature that is validated but not implemented yet (`alongside`, `manual`). Planned: a filesystem that cannot be used for the requested operation (for example `alongside` on an XFS partition) | Nothing | `<feature> is not implemented yet`; planned: `<fs> cannot be shrunk` |
+| `no_free_space` | `free_space` (or `alongside`, or manual `create`) needs a region larger than the unallocated space, or the partition table has no free entry | Nothing | `the largest unallocated region is <n> MiB; the layout needs at least <m> MiB` |
+| `not_gpt` | `free_space` on a disk with no readable GPT | Nothing | `<path> has no readable GPT; free_space needs one` |
 | `shrink_failed` (planned) | Filesystem shrink or the partition resize failed. The shrink runs before the partition table is written | Filesystem may be smaller than its partition; the partition table is unchanged. Data is intact; re-run with a size from the probe | `shrink_failed: <tool> failed: <stderr tail>` |
 | `disk_not_found` | `disk` is not a whole-disk block device in the probe, or blivet does not see it | Nothing | `no disk <path> was found`, `blivet does not see <path>` |
 | `disk_is_live_medium` | `disk` holds the live ISO | Nothing | `<path> is the live medium` |
@@ -109,7 +111,7 @@ Probe result data (protocol 1; the fields below are additive, so a client that i
 - `firmware`, `live_disk`, `tools_missing`, `installer_version`: as before.
 - `disks`: each entry `{"path","size_bytes","model","removable","is_live_medium","other_os":[...],"partition_table","free_bytes","partitions":[...]}`. `partition_table` is `"gpt"`, `"msdos"` or `null`. `free_bytes` is the unallocated space on the disk, or `null` when unknown.
 - `disks[].partitions`: each entry `{"path","fstype","label","size_bytes","mountpoint","used_bytes","free_bytes","os","shrinkable","min_bytes"}`. `label` is the filesystem label or `null`. `used_bytes` and `free_bytes` are the filesystem usage or `null`. `os` is the OS name found on the filesystem (as `other_os`) or `null`. `shrinkable` is `true` when the installer can shrink the filesystem for `alongside`; `min_bytes` is then the smallest size it can shrink to, otherwise `null`. A value the probe cannot read is `null`; it is never guessed.
-- `capabilities`: what this installer build implements end to end, matching the Status section. A choice is listed only when its install is implemented and covered by the install matrix. Shape: `{"storage_modes":["erase"],"filesystems":["ext4","btrfs","xfs"],"swap":["none","zram","file","partition"],"encryption":{"uefi":true,"bios":true},"dual_boot":false}`. The UI offers a choice only when it is listed. When `capabilities` is missing, the UI assumes exactly that Shape, so an older daemon still gets the Status list.
+- `capabilities`: what this installer build implements end to end, matching the Status section. A choice is listed only when its install is implemented and covered by the install matrix. Shape: `{"storage_modes":["erase","free_space"],"filesystems":["ext4","btrfs","xfs"],"swap":["none","zram","file","partition"],"encryption":{"uefi":true,"bios":true},"dual_boot":false}`. The UI offers a choice only when it is listed. When `capabilities` is missing, the UI assumes exactly that Shape, so an older daemon still gets the Status list.
 
 Install phases, in order: `validate`, `preflight`, `partition` (the commit point, the first destructive write), `mount`, `copy`, `strip`, `configure`, `bootloader`, `finish`.
 Cancel is honoured only before the commit point. Only one install runs at a time.
@@ -132,7 +134,7 @@ must be `2`.
 - `storage`: object (default `{"mode": "erase"}`). `mode` is one of (planned modes are refused
   with `unsupported` until implemented):
   - `erase`: wipe the disk and create the Bingux layout (below). `other_os` applies.
-  - `free_space` (planned): keep every existing partition. Create the Bingux partitions in the largest
+  - `free_space`: keep every existing partition. Create the Bingux partitions in the largest
     unallocated region of a GPT disk. An existing ESP (UEFI) or BIOS boot partition is reused when
     present; otherwise one is created. Refused with `no_free_space` when no region is large enough.
   - `alongside` (planned): as `free_space`, after shrinking one existing partition: `"shrink": {"partition":
@@ -158,7 +160,7 @@ must be `2`.
   `"swap_bytes"` (1 GiB to 64 GiB). In `erase`, `free_space` and `alongside` a `partition` swap is
   created with that size. In `manual` the `swap` role partition is used and `swap_bytes` is refused.
   `file` lives on the root filesystem.
-- `other_os`: `"refuse"` (default) or `"allow"`. Only meaningful for `storage.mode` `erase`.
+- `other_os`: `"refuse"` (default) or `"allow"`. Only meaningful for `storage.mode` `erase`; `free_space` keeps the other OS and ignores it.
 - `hostname`: RFC 1123 label, 1-63 characters.
 - `timezone`: `"Region/City"`, must exist under `/usr/share/zoneinfo`.
 - `locale`: `^[A-Za-z]{2,3}_[A-Za-z]{2}(\.UTF-8)?$`, must be listed in `/usr/share/i18n/SUPPORTED`.

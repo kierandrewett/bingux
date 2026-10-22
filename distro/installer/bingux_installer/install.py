@@ -106,7 +106,7 @@ def version_data() -> dict[str, Any]:
 # What this build carries out end to end (README "Status"). The UI offers a choice only
 # when it is listed here, so an entry is added only with its install implemented and tested.
 CAPABILITIES: dict[str, Any] = {
-    "storage_modes": ["erase"],
+    "storage_modes": ["erase", "free_space"],
     "filesystems": ["ext4", "btrfs", "xfs"],
     "swap": ["none", "zram", "file", "partition"],
     "encryption": {"uefi": True, "bios": True},
@@ -269,7 +269,7 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
         if disk.is_live_medium:
             raise InstallerError("disk_is_live_medium", f"{plan.disk} is the live medium")
         layout.check_disk_size(disk.size_bytes)
-        if disk.other_os and not plan.other_os_allow:
+        if disk.other_os and plan.storage_mode != "free_space" and not plan.other_os_allow:
             raise InstallerError(
                 "other_os_present",
                 f"{plan.disk} holds {', '.join(disk.other_os)}; set other_os to allow to erase it",
@@ -283,16 +283,34 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
         _guard("payload_failed", payload.preflight, env.sfs)
         env.state.check_cancelled()
 
-        env.state.begin_commit()
-        phase("partition", None, f"erasing and partitioning {plan.disk}")
         swap_partition_bytes = plan.swap_bytes if plan.swap == "partition" else 0
-        lay = _guard(
-            "storage_failed", storage.commit_layout,
-            disk=plan.disk, size_bytes=disk.size_bytes, uefi=plan.uefi,
-            filesystem=plan.filesystem, encrypted=plan.encrypted,
-            passphrase=plan.encryption.passphrase,
-            swap_partition_bytes=swap_partition_bytes,
-        )
+        free_parts = None
+        if plan.storage_mode == "free_space":
+            # Planned before the commit point: no_free_space and not_gpt fail with the disk untouched.
+            table = probe.read_gpt(runner, plan.disk)
+            if table is None:
+                raise InstallerError("not_gpt", f"{plan.disk} has no readable GPT; free_space needs one")
+            free_parts = layout.free_space_layout(
+                table, uefi=plan.uefi, encrypted=plan.encrypted,
+                swap_partition_bytes=swap_partition_bytes)
+        env.state.begin_commit()
+        if free_parts is None:
+            phase("partition", None, f"erasing and partitioning {plan.disk}")
+            lay = _guard(
+                "storage_failed", storage.commit_layout,
+                disk=plan.disk, size_bytes=disk.size_bytes, uefi=plan.uefi,
+                filesystem=plan.filesystem, encrypted=plan.encrypted,
+                passphrase=plan.encryption.passphrase,
+                swap_partition_bytes=swap_partition_bytes,
+            )
+        else:
+            phase("partition", None, f"partitioning the free space on {plan.disk}")
+            lay = _guard(
+                "storage_failed", storage.commit_free_space,
+                runner=runner, disk=plan.disk, partitions=free_parts,
+                filesystem=plan.filesystem, encrypted=plan.encrypted,
+                passphrase=plan.encryption.passphrase,
+            )
         mounts.luks_name = lay.luks_name
         if plan.encrypted and lay.luks_path is None:
             raise InstallerError("storage_failed", "encrypted install has no LUKS partition")

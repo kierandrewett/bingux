@@ -193,3 +193,65 @@ def test_free_regions_lie_between_partitions_and_after_the_last() -> None:
 def test_parse_sgdisk_print_rejects_non_gpt_text() -> None:
     with pytest.raises(ValueError):
         layout.parse_sgdisk_print("Error: not a GPT\n")
+
+
+def _gpt(free_gib: int, parts: tuple[layout.GptPartition, ...] = ()) -> layout.GptTable:
+    """A 512-byte-sector GPT with `free_gib` GiB unallocated after the given partitions."""
+    if not parts:
+        parts = (layout.GptPartition(1, 2048, 2048 + 20 * GIB // 512 - 1, "8300", "data"),)
+    last_usable = max(p.end for p in parts) + free_gib * GIB // 512
+    return layout.GptTable(sector_size=512, first_usable=34, last_usable=last_usable,
+                           partitions=parts)
+
+
+def test_free_space_uefi_creates_esp_and_root_in_free_region() -> None:
+    out = layout.free_space_layout(_gpt(30), uefi=True, encrypted=False)
+    assert [(p.role, p.number, p.reuse) for p in out] == [("esp", 2, False), ("root", 3, False)]
+    esp, root = out
+    assert esp.code == layout.GPT_ESP and esp.start >= 20 * GIB // 512 + 2048
+    assert esp.end - esp.start + 1 == layout.ESP_BYTES // 512
+    assert root.end == _gpt(30).last_usable and root.code == layout.GPT_LINUX
+
+
+def test_free_space_reuses_existing_esp_and_keeps_its_place() -> None:
+    esp = layout.GptPartition(1, 2048, 2048 + layout.ESP_BYTES // 512 - 1, layout.GPT_ESP, "EFI")
+    table = _gpt(30, (esp,))
+    out = layout.free_space_layout(table, uefi=True, encrypted=False)
+    assert out[0] == layout.FreePartition("esp", 1, 2048, esp.end, layout.GPT_ESP, "EFI",
+                                          reuse=True)
+    assert [p.role for p in out] == ["esp", "root"]
+
+
+def test_free_space_bios_encrypted_adds_bios_boot_boot_and_luks_root() -> None:
+    out = layout.free_space_layout(_gpt(30), uefi=False, encrypted=True, swap_partition_bytes=2 * GIB)
+    assert [p.role for p in out] == ["bios_boot", "boot", "swap", "root"]
+    assert out[0].code == layout.GPT_BIOS_BOOT and out[1].code == layout.GPT_LINUX
+    assert out[2].code == layout.GPT_LINUX_SWAP and out[3].code == layout.GPT_LINUX_LUKS
+
+
+def test_free_space_refuses_region_too_small_for_root() -> None:
+    with pytest.raises(InstallerError) as exc:
+        layout.free_space_layout(_gpt(1), uefi=True, encrypted=False)
+    assert exc.value.code == "no_free_space"
+
+
+def test_free_space_uses_largest_region_not_total_free() -> None:
+    # 4 GiB data, 1 GiB hole, 1 GiB data, 1 GiB hole, 1 GiB data: two 1 GiB holes, no tail.
+    parts = (
+        layout.GptPartition(1, 2048, 2048 + 4 * GIB // 512 - 1, "8300", "a"),
+        layout.GptPartition(2, 2048 + 5 * GIB // 512, 2048 + 6 * GIB // 512 - 1, "8300", "b"),
+        layout.GptPartition(3, 2048 + 7 * GIB // 512, 2048 + 8 * GIB // 512 - 1, "8300", "c"),
+    )
+    table = layout.GptTable(sector_size=512, first_usable=34, last_usable=parts[2].end,
+                            partitions=parts)
+    holes = [b - a + 1 for a, b in table.free_regions()]
+    assert sum(holes) * 512 >= 1 * GIB + layout.ESP_BYTES
+    assert max(holes) * 512 < 1 * GIB + layout.ESP_BYTES
+    with pytest.raises(InstallerError) as exc:
+        layout.free_space_layout(table, uefi=True, encrypted=False)
+    assert exc.value.code == "no_free_space"
+
+
+def test_partition_path_handles_sd_and_nvme_names() -> None:
+    assert layout.partition_path("/dev/vda", 3) == "/dev/vda3"
+    assert layout.partition_path("/dev/nvme0n1", 3) == "/dev/nvme0n1p3"

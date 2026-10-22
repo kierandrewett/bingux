@@ -23,6 +23,8 @@ ERROR_CODES = frozenset({
     "disk_not_found",
     "disk_is_live_medium",
     "disk_too_small",
+    "no_free_space",
+    "not_gpt",
     "other_os_present",
     "missing_tool",
     "cancelled",

@@ -238,3 +238,96 @@ def parse_sgdisk_print(text: str) -> GptTable:
         last_usable=int(usable.group(2)),
         partitions=tuple(parts),
     )
+
+
+# GPT type codes. A free_space layout creates partitions with these; a reused one keeps its own.
+GPT_ESP = "EF00"
+GPT_BIOS_BOOT = "EF02"
+GPT_LINUX = "8300"
+GPT_LINUX_SWAP = "8200"
+GPT_LINUX_LUKS = "8309"
+GPT_MAX_ENTRIES = 128
+ROOT_MIN_BYTES = 1 * GIB  # the growable root of a free_space layout is at least this large
+
+
+@dataclass(frozen=True)
+class FreePartition:
+    """One partition of a free_space layout. A reused partition keeps its place and is not written."""
+
+    role: str  # "esp" | "bios_boot" | "boot" | "swap" | "root"
+    number: int  # 1-based GPT index
+    start: int  # first sector, inclusive
+    end: int  # last sector, inclusive
+    code: str
+    name: str
+    reuse: bool
+
+
+def partition_path(disk: str, number: int) -> str:
+    """Device node of GPT partition `number`: /dev/vda3, /dev/nvme0n1p3."""
+    return f"{disk}p{number}" if disk[-1].isdigit() else f"{disk}{number}"
+
+
+def _align_up(sector: int, unit: int) -> int:
+    return -(-sector // unit) * unit
+
+
+def _no_free_space(largest_bytes: int, need_bytes: int) -> InstallerError:
+    return InstallerError(
+        "no_free_space",
+        f"the largest unallocated region is {largest_bytes // MIB} MiB; "
+        f"the layout needs at least {need_bytes // MIB} MiB",
+    )
+
+
+def free_space_layout(table: GptTable, *, uefi: bool, encrypted: bool,
+                      swap_partition_bytes: int = 0) -> tuple[FreePartition, ...]:
+    """Place the Bingux partitions in the largest unallocated region of an existing GPT.
+
+    An existing ESP (UEFI) or BIOS boot partition is reused; otherwise one is created. The
+    created partitions follow in disk order: boot (BIOS, encrypted), swap, root. Root takes the
+    rest of the region. Raises no_free_space when the largest region cannot hold the layout.
+    Pure: no I/O.
+    """
+    reuse_code = GPT_ESP if uefi else GPT_BIOS_BOOT
+    reused = next((p for p in table.partitions if p.code == reuse_code), None)
+    specs: list[tuple[str, int, str, str]] = []  # role, size bytes, code, name
+    if reused is None:
+        specs.append(("esp", ESP_BYTES, GPT_ESP, ESP_LABEL) if uefi
+                     else ("bios_boot", BIOS_BOOT_BYTES, GPT_BIOS_BOOT, "BIOS boot"))
+    if not uefi and encrypted:
+        specs.append(("boot", BOOT_BYTES, GPT_LINUX, BOOT_LABEL))
+    if swap_partition_bytes:
+        specs.append(("swap", swap_partition_bytes, GPT_LINUX_SWAP, "bingux-swap"))
+    need = sum(size for _, size, _, _ in specs) + ROOT_MIN_BYTES
+
+    first, last = max(table.free_regions(), key=lambda r: r[1] - r[0], default=(0, -1))
+    largest_bytes = (last - first + 1) * table.sector_size
+    unit = max(1, MIB // table.sector_size)  # 1 MiB alignment
+    used = {p.number for p in table.partitions}
+
+    def next_number() -> int:
+        for number in range(1, GPT_MAX_ENTRIES + 1):
+            if number not in used:
+                used.add(number)
+                return number
+        raise InstallerError("no_free_space", "the partition table has no free entry")
+
+    out: list[FreePartition] = []
+    if reused is not None:
+        out.append(FreePartition("esp" if uefi else "bios_boot", reused.number, reused.start,
+                                 reused.end, reuse_code, reused.name, reuse=True))
+    cursor = _align_up(first, unit)
+    for role, size_bytes, code, name in specs:
+        sectors = _align_up(-(-size_bytes // table.sector_size), unit)
+        if cursor + sectors - 1 > last:
+            raise _no_free_space(largest_bytes, need)
+        out.append(FreePartition(role, next_number(), cursor, cursor + sectors - 1, code, name,
+                                 reuse=False))
+        cursor += sectors
+    if (last - cursor + 1) * table.sector_size < ROOT_MIN_BYTES:
+        raise _no_free_space(largest_bytes, need)
+    root_code = GPT_LINUX_LUKS if encrypted else GPT_LINUX
+    out.append(FreePartition("root", next_number(), cursor, last, root_code, ROOT_LABEL,
+                             reuse=False))
+    return tuple(out)
