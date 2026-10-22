@@ -117,3 +117,6 @@ def mount_chroot_binds(runner: Runner, target: Path = TARGET_MNT) -> None:
     if os.path.isdir("/sys/firmware/efi/efivars"):
         efivars.mkdir(parents=True, exist_ok=True)
         runner.run(["mount", "-t", "efivarfs", "efivarfs", str(efivars)], check=False)
+    # Binds inherit the host's shared propagation: keep unmounts inside the target from
+    # propagating back to the host, so the final umount -R of the target is self-contained.
+    runner.run(["mount", "--make-rslave", str(target)])

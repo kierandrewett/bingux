@@ -143,7 +143,12 @@ def _teardown(env: Env, mounts: _Mounts, *, strict: bool) -> None:
         runner.run(["sync"], check=False)
         result = runner.run(["umount", "-R", str(env.target)], check=False)
         if result.returncode != 0 and strict:
-            raise InstallerError("storage_failed", f"could not unmount {env.target}")
+            left = runner.run(["findmnt", "-R", "-n", "-o", "TARGET", str(env.target)], check=False)
+            detail = (result.stderr or "").strip()[-300:]
+            raise InstallerError(
+                "storage_failed",
+                f"could not unmount {env.target}: {detail}; still mounted: {left.stdout.strip()}",
+            )
         mounts.target = False
     if mounts.opened:
         result = runner.run(["cryptsetup", "close", layout.LUKS_NAME], check=False)
