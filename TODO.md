@@ -88,9 +88,11 @@ work belongs in Git history and does not stay here as a second changelog.
       compositor ran a fallback configuration, then hit the redraw bug above. Likely
       trigger (not proven): Gnoblin kills the first Lua worker when it has not sent a
       configuration within 3 s (`WORKER_CONFIG_TIMEOUT_MS`) and retries with embedded
-      defaults; boots are slow and loaded at that moment. Those runs kept no Gnoblin
-      log; next black boot, read `~/.local/state/gnoblin/session-last.log` and look
-      for "did not produce a startup configuration in time".
+      defaults; boots are slow and loaded at that moment. Not reproduced: on c0c2c3a,
+      four greeter restarts with dropped caches and four busy CPUs all painted the
+      login card, and no log showed a fallback. Those runs kept no Gnoblin log; next
+      black boot, read `~/.local/state/gnoblin/session-last.log` and look for "did not
+      produce a startup configuration in time".
 - [ ] Gnoblin (owner): first frame waits for `activate_session()`. The guardian spawns
       the session supervisor (which produces the compositor's configuration) only
       after the dozen `systemctl --user` and D-Bus commands; the compositor blocks on
