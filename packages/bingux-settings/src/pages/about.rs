@@ -6,7 +6,7 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::system;
-use crate::ui::{Group, page_column, property_row, skeleton};
+use crate::ui::{Group, expander_row, page_column, property_row, skeleton};
 
 #[derive(Clone, PartialEq)]
 struct Facts {
@@ -141,10 +141,15 @@ impl Component for AboutPage {
             .child(
                 Group::titled("System")
                     .row(property_row("Operating system", facts.os))
-                    .row(property_row("Bingux", env!("CARGO_PKG_VERSION")))
-                    .row(property_row("Gnoblin", facts.gnoblin))
-                    .row(property_row("Kernel", facts.kernel))
-                    .row(property_row("Windowing system", "Wayland")),
+                    .row(property_row("Bingux version", env!("CARGO_PKG_VERSION")))
+                    .row(expander_row(
+                        "Technical details",
+                        vec![
+                            property_row("Kernel", facts.kernel).into(),
+                            property_row("Window manager version", facts.gnoblin).into(),
+                            property_row("Display server", "Wayland").into(),
+                        ],
+                    )),
             )
     }
 }

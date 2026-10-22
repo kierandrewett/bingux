@@ -10,11 +10,10 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
+use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::theme::Tokens;
-use crate::ui::{
-    Group, Status, action_button, page_column, row, skeleton, status, text_row, use_tokens,
-};
+use crate::ui::{Group, Status, page_column, row, skeleton, status, text_row, use_tokens};
 use bingux_ui::scale::*;
 
 const ACCOUNTS: &str = "org.freedesktop.Accounts";
@@ -67,10 +66,10 @@ fn load() -> Result<Vec<Account>, CommandError> {
         .and_then(Json::as_array)
         .and_then(|arguments| arguments.first())
         .and_then(Json::as_array)
-        .ok_or_else(|| unexpected("ListCachedUsers reply"))?;
+        .ok_or_else(unexpected)?;
     let mut accounts = Vec::with_capacity(paths.len());
     for path in paths {
-        let path = path.as_str().ok_or_else(|| unexpected("user path"))?;
+        let path = path.as_str().ok_or_else(unexpected)?;
         accounts.push(read_account(path)?);
     }
     accounts.sort_by_key(|account| account.user_name != current);
@@ -92,8 +91,7 @@ fn busctl_json(arguments: &[&str], timeout: Duration) -> Result<Json, CommandErr
     let mut full = vec!["--system", "--json=short"];
     full.extend_from_slice(arguments);
     let text = system::run("busctl", &full, timeout)?;
-    Json::parse(&text)
-        .map_err(|error| CommandError(format!("busctl sent unreadable JSON: {error}")))
+    Json::parse(&text).map_err(|_| unexpected())
 }
 
 /// The `data` of `busctl get-property` for one `org.freedesktop.Accounts.User`
@@ -105,30 +103,26 @@ fn property(path: &str, name: &str) -> Result<Json, CommandError> {
     )?
     .field("data")
     .cloned()
-    .ok_or_else(|| unexpected(name))
+    .ok_or_else(unexpected)
 }
 
 fn text_property(path: &str, name: &str) -> Result<String, CommandError> {
     property(path, name)?
         .as_str()
         .map(str::to_string)
-        .ok_or_else(|| unexpected(name))
+        .ok_or_else(unexpected)
 }
 
 fn number_property(path: &str, name: &str) -> Result<f64, CommandError> {
-    property(path, name)?
-        .as_number()
-        .ok_or_else(|| unexpected(name))
+    property(path, name)?.as_number().ok_or_else(unexpected)
 }
 
 fn bool_property(path: &str, name: &str) -> Result<bool, CommandError> {
-    property(path, name)?
-        .as_bool()
-        .ok_or_else(|| unexpected(name))
+    property(path, name)?.as_bool().ok_or_else(unexpected)
 }
 
-fn unexpected(what: &str) -> CommandError {
-    CommandError(format!("The account {what} could not be read."))
+fn unexpected() -> CommandError {
+    CommandError("Account details could not be read.".into())
 }
 
 /// Set the full name of the account at `path` through polkit.
@@ -156,18 +150,15 @@ fn change_password() -> Result<(), CommandError> {
         .iter()
         .find(|(program, _)| system::which(program))
         .ok_or_else(|| {
-            CommandError(
-                "No terminal found to run passwd. Install gnome-terminal, kgx or xdg-terminal-exec."
-                    .into(),
-            )
+            CommandError("No terminal app was found. Install one, then try again.".into())
         })?;
     let mut child = Command::new(program)
         .args(*arguments)
         .spawn()
-        .map_err(|error| CommandError(format!("Could not start {program}: {error}")))?;
+        .map_err(|_| CommandError("The terminal window could not be opened.".into()))?;
     child
         .wait()
-        .map_err(|error| CommandError(format!("{program} failed: {error}")))?;
+        .map_err(|_| CommandError("The terminal window closed unexpectedly.".into()))?;
     Ok(())
 }
 
@@ -189,9 +180,7 @@ pub struct UsersPage;
 impl Component for UsersPage {
     fn render(&self) -> impl IntoElement {
         let model = system::use_cached("users", load);
-        let mut selected = use_state::<Option<String>>(|| None);
-        let mut draft = use_state(String::new);
-        let mut error = use_state::<Option<String>>(|| None);
+        let navigator = use_navigator();
 
         let Some(loaded) = model.read().clone() else {
             return page_column().child(skeleton());
@@ -206,99 +195,97 @@ impl Component for UsersPage {
             }
         };
 
-        let selected_account = selected.read().clone().and_then(|path| {
-            accounts
-                .iter()
-                .find(|account| account.path == path)
-                .cloned()
+        let group = Group::titled("Accounts");
+        let group = if accounts.is_empty() {
+            group.row(status(Status::Empty("No accounts found.".into())))
+        } else {
+            group.rows(accounts.iter().map(|account| {
+                let route = Route::Account {
+                    path: account.path.clone(),
+                    name: account.real_name.clone(),
+                };
+                let on_press: EventHandler<()> =
+                    (move |_: ()| navigator.push(route.clone())).into();
+                Element::from(AccountRow {
+                    account: account.clone(),
+                    on_press,
+                })
+            }))
+        };
+        page_column().child(group)
+    }
+}
+
+/// One account: its full name, user name, type, and the password.
+#[derive(PartialEq)]
+pub struct AccountPage {
+    pub path: String,
+}
+
+impl Component for AccountPage {
+    fn render(&self) -> impl IntoElement {
+        let model: State<Option<Result<Vec<Account>, CommandError>>> =
+            system::use_cached("users", load);
+        let mut error = use_state::<Option<String>>(|| None);
+        let Some(Ok(accounts)) = model.read().clone() else {
+            return page_column().child(skeleton());
+        };
+        let Some(account) = accounts.iter().find(|account| account.path == self.path) else {
+            return page_column().child(status(Status::Empty(
+                "This account no longer exists.".to_string(),
+            )));
+        };
+        let draft = use_state(|| account.real_name.clone());
+        let path = account.path.clone();
+        let name_row = text_row("Full name", draft, move |name: String| {
+            let path = path.clone();
+            background_then(
+                move || set_real_name(&path, &name),
+                move |result: CommandResult| match result {
+                    Ok(_) => {
+                        error.set(None);
+                        background(model, load);
+                    }
+                    Err(e) => error.set(Some(e.0)),
+                },
+            );
+        });
+        let password_row = row("Change password").navigates().on_press(move |_| {
+            background_then(
+                change_password,
+                move |result: Result<(), CommandError>| match result {
+                    Ok(()) => error.set(None),
+                    Err(e) => error.set(Some(e.0)),
+                },
+            );
         });
         let banner = error
             .read()
             .clone()
             .map(|message| status(Status::Error(message)));
-
-        let page = page_column().maybe_child(banner);
-
-        match selected_account {
-            Some(account) => {
-                let path = account.path.clone();
-                let back = action_button("Users", move |_| selected.set(None))
-                    .icon(Icon::GoPrevious)
-                    .flat();
-                let name_row = text_row("Full name", draft, move |name: String| {
-                    let path = path.clone();
-                    background_then(
-                        move || set_real_name(&path, &name),
-                        move |result: CommandResult| match result {
-                            Ok(_) => {
-                                error.set(None);
-                                background(model, load);
-                            }
-                            Err(e) => error.set(Some(e.0)),
-                        },
-                    );
-                });
-                let password_row = row("Change password").navigates().on_press(move |_| {
-                    background_then(change_password, move |result: Result<(), CommandError>| {
-                        match result {
-                            Ok(()) => error.set(None),
-                            Err(e) => error.set(Some(e.0)),
-                        }
-                    });
-                });
-                let header = rect()
-                    .width(Size::fill())
-                    .spacing(S3)
-                    .child(rect().padding((0.0, GUTTER - S3)).child(back));
-                page.child(header)
-                    .child(
-                        Group::titled("Account")
-                            .row(name_row)
-                            .row(row("User name").value(account.user_name.clone()))
-                            .row(row("Account type").value(if account.administrator {
-                                "Administrator"
-                            } else {
-                                "Standard"
-                            }))
-                            .row(row("Automatic login").value(if account.automatic_login {
-                                "Enabled"
-                            } else {
-                                "Disabled"
-                            }))
-                            .row(row("Account locked").value(if account.locked {
-                                "Yes"
-                            } else {
-                                "No"
-                            })),
-                    )
-                    .child(
-                        Group::titled("Password")
-                            .description("Opens a terminal to run passwd.")
-                            .row(password_row),
-                    )
-            }
-            None => {
-                let group = Group::titled("Accounts");
-                let group = if accounts.is_empty() {
-                    group.row(status(Status::Empty("No accounts found.".into())))
-                } else {
-                    group.rows(accounts.iter().map(|account| {
-                        let path = account.path.clone();
-                        let real_name = account.real_name.clone();
-                        let on_press: EventHandler<()> = (move |_: ()| {
-                            draft.set(real_name.clone());
-                            selected.set(Some(path.clone()));
-                        })
-                        .into();
-                        Element::from(AccountRow {
-                            account: account.clone(),
-                            on_press,
-                        })
+        page_column()
+            .maybe_child(banner)
+            .child(
+                Group::titled("Account")
+                    .row(name_row)
+                    .row(row("User name").value(account.user_name.clone()))
+                    .row(row("Account type").value(if account.administrator {
+                        "Administrator"
+                    } else {
+                        "Standard"
                     }))
-                };
-                page.child(group)
-            }
-        }
+                    .row(row("Automatic login").value(if account.automatic_login {
+                        "Enabled"
+                    } else {
+                        "Disabled"
+                    }))
+                    .row(row("Account locked").value(if account.locked { "Yes" } else { "No" })),
+            )
+            .child(
+                Group::titled("Password")
+                    .description("Opens a terminal window where you type your new password.")
+                    .row(password_row),
+            )
     }
 }
 

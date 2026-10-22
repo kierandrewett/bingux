@@ -19,11 +19,12 @@ const TILES: [(&str, &str); 5] = [
     ("vpn", "VPN"),
     ("dnd", "Do not disturb"),
     ("nightLight", "Night light"),
-    ("power", "Power"),
+    ("power", "Power mode"),
     ("awake", "Keep awake"),
 ];
 /// What the shell shows when `controlCentre` is absent (`ControlCentreServices.qml`).
 const TILE_DEFAULTS: [bool; 5] = [true, true, false, false, false];
+const UNREADABLE: &str = "Could not read the desktop settings.";
 
 const DOCK_SIZE_MIN: f64 = 32.0;
 const DOCK_SIZE_RANGE: f64 = 48.0;
@@ -48,13 +49,9 @@ struct Model {
 
 impl Model {
     fn from_json(root: &Json) -> Result<Self, String> {
-        let data = root.get("data").ok_or("bingux-config dump has no data.")?;
-        let desktop = data
-            .get("desktop")
-            .ok_or("bingux-config dump has no desktop section.")?;
-        let privacy = data
-            .get("privacy")
-            .ok_or("bingux-config dump has no privacy section.")?;
+        let data = root.get("data").ok_or(UNREADABLE)?;
+        let desktop = data.get("desktop").ok_or(UNREADABLE)?;
+        let privacy = data.get("privacy").ok_or(UNREADABLE)?;
         // A fresh config has no `controlCentre`; the shell then shows its
         // defaults, which are the `TILES` defaults here.
         let mut tiles = TILE_DEFAULTS;
@@ -91,7 +88,7 @@ fn flag(object: &Json, key: &str) -> Result<bool, String> {
     object
         .get(key)
         .and_then(Json::as_bool)
-        .ok_or_else(|| format!("bingux-config dump has no boolean {key}."))
+        .ok_or_else(|| UNREADABLE.to_string())
 }
 
 fn text(object: &Json, key: &str) -> Result<String, String> {
@@ -99,14 +96,14 @@ fn text(object: &Json, key: &str) -> Result<String, String> {
         .get(key)
         .and_then(Json::as_str)
         .map(str::to_string)
-        .ok_or_else(|| format!("bingux-config dump has no text {key}."))
+        .ok_or_else(|| UNREADABLE.to_string())
 }
 
 fn number(object: &Json, key: &str) -> Result<f64, String> {
     object
         .get(key)
         .and_then(Json::as_number)
-        .ok_or_else(|| format!("bingux-config dump has no number {key}."))
+        .ok_or_else(|| UNREADABLE.to_string())
 }
 
 /// The `save` patch for all Control Centre tiles, with `index` set to `on`.
@@ -135,8 +132,7 @@ fn size_for_percent(percent: f64) -> u32 {
 
 fn load() -> Result<Model, CommandError> {
     let text = system::run(&bingux_config(), &["dump"], Duration::from_secs(5))?;
-    let json =
-        Json::parse(&text).map_err(|error| CommandError(format!("bingux-config dump: {error}")))?;
+    let json = Json::parse(&text).map_err(|_| CommandError(UNREADABLE.to_string()))?;
     Model::from_json(&json).map_err(CommandError)
 }
 
@@ -299,13 +295,16 @@ impl Component for DesktopPage {
                     )),
             )
             .child(
-                Group::titled("Dock actions")
+                Group::titled("Dock mouse actions")
+                    .description(
+                        "What happens when you click or scroll on an app icon in the dock.",
+                    )
                     .row(menu_row(
                         "Click",
                         vec![
                             ("toggle".into(), "Show or hide windows".into()),
-                            ("focus".into(), "Focus the window".into()),
-                            ("launch".into(), "Launch a new window".into()),
+                            ("focus".into(), "Bring the window to the front".into()),
+                            ("launch".into(), "Open a new window".into()),
                         ],
                         &m.dock_click,
                         move |key: String| write(ctx, Change::Set("desktop.dock_click", key)),
@@ -313,8 +312,8 @@ impl Component for DesktopPage {
                     .row(menu_row(
                         "Middle click",
                         vec![
-                            ("launch".into(), "Launch a new window".into()),
-                            ("close".into(), "Close the window".into()),
+                            ("launch".into(), "Open a new window".into()),
+                            ("close".into(), "Close all its windows".into()),
                             ("none".into(), "Nothing".into()),
                         ],
                         &m.dock_middle_click,
@@ -325,7 +324,7 @@ impl Component for DesktopPage {
                     .row(menu_row(
                         "Scroll",
                         vec![
-                            ("cycle".into(), "Cycle windows".into()),
+                            ("cycle".into(), "Switch between windows".into()),
                             ("none".into(), "Nothing".into()),
                         ],
                         &m.dock_scroll,
@@ -334,8 +333,8 @@ impl Component for DesktopPage {
                     .row(segment_row(
                         "Scroll direction",
                         vec![
-                            ("natural".into(), "Natural".into()),
-                            ("reverse".into(), "Reverse".into()),
+                            ("natural".into(), "Like a touchscreen".into()),
+                            ("reverse".into(), "Reversed".into()),
                         ],
                         &m.dock_scroll_direction,
                         move |key: String| {
@@ -349,7 +348,7 @@ impl Component for DesktopPage {
                         write(ctx, Change::Set("desktop.sidebar", on.to_string()))
                     }))
                     .row(menu_row(
-                        "Edge",
+                        "Side of the screen",
                         vec![
                             ("auto".into(), "Automatic".into()),
                             ("left".into(), "Left".into()),
@@ -368,9 +367,12 @@ impl Component for DesktopPage {
             )
             .child(
                 Group::titled("Top bar")
-                    .row(switch_row("System metrics", m.metrics, move |on: bool| {
-                        write(ctx, Change::Set("desktop.metrics", on.to_string()))
-                    }))
+                    .row(
+                        switch_row("Show system usage", m.metrics, move |on: bool| {
+                            write(ctx, Change::Set("desktop.metrics", on.to_string()))
+                        })
+                        .subtitle("Shows how busy the processor, memory and network are."),
+                    )
                     .row(switch_row(
                         "Show seconds in the clock",
                         m.clock_seconds,
@@ -391,10 +393,14 @@ impl Component for DesktopPage {
             )
             .child(
                 Group::titled("Privacy").row(
-                    switch_row("Public IP lookup", m.public_ip_lookup, move |on: bool| {
-                        write(ctx, Change::Set("privacy.public_ip_lookup", on.to_string()))
-                    })
-                    .subtitle("Ask ipapi.co for the public address in the Control Centre."),
+                    switch_row(
+                        "Show my public IP address",
+                        m.public_ip_lookup,
+                        move |on: bool| {
+                            write(ctx, Change::Set("privacy.public_ip_lookup", on.to_string()))
+                        },
+                    )
+                    .subtitle("Looks it up with an online service. Shown in the Control Centre."),
                 ),
             )
     }

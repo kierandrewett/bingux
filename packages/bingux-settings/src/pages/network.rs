@@ -48,10 +48,8 @@ struct Network {
     secured: bool,
     in_use: bool,
     saved: bool,
-    /// What the strongest access point reports for the network.
-    security: String,
-    channel: String,
-    frequency: String,
+    /// "2.4 GHz", "5 GHz" or "6 GHz", or empty when unknown.
+    band: String,
     rate: String,
 }
 
@@ -88,7 +86,7 @@ fn split_terse(line: &str) -> Vec<String> {
 fn parse_radio(output: &str) -> Result<(String, bool, bool), CommandError> {
     let fields = split_terse(output.trim());
     if fields.len() < 4 {
-        return Err(CommandError("Unexpected output from nmcli radio.".into()));
+        return Err(CommandError("Wi-Fi status could not be read.".into()));
     }
     let wifi_hw = fields[0].clone();
     let wifi_on = fields[1] == "enabled";
@@ -151,10 +149,8 @@ fn parse_networks(output: &str, saved: &[String]) -> Vec<Network> {
         if let Some(existing) = networks.iter_mut().find(|network| network.ssid == ssid) {
             if signal > existing.signal {
                 existing.signal = signal;
-                existing.security = security.to_string();
-                existing.channel = field(5).to_string();
-                existing.frequency = field(6).to_string();
-                existing.rate = field(7).to_string();
+                existing.band = band_label(field(5));
+                existing.rate = field(6).to_string();
             }
             existing.secured |= secured;
             existing.in_use |= in_use;
@@ -166,10 +162,8 @@ fn parse_networks(output: &str, saved: &[String]) -> Vec<Network> {
             secured,
             in_use,
             saved: saved.iter().any(|name| name == ssid),
-            security: security.to_string(),
-            channel: field(5).to_string(),
-            frequency: field(6).to_string(),
-            rate: field(7).to_string(),
+            band: band_label(field(5)),
+            rate: field(6).to_string(),
         });
     }
     networks.sort_by(|a, b| {
@@ -203,7 +197,7 @@ fn load() -> Result<Model, CommandError> {
                 &[
                     "-t",
                     "-f",
-                    "SSID,SIGNAL,SECURITY,IN-USE,BSSID,CHAN,FREQ,RATE",
+                    "SSID,SIGNAL,SECURITY,IN-USE,BSSID,FREQ,RATE",
                     "device",
                     "wifi",
                     "list",
@@ -262,6 +256,45 @@ fn capitalise(text: &str) -> String {
     match chars.next() {
         Some(first) => first.to_uppercase().chain(chars).collect(),
         None => String::new(),
+    }
+}
+
+/// Words for a signal strength from its percentage: 80 and above is "Excellent".
+fn signal_word(signal: u8) -> &'static str {
+    match signal {
+        80..=u8::MAX => "Excellent",
+        60..=79 => "Good",
+        40..=59 => "Fair",
+        _ => "Weak",
+    }
+}
+
+/// The details row for signal: the word and the percentage.
+fn signal_detail(signal: u8) -> String {
+    format!("{} ({signal}%)", signal_word(signal))
+}
+
+/// "2.4 GHz", "5 GHz" or "6 GHz" from a frequency such as "5180 MHz".
+/// Empty when the frequency is missing or in no known band.
+fn band_label(freq: &str) -> String {
+    let mhz = freq
+        .split_whitespace()
+        .next()
+        .and_then(|value| value.parse::<u32>().ok());
+    match mhz {
+        Some(2400..=2499) => "2.4 GHz",
+        Some(4900..=5899) => "5 GHz",
+        Some(5925..=7125) => "6 GHz",
+        _ => "",
+    }
+    .to_string()
+}
+
+/// A device state as one plain word, such as "Connected" or "Not connected".
+fn wired_state(state: &str) -> String {
+    match state.split(' ').next().unwrap_or(state) {
+        "disconnected" => "Not connected".to_string(),
+        word => capitalise(word),
     }
 }
 
@@ -463,7 +496,7 @@ fn wired_section(wired: &[WiredDevice]) -> Element {
         Element::from(
             row(device.name.clone())
                 .maybe_subtitle(Some(device.connection.clone()))
-                .value(capitalise(&device.state)),
+                .value(wired_state(&device.state)),
         )
     })))
 }
@@ -474,8 +507,15 @@ fn network_rows(ui: Ui, networks: &[Network], selected: Option<&str>) -> Vec<Ele
     for network in networks {
         let needs_password = network.secured && !network.saved && !network.in_use;
 
-        let mut parts = vec![format!("Signal {}%", network.signal)];
-        parts.push(if network.secured { "Secured" } else { "Open" }.to_string());
+        let mut parts = vec![format!("{} signal", signal_word(network.signal))];
+        parts.push(
+            if network.secured {
+                "Password protected"
+            } else {
+                "Open network"
+            }
+            .to_string(),
+        );
         if network.saved {
             parts.push("Saved".to_string());
         }
@@ -695,20 +735,17 @@ impl Component for NetworkDetailsPage {
         });
 
         let mut details = Group::titled("Details")
-            .row(row("Signal").value(format!("{}%", network.signal)))
+            .row(row("Signal").value(signal_detail(network.signal)))
             .row(row("Security").value(if network.secured {
-                network.security.clone()
+                "Password protected"
             } else {
-                "Open".to_string()
+                "Open network"
             }));
-        for (title, value) in [
-            ("Frequency", &network.frequency),
-            ("Channel", &network.channel),
-            ("Speed", &network.rate),
-        ] {
-            if !value.is_empty() {
-                details = details.row(row(title).value(value.clone()));
-            }
+        if !network.band.is_empty() {
+            details = details.row(row("Band").value(network.band.clone()));
+        }
+        if !network.rate.is_empty() {
+            details = details.row(row("Speed").value(network.rate.clone()));
         }
 
         let forget_ssid = network.ssid.clone();

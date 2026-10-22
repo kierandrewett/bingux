@@ -100,13 +100,28 @@ fn speed_value(percent: f64) -> String {
     format!("{:.3}", (percent / 100.0 * 2.0 - 1.0).clamp(-1.0, 1.0))
 }
 
-/// The pointer speed as shown to the user: two decimals.
+/// The pointer speed as shown to the user: a word, not the -1 to 1 value.
 fn speed_label(speed: f64) -> String {
-    format!("{speed:.2}")
+    match speed_percent(speed) {
+        percent if percent < 25.0 => "Slow",
+        percent if percent < 45.0 => "Slower than normal",
+        percent if percent <= 55.0 => "Normal",
+        percent if percent <= 75.0 => "Faster than normal",
+        _ => "Fast",
+    }
+    .to_string()
 }
 
 fn bool_value(value: bool) -> &'static str {
     if value { "true" } else { "false" }
+}
+
+/// The label for a stored option value, or the value itself when unknown.
+fn option_label(options: &[(&str, &str)], value: &str) -> String {
+    options
+        .iter()
+        .find(|(key, _)| *key == value)
+        .map_or_else(|| value.to_string(), |(_, label)| label.to_string())
 }
 
 /// One editable setting: the GSettings key, how to show it, and the Lua
@@ -129,8 +144,8 @@ impl Setting<'_> {
     fn switch(&self, on: bool) -> Row {
         match self.lua() {
             Some(value) => row(self.title)
-                .subtitle("Set by Gnoblin config")
-                .value(value),
+                .subtitle(gnoblin::MANAGED)
+                .value(if value == "true" { "On" } else { "Off" }),
             None => {
                 let (schema, key, loaded, error) = (self.schema, self.key, self.loaded, self.error);
                 switch_row(self.title, on, move |next: bool| {
@@ -144,9 +159,7 @@ impl Setting<'_> {
 
     fn speed(&self, speed: f64) -> Row {
         match self.lua() {
-            Some(value) => row(self.title)
-                .subtitle("Set by Gnoblin config")
-                .value(value),
+            Some(value) => row(self.title).subtitle(gnoblin::MANAGED).value(value),
             None => {
                 let (schema, loaded, error) = (self.schema, self.loaded, self.error);
                 row(self.title)
@@ -164,8 +177,8 @@ impl Setting<'_> {
     fn choice(&self, options: &[(&str, &str)], selected: &str) -> Row {
         match self.lua() {
             Some(value) => row(self.title)
-                .subtitle("Set by Gnoblin config")
-                .value(value),
+                .subtitle(gnoblin::MANAGED)
+                .value(option_label(options, &value)),
             None => {
                 let (schema, key, loaded, error) = (self.schema, self.key, self.loaded, self.error);
                 choice_row(
@@ -193,7 +206,7 @@ const ACCEL_PROFILES: [(&str, &str); 3] = [
     ("adaptive", "Adaptive"),
 ];
 const SEND_EVENTS: [(&str, &str); 3] = [
-    ("enabled", "Always"),
+    ("enabled", "Always on"),
     (
         "disabled-on-external-mouse",
         "Off when a mouse is connected",
@@ -242,14 +255,14 @@ impl Component for MousePage {
                     .switch(mouse.left_handed),
             )
             .row(
-                setting(MOUSE, "mouse", "accel-profile", "Acceleration")
+                setting(MOUSE, "mouse", "accel-profile", "Pointer acceleration")
                     .choice(&ACCEL_PROFILES, &mouse.accel_profile),
             );
 
         let touchpad_group = model.touchpad.as_ref().map(|pad| {
             Group::titled("Touchpad")
                 .row(
-                    setting(TOUCHPAD, "touchpad", "send-events", "Touchpad")
+                    setting(TOUCHPAD, "touchpad", "send-events", "Use touchpad")
                         .choice(&SEND_EVENTS, &pad.send_events),
                 )
                 .row(

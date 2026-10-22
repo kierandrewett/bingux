@@ -72,7 +72,7 @@ fn battery() -> Result<Option<Battery>, CommandError> {
         let value = value.trim();
         match key.trim() {
             "percentage" => percentage = Some(value.to_string()),
-            "state" => state = Some(sentence(value)),
+            "state" => state = Some(battery_state(value)),
             "time to empty" => time = Some(("Time to empty".to_string(), value.to_string())),
             "time to full" => time = Some(("Time to full".to_string(), value.to_string())),
             _ => {}
@@ -110,7 +110,7 @@ fn profile_label(name: &str) -> String {
         "performance" => "Performance".to_string(),
         "balanced" => "Balanced".to_string(),
         "power-saver" => "Power saver".to_string(),
-        other => other.to_string(),
+        other => sentence(other),
     }
 }
 
@@ -119,7 +119,7 @@ fn gsettings_u32(schema: &str, key: &str) -> Result<u32, CommandError> {
     raw.trim()
         .strip_prefix("uint32 ")
         .and_then(|number| number.parse().ok())
-        .ok_or_else(|| CommandError(format!("Unexpected {key} value: {raw}")))
+        .ok_or_else(|| CommandError("This setting could not be read.".into()))
 }
 
 /// Capitalise the first letter and turn dashes into spaces (`fully-charged`
@@ -130,6 +130,16 @@ fn sentence(value: &str) -> String {
     match chars.next() {
         Some(first) => first.to_uppercase().chain(chars).collect(),
         None => text,
+    }
+}
+
+/// A battery state as a plain word. UPower reports `pending-charge` and
+/// `pending-discharge` when the battery is waiting for a change in the charger.
+fn battery_state(value: &str) -> String {
+    match value {
+        "pending-charge" => "Waiting to charge".to_string(),
+        "pending-discharge" => "Waiting to discharge".to_string(),
+        other => sentence(other),
     }
 }
 
@@ -228,10 +238,11 @@ impl Component for PowerPage {
                     },
                 )))
             }
-            Err(e) if e.0.contains("not installed") => page.child(
-                Group::titled("Power mode")
-                    .row(row("Profile").value("Not installed").enabled(false)),
-            ),
+            Err(e) if e.0.contains("not installed") => {
+                page.child(Group::titled("Power mode").row(status(Status::Info(
+                    "Power modes are not available on this computer.".into(),
+                ))))
+            }
             Err(e) => page.child(Group::titled("Power mode").row(status(Status::Error(e.0)))),
         };
 
@@ -299,7 +310,7 @@ impl Component for PowerPage {
             .map(|(key, label)| (key.to_string(), label.to_string()))
             .collect();
             if !options.iter().any(|(key, _)| *key == current) {
-                options.push((current.clone(), current.clone()));
+                options.push((current.clone(), sentence(&current)));
             }
             page = page.child(Group::titled("Power button").row(choice_row(
                 "When the power button is pressed",

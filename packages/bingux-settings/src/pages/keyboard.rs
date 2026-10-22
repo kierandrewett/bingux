@@ -4,8 +4,6 @@
 //! Gnoblin's Lua `input.keyboard` fields override the GSettings keys, so a
 //! row whose field is set in the committed snapshot is shown read-only.
 
-use std::time::Duration;
-
 use freya::prelude::*;
 
 use crate::pages::gnoblin::{self, InputSource, Json};
@@ -17,8 +15,6 @@ use crate::ui::{
 const KEYBOARD: &str = "org.gnome.desktop.peripherals.keyboard";
 const DELAY_RANGE: (f64, f64) = (100.0, 2000.0);
 const INTERVAL_RANGE: (f64, f64) = (10.0, 200.0);
-const GNOBLIN_NOT_RUNNING: &str = "Gnoblin is not running.";
-const INPUT_SOURCES_NOTE: &str = "Set in Gnoblin's Lua config under input_sources.sources.";
 
 #[derive(Clone, PartialEq)]
 struct Model {
@@ -75,6 +71,22 @@ fn to_percent(value: f64, (low, high): (f64, f64)) -> f64 {
     ((value - low) / (high - low) * 100.0).clamp(0.0, 100.0)
 }
 
+/// Opens `path` in the default app. The child is reaped on a thread so the
+/// page never waits for it.
+fn open_file(path: &str) -> CommandResult {
+    let mut child = std::process::Command::new("xdg-open")
+        .arg(path)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|_| CommandError("The file could not be opened.".to_string()))?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(String::new())
+}
+
 #[derive(PartialEq)]
 pub struct KeyboardPage;
 
@@ -104,11 +116,9 @@ impl Component for KeyboardPage {
 
         let mut repeat_group = Group::titled("Key repeat");
         repeat_group = match repeat_lua {
-            Some(value) => repeat_group.row(
-                row("Repeat keys")
-                    .subtitle("Set by Gnoblin config")
-                    .value(value),
-            ),
+            Some(value) => {
+                repeat_group.row(row("Repeat keys").subtitle(gnoblin::MANAGED).value(value))
+            }
             None => repeat_group.row(switch_row(
                 "Repeat keys",
                 model.repeat,
@@ -126,7 +136,7 @@ impl Component for KeyboardPage {
         repeat_group = match delay_lua {
             Some(value) => repeat_group.row(
                 row("Delay")
-                    .subtitle("Set by Gnoblin config")
+                    .subtitle(gnoblin::MANAGED)
                     .value(format!("{value} ms")),
             ),
             None => repeat_group.row(
@@ -146,13 +156,13 @@ impl Component for KeyboardPage {
         };
         repeat_group = match interval_lua {
             Some(value) => repeat_group.row(
-                row("Speed")
-                    .subtitle("Set by Gnoblin config")
+                row("Repeat speed")
+                    .subtitle(gnoblin::MANAGED)
                     .value(format!("{value} ms")),
             ),
             None => repeat_group.row(
                 slider_row(
-                    "Speed",
+                    "Repeat speed",
                     100.0 - to_percent(model.interval_ms, INTERVAL_RANGE),
                     move |percent: f64| {
                         let ms = from_percent(100.0 - percent, INTERVAL_RANGE).to_string();
@@ -167,13 +177,11 @@ impl Component for KeyboardPage {
         };
 
         // The section always opens with where the list comes from. A missing
-        // Gnoblin is a calm muted line; any other failure is an error.
-        let sources_group = Group::titled("Input sources").description(INPUT_SOURCES_NOTE);
+        // desktop is a calm muted line; any other failure is an error.
+        let sources_group = Group::titled("Input sources");
         let sources: Element = match &model.sources {
             Ok(sources) if sources.is_empty() => sources_group
-                .row(status(Status::Empty(
-                    "Gnoblin has no input sources configured.".into(),
-                )))
+                .row(status(Status::Empty("No input sources are set up.".into())))
                 .into(),
             Ok(sources) => sources_group
                 .rows(sources.iter().map(|source| {
@@ -182,7 +190,11 @@ impl Component for KeyboardPage {
                     let active = source.active;
                     Element::from(
                         row(source.name.clone())
-                            .subtitle(format!("{} {}", source.kind, source.id))
+                            .subtitle(if source.kind == "xkb" {
+                                "Keyboard layout"
+                            } else {
+                                "Input method"
+                            })
                             .value(if active { "Active" } else { "" })
                             .enabled(!active)
                             .on_press(move |_| {
@@ -194,7 +206,7 @@ impl Component for KeyboardPage {
                     )
                 }))
                 .into(),
-            Err(message) if message == GNOBLIN_NOT_RUNNING => sources_group
+            Err(message) if message == gnoblin::NOT_RUNNING => sources_group
                 .row(status(Status::Empty(message.clone())))
                 .into(),
             Err(message) => sources_group
@@ -202,21 +214,19 @@ impl Component for KeyboardPage {
                 .into(),
         };
 
-        // Shortcuts live in Gnoblin's Lua config. The row opens that file in
-        // the default editor; Gnoblin reloads it on `gnoblinctl config reload`.
-        let shortcuts_row = match model.config_path.clone() {
-            Some(path) => row("Keyboard shortcuts")
-                .subtitle(format!("Edit {path}, then run gnoblinctl config reload"))
-                .trailing(row_button("Open config", move |_| {
-                    let path = path.clone();
-                    background_then(
-                        move || system::run("xdg-open", &[path.as_str()], Duration::from_secs(5)),
-                        move |result| error.set(result.err().map(|e| e.0)),
-                    );
-                })),
-            None => row("Keyboard shortcuts")
-                .subtitle("Configured in Gnoblin's Lua config; Gnoblin is not running"),
-        };
+        // Shortcuts are set in a configuration file. The button opens that file
+        // in the default editor.
+        let mut shortcuts_row =
+            row("Keyboard shortcuts").subtitle("Shortcuts are set in a configuration file.");
+        if let Some(path) = model.config_path.clone() {
+            shortcuts_row = shortcuts_row.trailing(row_button("Open file", move |_| {
+                let path = path.clone();
+                background_then(
+                    move || open_file(&path),
+                    move |result| error.set(result.err().map(|e| e.0)),
+                );
+            }));
+        }
         let shortcuts = Group::titled("Shortcuts").row(shortcuts_row);
 
         page_column()

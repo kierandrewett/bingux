@@ -66,7 +66,7 @@ fn bluetoothctl(args: &[&str], timeout: Duration) -> Result<String, CommandError
         // Without bluetoothd, bluetoothctl aborts on a D-Bus assertion and
         // prints a build-flag complaint that means nothing to a user.
         if error.0.contains("D-Bus") || error.0.contains("rdynamic") {
-            CommandError("The Bluetooth service (bluetoothd) is not running.".into())
+            CommandError("The Bluetooth service is not running.".into())
         } else {
             error
         }
@@ -86,12 +86,9 @@ fn field<'a>(text: &'a str, key: &str) -> Option<&'a str> {
 }
 
 fn flag(text: &str, key: &str) -> Result<bool, CommandError> {
-    field(text, key).map(|value| value == "yes").ok_or_else(|| {
-        CommandError(format!(
-            "Bluetooth did not report its {} state.",
-            key.to_lowercase()
-        ))
-    })
+    field(text, key)
+        .map(|value| value == "yes")
+        .ok_or_else(|| CommandError("Bluetooth status could not be read.".into()))
 }
 
 /// `Battery Percentage` reads `0x5a (90)`; the percentage is in brackets.
@@ -201,13 +198,13 @@ fn adapter_group(adapter: &Adapter, ctx: Ctx) -> Group {
     ));
     if adapter.powered {
         group = group.row(switch_row(
-            "Discoverable",
+            "Visible to nearby devices",
             adapter.discoverable,
             move |next: bool| {
                 let word = if next { "on" } else { "off" };
                 perform(
                     ctx,
-                    "Changing discoverability…".to_string(),
+                    "Changing visibility to nearby devices…".to_string(),
                     args(&["discoverable", word]),
                     TIMEOUT,
                 );
@@ -348,7 +345,7 @@ fn confirm_remove(device: &Device, ctx: Ctx) {
 fn device_row(device: &Device, ctx: Ctx, open: impl Fn() + 'static) -> Row {
     row(device.name.clone())
         .leading(device_icon(&device.icon))
-        .subtitle(format!("{} · {}", device_status(device), device.mac))
+        .subtitle(device_status(device))
         .maybe_trailing(device_action(device, ctx))
         .navigates()
         .on_press(move |_| open())
@@ -522,8 +519,8 @@ impl Component for BluetoothDevicePage {
         let mut details = Group::titled("Details")
             .row(row("Type").value(device_kind(&device.icon)))
             .row(row("Address").value(device.mac.clone()))
-            .row(row("Paired").value(yes_no(device.paired)))
-            .row(row("Trusted").value(yes_no(device.trusted)));
+            .row(row("Paired with this computer").value(yes_no(device.paired)))
+            .row(row("Connects automatically").value(yes_no(device.trusted)));
         if let Some(level) = device.battery {
             details = details.row(row("Battery").value(format!("{level}%")));
         }

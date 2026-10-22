@@ -510,7 +510,7 @@ fn stream_row(
                 set_volume(queue, error, id, percent);
             },
         ))),
-        None => Element::from(base.value("No volume control")),
+        None => Element::from(base.value("Volume cannot be changed")),
     }
 }
 

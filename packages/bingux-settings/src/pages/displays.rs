@@ -12,7 +12,7 @@ use freya::prelude::*;
 use crate::pages::gnoblin;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Status, action_row, choice_row, page_column, primary_button, row, skeleton, slider_row,
+    Group, Status, action_row, choice_row, page_column, primary_button, row, skeleton, slider,
     status, switch_row,
 };
 
@@ -280,7 +280,7 @@ impl Mode {
     }
 
     fn refresh_label(&self) -> String {
-        let preferred = if self.preferred { " (preferred)" } else { "" };
+        let preferred = if self.preferred { " (recommended)" } else { "" };
         format!("{} Hz{preferred}", trim_number(self.refresh))
     }
 }
@@ -438,6 +438,30 @@ fn transform_label(transform: u32) -> &'static str {
     }
 }
 
+fn orientation_name(value: &str) -> &'static str {
+    match value {
+        "normal" => "Normal",
+        "90" => "90°",
+        "180" => "180°",
+        "270" => "270°",
+        "flipped" => "Flipped",
+        "flipped-90" => "Flipped 90°",
+        "flipped-180" => "Flipped 180°",
+        "flipped-270" => "Flipped 270°",
+        _ => "Unknown",
+    }
+}
+
+/// A short word for a colour temperature, for the night light slider.
+fn temperature_word(kelvin: u32) -> &'static str {
+    match kelvin {
+        k if k < 2500 => "Very warm",
+        k if k < 3500 => "Warm",
+        k if k < 4200 => "Neutral",
+        _ => "Cool",
+    }
+}
+
 /// `1.5` -> `"1.5"`, `180.0` -> `"180"`, `59.94` -> `"59.94"`.
 fn trim_number(value: f64) -> String {
     format!("{value:.2}")
@@ -485,22 +509,18 @@ fn load() -> Page {
 }
 
 fn load_displays() -> Result<Displays, CommandError> {
-    let reason = match mutter_call(true, "GetCurrentState", None, &[])
+    if let Ok((serial, monitors)) = mutter_call(true, "GetCurrentState", None, &[])
         .and_then(|text| parse_mutter(&text).map_err(CommandError))
     {
-        Ok((serial, monitors)) => return Ok(Displays::Editable { serial, monitors }),
-        Err(failure) => failure.0,
-    };
-    // busctl reports an absent service as "not activatable"; that is the
-    // normal case outside GNOME and needs no diagnostic text.
-    let reason = if reason.contains("not activatable") {
-        "Mutter's DisplayConfig is not available.".to_string()
-    } else {
-        format!("Mutter's DisplayConfig could not be read: {reason}")
-    };
+        return Ok(Displays::Editable { serial, monitors });
+    }
+    // The editable layout is not available here, so show the read-only list.
     match load_gnoblin() {
-        Ok(records) => Ok(Displays::ReadOnly { reason, records }),
-        Err(fallback) => Err(CommandError(format!("{reason} {}", fallback.0))),
+        Ok(records) => Ok(Displays::ReadOnly {
+            reason: "Display settings cannot be changed right now.".to_string(),
+            records,
+        }),
+        Err(_) => Err(CommandError("Display settings could not be read.".into())),
     }
 }
 
@@ -715,13 +735,10 @@ fn parse_record(record: &Json) -> Result<Record, String> {
         .map_or("Unknown".to_string(), |scale| {
             format!("{}%", (scale * 100.0).round() as u32)
         });
-    let orientation = record
-        .get("transform")
-        .and_then(Json::text)
-        .unwrap_or("Unknown")
-        .to_string();
+    let orientation =
+        orientation_name(record.get("transform").and_then(Json::text).unwrap_or("")).to_string();
     let rows = [
-        ("Output", name.to_string()),
+        ("Port", name.to_string()),
         (
             "Enabled",
             yes_no(record.get("enabled").and_then(Json::boolean)),
@@ -756,9 +773,7 @@ fn load_night() -> Result<Night, CommandError> {
         .split_whitespace()
         .last()
         .and_then(|value| value.parse::<u32>().ok())
-        .ok_or_else(|| {
-            CommandError(format!("Unexpected night light temperature: {temperature}"))
-        })?;
+        .ok_or_else(|| CommandError("Night light settings could not be read.".into()))?;
     Ok(Night {
         enabled: enabled.trim() == "true",
         kelvin,
@@ -1072,7 +1087,7 @@ fn monitor_group(
     let mode = monitor.selected();
     Group::titled(&monitor.name)
         .description(monitor_state(monitor))
-        .row(row("Output").value(monitor.connector.clone()))
+        .row(row("Port").value(monitor.connector.clone()))
         .row(switch_row("Enabled", enabled, move |on: bool| {
             edit(model, error, move |monitors| {
                 set_enabled(monitors, index, on)
@@ -1152,12 +1167,13 @@ fn night_group(
         .row(switch_row("Enabled", night.enabled, move |on: bool| {
             set_night_enabled(model, error, on);
         }))
-        .row(slider_row(
-            "Colour temperature",
-            kelvin_level(night.kelvin),
-            move |level: f64| set_night_level(model, error, ticket, level),
-        ))
-        .row(row("Temperature").value(format!("{} K", night.kelvin)))
+        .row(
+            row("Colour temperature")
+                .subtitle(temperature_word(night.kelvin))
+                .trailing(slider(kelvin_level(night.kelvin), move |level: f64| {
+                    set_night_level(model, error, ticket, level)
+                })),
+        )
 }
 
 /// The line under a monitor's name: whether it is on, and whether it is the
@@ -1175,7 +1191,7 @@ fn monitor_state(monitor: &Monitor) -> &'static str {
 /// Apply saves the draft layout. It sits under the last monitor group.
 fn apply_footer(model: State<Option<Page>>, error: State<Option<String>>) -> Element {
     action_row(
-        Some("Saved for future sessions."),
+        Some("Also used the next time you sign in."),
         primary_button("Apply", move |_| apply(model, error)).compact(),
     )
 }
@@ -1200,7 +1216,7 @@ impl Component for DisplaysPage {
             ),
             Ok(Displays::ReadOnly { reason, records }) => {
                 let mut page = page.child(status(Status::Info(format!(
-                    "{reason} Showing gnoblinctl's read-only monitor list."
+                    "{reason} Showing the connected displays."
                 ))));
                 for record in &records {
                     page = page.child(record_group(record));

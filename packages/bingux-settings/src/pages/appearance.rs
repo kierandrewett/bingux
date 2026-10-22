@@ -8,16 +8,17 @@
 //! gsettings those two groups are left out. Changing either updates the
 //! shared palette at once, so the whole window recolours.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use freya::prelude::*;
 
 use crate::pages::bingux_config;
+use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then, which};
 use crate::theme::{Scheme, SharedTokens, Tokens, accent_for, accent_names, read_gsettings};
 use crate::ui::{
-    Group, Status, choice_row, entry_row, page_column, row, row_button, skeleton, status,
+    Group, Status, choice_list, choice_row, page_column, row, row_button, skeleton, status,
     use_tokens,
 };
 use bingux_ui::scale::*;
@@ -203,6 +204,7 @@ impl Component for AppearancePage {
         let error = use_state::<Option<String>>(|| None);
         let shared = use_consume::<SharedTokens>().0;
         let tokens = use_tokens();
+        let navigator = use_navigator();
 
         let Some(loaded) = model.read().clone() else {
             return page_column().child(skeleton());
@@ -216,10 +218,10 @@ impl Component for AppearancePage {
             }
         };
 
-        let wallpaper_name = if model_value.wallpaper.is_empty() {
-            "GNOME background".to_string()
+        let font_name = if model_value.font.is_empty() {
+            "System default".to_string()
         } else {
-            file_name(&model_value.wallpaper)
+            model_value.font.clone()
         };
         let wallpaper_path = Some(model_value.wallpaper.clone()).filter(|path| !path.is_empty());
 
@@ -241,8 +243,6 @@ impl Component for AppearancePage {
             (Scheme::PreferDark.gsettings_value().into(), "Dark".into()),
         ];
 
-        let reduced_motion = if tokens.reduced_motion { "On" } else { "Off" };
-
         page_column()
             .maybe_child(
                 error
@@ -252,47 +252,41 @@ impl Component for AppearancePage {
             )
             .child(
                 Group::titled("Wallpaper")
+                    .row(match wallpaper_path {
+                        Some(path) => row(file_name(&path)).trailing(
+                            rect()
+                                .direction(Direction::Horizontal)
+                                .cross_align(Alignment::Center)
+                                .spacing(S3)
+                                .child(wallpaper_thumbnail(&path))
+                                .child(row_button("Choose picture", move |_| {
+                                    run_wallpaper_change(model, error, choose_wallpaper)
+                                })),
+                        ),
+                        None => row("No picture chosen")
+                            .subtitle("The system wallpaper is in use.")
+                            .trailing(row_button("Choose picture", move |_| {
+                                run_wallpaper_change(model, error, choose_wallpaper)
+                            })),
+                    })
                     .row(
-                        row("Current wallpaper")
-                            .maybe_subtitle(wallpaper_path)
-                            .value(wallpaper_name),
-                    )
-                    .row(
-                        row("Choose a picture").trailing(row_button("Choose image", move |_| {
-                            run_wallpaper_change(model, error, choose_wallpaper)
-                        })),
-                    )
-                    .row(
-                        row("GNOME background").trailing(row_button("Use GNOME", move |_| {
-                            run_wallpaper_change(model, error, use_gnome_background)
-                        })),
+                        row("System wallpaper")
+                            .subtitle("Go back to the wallpaper that came with the system.")
+                            .trailing(row_button("Use it", move |_| {
+                                run_wallpaper_change(model, error, use_gnome_background)
+                            })),
                     ),
             )
             .child(
                 Group::titled("Font")
-                    .description("The shell uses it at once. This window uses it after a restart.")
+                    .description(
+                        "The desktop uses it straight away. This window uses it after it is reopened.",
+                    )
                     .row(
-                        entry_row("Font family", model_value.font.clone(), {
-                            move |family: String| {
-                                background_then(
-                                    move || set_font(&family),
-                                    move |result| match result {
-                                        Ok(Some(loaded)) => {
-                                            let mut error = error;
-                                            let mut model = model;
-                                            error.set(None);
-                                            model.set(Some(Ok(loaded)));
-                                        }
-                                        Ok(None) => {}
-                                        Err(failure) => {
-                                            let mut error = error;
-                                            error.set(Some(failure.0));
-                                        }
-                                    },
-                                );
-                            }
-                        })
-                        .placeholder("Adwaita Sans"),
+                        row("Font")
+                            .value(font_name)
+                            .navigates()
+                            .on_press(move |_| navigator.push(Route::Font)),
                     ),
             )
             .maybe_child(model_value.gsettings.then(|| {
@@ -328,23 +322,98 @@ impl Component for AppearancePage {
                                 apply_scheme(shared, error, scheme);
                             },
                         )
-                        .subtitle("GTK applications follow this. The shell stays dark."),
+                        .subtitle("Applications follow this. The desktop shell stays dark.")
                     ),
                 )
             }))
             .maybe_child((!model_value.gsettings).then(|| {
                 Element::from(status(Status::Info(
-                    "Accent colour and colour scheme need gsettings, which is not available."
-                        .into(),
+                    "Accent colour and colour scheme are not available on this system.".into(),
                 )))
             }))
-            .child(
-                Group::titled("Motion").row(
-                    row("Reduced motion")
-                        .subtitle("Set BINGUX_REDUCED_MOTION=1 to turn it on.")
-                        .value(reduced_motion),
-                ),
-            )
+    }
+}
+
+/// Wallpaper thumbnail: a small rounded crop of the picture, 96 by 36.
+fn wallpaper_thumbnail(path: &str) -> Element {
+    rect()
+        .width(Size::px(BOX_2XL))
+        .height(Size::px(BOX_LG))
+        .corner_radius(RADIUS)
+        .overflow(Overflow::Clip)
+        .child(
+            ImageViewer::new(PathBuf::from(path))
+                .width(Size::fill())
+                .height(Size::fill())
+                .aspect_ratio(AspectRatio::Max),
+        )
+        .into()
+}
+
+/// Every installed font family, sorted, each listed once under its first name.
+fn installed_fonts() -> Result<Vec<String>, CommandError> {
+    let text = system::run("fc-list", &[":", "family"], Duration::from_secs(5))?;
+    let mut families: Vec<String> = text
+        .lines()
+        .filter_map(|line| line.split(',').next())
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .collect();
+    families.sort_by_key(|name| name.to_lowercase());
+    families.dedup();
+    Ok(families)
+}
+
+/// The font subpage: every installed family, narrowed by typing. The first
+/// choice restores the system font.
+#[derive(PartialEq)]
+pub struct FontPage;
+
+impl Component for FontPage {
+    fn render(&self) -> impl IntoElement {
+        let model: State<Option<Loaded>> = system::cached("appearance");
+        let navigator = use_navigator();
+        let error = use_state::<Option<String>>(|| None);
+        let fonts = use_state::<Option<Result<Vec<String>, CommandError>>>(|| None);
+        use_hook(move || background(fonts, installed_fonts));
+
+        let list = match fonts.read().clone() {
+            Some(Ok(list)) => list,
+            Some(Err(failure)) => {
+                return page_column().child(status(Status::Error(failure.0)));
+            }
+            None => return page_column().child(skeleton()),
+        };
+        let current = match model.read().as_ref() {
+            Some(Ok(data)) => data.font.clone(),
+            _ => String::new(),
+        };
+        let mut options = vec![(String::new(), "System default".to_string())];
+        options.extend(list.into_iter().map(|family| (family.clone(), family)));
+
+        let mut page = page_column();
+        if let Some(message) = error.read().clone() {
+            page = page.child(status(Status::Error(message)));
+        }
+        page.child(
+            choice_list(options, current, move |family: String| {
+                let mut error = error;
+                let mut model = model;
+                background_then(
+                    move || set_font(&family),
+                    move |result| match result {
+                        Ok(Some(loaded)) => {
+                            error.set(None);
+                            model.set(Some(Ok(loaded)));
+                            navigator.pop();
+                        }
+                        Ok(None) => {}
+                        Err(failure) => error.set(Some(failure.0)),
+                    },
+                );
+            })
+            .placeholder("Search for a font"),
+        )
     }
 }
 

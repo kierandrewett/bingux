@@ -25,8 +25,8 @@ const PROVIDERS: [(&str, &str); 7] = [
     ("calculation", "Calculation"),
     ("conversions", "Conversions"),
     ("web", "Web"),
-    ("web-shortcuts", "Web shortcuts"),
-    ("external", "External"),
+    ("web-shortcuts", "Website shortcuts"),
+    ("external", "Add-on sources"),
 ];
 const MIN_MEGABYTES: i64 = 1;
 const MAX_MEGABYTES: i64 = 20;
@@ -266,8 +266,8 @@ impl Parser {
     }
 }
 
-fn missing(key: &str) -> CommandError {
-    CommandError(format!("The search setting {key} could not be read."))
+fn missing(_key: &str) -> CommandError {
+    CommandError("Some search settings could not be read.".into())
 }
 
 fn json_text(object: &Json, key: &str) -> Result<String, CommandError> {
@@ -306,7 +306,7 @@ fn strings(value: Option<&Json>) -> Vec<String> {
 /// Reads the `search` and `previews` sections from `bingux-config dump`.
 fn parse_dump(text: &str) -> Result<Model, CommandError> {
     let root = Json::parse(text)
-        .map_err(|e| CommandError(format!("Could not read the search settings: {e}.")))?;
+        .map_err(|_| CommandError("The search settings could not be read.".into()))?;
     if let Some(message) = root.get("error").and_then(Json::as_str) {
         return Err(CommandError(message.to_string()));
     }
@@ -599,7 +599,7 @@ fn providers_group(data: &Model, ctx: Ctx) -> Group {
     let disabled = data.disabled_providers.clone();
     PROVIDERS
         .iter()
-        .fold(Group::titled("Providers"), |group, (id, label)| {
+        .fold(Group::titled("Search sources"), |group, (id, label)| {
             let id = id.to_string();
             let enabled = !disabled.contains(&id);
             let current = disabled.clone();
@@ -696,7 +696,7 @@ fn engine_row(engine: Engine, engines: &[Engine], default: &str, ctx: Ctx) -> Ro
             ),
         );
     row(engine.name.clone())
-        .subtitle(format!("Shortcut {} · {}", engine.shortcut, engine.url))
+        .subtitle(format!("Shortcut {}", engine.shortcut))
         .trailing(trailing)
 }
 
@@ -725,7 +725,7 @@ impl Component for AddEngine {
             if name_text.is_empty() || shortcut_text.is_empty() || url_text.is_empty() {
                 let mut error = ctx.error;
                 error.set(Some(
-                    "Enter a name, a shortcut and a URL for the engine.".into(),
+                    "Enter a name, a shortcut and a web address for the engine.".into(),
                 ));
                 return;
             }
@@ -752,16 +752,24 @@ impl Component for AddEngine {
         };
 
         Group::titled("Add engine")
-            .description("The shortcut uses lowercase letters, digits and hyphens. The URL must contain {query} once.")
-            .row(row("Name").trailing(text_field(name, |_: String| {}).width(FIELD_WIDTH_WIDE)))
-            .row(row("Shortcut").trailing(text_field(shortcut, |_: String| {}).width(FIELD_WIDTH_WIDE)))
-            .row(
-                row("URL").trailing(
-                    text_field(url, |_: String| {})
-                        .width(FIELD_WIDTH_WIDE)
-                        .placeholder("https://example.com/?q={query}"),
-                ),
+            .description(
+                "Type the shortcut in search to use this engine. Put {query} in the address where the search words go.",
             )
+            .row(row("Name").trailing(
+                text_field(name, |_: String| {})
+                    .width(FIELD_WIDTH_WIDE)
+                    .placeholder("Example Search"),
+            ))
+            .row(row("Shortcut").trailing(
+                text_field(shortcut, |_: String| {})
+                    .width(FIELD_WIDTH_WIDE)
+                    .placeholder("ex"),
+            ))
+            .row(row("Web address").trailing(
+                text_field(url, |_: String| {})
+                    .width(FIELD_WIDTH_WIDE)
+                    .placeholder("https://example.com/?q={query}"),
+            ))
             .row(action_row(None, primary_button("Add", add).compact()))
     }
 }
@@ -772,7 +780,7 @@ fn files_group(data: &Model, ctx: Ctx) -> Group {
     );
     match &data.file_roots {
         None => {
-            group = group.row(row("Folders").value("Built-in home folders"));
+            group = group.row(row("Folders").value("Home folders"));
         }
         Some(roots) => {
             for root in roots {
@@ -784,7 +792,7 @@ fn files_group(data: &Model, ctx: Ctx) -> Group {
                         let remaining = remaining.clone();
                         ctx.overlays.show_dialog(
                             dialog(
-                                format!("Stop searching {folder}?"),
+                                format!("Stop searching {}?", folder_name(&folder)),
                                 "Files in this folder no longer appear in search results.",
                             )
                             .cancel("Cancel")
@@ -804,14 +812,18 @@ fn files_group(data: &Model, ctx: Ctx) -> Group {
                     })
                     .tooltip("Remove folder"),
                 );
-                group = group.row(row(root.clone()).trailing(trailing));
+                group = group.row(
+                    row(folder_name(root))
+                        .subtitle(folder_location(root))
+                        .trailing(trailing),
+                );
             }
         }
     }
     group
 }
 
-/// Adds an absolute, existing directory to the file search roots.
+/// Adds a folder to the file search roots. The folder is chosen with the system file picker.
 #[derive(PartialEq)]
 struct FileRootAdd {
     roots: Vec<String>,
@@ -820,51 +832,79 @@ struct FileRootAdd {
 
 impl Component for FileRootAdd {
     fn render(&self) -> impl IntoElement {
-        let path = use_state(String::new);
         let roots = self.roots.clone();
         let ctx = self.ctx;
 
-        let add = EventHandler::new(move |_: ()| {
-            let mut path = path;
-            let text = path.read().trim().to_string();
-            let mut error = ctx.error;
-            if !Path::new(&text).is_absolute() || !Path::new(&text).is_dir() {
-                error.set(Some(
-                    "Enter an absolute path to an existing folder, such as /home/you/Documents."
-                        .into(),
-                ));
-                return;
-            }
-            if roots.contains(&text) {
-                error.set(Some(format!("{text} is already searched.")));
-                return;
-            }
-            let mut list = roots.clone();
-            list.push(text);
-            write_then(
-                ctx,
-                set_args("search.file_roots", string_array(&list)),
-                move |ok| {
-                    if ok {
-                        path.set(String::new());
-                        reload(ctx);
+        let choose = move |_| {
+            let roots = roots.clone();
+            background_then(
+                || system::pick_path("Choose a folder", system::Pick::Folder),
+                move |result| match result {
+                    Ok(Some(path)) => add_folder(ctx, &roots, path),
+                    Ok(None) => {}
+                    Err(failure) => {
+                        let mut error = ctx.error;
+                        error.set(Some(failure.0));
                     }
                 },
             );
-        });
-        let submit = add.clone();
+        };
 
-        Group::titled("Add folder")
-            .description("An absolute path to an existing folder.")
-            .row(
-                row("Path").trailing(
-                    text_field(path, move |_: String| submit.call(()))
-                        .width(FIELD_WIDTH_WIDE)
-                        .placeholder("/home/user/Documents"),
-                ),
-            )
-            .row(action_row(None, primary_button("Add", add).compact()))
+        Group::titled("Add folder").row(action_row(
+            None,
+            primary_button("Choose folder", choose).compact(),
+        ))
     }
+}
+
+/// Checks a chosen folder and adds it to the file search roots.
+fn add_folder(ctx: Ctx, roots: &[String], path: String) {
+    let mut error = ctx.error;
+    if !Path::new(&path).is_absolute() || !Path::new(&path).is_dir() {
+        error.set(Some("That folder cannot be searched.".into()));
+        return;
+    }
+    if roots.contains(&path) {
+        error.set(Some(format!("{} is already searched.", folder_name(&path))));
+        return;
+    }
+    let mut list = roots.to_vec();
+    list.push(path);
+    write_then(
+        ctx,
+        set_args("search.file_roots", string_array(&list)),
+        move |ok| {
+            if ok {
+                reload(ctx);
+            }
+        },
+    );
+}
+
+/// The last part of a folder path, such as `Documents`.
+fn folder_name(path: &str) -> String {
+    Path::new(path).file_name().map_or_else(
+        || path.to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    )
+}
+
+/// The folder that holds a folder. The home folder is shortened to `Home`.
+fn folder_location(path: &str) -> String {
+    let Some(parent) = Path::new(path).parent() else {
+        return String::new();
+    };
+    let parent = parent.to_string_lossy().into_owned();
+    let home = std::env::var("HOME").unwrap_or_default();
+    if !home.is_empty() {
+        if parent == home {
+            return "Home".into();
+        }
+        if let Some(rest) = parent.strip_prefix(format!("{home}/").as_str()) {
+            return format!("Home/{rest}");
+        }
+    }
+    parent
 }
 
 fn previews_group(data: &Model, ctx: Ctx) -> Group {
@@ -904,7 +944,7 @@ impl Component for MaxMegabytes {
         let shown = *draft.read();
 
         slider_row(
-            "Largest previewed file",
+            "Largest file to preview",
             percent_from_megabytes(shown),
             move |percent: f64| {
                 let value = megabytes_from_percent(percent);
@@ -932,9 +972,11 @@ fn assistant_group(data: &Model, ctx: Ctx) -> Group {
         ("claude".to_string(), "Claude".to_string()),
     ];
     let mut group = Group::titled("Assistant")
-        .description("The model is passed to the harness. Leave it empty for the harness default.")
+        .description(
+            "Choose the program Bingux asks. Leave Model empty to use the program's own choice.",
+        )
         .row(choice_row(
-            "Harness",
+            "Assistant program",
             options,
             &selected,
             move |harness: String| {
