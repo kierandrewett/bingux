@@ -81,6 +81,59 @@ work belongs in Git history and does not stay here as a second changelog.
       repaint. `chvt 2; chvt 1` repaints at once and shows the "Configuration failed
       to load" panel. Same on a compositor restart with the broken config. The
       recovery panel must queue a stage redraw when it appears.
+- [x] Black live installer on 5f53de8.iso: UEFI runs 1, 3, 4, 5 and BIOS run 6 of the E2E
+      agent, and 5 of 5 boots in my VMs on a loaded host (`~/.cache/bingux-black2/runs/boot1..5/bundle.txt`;
+      in-guest replays `exp2` to `exp6`). Two failures, one cause: the guardian waits for the
+      helper units before it starts the supervisor.
+      - Gnoblin's guardian runs `systemctl --user start gnoblin-session.target`
+        (`gnoblin-runtime-environment.c:441`, called at `gnoblin-runtime.c:265`) before it spawns the
+        session supervisor (`gnoblin-runtime.c:323`) that sends the compositor its configuration. The
+        compositor stops waiting 10 s after it started (`gnoblin-control-connection.c:235`). The start job
+        waited for `bingux.target`, so for `bingux-greeter-export.service` (run 1: "Consumed 4.257s CPU
+        time over 8.199s wall clock time", then "Reached target Bingux helper services" and "Reached target
+        Gnoblin graphical session" in the same second). Login to that target: 14 s (run 1), 15 s (run 3),
+        19 s (run 4), 16 s (run 5), 19 s (run 6); 7 s in the good run 2.
+      - A. The compositor times out first. My boot 3: `session-last.log` "05:08:10 compositor spawned
+        pid=828", "05:08:25 session supervisor spawned pid=1133", "compositor pid=828 exited
+        status=1"; `compositor-last.log`: "Failed to receive Gnoblin runtime config: timed out waiting
+        for Gnoblin runtime configuration". The guardian exits, greetd starts the greeter (runs 3, 5, 6;
+        the greeter hit the same slow start in runs 3 and 5 and stayed black). Gaps spawn to supervisor
+        in my five boots: 13, 22, 15, 20 and 18 s.
+      - B. The compositor survives and the Lua runtime falls back (runs 1 and 4: supervisor and worker
+        pids far apart, worker with `--resume-runtime-worker`, nm-applet registered). Journal of a
+        replay with the new script (`exp5/new1.txt`): "gnoblin: runtime supervisor: compositor did not
+        complete the private runtime handshake" (10 s after the supervisor), then "restarting Lua
+        runtime worker", "configuration fell back to the built-in defaults: The Lua runtime restarted;
+        built-in defaults are being applied"; or "could not suspend Mutter for supervisor recovery;
+        keeping the session alive: Mutter did not acknowledge worker suspension" and the note
+        `$XDG_RUNTIME_DIR/gnoblin/config-fallback` reads "Lua runtime recovery failed. The compositor is
+        still running, but configuration and Lua callbacks are unavailable" (`exp4/new1.txt`).
+        `installer.lua` never loads, `bingux-installer-ui` never starts.
+      - Not Xwayland: no Xwayland error in any `compositor-last.log` ("Using public X11 display :0");
+        the installer comes up in good boots. The hand-run abort ("Failed to open Xauthority file")
+        had no logind session.
+      Measured on four busy CPUs: `systemctl --user start gnoblin-session.target` took 6.54 s and
+      0.41 s with `bingux.target` `DefaultDependencies=no` (`exp1`). The first start of the compositor
+      still takes 14 to 30 s on this host ("Running Mutter" to "Using Wayland display name"), even with
+      the libraries in memory (a warm-up unit made no difference to the first try, so it is not
+      shipped); the second takes 2 to 3 s.
+      Fixed here: `bingux.target` `DefaultDependencies=no`; `bingux-greeter-export.service` and the
+      image's `pacman-init.service` (9 s of CPU) yield the CPU; `bingux-live-session` starts the
+      compositor again (3 tries) when it exits with an error, has no `compositor-v1.sock` after 60 s, or
+      writes a fallback note, and logs to the journal (`journalctl -t bingux-live-session`). In-guest
+      replay (caches dropped, 6 busy loops): with the old files 0 of 3 reached the installer (2 of the 3
+      ended in the greeter); with the final script 9 of 9 did, each after one restart: 59 to 62 s
+      with the busy loops (`exp5/new1,2`), 43 to 51 s without them (`exp6/new1,2`), and 35 to 50 s in the
+      five runs that also had the libraries read first (`exp5/warm*`, `exp6/warm*`). Tests: `tests/live-session.test.py`,
+      `tests/session-start-load.test.py`. Not run: a real E2E boot of a rebuilt ISO.
+- [ ] Gnoblin (owner): the three start-up limits are fixed times, and a loaded machine passes them
+      (see the item above for the log lines). (1) Spawn the supervisor before `activate_session()`, or
+      start the target with `--no-block`: the compositor's 10 s clock runs while the guardian waits.
+      (2) The worker's 10 s handshake limit (`STARTUP_TIMEOUT_MS`, `gnoblin-runtime-worker.c:340`) and the
+      supervisor's 3 s `WORKER_CONFIG_TIMEOUT_MS` should count from the compositor's readiness, or be
+      much longer: the first start takes 14 to 30 s here. (3) After "could not suspend Mutter for
+      supervisor recovery" the session stays up with no Lua runtime and no way to start the shell:
+      exit with an error so the login manager can start the session again.
 - [ ] Black greeter on the 2026.10.21 and 2e59048 ISOs (run 4, fin2, fin3): in every
       black boot `pgrep -c -f bingux-greeter` was 3 or 2 (the Gnoblin processes,
       whose `--config` path contains `bingux-greeter`); in every good boot it was 4
@@ -92,7 +145,11 @@ work belongs in Git history and does not stay here as a second changelog.
       four greeter restarts with dropped caches and four busy CPUs all painted the
       login card, and no log showed a fallback. Those runs kept no Gnoblin log; next
       black boot, read `~/.local/state/gnoblin/session-last.log` and look for "did not
-      produce a startup configuration in time".
+      produce a startup configuration in time". Update: on 5f53de8.iso the same slow start
+      reproduced for the live session (previous item), through the compositor's 10 s limit and
+      the worker's 10 s handshake limit; the 3 s worker limit did not fire in any log I kept.
+      `bingux-greeter-session` has no restart loop yet, so a greeter that starts slowly can
+      still stay black.
 - [ ] Gnoblin (owner): first frame waits for `activate_session()`. The guardian spawns
       the session supervisor (which produces the compositor's configuration) only
       after the dozen `systemctl --user` and D-Bus commands; the compositor blocks on
