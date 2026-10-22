@@ -1,11 +1,19 @@
 singleton InstallerState 1.0 InstallerState.qml
+InstallerAccountPage 1.0 InstallerAccountPage.qml
 InstallerClient 1.0 InstallerClient.qml
+InstallerDiskPage 1.0 InstallerDiskPage.qml
+InstallerErrorPage 1.0 InstallerErrorPage.qml
 InstallerField 1.0 InstallerField.qml
+InstallerFinishedPage 1.0 InstallerFinishedPage.qml
 InstallerHostnamePage 1.0 InstallerHostnamePage.qml
 InstallerKeyboardPage 1.0 InstallerKeyboardPage.qml
+InstallerLog 1.0 InstallerLog.qml
 InstallerNetworkPage 1.0 InstallerNetworkPage.qml
 InstallerPage 1.0 InstallerPage.qml
+InstallerProgressPage 1.0 InstallerProgressPage.qml
 InstallerShell 1.0 InstallerShell.qml
+InstallerStoragePage 1.0 InstallerStoragePage.qml
+InstallerSummaryPage 1.0 InstallerSummaryPage.qml
 InstallerSwitchRow 1.0 InstallerSwitchRow.qml
 InstallerText 1.0 InstallerText.qml
 InstallerTimezonePage 1.0 InstallerTimezonePage.qml
