@@ -62,13 +62,6 @@ def partition_layout(*, uefi: bool, size_bytes: int, encrypted: bool = False,
     return tuple(specs)
 
 
-def partition_path(disk: str, index: int) -> str:
-    """/dev/sda -> /dev/sda1; /dev/nvme0n1 -> /dev/nvme0n1p1; /dev/mmcblk0 -> p1."""
-    last = disk.rsplit("/", 1)[-1]
-    sep = "p" if last[-1:].isdigit() else ""
-    return f"{disk}{sep}{index}"
-
-
 def cmdline(
     *,
     root_fs_uuid: str | None,

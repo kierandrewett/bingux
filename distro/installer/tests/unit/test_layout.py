@@ -40,15 +40,6 @@ def test_disk_below_eight_gib_is_too_small() -> None:
     assert exc.value.code == "disk_too_small"
 
 
-@pytest.mark.parametrize("disk,index,expected", [
-    ("/dev/sda", 2, "/dev/sda2"),
-    ("/dev/nvme0n1", 1, "/dev/nvme0n1p1"),
-    ("/dev/mmcblk0", 2, "/dev/mmcblk0p2"),
-])
-def test_partition_path_naming(disk: str, index: int, expected: str) -> None:
-    assert layout.partition_path(disk, index) == expected
-
-
 def test_cmdline_ext4_plain_root() -> None:
     text = layout.cmdline(root_fs_uuid=ROOT_UUID, luks_uuid=None, filesystem="ext4", encrypted=False)
     assert text == f"rw root=UUID={ROOT_UUID} {DISPLAY}"

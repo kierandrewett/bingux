@@ -195,10 +195,11 @@ def check_features(vm, checks, name, encrypted, extra):
     want_ntp = "enabled" if extra.get("ntp", True) else "disabled"
     checks.expect(ntp.strip().splitlines()[-1:] == [want_ntp], f"{name}: timesyncd is {want_ntp}",
                   f"out={ntp!r}")
-    rc, root_state = vm.run("passwd -S root", timeout=60)
+    rc, root_state = vm.run(f"printf %s {USER_PASSWORD} | sudo -S -p '' passwd -S root 2>/dev/null",
+                            timeout=60)
     want_root = "P" if extra.get("root_password") else "L"
-    fields = root_state.split()
-    checks.expect(rc == 0 and len(fields) > 1 and fields[1] == want_root,
+    status = [line.split() for line in root_state.splitlines() if line.startswith("root ")]
+    checks.expect(rc == 0 and len(status) == 1 and status[0][1:2] == [want_root],
                   f"{name}: root password {'set' if want_root == 'P' else 'locked'}",
                   f"rc={rc} out={root_state!r}")
     swap = extra.get("swap", "none")
@@ -210,8 +211,12 @@ def check_features(vm, checks, name, encrypted, extra):
         want = "/dev/zram0"
     else:
         want = "/dev/mapper/bingux-swap" if encrypted else f"{DISK}2"
-    rc, active = vm.run("swapon --noheadings --show=NAME", timeout=60)
-    checks.expect(rc == 0 and want in active.split(), f"{name}: {swap} swap is active",
+    # dm devices show up as /dev/dm-N in swapon, so compare resolved device names.
+    rc, active = vm.run(f"readlink -f {want}; swapon --noheadings --show=NAME | xargs -r -n1 readlink -f",
+                        timeout=60)
+    devices = active.split()
+    checks.expect(rc == 0 and len(devices) > 1 and devices[0] in devices[1:],
+                  f"{name}: {swap} swap is active",
                   f"rc={rc} active={active!r}")
 
 

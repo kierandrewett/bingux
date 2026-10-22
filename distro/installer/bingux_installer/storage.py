@@ -60,10 +60,12 @@ def commit_layout(
             b.recursive_remove(child)
         b.initialize_disk(dev)
 
+        parts: dict[str, object] = {}
         if uefi:
             boot = b.new_partition(
                 fmt_type="efi", fmt_args={"label": layout.ESP_LABEL},
                 size=Size(specs["esp"].size_bytes), parents=[dev])
+            parts["esp"] = boot
         else:
             boot = b.new_partition(
                 fmt_type="biosboot", size=Size(specs["bios_boot"].size_bytes), parents=[dev])
@@ -73,10 +75,12 @@ def commit_layout(
                 fmt_type="ext4", fmt_args={"label": layout.BOOT_LABEL},
                 size=Size(specs["boot"].size_bytes), parents=[dev])
             b.create_device(ext_boot)
+            parts["boot"] = ext_boot
         if specs.get("swap") is not None:
             swap = b.new_partition(fmt_type="swap", size=Size(specs["swap"].size_bytes),
                                    parents=[dev])
             b.create_device(swap)
+            parts["swap"] = swap
 
         root_kwargs: dict = {}
         if encrypted:
@@ -86,6 +90,7 @@ def commit_layout(
         root = b.new_partition(size=Size(ROOT_BASE_SIZE), grow=True, parents=[dev],
                                **root_kwargs)
         b.create_device(root)
+        parts["root"] = root
 
         # Growable partitions only receive their final size here; the LUKS mapping and
         # filesystems are created afterwards, sized from the allocated partition.
@@ -121,19 +126,18 @@ def commit_layout(
 
     boot_path, boot_fstype = None, None
     if uefi:
-        boot_path, boot_fstype = layout.partition_path(disk, specs["esp"].index), "vfat"
-    elif specs.get("boot") is not None:
-        boot_path, boot_fstype = layout.partition_path(disk, specs["boot"].index), "ext4"
-    swap_path = None
-    if specs.get("swap") is not None:
-        swap_path = layout.partition_path(disk, specs["swap"].index)
+        boot_path, boot_fstype = parts["esp"].path, "vfat"
+    elif "boot" in parts:
+        boot_path, boot_fstype = parts["boot"].path, "ext4"
+    # Paths come from the devices blivet created, not from partition numbers: the kernel's
+    # numbering follows the disk order, which blivet chooses (swap landed before the ESP once).
     return StorageLayout(
         boot_path=boot_path,
         boot_fstype=boot_fstype,
-        luks_path=layout.partition_path(disk, specs["root"].index) if encrypted else None,
+        luks_path=parts["root"].path if encrypted else None,
         fs_path=fs_device.path,
         luks_name=container.name if encrypted else None,
-        swap_path=swap_path,
+        swap_path=parts["swap"].path if "swap" in parts else None,
     )
 
 
