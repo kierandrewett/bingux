@@ -153,6 +153,18 @@ fades in over the blurred copy the compositor paints. Lock and kiosk shells
 ignore the flag. A desktop started without the variable (a cold start from
 another login path) keeps the zoom and slide-in.
 
+## Start-up cost
+
+The greeter account has its own user manager, so the packaged `bingux.target`
+would start the user desktop helpers for it. The search, status, portal and
+wallpaper-export units carry `ConditionUser=!greeter` and `ConditionUser=!greetd`
+so they start only for real users. The greeter's Gnoblin autostart already runs
+the status service. The greeter's shell does not start the gsettings readers in
+`Theme.qml`: they run only in the desktop and lock shells. `bingux-os` ships
+`greetd.service.d/plymouth.conf`, which orders greetd after
+`plymouth-quit-wait.service`, so the greeter takes the display once the splash
+releases it. The GRUB menu waits 5 seconds (`distro/profile/grub`).
+
 ## Testing
 
 `make check-session` runs both screens in headless Sway:

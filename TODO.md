@@ -74,8 +74,30 @@ work belongs in Git history and does not stay here as a second changelog.
       which display path was taken, and the serial log and reports contain no
       renderer string. Add a probe that reads the compositor's GL renderer.
 - [ ] Run 3's boot took 57 s between the end of the GRUB menu and the kernel frame.
-      Not explained: the serial log has no timestamps. The menu itself is GRUB's
-      15 s timeout (`distro/profile/grub/grub.cfg`).
+      Not explained: the serial log has no timestamps. The menu was GRUB's 15 s
+      timeout; `distro/profile/grub/grub.cfg` and `loopback.cfg` now use 5 s, which
+      removes 10 s from every boot (the menu always waits its full timeout). Target:
+      power-on to greeter is 10 s shorter than the same ISO before this change;
+      measure on the next ISO, three runs, timeline medians.
+- [ ] Greeter user manager (fix 4): `bingux.target` pulled bingux-searchd,
+      bingux-statusd, xdg-desktop-portal-bingux and bingux-greeter-export into the
+      `greeter` account's user manager. Those five units now carry
+      `ConditionUser=!greeter` and `ConditionUser=!greetd`. Target: none of the five
+      start for `greeter`. Not done here: wireplumber, gnome-keyring and at-spi user
+      units still start for it (third-party units, not shipped by this repo).
+- [ ] Greeter gsettings readers (fix 4): Theme.qml's accent, colour-scheme and
+      `gsettings monitor` processes now run only outside greeter and kiosk. Target: no
+      `gsettings` process in the greeter process list. Baseline not measured.
+- [ ] Greeter submit-to-session-bar (fix 4): baseline median 11 s (runs 1, 3, 5 =
+      10, 18, 11 s). Target: median 8 s or less over five runs. Expected effect is
+      from fewer greeter-side helpers; unmeasured until the next ISO run.
+- [ ] QML precompile for the greeter and installer trees: not done. Quickshell loads
+      loose `.qml` and this repo has no `qmlcachegen` step. Proposal: measure
+      first; a cache step only if `tests/distro-boot.py` shows QML load as the cost.
+- [ ] Plymouth to greeter (fix 5): `distro/packages/bingux-os` now ships
+      `greetd.service.d/plymouth.conf` (`After=plymouth-quit-wait.service`). Target:
+      no text flash between splash and greeter in the ISO frame check. Not verified
+      here: needs a VM frame capture.
 - [ ] Re-run `tests/distro-boot.py` on the new ISO with the fixed sign-in wait.
 - [ ] Re-run `tests/distro-install.py` on an ISO that contains `bingux-installer`;
       the 2026.10.21 image predates the package and the test cannot pass on it.
