@@ -12,7 +12,7 @@ ShellRoot {
     Component.onCompleted: {
         Quickshell.watchFiles = false;
         SessionContext.enter("kiosk");
-        client.probe();
+        installerClient.probe();
     }
 
     Metrics {
@@ -20,7 +20,7 @@ ShellRoot {
     }
 
     InstallerClient {
-        id: client
+        id: installerClient
     }
 
     Variants {
@@ -41,12 +41,13 @@ ShellRoot {
                 left: true
                 right: true
             }
-            // Variants instantiates this window as its own component, so the
-            // screen's property names shadow same-named ids of this file.
+            // Inside this window, a bare name that matches a property of the
+            // wizard (client, metrics, ...) resolves to that property, so
+            // `client: client` binds the wizard to itself. Hence the id installerClient.
             InstallerWizard {
                 anchors.fill: parent
                 metrics: sessionMetrics
-                client: client
+                client: installerClient
                 hostWindow: window
                 wallpaper: "file:///usr/share/backgrounds/bingux-os/default.jpg"
                 interactive: window.primary
