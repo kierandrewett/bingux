@@ -12,8 +12,8 @@ use crate::icons::Icon;
 use crate::pages::bingux_config;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Overlays, ResponseKind, Row, Status, choice_row, dialog, icon_button, page_column,
-    primary_button, row, skeleton, slider_row, status, switch, switch_row, text_field,
+    Group, Overlays, ResponseKind, Row, Status, action_row, choice_row, dialog, icon_button,
+    page_column, primary_button, row, skeleton, slider_row, status, switch, switch_row, text_field,
     use_overlays,
 };
 use bingux_ui::scale::*;
@@ -595,19 +595,6 @@ impl Component for SearchPage {
     }
 }
 
-/// A form's action row: the button sits at the right, on the row height.
-fn form_footer(button: impl IntoElement) -> Element {
-    rect()
-        .width(Size::fill())
-        .height(Size::px(ROW_HEIGHT))
-        .direction(Direction::Horizontal)
-        .main_align(Alignment::End)
-        .cross_align(Alignment::Center)
-        .padding((0.0, GUTTER))
-        .child(button)
-        .into()
-}
-
 fn providers_group(data: &Model, ctx: Ctx) -> Group {
     let disabled = data.disabled_providers.clone();
     PROVIDERS
@@ -766,16 +753,16 @@ impl Component for AddEngine {
 
         Group::titled("Add engine")
             .description("The shortcut uses lowercase letters, digits and hyphens. The URL must contain {query} once.")
-            .row(row("Name").trailing(text_field(name, |_: String| {}).width(FIELD_WIDTH * 2.0)))
-            .row(row("Shortcut").trailing(text_field(shortcut, |_: String| {}).width(FIELD_WIDTH * 2.0)))
+            .row(row("Name").trailing(text_field(name, |_: String| {}).width(FIELD_WIDTH_WIDE)))
+            .row(row("Shortcut").trailing(text_field(shortcut, |_: String| {}).width(FIELD_WIDTH_WIDE)))
             .row(
                 row("URL").trailing(
                     text_field(url, |_: String| {})
-                        .width(FIELD_WIDTH * 2.0)
+                        .width(FIELD_WIDTH_WIDE)
                         .placeholder("https://example.com/?q={query}"),
                 ),
             )
-            .row(form_footer(primary_button("Add", add).compact()))
+            .row(action_row(None, primary_button("Add", add).compact()))
     }
 }
 
@@ -872,11 +859,11 @@ impl Component for FileRootAdd {
             .row(
                 row("Path").trailing(
                     text_field(path, move |_: String| submit.call(()))
-                        .width(FIELD_WIDTH * 2.0)
+                        .width(FIELD_WIDTH_WIDE)
                         .placeholder("/home/user/Documents"),
                 ),
             )
-            .row(form_footer(primary_button("Add", add).compact()))
+            .row(action_row(None, primary_button("Add", add).compact()))
     }
 }
 
@@ -1002,7 +989,7 @@ impl Component for AssistantModel {
                 };
                 commit(ctx, set_args("search.ai", ai_toml(&next)));
             })
-            .width(FIELD_WIDTH * 2.0),
+            .width(FIELD_WIDTH_WIDE),
         )
     }
 }

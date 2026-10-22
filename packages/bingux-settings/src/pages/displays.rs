@@ -12,10 +12,9 @@ use freya::prelude::*;
 use crate::pages::gnoblin;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Status, Tokens, caption, choice_row, divider, hstack, page_column, primary_button, row,
-    skeleton, slider_row, status, switch_row, use_tokens,
+    Group, Status, action_row, choice_row, page_column, primary_button, row, skeleton, slider_row,
+    status, switch_row,
 };
-use bingux_ui::scale::*;
 
 const SERVICE: &str = "org.gnome.Mutter.DisplayConfig";
 const OBJECT: &str = "/org/gnome/Mutter/DisplayConfig";
@@ -1173,20 +1172,11 @@ fn monitor_state(monitor: &Monitor) -> &'static str {
     }
 }
 
-/// Apply saves the draft layout. It sits under the last monitor on the
-/// page inset, with a hairline above it like the group headings.
-fn apply_footer(tokens: &Tokens, model: State<Option<Page>>, error: State<Option<String>>) -> Rect {
-    rect().width(Size::fill()).child(divider(tokens)).child(
-        hstack(S4)
-            .width(Size::fill())
-            .padding((S4, GUTTER))
-            .content(Content::Flex)
-            .child(
-                rect()
-                    .width(Size::flex(1.0))
-                    .child(caption("Saved for future sessions.")),
-            )
-            .child(primary_button("Apply", move |_| apply(model, error))),
+/// Apply saves the draft layout. It sits under the last monitor group.
+fn apply_footer(model: State<Option<Page>>, error: State<Option<String>>) -> Element {
+    action_row(
+        Some("Saved for future sessions."),
+        primary_button("Apply", move |_| apply(model, error)).compact(),
     )
 }
 
@@ -1195,7 +1185,6 @@ impl Component for DisplaysPage {
         let model = system::use_cached("displays", load);
         let error = use_state::<Option<String>>(|| None);
         let night_ticket = use_state::<u64>(|| 0);
-        let tokens = use_tokens();
 
         let mut page = page_column();
         let Some(loaded) = model.read().clone() else {
@@ -1223,7 +1212,7 @@ impl Component for DisplaysPage {
                 for (index, monitor) in monitors.iter().enumerate() {
                     page = page.child(monitor_group(model, error, index, monitor));
                 }
-                page.child(apply_footer(&tokens, model, error))
+                page.child(apply_footer(model, error))
             }
         };
 

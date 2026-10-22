@@ -14,6 +14,22 @@ use crate::scale::*;
 use crate::surface::{over, use_tokens};
 use crate::theme::Tokens;
 
+/// A form's action row: an optional muted note at the left and the action
+/// at the right, on the row height and the gutter. Put it inside a group
+/// as the last row, or under the last group on a page.
+pub fn action_row(note: Option<&str>, action: impl IntoElement) -> Element {
+    rect()
+        .width(Size::fill())
+        .height(Size::px(ROW_HEIGHT))
+        .padding((0.0, GUTTER))
+        .direction(Direction::Horizontal)
+        .cross_align(Alignment::Center)
+        .content(Content::Flex)
+        .child(rect().width(Size::flex(1.0)).maybe_child(note.map(caption)))
+        .child(action)
+        .into()
+}
+
 /// A short muted explanation under a title or group.
 pub fn caption(text: impl Into<String>) -> Element {
     let text = text.into();

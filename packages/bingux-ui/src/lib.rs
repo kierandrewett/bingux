@@ -26,7 +26,7 @@ pub mod theme;
 pub mod prelude {
     pub use crate::controls::*;
     pub use crate::group::{
-        Group, Status, StatusBlock, caption, heading, section_label, skeleton, status,
+        Group, Status, StatusBlock, action_row, caption, heading, section_label, skeleton, status,
     };
     pub use crate::icons::{Icon, icon};
     pub use crate::layout::{card, clamp, divider, hstack, page_column, spacer, vstack};

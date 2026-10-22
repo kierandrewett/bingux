@@ -95,7 +95,8 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   field, segmented control, stepper, `compact()` or row button) is 32 px, so
   it leaves 4 px above and below. A standalone `ActionButton` and a menu item
   are 36 px. Dropdowns and fields in a row share one 220 px column
-  (`FIELD_WIDTH`), so their left edges line up; a dropdown grows to fit a
+  (`FIELD_WIDTH`), so their left edges line up; a field for a URL or a path
+  uses `FIELD_WIDTH_WIDE` (440 px); a dropdown grows to fit a
   longer option.
 - **`scripts/ui-lint.py` enforces it.** It fails on a raw number in a spacing,
   padding, margin, radius, font-size, width, height or icon-size call, and on
@@ -112,6 +113,9 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   turns accent while dragging and a 16 px thumb. Buttons are filled with
   `control` and have no idle outline; no control has one. A disabled row
   (`row(..).enabled(false)`) dims and disables every control in it.
+- **An action row** (`action_row`) is a form's last row: a small muted
+  note at the left and a compact button at the right, on the row height and
+  the gutter. Put it inside a group, or under the last group on a page.
 - **A message** (loading, empty, error) is a `status` row inside a group; only
   an error is tinted. A page that has no data yet shows `skeleton()`, not text.
 - **Chrome.** The header bar carries the window buttons only. The sidebar is

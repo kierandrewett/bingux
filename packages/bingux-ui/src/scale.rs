@@ -51,6 +51,8 @@ pub const BOX_XL: f32 = 44.0;
 pub const BOX_2XL: f32 = 96.0;
 /// The width of a slider or a text field in a row.
 pub const FIELD_WIDTH: f32 = 220.0;
+/// The width of a text field that takes a URL, a path or a name.
+pub const FIELD_WIDTH_WIDE: f32 = 440.0;
 
 /// The keyboard focus ring.
 pub const RING_WIDTH: f32 = 2.0;
