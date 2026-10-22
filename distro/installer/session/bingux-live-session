@@ -1,0 +1,45 @@
+#!/bin/sh
+# Live session loop for the live account. greetd starts this as its
+# initial_session, so the live image boots straight into the installer.
+#
+# The loop runs one Gnoblin compositor at a time: the installer
+# (installer.lua) or the normal live desktop. bingux-live-switch records the
+# next mode in $XDG_RUNTIME_DIR/bingux-live/next and stops the running
+# compositor. With no next mode the compositor's exit ends the login, and
+# greetd shows the greeter as usual.
+#
+# Usage: bingux-live-session [installer|live]   (default: installer)
+set -eu
+# shellcheck disable=SC3045 # dash and bash both accept -c; no core dumps from the live session
+ulimit -c 0
+
+state="${XDG_RUNTIME_DIR:?bingux-live-session needs XDG_RUNTIME_DIR}/bingux-live"
+GNOBLIN="${BINGUX_LIVE_COMPOSITOR:-gnoblin}"
+INSTALLER_LUA="${BINGUX_INSTALLER_CONFIG:-/usr/share/bingux/installer/gnoblin.lua}"
+
+export XDG_SESSION_TYPE=wayland
+mkdir -p "$state"
+
+mode="${1:-installer}"
+while :; do
+    rm -f "$state/next"
+    case $mode in
+        installer) "$GNOBLIN" --config "$INSTALLER_LUA" & ;;
+        live) "$GNOBLIN" & ;;
+        *)
+            echo "bingux-live-session: unknown mode '$mode'" >&2
+            exit 2
+            ;;
+    esac
+    printf '%s\n' "$!" >"$state/pid"
+    status=0
+    wait "$!" || status=$?
+    rm -f "$state/pid"
+
+    next=$(cat "$state/next" 2>/dev/null || true)
+    rm -f "$state/next"
+    case $next in
+        installer | live) mode=$next ;;
+        *) exit "$status" ;;
+    esac
+done

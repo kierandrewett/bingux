@@ -93,7 +93,8 @@ build_package() {
         bingux-installer)
             tar -C "$DISTRO" -cJf "$dir/bingux-installer-src.tar.xz" \
                 --exclude=tests/vm --exclude=__pycache__ --exclude='*.egg-info' \
-                --exclude=dist --exclude=.pytest_cache installer
+                --exclude=dist --exclude=.pytest_cache installer \
+                -C "$WORK" shell/bingux scripts/pack-shell.py
             ;;
     esac
     chown -R builder:builder "$dir" "$REPO"

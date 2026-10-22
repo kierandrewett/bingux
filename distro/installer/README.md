@@ -5,6 +5,23 @@ Disk installer backend for the Bingux OS live ISO. Two console scripts:
 - `bingux-installer-daemon`: root daemon, socket-activated on `/run/bingux-installer.sock`.
 - `bingux-installer`: client CLI (`probe`, `version`, `install --plan FILE|-`, `cancel`).
 
+## Live session
+
+The live image's greetd `initial_session` runs `bingux-live-session` as the
+`live` account, so it boots straight into the installer. The session loop runs one
+Gnoblin compositor at a time: the installer (`gnoblin/installer.lua`, which
+autostarts `bingux-installer-ui`) or the normal live desktop.
+
+- `bingux-live-switch installer` opens the installer. `bingux-live-switch live`
+  is "Try Bingux": it stops the installer and opens the live desktop.
+- The desktop entry `bingux-install-live` runs `bingux-live-switch installer`.
+- Exiting the compositor with no pending switch ends the login, and greetd shows
+  the greeter as usual.
+- `bingux-installer-ui` runs `InstallerShell.qml` from `/usr/lib/bingux/bingux-installer.sxa`,
+  packed by `scripts/pack-shell.py` from `shell/bingux` with `installer/shell` overlaid.
+
+`tests/live-session.test.py` runs the loop and switch against a fake compositor.
+
 ## Failure list
 
 Every error code the daemon can return. "Left on disk" describes the state after the error.

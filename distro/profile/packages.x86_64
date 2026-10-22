@@ -48,7 +48,6 @@ nvme-cli
 dmidecode
 ethtool
 iw
-iwd
 wpa_supplicant
 networkmanager
 network-manager-applet

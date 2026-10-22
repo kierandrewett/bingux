@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Install Bingux
+Comment=Install Bingux OS to this computer
+Exec=bingux-live-switch installer
+Icon=system-software-install
+Terminal=false
+Categories=System;
