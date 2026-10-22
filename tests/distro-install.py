@@ -173,8 +173,8 @@ def pick_city(inst, timeline, checks):
 def storage_page(inst, variant, checks):
     frame = inst.frame()
     if not variant["uefi"]:
-        checks["bios storage page explains why encryption is unavailable"] = (
-            text_on_screen(frame, "Encryption needs") is not None
+        checks["bios storage page says /boot stays unencrypted"] = (
+            text_on_screen(frame, "stays unencrypted") is not None
         )
     if variant["luks"]:
         if not inst.click_switch("Encrypt the system disk"):
@@ -305,7 +305,7 @@ def inspect_disk(vm, variant, out, checks, report):
         report.append(f"$ {command}\n{value}\n")
         checks[label] = value == expected
 
-    files = "etc/os-release usr/lib/os-release etc/issue etc/mkinitcpio.conf boot/loader/entries"
+    files = "etc/os-release usr/lib/os-release etc/issue etc/mkinitcpio.conf boot/loader/entries etc/default/grub boot/grub/grub.cfg"
     encoded = probe(vm, f"cd /mnt && tar -cf - {files} 2>/dev/null | base64 -w0") or ""
     root_copy = out / "installed-root-files"
     if root_copy.exists():
