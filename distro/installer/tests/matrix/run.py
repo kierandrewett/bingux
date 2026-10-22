@@ -57,6 +57,8 @@ CASES = {
     "uefi-btrfs-zram": ("uefi", "btrfs", False, {"swap": "zram"}),
     # encrypted swap partition on LUKS root
     "uefi-luks-ext4-swappart": ("uefi", "ext4", True, {"swap": "partition", "swap_bytes": SWAP_BYTES}),
+    # first user starts the Gnoblin session at boot (greetd initial_session); greeter kept as default
+    "uefi-ext4-autologin": ("uefi", "ext4", False, {"autologin": USER}),
 }
 
 
@@ -226,12 +228,20 @@ def boot_phase(vm, checks, name, firmware, filesystem, encrypted, extra, out):
     checks.expect(rc == 0 and who.strip() == USER, f"{name}: created user runs commands", f"rc={rc} out={who!r}")
     rc, groups = vm.run(f"id -nG {USER}", timeout=60)
     checks.expect(rc == 0 and "wheel" in groups.split(), f"{name}: admin user is in wheel", f"out={groups!r}")
-    rc, greetd = vm.run("grep -c initial_session /etc/greetd/config.toml; "
-                        "cmp -s /etc/greetd/config.toml /usr/share/bingux/greeter/greetd.toml && echo packaged",
-                        timeout=60)
-    checks.expect(greetd.split()[-2:] == ["0", "packaged"],
-                  f"{name}: greetd config is the packaged greeter, no live session",
-                  f"rc={rc} out={greetd!r}")
+    if extra.get("autologin"):
+        rc, greetd = vm.run("grep -c '^\\[initial_session\\]' /etc/greetd/config.toml; "
+                            f"grep -c 'user = \"{USER}\"' /etc/greetd/config.toml; "
+                            "grep -c '^\\[default_session\\]' /etc/greetd/config.toml", timeout=60)
+        checks.expect(greetd.split()[-3:] == ["1", "1", "1"],
+                      f"{name}: greetd starts {USER} in gnoblin and keeps the greeter",
+                      f"rc={rc} out={greetd!r}")
+    else:
+        rc, greetd = vm.run("grep -c initial_session /etc/greetd/config.toml; "
+                            "cmp -s /etc/greetd/config.toml /usr/share/bingux/greeter/greetd.toml && echo packaged",
+                            timeout=60)
+        checks.expect(greetd.split()[-2:] == ["0", "packaged"],
+                      f"{name}: greetd config is the packaged greeter, no live session",
+                      f"rc={rc} out={greetd!r}")
     rc, live_bits = vm.run("id live >/dev/null 2>&1 && echo live-user; "
                            "pacman -Q bingux-installer >/dev/null 2>&1 && echo installer-pkg; "
                            "ls /usr/local/bin/bingux-live-session /usr/local/bin/bingux-live-switch 2>/dev/null",
@@ -255,6 +265,14 @@ def boot_phase(vm, checks, name, firmware, filesystem, encrypted, extra, out):
         if state == "active":
             break
     checks.expect(state == "active", f"{name}: greetd greeter active", f"state={state!r}")
+    if extra.get("autologin"):
+        running = ""
+        for _ in range(24):
+            rc, running = vm.run(f"sleep 5; pgrep -u {USER} -x gnoblin; true", timeout=60)
+            if running.strip():
+                break
+        checks.expect(running.strip() != "", f"{name}: gnoblin session running for {USER} at boot",
+                      f"out={running!r}")
     rc, failed = vm.run("systemctl --failed --no-legend", timeout=60)
     (out / "failed-units.txt").write_text(failed + "\n", encoding="utf-8")
     vm.screenshot(out / "greeter.png")

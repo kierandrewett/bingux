@@ -336,6 +336,7 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
             _guard("config_failed", configure.write_crypttab, env.target, crypttab_text)
         _guard("config_failed", configure.create_users, runner, env.target, plan)
         _guard("config_failed", configure.write_sudoers, env.target, plan)
+        _guard("config_failed", configure.write_autologin, env.target, plan)
         _guard("config_failed", configure.write_initramfs, runner, env.target, plan)
 
         phase("bootloader", None, "installing the bootloader")

@@ -56,6 +56,49 @@ def test_restore_greeter_config_fails_without_packaged_file(tmp_path) -> None:
         configure.restore_greeter_config(tmp_path)
 
 
+def _autologin_target(tmp_path):  # noqa: ANN001,ANN202
+    session = tmp_path / configure.GREETD_GNOBLIN_SESSION
+    session.parent.mkdir(parents=True)
+    session.write_text("[Desktop Entry]\nName=Gnoblin\nExec=/usr/lib/gnoblin/bin/gnoblin\n"
+                       "DesktopNames=Gnoblin;\n", encoding="utf-8")
+    live = tmp_path / configure.GREETD_CONFIG
+    live.parent.mkdir(parents=True)
+    live.write_text('[default_session]\ncommand = "bingux-greeter-session"\nuser = "greeter"\n',
+                    encoding="utf-8")
+    return live
+
+
+def test_write_autologin_adds_initial_session_for_the_user(tmp_path) -> None:  # noqa: ANN001
+    import tomllib
+
+    live = _autologin_target(tmp_path)
+    configure.write_autologin(tmp_path, _plan(autologin="kieran"))
+
+    config = tomllib.loads(live.read_text(encoding="utf-8"))
+    assert config["default_session"] == {"command": "bingux-greeter-session", "user": "greeter"}
+    assert config["initial_session"]["user"] == "kieran"
+    assert config["initial_session"]["command"] == (
+        "env XDG_SESSION_TYPE=wayland XDG_SESSION_DESKTOP=gnoblin XDG_CURRENT_DESKTOP=Gnoblin "
+        "/usr/lib/gnoblin/bin/gnoblin")
+
+
+def test_write_autologin_none_leaves_the_greeter_config_alone(tmp_path) -> None:  # noqa: ANN001
+    live = _autologin_target(tmp_path)
+    before = live.read_text(encoding="utf-8")
+    configure.write_autologin(tmp_path, _plan(autologin=None))
+    assert live.read_text(encoding="utf-8") == before
+
+
+def test_write_autologin_fails_without_the_gnoblin_session(tmp_path) -> None:  # noqa: ANN001
+    import pytest
+    from bingux_installer.protocol import InstallerError
+
+    _autologin_target(tmp_path)
+    (tmp_path / configure.GREETD_GNOBLIN_SESSION).unlink()
+    with pytest.raises(InstallerError):
+        configure.write_autologin(tmp_path, _plan(autologin="kieran"))
+
+
 def test_rewrite_modules_replaces_or_appends() -> None:
     assert configure.rewrite_modules("MODULES=()\nHOOKS=(base)\n", ("xfs",)) == (
         "MODULES=(xfs)\nHOOKS=(base)\n")

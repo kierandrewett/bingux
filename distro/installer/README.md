@@ -33,11 +33,11 @@ Implemented (plan schema v2, covered by unit tests and the install matrix):
 - `root_password`: a string sets the root password; `null` locks the root account.
 - `swap`: `zram` (zram-generator), `file` (`/swapfile`), `partition` (swap partition; encrypted
   swap uses a random-key crypttab entry when the root is encrypted). `none` writes no swap.
+- `autologin`: a user name starts that user's Gnoblin session at boot (greetd `initial_session`); the greeter stays the default session, so later logins still show it. `null` turns it off.
 
 Planned (validated by the schema but refused with `unsupported` until the feature lands):
 
 - `storage.mode` `free_space`, `alongside` (shrink ext4, btrfs and NTFS) and `manual`.
-- `autologin`: greetd `initial_session` for the first user, with a setting to turn it off.
 - Dual-boot entries (os-prober for GRUB; the shared ESP for systemd-boot).
 
 ## Failure list
@@ -52,7 +52,7 @@ unmount the payload and close the LUKS mapper before replying.
 | `not_permitted` | Peer uid is not 0 and is not in group `bingux-install` (or the group does not exist) | Nothing | `peer is not root or a member of bingux-install` |
 | `busy` | `install` or `probe` while another install runs (probe mounts partitions read-only, so it is refused too) | Nothing; the running install continues | `another installation is already running` |
 | `invalid_plan` | Any plan schema rule fails, unknown top-level key, `confirm_erase` mismatch, firmware not matching the booted firmware | Nothing | `invalid plan: <field>: <rule>` |
-| `unsupported` | A plan feature that is validated but not implemented yet (`free_space`, `alongside`, `manual`, `autologin`). Planned: a filesystem that cannot be used for the requested operation (for example `alongside` on an XFS partition) | Nothing | `<feature> is not implemented yet`; planned: `<fs> cannot be shrunk`, `<path> is not a GPT disk` |
+| `unsupported` | A plan feature that is validated but not implemented yet (`free_space`, `alongside`, `manual`). Planned: a filesystem that cannot be used for the requested operation (for example `alongside` on an XFS partition) | Nothing | `<feature> is not implemented yet`; planned: `<fs> cannot be shrunk`, `<path> is not a GPT disk` |
 | `no_free_space` (planned) | `free_space`, `alongside` or manual `create` needs a region larger than the unallocated space | Nothing | `no unallocated region of at least <n> bytes on <path>` |
 | `shrink_failed` (planned) | Filesystem shrink or the partition resize failed. The shrink runs before the partition table is written | Filesystem may be smaller than its partition; the partition table is unchanged. Data is intact; re-run with a size from the probe | `shrink_failed: <tool> failed: <stderr tail>` |
 | `disk_not_found` | `disk` is not a whole-disk block device in the probe, or blivet does not see it | Nothing | `no disk <path> was found`, `blivet does not see <path>` |
@@ -161,7 +161,7 @@ must be `2`.
 - `ntp`: `true` (default) enables `systemd-timesyncd`; `false` disables it.
 - `users`: non-empty list of `{"name","password","admin","full_name"}`. `name` matches `^[a-z_][a-z0-9_-]{0,31}$` and is not `root`. `password` is 8+ characters with no control characters. `full_name` is optional, at most 128 characters, with no control characters, `:` or `,`.
 - `root_password`: `null` (default, the root account is locked) or a string of 8+ characters with no control characters.
-- `autologin` (planned): `null` (default) or the name of a user in `users`. The greetd `initial_session` logs that user straight into the desktop session at boot; the greeter still serves every later login. Refused with `unsupported` until implemented.
+- `autologin`: `null` (default) or the name of a user in `users`. With a name, the installed `/etc/greetd/config.toml` gets an `[initial_session]` that starts that user's Gnoblin session at boot: the `Exec` of `/usr/share/wayland-sessions/gnoblin.desktop`, run with `XDG_SESSION_TYPE=wayland`, `XDG_SESSION_DESKTOP=gnoblin` and `XDG_CURRENT_DESKTOP` from the entry's `DesktopNames`. The packaged `[default_session]` (the greeter) is kept, so logging out shows the greeter. `null` leaves the greeter as the only session.
 - `kernel_args`: optional list of strings, each matching `^[A-Za-z0-9_.=,:/+-]{1,200}$`. Refused if an argument starts with `root=`, `init=`, `rd.luks.` or `rootflags=`.
 
 Passwords (`users`, `root_password`) are hashed with `openssl passwd -6 -stdin` and never appear on a

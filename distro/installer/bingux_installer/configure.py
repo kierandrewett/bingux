@@ -6,9 +6,12 @@ ever appears on argv. Pure text renderers are separate so tests can check them.
 
 from __future__ import annotations
 
+import configparser
 import glob
+import json
 import os
 import re
+import shlex
 import shutil
 from collections.abc import Sequence
 from pathlib import Path
@@ -76,6 +79,7 @@ SUDOERS_TEXT = "%wheel ALL=(ALL:ALL) ALL\n"
 LIVE_ONLY_PACKAGES = ("archinstall", "mkinitcpio-archiso", "bingux-installer", "python-blivet")
 GREETD_CONFIG = "etc/greetd/config.toml"
 GREETD_PACKAGED = "usr/share/bingux/greeter/greetd.toml"
+GREETD_GNOBLIN_SESSION = "usr/share/wayland-sessions/gnoblin.desktop"
 PLYMOUTH_HOOK = "usr/lib/initcpio/install/plymouth"
 HOOKS_RE = re.compile(r"^HOOKS=.*$", re.MULTILINE)
 ZRAM_CONF = "etc/systemd/zram-generator.conf"
@@ -208,6 +212,37 @@ def restore_greeter_config(target: Path) -> None:
         dest.unlink()
     shutil.copyfile(source, dest)
     os.chmod(dest, 0o644)
+
+
+def write_autologin(target: Path, plan: Plan) -> None:
+    """Start the first user's Gnoblin session at boot instead of the greeter.
+
+    The packaged configuration stays the default session, so logging out still shows the
+    greeter. The initial session runs the Exec of the Gnoblin wayland-sessions entry with
+    the login environment minus BINGUX_CONTINUING: that flag makes a session keep the
+    greeter's wallpaper and bar, and no greeter screen is shown before an autologin."""
+    if plan.autologin is None:
+        return
+    session = target / GREETD_GNOBLIN_SESSION
+    if not session.is_file():
+        raise InstallerError("config_failed", f"{GREETD_GNOBLIN_SESSION} is missing from the target")
+    entry = configparser.ConfigParser(interpolation=None)
+    try:
+        entry.read_string(session.read_text(encoding="utf-8"))
+        desktop = entry["Desktop Entry"]
+        exec_line = desktop["Exec"].strip()
+    except (configparser.Error, KeyError) as exc:
+        raise InstallerError("config_failed", f"{GREETD_GNOBLIN_SESSION} has no Exec line") from exc
+    environment = ["XDG_SESSION_TYPE=wayland",
+                   f"XDG_SESSION_DESKTOP={Path(GREETD_GNOBLIN_SESSION).stem}"]
+    desktop_names = desktop.get("DesktopNames", "").rstrip(";").strip()
+    if desktop_names:
+        environment.append(f"XDG_CURRENT_DESKTOP={desktop_names}")
+    command = shlex.join(["env", *environment]) + " " + exec_line
+    config = target / GREETD_CONFIG
+    block = (f"\n[initial_session]\ncommand = {json.dumps(command)}\n"
+             f"user = {json.dumps(plan.autologin)}\n")
+    _write(config, config.read_text(encoding="utf-8").rstrip("\n") + "\n" + block)
 
 
 def strip_live_and_packages(runner: Runner, target: Path) -> None:

@@ -270,6 +270,8 @@ work belongs in Git history and does not stay here as a second changelog.
       cases `uefi-xfs`, `uefi-ext4-swapfile`, `uefi-btrfs-zram`, `uefi-luks-ext4-swappart` added.
       Boot-to-greeter VM run pending: the ISO 48ef0dc predates schema v2, so it needs a rebuild.
 - [ ] F2 BIOS with LUKS2 root (GRUB, unencrypted `/boot`).
-- [ ] F3 autologin via greetd `initial_session` (installed config, user-disableable).
+- [x] F3 autologin via greetd `initial_session` (installed config, user-disableable). Unit tests in
+      `distro/installer/tests/unit/test_configure.py`; matrix case `uefi-ext4-autologin` added. Boot
+      test (gnoblin running for the user, greeter still the default session) pending a rebuilt ISO.
 - [ ] F4 `free_space` and `alongside` (blivet shrink: ext4, btrfs, NTFS; os-prober and systemd-boot entries).
 - [ ] F5 `manual` partitioning (explicit partition list, validated server-side).

@@ -96,6 +96,7 @@ def test_unimplemented_plan_features_are_refused(changes: dict[str, object]) -> 
     {"swap": "partition", "swap_bytes": 2 * 1024 ** 3},
     {"ntp": False},
     {"root_password": "root pass word"},
+    {"autologin": "kieran"},
 ])
 def test_implemented_plan_features_are_accepted(changes: dict[str, object]) -> None:
     from dataclasses import replace
