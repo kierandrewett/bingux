@@ -61,10 +61,14 @@ impl Component for Gallery {
     fn render(&self) -> impl IntoElement {
         let tokens = provide_tokens();
         let page = use_state(|| self.initial);
+        let mut subpage = use_state(|| false);
         let content: Element = match page() {
             Page::Controls => ControlsPage.into(),
             Page::Buttons => ButtonsPage.into(),
-            Page::Rows => RowsPage.into(),
+            Page::Rows => RowsPage {
+                open: EventHandler::new(move |_: ()| subpage.set(true)),
+            }
+            .into(),
             Page::Feedback => FeedbackPage.into(),
             Page::Typography => TypographyPage.into(),
             Page::Icons => IconsPage.into(),
@@ -73,12 +77,12 @@ impl Component for Gallery {
             .expanded()
             .color(tokens.text)
             .font_family(bingux_ui::theme::font_family())
-            .child(OverlayHost::new(NavigationSplitView::new(
-                "Gallery",
-                Page::ALL.to_vec(),
-                page,
-                content,
-            )))
+            .child(OverlayHost::new(if subpage() && page() == Page::Rows {
+                NavigationSplitView::new("Gallery", Page::ALL.to_vec(), page, SubpageSample)
+                    .subpage("Subpage", move |_| subpage.set(false))
+            } else {
+                NavigationSplitView::new("Gallery", Page::ALL.to_vec(), page, content)
+            }))
     }
 }
 
@@ -256,8 +260,29 @@ impl Component for ButtonsPage {
     }
 }
 
+/// What a subpage holds: the header shows Back and the title.
 #[derive(PartialEq)]
-struct RowsPage;
+struct SubpageSample;
+
+impl Component for SubpageSample {
+    fn render(&self) -> impl IntoElement {
+        page_column().child(
+            Group::new("Inside a subpage".to_string())
+                .description("Back, Alt+Left and the mouse Back button return to the page below.")
+                .row(row("Opened from a navigating row"))
+                .row(
+                    row("Application")
+                        .leading_app("org.gnome.Nautilus")
+                        .subtitle("A leading application icon"),
+                ),
+        )
+    }
+}
+
+#[derive(PartialEq)]
+struct RowsPage {
+    open: EventHandler<()>,
+}
 
 impl Component for RowsPage {
     fn render(&self) -> impl IntoElement {
@@ -270,11 +295,16 @@ impl Component for RowsPage {
                     .row(row("Title only"))
                     .row(row("With subtitle").subtitle("Secondary text in the muted colour"))
                     .row(row("With value").value("Value"))
-                    .row(row("Navigates").navigates().on_press(|_| {})),
+                    .row(row("Opens a subpage").navigates().on_press({
+                        let open = self.open.clone();
+                        move |_| open.call(())
+                    })),
             )
             .child(
                 Group::new("Decorated".to_string())
                     .row(row("Leading icon").leading(Icon::Network))
+                    .row(row("Application icon").leading_app("org.gnome.Nautilus"))
+                    .row(row("Missing application icon").leading_app("no-such-icon"))
                     .row(row("Badge").badge("3"))
                     .row(row("Selected").selected(true).on_press(|_| {}))
                     .row(row("Destructive").destructive().on_press(|_| {}))
@@ -455,31 +485,46 @@ struct IconsPage;
 impl Component for IconsPage {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        page_column().child(
-            rect()
-                .width(Size::fill())
-                .direction(Direction::Horizontal)
-                .content(Content::wrap_spacing(8.0))
-                .spacing(S2)
-                .children(Icon::ALL.iter().map(|glyph| {
-                    Element::from(
-                        rect()
-                            .width(Size::px(SAMPLE_TILE_WIDTH))
-                            .height(Size::px(SAMPLE_TILE_HEIGHT))
-                            .corner_radius(RADIUS_LG)
-                            .background(tokens.card)
-                            .center()
-                            .spacing(S1)
-                            .child(icon(*glyph, 20.0, tokens.text))
-                            .child(
-                                label()
-                                    .text(format!("{glyph:?}"))
-                                    .font_size(TEXT_XS)
-                                    .color(tokens.muted)
-                                    .max_lines(1),
-                            ),
+        page_column()
+            .child(
+                Group::new("Application icons".to_string())
+                    .description("Full-colour icons from the icon theme, as the dock shows them.")
+                    .row(
+                        row("Sizes").trailing(
+                            hstack(S3)
+                                .child(app_icon("org.gnome.Nautilus", ICON_APP_LG))
+                                .child(app_icon("org.gnome.Nautilus", ICON_XL))
+                                .child(app_icon("org.gnome.Nautilus", ICON_APP))
+                                .child(app_icon("org.gnome.Nautilus", ICON_APP_SM)),
+                        ),
                     )
-                })),
-        )
+                    .row(row("Missing icon").trailing(app_icon("no-such-icon", ICON_APP))),
+            )
+            .child(
+                rect()
+                    .width(Size::fill())
+                    .direction(Direction::Horizontal)
+                    .content(Content::wrap_spacing(8.0))
+                    .spacing(S2)
+                    .children(Icon::ALL.iter().map(|glyph| {
+                        Element::from(
+                            rect()
+                                .width(Size::px(SAMPLE_TILE_WIDTH))
+                                .height(Size::px(SAMPLE_TILE_HEIGHT))
+                                .corner_radius(RADIUS_LG)
+                                .background(tokens.card)
+                                .center()
+                                .spacing(S1)
+                                .child(icon(*glyph, 20.0, tokens.text))
+                                .child(
+                                    label()
+                                        .text(format!("{glyph:?}"))
+                                        .font_size(TEXT_XS)
+                                        .color(tokens.muted)
+                                        .max_lines(1),
+                                ),
+                        )
+                    })),
+            )
     }
 }

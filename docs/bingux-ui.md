@@ -58,15 +58,16 @@ dialogs and shows toasts from any component below it.
 
 ## Components
 
-| Family          | Components                                                                                                                                                                                                         |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Controls        | `switch`, `checkbox` (tri-state), `radio_group`, `slider` (`step`, `show_value`), `segmented`, `dropdown`, `stepper`, `text_field` (`password`, `invalid`, `clearable`), `search_field`, `progress_bar`, `spinner` |
-| Buttons         | `action_button` (`suggested`, `destructive`, `flat`, `loading`, `icon`), `primary_button`, `row_button`, `icon_button` (`tooltip`, `danger`)                                                                       |
-| Rows            | `row` (`subtitle`, `value`, `badge`, `leading`, `navigates`, `selected`, `destructive`), `switch_row`, `slider_row`, `choice_row`, `text_row`, `entry_row`, `expander_row`, `property_row`                         |
-| Groups and text | `Group` (`description`), `section_label`, `caption`, `heading`, `status` (loading, empty, error, info blocks)                                                                                                      |
-| Layout          | `hstack`, `vstack`, `spacer`, `divider`, `card`, `clamp`, `page_column`                                                                                                                                            |
-| Shell           | `NavigationSplitView` with `NavItem`, `HeaderBar`, `WindowControls`, `status_page`, `banner`                                                                                                                       |
-| Overlays        | `dialog` with `ResponseKind::{Default, Suggested, Destructive}`, `Overlays::toast`, `Overlays::toast_with_action`                                                                                                  |
+| Family          | Components                                                                                                                                                                                                                                |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Controls        | `switch`, `checkbox` (tri-state), `radio_group`, `slider` (`step`, `show_value`), `segmented`, `dropdown` (`app_icons`, `width`), `stepper`, `text_field` (`password`, `invalid`, `clearable`), `search_field`, `progress_bar`, `spinner` |
+| Buttons         | `action_button` (`suggested`, `destructive`, `flat`, `loading`, `icon`), `primary_button`, `row_button`, `icon_button` (`tooltip`, `danger`)                                                                                              |
+| Rows            | `row` (`subtitle`, `value`, `badge`, `leading`, `leading_app`, `navigates`, `selected`, `destructive`), `switch_row`, `slider_row`, `choice_row`, `text_row`, `entry_row`, `expander_row`, `property_row`                                 |
+| Icons           | `icon` (bundled symbolic glyphs), `app_icon` (full-colour application icons from the icon theme)                                                                                                                                          |
+| Groups and text | `Group` (`description`), `section_label`, `caption`, `heading`, `status` (loading, empty, error, info blocks)                                                                                                                             |
+| Layout          | `hstack`, `vstack`, `spacer`, `divider`, `card`, `clamp`, `page_column`                                                                                                                                                                   |
+| Shell           | `NavigationSplitView` with `NavItem` and `subpage`, `HeaderBar`, `WindowControls`, `status_page`, `banner`                                                                                                                                |
+| Overlays        | `dialog` with `ResponseKind::{Default, Suggested, Destructive}`, `Overlays::toast`, `Overlays::toast_with_action`                                                                                                                         |
 
 Every control supports keyboard use: Enter and Space activate, arrows move
 sliders, steppers and segmented controls, Up and Down walk the sidebar,
@@ -129,6 +130,16 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   system sans-serif; GNOME's font setting is not read. Many system fonts are
   variable. Freya only picks real weights for fonts it loads itself, and
   otherwise fakes bold, which looks blotchy, so `with_font` loads the files.
+- **Application icons** (`app_icon`, `Row::leading_app`) are looked up as
+  the dock looks them up: the current GTK icon theme, the themes it
+  inherits, `hicolor`, then `/usr/share/pixmaps`; an absolute path is used as
+  it is. Sizes are `ICON_APP_SM` (20, in a dropdown), `ICON_APP` (32, in a
+  row) and `ICON_APP_LG` (64, at the head of a page). An icon that is not
+  found draws a tile with the generic application glyph.
+- **A subpage** is `NavigationSplitView::subpage(title, on_back)`. The
+  header shows a Back button and the title, and Alt+Left and the mouse Back
+  button call `on_back`. The application keeps the stack; the sidebar
+  selection decides which page owns it.
 - Icons are Adwaita symbolic SVGs under `packages/bingux-ui/icons/` with
   the hard-coded fill removed so they recolour. Add one by copying it from
   `/usr/share/icons/Adwaita/symbolic/` and adding a variant to `Icon`.

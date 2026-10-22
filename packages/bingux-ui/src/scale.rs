@@ -41,6 +41,10 @@ pub const ICON_SM: f32 = 12.0;
 pub const ICON_MD: f32 = 16.0;
 pub const ICON_LG: f32 = 18.0;
 pub const ICON_XL: f32 = 48.0;
+/// A full-colour application icon in a row, and at the head of a page.
+pub const ICON_APP_SM: f32 = 20.0;
+pub const ICON_APP: f32 = 32.0;
+pub const ICON_APP_LG: f32 = 64.0;
 
 /// Square boxes: a clear button or thumb, a small icon button, an avatar,
 /// a stepper value or switch width, and a status-page tile.
@@ -53,6 +57,8 @@ pub const BOX_2XL: f32 = 96.0;
 pub const FIELD_WIDTH: f32 = 220.0;
 /// The width of a text field that takes a URL, a path or a name.
 pub const FIELD_WIDTH_WIDE: f32 = 440.0;
+/// The width of a dropdown whose options carry application icons.
+pub const FIELD_WIDTH_APPS: f32 = 260.0;
 
 /// The keyboard focus ring.
 pub const RING_WIDTH: f32 = 2.0;

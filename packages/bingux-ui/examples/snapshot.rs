@@ -82,6 +82,27 @@ fn main() {
         .save(&path);
     println!("[snapshot] wrote {path}");
 
+    // A subpage opened from a navigating row, with the header's Back button.
+    let mut shot = Snapshot::new(
+        move || {
+            Element::from(
+                rect()
+                    .expanded()
+                    .background(Color::from_rgb(28, 28, 32))
+                    .child(Gallery {
+                        initial: Page::Rows,
+                    }),
+            )
+        },
+        size,
+    );
+    let path = format!("{out}/rows-subpage.png");
+    shot.settle(std::time::Duration::from_millis(400))
+        .click(630.0, 251.0)
+        .settle(std::time::Duration::from_millis(400))
+        .save(&path);
+    println!("[snapshot] wrote {path}");
+
     // The alert dialog open, then a toast after it is dismissed.
     let mut shot = Snapshot::new(
         move || {

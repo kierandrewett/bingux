@@ -8,6 +8,7 @@
 use freya::animation::*;
 use freya::prelude::*;
 
+use crate::app_icon::app_icon;
 use crate::icons::{self, Icon};
 use crate::scale::*;
 use crate::surface::{focus_border, is_activation_key, surface_color, use_enabled, use_tokens};
@@ -33,8 +34,11 @@ const BUTTON_CHROME: f32 = S3 + S2 + ICON_MD + S2;
 pub struct Dropdown {
     options: Vec<(String, String)>,
     selected: String,
+    /// Application icon names, one per option, or none.
+    icons: Vec<String>,
     enabled: bool,
     min_width: f32,
+    max_width: f32,
     on_select: EventHandler<String>,
 }
 
@@ -46,13 +50,22 @@ pub fn dropdown(
     Dropdown {
         options,
         selected: selected.into(),
+        icons: Vec::new(),
         enabled: true,
         min_width: 0.0,
+        max_width: BUTTON_MAX_WIDTH,
         on_select: on_select.into(),
     }
 }
 
 impl Dropdown {
+    /// Draw an application icon before each option; `icons` has one icon
+    /// name per option, in the same order.
+    pub fn app_icons(mut self, icons: Vec<String>) -> Self {
+        self.icons = icons;
+        self
+    }
+
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
@@ -63,6 +76,14 @@ impl Dropdown {
     /// [`BUTTON_MAX_WIDTH`].
     pub fn min_width(mut self, width: f32) -> Self {
         self.min_width = width;
+        self
+    }
+
+    /// The button is exactly this wide, so every dropdown in a column shares
+    /// both edges. A longer option is cut with an ellipsis.
+    pub fn width(mut self, width: f32) -> Self {
+        self.min_width = width;
+        self.max_width = width;
         self
     }
 }
@@ -83,6 +104,7 @@ impl Component for Dropdown {
         let enabled = use_enabled(self.enabled);
         let on_select = self.on_select.clone();
         let options = self.options.clone();
+        let icon_names = self.icons.clone();
         let selected_index = options.iter().position(|(key, _)| *key == self.selected);
         let current = selected_index
             .map(|index| options[index].1.clone())
@@ -115,9 +137,16 @@ impl Component for Dropdown {
             .map(|(_, text)| text.chars().count())
             .max()
             .unwrap_or(0) as f32;
-        let width = (longest * GLYPH_WIDTH + BUTTON_CHROME)
-            .min(BUTTON_MAX_WIDTH)
+        // An application icon and its gap come before the label.
+        let icon_space = if self.icons.is_empty() {
+            0.0
+        } else {
+            ICON_APP_SM + S2
+        };
+        let width = (longest * GLYPH_WIDTH + BUTTON_CHROME + icon_space)
+            .min(self.max_width)
             .max(self.min_width);
+        let current_icon = selected_index.and_then(|index| self.icons.get(index).cloned());
         // The rows' height, and the part of it the menu shows.
         let list_height = count as f32 * MENU_ITEM_HEIGHT;
         let viewport_height = list_height.min(MENU_MAX_ROWS_HEIGHT);
@@ -245,13 +274,20 @@ impl Component for Dropdown {
                     .on_key_down(on_key_down)
             })
             .child(
-                label()
-                    .text(current)
-                    .font_size(TEXT_MD)
-                    .color(tokens.text)
-                    .width(Size::px(width - BUTTON_CHROME))
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis),
+                rect()
+                    .direction(Direction::Horizontal)
+                    .cross_align(Alignment::Center)
+                    .spacing(S2)
+                    .maybe_child(current_icon.map(|name| app_icon(name, ICON_APP_SM)))
+                    .child(
+                        label()
+                            .text(current)
+                            .font_size(TEXT_MD)
+                            .color(tokens.text)
+                            .width(Size::px(width - BUTTON_CHROME - icon_space))
+                            .max_lines(1)
+                            .text_overflow(TextOverflow::Ellipsis),
+                    ),
             )
             .child(
                 rect()
@@ -315,6 +351,7 @@ impl Component for Dropdown {
                                             |(index, (_, text))| {
                                                 let choose = choose.clone();
                                                 Element::from(DropdownItem {
+                                                    icon: icon_names.get(index).cloned(),
                                                     text: text.clone(),
                                                     selected: Some(index) == selected_index,
                                                     highlighted: hovered_item().is_none()
@@ -345,6 +382,7 @@ impl Component for Dropdown {
 
 #[derive(PartialEq)]
 struct DropdownItem {
+    icon: Option<String>,
     text: String,
     selected: bool,
     highlighted: bool,
@@ -395,6 +433,11 @@ impl Component for DropdownItem {
                 pressing.set(false);
                 on_press.call(());
             })
+            .maybe_child(
+                self.icon
+                    .as_ref()
+                    .map(|name| app_icon(name.clone(), ICON_APP_SM)),
+            )
             .child(
                 label()
                     .text(self.text.clone())

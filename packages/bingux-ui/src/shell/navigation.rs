@@ -44,6 +44,16 @@ pub struct NavigationSplitView<T: NavItem> {
     pub selected: State<T>,
     pub content: Element,
     pub page_width: f32,
+    /// Set while a subpage is open: its title and what Back does.
+    pub subpage: Option<Subpage>,
+}
+
+/// An open subpage. The header shows a Back button and the title in place of
+/// the empty header; Alt+Left and the mouse Back button go back too.
+#[derive(PartialEq)]
+pub struct Subpage {
+    pub title: String,
+    pub on_back: EventHandler<()>,
 }
 
 impl<T: NavItem> NavigationSplitView<T> {
@@ -59,7 +69,22 @@ impl<T: NavItem> NavigationSplitView<T> {
             selected,
             content: content.into(),
             page_width: PAGE_WIDTH,
+            subpage: None,
         }
+    }
+
+    /// Show `content` as a subpage called `title`; `on_back` returns to the
+    /// page below it.
+    pub fn subpage(
+        mut self,
+        title: impl Into<String>,
+        on_back: impl Into<EventHandler<()>>,
+    ) -> Self {
+        self.subpage = Some(Subpage {
+            title: title.into(),
+            on_back: on_back.into(),
+        });
+        self
     }
 
     pub fn page_width(mut self, width: f32) -> Self {
@@ -97,9 +122,23 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             overlay,
         };
         // The header carries only the window buttons; it is the drag region.
-        let header = HeaderBar::new("")
-            .background(tokens.bg)
-            .trailing(WindowControls);
+        let header = match &self.subpage {
+            None => HeaderBar::new("").background(tokens.bg),
+            Some(subpage) => {
+                let on_back = subpage.on_back.clone();
+                HeaderBar::new(subpage.title.clone())
+                    .background(tokens.bg)
+                    .leading(
+                        icon_button(Icon::GoPrevious, move |_| on_back.call(()))
+                            .size(WINDOW_CONTROL_BUTTON)
+                            .tooltip("Back"),
+                    )
+            }
+        }
+        .trailing(WindowControls);
+        // Alt+Left and the mouse Back button return from a subpage.
+        let back_key = self.subpage.as_ref().map(|subpage| subpage.on_back.clone());
+        let back_pointer = back_key.clone();
         // With the sidebar hidden, a button above the page opens it.
         let show_pages = narrow.then(|| {
             rect()
@@ -118,6 +157,21 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             .direction(Direction::Horizontal)
             .content(Content::Flex)
             .background(tokens.bg)
+            .on_global_key_down(move |event: Event<KeyboardEventData>| {
+                if let Some(on_back) = &back_key
+                    && event.modifiers == Modifiers::ALT
+                    && event.key == Key::Named(NamedKey::ArrowLeft)
+                {
+                    on_back.call(());
+                }
+            })
+            .on_global_pointer_down(move |event: Event<PointerEventData>| {
+                if let Some(on_back) = &back_pointer
+                    && matches!(event.data(), PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Back))
+                {
+                    on_back.call(());
+                }
+            })
             .maybe_child((!narrow).then(|| sidebar(false)))
             .child(
                 rect()

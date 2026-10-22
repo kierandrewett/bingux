@@ -7,6 +7,7 @@
 use freya::animation::*;
 use freya::prelude::*;
 
+use crate::app_icon::app_icon;
 use crate::controls::dropdown::dropdown;
 use crate::controls::segmented::segmented;
 use crate::controls::slider::slider;
@@ -27,6 +28,7 @@ pub struct Row {
     subtitle: Option<String>,
     trailing: Option<Element>,
     leading: Option<Icon>,
+    leading_app: Option<String>,
     on_press: Option<EventHandler<()>>,
     enabled: bool,
     navigates: bool,
@@ -41,6 +43,7 @@ pub fn row(title: impl Into<String>) -> Row {
         subtitle: None,
         trailing: None,
         leading: None,
+        leading_app: None,
         on_press: None,
         enabled: true,
         navigates: false,
@@ -69,6 +72,12 @@ impl Row {
 
     pub fn leading(mut self, icon: Icon) -> Self {
         self.leading = Some(icon);
+        self
+    }
+
+    /// A full-colour application icon, by icon name, in place of a glyph.
+    pub fn leading_app(mut self, icon_name: impl Into<String>) -> Self {
+        self.leading_app = Some(icon_name.into());
         self
     }
 
@@ -254,6 +263,11 @@ impl Component for Row {
             .maybe_child(
                 self.leading
                     .map(|leading| icons::icon(leading, ICON_LG, icon_color)),
+            )
+            .maybe_child(
+                self.leading_app
+                    .as_ref()
+                    .map(|name| app_icon(name.clone(), ICON_APP)),
             )
             .child(text_column)
             .maybe_child(self.trailing.clone())

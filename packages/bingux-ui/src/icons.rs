@@ -48,11 +48,13 @@ pub enum Icon {
     OpenMenu,
     ViewMore,
     UserTrash,
+    Application,
+    Applications,
 }
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 40] = [
+    pub const ALL: [Icon; 42] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -93,6 +95,8 @@ impl Icon {
         Self::OpenMenu,
         Self::ViewMore,
         Self::UserTrash,
+        Self::Application,
+        Self::Applications,
     ];
 
     /// The embedded SVG source for this icon.
@@ -140,6 +144,8 @@ impl Icon {
             Self::OpenMenu => include_bytes!("../icons/open-menu-symbolic.svg"),
             Self::ViewMore => include_bytes!("../icons/view-more-symbolic.svg"),
             Self::UserTrash => include_bytes!("../icons/user-trash-symbolic.svg"),
+            Self::Application => include_bytes!("../icons/application-x-executable-symbolic.svg"),
+            Self::Applications => include_bytes!("../icons/view-app-grid-symbolic.svg"),
         }
     }
 }

@@ -9,6 +9,7 @@
 //! [`theme::provide_tokens`] at the window root and read with
 //! [`surface::use_tokens`].
 
+pub mod app_icon;
 pub mod controls;
 pub mod group;
 pub mod icons;
@@ -24,6 +25,7 @@ pub mod theme;
 
 /// Everything an application window normally needs.
 pub mod prelude {
+    pub use crate::app_icon::{AppIcon, app_icon};
     pub use crate::controls::*;
     pub use crate::group::{
         Group, Status, StatusBlock, action_row, caption, heading, section_label, skeleton, status,

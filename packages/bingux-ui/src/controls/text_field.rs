@@ -20,6 +20,7 @@ pub struct TextField {
     value: State<String>,
     placeholder: Option<String>,
     width: f32,
+    fill: bool,
     well: bool,
     password: bool,
     multiline: bool,
@@ -38,6 +39,7 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         value,
         placeholder: None,
         width: FIELD_WIDTH,
+        fill: false,
         well: false,
         password: false,
         multiline: false,
@@ -64,6 +66,12 @@ impl TextField {
 
     pub fn width(mut self, width: f32) -> Self {
         self.width = width;
+        self
+    }
+
+    /// Fill the container's width, for a filter field above a list.
+    pub fn fill_width(mut self) -> Self {
+        self.fill = true;
         self
     }
 
@@ -161,7 +169,11 @@ impl Component for TextField {
         };
 
         let mut input = Input::new(value)
-            .width(Size::px(self.width))
+            .width(if self.fill {
+                Size::fill()
+            } else {
+                Size::px(self.width)
+            })
             .enabled(use_enabled(self.enabled))
             .theme_colors(colors)
             .theme_layout(layout)
