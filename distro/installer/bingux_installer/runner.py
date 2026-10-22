@@ -96,7 +96,7 @@ class SubprocessRunner:
         tail: list[str] = []
         buf = ""
         while True:
-            chunk = proc.stdout.read(4096)
+            chunk = proc.stdout.read1(4096)
             if not chunk:
                 break
             buf += chunk.decode("utf-8", errors="replace")
