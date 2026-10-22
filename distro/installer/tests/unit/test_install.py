@@ -74,7 +74,6 @@ def _base_plan():  # noqa: ANN202
 
 
 @pytest.mark.parametrize("changes", [
-    {"storage_mode": "alongside"},
     {"storage_mode": "manual"},
 ])
 def test_unimplemented_plan_features_are_refused(changes: dict[str, object]) -> None:
@@ -90,6 +89,7 @@ def test_unimplemented_plan_features_are_refused(changes: dict[str, object]) -> 
 
 @pytest.mark.parametrize("changes", [
     {"filesystem": "xfs"},
+    {"storage_mode": "alongside"},
     {"storage_mode": "free_space"},
     {"swap": "zram"},
     {"swap": "file", "swap_bytes": 2 * 1024 ** 3},

@@ -25,6 +25,7 @@ ERROR_CODES = frozenset({
     "disk_too_small",
     "no_free_space",
     "not_gpt",
+    "cannot_shrink",
     "other_os_present",
     "missing_tool",
     "cancelled",

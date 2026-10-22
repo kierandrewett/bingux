@@ -106,7 +106,7 @@ def version_data() -> dict[str, Any]:
 # What this build carries out end to end (README "Status"). The UI offers a choice only
 # when it is listed here, so an entry is added only with its install implemented and tested.
 CAPABILITIES: dict[str, Any] = {
-    "storage_modes": ["erase", "free_space"],
+    "storage_modes": ["erase", "free_space", "alongside"],
     "filesystems": ["ext4", "btrfs", "xfs"],
     "swap": ["none", "zram", "file", "partition"],
     "encryption": {"uefi": True, "bios": True},
@@ -243,6 +243,40 @@ def _refuse_unimplemented(plan: Plan) -> None:
         raise InstallerError("unsupported", f"storage mode {plan.storage_mode} is not implemented yet")
 
 
+# Storage modes that keep the partitions already on the disk (other OS included).
+KEEPS_OTHER_OS = ("free_space", "alongside")
+
+
+@dataclass(frozen=True)
+class _Shrink:
+    part: layout.GptPartition  # the partition being shrunk, as it is in the GPT now
+    fstype: str
+    new_end: int  # last sector after the shrink
+
+
+def _plan_shrink(plan: Plan, disk: probe.DiskInfo, table: layout.GptTable) -> _Shrink:
+    """Check that the partition named by the plan can shrink to the requested size. Reads only."""
+    target = plan.shrink.partition
+    info = next((p for p in disk.partitions if p["path"] == target), None)
+    part = next((p for p in table.partitions
+                 if layout.partition_path(plan.disk, p.number) == target), None)
+    if info is None or part is None:
+        raise InstallerError("cannot_shrink", f"{target} is not a partition of {plan.disk}")
+    if info["mountpoint"]:
+        raise InstallerError("cannot_shrink", f"{target} is mounted; it must be unmounted to shrink")
+    fstype = info["fstype"]
+    if fstype not in probe.SHRINKABLE_FSTYPES:
+        raise InstallerError("cannot_shrink", f"{fstype or 'unknown'} cannot be shrunk")
+    min_bytes = info["min_bytes"]
+    if min_bytes is None:
+        raise InstallerError("cannot_shrink", f"the smallest size of {target} could not be read")
+    if plan.shrink.size_bytes < min_bytes:
+        raise InstallerError("cannot_shrink", f"{target} cannot shrink below {min_bytes} bytes")
+    new_end = layout.shrink_end_sector(part, plan.shrink.size_bytes, table.sector_size)
+    return _Shrink(part=part, fstype=fstype, new_end=new_end)
+
+
+
 def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
     runner = env.runner
     mounts = _Mounts()
@@ -269,7 +303,7 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
         if disk.is_live_medium:
             raise InstallerError("disk_is_live_medium", f"{plan.disk} is the live medium")
         layout.check_disk_size(disk.size_bytes)
-        if disk.other_os and plan.storage_mode != "free_space" and not plan.other_os_allow:
+        if disk.other_os and plan.storage_mode not in KEEPS_OTHER_OS and not plan.other_os_allow:
             raise InstallerError(
                 "other_os_present",
                 f"{plan.disk} holds {', '.join(disk.other_os)}; set other_os to allow to erase it",
@@ -285,15 +319,24 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
 
         swap_partition_bytes = plan.swap_bytes if plan.swap == "partition" else 0
         free_parts = None
-        if plan.storage_mode == "free_space":
-            # Planned before the commit point: no_free_space and not_gpt fail with the disk untouched.
+        shrink = None
+        if plan.storage_mode in ("free_space", "alongside"):
+            # Planned before the commit point: no_free_space, not_gpt and cannot_shrink fail with the disk untouched.
             table = probe.read_gpt(runner, plan.disk)
             if table is None:
-                raise InstallerError("not_gpt", f"{plan.disk} has no readable GPT; free_space needs one")
+                raise InstallerError("not_gpt", f"{plan.disk} has no readable GPT; {plan.storage_mode} needs one")
+            if plan.storage_mode == "alongside":
+                shrink = _plan_shrink(plan, disk, table)
+                table = layout.shrink_table(table, shrink.part.number, shrink.new_end)
             free_parts = layout.free_space_layout(
                 table, uefi=plan.uefi, encrypted=plan.encrypted,
                 swap_partition_bytes=swap_partition_bytes)
         env.state.begin_commit()
+        if shrink is not None:
+            phase("shrink", None, f"shrinking {plan.shrink.partition}")
+            storage.shrink_partition(
+                runner=runner, disk=plan.disk, part=shrink.part, fstype=shrink.fstype,
+                size_bytes=plan.shrink.size_bytes, new_end=shrink.new_end)
         if free_parts is None:
             phase("partition", None, f"erasing and partitioning {plan.disk}")
             lay = _guard(

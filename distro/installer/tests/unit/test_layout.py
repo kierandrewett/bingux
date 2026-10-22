@@ -252,6 +252,33 @@ def test_free_space_uses_largest_region_not_total_free() -> None:
     assert exc.value.code == "no_free_space"
 
 
+def test_shrink_end_sector_is_mib_aligned_and_frees_the_tail() -> None:
+    part = layout.GptPartition(3, 2048, 2048 + 4 * GIB // 512 - 1, "8300", "root")
+    new_end = layout.shrink_end_sector(part, 1 * GIB, 512)
+    assert new_end == 2048 + GIB // 512 - 1
+    assert new_end < part.end
+
+
+def test_shrink_end_sector_refuses_a_size_that_frees_nothing() -> None:
+    part = layout.GptPartition(3, 2048, 2048 + 4 * GIB // 512 - 1, "8300", "root")
+    with pytest.raises(InstallerError) as exc:
+        layout.shrink_end_sector(part, 4 * GIB, 512)
+    assert exc.value.code == "cannot_shrink"
+
+
+def test_shrink_table_changes_only_the_named_partition_end() -> None:
+    parts = (
+        layout.GptPartition(1, 2048, 4095, "ef00", "esp"),
+        layout.GptPartition(2, 4096, 8191, "8300", "root"),
+    )
+    table = layout.GptTable(sector_size=512, first_usable=34, last_usable=8191, partitions=parts)
+    shrunk = layout.shrink_table(table, 2, 6143)
+    assert shrunk.partitions[0] == parts[0]
+    assert shrunk.partitions[1].end == 6143
+    assert shrunk.partitions[1].start == 4096
+    assert table.partitions[1].end == 8191
+
+
 def test_partition_path_handles_sd_and_nvme_names() -> None:
     assert layout.partition_path("/dev/vda", 3) == "/dev/vda3"
     assert layout.partition_path("/dev/nvme0n1", 3) == "/dev/nvme0n1p3"

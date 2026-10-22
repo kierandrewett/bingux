@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .protocol import InstallerError
 
@@ -138,6 +138,7 @@ def grub_defaults(*, cmdline_text: str) -> str:
         'GRUB_DISTRIBUTOR="Bingux OS"\n'
         f'GRUB_CMDLINE_LINUX_DEFAULT="{cmdline_text}"\n'
         "GRUB_TIMEOUT=3\n"
+        "GRUB_DISABLE_OS_PROBER=false\n"
     )
 
 
@@ -331,3 +332,23 @@ def free_space_layout(table: GptTable, *, uefi: bool, encrypted: bool,
     out.append(FreePartition("root", next_number(), cursor, last, root_code, ROOT_LABEL,
                              reuse=False))
     return tuple(out)
+
+
+def shrink_end_sector(part: GptPartition, size_bytes: int, sector_size: int) -> int:
+    """Last sector of `part` once it shrinks to hold size_bytes, rounded up to a 1 MiB boundary.
+
+    Raises cannot_shrink when that end is not before the current end: nothing would be freed.
+    """
+    unit = MIB // sector_size
+    first_free = part.start + -(-size_bytes // sector_size)
+    new_end = _align_up(first_free, unit) - 1
+    if new_end >= part.end:
+        raise InstallerError("cannot_shrink",
+                             f"partition {part.number} cannot shrink to {size_bytes} bytes")
+    return new_end
+
+
+def shrink_table(table: GptTable, number: int, new_end: int) -> GptTable:
+    """The table with partition `number` ending at new_end. Pure: the disk is not touched."""
+    parts = tuple(replace(p, end=new_end) if p.number == number else p for p in table.partitions)
+    return replace(table, partitions=parts)

@@ -6,7 +6,7 @@ import pytest
 
 from bingux_installer import layout, storage
 from bingux_installer.protocol import InstallerError
-from bingux_installer.runner import CommandError
+from bingux_installer.runner import CmdResult, CommandError
 
 PASSPHRASE = "hunter22-secret"
 
@@ -89,3 +89,39 @@ def test_tool_failure_names_the_tool_and_hides_stderr() -> None:
                                   encrypted=False, passphrase="")
     assert exc.value.code == "storage_failed"
     assert "/dev/vda2" not in exc.value.message
+
+
+GIB = 1024 ** 3
+
+
+class _ShrinkRunner(RecordingRunner):
+    """Answers every command with success; sgdisk -i reports a fixed partition GUID."""
+
+    def run(self, argv, *, check=True, stdin=None):  # noqa: ANN001, ANN201
+        super().run(argv, check=check, stdin=stdin)
+        return CmdResult(0, "Partition unique GUID: 1111-2222\n", "")
+
+
+def test_shrink_resizes_the_filesystem_before_rewriting_the_entry() -> None:
+    runner = _ShrinkRunner()
+    part = layout.GptPartition(3, 2048, 2048 + 4 * GIB // 512 - 1, "8300", "root")
+    new_end = layout.shrink_end_sector(part, GIB, 512)
+    storage.shrink_partition(runner=runner, disk="/dev/vda", part=part, fstype="ext4",
+                             size_bytes=GIB, new_end=new_end)
+    argvs = runner.argvs()
+    resize = argvs.index(["resize2fs", "/dev/vda3", f"{GIB // 1024}K"])
+    first_sgdisk = next(i for i, a in enumerate(argvs) if a[0] == "sgdisk")
+    assert resize < first_sgdisk
+    new_entry = next(a for a in argvs if any(s.startswith("--new=3:") for s in a))
+    assert f"--new=3:2048:{new_end}" in new_entry
+    assert "--partition-guid=3:1111-2222" in new_entry
+
+
+def test_failed_resize_leaves_the_partition_entry_alone() -> None:
+    runner = _ShrinkRunner(fail_on="resize2fs")
+    part = layout.GptPartition(3, 2048, 2048 + 4 * GIB // 512 - 1, "8300", "root")
+    with pytest.raises(InstallerError) as exc:
+        storage.shrink_partition(runner=runner, disk="/dev/vda", part=part, fstype="ext4",
+                                 size_bytes=GIB, new_end=2048 + GIB // 512 - 1)
+    assert exc.value.code == "storage_failed"
+    assert not any(any(s.startswith("--new=") for s in a) for a in runner.argvs())

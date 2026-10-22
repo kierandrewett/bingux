@@ -2,14 +2,18 @@
 
 commit_layout builds a fresh GPT through python-blivet (imported lazily, so the unit tests never
 need it). commit_free_space adds partitions to free space with sgdisk and formats them with mkfs;
-it never touches blivet and never writes a reused partition.
+it never touches blivet and never writes a reused partition. shrink_partition resizes an existing
+filesystem and its GPT entry in place (alongside).
 """
 
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 from . import layout
@@ -218,18 +222,81 @@ def _settle(runner: Runner) -> None:
         raise InstallerError("storage_failed", "udev did not settle after partitioning") from exc
 
 
-def _make_btrfs_subvolumes(runner: Runner, device: str) -> None:
-    """Create the top-level subvolumes through a temporary mount, then unmount it."""
-    mount_point = tempfile.mkdtemp(prefix="bingux-btrfs-")
+@contextmanager
+def _mounted(runner: Runner, device: str) -> Iterator[str]:
+    """Mount device on a temporary directory for the duration of the block, then unmount it."""
+    mount_point = tempfile.mkdtemp(prefix="bingux-mount-")
     try:
         runner.run(["mount", device, mount_point])
         try:
-            for name, _ in layout.BTRFS_SUBVOLS:
-                runner.run(["btrfs", "subvolume", "create", f"{mount_point}/{name}"])
+            yield mount_point
         finally:
             runner.run(["umount", mount_point])
     finally:
         os.rmdir(mount_point)
+
+
+def _make_btrfs_subvolumes(runner: Runner, device: str) -> None:
+    """Create the top-level subvolumes through a temporary mount, then unmount it."""
+    with _mounted(runner, device) as mount_point:
+        for name, _ in layout.BTRFS_SUBVOLS:
+            runner.run(["btrfs", "subvolume", "create", f"{mount_point}/{name}"])
+
+
+def shrink_partition(
+    *,
+    runner: Runner,
+    disk: str,
+    part: layout.GptPartition,
+    fstype: str,
+    size_bytes: int,
+    new_end: int,
+) -> None:
+    """Shrink one unmounted partition to size_bytes: its filesystem first, then its GPT entry.
+
+    The filesystem is resized while the old partition still covers it, so a failure before the
+    sgdisk call leaves the partition at its old size. The entry keeps its unique GUID, name and
+    type. Destructive to the shrunk tail only; the caller has checked that size_bytes fits."""
+    try:
+        _shrink_filesystem(runner, fstype, layout.partition_path(disk, part.number), size_bytes)
+    except CommandError as exc:
+        raise InstallerError("storage_failed", f"{exc.argv[0]} failed (exit {exc.returncode})") from exc
+    guid = _partition_guid(runner, disk, part.number)
+    n = part.number
+    try:
+        runner.run(["sgdisk", f"--delete={n}", f"--new={n}:{part.start}:{new_end}",
+                    f"--typecode={n}:{part.code}", f"--change-name={n}:{part.name}",
+                    f"--partition-guid={n}:{guid}", disk])
+    except CommandError as exc:
+        raise InstallerError("storage_failed", "sgdisk could not shrink the partition") from exc
+    _settle(runner)
+
+
+def _shrink_filesystem(runner: Runner, fstype: str, path: str, size_bytes: int) -> None:
+    if fstype == "ext4":
+        # e2fsck exits 1 when it corrected errors, which is safe to continue from; 2 and up is not.
+        fsck = runner.run(["e2fsck", "-f", "-y", path], check=False)
+        if fsck.returncode not in (0, 1):
+            raise CommandError(["e2fsck"], fsck.returncode)
+        runner.run(["resize2fs", path, f"{size_bytes // 1024}K"])
+    elif fstype == "ntfs":
+        runner.run(["ntfsresize", "--force", "--size", str(size_bytes), path])
+    elif fstype == "btrfs":
+        with _mounted(runner, path) as mount_point:
+            runner.run(["btrfs", "filesystem", "resize", str(size_bytes), mount_point])
+    else:
+        raise InstallerError("cannot_shrink", f"{fstype} cannot be shrunk")
+
+
+def _partition_guid(runner: Runner, disk: str, number: int) -> str:
+    try:
+        result = runner.run(["sgdisk", "-i", str(number), disk])
+    except CommandError as exc:
+        raise InstallerError("storage_failed", f"sgdisk could not read partition {number}") from exc
+    match = re.search(r"^Partition unique GUID:\s*(\S+)", result.stdout, re.MULTILINE)
+    if match is None:
+        raise InstallerError("storage_failed", f"partition {number} has no unique GUID")
+    return match.group(1)
 
 
 
