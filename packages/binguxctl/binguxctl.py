@@ -398,6 +398,8 @@ SETTINGS_PANELS = (
     "display",
     "sound",
     "network",
+    "wifi",
+    "wired",
     "bluetooth",
     "power",
     "keyboard",

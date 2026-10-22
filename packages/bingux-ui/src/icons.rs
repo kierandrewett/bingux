@@ -54,11 +54,65 @@ pub enum Icon {
     Speakers,
     Gamepad,
     Phone,
+    NetworkWirelessSignalNone,
+    NetworkWirelessSignalWeak,
+    NetworkWirelessSignalOk,
+    NetworkWirelessSignalGood,
+    NetworkWirelessSignalExcellent,
+    NetworkWirelessEncrypted,
+    NetworkWired,
+    NetworkVpn,
+    AirplaneMode,
+    NetworkWirelessHotspot,
+    NetworkWirelessDisabled,
+    NetworkOffline,
+    NetworkError,
+    AudioInputMicrophone,
+    AudioVolumeMuted,
+    AudioVolumeLow,
+    AudioVolumeMedium,
+    AudioCard,
+    CameraWeb,
+    DisplayBrightness,
+    NightLight,
+    WeatherClearNight,
+    PowerProfilePowerSaver,
+    PowerProfileBalanced,
+    PowerProfilePerformance,
+    SystemShutdown,
+    BatteryLevel50,
+    ViewReveal,
+    ViewConceal,
+    DocumentEdit,
+    UserInfo,
+    Starred,
+    DialogPassword,
+    SystemLockScreen,
+    SendTo,
+    FolderDownload,
+    PreferencesDesktopKeyboardShortcuts,
+    InputTouchpad,
+    PreferencesOther,
+    ViewList,
+    MediaRemovable,
+    Printer,
+    InputTablet,
+    NetworkServer,
+    AvatarDefault,
+    SecurityHigh,
+    SecurityLow,
+    FindLocation,
+    MailUnread,
+    ApplicationsMultimedia,
+    AccessoriesCalculator,
+    WebBrowser,
+    XOfficeCalendar,
+    HelpBrowser,
 }
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 46] = [
+    pub const ALL: [Icon; 100] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -105,6 +159,60 @@ impl Icon {
         Self::Speakers,
         Self::Gamepad,
         Self::Phone,
+        Self::NetworkWirelessSignalNone,
+        Self::NetworkWirelessSignalWeak,
+        Self::NetworkWirelessSignalOk,
+        Self::NetworkWirelessSignalGood,
+        Self::NetworkWirelessSignalExcellent,
+        Self::NetworkWirelessEncrypted,
+        Self::NetworkWired,
+        Self::NetworkVpn,
+        Self::AirplaneMode,
+        Self::NetworkWirelessHotspot,
+        Self::NetworkWirelessDisabled,
+        Self::NetworkOffline,
+        Self::NetworkError,
+        Self::AudioInputMicrophone,
+        Self::AudioVolumeMuted,
+        Self::AudioVolumeLow,
+        Self::AudioVolumeMedium,
+        Self::AudioCard,
+        Self::CameraWeb,
+        Self::DisplayBrightness,
+        Self::NightLight,
+        Self::WeatherClearNight,
+        Self::PowerProfilePowerSaver,
+        Self::PowerProfileBalanced,
+        Self::PowerProfilePerformance,
+        Self::SystemShutdown,
+        Self::BatteryLevel50,
+        Self::ViewReveal,
+        Self::ViewConceal,
+        Self::DocumentEdit,
+        Self::UserInfo,
+        Self::Starred,
+        Self::DialogPassword,
+        Self::SystemLockScreen,
+        Self::SendTo,
+        Self::FolderDownload,
+        Self::PreferencesDesktopKeyboardShortcuts,
+        Self::InputTouchpad,
+        Self::PreferencesOther,
+        Self::ViewList,
+        Self::MediaRemovable,
+        Self::Printer,
+        Self::InputTablet,
+        Self::NetworkServer,
+        Self::AvatarDefault,
+        Self::SecurityHigh,
+        Self::SecurityLow,
+        Self::FindLocation,
+        Self::MailUnread,
+        Self::ApplicationsMultimedia,
+        Self::AccessoriesCalculator,
+        Self::WebBrowser,
+        Self::XOfficeCalendar,
+        Self::HelpBrowser,
     ];
 
     /// The embedded SVG source for this icon.
@@ -158,6 +266,90 @@ impl Icon {
             Self::Speakers => include_bytes!("../icons/audio-speakers-symbolic.svg"),
             Self::Gamepad => include_bytes!("../icons/input-gaming-symbolic.svg"),
             Self::Phone => include_bytes!("../icons/phone-symbolic.svg"),
+            Self::NetworkWirelessSignalNone => {
+                include_bytes!("../icons/network-wireless-signal-none-symbolic.svg")
+            }
+            Self::NetworkWirelessSignalWeak => {
+                include_bytes!("../icons/network-wireless-signal-weak-symbolic.svg")
+            }
+            Self::NetworkWirelessSignalOk => {
+                include_bytes!("../icons/network-wireless-signal-ok-symbolic.svg")
+            }
+            Self::NetworkWirelessSignalGood => {
+                include_bytes!("../icons/network-wireless-signal-good-symbolic.svg")
+            }
+            Self::NetworkWirelessSignalExcellent => {
+                include_bytes!("../icons/network-wireless-signal-excellent-symbolic.svg")
+            }
+            Self::NetworkWirelessEncrypted => {
+                include_bytes!("../icons/network-wireless-encrypted-symbolic.svg")
+            }
+            Self::NetworkWired => include_bytes!("../icons/network-wired-symbolic.svg"),
+            Self::NetworkVpn => include_bytes!("../icons/network-vpn-symbolic.svg"),
+            Self::AirplaneMode => include_bytes!("../icons/airplane-mode-symbolic.svg"),
+            Self::NetworkWirelessHotspot => {
+                include_bytes!("../icons/network-wireless-hotspot-symbolic.svg")
+            }
+            Self::NetworkWirelessDisabled => {
+                include_bytes!("../icons/network-wireless-disabled-symbolic.svg")
+            }
+            Self::NetworkOffline => include_bytes!("../icons/network-offline-symbolic.svg"),
+            Self::NetworkError => include_bytes!("../icons/network-error-symbolic.svg"),
+            Self::AudioInputMicrophone => {
+                include_bytes!("../icons/audio-input-microphone-symbolic.svg")
+            }
+            Self::AudioVolumeMuted => include_bytes!("../icons/audio-volume-muted-symbolic.svg"),
+            Self::AudioVolumeLow => include_bytes!("../icons/audio-volume-low-symbolic.svg"),
+            Self::AudioVolumeMedium => include_bytes!("../icons/audio-volume-medium-symbolic.svg"),
+            Self::AudioCard => include_bytes!("../icons/audio-card-symbolic.svg"),
+            Self::CameraWeb => include_bytes!("../icons/camera-web-symbolic.svg"),
+            Self::DisplayBrightness => include_bytes!("../icons/display-brightness-symbolic.svg"),
+            Self::NightLight => include_bytes!("../icons/night-light-symbolic.svg"),
+            Self::WeatherClearNight => include_bytes!("../icons/weather-clear-night-symbolic.svg"),
+            Self::PowerProfilePowerSaver => {
+                include_bytes!("../icons/power-profile-power-saver-symbolic.svg")
+            }
+            Self::PowerProfileBalanced => {
+                include_bytes!("../icons/power-profile-balanced-symbolic.svg")
+            }
+            Self::PowerProfilePerformance => {
+                include_bytes!("../icons/power-profile-performance-symbolic.svg")
+            }
+            Self::SystemShutdown => include_bytes!("../icons/system-shutdown-symbolic.svg"),
+            Self::BatteryLevel50 => include_bytes!("../icons/battery-level-50-symbolic.svg"),
+            Self::ViewReveal => include_bytes!("../icons/view-reveal-symbolic.svg"),
+            Self::ViewConceal => include_bytes!("../icons/view-conceal-symbolic.svg"),
+            Self::DocumentEdit => include_bytes!("../icons/document-edit-symbolic.svg"),
+            Self::UserInfo => include_bytes!("../icons/user-info-symbolic.svg"),
+            Self::Starred => include_bytes!("../icons/starred-symbolic.svg"),
+            Self::DialogPassword => include_bytes!("../icons/dialog-password-symbolic.svg"),
+            Self::SystemLockScreen => include_bytes!("../icons/system-lock-screen-symbolic.svg"),
+            Self::SendTo => include_bytes!("../icons/send-to-symbolic.svg"),
+            Self::FolderDownload => include_bytes!("../icons/folder-download-symbolic.svg"),
+            Self::PreferencesDesktopKeyboardShortcuts => {
+                include_bytes!("../icons/preferences-desktop-keyboard-shortcuts-symbolic.svg")
+            }
+            Self::InputTouchpad => include_bytes!("../icons/input-touchpad-symbolic.svg"),
+            Self::PreferencesOther => include_bytes!("../icons/preferences-other-symbolic.svg"),
+            Self::ViewList => include_bytes!("../icons/view-list-symbolic.svg"),
+            Self::MediaRemovable => include_bytes!("../icons/media-removable-symbolic.svg"),
+            Self::Printer => include_bytes!("../icons/printer-symbolic.svg"),
+            Self::InputTablet => include_bytes!("../icons/input-tablet-symbolic.svg"),
+            Self::NetworkServer => include_bytes!("../icons/network-server-symbolic.svg"),
+            Self::AvatarDefault => include_bytes!("../icons/avatar-default-symbolic.svg"),
+            Self::SecurityHigh => include_bytes!("../icons/security-high-symbolic.svg"),
+            Self::SecurityLow => include_bytes!("../icons/security-low-symbolic.svg"),
+            Self::FindLocation => include_bytes!("../icons/find-location-symbolic.svg"),
+            Self::MailUnread => include_bytes!("../icons/mail-unread-symbolic.svg"),
+            Self::ApplicationsMultimedia => {
+                include_bytes!("../icons/applications-multimedia-symbolic.svg")
+            }
+            Self::AccessoriesCalculator => {
+                include_bytes!("../icons/accessories-calculator-symbolic.svg")
+            }
+            Self::WebBrowser => include_bytes!("../icons/web-browser-symbolic.svg"),
+            Self::XOfficeCalendar => include_bytes!("../icons/x-office-calendar-symbolic.svg"),
+            Self::HelpBrowser => include_bytes!("../icons/help-browser-symbolic.svg"),
         }
     }
 }
