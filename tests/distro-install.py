@@ -38,7 +38,15 @@ import tempfile
 import time
 
 from distro_capture import greeter_shown, session_painted
-from distro_installer_driver import Installer, Pointer, ocr_words, page_title, text_on_screen
+from distro_installer_driver import (
+    Installer,
+    Pointer,
+    error_page_up,
+    lowest_word,
+    page_title,
+    text_on_screen,
+    zone_on_label,
+)
 from distro_vm import ROOT, Vm, find_iso, missing_tools
 
 USER = "tester"
@@ -46,14 +54,16 @@ PASSWORD = "bingux-test-2026"
 PASSPHRASE = "bingux-luks-2026"
 CITY_ZONE = "Europe/Berlin"
 CITY_LON_LAT = (13.4, 52.5)
+# Offsets (px) tried in turn when a click on the map picks another zone.
+MAP_NUDGES = [(0, 0), (4, 0), (-4, 0), (0, 4), (0, -4)]
 MAP_GAP = 12  # px between the bottom of the time zone map and the "Time zone:" label
+ZONE_NAMES = [entry["zone"] for entry in json.loads((ROOT / "distro/installer/shell/assets/timezones.json").read_text())]
 VARIANTS = {
     "uefi": {"uefi": True, "luks": False},
     "uefi-luks": {"uefi": True, "luks": True},
     "bios": {"uefi": False, "luks": False},
 }
-INSTALL_TIMEOUT = 3600
-ERROR_TEXT = "could not"
+INSTALL_TIMEOUT = 1500  # seconds for the payload copy; the error page ends the wait early
 ROOT_PART = "/dev/vda2"  # root (or the LUKS container) on every layout; ESP is /dev/vda1 on uefi
 
 
@@ -132,21 +142,19 @@ def eject_medium(vm):
 
 
 def pick_city(inst, timeline, checks):
-    """Click Berlin on the time zone map and check that the page names it.
+    """Click Berlin on the time zone map and check that the page's label names it.
 
     The map is the first item of the page column, so its width is the column
     width (the column starts at the left edge of the hint text and the card is
     centred), its height is width * 145 / 360, and it sits just above the
-    "Time zone:" label with the theme gap in between.
+    "Time zone:" label with the theme gap in between. The installer picks the
+    nearest zone to the click, so each click is nudged until the label names it.
     """
     frame = inst.frame()
-    words = ocr_words(frame)
-    labels = [w for w in words if w.text.lower().startswith("zone")]
-    hints = [w for w in words if w.text == "Click"]
-    if not labels or not hints:
+    label = lowest_word(frame, lambda w: w.text.lower().startswith("zone"))  # the title "Time zone" is higher up
+    hint = lowest_word(frame, lambda w: w.text == "Click")
+    if label is None or hint is None:
         raise Fail("time zone label or map hint not found")
-    label = max(labels, key=lambda w: w.y0)  # the page title "Time zone" is higher up
-    hint = max(hints, key=lambda w: w.y0)
     body_left = hint.x0
     width = 2 * (frame.shape[1] / 2 - body_left)
     height = width * 145 / 360
@@ -154,10 +162,16 @@ def pick_city(inst, timeline, checks):
     lon, lat = CITY_LON_LAT
     x = body_left + (lon + 180) / 360 * width
     y = map_top + (85 - lat) / 145 * height
-    timeline.mark(f"clicking the time zone map at {x:.0f},{y:.0f} for {CITY_ZONE}")
-    inst.pointer.click(x, y)
-    time.sleep(1.5)
-    checks[f"time zone map click picks {CITY_ZONE}"] = text_on_screen(inst.frame(), "Berlin") is not None
+    picked = None
+    for dx, dy in MAP_NUDGES:
+        timeline.mark(f"clicking the time zone map at {x + dx:.0f},{y + dy:.0f} for {CITY_ZONE}")
+        inst.pointer.click(x + dx, y + dy)
+        time.sleep(1.5)
+        picked = zone_on_label(inst.frame(), ZONE_NAMES)
+        if picked == CITY_ZONE:
+            break
+    timeline.mark(f"time zone label reads {picked!r}")
+    checks[f"time zone map click picks {CITY_ZONE}"] = picked == CITY_ZONE
 
 
 def storage_page(inst, variant, checks):
@@ -167,7 +181,7 @@ def storage_page(inst, variant, checks):
             text_on_screen(frame, "Encryption needs") is not None
         )
     if variant["luks"]:
-        if not inst.click_text("Encrypt the system disk"):
+        if not inst.click_switch("Encrypt the system disk"):
             raise Fail("encryption switch not found")
         time.sleep(1)
         if not inst.type_into("Passphrase", PASSPHRASE):
@@ -192,12 +206,21 @@ def account_page(inst):
     inst.continue_page()
 
 
-def confirm_erase(inst):
-    if not inst.click_text("I understand that everything"):
+def confirm_erase(inst, timeline):
+    # The label wraps onto two lines, and OCR reads its capital I as a bar, so the phrase starts at "understand".
+    if not inst.click_switch("understand that everything", last_line="will be erased"):
         raise Fail("erase confirmation not found")
     time.sleep(1)
-    if not inst.click_text("Erase and install"):
-        raise Fail("'Erase and install' button not found")
+    # The button enables a moment after the switch; a click that lands early does nothing, so click again
+    # until the page leaves "Ready to install".
+    for _ in range(3):
+        if not inst.click_text("Erase and install"):
+            raise Fail("'Erase and install' button not found")
+        time.sleep(4)
+        if page_title(inst.frame()) != "Ready to install":
+            return
+        timeline.mark("Erase and install did not start the install; clicking again")
+    raise Fail("Erase and install did not start the install")
 
 
 def wait_page(inst, title, timeout, poll):
@@ -206,9 +229,10 @@ def wait_page(inst, title, timeout, poll):
     while time.monotonic() < deadline:
         frame = inst.frame()
         if frame is not None:
-            if page_title(frame) == title:
+            on_screen = page_title(frame)
+            if on_screen == title:
                 return True
-            if text_on_screen(frame, ERROR_TEXT) is not None:
+            if on_screen is None and error_page_up(frame):
                 return False
         time.sleep(poll)
     return False
@@ -226,7 +250,7 @@ def run_steps(inst, vm, variant, out, checks, timeline):
         ("Disk", lambda: (inst.click_text("/dev/vda"), time.sleep(1), inst.continue_page())),
         ("Storage", lambda: storage_page(inst, variant, checks)),
         ("Your account", lambda: account_page(inst)),
-        ("Ready to install", lambda: confirm_erase(inst)),
+        ("Ready to install", lambda: confirm_erase(inst, timeline)),
         ("Installing Bingux", None),
         ("Bingux is installed", None),
     ]
@@ -245,7 +269,7 @@ def run_steps(inst, vm, variant, out, checks, timeline):
             frame = inst.frame()
             if frame is not None:
                 vm.still(pages / f"{index:02d}-FAILED-{slug(title)}.png", frame)
-            raise Fail(f"page '{title}' not reached; on screen: {page_title(inst.frame())!r}")
+            raise Fail(f"page '{title}' not reached; on screen: {inst.current_page()!r}")
         reached.append(title)
         timeline.mark(f"page {title}")
         vm.still(pages / f"{index:02d}-{slug(title)}.png", inst.frame())
