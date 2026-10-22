@@ -104,7 +104,12 @@ Terminal lines:
 - `{"event":"result","ok":true,"data":{...}}`
 - `{"event":"error","code":"<code>","message":"<human text>"}`
 
-Probe result data: `{"firmware":"uefi"|"bios","live_disk":"/dev/..."|null,"disks":[{"path","size_bytes","model","removable","is_live_medium","other_os":[...]}],"tools_missing":[...],"installer_version":"0.1.0"}`.
+Probe result data (protocol 1; the fields below are additive, so a client that ignores them still works):
+
+- `firmware`, `live_disk`, `tools_missing`, `installer_version`: as before.
+- `disks`: each entry `{"path","size_bytes","model","removable","is_live_medium","other_os":[...],"partition_table","free_bytes","partitions":[...]}`. `partition_table` is `"gpt"`, `"msdos"` or `null`. `free_bytes` is the unallocated space on the disk, or `null` when unknown.
+- `disks[].partitions`: each entry `{"path","fstype","label","size_bytes","mountpoint","used_bytes","free_bytes","os","shrinkable","min_bytes"}`. `label` is the filesystem label or `null`. `used_bytes` and `free_bytes` are the filesystem usage or `null`. `os` is the OS name found on the filesystem (as `other_os`) or `null`. `shrinkable` is `true` when the installer can shrink the filesystem for `alongside`; `min_bytes` is then the smallest size it can shrink to, otherwise `null`. A value the probe cannot read is `null`; it is never guessed.
+- `capabilities`: what this installer build implements end to end. A choice is listed only when the install of it is implemented and covered by the install matrix. Shape: `{"storage_modes":["erase"],"filesystems":["ext4","btrfs","xfs"],"swap":["none","zram","file","partition"],"encryption":{"uefi":true,"bios":true},"dual_boot":false}`. The UI offers a choice only when it is listed. When `capabilities` is missing, the UI offers `erase` with the ext4 filesystem only.
 
 Install phases, in order: `validate`, `preflight`, `partition` (the commit point, the first destructive write), `mount`, `copy`, `strip`, `configure`, `bootloader`, `finish`.
 Cancel is honoured only before the commit point. Only one install runs at a time.
