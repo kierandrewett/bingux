@@ -157,13 +157,14 @@ def greeter_shown(frame):
 def session_painted(frame):
     """True on a Bingux session (desktop or lock): the bar's clock text over a lit strip and the blue wallpaper.
 
-    The bar clock text rules out the Plymouth splash (same blue, no text at the top) and the greeter
-    (lit clock text, but a flat dark strip).
+    The bar clock text rules out the Plymouth splash (same blue, no text at the top). The greeter has the
+    same bar and wallpaper, so a frame that still shows the greeter's login card is not a session.
     """
     return (
         bright_count(frame, "160x24+560+4") > 100
         and region_mean_luma(frame, SESSION_STRIP) >= 36.0
         and blue_lead(frame, "1280x700+0+60") > 0.05
+        and not greeter_shown(frame)
     )
 
 
