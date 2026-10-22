@@ -56,7 +56,7 @@ def make_plan(firmware, filesystem, encrypted):
     if encrypted:
         encryption["passphrase"] = LUKS_PASSPHRASE
     return {
-        "version": 1,
+        "version": 2,
         "disk": DISK,
         "confirm_erase": DISK,
         "firmware": firmware,

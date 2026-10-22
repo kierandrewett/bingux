@@ -114,7 +114,7 @@ QtObject {
     // The plan schema v1 document. Only protocol fields appear here.
     function planObject() {
         const plan = {
-            version: 1,
+            version: 2,
             disk: diskPath,
             confirm_erase: diskPath,
             firmware: "auto",

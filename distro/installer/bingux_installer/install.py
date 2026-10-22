@@ -220,6 +220,22 @@ def _teardown(env: Env, mounts: _Mounts, *, strict: bool) -> None:
         mounts.luks_name = None
 
 
+def _refuse_unimplemented(plan: Plan) -> None:
+    """Refuse valid plan features the installer does not carry out yet.
+
+    Each one would otherwise be accepted and silently ignored, or would erase a disk the
+    user asked to keep. Removing an entry here is the only way it becomes reachable.
+    """
+    if plan.storage_mode != "erase":
+        raise InstallerError("unsupported", f"storage mode {plan.storage_mode} is not implemented yet")
+    if plan.filesystem == "xfs":
+        raise InstallerError("unsupported", "xfs is not implemented yet")
+    if plan.swap != "none":
+        raise InstallerError("unsupported", f"swap {plan.swap} is not implemented yet")
+    if not plan.ntp:
+        raise InstallerError("unsupported", "ntp false is not implemented yet")
+
+
 def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
     runner = env.runner
     mounts = _Mounts()
@@ -236,6 +252,7 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
             timezone_exists=system_timezone_exists,
             locale_supported=system_locale_supported,
         )
+        _refuse_unimplemented(plan)
         secrets = plan.secrets()
         doc = probe.list_block_devices(runner)
         live = probe.live_source_device(runner)

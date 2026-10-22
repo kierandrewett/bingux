@@ -131,7 +131,7 @@ def run_shell(shell, tree, mode, socket_path):
 
 def check_plan(plan, disk):
     expected = {
-        "version": 1,
+        "version": 2,
         "disk": disk,
         "confirm_erase": disk,
         "firmware": "auto",
