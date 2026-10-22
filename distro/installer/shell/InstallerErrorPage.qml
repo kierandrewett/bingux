@@ -46,7 +46,7 @@ InstallerPage {
         const stamp = Schema.nowStamp();
         page.savedPath = "/tmp/bingux-installer-" + stamp + ".log";
         logFile.path = page.savedPath;
-        logFile.setText(InstallerState.logLines.join("\n") + "\n");
+        logFile.setText(InstallerState.logText() + "\n");
     }
 
     FileView {

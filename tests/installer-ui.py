@@ -8,6 +8,7 @@ The fake daemon speaks the protocol in distro/installer/README.md:
   probe    -> two 8 GiB disks, UEFI
   install /dev/vda -> progress through every phase, then result ok
   install /dev/vdb -> progress up to mount, then error storage_failed
+  log mode -> no daemon; 5000 appended log lines must stay within InstallerState.logLimit
   unreachable mode -> no daemon listens, so the probe must fail
 After the shell exits the test checks the plans the daemon received.
 
@@ -223,7 +224,13 @@ def main():
         if "INSTALLER_UI_FAILED" in output or "INSTALLER_UI_UNREACHABLE_OK" not in output:
             raise SystemExit("installer-ui unreachable failed:\n" + "\n".join(line for line in output.splitlines() if "INSTALLER_UI" in line or "ERROR" in line))
 
-        print("installer-ui: probe, install and failure flows pass against the fake daemon; unreachable probe fails cleanly")
+        # Log: the install log holds at most logLimit lines, keeps the newest and resetInstall clears it.
+        log_path = probe_socket_path(scratch, "log.sock")
+        output = run_shell(arguments.shell, tree, "log", log_path)
+        if "INSTALLER_UI_FAILED" in output or "INSTALLER_UI_LOG_OK" not in output:
+            raise SystemExit("installer-ui log failed:\n" + "\n".join(line for line in output.splitlines() if "INSTALLER_UI" in line or "ERROR" in line))
+
+        print("installer-ui: probe, install and failure flows pass against the fake daemon; unreachable probe fails cleanly; the install log stays capped")
         print("INSTALLER_UI_PASSED")
     finally:
         shutil.rmtree(scratch, ignore_errors=True)

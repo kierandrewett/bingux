@@ -89,7 +89,13 @@ QtObject {
     property string phase: ""
     property real percent: -1
     property string phaseMessage: ""
-    property var logLines: []
+    // The install log, read by InstallerLog and the error page. A ListModel, so
+    // appendLog adds a line without copying the others. At most logLimit lines are
+    // held; when a line would pass it, the oldest lines go in one batch down to
+    // logKeep, so the removal cost is paid once per (logLimit - logKeep) appends.
+    readonly property int logLimit: 2000
+    readonly property int logKeep: 1500
+    readonly property ListModel logModel: ListModel {}
     property var result: null
     property string errorCode: ""
     property string errorMessage: ""
@@ -141,8 +147,17 @@ QtObject {
     }
 
     function appendLog(text) {
-        const lines = logLines.concat([text]);
-        logLines = lines.length > 2000 ? lines.slice(lines.length - 2000) : lines;
+        logModel.append({line: String(text)});
+        if (logModel.count > logLimit)
+            logModel.remove(0, logModel.count - logKeep);
+    }
+
+    // The whole log as one string, for saving it. Only the error page calls this.
+    function logText() {
+        const lines = [];
+        for (let i = 0; i < logModel.count; i++)
+            lines.push(logModel.get(i).line);
+        return lines.join("\n");
     }
 
     function resetInstall() {
@@ -150,7 +165,7 @@ QtObject {
         phase = "";
         percent = -1;
         phaseMessage = "";
-        logLines = [];
+        logModel.clear();
         result = null;
         errorCode = "";
         errorMessage = "";

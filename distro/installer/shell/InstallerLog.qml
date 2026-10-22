@@ -1,6 +1,6 @@
 import QtQuick
 
-// The installer log: one line per entry from InstallerState.logLines, newest
+// The installer log: one line per entry in InstallerState.logModel, newest
 // at the bottom. Shared by the progress and error pages.
 Rectangle {
     id: root
@@ -21,13 +21,13 @@ Rectangle {
         anchors.fill: parent
         anchors.margins: Theme.gap
         clip: true
-        model: InstallerState.logLines
+        model: InstallerState.logModel
         onCountChanged: positionViewAtEnd()
 
         delegate: Text {
-            required property string modelData
+            required property string line
             width: list.width
-            text: modelData
+            text: line
             wrapMode: Text.WrapAnywhere
             color: Theme.muted
             font.family: "monospace"
