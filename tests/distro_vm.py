@@ -275,10 +275,15 @@ class Vm:
         return None
 
     def eject_medium(self):
-        """Take the installation ISO out of its drive, as a user does. Returns the drive id or None."""
+        """Take the installation ISO out of its drive, as a user does. Returns the drive id or None.
+
+        Done through the monitor: QMP `eject` does not find the -cdrom drive by its id on this QEMU.
+        """
         device = self.medium()
         if device is not None:
-            self._qmp.execute("eject", {"id": device, "force": True})
+            self.monitor(f"eject -f {device}")
+            if self.medium() is not None:
+                raise RuntimeError(f"installation medium {device} still attached after eject")
         return device
 
     # Monitor: key presses.
