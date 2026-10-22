@@ -7,7 +7,7 @@
 
 use freya::prelude::*;
 
-use crate::pages::{PageId, applications, bluetooth, network};
+use crate::pages::{PageId, applications, bluetooth, datetime, network};
 
 /// A page below a sidebar page.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,6 +20,10 @@ pub enum Route {
     Device { mac: String, name: String },
     /// One Wi-Fi network, by name.
     Network { ssid: String },
+    /// The time zone list.
+    TimeZone,
+    /// Setting the date and time by hand.
+    SetTime,
 }
 
 impl Route {
@@ -29,6 +33,8 @@ impl Route {
             Self::DefaultApps => "Default applications".to_string(),
             Self::Device { name, .. } => name.clone(),
             Self::Network { ssid } => ssid.clone(),
+            Self::TimeZone => "Time zone".to_string(),
+            Self::SetTime => "Set date and time".to_string(),
         }
     }
 
@@ -54,6 +60,8 @@ impl Route {
             Self::DefaultApps => applications::DefaultAppsPage.into(),
             Self::Device { mac, .. } => bluetooth::BluetoothDevicePage { mac: mac.clone() }.into(),
             Self::Network { ssid } => network::NetworkDetailsPage { ssid: ssid.clone() }.into(),
+            Self::TimeZone => datetime::TimeZonePage.into(),
+            Self::SetTime => datetime::SetTimePage.into(),
         }
     }
 }

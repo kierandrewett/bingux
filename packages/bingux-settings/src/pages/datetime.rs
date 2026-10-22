@@ -1,15 +1,18 @@
-//! Date and time: the live clock, NTP, the time zone, a manual clock setting,
-//! the clock format and whether seconds are shown. Backends: `timedatectl`,
-//! `gsettings` (clock format) and `bingux-config` (clock seconds).
+//! Date and time: the live clock, whether the clock sets itself, the time
+//! zone and the clock format. The time zone and the manual clock setting are
+//! subpages. Backends: `timedatectl`, `gsettings` (clock format) and
+//! `bingux-config` (clock seconds).
 
 use std::time::Duration;
 
 use freya::prelude::*;
 
 use crate::pages::bingux_config;
+use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Status, choice_row, page_column, row, skeleton, status, switch_row, text_row,
+    Group, Status, action_row, choice_list, choice_row, dropdown, page_column, primary_button, row,
+    skeleton, status, stepper, switch_row,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -21,15 +24,13 @@ struct Model {
     ntp: bool,
     clock_format: String,
     clock_seconds: Option<bool>,
-    /// `YYYY-MM-DD HH:MM:SS` in the local zone, used as the manual time draft.
+    /// `YYYY-MM-DD HH:MM:SS` in the local zone, where the manual time starts.
     local_time: String,
 }
 
 #[derive(Clone, Copy)]
 struct Ctx {
     model: State<Option<Result<Model, CommandError>>>,
-    zone_input: State<String>,
-    time_input: State<String>,
     error: State<Option<String>>,
 }
 
@@ -75,32 +76,28 @@ fn read_now() -> Result<String, String> {
 }
 
 fn set_timezone(zone: &str) -> CommandResult {
-    if zone.is_empty() {
-        return Err(CommandError(
-            "Enter a time zone such as Europe/London.".into(),
-        ));
-    }
-    let zones = system::run("timedatectl", &["list-timezones"], TIMEOUT)?;
-    if !zones.lines().any(|line| line == zone) {
-        return Err(CommandError(format!("Unknown time zone: {zone}.")));
-    }
     system::run("timedatectl", &["set-timezone", zone], TIMEOUT)
 }
 
 fn set_time(text: &str) -> CommandResult {
-    if text.is_empty() {
-        return Err(CommandError("Enter a time as YYYY-MM-DD HH:MM:SS.".into()));
-    }
     system::run("timedatectl", &["set-time", text], TIMEOUT)
+}
+
+/// `Europe/London` as "London, Europe"; `America/Argentina/Buenos_Aires` as
+/// "Buenos Aires, America / Argentina".
+fn zone_label(zone: &str) -> String {
+    let mut parts: Vec<&str> = zone.split('/').collect();
+    let city = parts.pop().unwrap_or(zone).replace('_', " ");
+    if parts.is_empty() {
+        city
+    } else {
+        format!("{city}, {}", parts.join(" / "))
+    }
 }
 
 /// Reloads the model in the background and refreshes the drafts from it.
 fn reload(mut ctx: Ctx) {
     background_then(load, move |result| {
-        if let Ok(model) = &result {
-            ctx.zone_input.set(model.timezone.clone());
-            ctx.time_input.set(model.local_time.clone());
-        }
         ctx.model.set(Some(result));
     });
 }
@@ -122,16 +119,10 @@ pub struct DateTimePage;
 impl Component for DateTimePage {
     fn render(&self) -> impl IntoElement {
         let model = system::cached("datetime");
-        let zone_input = use_state(String::new);
-        let time_input = use_state(String::new);
+        let navigator = use_navigator();
         let error = use_state::<Option<String>>(|| None);
         let now = use_state::<Option<Result<String, String>>>(|| None);
-        let ctx = Ctx {
-            model,
-            zone_input,
-            time_input,
-            error,
-        };
+        let ctx = Ctx { model, error };
 
         use_hook(move || {
             reload(ctx);
@@ -170,34 +161,31 @@ impl Component for DateTimePage {
             page = page.child(status(Status::Error(message)));
         }
 
-        let time_row = if ntp {
-            row("Set time manually")
-                .subtitle("Turn off Automatic time to set the clock by hand.")
-                .enabled(false)
-        } else {
-            text_row("Set time manually", time_input, move |text: String| {
-                let text = text.trim().to_string();
-                commit(ctx, move || set_time(&text));
+        let time_row = row("Set date and time")
+            .subtitle(if ntp {
+                "Turn off Set automatically to change the clock yourself."
+            } else {
+                ""
             })
-            .subtitle("Format: YYYY-MM-DD HH:MM:SS")
-        };
+            .enabled(!ntp)
+            .navigates()
+            .on_press(move |_| navigator.push(Route::SetTime));
+        let zone_row = row("Time zone")
+            .value(zone_label(&model_data.timezone))
+            .navigates()
+            .on_press(move |_| navigator.push(Route::TimeZone));
 
         page.child(
             Group::titled("Clock")
                 .row(row("Date and time").value(now_text))
-                .row(switch_row("Automatic time", ntp, move |next: bool| {
+                .row(switch_row("Set automatically", ntp, move |next: bool| {
                     let value = if next { "true" } else { "false" };
                     commit(ctx, move || {
                         system::run("timedatectl", &["set-ntp", value], TIMEOUT)
                     });
                 }))
-                .row(time_row),
-        )
-        .child(
-            Group::titled("Time zone").row(text_row("Zone", zone_input, move |text: String| {
-                let zone = text.trim().to_string();
-                commit(ctx, move || set_timezone(&zone));
-            })),
+                .row(time_row)
+                .row(zone_row),
         )
         .child(
             Group::titled("Format")
@@ -231,6 +219,172 @@ impl Component for DateTimePage {
                         },
                     ))
                 })),
+        )
+    }
+}
+
+/// The time zone subpage: every zone, narrowed by typing.
+#[derive(PartialEq)]
+pub struct TimeZonePage;
+
+impl Component for TimeZonePage {
+    fn render(&self) -> impl IntoElement {
+        let model: State<Option<Result<Model, CommandError>>> = system::cached("datetime");
+        let navigator = use_navigator();
+        let error = use_state::<Option<String>>(|| None);
+        let zones = use_state::<Option<Result<Vec<String>, CommandError>>>(|| None);
+        use_hook(move || {
+            background(zones, || {
+                system::run("timedatectl", &["list-timezones"], TIMEOUT)
+                    .map(|text| text.lines().map(str::to_string).collect())
+            })
+        });
+        let Some(Ok(list)) = zones.read().clone() else {
+            return match zones.read().clone() {
+                Some(Err(failure)) => page_column().child(status(Status::Error(failure.0))),
+                _ => page_column().child(skeleton()),
+            };
+        };
+        let current = match model.read().as_ref() {
+            Some(Ok(data)) => data.timezone.clone(),
+            _ => String::new(),
+        };
+        let options = list
+            .iter()
+            .map(|zone| (zone.clone(), zone_label(zone)))
+            .collect();
+        let mut page = page_column();
+        if let Some(message) = error.read().clone() {
+            page = page.child(status(Status::Error(message)));
+        }
+        page.child(
+            choice_list(options, current, move |zone: String| {
+                let mut error = error;
+                background_then(
+                    move || set_timezone(&zone),
+                    move |result| match result {
+                        Ok(_) => {
+                            reload(Ctx { model, error });
+                            navigator.pop();
+                        }
+                        Err(failure) => error.set(Some(failure.0)),
+                    },
+                );
+            })
+            .placeholder("Search for a city"),
+        )
+    }
+}
+
+const MONTHS: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+
+/// Days in `month` (1 to 12) of `year`.
+fn days_in_month(year: i64, month: i64) -> i64 {
+    match month {
+        2 if (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    }
+}
+
+/// The manual clock subpage: the date and time, set with steppers.
+#[derive(PartialEq)]
+pub struct SetTimePage;
+
+impl Component for SetTimePage {
+    fn render(&self) -> impl IntoElement {
+        let model: State<Option<Result<Model, CommandError>>> = system::cached("datetime");
+        let navigator = use_navigator();
+        let error = use_state::<Option<String>>(|| None);
+        let start = match model.read().as_ref() {
+            Some(Ok(data)) => data.local_time.clone(),
+            _ => String::new(),
+        };
+        // `YYYY-MM-DD HH:MM:SS`
+        let number = |from: usize, to: usize| -> i64 {
+            start
+                .get(from..to)
+                .and_then(|text| text.parse().ok())
+                .unwrap_or(0)
+        };
+        let mut year = use_state(|| number(0, 4));
+        let mut month = use_state(|| number(5, 7).max(1));
+        let mut day = use_state(|| number(8, 10).max(1));
+        let mut hour = use_state(|| number(11, 13));
+        let mut minute = use_state(|| number(14, 16));
+        if start.is_empty() {
+            return page_column().child(skeleton());
+        }
+        let last_day = days_in_month(year(), month());
+        let month_options = MONTHS
+            .iter()
+            .enumerate()
+            .map(|(index, name)| ((index + 1).to_string(), name.to_string()))
+            .collect();
+
+        let apply = move |_| {
+            let text = format!(
+                "{:04}-{:02}-{:02} {:02}:{:02}:00",
+                year(),
+                month(),
+                day().min(days_in_month(year(), month())),
+                hour(),
+                minute()
+            );
+            let mut error = error;
+            background_then(
+                move || set_time(&text),
+                move |result| match result {
+                    Ok(_) => {
+                        reload(Ctx { model, error });
+                        navigator.pop();
+                    }
+                    Err(failure) => error.set(Some(failure.0)),
+                },
+            );
+        };
+
+        let mut page = page_column();
+        if let Some(message) = error.read().clone() {
+            page = page.child(status(Status::Error(message)));
+        }
+        page.child(
+            Group::new(None::<String>)
+                .row(row("Day").trailing(
+                    stepper(day().min(last_day), move |next| day.set(next)).range(1, last_day),
+                ))
+                .row(
+                    row("Month").trailing(
+                        dropdown(month_options, month().to_string(), move |key: String| {
+                            month.set(key.parse().unwrap_or(1))
+                        })
+                        .min_width(bingux_ui::scale::FIELD_WIDTH),
+                    ),
+                )
+                .row(
+                    row("Year")
+                        .trailing(stepper(year(), move |next| year.set(next)).range(2000, 2099)),
+                )
+                .row(row("Hour").trailing(stepper(hour(), move |next| hour.set(next)).range(0, 23)))
+                .row(
+                    row("Minute")
+                        .trailing(stepper(minute(), move |next| minute.set(next)).range(0, 59)),
+                )
+                .row(action_row(None, primary_button("Set", apply).compact())),
         )
     }
 }

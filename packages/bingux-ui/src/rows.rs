@@ -535,7 +535,7 @@ impl Component for ChoiceList {
         let tokens = use_tokens();
         let query = use_state(String::new);
         let needle = query.read().trim().to_lowercase();
-        let matching: Vec<&(String, String)> = self
+        let mut matching: Vec<&(String, String)> = self
             .options
             .iter()
             .filter(|(key, label)| {
@@ -544,6 +544,14 @@ impl Component for ChoiceList {
                     || key.to_lowercase().contains(&needle)
             })
             .collect();
+        // Before anything is typed, the current choice comes first, so it is
+        // in view whichever part of a long list it belongs to.
+        if needle.is_empty()
+            && let Some(at) = matching.iter().position(|(key, _)| *key == self.selected)
+        {
+            let chosen = matching.remove(at);
+            matching.insert(0, chosen);
+        }
         let hidden = matching.len().saturating_sub(CHOICE_LIST_LIMIT);
         let rows = matching.iter().take(CHOICE_LIST_LIMIT).map(|(key, label)| {
             let on_select = self.on_select.clone();
