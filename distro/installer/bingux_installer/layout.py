@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from .protocol import InstallerError
@@ -178,3 +179,62 @@ def modules_line(modules: tuple[str, ...]) -> str:
 def zram_conf() -> str:
     """zram-generator config: one compressed RAM swap device, half of RAM, capped at 4 GiB."""
     return "[zram0]\nzram-size = min(ram / 2, 4096)\ncompression-algorithm = zstd\n"
+
+
+@dataclass(frozen=True)
+class GptPartition:
+    number: int
+    start: int
+    end: int
+    code: str
+    name: str
+
+
+@dataclass(frozen=True)
+class GptTable:
+    """A GPT read from `sgdisk -p`. Sectors are inclusive; the usable range excludes the headers."""
+
+    sector_size: int
+    first_usable: int
+    last_usable: int
+    partitions: tuple[GptPartition, ...]
+
+    def free_regions(self) -> list[tuple[int, int]]:
+        """Unallocated sector ranges (start, end inclusive), in disk order."""
+        regions: list[tuple[int, int]] = []
+        cursor = self.first_usable
+        for part in sorted(self.partitions, key=lambda p: p.start):
+            if part.start > cursor:
+                regions.append((cursor, part.start - 1))
+            cursor = max(cursor, part.end + 1)
+        if cursor <= self.last_usable:
+            regions.append((cursor, self.last_usable))
+        return regions
+
+    def free_bytes(self) -> int:
+        return sum(end - start + 1 for start, end in self.free_regions()) * self.sector_size
+
+
+_SECTOR_SIZE_RE = re.compile(r"Sector size \(logical[^)]*\):\s*(\d+)")
+_USABLE_RE = re.compile(r"First usable sector is (\d+), last usable sector is (\d+)")
+_PART_ROW_RE = re.compile(r"^\s*(\d+)\s+(\d+)\s+(\d+)\s+[\d.]+\s+\S+\s+([0-9A-Fa-f]{4})\s*(.*?)\s*$")
+
+
+def parse_sgdisk_print(text: str) -> GptTable:
+    """Parse `sgdisk -p DISK` output. Raises ValueError when the text is not a GPT listing."""
+    sector = _SECTOR_SIZE_RE.search(text)
+    usable = _USABLE_RE.search(text)
+    if sector is None or usable is None:
+        raise ValueError("not a GPT listing")
+    parts = []
+    for line in text.splitlines():
+        row = _PART_ROW_RE.match(line)
+        if row is not None:
+            number, start, end, code, name = row.groups()
+            parts.append(GptPartition(int(number), int(start), int(end), code.upper(), name))
+    return GptTable(
+        sector_size=int(sector.group(1)),
+        first_usable=int(usable.group(1)),
+        last_usable=int(usable.group(2)),
+        partitions=tuple(parts),
+    )

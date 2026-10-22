@@ -160,3 +160,36 @@ def test_zram_conf_is_half_ram_capped_at_4gib() -> None:
 def test_modules_line_renders_mkinitcpio_modules() -> None:
     assert layout.modules_line(()) == "MODULES=()"
     assert layout.modules_line(("xfs",)) == "MODULES=(xfs)"
+
+
+SGDISK_PRINT = """Disk /dev/vda: 20971520 sectors, 10.0 GiB
+Sector size (logical/physical): 512/512 bytes
+Disk identifier (GUID): 0F0F
+Partition table holds up to 128 entries
+Main partition table begins at sector 2 and ends at sector 33
+First usable sector is 34, last usable sector is 20971486
+Partitions will be aligned on 2048-sector boundaries
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            2048         1050623   512.0 MiB   EF00  EFI System
+   2         1050624        11538431   5.0 GiB     8300  Linux root
+"""
+
+
+def test_parse_sgdisk_print_reads_partitions_and_usable_range() -> None:
+    table = layout.parse_sgdisk_print(SGDISK_PRINT)
+    assert table.sector_size == 512
+    assert table.first_usable == 34 and table.last_usable == 20971486
+    assert [(p.number, p.start, p.end, p.code) for p in table.partitions] == [
+        (1, 2048, 1050623, "EF00"), (2, 1050624, 11538431, "8300")]
+    assert table.partitions[0].name == "EFI System"
+
+
+def test_free_regions_lie_between_partitions_and_after_the_last() -> None:
+    table = layout.parse_sgdisk_print(SGDISK_PRINT)
+    assert table.free_regions() == [(34, 2047), (11538432, 20971486)]
+    assert table.free_bytes() == (2047 - 34 + 1 + 20971486 - 11538432 + 1) * 512
+
+
+def test_parse_sgdisk_print_rejects_non_gpt_text() -> None:
+    with pytest.raises(ValueError):
+        layout.parse_sgdisk_print("Error: not a GPT\n")

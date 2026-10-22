@@ -7,6 +7,7 @@ so the two outcomes cannot interleave.
 
 from __future__ import annotations
 
+import copy
 import os
 import stat
 import threading
@@ -102,6 +103,17 @@ def version_data() -> dict[str, Any]:
     return {"installer_version": __version__, "protocol": PROTOCOL_VERSION}
 
 
+# What this build carries out end to end (README "Status"). The UI offers a choice only
+# when it is listed here, so an entry is added only with its install implemented and tested.
+CAPABILITIES: dict[str, Any] = {
+    "storage_modes": ["erase"],
+    "filesystems": ["ext4", "btrfs", "xfs"],
+    "swap": ["none", "zram", "file", "partition"],
+    "encryption": {"uefi": True, "bios": True},
+    "dual_boot": False,
+}
+
+
 def run_probe(env: Env) -> dict[str, Any]:
     runner = env.runner
     if env.state.running:
@@ -116,6 +128,7 @@ def run_probe(env: Env) -> dict[str, Any]:
         "live_disk": probe.find_live_disk(doc, source),
         "disks": probe.disk_report(disks),
         "tools_missing": probe.missing_tools(firmware=firmware),
+        "capabilities": copy.deepcopy(CAPABILITIES),
         "installer_version": __version__,
     }
 
@@ -226,7 +239,7 @@ def _refuse_unimplemented(plan: Plan) -> None:
     Each one would otherwise be accepted and silently ignored, or would erase a disk the
     user asked to keep. Removing an entry here is the only way it becomes reachable.
     """
-    if plan.storage_mode != "erase":
+    if plan.storage_mode not in CAPABILITIES["storage_modes"]:
         raise InstallerError("unsupported", f"storage mode {plan.storage_mode} is not implemented yet")
 
 
