@@ -101,6 +101,13 @@ QEMU runs of the tests below):
   them in place after every transaction that touches `filesystem` or
   `bingux-os`; `ID_LIKE=arch` keeps Arch tooling working. The package adds the
   `plymouth` mkinitcpio hook after `kms`.
+- Boot: the UEFI menu (systemd-boot, `efiboot/loader/loader.conf`) and the BIOS
+  menu (syslinux, `syslinux/archiso_sys.cfg`) wait 5 s; both files replace
+  releng's 15 s ones. Every live entry passes `systemd.condition_needs_update=0`:
+  the overlay root never has `/etc/.updated`, so without it `ldconfig.service`
+  rebuilt the linker cache (about 20 s) before greetd on every boot. The image
+  already holds that cache, the hwdb and the journal catalogue from pacman's
+  hooks. `tests/distro-startup.py --iso ISO` checks what an image boots with.
 - Still Arch: the package names, the pacman configuration, the Arch mirror list
   the base system comes from, and the `arch` directory inside the ISO (its
   `install_dir`, which the tooling expects).

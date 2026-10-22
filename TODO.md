@@ -62,11 +62,40 @@ work belongs in Git history and does not stay here as a second changelog.
       sat at an empty field until a second typing. `tests/distro-boot.py` now waits
       for the greeter clock, and retypes once if the greeter is still up after a
       minute. Not re-run.
-- [ ] Black greeter: run 4 (2026.10.21 ISO) never showed the greeter clock, black
-      from 167 s to 737 s. It recurred on the 2e59048 ISO: fin2 and fin3 never
-      showed the login card (13 checks failed each; no `first greeter frame` in
-      the timeline). fin1 and boots 2-3 passed. Cause open; `/tmp/h3/repro.py`
-      not yet run.
+- [x] Black installer kiosk (c0c2c3a ISO, 4 of 4 boots, `MUTTER_DEBUG=kms` log in
+      one): `distro/installer/gnoblin/installer.lua:12` called `os.getenv`, and
+      Gnoblin's Lua has no `os` library ("attempt to index a nil value (global
+      'os')"). Gnoblin then runs its built-in defaults: black background, no
+      `bingux-installer-ui`, nm-applet and the other XDG autostart programs. Fixed:
+      `~/.config/gnoblin/conf.d` path, and the greeter's `bingux-statusd` autostart is
+      off (the live account's user manager already runs one; the second exits on the
+      busy socket and Gnoblin shows "bingux-statusd exited with status 1"). Checked
+      in the booted ISO by replacing the file and restarting the compositor: the
+      installer card paints, with no error panel. Test:
+      `tests/installer-gnoblin-config.py` (Gnoblin's own loader).
+- [ ] Gnoblin (owner): a fallback configuration leaves the screen black. With the
+      broken config the compositor paints two frames and stops: last
+      `BACKEND: Unclipped stage paint` at 02:15:34.468, page flip presented at
+      02:15:34.541, then no stage paint for minutes; virtio-gpu fences 15/15, plane 35
+      keeps FB 47 (allocated by gnoblin); pointer motion and a new client do not
+      repaint. `chvt 2; chvt 1` repaints at once and shows the "Configuration failed
+      to load" panel. Same on a compositor restart with the broken config. The
+      recovery panel must queue a stage redraw when it appears.
+- [ ] Black greeter on the 2026.10.21 and 2e59048 ISOs (run 4, fin2, fin3): in every
+      black boot `pgrep -c -f bingux-greeter` was 3 or 2 (the Gnoblin processes,
+      whose `--config` path contains `bingux-greeter`); in every good boot it was 4
+      (the same plus the greeter client). So the greeter client never started: the
+      compositor ran a fallback configuration, then hit the redraw bug above. Likely
+      trigger (not proven): Gnoblin kills the first Lua worker when it has not sent a
+      configuration within 3 s (`WORKER_CONFIG_TIMEOUT_MS`) and retries with embedded
+      defaults; boots are slow and loaded at that moment. Those runs kept no Gnoblin
+      log; next black boot, read `~/.local/state/gnoblin/session-last.log` and look
+      for "did not produce a startup configuration in time".
+- [ ] Gnoblin (owner): first frame waits for `activate_session()`. The guardian spawns
+      the session supervisor (which produces the compositor's configuration) only
+      after the dozen `systemctl --user` and D-Bus commands; the compositor blocks on
+      that configuration. Guardian to "Running Mutter": 7.3, 6.6, 6.0 and 5.5 s in four
+      boots. Then 4.9 to 6.8 s more to "Added device" (cold squashfs reads).
 - [x] Capture: frames come from the VNC framebuffer only (QMP screendump removed,
       `tests/distro_capture.py`, commit 862e055).
 - [x] Session, greeter and lock detection (`tests/distro_capture.py`): greeter by
@@ -76,12 +105,29 @@ work belongs in Git history and does not stay here as a second changelog.
 - [ ] Verify the GL renderer (`virtio-vga-gl`) in QEMU. Not verified: no run records
       which display path was taken, and the serial log and reports contain no
       renderer string. Add a probe that reads the compositor's GL renderer.
-- [ ] Run 3's boot took 57 s between the end of the GRUB menu and the kernel frame.
-      Not explained: the serial log has no timestamps. The menu was GRUB's 15 s
-      timeout; `distro/profile/grub/grub.cfg` and `loopback.cfg` now use 5 s, which
-      removes 10 s from every boot (the menu always waits its full timeout). Target:
-      power-on to greeter is 10 s shorter than the same ISO before this change;
-      measure on the next ISO, three runs, timeline medians.
+- [x] Boot menu timeout: the UEFI ISO boots through systemd-boot (`loader.conf`,
+      15 s from releng) and BIOS through syslinux (`TIMEOUT 150`); GRUB only reads
+      `loopback.cfg`, so the earlier GRUB change did not reach a normal boot. Menu on
+      screen 15.6 s in four boots. Now `efiboot/loader/loader.conf` and
+      `syslinux/archiso_sys.cfg` wait 5 s, and syslinux's DEFAULT names `bingux`
+      (releng's `arch` label does not exist). Expected: 10 s less per boot.
+- [x] `ldconfig.service` on every live boot: the overlay root has no
+      `/etc/.updated`, so `ConditionNeedsUpdate` held and the linker cache was rebuilt
+      before `sysinit.target`: 20.7, 20.9, 17.1 and 20.4 s on the path to greetd.
+      Every live entry now passes `systemd.condition_needs_update=0` (the image
+      already has the cache, hwdb, catalogue and accounts from pacman's hooks).
+      Expected: about 20 s less. `tests/distro-startup.py [--iso ISO]` checks both.
+- [ ] Start-up costs left (c0c2c3a, host seconds since power-on, four boots): OVMF
+      6-7 s; loader reads kernel and the 245 MB initramfs (105 MB of it Nvidia GSP
+      firmware from the `kms` hook) in 4-12 s; kernel and initramfs 3.6-6.3 s;
+      `bingux-os-firstboot` 1.5-2.1 s before greetd; Plymouth quits at 56.6-73.6 s and
+      the console shows until the first compositor frame at 69.6-89.3 s (Gnoblin, see
+      above); first installer card 3.8 s after the wallpaper on a cold QML cache,
+      1.2-1.5 s warm (compositor restarts). `pacman-init.service` (9.6-11.7 s of key
+      generation) runs during the compositor start.
+- [ ] The installer's first frame is the bright, unblurred gradient for about 0.1 s
+      (frame mean 53.7, then 37.9) before the dimmed background; seen on every
+      installer start.
 - [ ] Greeter user manager (fix 4): `bingux.target` pulled bingux-searchd,
       bingux-statusd, xdg-desktop-portal-bingux and bingux-greeter-export into the
       `greeter` account's user manager. Those five units now carry
@@ -97,10 +143,11 @@ work belongs in Git history and does not stay here as a second changelog.
 - [ ] QML precompile for the greeter and installer trees: not done. Quickshell loads
       loose `.qml` and this repo has no `qmlcachegen` step. Proposal: measure
       first; a cache step only if `tests/distro-boot.py` shows QML load as the cost.
-- [ ] Plymouth to greeter (fix 5): `distro/packages/bingux-os` now ships
-      `greetd.service.d/plymouth.conf` (`After=plymouth-quit-wait.service`). Target:
-      no text flash between splash and greeter in the ISO frame check. Not verified
-      here: needs a VM frame capture.
+- [ ] Plymouth to greeter (fix 5): the `greetd.service.d/plymouth.conf` drop-in
+      changes nothing on Arch: greetd's own unit already has
+      `After=systemd-user-sessions.service plymouth-quit-wait.service` (checked with
+      `systemctl show greetd -p After` in the VM). The splash quits before greetd
+      starts, so the text console shows for about 13-16 s until Gnoblin's first frame.
 - [ ] Re-run `tests/distro-boot.py` on the new ISO with the fixed sign-in wait.
 - [ ] Re-run `tests/distro-install.py` on an ISO that contains `bingux-installer`;
       the 2026.10.21 image predates the package and the test cannot pass on it.
