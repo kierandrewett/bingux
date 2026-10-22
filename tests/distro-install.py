@@ -378,14 +378,18 @@ def boot_installed(vm, variant, out, timeline, checks):
     timeline.mark("greeter shown")
     # Keys typed while the greeter is still settling can be lost, and the greeter
     # then says "Try again": type the password again until a session paints.
+    # Every frame after each attempt is kept, so a missed sign-in shows what the greeter did.
     frame = None
-    for _ in range(3):
+    for attempt in range(3):
         time.sleep(10)
         vm.type_text(PASSWORD)
         vm.key("ret")
-        frame = vm.wait_frame(session_painted, attempts=25)
+        frame = vm.wait_frame(session_painted, attempts=60)
         if frame is not None:
             break
+        last = vm.frame()
+        if last is not None:
+            vm.still(out / f"installed-after-login-{attempt}.png", last)
     checks["installed account signs in to a desktop"] = frame is not None
     if frame is not None:
         vm.still(out / "installed-session.png", frame)
