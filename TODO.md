@@ -27,7 +27,7 @@ work belongs in Git history and does not stay here as a second changelog.
 - [ ] Lock on idle timeout and on logind `Lock` (lid close, suspend). Both
       reach Gnoblin as the same lock request; only the idle policy is missing.
 - [ ] Adopt `StatusBar` in the desktop top bar, greeter, lock and kiosk; the component exists and `tests/status-bar-parity.py` matches the desktop top bar.
-- [ ] Let `SessionBar` show the user's own extensions once an extension
+- [ ] Let the locked `StatusBar` show the user's own extensions once an extension
       capability contract exists; today `contexts` is recorded only.
 - [ ] Verify the greeter on real hardware: fingerprint hint, multi-monitor,
       the exit into a fresh session.

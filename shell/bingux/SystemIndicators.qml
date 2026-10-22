@@ -76,9 +76,11 @@ Item {
             dnd: "doNotDisturb",
             power: "power"
         };
-        return rows.filter(row => SessionServices.permits(capabilities[row.key] || row.key));
+        return rows.map(row => Object.assign({}, row, {
+            available: SessionServices.permits(capabilities[row.key] || row.key)
+        }));
     }
-    readonly property string extraStatusDescription: extraIndicators.filter(indicator => indicator.active).map(indicator => indicator.label).join("\n")
+    readonly property string extraStatusDescription: extraIndicators.filter(indicator => indicator.active && indicator.available).map(indicator => indicator.label).join("\n")
     readonly property var audioSink: Pipewire.defaultAudioSink
     readonly property var audioSource: Pipewire.defaultAudioSource
     readonly property bool microphoneMuted: !!audioSource && audioSource.ready && !!audioSource.audio && audioSource.audio.muted
@@ -286,9 +288,10 @@ Item {
         StatusIndicator {
             objectName: "controlStatus_bluetooth"
             slotSize: root.controlSize
-            shown: root.bluetoothAdapter !== null && root.bluetoothAdapter.enabled && SessionServices.permits("bluetooth")
+            shown: root.bluetoothAdapter !== null && root.bluetoothAdapter.enabled
+            available: SessionServices.permits("bluetooth")
             iconName: "bluetooth-active-symbolic"
-            label: root.connectedBluetoothDevices > 0 ? "Bluetooth, " + root.connectedBluetoothDevices + " connected" : "Bluetooth on"
+            label: !available ? "Not available in this session" : root.connectedBluetoothDevices > 0 ? "Bluetooth, " + root.connectedBluetoothDevices + " connected" : "Bluetooth on"
         }
         Repeater {
             // Stable keys retain exiting icons and do not replay other icons' animations.
@@ -299,8 +302,9 @@ Item {
                 objectName: "controlStatus_" + modelData
                 slotSize: root.controlSize
                 shown: status !== null && status.active
+                available: status ? status.available : true
                 iconName: status ? status.icon : ""
-                label: status ? status.label : ""
+                label: status ? (status.available ? status.label : "Not available in this session") : ""
             }
         }
     }

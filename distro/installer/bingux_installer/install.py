@@ -143,7 +143,12 @@ def _teardown(env: Env, mounts: _Mounts, *, strict: bool) -> None:
         runner.run(["sync"], check=False)
         result = runner.run(["umount", "-R", str(env.target)], check=False)
         if result.returncode != 0 and strict:
-            raise InstallerError("storage_failed", f"could not unmount {env.target}")
+            left = runner.run(["findmnt", "-R", "-n", "-o", "TARGET", str(env.target)], check=False)
+            detail = (result.stderr or "").strip()[-300:]
+            raise InstallerError(
+                "storage_failed",
+                f"could not unmount {env.target}: {detail}; still mounted: {left.stdout.strip()}",
+            )
         mounts.target = False
     if mounts.opened:
         result = runner.run(["cryptsetup", "close", layout.LUKS_NAME], check=False)
@@ -220,6 +225,7 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
         phase("copy", 0, "copying the live system")
         _guard("payload_failed", payload.copy_payload, runner, env.source, env.target,
                lambda pct: phase("copy", pct, f"copying the live system ({pct}%)"))
+        _guard("payload_failed", payload.copy_kernel, env.target)
         payload.unmount_source(runner, env.source)
         mounts.source = False
         _guard("payload_failed", payload.mount_chroot_binds, runner, env.target)

@@ -9,9 +9,8 @@ show on the screen.
 Sockets under the VM's work directory:
 
 - monitor.sock: HMP, for key presses.
-- qmp.sock: a second control socket, used only by the capture thread of
-  distro_capture.Recorder (10 fps screendumps).
-- vnc.sock: VNC, used by the same recorder for full-rate scanout updates.
+- vnc.sock: VNC, the only frame source for distro_capture.Recorder. QMP
+  screendump is not used: it fails with "no surface" under virtio-vga-gl.
 - serial.sock: the serial console, when `serial=True`.
 
 Serial console without `console=ttyS0`: the live image's serial-getty autologin
@@ -108,8 +107,6 @@ class Vm:
             *display_args(),
             "-vnc",
             f"unix:{self.work / 'vnc.sock'}",
-            "-qmp",
-            f"unix:{self.work / 'qmp.sock'},server,nowait",
             "-monitor",
             f"unix:{self.work / 'monitor.sock'},server,nowait",
             "-netdev",
@@ -148,7 +145,7 @@ class Vm:
         self._monitor = self._connect("monitor.sock")
         self._monitor.settimeout(2)
         self._monitor_read()
-        self.recorder = Recorder(self.record_dir, self.work / "frames", self.work / "qmp.sock", self.work / "vnc.sock")
+        self.recorder = Recorder(self.record_dir, self.work / "vnc.sock")
         self.recorder.start(self.t0)
         self.recorder.mark("power on")
 

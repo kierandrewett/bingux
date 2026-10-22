@@ -1,15 +1,22 @@
 """Recording and frame checks for the distro VM tests.
 
-Two views of the guest screen come from QEMU, both on sockets the Vm opens:
+The recorder reads the guest screen from the VNC server (`-vnc unix:`) and
+from nothing else. QMP screendump is not used: under virtio-vga-gl with
+egl-headless the scanout lives in the GPU, QEMU has no CPU surface to dump,
+and screendump fails with "no surface" on nearly every call. VNC reads the
+scanout through GL, so it works in that mode.
 
-- QMP `screendump` on a second QMP socket, sampled by a capture thread on a
-  fixed 10 fps clock. Slot k is due at t0 + k / 10. Each dump is read, streamed
-  into ffmpeg as raw RGB and deleted, so frames never pile up in /tmp. A slot
-  that a slow dump covers late gets the same frame, and the count is reported.
-- The VNC server (`-vnc unix:`) sends a framebuffer update whenever the scanout
-  changes, at QEMU's display refresh (about 30 Hz). Each update that changes the
-  framebuffer is logged to frame-events.jsonl with a black/size classification,
-  so a one-frame flash between 10 fps samples is still visible.
+Two views of the same framebuffer:
+
+- 10 fps slots: slot k is due at t0 + k / 10. At each slot the framebuffer is
+  copied, written once to the video (ffmpeg, raw RGB) and logged to
+  slots.jsonl with its age and class. A slot is `real` when QEMU sent a
+  framebuffer message within MAX_FRAME_AGE. A quiet connection is refreshed by
+  a full-frame request every HEARTBEAT seconds, so a static screen stays
+  provably current.
+- Full-rate events: every framebuffer message that changes pixels is logged to
+  frame-events.jsonl with its class, and frame expectations run on it, so a
+  one-frame flash between slots is still seen.
 
 Timeline events come from frame predicates: a test registers a name and a
 function on a frame (`Recorder.expect`), or marks a point itself
@@ -36,62 +43,12 @@ import numpy as np
 FPS = 10
 # ffmpeg here has no libx264; libopenh264 is the H.264 encoder that is present.
 ENCODER = ["-c:v", "libopenh264", "-b:v", "6M", "-pix_fmt", "yuv420p"]
-
-
-# ---- frame sources -------------------------------------------------------------
-
-
-def read_ppm(path):
-    """Decode a binary PPM (P6) file into an H x W x 3 uint8 array."""
-    data = Path(path).read_bytes()
-    fields, i = [], 2
-    while len(fields) < 3:
-        while data[i : i + 1].isspace():
-            i += 1
-        j = i
-        while not data[j : j + 1].isspace():
-            j += 1
-        fields.append(int(data[i:j]))
-        i = j
-    width, height, _ = fields
-    i += 1
-    return np.frombuffer(data, np.uint8, count=width * height * 3, offset=i).reshape(height, width, 3)
-
-
-class Qmp:
-    """A QMP connection; events are skipped and only the command's reply is kept."""
-
-    def __init__(self, path, timeout=5):
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.sock.settimeout(timeout)
-        self.sock.connect(str(path))
-        self.file = self.sock.makefile("rwb")
-        self.file.readline()
-        self.command("qmp_capabilities")
-
-    def command(self, name, **arguments):
-        message = {"execute": name}
-        if arguments:
-            message["arguments"] = arguments
-        self.file.write(json.dumps(message).encode() + b"\n")
-        self.file.flush()
-        while True:
-            line = self.file.readline()
-            if not line:
-                raise RuntimeError("QMP connection closed")
-            reply = json.loads(line)
-            if "event" in reply:
-                continue
-            if "error" in reply:
-                raise RuntimeError(f"QMP {name}: {reply['error']}")
-            return reply.get("return")
-
-    def screendump(self, filename):
-        self.command("screendump", filename=str(filename), format="ppm")
-
-    def close(self):
-        self.file.close()
-        self.sock.close()
+# Capture timing (seconds). A slot is `real` when the framebuffer is at most
+# MAX_FRAME_AGE old: a quiet screen is re-requested every HEARTBEAT, so a
+# still picture stays current. A slot is `late` when it is taken LATE after due.
+HEARTBEAT = 0.2
+MAX_FRAME_AGE = 0.5
+LATE = 0.05
 
 
 # ---- frame checks --------------------------------------------------------------
@@ -130,9 +87,13 @@ def region_mean_luma(frame, geometry):
 
 
 def is_black(frame):
-    """A frame with no light in it: a black scanout, or a blank fade. Looks at every fourth pixel."""
+    """A frame with no light in it: a black scanout, or a blank fade with a stray glyph.
+
+    Measured on the VT-switch black frame (mean 0.2, 0.1% of pixels above luma 16)
+    versus a content frame (mean 25, 72% above 16). Looks at every fourth pixel.
+    """
     sample = luma(frame[::4, ::4])
-    return float(sample.mean()) < 6.0 and float(sample.std()) < 4.0
+    return float(sample.mean()) < 6.0 and float((sample > 16).mean()) < 0.01
 
 
 def classify(frame, reference_size=None):
@@ -189,35 +150,50 @@ def session_painted(frame):
 
 
 class Recorder:
-    """Records one VM run into `out_dir`: flow.mp4, timeline.json, frame-events.jsonl.
+    """Records one VM run into `out_dir`: flow.mp4, timeline.json, slots.jsonl and frame-events.jsonl.
 
-    Start it right after QEMU starts, with the QMP and VNC socket paths.
+    The only frame source is the VNC framebuffer on `vnc_path`. Start it right
+    after QEMU starts, with the VNC socket path.
     """
 
-    def __init__(self, out_dir, scratch_dir, qmp_path, vnc_path, reference_size=(1280, 800)):
+    def __init__(self, out_dir, vnc_path, reference_size=(1280, 800)):
         self.out = Path(out_dir)
         self.out.mkdir(parents=True, exist_ok=True)
-        self.scratch = Path(scratch_dir)
-        self.scratch.mkdir(parents=True, exist_ok=True)
-        self.qmp_path, self.vnc_path = Path(qmp_path), Path(vnc_path)
+        self.vnc_path = Path(vnc_path)
         self.reference_size = reference_size
         self.t0 = None
         self.events = {}
         self.sources = {}
         self.expectations = {}
-        self.stats = {"dumps": 0, "dump_errors": 0, "scanout_fallbacks": 0, "slots": 0, "duplicate_slots": 0, "size_changes": 0, "errors": []}
-        self.frame_times = []
-        self.dump_times = []
+        self.stats = {
+            "slots": 0,
+            "real_slots": 0,
+            "stale_slots": 0,
+            "fresh_slots": 0,
+            "held_slots": 0,
+            "black_slots": 0,
+            "size_change_slots": 0,
+            "late_slots": 0,
+            "write_ms_max": 0.0,
+            "updates": 0,
+            "changed_updates": 0,
+            "refresh_requests": 0,
+            "errors": [],
+        }
+        self.slot_times = []
         self.last_slot_time = None
-        self.latest = None
-        self.scanout_frame = None
-        self.latest_time = None
-        self.scanout_events = []
+        self.max_age = 0.0
+        self.max_late = 0.0
+        self.framebuffer = None  # H x W x 4 (B, G, R, unused), written by the VNC thread under _lock
+        self.update_time = None  # monotonic time of the last framebuffer message
+        self.change_count = 0  # framebuffer messages that changed pixels
+        self.seen_changes = 0  # change_count when the previous slot was written
         self._lock = threading.Condition()
         self._stop = threading.Event()
         self._ffmpeg = None
         self._threads = []
-        self._frame_events_file = None
+        self._slots_file = None
+        self._events_file = None
 
     # Lifecycle.
 
@@ -234,10 +210,11 @@ class Recorder:
             stdin=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        self._frame_events_file = (self.out / "frame-events.jsonl").open("w")
+        self._slots_file = (self.out / "slots.jsonl").open("w")
+        self._events_file = (self.out / "frame-events.jsonl").open("w")
         self._threads = [
-            threading.Thread(target=self._sample_loop, name="capture-10fps", daemon=True),
-            threading.Thread(target=self._scanout_loop, name="capture-scanout", daemon=True),
+            threading.Thread(target=self._slot_loop, name="capture-10fps", daemon=True),
+            threading.Thread(target=self._vnc_loop, name="capture-vnc", daemon=True),
         ]
         for thread in self._threads:
             thread.start()
@@ -256,8 +233,9 @@ class Recorder:
             self._ffmpeg.wait(timeout=120)
             if self._ffmpeg.returncode != 0 or err.strip():
                 self.stats["errors"].append("ffmpeg: " + err.strip()[-400:])
-        if self._frame_events_file is not None:
-            self._frame_events_file.close()
+        for handle in (self._slots_file, self._events_file):
+            if handle is not None:
+                handle.close()
         self.stats.update(self._rate_stats())
         timeline = {
             "fps": FPS,
@@ -272,10 +250,10 @@ class Recorder:
         return self.stats
 
     def _rate_stats(self):
-        """Achieved rate and jitter. Slot k is due at t0 + k / FPS, so a steady run has gaps near 100 ms."""
-        if self.t0 is None or len(self.frame_times) < 2:
+        """Achieved rate and slot-to-slot gaps. Slot k is due at t0 + k / FPS, so a steady run has gaps near 100 ms."""
+        if self.t0 is None or len(self.slot_times) < 2:
             return {}
-        gaps = np.diff(np.array(self.frame_times))
+        gaps = np.diff(np.array(self.slot_times))
         span = self.last_slot_time - self.t0 + 1 / FPS
         return {
             "achieved_fps": round(self.stats["slots"] / span, 2),
@@ -283,7 +261,8 @@ class Recorder:
             "video_seconds": round(self.stats["slots"] / FPS, 2),
             "gap_ms_median": round(float(np.median(gaps)) * 1000, 1),
             "gap_ms_max": round(float(gaps.max()) * 1000, 1),
-            "dump_ms_median": round(float(np.median(self.dump_times)) * 1000, 1),
+            "age_ms_max": round(self.max_age * 1000, 1),
+            "late_ms_max": round(self.max_late * 1000, 1),
         }
 
     # Timeline.
@@ -315,107 +294,160 @@ class Recorder:
         return self.events.get(name)
 
     def frame(self):
-        """The most recent sample (numpy RGB), or None before the first one."""
+        """The newest framebuffer (numpy RGB), or None before the first picture."""
         with self._lock:
-            return self.latest
+            if self.update_time is None:
+                return None
+            return self.framebuffer[..., [2, 1, 0]]
 
-    # Capture loops.
+    # Slots: one real framebuffer per 10 fps slot.
 
-    def _sample_loop(self):
-        scratch = self.scratch / "current.ppm"
-        qmp = None
+    def _slot_loop(self):
         slot = 0
+        while not self._stop.is_set():
+            due = self.t0 + slot / FPS
+            wait = due - time.monotonic()
+            if wait > 0 and self._stop.wait(wait):
+                break
+            taken = time.monotonic()
+            with self._lock:
+                rgb = None if self.update_time is None else self.framebuffer[..., [2, 1, 0]]
+                updated = self.update_time
+                changes = self.change_count
+            self._emit_slot(slot, due, taken, rgb, updated, changes)
+            slot += 1
+
+    def _emit_slot(self, slot, due, taken, rgb, updated, changes):
+        """Write one slot: one copy of the framebuffer, with its age and whether it changed since the last slot."""
+        width, height = self.reference_size
+        late = taken - due
+        self.max_late = max(self.max_late, late)
+        if late > LATE:
+            self.stats["late_slots"] += 1
+        if rgb is None:
+            picture = np.zeros((height, width, 3), np.uint8)
+            age, real, fresh, label = None, False, False, "no-picture"
+        else:
+            picture = rgb
+            age = taken - updated
+            self.max_age = max(self.max_age, age)
+            real = age <= MAX_FRAME_AGE
+            fresh = changes != self.seen_changes
+            self.seen_changes = changes
+            label = classify(rgb, self.reference_size)
+        started = time.monotonic()
+        self._ffmpeg.stdin.write(fit(picture, width, height).tobytes())
+        self.stats["write_ms_max"] = max(self.stats["write_ms_max"], round((time.monotonic() - started) * 1000, 1))
+        self.slot_times.append(taken)
+        self.last_slot_time = due
+        stats = self.stats
+        stats["slots"] += 1
+        stats["real_slots" if real else "stale_slots"] += 1
+        if fresh:
+            stats["fresh_slots"] += 1
+        elif real:
+            stats["held_slots"] += 1
+        if label == "black":
+            stats["black_slots"] += 1
+        if label in ("size-change", "placeholder"):
+            stats["size_change_slots"] += 1
+        record = {
+            "slot": slot,
+            "due": round(due - self.t0, 3),
+            "taken": round(taken - self.t0, 4),
+            "age_ms": None if age is None else round(age * 1000, 1),
+            "real": real,
+            "fresh": fresh,
+            "class": label,
+        }
+        self._slots_file.write(json.dumps(record) + "\n")
+
+    # Full-rate events: every framebuffer message from QEMU.
+
+    def _vnc_loop(self):
         try:
+            conn = connect_vnc(self.vnc_path)
+        except (OSError, RuntimeError) as error:
+            self.stats["errors"].append(f"vnc: {error}")
+            return
+        try:
+            width, height = conn.size
+            framebuffer = np.zeros((height, width, 4), np.uint8)
+            with self._lock:
+                self.framebuffer = framebuffer
+            conn.request(incremental=False, size=(width, height))
             while not self._stop.is_set():
-                due = self.t0 + slot / FPS
-                wait = due - time.monotonic()
-                if wait > 0 and self._stop.wait(wait):
-                    break
-                started = time.monotonic()
-                frame = None
-                source = None
+                # Wait at most HEARTBEAT for the next message. On a quiet screen,
+                # ask for the whole picture: it is re-sent and stays current.
+                conn.settimeout(HEARTBEAT)
                 try:
-                    if qmp is None:
-                        qmp = Qmp(self.qmp_path)
-                    qmp.screendump(scratch)
-                    frame = read_ppm(scratch)
-                    source = "qmp"
-                except (OSError, RuntimeError, ValueError) as error:
-                    # QEMU has no display surface during some mode sets ("no surface").
-                    # Take the picture from the VNC scanout instead; if the scanout has
-                    # not produced a frame yet, the slot repeats the last picture.
-                    self._dump_failed(error, started)
-                    qmp = self._close_quietly(qmp)
-                    frame = self._scanout_snapshot()
-                    if frame is not None:
-                        source = "scanout"
-                finally:
-                    scratch.unlink(missing_ok=True)
-                done = time.monotonic()
-                if source == "qmp":
-                    self.dump_times.append(done - started)
-                    self.stats["dumps"] += 1
-                    self.frame_times.append(started)
-                elif source == "scanout":
-                    self.stats["scanout_fallbacks"] += 1
-                    self.frame_times.append(started)
-                if frame is not None:
-                    picture = frame
-                else:
-                    picture = self.latest if self.latest is not None else np.zeros(
-                        (self.reference_size[1], self.reference_size[0], 3), np.uint8
-                    )
-                # Every slot whose time has passed by the end of this dump gets this frame.
-                last_slot = max(slot, int((done - self.t0) * FPS))
-                self._emit(picture, (started + done) / 2, slot_count=last_slot - slot + 1, check=frame is not None)
-                self.stats["duplicate_slots"] += last_slot - slot
-                slot = last_slot + 1
-                self.last_slot_time = self.t0 + last_slot / FPS
+                    kind = conn.recv_exact(1)[0]
+                except TimeoutError:
+                    self.stats["refresh_requests"] += 1
+                    conn.request(incremental=False, size=(framebuffer.shape[1], framebuffer.shape[0]))
+                    continue
+                conn.settimeout(10)  # the rest of a message must arrive whole
+                if kind != 0:
+                    raise RuntimeError(f"unexpected VNC message {kind}")
+                conn.recv_exact(1)
+                rects = struct.unpack(">H", conn.recv_exact(2))[0]
+                changed = resized = False
+                area = 0
+                for _ in range(rects):
+                    x, y, w, h, encoding = struct.unpack(">HHHHi", conn.recv_exact(12))
+                    if encoding == -223:  # DesktopSize: a new mode; its pixels follow in the next update.
+                        framebuffer = np.zeros((h, w, 4), np.uint8)
+                        with self._lock:
+                            self.framebuffer = framebuffer
+                        resized = changed = True
+                        self._note_event(f"screen {w}x{h}", time.monotonic())
+                        continue
+                    if encoding != 0:
+                        raise RuntimeError(f"unsupported VNC encoding {encoding}")
+                    pixels = np.frombuffer(conn.recv_exact(w * h * 4), np.uint8).reshape(h, w, 4)
+                    region = framebuffer[y : y + h, x : x + w]
+                    if not np.array_equal(region, pixels):
+                        changed = True
+                    with self._lock:
+                        region[...] = pixels
+                    area += w * h
+                now = time.monotonic()
+                with self._lock:
+                    self.update_time = now
+                    if changed:
+                        self.change_count += 1
+                self.stats["updates"] += 1
+                if changed:
+                    self.stats["changed_updates"] += 1
+                    self._after_change(framebuffer, now, rects, area, resized)
+                # One incremental request stays in flight after every update.
+                conn.request(incremental=True, size=(framebuffer.shape[1], framebuffer.shape[0]))
+        except (OSError, RuntimeError, ValueError) as error:
+            if not self._stop.is_set():
+                self.stats["errors"].append(f"vnc: {error}")
         finally:
-            self._close_quietly(qmp)
-            scratch.unlink(missing_ok=True)
+            conn.close()
 
-    def _scanout_snapshot(self):
-        with self._lock:
-            frame = self.scanout_frame
-        return frame
-
-    def _close_quietly(self, qmp):
-        if qmp is not None:
-            try:
-                qmp.close()
-            except OSError:
-                pass
-        return None
-
-    def _dump_failed(self, error, when):
-        self.stats["dump_errors"] += 1
-        if len(self.stats["errors"]) < 20:
-            self.stats["errors"].append(f"capture: {error}")
+    def _after_change(self, framebuffer, when, rects, area, resized):
+        """Classify a changed picture, log it and run the frame expectations on it."""
+        rgb = framebuffer[..., [2, 1, 0]]
+        height, width = rgb.shape[:2]
         record = {
             "t": round(when - self.t0, 4),
-            "kind": "dump-error",
-            "message": str(error),
+            "kind": "resize" if resized else "update",
+            "size": [width, height],
+            "rects": rects,
+            "area": area,
+            "class": classify(rgb, self.reference_size),
+            "mean": round(float(luma(rgb[::4, ::4]).mean()), 1),
         }
-        self._frame_events_file.write(json.dumps(record) + "\n")
+        self._events_file.write(json.dumps(record) + "\n")
+        self._check_expectations(rgb, when)
 
-
-    def _emit(self, frame, when, slot_count, check=True):
-        """Write `slot_count` copies of `frame` into the video and run the frame expectations on it."""
-        width, height = self.reference_size
-        canvas = fit(frame, width, height)
-        if frame.shape[:2] != (height, width):
-            self.stats["size_changes"] += 1
-            self._record_size_change(frame, when)
-        data = canvas.tobytes()
-        for _ in range(slot_count):
-            self._ffmpeg.stdin.write(data)
-            self.stats["slots"] += 1
-        if check:
-            self._check_expectations(frame, when)
+    def _note_event(self, name, when):
         with self._lock:
-            self.latest = frame
-            self.latest_time = when
+            self.events.setdefault(name, when - self.t0)
+            self.sources.setdefault(name, "frame")
 
     def _check_expectations(self, frame, when):
         with self._lock:
@@ -429,79 +461,6 @@ class Recorder:
                         self._lock.notify_all()
                     self.expectations.pop(name, None)
 
-    def _record_size_change(self, frame, when):
-        name = f"screen {frame.shape[1]}x{frame.shape[0]}"
-        with self._lock:
-            self.events.setdefault(name, when - self.t0)
-            self.sources.setdefault(name, "frame")
-
-    def _scanout_loop(self):
-        """Log each VNC framebuffer update that changes the picture."""
-        try:
-            conn = connect_vnc(self.vnc_path)
-        except (OSError, RuntimeError) as error:
-            self.stats["errors"].append(f"scanout: {error}")
-            return
-        try:
-            conn.settimeout(10)
-            framebuffer = np.zeros((conn.size[1], conn.size[0], 4), np.uint8)
-            conn.request(incremental=False)
-            while not self._stop.is_set():
-                try:
-                    kind = conn.recv_exact(1)[0]
-                except TimeoutError:
-                    continue
-                if kind != 0:
-                    raise RuntimeError(f"unexpected VNC message {kind}")
-                conn.recv_exact(1)
-                rects = struct.unpack(">H", conn.recv_exact(2))[0]
-                changed_area = 0
-                resized = False
-                for _ in range(rects):
-                    x, y, w, h, encoding = struct.unpack(">HHHHi", conn.recv_exact(12))
-                    if encoding == -223:  # DesktopSize: a new mode, its pixels follow in a full update.
-                        framebuffer = np.zeros((h, w, 4), np.uint8)
-                        resized = True
-                        self._scanout_event(framebuffer, "resize", rects=rects, area=0)
-                        continue
-                    if encoding != 0:
-                        raise RuntimeError(f"unsupported VNC encoding {encoding}")
-                    pixels = conn.recv_exact(w * h * 4)
-                    framebuffer[y : y + h, x : x + w] = np.frombuffer(pixels, np.uint8).reshape(h, w, 4)
-                    changed_area += w * h
-                if not resized:
-                    self._scanout_event(framebuffer, "update", rects=rects, area=changed_area)
-                conn.request(incremental=True, size=(framebuffer.shape[1], framebuffer.shape[0]))
-        except (OSError, RuntimeError, ValueError) as error:
-            if not self._stop.is_set():
-                self.stats["errors"].append(f"scanout: {error}")
-        finally:
-            conn.close()
-
-    def _scanout_event(self, framebuffer, kind, rects, area):
-        rgb = framebuffer[..., [2, 1, 0]]
-        with self._lock:
-            self.scanout_frame = rgb
-        height, width = framebuffer.shape[:2]
-        if (width, height) == self.reference_size and not is_black(rgb):
-            label = "content"
-        elif (width, height) == (640, 480):
-            label = "placeholder"
-        elif is_black(rgb):
-            label = "black"
-        else:
-            label = "size-change"
-        record = {
-            "t": round(time.monotonic() - self.t0, 4),
-            "kind": kind,
-            "size": [width, height],
-            "rects": rects,
-            "area": area,
-            "class": label,
-            "mean": round(float(luma(rgb[::4, ::4]).mean()), 1),
-        }
-        self._frame_events_file.write(json.dumps(record) + "\n")
-        self.scanout_events.append(record)
 
 
 class VncConnection:
