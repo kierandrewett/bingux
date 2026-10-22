@@ -12,6 +12,7 @@ pub use crate::system::bingux_config;
 
 pub mod about;
 pub mod appearance;
+pub mod applications;
 pub mod bluetooth;
 pub mod datetime;
 pub mod desktop;
@@ -39,6 +40,7 @@ pub enum PageId {
     Mouse,
     DateTime,
     Users,
+    Applications,
     About,
 }
 
@@ -47,6 +49,7 @@ pub enum PageId {
 pub fn prefetch_all() {
     about::prefetch();
     appearance::prefetch();
+    applications::prefetch();
     bluetooth::prefetch();
     datetime::prefetch();
     desktop::prefetch();
@@ -62,7 +65,7 @@ pub fn prefetch_all() {
 
 impl PageId {
     /// Sidebar order.
-    pub const ALL: [PageId; 13] = [
+    pub const ALL: [PageId; 14] = [
         PageId::Network,
         PageId::Bluetooth,
         PageId::Displays,
@@ -75,6 +78,7 @@ impl PageId {
         PageId::Mouse,
         PageId::DateTime,
         PageId::Users,
+        PageId::Applications,
         PageId::About,
     ];
 
@@ -92,6 +96,7 @@ impl PageId {
             Self::Mouse => "Mouse and Touchpad",
             Self::DateTime => "Date and Time",
             Self::Users => "Users",
+            Self::Applications => "Applications",
             Self::About => "About",
         }
     }
@@ -102,7 +107,7 @@ impl PageId {
             Self::Network | Self::Bluetooth | Self::Displays | Self::Sound => "Connections",
             Self::Appearance | Self::Desktop | Self::Search => "Bingux",
             Self::Power | Self::Keyboard | Self::Mouse | Self::DateTime => "Hardware and time",
-            Self::Users | Self::About => "System",
+            Self::Users | Self::Applications | Self::About => "System",
         }
     }
 
@@ -121,6 +126,7 @@ impl PageId {
             Self::Mouse => "touchpad trackpad pointer scrolling tap",
             Self::DateTime => "clock time zone ntp format",
             Self::Users => "accounts password login avatar",
+            Self::Applications => "apps programs default browser mail open with launch",
             Self::About => "version kernel hardware memory disk gnoblin",
         }
     }
@@ -139,6 +145,7 @@ impl PageId {
             Self::Mouse => Icon::Mouse,
             Self::DateTime => Icon::Clock,
             Self::Users => Icon::Users,
+            Self::Applications => Icon::Applications,
             Self::About => Icon::About,
         }
     }
@@ -158,6 +165,7 @@ impl PageId {
             Self::Mouse => "mouse",
             Self::DateTime => "datetime",
             Self::Users => "users",
+            Self::Applications => "applications",
             Self::About => "about",
         }
     }
@@ -180,6 +188,7 @@ impl PageId {
             "mouse" => Self::Mouse,
             "datetime" => Self::DateTime,
             "users" | "user-accounts" => Self::Users,
+            "applications" | "apps" | "default-apps" => Self::Applications,
             "about" | "info-overview" => Self::About,
             _ => return None,
         })
@@ -201,6 +210,7 @@ impl PageId {
             Self::Mouse => mouse::MousePage.into(),
             Self::DateTime => datetime::DateTimePage.into(),
             Self::Users => users::UsersPage.into(),
+            Self::Applications => applications::ApplicationsPage.into(),
             Self::About => about::AboutPage.into(),
         }
     }

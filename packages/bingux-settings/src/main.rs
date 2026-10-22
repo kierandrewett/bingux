@@ -1,12 +1,15 @@
 //! Bingux Settings: a Freya application for the Bingux desktop shell.
 //!
-//! Usage: `bingux-settings [PANEL]`. `PANEL` is one of the names the shell
-//! passes (`network`, `bluetooth`, `sound`, `power`, `users`, `background`,
-//! `display`, `desktop`, `search`) or a page name; unknown names open the
-//! first page.
+//! Usage: `bingux-settings [PANEL[/SUBPAGE]]`. `PANEL` is one of the names
+//! the shell passes (`network`, `bluetooth`, `sound`, `power`, `users`,
+//! `background`, `display`, `desktop`, `search`) or a page name; unknown
+//! names open the first page. `SUBPAGE` is `default` or an application's
+//! desktop id, under `applications`.
 
 mod app;
+mod apps;
 mod pages;
+mod routes;
 
 /// Pages were written against these module paths; they map onto bingux-ui.
 pub(crate) use bingux_ui::icons;
@@ -24,7 +27,7 @@ use crate::pages::PageId;
 fn main() {
     let panel = std::env::args().nth(1).unwrap_or_default();
     if panel == "--help" || panel == "-h" {
-        println!("usage: bingux-settings [PANEL]");
+        println!("usage: bingux-settings [PANEL[/SUBPAGE]]");
         println!(
             "panels: {}",
             PageId::ALL.map(|id| id.panel_name()).join(", ")
@@ -47,7 +50,13 @@ fn main() {
         snapshot_pages(&dir, &only);
         return;
     }
-    let initial = PageId::from_panel(&panel).unwrap_or(PageId::ALL[0]);
+    // `PANEL/SUBPAGE` opens a subpage: `applications/default`, or
+    // `applications/` followed by an application's desktop id.
+    let (panel_name, subpage_name) = panel.split_once('/').unwrap_or((panel.as_str(), ""));
+    let initial = PageId::from_panel(panel_name).unwrap_or(PageId::ALL[0]);
+    let subpage = (!subpage_name.is_empty())
+        .then(|| routes::Route::from_name(subpage_name))
+        .flatten();
     let (width, height) = theme::WINDOW_SIZE;
     let (min_width, min_height) = theme::WINDOW_MIN_SIZE;
     // Gnoblin draws the window's corners, border and shadow, so the window is
@@ -56,12 +65,15 @@ fn main() {
         theme::with_font(LaunchConfig::new())
             .with_plugin(freya::borderless::BorderlessPlugin::new())
             .with_window(
-                WindowConfig::new(move || app::App { initial })
-                    .with_title("Settings")
-                    .with_app_id("bingux-settings")
-                    .with_decorations(false)
-                    .with_size(width as f64, height as f64)
-                    .with_min_size(min_width as f64, min_height as f64),
+                WindowConfig::new(move || app::App {
+                    initial,
+                    subpage: subpage.clone(),
+                })
+                .with_title("Settings")
+                .with_app_id("bingux-settings")
+                .with_decorations(false)
+                .with_size(width as f64, height as f64)
+                .with_min_size(min_width as f64, min_height as f64),
             ),
     );
 }
@@ -109,7 +121,10 @@ fn snapshot_pages(dir: &str, only: &[String]) {
                     rect()
                         .expanded()
                         .background(Color::from_rgb(28, 28, 32))
-                        .child(app::App { initial: page }),
+                        .child(app::App {
+                            initial: page,
+                            subpage: None,
+                        }),
                 )
             },
             size,

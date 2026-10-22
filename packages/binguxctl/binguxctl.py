@@ -151,7 +151,7 @@ def parser():
         "panel",
         nargs="?",
         default="",
-        help="Panel name, for example sound, network, display or appearance",
+        help="Panel name, for example sound, network, display or appearance; PANEL/SUBPAGE opens a subpage",
     )
     ipc = commands.add_parser("ipc", help="Call any public IPC method directly")
     ipc.add_argument("target")
@@ -404,13 +404,15 @@ SETTINGS_PANELS = (
     "mouse",
     "datetime",
     "users",
+    "applications",
     "about",
 )
 
 
 def open_settings(panel, cli, spawn=subprocess.Popen):
     """Start the Settings application as its own session so it outlives binguxctl."""
-    if panel and panel not in SETTINGS_PANELS:
+    # PANEL/SUBPAGE opens a subpage; only the panel is checked here.
+    if panel and panel.split("/", 1)[0] not in SETTINGS_PANELS:
         cli.error("Unknown settings panel; choose one of " + ", ".join(SETTINGS_PANELS))
     executable = os.environ.get("BINGUX_SETTINGS_BIN", "bingux-settings")
     command = [executable, *([panel] if panel else [])]

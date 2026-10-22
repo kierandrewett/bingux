@@ -8,6 +8,7 @@ use freya::prelude::*;
 
 use bingux_ui::scale::*;
 
+use crate::apps;
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{Group, Status, dropdown, page_column, row, skeleton, slider, status, switch_row};
 
@@ -68,6 +69,10 @@ struct Stream {
     recording_from: Vec<String>,
     /// The stream's own volume, when WirePlumber reports one.
     level: Option<(f64, bool)>,
+    /// The icon name to draw for the application that owns the stream.
+    icon: String,
+    /// The desktop id of that application, when it is installed.
+    app: Option<String>,
 }
 
 impl Stream {
@@ -209,6 +214,8 @@ fn parse_status(text: &str) -> Model {
                         playing_to: Vec::new(),
                         recording_from: Vec::new(),
                         level: None,
+                        icon: String::new(),
+                        app: None,
                     });
                     current = Some(model.streams.len() - 1);
                 } else if let Some(stream) = current.and_then(|i| model.streams.get_mut(i)) {
@@ -250,14 +257,52 @@ fn load() -> Result<Model, CommandError> {
     let mut model = parse_status(&text);
     model.output = read_level(Kind::Output, &model.outputs)?;
     model.input = read_level(Kind::Input, &model.inputs)?;
+    let apps = apps::installed();
     for stream in &mut model.streams {
         // A stream without a volume control (monitor-only nodes) is shown
         // without a slider rather than failing the page.
         stream.level = system::run("wpctl", &["get-volume", &stream.id.to_string()], TIMEOUT)
             .ok()
             .and_then(|text| parse_volume(&text));
+        identify(stream, &apps);
     }
     Ok(model)
+}
+
+/// The value of `key` in `wpctl inspect` output, which prints `key = "value"`.
+fn property<'a>(text: &'a str, key: &str) -> &'a str {
+    text.lines()
+        .find_map(|line| {
+            let (name, value) = line.trim_start_matches(['*', ' ']).split_once('=')?;
+            (name.trim() == key).then(|| value.trim().trim_matches('"'))
+        })
+        .unwrap_or_default()
+}
+
+/// Work out which application owns `stream` and which icon to draw for it.
+/// The icon the stream names is used when the theme has it; an application
+/// that names none, or one the theme lacks, gets its desktop entry's icon.
+fn identify(stream: &mut Stream, apps: &[apps::AppEntry]) {
+    let text =
+        system::run("wpctl", &["inspect", &stream.id.to_string()], TIMEOUT).unwrap_or_default();
+    let named = property(&text, "application.icon-name");
+    let app = apps::for_stream(
+        apps,
+        property(&text, "application.id"),
+        property(&text, "application.process.binary"),
+        &stream.name,
+    );
+    let theme_has = |name: &str| {
+        !name.is_empty() && bingux_ui::app_icon::resolve(name, ICON_APP as u32 * 2).is_some()
+    };
+    stream.icon = if theme_has(named) {
+        named.to_string()
+    } else if let Some(app) = app.as_ref().filter(|app| !app.icon.is_empty()) {
+        app.icon.clone()
+    } else {
+        named.to_string()
+    };
+    stream.app = app.map(|app| app.id);
 }
 
 /// Run a `wpctl` write on a background thread, then set or clear the error
@@ -444,6 +489,31 @@ fn channel_group(
     group
 }
 
+/// One application stream: its icon, name, what it is connected to and a
+/// volume slider when WirePlumber reports a volume.
+fn stream_row(
+    stream: &Stream,
+    model: State<Option<Result<Model, CommandError>>>,
+    error: State<Option<String>>,
+    queue: VolumeQueue,
+) -> Element {
+    let id = stream.id;
+    let base = row(stream.name.clone())
+        .leading_app(stream.icon.clone())
+        .subtitle(stream.summary());
+    match stream.level {
+        Some((volume, _)) => Element::from(base.trailing(volume_slider(
+            (volume * 100.0).min(100.0),
+            move |value: f64| {
+                let percent = value.round().clamp(0.0, 100.0) as u32;
+                update_stream(model, id, f64::from(percent) / 100.0);
+                set_volume(queue, error, id, percent);
+            },
+        ))),
+        None => Element::from(base.value("No volume control")),
+    }
+}
+
 #[derive(PartialEq)]
 pub struct SoundPage;
 
@@ -508,23 +578,68 @@ impl Component for SoundPage {
                 "No applications are playing or recording audio.".into(),
             ))));
         } else {
-            page = page.child(applications.rows(data.streams.iter().map(|stream| {
-                let id = stream.id;
-                let base = row(stream.name.clone()).subtitle(stream.summary());
-                match stream.level {
-                    Some((volume, _)) => Element::from(base.trailing(volume_slider(
-                        (volume * 100.0).min(100.0),
-                        move |value: f64| {
-                            let percent = value.round().clamp(0.0, 100.0) as u32;
-                            update_stream(model, id, f64::from(percent) / 100.0);
-                            set_volume(queue, error, id, percent);
-                        },
-                    ))),
-                    None => Element::from(base.value("No volume control")),
-                }
-            })));
+            page = page.child(
+                applications.rows(
+                    data.streams
+                        .iter()
+                        .map(|stream| stream_row(stream, model, error, queue)),
+                ),
+            );
         }
         page
+    }
+}
+
+/// The sound of one application: a volume slider for each of its streams,
+/// shown on the application's page. It draws nothing while the application
+/// is not playing or recording.
+#[derive(PartialEq)]
+pub struct AppSound {
+    pub app_id: String,
+}
+
+impl Component for AppSound {
+    fn render(&self) -> impl IntoElement {
+        let model = system::cached("sound");
+        let error = use_state::<Option<String>>(|| None);
+        let queue = VolumeQueue {
+            pending: use_state(Vec::new),
+            busy: use_state(|| false),
+        };
+        use_hook(move || {
+            background(model, load);
+            spawn(async move {
+                loop {
+                    timer(POLL).await;
+                    background(model, load);
+                }
+            });
+        });
+
+        let Some(Ok(data)) = model.read().clone() else {
+            return Element::from(rect());
+        };
+        let streams: Vec<&Stream> = data
+            .streams
+            .iter()
+            .filter(|stream| stream.app.as_deref() == Some(self.app_id.as_str()))
+            .collect();
+        if streams.is_empty() {
+            return Element::from(rect());
+        }
+        let mut group = page_column();
+        if let Some(message) = error.read().clone() {
+            group = group.child(status(Status::Error(message)));
+        }
+        group
+            .child(
+                Group::titled("Sound").rows(
+                    streams
+                        .iter()
+                        .map(|stream| stream_row(stream, model, error, queue)),
+                ),
+            )
+            .into()
     }
 }
 

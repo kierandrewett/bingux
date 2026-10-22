@@ -13,7 +13,11 @@ width the page list becomes an overlay opened from the header button.
 
 Panels: `network`, `bluetooth`, `background` (Appearance), `desktop`,
 `search`, `display`, `sound`, `power`, `keyboard`, `mouse`, `datetime`,
-`users`, `about`. An unknown or omitted panel opens the first page.
+`users`, `applications`, `about`. An unknown or omitted panel opens the
+first page. `PANEL/SUBPAGE` opens a subpage: `applications/default` opens
+Default applications, and `applications/` followed by an application's
+desktop id, for example `applications/org.gnome.Nautilus`, opens that
+application.
 
 Set `BINGUX_REDUCED_MOTION=1` to disable animations.
 
@@ -36,6 +40,26 @@ applications. `scripts/install-shell.py` and the RPM install it as
 prefix. The window itself sets no icon, because Wayland takes it from the
 desktop entry.
 
+## Applications and subpages
+
+Applications lists every installed application with its full-colour icon.
+Search filters the list by name. Pressing a row opens that application's
+page, with its icon and name, an Open button, a volume slider for each of its
+audio streams while it plays or records, and the kinds of file it can open
+with a Make default button for each one it is not yet the default for.
+Default applications, at the top of the page, sets the default application
+for web links, mail, calendar, files, text, documents, photos, music and
+video; each choice shows the application icons. Changes are written with
+`gio mime`, so GTK applications and `xdg-open` see them.
+
+The Sound page shows each application stream with the same icon. An
+application's icon comes from the icon the stream names when the icon theme
+has it, otherwise from the application's desktop entry.
+
+A subpage replaces the page and puts a Back button and the subpage title in
+the header. Back, Alt+Left and the mouse Back button return to the page
+below; choosing another page in the sidebar closes the subpage.
+
 ## Where each setting lives
 
 Settings has no store of its own. Every page reads and writes the system
@@ -54,6 +78,7 @@ way round.
 | Keyboard, Mouse | GSettings `org.gnome.desktop.peripherals.*`, `gnoblinctl input`                                      | See the Gnoblin note below.                                                                                                                    |
 | Date and Time   | `timedatectl`, GSettings clock format, `bingux-config desktop.clock_seconds`                         | Time zone and manual time may ask for authorisation.                                                                                           |
 | Users           | AccountsService over D-Bus                                                                           | Full name changes may ask for authorisation.                                                                                                   |
+| Applications    | Desktop entries in `XDG_DATA_DIRS`, `gio mime`, `wpctl`                                              | Installed applications with their icons, a page for each, and the default application for each kind of file.                                   |
 | About           | `/etc/os-release`, DMI, `gnoblinctl --version`                                                       | Read-only.                                                                                                                                     |
 
 Each page shows a readable error when its tool is missing or refuses the
