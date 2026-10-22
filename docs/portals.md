@@ -207,28 +207,28 @@ The table lists the 20 interfaces that Gnoblin's portal declaration names. It
 shows which package declares each one in the ISO. A declaration does not prove
 that a backend implements the interface.
 
-| Interface       | Declared in the ISO by                   | Bingux backend | Tested                 |
-| --------------- | ---------------------------------------- | -------------- | ---------------------- |
-| Screenshot      | `bingux`                                 | Served         | Stand-in frontend only |
-| Access          | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                     |
-| Account         | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                     |
-| AppChooser      | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                     |
-| Background      | None (only `xdg-desktop-portal-gnoblin`) | No             | No                     |
-| Clipboard       | None (only `xdg-desktop-portal-gnoblin`) | No             | No                     |
-| DynamicLauncher | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                     |
-| Email           | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                     |
-| FileChooser     | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                     |
-| GlobalShortcuts | None (only `xdg-desktop-portal-gnoblin`) | No             | No                     |
-| InputCapture    | None (only `xdg-desktop-portal-gnoblin`) | No             | No                     |
-| Inhibit         | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                     |
-| Lockdown        | None (only `xdg-desktop-portal-gnoblin`) | No             | No                     |
-| Notification    | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                     |
-| Print           | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                     |
-| RemoteDesktop   | None (only `xdg-desktop-portal-gnoblin`) | No             | No                     |
-| ScreenCast      | None (only `xdg-desktop-portal-gnoblin`) | No             | No                     |
-| Settings        | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                     |
-| Usb             | None (only `xdg-desktop-portal-gnoblin`) | No             | No                     |
-| Wallpaper       | None (only `xdg-desktop-portal-gnoblin`) | No             | No                     |
+| Interface       | Declared in the ISO by                   | Bingux backend | Tested                    |
+| --------------- | ---------------------------------------- | -------------- | ------------------------- |
+| Screenshot      | `bingux`                                 | Served         | Real frontend, QEMU guest |
+| Access          | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
+| Account         | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
+| AppChooser      | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
+| Background      | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
+| Clipboard       | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
+| DynamicLauncher | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
+| Email           | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
+| FileChooser     | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
+| GlobalShortcuts | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
+| InputCapture    | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
+| Inhibit         | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
+| Lockdown        | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
+| Notification    | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
+| Print           | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
+| RemoteDesktop   | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
+| ScreenCast      | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
+| Settings        | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
+| Usb             | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
+| Wallpaper       | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
 
 Notes:
 
@@ -242,3 +242,55 @@ Notes:
   request for it as failing until a test shows otherwise.
 - The integration test drives the Screenshot backend with a stand-in frontend
   on a private bus. It does not run a real `xdg-desktop-portal` session.
+
+## Audit in a guest
+
+On 2026-10-22 a QEMU guest ran a Gnoblin session with the Bingux backend and
+the Gnoblin backend (`xdg-desktop-portal-gnoblin`) both installed. The ISO does
+not install the Gnoblin backend, so these results show what the interfaces do
+when both backends are present. They do not describe the ISO as shipped. A
+small Python client called each interface through `org.freedesktop.portal.Desktop`.
+The raw runs are `/var/tmp/portal-audit/probe-run1.jsonl` and `probe-run2.jsonl`
+on the build host.
+
+Screenshot through the Bingux backend:
+
+| Request                                      | Result                                     |
+| -------------------------------------------- | ------------------------------------------ |
+| Interactive, then `binguxctl capture take`   | Response 0 and a valid PNG (768x400).      |
+| Interactive, then `binguxctl capture cancel` | Response 1.                                |
+| Non-interactive with an `allow` rule         | Response 0, whole desktop PNG (1280x800).  |
+| `deny` rule, interactive or not              | Response 2 in about 0.01 s.                |
+| No shell running                             | Response 2 in about 0.3 s.                 |
+| Non-interactive with no rule (default `ask`) | The selector opens and waits for the user. |
+
+A non-interactive request with no matching rule opens the selector, because the
+default level is `ask`. Add an `allow` rule for apps that must capture without a
+prompt.
+
+Other interfaces:
+
+| Interface       | Request                          | Result                                          | Verdict    |
+| --------------- | -------------------------------- | ----------------------------------------------- | ---------- |
+| Background      | `RequestBackground`              | Response 0                                      | Works      |
+| GlobalShortcuts | `CreateSession`                  | Response 0                                      | Works      |
+| GlobalShortcuts | `BindShortcuts`                  | Response 2: no owner of the shell provider name | Fails      |
+| Inhibit         | `Inhibit` and `Close`            | Accepted                                        | Works      |
+| Settings        | `ReadAll`, `Read`, `ReadOne`     | Values returned                                 | Works      |
+| Notification    | `AddNotification`                | Accepted. No notification server was running.   | Unverified |
+| Email           | `ComposeEmail`                   | Response 2: no mail client                      | Cancelled  |
+| RemoteDesktop   | `CreateSession`, `SelectDevices` | Response 0. `Start` got no response.            | Partial    |
+| ScreenCast      | `CreateSession`, `SelectSources` | Response 0. `Start` not tested.                 | Partial    |
+| Usb             | `EnumerateDevices`               | Empty list. The session call got no response.   | Partial    |
+| Clipboard       | `RequestClipboard`               | Access denied: needs a started session          | Fails      |
+| DynamicLauncher | `PrepareInstall`                 | Invalid argument: the icon failed validation    | Fails      |
+| Account         | `GetUserInformation`             | No response in 13 s: waiting for a dialog       | Unverified |
+| FileChooser     | `OpenFile`                       | No response in 13 s: waiting for a dialog       | Unverified |
+| InputCapture    | `CreateSession`                  | No response in 13 s: waiting for a dialog       | Unverified |
+| Print           | `PreparePrint`                   | No response in 13 s: waiting for a dialog       | Unverified |
+| Wallpaper       | `SetWallpaperURI`                | No response in 18 s                             | Unverified |
+
+Access, AppChooser and Lockdown are not exported by the frontend. Their dialogs
+could not be driven: the guest has no `xdotool`, `wmctrl` or `ydotool`. The
+DynamicLauncher failure may come from the probe's icon data and needs a rerun.
+Treat every row marked Fails or Unverified as not confirmed.
