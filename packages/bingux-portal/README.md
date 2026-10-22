@@ -63,6 +63,25 @@ The backend calls `binguxctl capture request ID --interactive` or
 gives up after 25 failed polls in a row and cancels the capture. A user cancel
 returns response code 1. Any other failure returns response code 2.
 
+## GlobalShortcuts provider
+
+`bingux-global-shortcuts` owns `org.gnoblin.Shell.GlobalShortcutsProvider` at
+`/org/gnoblin/Shell/GlobalShortcutsProvider`. Only the Gnoblin portal backend
+(`org.freedesktop.impl.portal.desktop.gnoblin`) may call it. Other callers are refused.
+
+- `BindShortcuts` asks the shell for approval through `binguxctl ipc shortcuts`.
+  The shell shows the approval UI and returns the approved bindings. The request
+  waits for the user.
+- Approval needs an app_id. The frontend derives it from the caller. A host
+  program with no app_id is refused: the shell rejects an empty app_id, and the
+  provider has no other identity to use.
+- A user denial returns `AccessDenied` on the provider. The frontend maps that
+  error to response code 2, not 1.
+- Approved grants are kept in `$XDG_CONFIG_HOME/bingux/global-shortcuts.toml`,
+  or under `~/.config` when `XDG_CONFIG_HOME` is unset. The file mode is 0600.
+- When saved bindings change, the provider calls `RebindShortcuts` on the backend
+  to apply them.
+
 ## Build and test
 
 ```sh

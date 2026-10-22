@@ -21,6 +21,24 @@ It answers on the bus name `org.freedesktop.impl.portal.desktop.bingux`.
 
 The `bingux` package installs these files and depends on `xdg-desktop-portal`.
 
+## GlobalShortcuts provider
+
+GlobalShortcuts is not served by `xdg-desktop-portal-bingux`. The
+`bingux-global-shortcuts` daemon owns `org.gnoblin.Shell.GlobalShortcutsProvider`
+and answers only the Gnoblin portal backend, `org.freedesktop.impl.portal.desktop.gnoblin`.
+It asks the shell for approval through `binguxctl ipc shortcuts`. Approved grants
+are kept in `$XDG_CONFIG_HOME/bingux/global-shortcuts.toml`, or under `~/.config`.
+
+| Path                                                                           | Purpose                                     |
+| ------------------------------------------------------------------------------ | ------------------------------------------- |
+| `/usr/libexec/bingux/bingux-global-shortcuts`                                  | Provider executable.                        |
+| `/usr/share/dbus-1/services/org.gnoblin.Shell.GlobalShortcutsProvider.service` | D-Bus activation.                           |
+| `bingux-global-shortcuts.service`                                              | Systemd user unit, part of `bingux.target`. |
+
+The provider is not the screenshot backend. A caller with no app_id is refused,
+because the shell's approval request needs one. See
+[Interface known state](#interface-known-state).
+
 ## Routing
 
 `xdg-desktop-portal` picks a backend for each interface from its routing
@@ -218,7 +236,7 @@ that a backend implements the interface.
 | DynamicLauncher | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
 | Email           | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
 | FileChooser     | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
-| GlobalShortcuts | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
+| GlobalShortcuts | None (only `xdg-desktop-portal-gnoblin`) | Provider       | Partial: app_id only      |
 | InputCapture    | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
 | Inhibit         | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
 | Lockdown        | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
@@ -294,16 +312,18 @@ not from the interface. A 512px PNG passed when sent as a bytes icon.
 
 Other interfaces:
 
-| Interface       | Request                      | Result                                          | Verdict   |
-| --------------- | ---------------------------- | ----------------------------------------------- | --------- |
-| Background      | `RequestBackground`          | Response 0                                      | Works     |
-| GlobalShortcuts | `CreateSession`              | Response 0                                      | Works     |
-| GlobalShortcuts | `BindShortcuts`              | Response 2: no owner of the shell provider name | Fails     |
-| Inhibit         | `Inhibit` and `Close`        | Accepted                                        | Works     |
-| Settings        | `ReadAll`, `Read`, `ReadOne` | Values returned                                 | Works     |
-| Email           | `ComposeEmail`               | Response 2: no mail client                      | Cancelled |
-| Usb             | `EnumerateDevices`           | Empty list. The session call got no response.   | Partial   |
-| Clipboard       | `RequestClipboard`           | Access denied: needs a started session          | Fails     |
+| Interface       | Request                      | Result                                                                        | Verdict               |
+| --------------- | ---------------------------- | ----------------------------------------------------------------------------- | --------------------- |
+| Background      | `RequestBackground`          | Response 0                                                                    | Works                 |
+| GlobalShortcuts | `CreateSession`              | Response 0                                                                    | Works                 |
+| GlobalShortcuts | `BindShortcuts`, Allow       | Response 0 with `gs-probe`. Key chord sends `Activated` to the session.       | Works, with an app_id |
+| GlobalShortcuts | `BindShortcuts`, Deny        | Response 2 (`AccessDenied` from the provider).                                | Refused               |
+| GlobalShortcuts | `BindShortcuts`, no app_id   | Response 2: the shell rejects an empty app_id. The provider has no requester. | Fails: host programs  |
+| Inhibit         | `Inhibit` and `Close`        | Accepted                                                                      | Works                 |
+| Settings        | `ReadAll`, `Read`, `ReadOne` | Values returned                                                               | Works                 |
+| Email           | `ComposeEmail`               | Response 2: no mail client                                                    | Cancelled             |
+| Usb             | `EnumerateDevices`           | Empty list. The session call got no response.                                 | Partial               |
+| Clipboard       | `RequestClipboard`           | Access denied: needs a started session                                        | Fails                 |
 
 Access, AppChooser and Lockdown are not exported by the frontend. AppChooser
 was reached through `OpenURI` with `ask=true` above. Access was not driven. The
