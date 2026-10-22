@@ -41,6 +41,25 @@ ShellRoot {
             property bool muted: false
         }
     }
+    // The keyboard layout menu reads these fields from statusd metrics. Two
+    // layouts, the first active, so the popup has a choice to show.
+    QtObject {
+        id: lockMetrics
+        readonly property bool desktopStateAvailable: true
+        readonly property string inputSourceLabel: "US"
+        readonly property var inputSources: [
+            { type: "xkb", id: "us", shortName: "US", displayName: "English (US)" },
+            { type: "xkb", id: "de", shortName: "DE", displayName: "German" }
+        ]
+        readonly property var currentInputSource: inputSources[0]
+        readonly property bool screenSharing: false
+        readonly property bool microphoneInUse: false
+        readonly property bool locationInUse: false
+        readonly property bool privacyAvailable: true
+        readonly property bool screenSharingAvailable: true
+        readonly property bool microphoneAvailable: true
+        readonly property bool locationAvailable: true
+    }
     OsdState {
         id: lockOsd
     }
@@ -156,8 +175,42 @@ ShellRoot {
             if (findChildOf(card, "osdTitle").text !== "Volume" || card.percentLabel !== "55%")
                 root.fail("the OSD card shows " + findChildOf(card, "osdTitle").text + " " + card.percentLabel);
             console.error("LOCK_UI_OSD_SHOWN");
+            popupCheck.start();
+        }
+    }
+    // The keyboard layout menu, opened from the lock bar, must map on the lock
+    // surface. The popup is a non-visual ShellPopup Scope, so it is reached
+    // through its visual selector: menuOpen is the popup's visibility.
+    Timer {
+        id: popupCheck
+        onTriggered: {
+            const owner = selectorOnLockBar();
+            owner.openMenu();
+            popupVerify.start();
+        }
+    }
+    Timer {
+        id: popupVerify
+        interval: 400
+        onTriggered: {
+            const owner = selectorOnLockBar();
+            if (!owner.menuOpen)
+                root.fail("the keyboard layout popup did not open on the lock screen");
+            if (!findChildOf(root.lockScreen.hostWindow.contentItem, "keyboardLayoutMenu"))
+                root.fail("the keyboard layout menu did not draw into the lock surface");
+            console.error("LOCK_UI_POPUP_OPEN");
             shot.start();
         }
+    }
+    function selectorOnLockBar() {
+        let owner = findChildOf(root.lockScreen, "keyboardLayoutLabel");
+        if (!owner)
+            root.fail("the keyboard layout selector is not on the lock bar");
+        while (owner && typeof owner.openMenu !== "function")
+            owner = owner.parent;
+        if (!owner)
+            root.fail("the keyboard layout label has no selector to open it");
+        return owner;
     }
     function findChildOf(item, name) {
         for (const child of item.children) {
@@ -177,7 +230,7 @@ ShellRoot {
         onTriggered: lockAuthentication.respond("secret")
     }
     Timer {
-        interval: 15000
+        interval: 25000
         running: true
         onTriggered: root.fail("timed out at step " + root.step + " secure=" + lock.secure)
     }
@@ -190,12 +243,15 @@ ShellRoot {
     WlSessionLock {
         id: lock
         WlSessionLockSurface {
+            id: lockSurface
             color: Theme.background
             SessionScreen {
                 id: screen
                 Component.onCompleted: root.lockScreen = screen
                 anchors.fill: parent
                 authentication: lockAuthentication
+                metrics: lockMetrics
+                hostWindow: lockSurface
                 ready: lock.secure
                 osdState: lockOsd
                 outputName: Quickshell.screens[0].name
