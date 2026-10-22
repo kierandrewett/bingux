@@ -31,6 +31,7 @@ Implemented (plan schema v2, covered by unit tests and the install matrix):
 - Storage mode `erase` on UEFI and BIOS, unencrypted and LUKS2. BIOS with LUKS2 keeps an unencrypted ext4 `/boot` (see the layout section).
 - Storage mode `free_space` on a GPT disk, UEFI and BIOS, unencrypted and LUKS2: existing partitions are kept; an existing ESP or BIOS boot partition is reused and not written. Refused with `no_free_space` or `not_gpt`.
 - Storage mode `alongside` on a GPT disk, UEFI and BIOS, unencrypted and LUKS2: one existing ext4, btrfs or NTFS partition (not mounted) is shrunk to `size_bytes`, then the Bingux layout is created in the freed space as for `free_space`. The shrink resizes the filesystem before the partition entry, so a failed resize leaves the entry at its old size. Refused with `cannot_shrink`, `no_free_space` or `not_gpt`.
+- Storage mode `manual` on a GPT disk, UEFI and BIOS, unencrypted or LUKS2: the plan's partition list is applied as written (`reuse` and `format` keep the disk's entries, `create` takes free space). The install matrix covers `uefi-manual` (unencrypted) only; the other combinations are implemented but not matrix-verified. Refused with `invalid_plan`, `no_free_space`, or `unsupported` for encryption with a `home` partition.
 - `ntp`: `false` disables `systemd-timesyncd`.
 - `root_password`: a string sets the root password; `null` locks the root account.
 - `swap`: `zram` (zram-generator), `file` (`/swapfile`), `partition` (swap partition; encrypted
@@ -39,7 +40,6 @@ Implemented (plan schema v2, covered by unit tests and the install matrix):
 
 Planned (validated by the schema but refused with `unsupported` until the feature lands):
 
-- `storage.mode` `manual`.
 - Dual-boot entries (os-prober for GRUB; the shared ESP for systemd-boot).
 
 ## Failure list
@@ -54,7 +54,7 @@ unmount the payload and close the LUKS mapper before replying.
 | `not_permitted` | Peer uid is not 0 and is not in group `bingux-install` (or the group does not exist) | Nothing | `peer is not root or a member of bingux-install` |
 | `busy` | `install` or `probe` while another install runs (probe mounts partitions read-only, so it is refused too) | Nothing; the running install continues | `another installation is already running` |
 | `invalid_plan` | Any plan schema rule fails, unknown top-level key, `confirm_erase` mismatch, firmware not matching the booted firmware | Nothing | `invalid plan: <field>: <rule>` |
-| `unsupported` | A plan feature that is validated but not implemented yet (`manual`) | Nothing | `<feature> is not implemented yet` |
+| `unsupported` | `manual` with encryption and a `home` partition | Nothing | `<feature> is not implemented yet` |
 | `no_free_space` | `free_space` (or `alongside`, or manual `create`) needs a region larger than the unallocated space, or the partition table has no free entry | Nothing | `the largest unallocated region is <n> MiB; the layout needs at least <m> MiB` |
 | `not_gpt` | `free_space` on a disk with no readable GPT | Nothing | `<path> has no readable GPT; free_space needs one` |
 | `cannot_shrink` | `alongside` names a partition that is not on the disk, is mounted, is not ext4, btrfs or NTFS, is smaller than its `min_bytes`, or `size_bytes` frees no space | Nothing | `<partition> is mounted; it must be unmounted to shrink` or `<fstype> cannot be shrunk` |
@@ -112,7 +112,7 @@ Probe result data (protocol 1; the fields below are additive, so a client that i
 - `firmware`, `live_disk`, `tools_missing`, `installer_version`: as before.
 - `disks`: each entry `{"path","size_bytes","model","removable","is_live_medium","other_os":[...],"partition_table","free_bytes","partitions":[...]}`. `partition_table` is `"gpt"`, `"msdos"` or `null`. `free_bytes` is the unallocated space on the disk, or `null` when unknown.
 - `disks[].partitions`: each entry `{"path","fstype","label","size_bytes","mountpoint","used_bytes","free_bytes","os","shrinkable","min_bytes"}`. `label` is the filesystem label or `null`. `used_bytes` and `free_bytes` are the filesystem usage or `null`. `os` is the OS name found on the filesystem (as `other_os`) or `null`. `shrinkable` is `true` when the installer can shrink the filesystem for `alongside`; `min_bytes` is then the smallest size it can shrink to, otherwise `null`. A value the probe cannot read is `null`; it is never guessed.
-- `capabilities`: what this installer build implements end to end, matching the Status section. A choice is listed only when its install is implemented and covered by the install matrix. Shape: `{"storage_modes":["erase","free_space","alongside"],"filesystems":["ext4","btrfs","xfs"],"swap":["none","zram","file","partition"],"encryption":{"uefi":true,"bios":true},"dual_boot":false}`. The UI offers a choice only when it is listed. When `capabilities` is missing, the UI assumes exactly that Shape, so an older daemon still gets the Status list.
+- `capabilities`: what this installer build implements end to end, matching the Status section. A choice is listed only when its install is implemented and covered by the install matrix. Shape: `{"storage_modes":["erase","free_space","alongside","manual"],"filesystems":["ext4","btrfs","xfs"],"swap":["none","zram","file","partition"],"encryption":{"uefi":true,"bios":true},"dual_boot":false}`. The UI offers a choice only when it is listed. When `capabilities` is missing, the UI assumes exactly that Shape, so an older daemon still gets the Status list.
 
 Install phases, in order: `validate`, `preflight`, `partition` (the commit point, the first destructive write), `mount`, `copy`, `strip`, `configure`, `bootloader`, `finish`.
 Cancel is honoured only before the commit point. Only one install runs at a time.
@@ -142,16 +142,16 @@ must be `2`.
     "/dev/sda3", "size_bytes": <n>}`. Supported filesystems: ext4, btrfs and NTFS (not mounted).
     `size_bytes` must be at least the probe's `min_bytes` for that partition and smaller than its
     current size.
-  - `manual` (planned): `"partitions": [...]`, an explicit list. Each entry is `{"device", "action", "role"}`
+  - `manual`: `"partitions": [...]` under `storage`, an explicit list. Each entry is `{"device", "action", "role"}`
     plus `"size_bytes"` for `create` and `"fs"` for `format`/`create` (see below). Validated before any write:
     exactly one `root`; `esp` required under UEFI and `bios_boot` required under BIOS (both
     `reuse` or `create`); `boot` required with LUKS under BIOS; `reuse` is allowed only for `esp`
     and `home`; `create` sizes must fit the free space on the disk. `device` must be a partition
-    of `disk`.
+    of `disk`. A `create` device is a partition number not yet on the disk (`/dev/vda3` when the GPT holds partitions 1 and 2).
     - `action`: `reuse` (mount as-is, no mkfs), `format` (mkfs, destroys contents), `create` (new
       partition in free space, then mkfs).
     - `role`: `esp`, `bios_boot`, `boot`, `root`, `home`, `swap`.
-    - `fs`: `ext4`, `btrfs`, `xfs`, `vfat` (esp only), or `swap` (swap role only).
+    - `fs`: `ext4`, `btrfs` or `xfs`, home only, not with `reuse` (a reused home keeps its own filesystem). The root filesystem is the top-level `filesystem`.
 - `filesystem`: `"ext4"` (default), `"btrfs"` or `"xfs"` for the root. Btrfs creates subvolumes `@`
   (mounted at `/`) and `@home` (mounted at `/home`). XFS cannot be shrunk, so it cannot be used with
   `alongside` on an existing XFS partition (`cannot_shrink`).
@@ -206,6 +206,7 @@ Example (erase, btrfs with LUKS, zram):
 
 GPT, always. In `erase` mode the disk is repartitioned from scratch; in `free_space` and `alongside`
 the Bingux partitions are created in unallocated space and existing partitions are kept.
+In `manual` the partitions are the plan's list (see Plan schema v2); `reuse` and `format` keep their entries, `create` takes free space.
 
 - UEFI: ESP, FAT32, 512 MiB, label `BINGUX_ESP`, mounted at `/boot` (`umask=0077`); root for the rest.
 - BIOS, unencrypted: BIOS boot, 1 MiB, flag `bios_grub`; root for the rest. `/boot` lives on root.
@@ -247,6 +248,7 @@ sd-vconsole block [sd-encrypt] filesystems fsck`), built with `mkinitcpio -P` in
   Feature cases: `uefi-xfs` (xfs root, `ntp` false, root password set), `uefi-ext4-swapfile`,
   `uefi-btrfs-zram`, and `uefi-luks-ext4-swappart` (encrypted swap partition). Feature checks read
   `systemd-timesyncd` enablement, `passwd -S root`, and `swapon` output.
+  Storage case `uefi-manual` pre-partitions the guest disk (ESP formatted, home formatted, root created in the free space) and checks the same boot results.
 - Artifacts: `distro/out/installer-backend/matrix/<case>/{install,boot}/` (serial transcript, command
   log, screenshots) and `distro/out/installer-backend/matrix/<case>/results.json`. Exit status is 0 only
   when every case passes.

@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__, bootloader, configure, layout, payload, probe, storage
-from .plan import Plan, validate_plan
+from .plan import HOME_FILESYSTEMS, Plan, validate_plan
 from .protocol import PROTOCOL_VERSION, InstallerError, progress, redact
 from .runner import Runner
 
@@ -106,7 +106,7 @@ def version_data() -> dict[str, Any]:
 # What this build carries out end to end (README "Status"). The UI offers a choice only
 # when it is listed here, so an entry is added only with its install implemented and tested.
 CAPABILITIES: dict[str, Any] = {
-    "storage_modes": ["erase", "free_space", "alongside"],
+    "storage_modes": ["erase", "free_space", "alongside", "manual"],
     "filesystems": ["ext4", "btrfs", "xfs"],
     "swap": ["none", "zram", "file", "partition"],
     "encryption": {"uefi": True, "bios": True},
@@ -241,10 +241,12 @@ def _refuse_unimplemented(plan: Plan) -> None:
     """
     if plan.storage_mode not in CAPABILITIES["storage_modes"]:
         raise InstallerError("unsupported", f"storage mode {plan.storage_mode} is not implemented yet")
+    if plan.storage_mode == "manual" and plan.encrypted and any(p.role == "home" for p in plan.partitions):
+        raise InstallerError("unsupported", "encryption with a separate home partition is not implemented yet")
 
 
 # Storage modes that keep the partitions already on the disk (other OS included).
-KEEPS_OTHER_OS = ("free_space", "alongside")
+KEEPS_OTHER_OS = ("free_space", "alongside", "manual")
 
 
 @dataclass(frozen=True)
@@ -275,6 +277,34 @@ def _plan_shrink(plan: Plan, disk: probe.DiskInfo, table: layout.GptTable) -> _S
     new_end = layout.shrink_end_sector(part, plan.shrink.size_bytes, table.sector_size)
     return _Shrink(part=part, fstype=fstype, new_end=new_end)
 
+
+def _plan_manual(plan: Plan, disk: probe.DiskInfo, table: layout.GptTable) -> tuple[
+        layout.FreePartition, ...]:
+    """Check the plan's partition list against the probed disk, then map it onto the GPT. Reads only."""
+    by_path = {p["path"]: p for p in disk.partitions}
+    entries: list[layout.ManualEntry] = []
+    for part in plan.partitions:
+        number = layout.partition_number(plan.disk, part.device)
+        if number is None:
+            raise InstallerError("invalid_plan", f"{part.device} is not a partition of {plan.disk}")
+        fs = part.fs
+        info = by_path.get(part.device)
+        if part.action != "create":
+            if info is None:
+                raise InstallerError("invalid_plan", f"{part.device} is not on {plan.disk}")
+            if part.action == "format" and info["mountpoint"]:
+                raise InstallerError("invalid_plan", f"{part.device} is mounted; unmount it to format it")
+            if part.action == "reuse" and part.role == "esp" and info["fstype"] != "vfat":
+                raise InstallerError("invalid_plan", f"{part.device} is not a vfat ESP; it cannot be reused")
+            if part.action == "reuse" and part.role == "home":
+                if info["fstype"] not in HOME_FILESYSTEMS:
+                    raise InstallerError("invalid_plan",
+                                         f"{part.device} holds {info['fstype'] or 'no'} filesystem; "
+                                         "a reused home needs ext4, btrfs or xfs")
+                fs = info["fstype"]
+        entries.append(layout.ManualEntry(number=number, role=part.role, action=part.action,
+                                          size_bytes=part.size_bytes, fs=fs))
+    return layout.manual_layout(table, tuple(entries), encrypted=plan.encrypted)
 
 
 def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
@@ -320,7 +350,7 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
         swap_partition_bytes = plan.swap_bytes if plan.swap == "partition" else 0
         free_parts = None
         shrink = None
-        if plan.storage_mode in ("free_space", "alongside"):
+        if plan.storage_mode in ("free_space", "alongside", "manual"):
             # Planned before the commit point: no_free_space, not_gpt and cannot_shrink fail with the disk untouched.
             table = probe.read_gpt(runner, plan.disk)
             if table is None:
@@ -328,9 +358,12 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
             if plan.storage_mode == "alongside":
                 shrink = _plan_shrink(plan, disk, table)
                 table = layout.shrink_table(table, shrink.part.number, shrink.new_end)
-            free_parts = layout.free_space_layout(
-                table, uefi=plan.uefi, encrypted=plan.encrypted,
-                swap_partition_bytes=swap_partition_bytes)
+            if plan.storage_mode == "manual":
+                free_parts = _plan_manual(plan, disk, table)
+            else:
+                free_parts = layout.free_space_layout(
+                    table, uefi=plan.uefi, encrypted=plan.encrypted,
+                    swap_partition_bytes=swap_partition_bytes)
         env.state.begin_commit()
         if shrink is not None:
             phase("shrink", None, f"shrinking {plan.shrink.partition}")
@@ -349,7 +382,7 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
         else:
             phase("partition", None, f"partitioning the free space on {plan.disk}")
             lay = _guard(
-                "storage_failed", storage.commit_free_space,
+                "storage_failed", storage.commit_partitions,
                 runner=runner, disk=plan.disk, partitions=free_parts,
                 filesystem=plan.filesystem, encrypted=plan.encrypted,
                 passphrase=plan.encryption.passphrase,
@@ -364,6 +397,8 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
                      if plan.encrypted else None)
         boot_uuid = (_guard("storage_failed", storage.blkid_value, runner, lay.boot_path, "UUID")
                      if lay.boot_path else None)
+        home_uuid = (_guard("storage_failed", storage.blkid_value, runner, lay.home_path, "UUID")
+                     if lay.home_path else None)
         if plan.swap == "partition" and lay.swap_path is None:
             raise InstallerError("storage_failed", "swap partition was not created")
         swap_source = None
@@ -401,6 +436,7 @@ def _install(raw: Any, emit: Emit, env: Env) -> dict[str, Any]:
         phase("configure", None, "configuring the system")
         fstab = layout.fstab(root_fs_uuid=root_uuid, filesystem=plan.filesystem,
                              boot_uuid=boot_uuid, boot_fstype=lay.boot_fstype or "vfat",
+                             home_uuid=home_uuid, home_fstype=lay.home_fstype or "ext4",
                              swap_source=swap_source)
         _guard("config_failed", configure.write_identity, env.target, plan, fstab_text=fstab)
         _guard("config_failed", configure.write_locale, runner, env.target, plan)

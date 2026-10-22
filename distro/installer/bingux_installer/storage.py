@@ -1,7 +1,7 @@
 """Partition, encrypt and format the target disk.
 
 commit_layout builds a fresh GPT through python-blivet (imported lazily, so the unit tests never
-need it). commit_free_space adds partitions to free space with sgdisk and formats them with mkfs;
+need it). commit_partitions creates the planned partitions with sgdisk and formats them with mkfs;
 it never touches blivet and never writes a reused partition. shrink_partition resizes an existing
 filesystem and its GPT entry in place (alongside).
 """
@@ -31,6 +31,8 @@ class StorageLayout:
     fs_path: str  # device the root filesystem lives on (mapper device or btrfs volume)
     luks_name: str | None  # open LUKS mapper after commit, e.g. luks-<uuid>; None when unencrypted
     swap_path: str | None  # swap partition, when one was created
+    home_path: str | None = None  # separate /home partition; None when /home is a btrfs subvolume
+    home_fstype: str | None = None  # filesystem of the separate /home partition
 
 
 def commit_layout(
@@ -149,7 +151,7 @@ def commit_layout(
     )
 
 
-def commit_free_space(
+def commit_partitions(
     *,
     runner: Runner,
     disk: str,
@@ -158,30 +160,37 @@ def commit_free_space(
     encrypted: bool,
     passphrase: str,
 ) -> StorageLayout:
-    """Create the planned partitions in free space and format the new ones. Destructive only to
-    the new partitions: a reused partition (existing ESP or BIOS boot) is never written.
-    Commit point: the first sgdisk call. The passphrase goes on stdin only."""
+    """Create the planned partitions and format every one that is not reused. A reused partition
+    is never written, and a formatted one keeps its place in the GPT. Commit point: the first
+    sgdisk call when any partition is created, else the first mkfs. The passphrase goes on stdin
+    only."""
     paths = {p.role: layout.partition_path(disk, p.number) for p in partitions}
-    fresh = {p.role for p in partitions if not p.reuse}
     root = paths["root"]
     fs_path = f"/dev/mapper/{layout.LUKS_NAME}" if encrypted else root
+    home = next((p for p in partitions if p.role == "home"), None)
     args: list[str] = []
     for p in partitions:
-        if not p.reuse:
+        if p.action == "create":
             args += [f"--new={p.number}:{p.start}:{p.end}", f"--typecode={p.number}:{p.code}",
                      f"--change-name={p.number}:{p.name}"]
+    if args:
+        try:
+            runner.run(["sgdisk", *args, disk])
+        except CommandError as exc:
+            raise InstallerError("storage_failed", "sgdisk could not write the new partitions") from exc
+        _settle(runner)
     try:
-        runner.run(["sgdisk", *args, disk])
-    except CommandError as exc:
-        raise InstallerError("storage_failed", "sgdisk could not write the new partitions") from exc
-    _settle(runner)
-    try:
-        if "esp" in fresh:
-            runner.run(["mkfs.fat", "-F", "32", "-n", layout.ESP_LABEL, paths["esp"]])
-        if "boot" in fresh:
-            runner.run(["mkfs.ext4", "-F", "-L", layout.BOOT_LABEL, paths["boot"]])
-        if "swap" in fresh:
-            runner.run(["mkswap", paths["swap"]])
+        for p in partitions:
+            if p.action == "reuse":
+                continue
+            if p.role == "esp":
+                runner.run(["mkfs.fat", "-F", "32", "-n", layout.ESP_LABEL, paths["esp"]])
+            elif p.role == "boot":
+                runner.run(["mkfs.ext4", "-F", "-L", layout.BOOT_LABEL, paths["boot"]])
+            elif p.role == "swap":
+                runner.run(["mkswap", paths["swap"]])
+            elif p.role == "home":
+                runner.run([*HOME_MKFS[p.fs], paths["home"]])
         if encrypted:
             runner.run(["cryptsetup", "luksFormat", "--batch-mode", "--key-file=-", root],
                        stdin=passphrase)
@@ -190,7 +199,7 @@ def commit_free_space(
             _settle(runner)
         if filesystem == "btrfs":
             runner.run(["mkfs.btrfs", "-f", "-L", layout.ROOT_LABEL, fs_path])
-            _make_btrfs_subvolumes(runner, fs_path)
+            _make_btrfs_subvolumes(runner, fs_path, home_separate=home is not None)
         elif filesystem == "xfs":
             runner.run(["mkfs.xfs", "-f", "-L", layout.ROOT_LABEL, fs_path])
         else:
@@ -212,7 +221,16 @@ def commit_free_space(
         fs_path=fs_path,
         luks_name=layout.LUKS_NAME if encrypted else None,
         swap_path=paths.get("swap"),
+        home_path=paths.get("home"),
+        home_fstype=home.fs if home is not None else None,
     )
+
+
+HOME_MKFS: dict[str, list[str]] = {
+    "ext4": ["mkfs.ext4", "-F", "-L", layout.HOME_LABEL],
+    "btrfs": ["mkfs.btrfs", "-f", "-L", layout.HOME_LABEL],
+    "xfs": ["mkfs.xfs", "-f", "-L", layout.HOME_LABEL],
+}
 
 
 def _settle(runner: Runner) -> None:
@@ -236,10 +254,13 @@ def _mounted(runner: Runner, device: str) -> Iterator[str]:
         os.rmdir(mount_point)
 
 
-def _make_btrfs_subvolumes(runner: Runner, device: str) -> None:
-    """Create the top-level subvolumes through a temporary mount, then unmount it."""
+def _make_btrfs_subvolumes(runner: Runner, device: str, *, home_separate: bool) -> None:
+    """Create the top-level subvolumes through a temporary mount, then unmount it. @home is left
+    out when /home is a partition of its own."""
     with _mounted(runner, device) as mount_point:
         for name, _ in layout.BTRFS_SUBVOLS:
+            if home_separate and name == "@home":
+                continue
             runner.run(["btrfs", "subvolume", "create", f"{mount_point}/{name}"])
 
 

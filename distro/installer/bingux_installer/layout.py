@@ -16,6 +16,7 @@ BIOS_BOOT_BYTES = 1 * MIB
 BOOT_BYTES = 1 * GIB  # unencrypted /boot under BIOS with an encrypted root
 ESP_LABEL = "BINGUX_ESP"
 BOOT_LABEL = "BINGUX_BOOT"
+HOME_LABEL = "BINGUX_HOME"
 ROOT_LABEL = "BINGUX_ROOT"
 LUKS_NAME = "bingux-root"
 BTRFS_SUBVOLS = (("@", "/"), ("@home", "/home"))
@@ -95,10 +96,13 @@ def fstab(
     filesystem: str,
     boot_uuid: str | None,
     boot_fstype: str = "vfat",
+    home_uuid: str | None = None,
+    home_fstype: str = "ext4",
     swap_source: str | None = None,
 ) -> str:
     """Render /etc/fstab. /boot only when boot_uuid is set: a vfat ESP (UEFI) or an ext4 partition
-    (BIOS with encryption); swap only when swap_source is set.
+    (BIOS with encryption); /home on its own partition only when home_uuid is set, else a btrfs
+    @home subvolume; swap only when swap_source is set.
 
     swap_source is the device column of the swap entry: a path to a swap file, a UUID=
     spec, or the mapper device of encrypted swap."""
@@ -108,11 +112,16 @@ def fstab(
     ]
     if filesystem == "btrfs":
         lines.append(f"UUID={root_fs_uuid}\t/\tbtrfs\tsubvol=@,defaults\t0\t0")
-        lines.append(f"UUID={root_fs_uuid}\t/home\tbtrfs\tsubvol=@home,defaults\t0\t0")
+        if home_uuid is None:
+            lines.append(f"UUID={root_fs_uuid}\t/home\tbtrfs\tsubvol=@home,defaults\t0\t0")
     elif filesystem == "xfs":
         lines.append(f"UUID={root_fs_uuid}\t/\txfs\tdefaults\t0\t0")
     else:
         lines.append(f"UUID={root_fs_uuid}\t/\text4\tdefaults\t0\t1")
+    if home_uuid:
+        if home_fstype not in ("ext4", "btrfs", "xfs"):
+            raise ValueError(f"unsupported home filesystem {home_fstype!r}")
+        lines.append(f"UUID={home_uuid}\t/home\t{home_fstype}\tdefaults\t0\t2")
     if boot_uuid:
         if boot_fstype not in ("vfat", "ext4"):
             raise ValueError(f"unsupported boot filesystem {boot_fstype!r}")
@@ -253,15 +262,17 @@ ROOT_MIN_BYTES = 1 * GIB  # the growable root of a free_space layout is at least
 
 @dataclass(frozen=True)
 class FreePartition:
-    """One partition of a free_space layout. A reused partition keeps its place and is not written."""
+    """One planned partition. `action` is reuse (kept as-is, nothing written), format (existing
+    partition, mkfs only) or create (new GPT entry, then mkfs). `fs` is the home filesystem."""
 
-    role: str  # "esp" | "bios_boot" | "boot" | "swap" | "root"
+    role: str  # "esp" | "bios_boot" | "boot" | "swap" | "root" | "home"
     number: int  # 1-based GPT index
     start: int  # first sector, inclusive
     end: int  # last sector, inclusive
     code: str
     name: str
-    reuse: bool
+    action: str  # "reuse" | "format" | "create"
+    fs: str = ""  # home: "ext4" | "btrfs" | "xfs" (reuse: the filesystem found on disk)
 
 
 def partition_path(disk: str, number: int) -> str:
@@ -317,20 +328,95 @@ def free_space_layout(table: GptTable, *, uefi: bool, encrypted: bool,
     out: list[FreePartition] = []
     if reused is not None:
         out.append(FreePartition("esp" if uefi else "bios_boot", reused.number, reused.start,
-                                 reused.end, reuse_code, reused.name, reuse=True))
+                                 reused.end, reuse_code, reused.name, action="reuse"))
     cursor = _align_up(first, unit)
     for role, size_bytes, code, name in specs:
         sectors = _align_up(-(-size_bytes // table.sector_size), unit)
         if cursor + sectors - 1 > last:
             raise _no_free_space(largest_bytes, need)
         out.append(FreePartition(role, next_number(), cursor, cursor + sectors - 1, code, name,
-                                 reuse=False))
+                                 action="create"))
         cursor += sectors
     if (last - cursor + 1) * table.sector_size < ROOT_MIN_BYTES:
         raise _no_free_space(largest_bytes, need)
     root_code = GPT_LINUX_LUKS if encrypted else GPT_LINUX
     out.append(FreePartition("root", next_number(), cursor, last, root_code, ROOT_LABEL,
-                             reuse=False))
+                             action="create"))
+    return tuple(out)
+
+
+@dataclass(frozen=True)
+class ManualEntry:
+    """One partition of a manual layout. `number` is the GPT index the plan's device names;
+    a create entry must name an index the table does not use yet."""
+
+    number: int
+    role: str
+    action: str  # "reuse" | "format" | "create"
+    size_bytes: int  # create only
+    fs: str  # home only
+
+
+CREATE_CODES = {"esp": GPT_ESP, "bios_boot": GPT_BIOS_BOOT, "boot": GPT_LINUX,
+                "swap": GPT_LINUX_SWAP, "home": GPT_LINUX}
+CREATE_NAMES = {"esp": ESP_LABEL, "bios_boot": "BIOS boot", "boot": BOOT_LABEL,
+                "swap": "bingux-swap", "home": HOME_LABEL, "root": ROOT_LABEL}
+
+
+def partition_number(disk: str, device: str) -> int | None:
+    """GPT index of `device` on `disk`, the inverse of partition_path; None when it is not one."""
+    match = re.fullmatch(re.escape(disk) + r"p?([0-9]+)", device)
+    if match is None:
+        return None
+    number = int(match.group(1))
+    return number if partition_path(disk, number) == device else None
+
+
+def manual_layout(table: GptTable, entries: tuple[ManualEntry, ...], *,
+                  encrypted: bool) -> tuple[FreePartition, ...]:
+    """Map an explicit partition list onto the GPT, in list order.
+
+    reuse and format keep an existing entry (its place, code and name). create places a new
+    entry in the largest unallocated region, in list order, aligned to 1 MiB. Raises
+    invalid_plan for a missing or clashing entry or a root under 1 GiB, and no_free_space when
+    the new entries do not fit. Pure: no I/O.
+    """
+    by_number = {p.number: p for p in table.partitions}
+    for e in entries:
+        if e.action == "create" and e.number in by_number:
+            raise InstallerError("invalid_plan",
+                                 f"partition {e.number} already exists; create needs an unused one")
+        if e.action != "create" and e.number not in by_number:
+            raise InstallerError("invalid_plan", f"partition {e.number} is not on the disk")
+        if e.action == "create" and e.role == "root" and e.size_bytes < ROOT_MIN_BYTES:
+            raise InstallerError("invalid_plan", "a new root partition needs at least 1 GiB")
+
+    creates = [e for e in entries if e.action == "create"]
+    unit = max(1, MIB // table.sector_size)  # 1 MiB alignment
+    sectors = {e.number: _align_up(-(-e.size_bytes // table.sector_size), unit) for e in creates}
+    need = sum(sectors.values()) * table.sector_size
+    first, last = max(table.free_regions(), key=lambda r: r[1] - r[0], default=(0, -1))
+    largest_bytes = (last - first + 1) * table.sector_size
+    placed: dict[int, tuple[int, int]] = {}
+    cursor = _align_up(first, unit)
+    for e in creates:
+        if cursor + sectors[e.number] - 1 > last:
+            raise _no_free_space(largest_bytes, need)
+        placed[e.number] = (cursor, cursor + sectors[e.number] - 1)
+        cursor += sectors[e.number]
+
+    out: list[FreePartition] = []
+    for e in entries:
+        if e.action == "create":
+            start, end = placed[e.number]
+            code = GPT_LINUX_LUKS if encrypted and e.role == "root" else (
+                GPT_LINUX if e.role == "root" else CREATE_CODES[e.role])
+            name = CREATE_NAMES[e.role]
+        else:
+            existing = by_number[e.number]
+            start, end, code, name = existing.start, existing.end, existing.code, existing.name
+        out.append(FreePartition(e.role, e.number, start, end, code, name, action=e.action,
+                                 fs=e.fs))
     return tuple(out)
 
 

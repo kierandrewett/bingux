@@ -1,4 +1,4 @@
-"""commit_free_space against a recording runner: no disk is touched."""
+"""commit_partitions against a recording runner: no disk is touched."""
 
 from __future__ import annotations
 
@@ -31,14 +31,14 @@ class RecordingRunner:
 
 def _fresh_esp_and_root() -> tuple[layout.FreePartition, ...]:
     return (
-        layout.FreePartition("esp", 2, 100, 200, layout.GPT_ESP, layout.ESP_LABEL, reuse=False),
-        layout.FreePartition("root", 3, 201, 400, layout.GPT_LINUX, layout.ROOT_LABEL, reuse=False),
+        layout.FreePartition("esp", 2, 100, 200, layout.GPT_ESP, layout.ESP_LABEL, action="create"),
+        layout.FreePartition("root", 3, 201, 400, layout.GPT_LINUX, layout.ROOT_LABEL, action="create"),
     )
 
 
 def test_fresh_partitions_are_created_then_formatted_on_ext4() -> None:
     runner = RecordingRunner()
-    out = storage.commit_free_space(
+    out = storage.commit_partitions(
         runner=runner, disk="/dev/vda", partitions=_fresh_esp_and_root(),
         filesystem="ext4", encrypted=False, passphrase="")
     argvs = runner.argvs()
@@ -56,11 +56,11 @@ def test_fresh_partitions_are_created_then_formatted_on_ext4() -> None:
 
 def test_reused_esp_is_never_written_or_formatted() -> None:
     parts = (
-        layout.FreePartition("esp", 1, 2048, 4095, layout.GPT_ESP, "EFI", reuse=True),
-        layout.FreePartition("root", 3, 201, 400, layout.GPT_LINUX, layout.ROOT_LABEL, reuse=False),
+        layout.FreePartition("esp", 1, 2048, 4095, layout.GPT_ESP, "EFI", action="reuse"),
+        layout.FreePartition("root", 3, 201, 400, layout.GPT_LINUX, layout.ROOT_LABEL, action="create"),
     )
     runner = RecordingRunner()
-    storage.commit_free_space(runner=runner, disk="/dev/vda", partitions=parts,
+    storage.commit_partitions(runner=runner, disk="/dev/vda", partitions=parts,
                               filesystem="ext4", encrypted=False, passphrase="")
     argvs = runner.argvs()
     assert not any("--new=1:" in part for argv in argvs for part in argv)
@@ -70,9 +70,9 @@ def test_reused_esp_is_never_written_or_formatted() -> None:
 
 def test_encrypted_root_takes_passphrase_on_stdin_only() -> None:
     parts = (layout.FreePartition("root", 3, 201, 400, layout.GPT_LINUX_LUKS,
-                                  layout.ROOT_LABEL, reuse=False),)
+                                  layout.ROOT_LABEL, action="create"),)
     runner = RecordingRunner()
-    out = storage.commit_free_space(runner=runner, disk="/dev/vda", partitions=parts,
+    out = storage.commit_partitions(runner=runner, disk="/dev/vda", partitions=parts,
                                     filesystem="ext4", encrypted=True, passphrase=PASSPHRASE)
     assert all(PASSPHRASE not in arg for argv in runner.argvs() for arg in argv)
     secret_calls = [(argv, stdin) for argv, stdin in runner.calls if stdin == PASSPHRASE]
@@ -84,7 +84,7 @@ def test_encrypted_root_takes_passphrase_on_stdin_only() -> None:
 def test_tool_failure_names_the_tool_and_hides_stderr() -> None:
     runner = RecordingRunner(fail_on="sgdisk")
     with pytest.raises(InstallerError) as exc:
-        storage.commit_free_space(runner=runner, disk="/dev/vda",
+        storage.commit_partitions(runner=runner, disk="/dev/vda",
                                   partitions=_fresh_esp_and_root(), filesystem="ext4",
                                   encrypted=False, passphrase="")
     assert exc.value.code == "storage_failed"

@@ -275,4 +275,4 @@ work belongs in Git history and does not stay here as a second changelog.
       `distro/installer/tests/unit/test_configure.py`; matrix case `uefi-ext4-autologin` passes:
       gnoblin runs for the user at boot and greetd keeps the greeter as the default session.
 - [ ] F4 `free_space` and `alongside` (blivet shrink: ext4, btrfs, NTFS; os-prober and systemd-boot entries).
-- [ ] F5 `manual` partitioning (explicit partition list, validated server-side).
+- [x] F5 `manual` partitioning (explicit partition list, validated server-side; matrix case `uefi-manual`).

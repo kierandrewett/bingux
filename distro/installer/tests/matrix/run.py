@@ -59,6 +59,18 @@ CASES = {
     "uefi-luks-ext4-swappart": ("uefi", "ext4", True, {"swap": "partition", "swap_bytes": SWAP_BYTES}),
     # first user starts the Gnoblin session at boot (greetd initial_session); greeter kept as default
     "uefi-ext4-autologin": ("uefi", "ext4", False, {"autologin": USER}),
+    # manual: reuse the ESP, format a home partition, create the root in the free space (see PREPARE)
+    "uefi-manual": ("uefi", "ext4", False, {"storage": {"mode": "manual", "partitions": [
+        {"device": DISK + "1", "action": "reuse", "role": "esp"},
+        {"device": DISK + "2", "action": "format", "role": "home", "fs": "ext4"},
+        {"device": DISK + "3", "action": "create", "role": "root", "size_bytes": 6 * 1024**3},
+    ]}}),
+}
+
+# Guest disk layout a case needs before the probe: the matrix blank disk has no partition table.
+PREPARE = {
+    "uefi-manual": (f"printf '%s\\n' 'label: gpt' ',512MiB,U' ',2GiB,L' | sfdisk --wipe always {DISK} && "
+                    f"udevadm settle && mkfs.vfat -F 32 -n BINGUX_ESP {DISK}1"),
 }
 
 
@@ -82,6 +94,8 @@ def make_plan(firmware, filesystem, encrypted, extra=None):
         "kernel_args": ["console=ttyS0"],
     }
     plan.update(extra or {})
+    if plan.get("storage", {}).get("mode", "erase") != "erase":
+        del plan["other_os"]  # the plan schema allows other_os only in erase mode
     return plan
 
 ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[()][0-9A-Za-z]|\x1b[=>78]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
@@ -153,6 +167,9 @@ def install_phase(vm, checks, name, firmware, filesystem, encrypted, extra, over
                        "base64 -d > /run/systemd/system/bingux-installer.service.d/overlay.conf && "
                        "systemctl daemon-reload && systemctl restart bingux-installer.service", timeout=120)
         checks.expect(rc == 0, f"{name}: daemon restarted on the overlay", f"rc={rc}")
+    if name in PREPARE:
+        rc, _ = vm.run(PREPARE[name], timeout=180)
+        checks.expect(rc == 0, f"{name}: guest disk prepared", f"rc={rc}")
     payload = base64.b64encode(json.dumps(make_plan(firmware, filesystem, encrypted, extra)).encode()).decode()
     rc, _ = vm.run(f"printf %s {payload} | base64 -d > /tmp/plan.json", timeout=60)
     checks.expect(rc == 0, f"{name}: plan written to the guest", f"rc={rc}")

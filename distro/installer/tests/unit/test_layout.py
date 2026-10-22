@@ -206,7 +206,7 @@ def _gpt(free_gib: int, parts: tuple[layout.GptPartition, ...] = ()) -> layout.G
 
 def test_free_space_uefi_creates_esp_and_root_in_free_region() -> None:
     out = layout.free_space_layout(_gpt(30), uefi=True, encrypted=False)
-    assert [(p.role, p.number, p.reuse) for p in out] == [("esp", 2, False), ("root", 3, False)]
+    assert [(p.role, p.number, p.action) for p in out] == [("esp", 2, "create"), ("root", 3, "create")]
     esp, root = out
     assert esp.code == layout.GPT_ESP and esp.start >= 20 * GIB // 512 + 2048
     assert esp.end - esp.start + 1 == layout.ESP_BYTES // 512
@@ -218,7 +218,7 @@ def test_free_space_reuses_existing_esp_and_keeps_its_place() -> None:
     table = _gpt(30, (esp,))
     out = layout.free_space_layout(table, uefi=True, encrypted=False)
     assert out[0] == layout.FreePartition("esp", 1, 2048, esp.end, layout.GPT_ESP, "EFI",
-                                          reuse=True)
+                                          action="reuse")
     assert [p.role for p in out] == ["esp", "root"]
 
 
@@ -233,6 +233,48 @@ def test_free_space_refuses_region_too_small_for_root() -> None:
     with pytest.raises(InstallerError) as exc:
         layout.free_space_layout(_gpt(1), uefi=True, encrypted=False)
     assert exc.value.code == "no_free_space"
+
+
+def test_manual_layout_keeps_reused_entries_and_places_creates_in_list_order() -> None:
+    esp = layout.GptPartition(1, 2048, 2048 + layout.ESP_BYTES // 512 - 1, layout.GPT_ESP, "EFI")
+    out = layout.manual_layout(_gpt(30, (esp,)), (
+        layout.ManualEntry(1, "esp", "reuse", 0, ""),
+        layout.ManualEntry(3, "root", "create", 10 * GIB, ""),
+        layout.ManualEntry(2, "home", "create", 5 * GIB, "btrfs"),
+    ), encrypted=False)
+    assert [(p.role, p.number, p.action, p.fs) for p in out] == [
+        ("esp", 1, "reuse", ""), ("root", 3, "create", ""), ("home", 2, "create", "btrfs")]
+    assert (out[0].start, out[0].end) == (esp.start, esp.end)
+    assert out[1].end - out[1].start + 1 == 10 * GIB // 512
+    assert out[1].code == layout.GPT_LINUX and out[1].end < out[2].start
+
+
+def test_manual_layout_encrypted_root_uses_luks_code() -> None:
+    out = layout.manual_layout(_gpt(30), (layout.ManualEntry(2, "root", "create", 10 * GIB, ""),),
+                               encrypted=True)
+    assert out[0].code == layout.GPT_LINUX_LUKS
+
+
+def test_manual_layout_refuses_clashing_or_missing_entries() -> None:
+    table = _gpt(30)
+    with pytest.raises(InstallerError) as exc:
+        layout.manual_layout(table, (layout.ManualEntry(1, "home", "create", GIB, "ext4"),),
+                             encrypted=False)
+    assert exc.value.code == "invalid_plan"
+    with pytest.raises(InstallerError) as exc:
+        layout.manual_layout(table, (layout.ManualEntry(7, "home", "reuse", 0, "ext4"),),
+                             encrypted=False)
+    assert exc.value.code == "invalid_plan"
+    with pytest.raises(InstallerError) as exc:
+        layout.manual_layout(table, (layout.ManualEntry(2, "root", "create", GIB // 2, ""),),
+                             encrypted=False)
+    assert exc.value.code == "invalid_plan"
+
+
+def test_fstab_mounts_a_separate_home_by_its_filesystem() -> None:
+    text = layout.fstab(root_fs_uuid="root-uuid", filesystem="ext4", boot_uuid=None,
+                        home_uuid="home-uuid", home_fstype="xfs")
+    assert "UUID=home-uuid\t/home\txfs\tdefaults\t0\t2" in text
 
 
 def test_free_space_uses_largest_region_not_total_free() -> None:

@@ -103,14 +103,19 @@ def _private_mountpoint(runner: Runner, target: Path) -> None:
 
 def mount_target(runner: Runner, lay: StorageLayout, target: Path = TARGET_MNT, *,
                  filesystem: str) -> None:
-    """Mount the installed root (and btrfs @home, and the /boot partition at target/boot)."""
+    """Mount the installed root, /home (a btrfs @home subvolume or its own partition) and the
+    /boot partition at target/boot."""
     _private_mountpoint(runner, target)
     if filesystem == "btrfs":
         runner.run(["mount", "-o", "subvol=@", lay.fs_path, str(target)])
-        (target / "home").mkdir(exist_ok=True)
-        runner.run(["mount", "-o", "subvol=@home", lay.fs_path, str(target / "home")])
     else:
         runner.run(["mount", lay.fs_path, str(target)])
+    if lay.home_path is not None:
+        (target / "home").mkdir(exist_ok=True)
+        runner.run(["mount", lay.home_path, str(target / "home")])
+    elif filesystem == "btrfs":
+        (target / "home").mkdir(exist_ok=True)
+        runner.run(["mount", "-o", "subvol=@home", lay.fs_path, str(target / "home")])
     if lay.boot_path is not None:
         boot = target / "boot"
         boot.mkdir(exist_ok=True)
