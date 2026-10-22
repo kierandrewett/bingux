@@ -74,7 +74,11 @@ returns response code 1. Any other failure returns response code 2.
   waits for the user.
 - Approval needs an app_id. The frontend derives it from the caller. A host
   program with no app_id is refused: the shell rejects an empty app_id, and the
-  provider has no other identity to use.
+  provider has no other identity to use. The Gnoblin backend passes only
+  `app_id` to the provider, so the request handle that names a host caller is
+  not available. Fixing this needs a contract change in Gnoblin and here
+  together: `BindShortcuts` and `ConfigureShortcuts` take the request handle,
+  and grants are keyed by `identity::Identity::key()`. See `docs/portals.md`.
 - A user denial returns `AccessDenied` on the provider. The frontend maps that
   error to response code 2, not 1.
 - Approved grants are kept in `$XDG_CONFIG_HOME/bingux/global-shortcuts.toml`,

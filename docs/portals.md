@@ -39,6 +39,34 @@ The provider is not the screenshot backend. A caller with no app_id is refused,
 because the shell's approval request needs one. See
 [Interface known state](#interface-known-state).
 
+Host programs (empty app_id) cannot be approved yet, and the provider cannot
+identify them under the current contract. The Gnoblin patch
+(`xdg-desktop-portal-gnome/39-global-shortcuts/0001-route-global-shortcuts-through-gnoblin.patch`)
+passes only `app_id` to `BindShortcuts` and `ConfigureShortcuts`. The request
+handle that names the caller's unique bus name stays in the backend. The
+Screenshot identity (`identity::resolve`) needs that handle, so the provider
+cannot reuse it here.
+
+Proposed smallest contract change, which must land in Gnoblin and Bingux together:
+
+- `BindShortcuts(app_id, parent, shortcuts, handle)` and
+  `ConfigureShortcuts(app_id, parent, handle)` take a trailing `o` request handle
+  from the backend's `arg_handle`. The provider calls
+  `identity::requester(connection, app_id, handle, uid)`: an `app_id` identifies
+  a sandboxed app, and an empty `app_id` identifies a host program by
+  `host-exe:<path>`.
+- Grants are keyed by the identity key, not the bare `app_id`. The approval
+  request carries the identity and a display name (the executable's file name
+  for a host program).
+- `RebindShortcuts` also needs the handle, so the backend can choose the session.
+- Callers that send the old three-argument form are rejected. The backend and
+  provider must be deployed together.
+
+Guest check, 2026-10-23: a host process with no Flatpak scope calls
+`BindShortcuts` and gets response 2 after 0.2 s with no empty results and no
+dialog. The shell rejects the empty `app_id` before any approval. The Allow path
+for a host caller cannot run until the contract changes.
+
 ## Routing
 
 `xdg-desktop-portal` picks a backend for each interface from its routing
