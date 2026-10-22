@@ -32,3 +32,25 @@ def test_locale_hostname_and_vconsole_renderers() -> None:
     assert configure.render_hostname("bingux") == "bingux\n"
     assert configure.render_locale_conf("en_GB.UTF-8") == "LANG=en_GB.UTF-8\n"
     assert configure.render_vconsole("uk") == "KEYMAP=uk\n"
+
+
+def test_restore_greeter_config_replaces_live_config(tmp_path) -> None:
+    packaged = tmp_path / configure.GREETD_PACKAGED
+    packaged.parent.mkdir(parents=True)
+    packaged.write_text('[default_session]\ncommand = "bingux-greeter-session"\n', encoding="utf-8")
+    live = tmp_path / configure.GREETD_CONFIG
+    live.parent.mkdir(parents=True)
+    live.write_text('[initial_session]\ncommand = "bingux-live-session installer"\n', encoding="utf-8")
+
+    configure.restore_greeter_config(tmp_path)
+
+    assert live.read_text(encoding="utf-8") == packaged.read_text(encoding="utf-8")
+    assert "initial_session" not in live.read_text(encoding="utf-8")
+
+
+def test_restore_greeter_config_fails_without_packaged_file(tmp_path) -> None:
+    import pytest
+    from bingux_installer.protocol import InstallerError
+
+    with pytest.raises(InstallerError):
+        configure.restore_greeter_config(tmp_path)

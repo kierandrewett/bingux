@@ -133,6 +133,18 @@ def boot_phase(vm, checks, name, firmware, filesystem, encrypted, out):
     checks.expect(rc == 0 and who.strip() == USER, f"{name}: created user runs commands", f"rc={rc} out={who!r}")
     rc, groups = vm.run(f"id -nG {USER}", timeout=60)
     checks.expect(rc == 0 and "wheel" in groups.split(), f"{name}: admin user is in wheel", f"out={groups!r}")
+    rc, greetd = vm.run("grep -c initial_session /etc/greetd/config.toml; "
+                        "cmp -s /etc/greetd/config.toml /usr/share/bingux/greeter/greetd.toml && echo packaged",
+                        timeout=60)
+    checks.expect(greetd.split()[:1] == ["0"] and greetd.split()[-1:] == ["packaged"],
+                  f"{name}: greetd config is the packaged greeter, no live session",
+                  f"rc={rc} out={greetd!r}")
+    rc, live_bits = vm.run("id live >/dev/null 2>&1 && echo live-user; "
+                           "pacman -Q bingux-installer >/dev/null 2>&1 && echo installer-pkg; "
+                           "ls /usr/local/bin/bingux-live-session /usr/local/bin/bingux-live-switch 2>/dev/null",
+                           timeout=60)
+    checks.expect(live_bits.strip() == "", f"{name}: no live-only account, package or scripts",
+                  f"rc={rc} out={live_bits!r}")
 
     rc, fstype = vm.run("findmnt -n -o FSTYPE /", timeout=60)
     checks.expect(rc == 0 and fstype.strip() == filesystem, f"{name}: root is {filesystem}",

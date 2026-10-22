@@ -74,6 +74,8 @@ ADMIN_GROUP = "wheel"
 SUDOERS_FILE = "etc/sudoers.d/10-bingux-wheel"
 SUDOERS_TEXT = "%wheel ALL=(ALL:ALL) ALL\n"
 LIVE_ONLY_PACKAGES = ("archinstall", "mkinitcpio-archiso", "bingux-installer", "python-blivet")
+GREETD_CONFIG = "etc/greetd/config.toml"
+GREETD_PACKAGED = "usr/share/bingux/greeter/greetd.toml"
 PLYMOUTH_HOOK = "usr/lib/initcpio/install/plymouth"
 HOOKS_RE = re.compile(r"^HOOKS=.*$", re.MULTILINE)
 
@@ -182,8 +184,25 @@ def _installed_packages(runner: Runner, target: Path, names: Sequence[str]) -> l
 
 # ---- orchestration --------------------------------------------------------------
 
+def restore_greeter_config(target: Path) -> None:
+    """Replace the live greetd config with the packaged greeter configuration.
+
+    The live image's config starts the live session; the installed system must
+    get the copy bingux ships in /usr/share/bingux/greeter/greetd.toml."""
+    source = target / GREETD_PACKAGED
+    if not source.is_file():
+        raise InstallerError("config_failed", f"{GREETD_PACKAGED} is missing from the target")
+    dest = target / GREETD_CONFIG
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.is_symlink():
+        dest.unlink()
+    shutil.copyfile(source, dest)
+    os.chmod(dest, 0o644)
+
+
 def strip_live_and_packages(runner: Runner, target: Path) -> None:
     strip_live(target)
+    restore_greeter_config(target)
     installed = _installed_packages(runner, target, LIVE_ONLY_PACKAGES)
     if installed:
         _chroot(runner, target, ["pacman", "-Rns", "--noconfirm", *installed])
