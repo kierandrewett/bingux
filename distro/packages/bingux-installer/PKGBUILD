@@ -14,7 +14,7 @@ url='https://github.com/kierandrewett/bingux'
 license=('GPL-3.0-or-later')
 depends=('python' 'python-blivet' 'parted' 'gptfdisk' 'dosfstools' 'e2fsprogs' 'btrfs-progs'
     'cryptsetup' 'rsync' 'openssl' 'util-linux' 'squashfs-tools' 'mkinitcpio' 'systemd'
-    'grub' 'efibootmgr' 'ntfs-3g' 'bingux' 'gnoblin')
+    'grub' 'efibootmgr' 'ntfs-3g' 'bingux' 'bingux-os' 'gnoblin')
 makedepends=('python-build' 'python-installer' 'python-setuptools' 'python-wheel')
 options=('!debug')
 install=bingux-installer.install
