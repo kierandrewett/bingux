@@ -49,7 +49,10 @@ impl Component for UsageMeter {
             .child(
                 rect()
                     .width(Size::fill())
-                    .tw(&tokens, &[flex_row(), items(Align::End), gap(S2)])
+                    .tw(
+                        &tokens,
+                        &[flex_row(), grow_children(), items(Align::End), gap(S2)],
+                    )
                     .child(HERO.label(&tokens, self.value.clone()).max_lines(1))
                     .child(
                         rect()

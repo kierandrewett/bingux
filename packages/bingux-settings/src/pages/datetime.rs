@@ -392,8 +392,10 @@ impl Component for DateTimePage {
             Some(Err(message)) => (message, String::new()),
             None => ("Reading the clock.".to_string(), String::new()),
         };
-        let clock_face = vstack(S1)
-            .tw_layout(&[w_full(), py(S2), px(GUTTER)])
+        // Free content in the card: the card body's 16 px on every side.
+        let clock_face = rect()
+            .tw_layout(CARD_BODY)
+            .tw_layout(&[gap(S1)])
             .child(styled_label(typography::HERO, clock))
             .child(caption(date));
 

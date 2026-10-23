@@ -484,10 +484,14 @@ struct PropertyValue {
 impl Component for PropertyValue {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        VALUE
-            .paragraph(&tokens, self.text.clone())
-            .width(Size::percent(55.0))
-            .text_align(TextAlign::End)
+        // A long value wraps within the field column instead of pushing
+        // the title aside.
+        rect().tw(&tokens, &[w(Dim::Field)]).child(
+            VALUE
+                .paragraph(&tokens, self.text.clone())
+                .width(Size::fill())
+                .text_align(TextAlign::End),
+        )
     }
 }
 

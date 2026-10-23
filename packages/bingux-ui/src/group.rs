@@ -326,11 +326,14 @@ impl Component for StatusBlock {
         } else {
             Paint::Card
         };
-        // A status is a card with the metrics of a row. A long message wraps
-        // and grows the block.
+        // A status is a card with the metrics of a row. A short message is
+        // one row high, centred; a long one wraps and grows the block (Freya
+        // centres against the content, not a minimum height, so the short
+        // case needs the fixed row height).
+        let short = text.chars().count() <= 70;
         rect()
             .tw(&tokens, CARD)
-            .tw(&tokens, ROW_TALL)
+            .tw(&tokens, if short { ROW } else { ROW_TALL })
             .tw(&tokens, &[bg(paint)])
             .maybe_child(
                 matches!(self.status, Status::Loading(_)).then(|| spinner(SpinnerSize::Small)),
