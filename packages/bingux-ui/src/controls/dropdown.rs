@@ -25,7 +25,7 @@ const BUTTON_MAX_WIDTH: f32 = 360.0;
 /// A generous average glyph width at body size. Freya cannot size a button
 /// to an ellipsised label, so the button is sized from its longest option
 /// and does not change width when the choice changes.
-const GLYPH_WIDTH: f32 = 7.4;
+const GLYPH_WIDTH: f32 = 8.2;
 /// Left padding, gap and chevron with its right padding.
 const BUTTON_CHROME: f32 = S3 + S2 + ICON_MD + S2;
 
