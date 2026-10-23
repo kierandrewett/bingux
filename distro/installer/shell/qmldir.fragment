@@ -8,6 +8,9 @@ InstallerFinishedPage 1.0 InstallerFinishedPage.qml
 InstallerHostnamePage 1.0 InstallerHostnamePage.qml
 InstallerKeyboardPage 1.0 InstallerKeyboardPage.qml
 InstallerLog 1.0 InstallerLog.qml
+InstallerNotice 1.0 InstallerNotice.qml
+InstallerOption 1.0 InstallerOption.qml
+InstallerScroll 1.0 InstallerScroll.qml
 InstallerNetworkPage 1.0 InstallerNetworkPage.qml
 InstallerPage 1.0 InstallerPage.qml
 InstallerPartitionsPage 1.0 InstallerPartitionsPage.qml

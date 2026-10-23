@@ -34,8 +34,8 @@ Rectangle {
     // room left under the top bar with a margin of 4% of the screen height.
     readonly property real frameWidth: wide && parent ? Math.round(Math.min(parent.width * 0.9, (parent.height - verticalReserve - 2 * Math.round(parent.height * 0.04)) * 16 / 9)) : 0
     readonly property real frameHeight: Math.round(frameWidth * 9 / 16)
-    // Scales type and spacing with the card so 1280x800 and 1920x1080 match.
-    readonly property real uiScale: wide ? Math.max(0.9, Math.min(1.4, frameHeight / 680)) : 1
+    // Scales type and spacing with the card: 1.08 at 1280x800, 1.5 from 1080 lines up.
+    readonly property real uiScale: wide ? Math.max(1, Math.min(1.5, frameHeight / 600)) : 1
     readonly property real framePad: Math.round(frameHeight * 0.06)
     readonly property real footerHeight: Math.round(44 * uiScale)
     readonly property real leftWidthRatio: 0.34
