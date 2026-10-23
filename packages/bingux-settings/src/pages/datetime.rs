@@ -1,18 +1,19 @@
 //! Date and time: the live clock, whether the clock sets itself, the time
 //! zone and the clock format. The time zone and the manual clock setting are
-//! subpages. Backends: `timedatectl`, `gsettings` (clock format) and
+//! subpages. Backends: `timedatectl`, `gsettings` (clock format, weekday and date) and
 //! `bingux-config` (clock seconds).
 
 use std::time::Duration;
 
+use bingux_ui::scale::{GUTTER, S1, S2, TEXT_DISPLAY};
 use freya::prelude::*;
 
 use crate::pages::bingux_config;
 use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Status, action_row, choice_list, choice_row, dropdown, page_column, primary_button, row,
-    skeleton, status, stepper, switch_row,
+    Group, Status, action_row, caption, choice_list, choice_row, dropdown, page_column,
+    primary_button, row, skeleton, status, stepper, switch_row,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -21,9 +22,13 @@ const INTERFACE: &str = "org.gnome.desktop.interface";
 #[derive(Clone)]
 struct Model {
     timezone: String,
+    /// Offset from UTC, as `+01:00`.
+    utc_offset: String,
     ntp: bool,
     clock_format: String,
     clock_seconds: Option<bool>,
+    show_weekday: Option<bool>,
+    show_date: Option<bool>,
     /// `YYYY-MM-DD HH:MM:SS` in the local zone, where the manual time starts.
     local_time: String,
 }
@@ -61,18 +66,85 @@ fn load() -> Result<Model, CommandError> {
     let clock_seconds = system::run(&bingux_config(), &["get", "desktop.clock_seconds"], TIMEOUT)
         .ok()
         .map(|value| value == "true");
+    let show_weekday = system::gsettings_get(INTERFACE, "clock-show-weekday")
+        .ok()
+        .map(|value| value == "true");
+    let show_date = system::gsettings_get(INTERFACE, "clock-show-date")
+        .ok()
+        .map(|value| value == "true");
+    let utc_offset = system::run("date", &["+%:z"], TIMEOUT)?;
     let local_time = system::run("date", &["+%Y-%m-%d %H:%M:%S"], TIMEOUT)?;
     Ok(Model {
         timezone,
+        utc_offset,
         ntp,
         clock_format,
         clock_seconds,
+        show_weekday,
+        show_date,
         local_time,
     })
 }
 
-fn read_now() -> Result<String, String> {
-    system::run("date", &["+%a %-d %b %Y, %H:%M:%S %Z"], TIMEOUT).map_err(|e| e.0)
+/// The local date and time, read once a second and formatted in `render`.
+#[derive(Clone)]
+struct Now {
+    year: i64,
+    month: i64,
+    day: i64,
+    hour: i64,
+    minute: i64,
+    second: i64,
+    weekday: String,
+}
+
+fn read_now() -> Result<Now, String> {
+    let failed = || "The time could not be read.".to_string();
+    let text = system::run("date", &["+%Y %m %d %H %M %S %A"], TIMEOUT).map_err(|e| e.0)?;
+    let parts: Vec<&str> = text.split_whitespace().collect();
+    let &[year, month, day, hour, minute, second, weekday] = parts.as_slice() else {
+        return Err(failed());
+    };
+    let number = |text: &str| text.parse::<i64>().map_err(|_| failed());
+    Ok(Now {
+        year: number(year)?,
+        month: number(month)?,
+        day: number(day)?,
+        hour: number(hour)?,
+        minute: number(minute)?,
+        second: number(second)?,
+        weekday: weekday.to_string(),
+    })
+}
+
+/// The clock face: `09:05` in 24-hour form, `9:05 AM` in 12-hour form.
+fn clock_text(now: &Now, twelve_hour: bool, seconds: bool) -> String {
+    let mut text = if twelve_hour {
+        let hour = match now.hour % 12 {
+            0 => 12,
+            hour => hour,
+        };
+        format!("{hour}:{:02}", now.minute)
+    } else {
+        format!("{:02}:{:02}", now.hour, now.minute)
+    };
+    if seconds {
+        text.push_str(&format!(":{:02}", now.second));
+    }
+    if twelve_hour {
+        text.push_str(if now.hour < 12 { " AM" } else { " PM" });
+    }
+    text
+}
+
+/// The date line under the clock, such as `Friday, 23 October 2026`.
+fn date_text(now: &Now) -> String {
+    let month = usize::try_from(now.month - 1)
+        .ok()
+        .and_then(|index| MONTHS.get(index))
+        .copied()
+        .unwrap_or("");
+    format!("{}, {} {month} {}", now.weekday, now.day, now.year)
 }
 
 fn set_timezone(zone: &str) -> CommandResult {
@@ -113,6 +185,12 @@ fn commit(mut ctx: Ctx, work: impl FnOnce() -> CommandResult + Send + 'static) {
     });
 }
 
+/// Writes a true or false setting in the interface schema.
+fn set_interface_flag(ctx: Ctx, key: &'static str, next: bool) {
+    let value = if next { "true" } else { "false" };
+    commit(ctx, move || system::gsettings_set(INTERFACE, key, value));
+}
+
 #[derive(PartialEq)]
 pub struct DateTimePage;
 
@@ -121,7 +199,7 @@ impl Component for DateTimePage {
         let model = system::cached("datetime");
         let navigator = use_navigator();
         let error = use_state::<Option<String>>(|| None);
-        let now = use_state::<Option<Result<String, String>>>(|| None);
+        let now = use_state::<Option<Result<Now, String>>>(|| None);
         let ctx = Ctx { model, error };
 
         use_hook(move || {
@@ -147,11 +225,26 @@ impl Component for DateTimePage {
             }
         };
 
-        let now_text = match now.read().clone() {
-            Some(Ok(text)) => text,
-            Some(Err(message)) => message,
-            None => "Reading the clock.".to_string(),
+        let seconds = model_data.clock_seconds.unwrap_or(false);
+        let (clock, date) = match now.read().clone() {
+            Some(Ok(reading)) => (
+                clock_text(&reading, model_data.clock_format == "12h", seconds),
+                date_text(&reading),
+            ),
+            Some(Err(message)) => (message, String::new()),
+            None => ("Reading the clock.".to_string(), String::new()),
         };
+        let clock_face = rect()
+            .width(Size::fill())
+            .padding((S2, GUTTER))
+            .spacing(S1)
+            .child(
+                label()
+                    .text(clock)
+                    .font_size(TEXT_DISPLAY)
+                    .font_weight(FontWeight::SEMI_BOLD),
+            )
+            .child(caption(date));
 
         let ntp = model_data.ntp;
         let clock_format = model_data.clock_format.clone();
@@ -171,13 +264,14 @@ impl Component for DateTimePage {
             .navigates()
             .on_press(move |_| navigator.push(Route::SetTime));
         let zone_row = row("Time zone")
+            .subtitle(format!("UTC{}", model_data.utc_offset))
             .value(zone_label(&model_data.timezone))
             .navigates()
             .on_press(move |_| navigator.push(Route::TimeZone));
 
         page.child(
             Group::titled("Clock")
-                .row(row("Date and time").value(now_text))
+                .row(clock_face)
                 .row(switch_row("Set automatically", ntp, move |next: bool| {
                     let value = if next { "true" } else { "false" };
                     commit(ctx, move || {
@@ -218,6 +312,20 @@ impl Component for DateTimePage {
                             });
                         },
                     ))
+                }))
+                .rows(model_data.show_weekday.map(|on| {
+                    Element::from(switch_row(
+                        "Show weekday in the top bar",
+                        on,
+                        move |next: bool| set_interface_flag(ctx, "clock-show-weekday", next),
+                    ))
+                }))
+                .rows(model_data.show_date.map(|on| {
+                    Element::from(switch_row(
+                        "Show date in the top bar",
+                        on,
+                        move |next: bool| set_interface_flag(ctx, "clock-show-date", next),
+                    ))
                 })),
         )
     }
@@ -256,6 +364,13 @@ impl Component for TimeZonePage {
         let mut page = page_column();
         if let Some(message) = error.read().clone() {
             page = page.child(status(Status::Error(message)));
+        }
+        if let Some(Ok(data)) = model.read().as_ref() {
+            page = page.child(caption(format!(
+                "Current time zone: {} (UTC{}).",
+                zone_label(&data.timezone),
+                data.utc_offset
+            )));
         }
         page.child(
             choice_list(options, current, move |zone: String| {

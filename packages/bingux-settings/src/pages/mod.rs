@@ -14,6 +14,7 @@ pub mod about;
 pub mod appearance;
 pub mod applications;
 pub mod bluetooth;
+pub mod connection_editor;
 pub mod datetime;
 pub mod desktop;
 pub mod displays;
@@ -26,6 +27,7 @@ pub mod search;
 pub mod sound;
 pub mod users;
 pub mod wifi;
+pub mod wifi_editor;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum PageId {
@@ -74,15 +76,15 @@ impl PageId {
         PageId::Bluetooth,
         PageId::Displays,
         PageId::Sound,
-        PageId::Appearance,
-        PageId::Desktop,
-        PageId::Search,
         PageId::Power,
         PageId::Keyboard,
         PageId::Mouse,
+        PageId::Appearance,
+        PageId::Desktop,
+        PageId::Search,
+        PageId::Applications,
         PageId::DateTime,
         PageId::Users,
-        PageId::Applications,
         PageId::About,
     ];
 
@@ -92,29 +94,50 @@ impl PageId {
             Self::Network => "Network",
             Self::Bluetooth => "Bluetooth",
             Self::Appearance => "Appearance",
-            Self::Desktop => "Desktop",
+            Self::Desktop => "Desktop and dock",
             Self::Search => "Search",
             Self::Displays => "Displays",
             Self::Sound => "Sound",
             Self::Power => "Power",
             Self::Keyboard => "Keyboard",
-            Self::Mouse => "Mouse and Touchpad",
-            Self::DateTime => "Date and Time",
+            Self::Mouse => "Mouse and touchpad",
+            Self::DateTime => "Date and time",
             Self::Users => "Users",
             Self::Applications => "Applications",
             Self::About => "About",
         }
     }
 
-    /// The sidebar section the page is listed under.
+    /// The pages a person is likely to want next from this one. Shown under
+    /// the page as the Related group. Never includes the page itself.
+    pub fn related(self) -> &'static [PageId] {
+        match self {
+            Self::WiFi => &[PageId::Network, PageId::Bluetooth],
+            Self::Network => &[PageId::WiFi, PageId::Bluetooth],
+            Self::Bluetooth => &[PageId::Sound, PageId::Mouse],
+            Self::Displays => &[PageId::Appearance, PageId::Power],
+            Self::Sound => &[PageId::Bluetooth, PageId::Displays],
+            Self::Power => &[PageId::Displays, PageId::Sound],
+            Self::Keyboard => &[PageId::Mouse, PageId::Applications],
+            Self::Mouse => &[PageId::Keyboard, PageId::Bluetooth],
+            Self::Appearance => &[PageId::Desktop, PageId::Displays],
+            Self::Desktop => &[PageId::Appearance, PageId::Search],
+            Self::Search => &[PageId::Applications, PageId::Desktop],
+            Self::Applications => &[PageId::Search, PageId::Keyboard],
+            Self::DateTime => &[PageId::Power, PageId::About],
+            Self::Users => &[PageId::About, PageId::DateTime],
+            Self::About => &[PageId::Displays, PageId::Users],
+        }
+    }
+
+    /// The sidebar section the page is listed under. Sections are divided by
+    /// a hairline in the sidebar, not by a heading.
     pub fn group(self) -> &'static str {
         match self {
-            Self::WiFi | Self::Network | Self::Bluetooth | Self::Displays | Self::Sound => {
-                "Connections"
-            }
-            Self::Appearance | Self::Desktop | Self::Search => "Bingux",
-            Self::Power | Self::Keyboard | Self::Mouse | Self::DateTime => "Hardware and time",
-            Self::Users | Self::Applications | Self::About => "System",
+            Self::WiFi | Self::Network | Self::Bluetooth => "connections",
+            Self::Displays | Self::Sound | Self::Power | Self::Keyboard | Self::Mouse => "devices",
+            Self::Appearance | Self::Desktop | Self::Search | Self::Applications => "desktop",
+            Self::DateTime | Self::Users | Self::About => "system",
         }
     }
 

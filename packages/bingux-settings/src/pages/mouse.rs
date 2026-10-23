@@ -6,13 +6,29 @@
 
 use freya::prelude::*;
 
+use crate::icons::Icon;
 use crate::pages::gnoblin::{self, Json};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
+use crate::theme::Tokens;
 use crate::ui::{
     Group, Row, Status, choice_row, page_column, row, skeleton, slider, status, switch_row,
+    use_tokens,
 };
+use bingux_ui::scale::{BOX_2XL, FIELD_WIDTH, S0, TEXT_SM};
+
+/// One end of a slider's scale: "Slow" starts it, "Fast" ends it. Each label
+/// gets a fixed width so the two never squeeze each other.
+fn end_label(text: &'static str, width: f32, align: TextAlign, tokens: &Tokens) -> Paragraph {
+    paragraph()
+        .width(Size::px(width))
+        .text_align(align)
+        .color(tokens.muted)
+        .font_size(TEXT_SM)
+        .child(text)
+}
 
 const MOUSE: &str = "org.gnome.desktop.peripherals.mouse";
+
 const TOUCHPAD: &str = "org.gnome.desktop.peripherals.touchpad";
 
 #[derive(Clone, PartialEq)]
@@ -28,6 +44,8 @@ struct Touchpad {
     tap_to_click: bool,
     natural_scroll: bool,
     two_finger_scrolling: bool,
+    edge_scrolling: bool,
+    click_method: String,
     speed: f64,
     disable_while_typing: bool,
     send_events: String,
@@ -63,6 +81,8 @@ fn load() -> Result<Model, CommandError> {
             tap_to_click: get_bool(TOUCHPAD, "tap-to-click")?,
             natural_scroll: get_bool(TOUCHPAD, "natural-scroll")?,
             two_finger_scrolling: get_bool(TOUCHPAD, "two-finger-scrolling-enabled")?,
+            edge_scrolling: get_bool(TOUCHPAD, "edge-scrolling-enabled")?,
+            click_method: system::unquote(&system::gsettings_get(TOUCHPAD, "click-method")?),
             speed: get_speed(TOUCHPAD)?,
             disable_while_typing: get_bool(TOUCHPAD, "disable-while-typing")?,
             send_events: system::unquote(&system::gsettings_get(TOUCHPAD, "send-events")?),
@@ -124,13 +144,14 @@ fn option_label(options: &[(&str, &str)], value: &str) -> String {
         .map_or_else(|| value.to_string(), |(_, label)| label.to_string())
 }
 
-/// One editable setting: the GSettings key, how to show it, and the Lua
-/// field that may override it.
+/// One editable setting: the GSettings key, how to show it, the icon for its
+/// kind of device, and the Lua field that may override it.
 struct Setting<'a> {
     schema: &'static str,
     key: &'static str,
     group: &'static str,
     title: &'static str,
+    icon: Icon,
     overrides: &'a Json,
     loaded: State<Option<Result<Model, CommandError>>>,
     error: State<Option<String>>,
@@ -144,6 +165,7 @@ impl Setting<'_> {
     fn switch(&self, on: bool) -> Row {
         match self.lua() {
             Some(value) => row(self.title)
+                .leading(self.icon)
                 .subtitle(gnoblin::MANAGED)
                 .value(if value == "true" { "On" } else { "Off" }),
             None => {
@@ -153,23 +175,47 @@ impl Setting<'_> {
                         system::gsettings_set(schema, key, bool_value(next))
                     })
                 })
+                .leading(self.icon)
             }
         }
     }
 
-    fn speed(&self, speed: f64) -> Row {
+    /// A pointer speed slider with "Slow" and "Fast" at its ends. The subtitle
+    /// names the current speed in words.
+    fn speed(&self, speed: f64, tokens: &Tokens) -> Row {
         match self.lua() {
-            Some(value) => row(self.title).subtitle(gnoblin::MANAGED).value(value),
+            Some(value) => row(self.title)
+                .leading(self.icon)
+                .subtitle(gnoblin::MANAGED)
+                .value(value),
             None => {
                 let (schema, loaded, error) = (self.schema, self.loaded, self.error);
                 row(self.title)
+                    .leading(self.icon)
                     .subtitle(speed_label(speed))
-                    .trailing(slider(speed_percent(speed), move |percent: f64| {
-                        let value = speed_value(percent);
-                        commit(loaded, error, move || {
-                            system::gsettings_set(schema, "speed", &value)
-                        })
-                    }))
+                    .trailing(
+                        rect()
+                            .width(Size::px(FIELD_WIDTH))
+                            .spacing(S0)
+                            .child(slider(speed_percent(speed), move |percent: f64| {
+                                let value = speed_value(percent);
+                                commit(loaded, error, move || {
+                                    system::gsettings_set(schema, "speed", &value)
+                                })
+                            }))
+                            .child(
+                                rect()
+                                    .width(Size::px(FIELD_WIDTH))
+                                    .direction(Direction::Horizontal)
+                                    .child(end_label(
+                                        "Slow",
+                                        FIELD_WIDTH - BOX_2XL,
+                                        TextAlign::Start,
+                                        tokens,
+                                    ))
+                                    .child(end_label("Fast", BOX_2XL, TextAlign::End, tokens)),
+                            ),
+                    )
             }
         }
     }
@@ -177,6 +223,7 @@ impl Setting<'_> {
     fn choice(&self, options: &[(&str, &str)], selected: &str) -> Row {
         match self.lua() {
             Some(value) => row(self.title)
+                .leading(self.icon)
                 .subtitle(gnoblin::MANAGED)
                 .value(option_label(options, &value)),
             None => {
@@ -195,6 +242,7 @@ impl Setting<'_> {
                         })
                     },
                 )
+                .leading(self.icon)
             }
         }
     }
@@ -213,6 +261,14 @@ const SEND_EVENTS: [(&str, &str); 3] = [
     ),
     ("disabled", "Off"),
 ];
+/// How a touchpad click is told apart: by fingers, by the bottom corners, or
+/// not at all.
+const CLICK_METHOD: [(&str, &str); 4] = [
+    ("default", "Automatic"),
+    ("fingers", "Two fingers"),
+    ("areas", "Bottom corners"),
+    ("none", "Off"),
+];
 
 #[derive(PartialEq)]
 pub struct MousePage;
@@ -221,6 +277,7 @@ impl Component for MousePage {
     fn render(&self) -> impl IntoElement {
         let loaded = system::use_cached("mouse", load);
         let error = use_state::<Option<String>>(|| None);
+        let tokens = use_tokens();
 
         let Some(result) = loaded.read().clone() else {
             return page_column().child(skeleton());
@@ -234,11 +291,12 @@ impl Component for MousePage {
                 );
             }
         };
-        let setting = |schema, group, key, title| Setting {
+        let setting = |schema, group, key, title, icon| Setting {
             schema,
             key,
             group,
             title,
+            icon,
             overrides: &model.overrides,
             loaded,
             error,
@@ -246,51 +304,62 @@ impl Component for MousePage {
         let mouse = &model.mouse;
         let mouse_group = Group::titled("Mouse")
             .row(
-                setting(MOUSE, "mouse", "natural-scroll", "Natural scrolling")
-                    .switch(mouse.natural_scroll),
+                setting(
+                    MOUSE,
+                    "mouse",
+                    "natural-scroll",
+                    "Natural scrolling",
+                    Icon::Mouse,
+                )
+                .switch(mouse.natural_scroll),
             )
-            .row(setting(MOUSE, "mouse", "speed", "Pointer speed").speed(mouse.speed))
             .row(
-                setting(MOUSE, "mouse", "left-handed", "Left-handed buttons")
-                    .switch(mouse.left_handed),
+                setting(MOUSE, "mouse", "speed", "Pointer speed", Icon::Mouse)
+                    .speed(mouse.speed, &tokens),
             )
             .row(
-                setting(MOUSE, "mouse", "accel-profile", "Pointer acceleration")
-                    .choice(&ACCEL_PROFILES, &mouse.accel_profile),
+                setting(
+                    MOUSE,
+                    "mouse",
+                    "left-handed",
+                    "Left-handed buttons",
+                    Icon::Mouse,
+                )
+                .switch(mouse.left_handed),
+            )
+            .row(
+                setting(
+                    MOUSE,
+                    "mouse",
+                    "accel-profile",
+                    "Pointer acceleration",
+                    Icon::Mouse,
+                )
+                .choice(&ACCEL_PROFILES, &mouse.accel_profile),
             );
 
         let touchpad_group = model.touchpad.as_ref().map(|pad| {
+            let touchpad =
+                |key, title| setting(TOUCHPAD, "touchpad", key, title, Icon::InputTouchpad);
             Group::titled("Touchpad")
+                .row(touchpad("send-events", "Use touchpad").choice(&SEND_EVENTS, &pad.send_events))
+                .row(touchpad("tap-to-click", "Tap to click").switch(pad.tap_to_click))
                 .row(
-                    setting(TOUCHPAD, "touchpad", "send-events", "Use touchpad")
-                        .choice(&SEND_EVENTS, &pad.send_events),
+                    touchpad("click-method", "Click with").choice(&CLICK_METHOD, &pad.click_method),
+                )
+                .row(touchpad("natural-scroll", "Natural scrolling").switch(pad.natural_scroll))
+                .row(
+                    touchpad("two-finger-scrolling-enabled", "Two-finger scrolling")
+                        .switch(pad.two_finger_scrolling),
                 )
                 .row(
-                    setting(TOUCHPAD, "touchpad", "tap-to-click", "Tap to click")
-                        .switch(pad.tap_to_click),
+                    touchpad("edge-scrolling-enabled", "Scrolling along edges")
+                        .switch(pad.edge_scrolling),
                 )
+                .row(touchpad("speed", "Pointer speed").speed(pad.speed, &tokens))
                 .row(
-                    setting(TOUCHPAD, "touchpad", "natural-scroll", "Natural scrolling")
-                        .switch(pad.natural_scroll),
-                )
-                .row(
-                    setting(
-                        TOUCHPAD,
-                        "touchpad",
-                        "two-finger-scrolling-enabled",
-                        "Two-finger scrolling",
-                    )
-                    .switch(pad.two_finger_scrolling),
-                )
-                .row(setting(TOUCHPAD, "touchpad", "speed", "Pointer speed").speed(pad.speed))
-                .row(
-                    setting(
-                        TOUCHPAD,
-                        "touchpad",
-                        "disable-while-typing",
-                        "Disable while typing",
-                    )
-                    .switch(pad.disable_while_typing),
+                    touchpad("disable-while-typing", "Disable while typing")
+                        .switch(pad.disable_while_typing),
                 )
         });
 

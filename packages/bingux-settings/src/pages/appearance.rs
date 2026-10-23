@@ -18,7 +18,7 @@ use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then, which};
 use crate::theme::{Scheme, SharedTokens, Tokens, accent_for, accent_names, read_gsettings};
 use crate::ui::{
-    Group, Status, choice_list, choice_row, page_column, row, row_button, skeleton, status,
+    Group, Icon, Status, choice_list, icon, page_column, row, row_button, skeleton, status,
     use_tokens,
 };
 use bingux_ui::scale::*;
@@ -158,12 +158,14 @@ fn run_wallpaper_change(
 }
 
 /// One accent circle, set in a box of the icon-button size so the row keeps
-/// an even pitch. The selected one is ringed in the text colour.
+/// an even pitch. The selected one is ringed in the text colour and carries a
+/// check. Hovering shows the accent's name.
 fn swatch(
     name: &'static str,
     color: Color,
     selected: bool,
     ring: Color,
+    check: Color,
     on_press: impl FnMut(Event<PressEventData>) + 'static,
 ) -> Element {
     let border = if selected {
@@ -174,24 +176,156 @@ fn swatch(
     } else {
         Border::new()
     };
+    let mark = selected.then(|| Element::from(icon(Icon::Check, ICON_MD, check)));
+    let button = rect()
+        .a11y_role(AccessibilityRole::Button)
+        .a11y_alt(format!("Accent colour {name}"))
+        .a11y_focusable(true)
+        .width(Size::px(BOX_LG))
+        .height(Size::px(BOX_LG))
+        .center()
+        .corner_radius(BOX_LG / 2.0)
+        .border(border)
+        .on_press(on_press)
+        .child(
+            rect()
+                .width(Size::px(BOX_MD))
+                .height(Size::px(BOX_MD))
+                .corner_radius(BOX_MD / 2.0)
+                .background(color)
+                .center()
+                .maybe_child(mark),
+        );
+    let title = format!("{}{}", name[..1].to_uppercase(), &name[1..]);
+    Element::from(TooltipContainer::new(Tooltip::new_text(title)).child(button))
+}
+
+/// A grey line standing in for text in a scheme card.
+fn preview_line(width: Size, color: Color) -> impl IntoElement {
+    rect()
+        .width(width)
+        .height(Size::px(S1))
+        .corner_radius(RADIUS_SM)
+        .background(color)
+}
+
+/// A small window in one colour scheme: a title bar, a sidebar and content.
+/// The colours are fixed so each card shows its scheme, whatever is current.
+fn mock_window(dark: bool, accent: Color, width: Size) -> Element {
+    let (window, bar, sidebar, line) = if dark {
+        (
+            Color::from_rgb(38, 38, 42),
+            Color::from_rgb(56, 56, 62),
+            Color::from_rgb(47, 47, 53),
+            Color::from_rgb(100, 100, 108),
+        )
+    } else {
+        (
+            Color::from_rgb(250, 250, 250),
+            Color::from_rgb(228, 228, 228),
+            Color::from_rgb(238, 238, 238),
+            Color::from_rgb(186, 186, 186),
+        )
+    };
+    let side = rect()
+        .width(Size::px(PREVIEW_SIDEBAR))
+        .height(Size::fill())
+        .background(sidebar)
+        .padding(S2)
+        .spacing(S2)
+        .child(preview_line(Size::fill(), line))
+        .child(preview_line(Size::fill(), line));
+    let content = rect()
+        .width(Size::flex(1.0))
+        .height(Size::fill())
+        .background(window)
+        .padding(S2)
+        .spacing(S2)
+        .child(preview_line(Size::px(PREVIEW_LINE), accent))
+        .child(preview_line(Size::fill(), line))
+        .child(preview_line(Size::fill(), line));
+    let body = rect()
+        .width(Size::fill())
+        .height(Size::flex(1.0))
+        .direction(Direction::Horizontal)
+        .child(side)
+        .child(content);
+    let top = rect()
+        .width(Size::fill())
+        .height(Size::px(S4))
+        .background(bar);
+    Element::from(
+        rect()
+            .width(width)
+            .height(Size::fill())
+            .background(window)
+            .child(top)
+            .child(body),
+    )
+}
+
+/// One colour scheme card, drawn as a small window, with its name under it.
+/// The chosen card is ringed in the accent colour, as GNOME's Style switcher.
+fn scheme_card(
+    title: &'static str,
+    scheme: Scheme,
+    tokens: Tokens,
+    on_press: impl FnMut(Event<PressEventData>) + 'static,
+) -> Element {
+    let selected = tokens.scheme == scheme;
+    let windows = match scheme {
+        Scheme::Default => Element::from(
+            rect()
+                .width(Size::fill())
+                .height(Size::fill())
+                .direction(Direction::Horizontal)
+                .child(mock_window(false, tokens.accent, Size::flex(1.0)))
+                .child(mock_window(true, tokens.accent, Size::flex(1.0))),
+        ),
+        Scheme::PreferLight => mock_window(false, tokens.accent, Size::fill()),
+        Scheme::PreferDark => mock_window(true, tokens.accent, Size::fill()),
+    };
+    let border = Border::new()
+        .width(RING_WIDTH)
+        .alignment(BorderAlignment::Inner)
+        .fill(if selected {
+            tokens.accent
+        } else {
+            tokens.outline
+        });
+    let content = rect()
+        .width(Size::fill())
+        .height(Size::fill())
+        .corner_radius(RADIUS_LG)
+        .overflow(Overflow::Clip)
+        .child(windows);
+    let frame = rect()
+        .width(Size::px(PREVIEW_WIDTH))
+        .height(Size::px(PREVIEW_HEIGHT))
+        .corner_radius(RADIUS_LG)
+        .border(border)
+        .padding((RING_WIDTH, RING_WIDTH))
+        .child(content);
+    let caption = label()
+        .text(title)
+        .font_size(TEXT_MD)
+        .color(tokens.text)
+        .font_weight(if selected {
+            FontWeight::SEMI_BOLD
+        } else {
+            FontWeight::NORMAL
+        });
     Element::from(
         rect()
             .a11y_role(AccessibilityRole::Button)
-            .a11y_alt(format!("Accent colour {name}"))
+            .a11y_alt(format!("{title} colour scheme"))
             .a11y_focusable(true)
-            .width(Size::px(BOX_LG))
-            .height(Size::px(BOX_LG))
-            .center()
-            .corner_radius(BOX_LG / 2.0)
-            .border(border)
+            .width(Size::px(PREVIEW_WIDTH))
+            .spacing(S2)
+            .cross_align(Alignment::Center)
             .on_press(on_press)
-            .child(
-                rect()
-                    .width(Size::px(BOX_MD))
-                    .height(Size::px(BOX_MD))
-                    .corner_radius(BOX_MD / 2.0)
-                    .background(color),
-            ),
+            .child(frame)
+            .child(caption),
     )
 }
 
@@ -232,16 +366,11 @@ impl Component for AppearancePage {
                     accent_for(name, tokens.scheme.is_dark()),
                     name == tokens.accent_name,
                     tokens.text,
+                    tokens.accent_foreground,
                     move |_| apply_accent(shared, error, name),
                 )
             })
             .collect();
-
-        let scheme_options: Vec<(String, String)> = vec![
-            (Scheme::Default.gsettings_value().into(), "Default".into()),
-            (Scheme::PreferLight.gsettings_value().into(), "Light".into()),
-            (Scheme::PreferDark.gsettings_value().into(), "Dark".into()),
-        ];
 
         page_column()
             .maybe_child(
@@ -308,22 +437,34 @@ impl Component for AppearancePage {
             // accent variant.
             .maybe_child(model_value.gsettings.then(|| {
                 Element::from(
-                    Group::titled("Colour scheme").row(
-                        choice_row(
-                            "Applications",
-                            scheme_options,
-                            tokens.scheme.gsettings_value(),
-                            move |key: String| {
-                                let scheme = match key.as_str() {
-                                    "prefer-light" => Scheme::PreferLight,
-                                    "prefer-dark" => Scheme::PreferDark,
-                                    _ => Scheme::Default,
-                                };
-                                apply_scheme(shared, error, scheme);
-                            },
-                        )
-                        .subtitle("Applications follow this. The desktop shell stays dark.")
-                    ),
+                    Group::titled("Colour scheme")
+                        .description("Applications follow this. The desktop shell stays dark.")
+                        .row(
+                            rect()
+                                .width(Size::fill())
+                                .direction(Direction::Horizontal)
+                                .main_align(Alignment::Center)
+                                .padding((S3, GUTTER - S1))
+                                .spacing(S4)
+                                .child(scheme_card(
+                                    "Default",
+                                    Scheme::Default,
+                                    tokens,
+                                    move |_| apply_scheme(shared, error, Scheme::Default),
+                                ))
+                                .child(scheme_card(
+                                    "Light",
+                                    Scheme::PreferLight,
+                                    tokens,
+                                    move |_| apply_scheme(shared, error, Scheme::PreferLight),
+                                ))
+                                .child(scheme_card(
+                                    "Dark",
+                                    Scheme::PreferDark,
+                                    tokens,
+                                    move |_| apply_scheme(shared, error, Scheme::PreferDark),
+                                )),
+                        ),
                 )
             }))
             .maybe_child((!model_value.gsettings).then(|| {

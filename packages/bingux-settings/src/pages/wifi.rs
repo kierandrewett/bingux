@@ -1,27 +1,34 @@
-//! Wi-Fi: the Wi-Fi and airplane mode switches and the Wi-Fi networks list. Everything comes from `nmcli`. The list is read
-//! once when the page opens and again every ten seconds while it stays open.
+//! Wi-Fi: the Wi-Fi and airplane mode switches, the saved networks list, the
+//! hidden network and hotspot forms, and the visible networks list. Everything
+//! comes from `nmcli`. The lists are read once when the page opens and again
+//! every few seconds while it stays open.
 
 use std::time::Duration;
 
 use freya::prelude::*;
 
+use super::wifi_editor::{Editor, Target, use_editor};
 use crate::icons::{self, Icon};
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
-    Group, Overlays, ResponseKind, Status, action_button, centered_caption, dialog, heading,
-    icon_button, page_column, primary_button, row, skeleton, status, switch_row, text_row,
-    use_overlays, use_tokens,
+    Group, Overlays, PageHeader, SpinnerSize, Status, Tokens, checkbox, icon_button, page_column,
+    row, sheet, skeleton, spinner, status, switch_row, text_field, use_overlays, use_page_busy,
+    use_page_header, use_tokens,
 };
 use bingux_ui::scale::*;
 
-const POLL_INTERVAL: Duration = Duration::from_secs(10);
+const POLL_INTERVAL: Duration = Duration::from_secs(5);
 const QUICK: Duration = Duration::from_secs(5);
 /// `device wifi list` takes about four seconds on a busy radio.
 const SCAN: Duration = Duration::from_secs(10);
 const CONNECT: Duration = Duration::from_secs(90);
+/// Busy line shown while a scan runs; the heading shows a spinner for it.
+const SCAN_LABEL: &str = "Scanning for Wi-Fi networks.";
 /// Width of the right-hand action column in the network list.
 const ACTION_WIDTH: f32 = BOX_2XL;
+/// The shortest password WPA allows for a hotspot.
+const HOTSPOT_PASSWORD_MIN: usize = 8;
 
 #[derive(Clone, PartialEq)]
 struct Model {
@@ -30,6 +37,10 @@ struct Model {
     wifi_on: bool,
     airplane: bool,
     networks: Vec<Network>,
+    /// Names of every saved Wi-Fi profile, in any range.
+    saved_names: Vec<String>,
+    /// The name of the active hotspot profile, when one is on.
+    hotspot: Option<String>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -87,7 +98,7 @@ fn parse_radio(output: &str) -> Result<(String, bool, bool), CommandError> {
     Ok((wifi_hw, wifi_on, airplane))
 }
 
-/// Names of the saved Wi-Fi connection profiles.
+/// Names of the Wi-Fi connection profiles in `NAME,TYPE` output.
 fn parse_saved_wifi(output: &str) -> Vec<String> {
     output
         .lines()
@@ -144,20 +155,36 @@ fn parse_networks(output: &str, saved: &[String]) -> Vec<Network> {
     networks
 }
 
+/// The name of the active access point profile, if one is running.
+fn active_hotspot() -> Option<String> {
+    let active = nmcli(
+        &["-t", "-f", "NAME,TYPE", "connection", "show", "--active"],
+        QUICK,
+    )
+    .ok()?;
+    parse_saved_wifi(&active).into_iter().find(|name| {
+        let name = name.as_str();
+        nmcli(
+            &["-g", "802-11-wireless.mode", "connection", "show", name],
+            QUICK,
+        )
+        .is_ok_and(|mode| mode.trim() == "ap")
+    })
+}
+
 fn load() -> Result<Model, CommandError> {
     let (wifi_hw, wifi_on, airplane) = parse_radio(&nmcli(
         &["-t", "-f", "WIFI-HW,WIFI,WWAN-HW,WWAN", "radio"],
         QUICK,
     )?)?;
-    let networks = if wifi_on && wifi_usable(&wifi_hw) {
-        let saved = parse_saved_wifi(&nmcli(
-            &["-t", "-f", "NAME,TYPE", "connection", "show"],
-            QUICK,
-        )?);
+    let saved_names = parse_saved_wifi(
+        &nmcli(&["-t", "-f", "NAME,TYPE", "connection", "show"], QUICK).unwrap_or_default(),
+    );
+    let (networks, hotspot) = if wifi_on && wifi_usable(&wifi_hw) {
         // `--rescan no` returns NetworkManager's cached list at once; a
         // fresh scan can block for ten seconds and the page would sit on
         // "Reading Wi-Fi networks." Refresh and the poll loop rescan.
-        parse_networks(
+        let networks = parse_networks(
             &nmcli(
                 &[
                     "-t",
@@ -171,16 +198,19 @@ fn load() -> Result<Model, CommandError> {
                 ],
                 QUICK,
             )?,
-            &saved,
-        )
+            &saved_names,
+        );
+        (networks, active_hotspot())
     } else {
-        Vec::new()
+        (Vec::new(), None)
     };
     Ok(Model {
         wifi_hw,
         wifi_on,
         airplane,
         networks,
+        saved_names,
+        hotspot,
     })
 }
 
@@ -193,7 +223,8 @@ fn toggle_airplane(on: bool) -> Result<(), CommandError> {
 }
 
 fn scan_networks() -> Result<(), CommandError> {
-    nmcli(&["device", "wifi", "rescan"], SCAN).map(|_| ())
+    let _ = nmcli(&["device", "wifi", "rescan"], SCAN);
+    Ok(())
 }
 
 fn connect_network(ssid: &str, password: Option<&str>) -> Result<(), CommandError> {
@@ -207,27 +238,60 @@ fn connect_network(ssid: &str, password: Option<&str>) -> Result<(), CommandErro
     .map(|_| ())
 }
 
-fn disconnect_network(ssid: &str) -> Result<(), CommandError> {
-    nmcli(&["connection", "down", "id", ssid], QUICK).map(|_| ())
+fn connect_hidden(ssid: &str, password: Option<&str>) -> Result<(), CommandError> {
+    match password {
+        Some(password) => nmcli(
+            &[
+                "device", "wifi", "connect", ssid, "password", password, "hidden", "yes",
+            ],
+            CONNECT,
+        ),
+        None => nmcli(
+            &["device", "wifi", "connect", ssid, "hidden", "yes"],
+            CONNECT,
+        ),
+    }
+    .map(|_| ())
 }
 
-fn forget_network(ssid: &str) -> Result<(), CommandError> {
-    nmcli(&["connection", "delete", "id", ssid], QUICK).map(|_| ())
+fn start_hotspot(name: &str, password: &str) -> Result<(), CommandError> {
+    nmcli(
+        &[
+            "device", "wifi", "hotspot", "ssid", name, "password", password,
+        ],
+        CONNECT,
+    )
+    .map(|_| ())
 }
 
-/// Words for a signal strength from its percentage: 80 and above is "Excellent".
-fn signal_word(signal: u8) -> &'static str {
+fn down_connection(name: &str) -> Result<(), CommandError> {
+    nmcli(&["connection", "down", "id", name], QUICK).map(|_| ())
+}
+
+/// Words for a signal strength from its percentage. Only the details view
+/// uses them; the list shows the signal icon alone.
+fn signal_detail(signal: u8) -> String {
+    format!("{signal}%")
+}
+
+/// Filled bars for a row, 0 to 4, from the signal percentage.
+fn signal_level(signal: u8) -> u8 {
     match signal {
-        80..=u8::MAX => "Excellent",
-        60..=79 => "Good",
-        40..=59 => "Fair",
-        _ => "Weak",
+        80..=u8::MAX => 4,
+        60..=79 => 3,
+        40..=59 => 2,
+        1..=39 => 1,
+        0 => 0,
     }
 }
 
-/// The details row for signal: the word and the percentage.
-fn signal_detail(signal: u8) -> String {
-    format!("{} ({signal}%)", signal_word(signal))
+/// The small lock shown on a secured network.
+fn lock_icon(tokens: Tokens) -> Element {
+    Element::from(icons::icon(
+        Icon::NetworkWirelessEncrypted,
+        ICON_MD,
+        tokens.muted,
+    ))
 }
 
 /// "2.4 GHz", "5 GHz" or "6 GHz" from a frequency such as "5180 MHz".
@@ -246,27 +310,70 @@ fn band_label(freq: &str) -> String {
     .to_string()
 }
 
+/// The facts the connection editor shows for a visible network.
+fn network_facts(network: &Network) -> Vec<(String, String)> {
+    let mut facts = vec![
+        ("Signal".to_string(), signal_detail(network.signal)),
+        (
+            "Security".to_string(),
+            if network.secured { "Secured" } else { "Open" }.to_string(),
+        ),
+    ];
+    if !network.band.is_empty() {
+        facts.push(("Band".to_string(), network.band.clone()));
+    }
+    if !network.rate.is_empty() {
+        facts.push(("Speed".to_string(), network.rate.clone()));
+    }
+    facts
+}
+
 /// The page's shared state. Copy, so every event handler owns a copy.
 #[derive(Clone, Copy)]
 struct Ui {
     model: State<Option<Result<Model, CommandError>>>,
     busy: State<Option<String>>,
-    action_error: State<Option<String>>,
-    /// The SSID whose password row is open.
-    selected: State<Option<String>>,
+    /// Shown inside the open sheet, such as "Enter the Wi-Fi password."
+    sheet_error: State<Option<String>>,
     password: State<String>,
+    show_password: State<bool>,
+    hidden_ssid: State<String>,
+    hidden_password: State<String>,
+    hotspot_name: State<String>,
+    hotspot_password: State<String>,
     overlays: Overlays,
     navigator: Navigator,
+    editor: Editor,
+}
+
+/// Sheet bodies are components that read the page state themselves, so their
+/// props never change; the state handles carry the updates.
+impl PartialEq for Ui {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+fn use_ui() -> Ui {
+    Ui {
+        model: system::cached("wifi"),
+        busy: use_state(|| None::<String>),
+        sheet_error: use_state(|| None::<String>),
+        password: use_state(String::new),
+        show_password: use_state(|| false),
+        hidden_ssid: use_state(String::new),
+        hidden_password: use_state(String::new),
+        hotspot_name: use_state(String::new),
+        hotspot_password: use_state(String::new),
+        overlays: use_overlays(),
+        navigator: use_navigator(),
+        editor: use_editor(),
+    }
 }
 
 impl Ui {
     fn reload(self) {
         background(self.model, load);
-    }
-
-    fn fail(self, message: String) {
-        let mut action_error = self.action_error;
-        action_error.set(Some(message));
     }
 
     /// Run one nmcli action in the background with a busy line, then reload
@@ -285,13 +392,11 @@ impl Ui {
         background_then(work, move |result| {
             let mut busy = self.busy;
             busy.set(None);
-            let mut action_error = self.action_error;
             match result {
                 Ok(()) => {
-                    action_error.set(None);
                     on_success();
                 }
-                Err(error) => action_error.set(Some(error.0)),
+                Err(error) => self.overlays.toast(error.0),
             }
             self.reload();
         });
@@ -316,50 +421,125 @@ impl Ui {
     }
 
     fn rescan(self) {
-        self.act("Scanning for Wi-Fi networks.", scan_networks, || {});
+        self.act(SCAN_LABEL, scan_networks, || {});
     }
 
     fn connect(self, ssid: String, password: Option<String>) {
-        if password.as_deref() == Some("") {
-            self.fail(format!("Enter the Wi-Fi password for {ssid}."));
-            return;
-        }
         let label = format!("Connecting to {ssid}.");
         self.act(
             &label,
             move || connect_network(&ssid, password.as_deref()),
-            move || {
-                let mut selected = self.selected;
-                selected.set(None);
-                let mut password = self.password;
-                password.set(String::new());
-            },
+            || {},
         );
     }
 
-    /// Ask first: forgetting drops the saved password.
-    fn confirm_forget(self, ssid: String) {
-        let title = format!("Forget \"{ssid}\"?");
-        self.overlays.show_dialog(
-            dialog(
-                title,
-                "The saved password is removed. Connecting again asks for it.",
-            )
-            .cancel("Cancel")
-            .response("Forget", ResponseKind::Destructive, move |_| {
-                self.forget(ssid.clone())
-            }),
+    fn edit_network(self, network: &Network) {
+        self.editor.open(Target {
+            name: network.ssid.clone(),
+            wireless: true,
+            facts: network_facts(network),
+        });
+    }
+
+    /// The password sheet for a secured network that is not saved yet.
+    fn open_join(self, ssid: String) {
+        let mut password = self.password;
+        password.set(String::new());
+        let mut show = self.show_password;
+        show.set(false);
+        let mut error = self.sheet_error;
+        error.set(None);
+        let press = ssid.clone();
+        self.overlays.show_sheet(
+            sheet(ssid.clone(), JoinBody { ui: self, ssid })
+                .primary("Connect", move |_| self.join_now(press.clone())),
         );
     }
 
-    fn disconnect(self, ssid: String) {
-        let label = format!("Disconnecting from {ssid}.");
-        self.act(&label, move || disconnect_network(&ssid), || {});
+    fn join_now(self, ssid: String) {
+        let password = self.password.read().clone();
+        if password.is_empty() {
+            self.sheet_error("Enter the Wi-Fi password.");
+            return;
+        }
+        self.overlays.close_sheet();
+        self.connect(ssid, Some(password));
     }
 
-    fn forget(self, ssid: String) {
-        let label = format!("Forgetting {ssid}.");
-        self.act(&label, move || forget_network(&ssid), || {});
+    fn sheet_error(self, text: &str) {
+        let mut error = self.sheet_error;
+        error.set(Some(text.to_string()));
+    }
+
+    fn open_hidden(self) {
+        let mut ssid = self.hidden_ssid;
+        ssid.set(String::new());
+        let mut password = self.hidden_password;
+        password.set(String::new());
+        let mut show = self.show_password;
+        show.set(false);
+        let mut error = self.sheet_error;
+        error.set(None);
+        self.overlays.show_sheet(
+            sheet("Connect to hidden network", HiddenBody { ui: self })
+                .primary("Connect", move |_| self.connect_hidden()),
+        );
+    }
+
+    fn connect_hidden(self) {
+        let ssid = self.hidden_ssid.read().trim().to_string();
+        if ssid.is_empty() {
+            self.sheet_error("Enter the network name.");
+            return;
+        }
+        let password = self.hidden_password.read().clone();
+        let password = (!password.is_empty()).then_some(password);
+        self.overlays.close_sheet();
+        let label = format!("Connecting to {ssid}.");
+        self.act(
+            &label,
+            move || connect_hidden(&ssid, password.as_deref()),
+            || {},
+        );
+    }
+
+    fn open_hotspot(self) {
+        let mut name = self.hotspot_name;
+        name.set("Hotspot".to_string());
+        let mut password = self.hotspot_password;
+        password.set(String::new());
+        let mut show = self.show_password;
+        show.set(false);
+        let mut error = self.sheet_error;
+        error.set(None);
+        self.overlays.show_sheet(
+            sheet("Wi-Fi hotspot", HotspotBody { ui: self })
+                .primary("Turn on", move |_| self.start_hotspot()),
+        );
+    }
+
+    fn start_hotspot(self) {
+        let name = self.hotspot_name.read().trim().to_string();
+        let password = self.hotspot_password.read().clone();
+        if name.is_empty() {
+            self.sheet_error("Enter a network name.");
+            return;
+        }
+        if password.chars().count() < HOTSPOT_PASSWORD_MIN {
+            self.sheet_error("The password needs at least 8 characters.");
+            return;
+        }
+        self.overlays.close_sheet();
+        self.act(
+            "Turning on the Wi-Fi hotspot.",
+            move || start_hotspot(&name, &password),
+            || {},
+        );
+    }
+
+    fn stop_hotspot(self, name: String) {
+        let label = format!("Turning off {name}.");
+        self.act(&label, move || down_connection(&name), || {});
     }
 }
 
@@ -367,8 +547,8 @@ fn page(children: Vec<Element>) -> impl IntoElement {
     page_column().children(children)
 }
 
-/// The right-hand column of a network row. Every row has one, so Forget and
-/// Connect sit in the same place whether or not a row has an action.
+/// The right-hand column of a network row. Every row has one, so the icons
+/// sit in the same place whether or not a row has them.
 fn action_slot(action: Option<Element>) -> Element {
     rect()
         .width(Size::px(ACTION_WIDTH))
@@ -388,10 +568,104 @@ fn network_count(count: usize) -> String {
     }
 }
 
-/// The Wi-Fi section. Its title and hairline stay the same in every state,
-/// so the page keeps one shape whether Wi-Fi is off, missing or empty.
-fn wifi_section(ui: Ui, model: &Model) -> Element {
-    let title = "Wi-Fi networks";
+/// The password sheet body. It reads the page's state, so it redraws as the
+/// fields change.
+#[derive(Clone, PartialEq)]
+struct JoinBody {
+    ui: Ui,
+    ssid: String,
+}
+
+impl Component for JoinBody {
+    fn render(&self) -> impl IntoElement {
+        let ui = self.ui;
+        let submit = self.ssid.clone();
+        let show = *ui.show_password.read();
+        let field = text_field(ui.password, move |_: String| ui.join_now(submit.clone()));
+        let field = if show { field } else { field.password() };
+        let toggle = checkbox(show, move |on: bool| {
+            let mut state = ui.show_password;
+            state.set(on);
+        })
+        .text("Show password");
+        let error = ui.sheet_error.read().clone();
+        page_column()
+            .child(
+                Group::new(None::<String>)
+                    .row(row("Password").trailing(field))
+                    .row(toggle),
+            )
+            .maybe_child(error.map(|text| Element::from(status(Status::Error(text)))))
+    }
+}
+
+/// The hidden network sheet body: a name, an optional password and the show toggle.
+#[derive(Clone, PartialEq)]
+struct HiddenBody {
+    ui: Ui,
+}
+
+impl Component for HiddenBody {
+    fn render(&self) -> impl IntoElement {
+        let ui = self.ui;
+        let show = *ui.show_password.read();
+        let name = text_field(ui.hidden_ssid, move |_: String| ui.connect_hidden())
+            .placeholder("Network name");
+        let password = text_field(ui.hidden_password, move |_: String| ui.connect_hidden())
+            .placeholder("Leave empty for an open network");
+        let password = if show { password } else { password.password() };
+        let toggle = checkbox(show, move |on: bool| {
+            let mut state = ui.show_password;
+            state.set(on);
+        })
+        .text("Show password");
+        let error = ui.sheet_error.read().clone();
+        page_column()
+            .child(
+                Group::new(None::<String>)
+                    .row(row("Network name").trailing(name))
+                    .row(row("Password").trailing(password))
+                    .row(toggle),
+            )
+            .maybe_child(error.map(|text| Element::from(status(Status::Error(text)))))
+    }
+}
+
+/// The hotspot sheet body: a network name, a password of at least eight characters and the show toggle.
+#[derive(Clone, PartialEq)]
+struct HotspotBody {
+    ui: Ui,
+}
+
+impl Component for HotspotBody {
+    fn render(&self) -> impl IntoElement {
+        let ui = self.ui;
+        let show = *ui.show_password.read();
+        let name = text_field(ui.hotspot_name, move |_: String| ui.start_hotspot())
+            .placeholder("Network name");
+        let password = text_field(ui.hotspot_password, move |_: String| ui.start_hotspot())
+            .placeholder("At least 8 characters");
+        let password = if show { password } else { password.password() };
+        let toggle = checkbox(show, move |on: bool| {
+            let mut state = ui.show_password;
+            state.set(on);
+        })
+        .text("Show password");
+        let error = ui.sheet_error.read().clone();
+        page_column()
+            .child(
+                Group::new(None::<String>)
+                    .row(row("Network name").trailing(name))
+                    .row(row("Password").trailing(password))
+                    .row(toggle),
+            )
+            .maybe_child(error.map(|text| Element::from(status(Status::Error(text)))))
+    }
+}
+
+/// The visible networks section. Its heading shows a spinner while a scan runs.
+fn visible_section(ui: Ui, model: &Model, tokens: Tokens) -> Element {
+    let title = "Visible networks";
     if model.wifi_hw == "missing" {
         return Element::from(Group::titled(title).row(Element::from(status(Status::Empty(
             "This computer has no Wi-Fi hardware.".into(),
@@ -413,102 +687,118 @@ fn wifi_section(ui: Ui, model: &Model) -> Element {
         );
     }
 
-    let refresh = icon_button(Icon::Refresh, move |_| ui.rescan()).tooltip("Refresh");
+    let scanning = ui.busy.read().as_deref() == Some(SCAN_LABEL);
+    let trailing = if scanning {
+        Element::from(spinner(SpinnerSize::Small))
+    } else {
+        Element::from(rect().width(Size::px(ICON_MD)).height(Size::px(ICON_MD)))
+    };
     if model.networks.is_empty() {
         return Element::from(
             Group::titled(title)
-                .trailing(refresh)
+                .trailing(trailing)
                 .row(Element::from(status(Status::Empty(
-                    "No Wi-Fi networks found. Press refresh to scan again.".into(),
+                    "No Wi-Fi networks found.".into(),
                 )))),
         );
     }
-    let selected = ui.selected.read().clone();
     Element::from(
         Group::titled(title)
             .description(network_count(model.networks.len()))
-            .trailing(refresh)
-            .rows(network_rows(ui, &model.networks, selected.as_deref())),
+            .trailing(trailing)
+            .rows(network_rows(ui, &model.networks, tokens)),
     )
 }
 
-/// One row per network, plus the password rows under the selected one.
-fn network_rows(ui: Ui, networks: &[Network], selected: Option<&str>) -> Vec<Element> {
-    let mut rows = Vec::new();
-    for network in networks {
-        let needs_password = network.secured && !network.saved && !network.in_use;
-
-        let mut parts = vec![format!("{} signal", signal_word(network.signal))];
-        parts.push(
-            if network.secured {
-                "Password protected"
-            } else {
-                "Open network"
+/// One row per network. The signal icon leads; a lock marks a secured network;
+/// a check mark marks the connected network and the subtitle says "Saved" for a
+/// saved one. A gear opens the connection editor for a network that is connected
+/// or saved.
+fn network_rows(ui: Ui, networks: &[Network], tokens: Tokens) -> Vec<Element> {
+    networks
+        .iter()
+        .map(|network| {
+            let mut item = row(network.ssid.clone())
+                .leading_signal(signal_level(network.signal), network.secured);
+            let connecting = ui.busy.read().as_deref()
+                == Some(format!("Connecting to {}.", network.ssid).as_str());
+            if network.in_use {
+                item = item.selected(true);
+            } else if network.saved {
+                item = item.subtitle("Saved");
             }
-            .to_string(),
-        );
-        if network.saved {
-            parts.push("Saved".to_string());
-        }
-        let subtitle = parts.join(" · ");
 
-        let details = {
-            let route = Route::WifiNetwork {
-                ssid: network.ssid.clone(),
-            };
-            Element::from(
-                icon_button(Icon::About, move |_| ui.navigator.push(route.clone()))
-                    .tooltip("Details"),
-            )
-        };
+            let mut cluster = rect()
+                .direction(Direction::Horizontal)
+                .spacing(S2)
+                .cross_align(Alignment::Center);
+            if connecting {
+                cluster = cluster.child(Element::from(spinner(SpinnerSize::Small)));
+            }
+            if network.secured {
+                cluster = cluster.child(lock_icon(tokens));
+            }
+            if network.in_use || network.saved {
+                let target = network.clone();
+                cluster = cluster.child(Element::from(
+                    icon_button(Icon::EmblemSystem, move |_| ui.edit_network(&target))
+                        .tooltip("Connection settings"),
+                ));
+            }
 
-        let ssid = network.ssid.clone();
-        let mut item = row(network.ssid.clone())
-            .subtitle(subtitle)
-            .trailing(action_slot(Some(details)));
-        if network.in_use {
-            item = item.badge("Connected");
-        } else if needs_password {
-            let target = ssid.clone();
-            item = item.on_press(move |_| {
-                let is_open = ui.selected.read().as_deref() == Some(target.as_str());
-                let mut selected = ui.selected;
-                selected.set(if is_open { None } else { Some(target.clone()) });
+            let press = network.clone();
+            let item = item.on_press(move |_| {
+                if press.in_use {
+                    ui.edit_network(&press);
+                } else if press.saved || !press.secured {
+                    ui.connect(press.ssid.clone(), None);
+                } else {
+                    ui.open_join(press.ssid.clone());
+                }
             });
-        } else {
-            let target = ssid.clone();
-            item = item.on_press(move |_| ui.connect(target.clone(), None));
-        }
-        rows.push(Element::from(item));
-
-        if needs_password && selected == Some(ssid.as_str()) {
-            let target = ssid.clone();
-            rows.push(Element::from(text_row(
-                "Password",
-                ui.password,
-                move |password: String| ui.connect(target.clone(), Some(password)),
-            )));
-            let target = ssid.clone();
-            let connect = primary_button("Connect", move |_| {
-                let password = ui.password.read().clone();
-                ui.connect(target.clone(), Some(password));
-            });
-            rows.push(Element::from(
-                row(format!("Join {ssid}")).trailing(action_slot(Some(Element::from(connect)))),
-            ));
-        }
-    }
-    rows
+            Element::from(item.trailing(action_slot(Some(Element::from(cluster)))))
+        })
+        .collect()
 }
 
-/// Read the network list now and every ten seconds while the page is open.
+/// The hotspot row: the state and a turn-off row while one runs, or the form otherwise.
+fn hotspot_row(ui: Ui, model: &Model) -> Element {
+    match &model.hotspot {
+        Some(name) => {
+            let stop = name.clone();
+            Element::from(
+                row("Turn off Wi-Fi hotspot")
+                    .subtitle(format!("On: {name}"))
+                    .on_press(move |_| ui.stop_hotspot(stop.clone())),
+            )
+        }
+        None => Element::from(
+            row("Turn on Wi-Fi hotspot...")
+                .navigates()
+                .on_press(move |_| ui.open_hotspot()),
+        ),
+    }
+}
+/// The header line: the connected network, or whether Wi-Fi is off.
+fn wifi_subtitle(model: Option<&Result<Model, CommandError>>) -> String {
+    match model {
+        Some(Ok(model)) if !model.wifi_on => "Off".to_string(),
+        Some(Ok(model)) => match model.networks.iter().find(|network| network.in_use) {
+            Some(network) => format!("Connected to {}", network.ssid),
+            None => "Not connected".to_string(),
+        },
+        _ => String::new(),
+    }
+}
+
+/// Read the lists now and every few seconds while the page is open.
 fn use_polling(ui: Ui) {
     use_hook(move || {
         ui.reload();
         spawn(async move {
             loop {
                 timer(POLL_INTERVAL).await;
-                ui.reload();
+                ui.rescan();
             }
         });
     });
@@ -519,24 +809,25 @@ pub struct WifiPage;
 
 impl Component for WifiPage {
     fn render(&self) -> impl IntoElement {
-        let model = system::cached("wifi");
-        let busy = use_state::<Option<String>>(|| None);
-        let action_error = use_state::<Option<String>>(|| None);
-        let selected = use_state::<Option<String>>(|| None);
-        let password = use_state::<String>(String::new);
-        let overlays = use_overlays();
-        let ui = Ui {
-            model,
-            busy,
-            action_error,
-            selected,
-            password,
-            overlays,
-            navigator: use_navigator(),
-        };
+        let ui = use_ui();
+        let tokens = use_tokens();
         use_polling(ui);
+        use_page_busy(ui.busy.read().is_some());
+        // The master switch lives in the header bar, as in GNOME.
+        let master = match ui.model.read().as_ref() {
+            Some(Ok(model)) if wifi_usable(&model.wifi_hw) => Some(model.wifi_on),
+            _ => None,
+        };
+        let mut header = PageHeader {
+            subtitle: Some(wifi_subtitle(ui.model.read().as_ref())),
+            action: None,
+        };
+        if let Some(on) = master {
+            header = header.switch("Wi-Fi", on, move |next: bool| ui.set_wifi(next));
+        }
+        use_page_header(header);
 
-        let loaded = model.read().clone();
+        let loaded = ui.model.read().clone();
         let Some(loaded) = loaded else {
             return page(vec![skeleton()]);
         };
@@ -551,144 +842,86 @@ impl Component for WifiPage {
 
         let mut blocks: Vec<Element> = Vec::new();
 
-        if let Some(text) = busy.read().clone() {
-            blocks.push(Element::from(status(Status::Loading(text))));
-        }
-        if let Some(text) = action_error.read().clone() {
-            blocks.push(Element::from(status(Status::Error(text))));
-        }
-
         let usable = wifi_usable(&model.wifi_hw);
-        blocks.push(Element::from(
-            Group::new(None::<String>)
-                .row(
-                    switch_row("Wi-Fi", model.wifi_on, move |on: bool| ui.set_wifi(on))
-                        .enabled(usable),
-                )
-                .row(switch_row(
-                    "Airplane mode",
-                    model.airplane,
-                    move |on: bool| ui.set_airplane(on),
-                )),
-        ));
+        let mut items: Vec<Element> = Vec::new();
+        if !usable {
+            items.push(Element::from(
+                row("Wi-Fi")
+                    .subtitle("Wi-Fi is not available on this computer.")
+                    .enabled(false),
+            ));
+        } else if !model.wifi_on {
+            items.push(Element::from(
+                row("Wi-Fi is off").subtitle("Use the switch at the top to turn it on."),
+            ));
+        }
+        if model.wifi_on && usable {
+            let navigator = ui.navigator;
+            items.push(Element::from(
+                row("Saved networks")
+                    .navigates()
+                    .on_press(move |_| navigator.push(Route::WifiSaved)),
+            ));
+            items.push(Element::from(
+                row("Connect to hidden network...")
+                    .navigates()
+                    .on_press(move |_| ui.open_hidden()),
+            ));
+            items.push(hotspot_row(ui, &model));
+        }
+        blocks.push(Element::from(Group::new(None::<String>).rows(items)));
+        blocks.push(Element::from(Group::new(None::<String>).row(switch_row(
+            "Airplane mode",
+            model.airplane,
+            move |on: bool| ui.set_airplane(on),
+        ))));
 
-        blocks.push(wifi_section(ui, &model));
+        blocks.push(visible_section(ui, &model, tokens));
 
         page(blocks)
     }
 }
 
-/// One Wi-Fi network: its state and the action it allows, the password row
-/// when joining needs one, what NetworkManager reports about the strongest
-/// access point, and Forget for a saved network.
+/// The saved Wi-Fi profiles. A press opens the connection editor for one.
 #[derive(PartialEq)]
-pub struct NetworkDetailsPage {
-    pub ssid: String,
-}
+pub struct SavedNetworksPage;
 
-impl Component for NetworkDetailsPage {
+impl Component for SavedNetworksPage {
     fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let ui = Ui {
-            model: system::cached("wifi"),
-            busy: use_state::<Option<String>>(|| None),
-            action_error: use_state::<Option<String>>(|| None),
-            selected: use_state::<Option<String>>(|| None),
-            password: use_state::<String>(String::new),
-            overlays: use_overlays(),
-            navigator: use_navigator(),
-        };
+        let ui = use_ui();
         use_polling(ui);
 
-        let Some(Ok(model)) = ui.model.read().clone() else {
-            return page_column().child(skeleton());
+        let loaded = ui.model.read().clone();
+        let Some(loaded) = loaded else {
+            return page(vec![skeleton()]);
         };
-        let mut page = page_column();
-        if let Some(text) = ui.busy.read().clone() {
-            page = page.child(status(Status::Loading(text)));
-        }
-        if let Some(text) = ui.action_error.read().clone() {
-            page = page.child(status(Status::Error(text)));
-        }
-        let Some(network) = model
-            .networks
-            .iter()
-            .find(|network| network.ssid == self.ssid)
-        else {
-            return page.child(status(Status::Info(
-                "This network is not in range.".to_string(),
-            )));
-        };
-
-        let idle = ui.busy.read().is_none();
-        let needs_password = network.secured && !network.saved && !network.in_use;
-        let ssid = network.ssid.clone();
-        let action = (idle && !(needs_password && ui.password.read().is_empty())).then(|| {
-            if network.in_use {
-                Element::from(
-                    action_button("Disconnect", move |_| ui.disconnect(ssid.clone())).compact(),
-                )
-            } else {
-                let password = needs_password.then(|| ui.password.read().clone());
-                Element::from(
-                    primary_button("Connect", move |_| {
-                        ui.connect(ssid.clone(), password.clone())
-                    })
-                    .compact(),
-                )
+        let model = match loaded {
+            Ok(model) => model,
+            Err(error) => {
+                return page(vec![Element::from(
+                    status(Status::Error(error.0)).action("Try again", move |_| ui.reload()),
+                )]);
             }
-        });
-        let state = if network.in_use {
-            "Connected"
-        } else if network.saved {
-            "Saved"
-        } else {
-            "Not saved"
         };
-        let identity = rect()
-            .width(Size::fill())
-            .cross_align(Alignment::Center)
-            .spacing(S2)
-            .padding((S2, 0.0, S2, 0.0))
-            .child(icons::icon(Icon::Network, ICON_XL, tokens.muted))
-            .child(heading(network.ssid.clone()))
-            .child(centered_caption(state))
-            .maybe_child(action);
 
-        let join_ssid = network.ssid.clone();
-        let join = needs_password.then(|| {
-            Group::new(None::<String>).row(text_row(
-                "Password",
-                ui.password,
-                move |password: String| ui.connect(join_ssid.clone(), Some(password)),
-            ))
-        });
-
-        let mut details = Group::titled("Details")
-            .row(row("Signal").value(signal_detail(network.signal)))
-            .row(row("Security").value(if network.secured {
-                "Password protected"
-            } else {
-                "Open network"
-            }));
-        if !network.band.is_empty() {
-            details = details.row(row("Band").value(network.band.clone()));
+        if model.saved_names.is_empty() {
+            return page(vec![Element::from(status(Status::Empty(
+                "No saved networks.".into(),
+            )))]);
         }
-        if !network.rate.is_empty() {
-            details = details.row(row("Speed").value(network.rate.clone()));
-        }
-
-        let forget_ssid = network.ssid.clone();
-        page.child(identity)
-            .maybe_child(join)
-            .child(details)
-            .maybe_child(network.saved.then(|| {
-                Group::new(None::<String>).row(
-                    row("Forget network")
-                        .destructive()
-                        .on_press(move |_| ui.confirm_forget(forget_ssid.clone())),
-                )
+        let rows = model.saved_names.iter().map(|name| {
+            let target = name.clone();
+            Element::from(row(name.clone()).on_press(move |_| {
+                ui.editor.open(Target {
+                    name: target.clone(),
+                    wireless: true,
+                    facts: Vec::new(),
+                });
             }))
+        });
+        page(vec![Element::from(
+            Group::new(None::<String>).rows(rows.collect::<Vec<_>>()),
+        )])
     }
 }
 

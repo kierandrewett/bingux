@@ -1,31 +1,47 @@
-//! Bluetooth: the adapter's power and discoverability, the devices BlueZ
-//! knows about, and a timed scan for nearby devices, all through
-//! `bluetoothctl`. Everything is read in the background and refreshed every
-//! five seconds while no action is running.
+//! Bluetooth: the adapter's power and visibility, the devices it knows, and a
+//! scan that runs while this page is open. Everything goes through
+//! `bluetoothctl` on background threads; the scan is one child process per
+//! round, and it is killed when the scan stops or the page closes.
 
+use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::routes::{Route, use_navigator};
+use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
-    Group, Overlays, ResponseKind, Row, Status, action_button, centered_caption, dialog, heading,
-    page_column, primary_button, row, row_button, skeleton, status, switch_row, use_overlays,
+    Group, Overlays, PageHeader, ResponseKind, Row, SpinnerSize, Status, Tokens, action_button,
+    caption, centered_caption, dialog, heading, page_column, primary_button, row, skeleton,
+    spinner, status, status_page, switch_row, use_overlays, use_page_busy, use_page_header,
     use_tokens,
 };
 use bingux_ui::scale::*;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(45);
-const SCAN_TIMEOUT: Duration = Duration::from_secs(20);
-const POLL: Duration = Duration::from_secs(5);
+const PAIR_TIMEOUT: Duration = Duration::from_secs(30);
+/// Length of one scan round; a new round starts when it ends.
+const SCAN_SECONDS: &str = "25";
+/// Refresh while scanning, so new devices appear as they are found.
+const POLL_SCANNING: Duration = Duration::from_millis(2500);
+const POLL_IDLE: Duration = Duration::from_secs(8);
+
+#[derive(Clone, Copy, PartialEq)]
+enum Block {
+    Software,
+    Hardware,
+}
 
 #[derive(Clone, PartialEq)]
 struct Adapter {
     powered: bool,
     discoverable: bool,
+    /// The name other devices see; the computer's name when BlueZ has none.
+    alias: String,
 }
 
 #[derive(Clone, PartialEq)]
@@ -44,21 +60,51 @@ struct Device {
 struct Model {
     /// `None` when BlueZ has no controller.
     adapter: Option<Adapter>,
+    /// Set when a switch on the computer or a system setting blocks Bluetooth.
+    blocked: Option<Block>,
     devices: Vec<Device>,
 }
 
 type Loaded = Option<Result<Model, CommandError>>;
 
+/// The action in progress. An empty `mac` is an adapter-wide action.
+#[derive(Clone, PartialEq)]
+struct Busy {
+    mac: String,
+    label: String,
+}
+
 /// Everything the event handlers need. All of it is `Copy`.
 #[derive(Clone, Copy)]
 struct Ctx {
     model: State<Loaded>,
-    error: State<Option<String>>,
-    busy: State<Option<String>>,
-    powered: bool,
-    /// No action is running, so the action buttons may be shown.
-    idle: bool,
+    busy: State<Option<Busy>>,
     overlays: Overlays,
+}
+
+#[derive(Clone)]
+struct Step {
+    args: Vec<String>,
+    timeout: Duration,
+}
+
+/// A user action: one or more `bluetoothctl` commands, run in order.
+#[derive(Clone)]
+struct Job {
+    mac: String,
+    busy: String,
+    steps: Vec<Step>,
+    /// A toast on success. Empty when the visible change is enough.
+    done: String,
+    /// The start of the toast on failure; the reason follows it.
+    failed: String,
+}
+
+fn step(args: &[&str], timeout: Duration) -> Step {
+    Step {
+        args: args.iter().map(|part| part.to_string()).collect(),
+        timeout,
+    }
 }
 
 fn bluetoothctl(args: &[&str], timeout: Duration) -> Result<String, CommandError> {
@@ -71,10 +117,6 @@ fn bluetoothctl(args: &[&str], timeout: Duration) -> Result<String, CommandError
             error
         }
     })
-}
-
-fn args(parts: &[&str]) -> Vec<String> {
-    parts.iter().map(|part| part.to_string()).collect()
 }
 
 /// The value of `key: value` in a `bluetoothctl` report, trimmed.
@@ -108,23 +150,51 @@ fn has_controller() -> bool {
     std::fs::read_dir("/sys/class/bluetooth").is_ok_and(|mut entries| entries.next().is_some())
 }
 
-fn load() -> Result<Model, CommandError> {
-    if !has_controller() {
-        return Ok(Model {
-            adapter: None,
-            devices: Vec::new(),
-        });
+/// Bluetooth blocked by a switch or by a system setting, from the radio
+/// kill switches the kernel reports.
+fn radio_block() -> Option<Block> {
+    for entry in std::fs::read_dir("/sys/class/rfkill").ok()?.flatten() {
+        let path = entry.path();
+        let kind = std::fs::read_to_string(path.join("type")).unwrap_or_default();
+        if kind.trim() != "bluetooth" {
+            continue;
+        }
+        let set =
+            |name: &str| std::fs::read_to_string(path.join(name)).is_ok_and(|v| v.trim() == "1");
+        if set("hard") {
+            return Some(Block::Hardware);
+        }
+        if set("soft") {
+            return Some(Block::Software);
+        }
     }
-    if bluetoothctl(&["list"], TIMEOUT)?.trim().is_empty() {
-        return Ok(Model {
-            adapter: None,
-            devices: Vec::new(),
-        });
+    None
+}
+
+fn hostname() -> String {
+    std::fs::read_to_string("/etc/hostname")
+        .map(|name| name.trim().to_string())
+        .ok()
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| "This computer".to_string())
+}
+
+fn load() -> Result<Model, CommandError> {
+    let empty = Model {
+        adapter: None,
+        blocked: None,
+        devices: Vec::new(),
+    };
+    if !has_controller() || bluetoothctl(&["list"], TIMEOUT)?.trim().is_empty() {
+        return Ok(empty);
     }
     let show = bluetoothctl(&["show"], TIMEOUT)?;
     let adapter = Adapter {
         powered: flag(&show, "Powered")?,
         discoverable: flag(&show, "Discoverable")?,
+        alias: field(&show, "Alias")
+            .filter(|alias| !alias.is_empty())
+            .map_or_else(hostname, str::to_string),
     };
 
     let listing = bluetoothctl(&["devices"], TIMEOUT)?;
@@ -149,96 +219,346 @@ fn load() -> Result<Model, CommandError> {
 
     Ok(Model {
         adapter: Some(adapter),
+        blocked: radio_block(),
         devices,
     })
 }
 
-/// Run one `bluetoothctl` action in the background, then show its error (or
-/// clear it) and reload the model so the page shows what BlueZ now reports.
-/// A second action is refused while one is still running.
-fn perform(ctx: Ctx, label: String, arguments: Vec<String>, timeout: Duration) {
+/// Set while a read is running, so polls do not pile up threads.
+static READING: AtomicBool = AtomicBool::new(false);
+
+/// Read Bluetooth in the background, unless a read is already running.
+fn refresh(model: State<Loaded>) {
+    if READING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    background(model, || {
+        let result = load();
+        READING.store(false, Ordering::SeqCst);
+        result
+    });
+}
+
+/// Turn a `bluetoothctl` answer into success, or a reason a person can act
+/// on. An answer that says the device is already connected or paired is a
+/// success.
+fn verdict(text: &str, failed: bool) -> Result<(), String> {
+    let lower = text.to_lowercase();
+    if lower.contains("already") {
+        Ok(())
+    } else if failed || lower.contains("failed") || lower.contains("error") {
+        Err(plain_reason(text))
+    } else {
+        Ok(())
+    }
+}
+
+/// Known BlueZ failures, in words for a person. The first match wins.
+const REASONS: &[(&[&str], &str)] = &[
+    (
+        &["did not answer"],
+        "Bluetooth did not answer. Try again in a moment.",
+    ),
+    (
+        &["d-bus", "rdynamic"],
+        "The Bluetooth service is not running.",
+    ),
+    (
+        &["inprogress", "in progress"],
+        "Bluetooth is busy. Try again in a moment.",
+    ),
+    (
+        &["authentic", "rejected"],
+        "The device did not accept the pairing.",
+    ),
+    (
+        &["notavailable", "not available", "doesnotexist", "not found"],
+        "The device is out of range or turned off.",
+    ),
+    (
+        &["timeout", "timed out"],
+        "The device did not respond in time.",
+    ),
+    (
+        &[
+            "connectionattempt",
+            "page-timeout",
+            "host is down",
+            "failed to connect",
+        ],
+        "The device did not respond. Turn it on, bring it closer and try again.",
+    ),
+];
+
+fn plain_reason(text: &str) -> String {
+    let lower = text.to_lowercase();
+    for (keys, reason) in REASONS {
+        if keys.iter().any(|key| lower.contains(key)) {
+            return reason.to_string();
+        }
+    }
+    if lower.contains("org.") || lower.contains("bluez") || lower.contains("bluetoothd") {
+        return "The action did not finish.".to_string();
+    }
+    text.trim().to_string()
+}
+
+fn run_steps(steps: &[Step]) -> Result<(), String> {
+    for step in steps {
+        let args: Vec<&str> = step.args.iter().map(String::as_str).collect();
+        match bluetoothctl(&args, step.timeout) {
+            Ok(text) => verdict(&text, false)?,
+            Err(error) => verdict(&error.0, true)?,
+        }
+    }
+    Ok(())
+}
+
+/// Run a job in the background, toast the outcome, and read Bluetooth again.
+/// One job runs at a time; a second request says so instead of queuing.
+fn run_job(ctx: Ctx, job: Job) {
     if ctx.busy.read().is_some() {
+        ctx.overlays.toast("Wait for the current action to finish.");
         return;
     }
     let Ctx {
         mut busy,
-        mut error,
         model,
-        ..
+        overlays,
     } = ctx;
-    busy.set(Some(label));
+    busy.set(Some(Busy {
+        mac: job.mac.clone(),
+        label: job.busy.clone(),
+    }));
+    let retry = job.clone();
+    let done = job.done.clone();
+    let failed = job.failed.clone();
     background_then(
-        move || {
-            let refs: Vec<&str> = arguments.iter().map(String::as_str).collect();
-            bluetoothctl(&refs, timeout)
-        },
+        move || run_steps(&job.steps),
         move |result| {
             busy.set(None);
             match result {
-                Ok(_) => error.set(None),
-                Err(e) => error.set(Some(e.0)),
+                Ok(()) => {
+                    if !done.is_empty() {
+                        overlays.toast(done);
+                    }
+                }
+                Err(reason) => overlays.toast_with_action(
+                    format!("{failed} {reason}"),
+                    "Try again",
+                    move |_| run_job(ctx, retry.clone()),
+                ),
             }
-            background(model, load);
+            refresh(model);
         },
     );
 }
 
-fn adapter_group(adapter: &Adapter, ctx: Ctx) -> Group {
-    let mut group = Group::titled("Adapter").row(switch_row(
-        "Bluetooth",
-        adapter.powered,
-        move |next: bool| {
-            let (label, word) = if next {
-                ("Turning Bluetooth on…", "on")
-            } else {
-                ("Turning Bluetooth off…", "off")
-            };
-            perform(ctx, label.to_string(), args(&["power", word]), TIMEOUT);
-        },
-    ));
-    if adapter.powered {
-        group = group.row(switch_row(
-            "Visible to nearby devices",
-            adapter.discoverable,
-            move |next: bool| {
-                let word = if next { "on" } else { "off" };
-                perform(
-                    ctx,
-                    "Changing visibility to nearby devices…".to_string(),
-                    args(&["discoverable", word]),
-                    TIMEOUT,
-                );
-            },
-        ));
-        let scan = row("Scan for devices");
-        let scan = if ctx.idle {
-            scan.trailing(row_button("Scan", move |_| {
-                perform(
-                    ctx,
-                    "Scanning for nearby devices…".to_string(),
-                    args(&["--timeout", "8", "scan", "on"]),
-                    SCAN_TIMEOUT,
-                )
-            }))
-        } else {
-            scan
-        };
-        group = group.row(scan);
+fn power_job(on: bool) -> Job {
+    let word = if on { "on" } else { "off" };
+    Job {
+        mac: String::new(),
+        busy: format!("Turning Bluetooth {word}…"),
+        steps: vec![step(&["power", word], TIMEOUT)],
+        done: String::new(),
+        failed: format!("Bluetooth could not be turned {word}."),
     }
-    group
 }
 
-fn device_status(device: &Device) -> String {
-    let state = if device.connected {
-        "Connected"
+fn visibility_job(on: bool) -> Job {
+    let word = if on { "on" } else { "off" };
+    Job {
+        mac: String::new(),
+        busy: "Changing visibility…".to_string(),
+        steps: vec![step(&["discoverable", word], TIMEOUT)],
+        done: String::new(),
+        failed: "Could not change visibility.".to_string(),
+    }
+}
+
+fn trust_job(device: &Device, on: bool) -> Job {
+    let word = if on { "trust" } else { "untrust" };
+    Job {
+        mac: device.mac.clone(),
+        busy: "Saving…".to_string(),
+        steps: vec![step(&[word, device.mac.as_str()], TIMEOUT)],
+        done: String::new(),
+        failed: format!("Could not change automatic connection for {}.", device.name),
+    }
+}
+
+fn remove_job(device: &Device) -> Job {
+    Job {
+        mac: device.mac.clone(),
+        busy: "Forgetting…".to_string(),
+        steps: vec![step(&["remove", device.mac.as_str()], TIMEOUT)],
+        done: format!("{} was forgotten.", device.name),
+        failed: format!("Could not forget {}.", device.name),
+    }
+}
+
+/// The action a device allows: connect or disconnect when set up, and pair
+/// otherwise (then connect). Pairing that needs a passkey fails here, because
+/// bluetoothctl has no agent to answer it.
+fn device_job(device: &Device) -> Job {
+    let mac = device.mac.as_str();
+    let name = &device.name;
+    if device.connected {
+        Job {
+            mac: device.mac.clone(),
+            busy: "Disconnecting…".to_string(),
+            steps: vec![step(&["disconnect", mac], TIMEOUT)],
+            done: format!("Disconnected from {name}."),
+            failed: format!("Could not disconnect from {name}."),
+        }
     } else if device.paired {
-        "Paired"
+        Job {
+            mac: device.mac.clone(),
+            busy: "Connecting…".to_string(),
+            steps: vec![step(&["connect", mac], CONNECT_TIMEOUT)],
+            done: format!("Connected to {name}."),
+            failed: format!("Could not connect to {name}."),
+        }
     } else {
-        "Not paired"
-    };
-    match device.battery {
-        Some(level) => format!("{state} · {level}% battery"),
-        None => state.to_string(),
+        Job {
+            mac: device.mac.clone(),
+            busy: "Pairing…".to_string(),
+            steps: vec![
+                step(&["--timeout", "30", "pair", mac], PAIR_TIMEOUT),
+                step(&["connect", mac], CONNECT_TIMEOUT),
+            ],
+            done: format!("Connected to {name}."),
+            failed: format!("Could not set up {name}."),
+        }
+    }
+}
+
+/// Keeps `bluetoothctl scan on` running in rounds while started. Each round
+/// is one child process. `stop` kills the child; a loop from an earlier start
+/// sees its generation has changed and exits, so no process outlives its page.
+#[derive(Clone)]
+struct Scanner(Arc<Mutex<ScanSlot>>);
+
+#[derive(Default)]
+struct ScanSlot {
+    /// Bumped on every start and stop.
+    generation: u64,
+    running: bool,
+    child: Option<Child>,
+}
+
+impl Scanner {
+    fn new() -> Self {
+        Self(Arc::default())
+    }
+
+    fn lock(&self) -> MutexGuard<'_, ScanSlot> {
+        self.0.lock().unwrap_or_else(|poison| poison.into_inner())
+    }
+
+    fn running(&self) -> bool {
+        self.lock().running
+    }
+
+    fn start(&self) {
+        let generation = {
+            let mut slot = self.lock();
+            if slot.running {
+                return;
+            }
+            slot.running = true;
+            slot.generation += 1;
+            slot.generation
+        };
+        let scanner = self.clone();
+        std::thread::spawn(move || scanner.run_rounds(generation));
+    }
+
+    fn stop(&self) {
+        let child = {
+            let mut slot = self.lock();
+            slot.running = false;
+            slot.generation += 1;
+            slot.child.take()
+        };
+        if let Some(mut child) = child {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+
+    fn run_rounds(&self, generation: u64) {
+        loop {
+            {
+                let mut slot = self.lock();
+                if slot.generation != generation {
+                    return;
+                }
+                let spawned = Command::new("bluetoothctl")
+                    .args(["--timeout", SCAN_SECONDS, "scan", "on"])
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn();
+                match spawned {
+                    Ok(child) => slot.child = Some(child),
+                    Err(_) => {
+                        slot.running = false;
+                        return;
+                    }
+                }
+            }
+            // Wait for this round to end. `stop` kills and takes the child.
+            loop {
+                std::thread::sleep(Duration::from_millis(200));
+                let mut slot = self.lock();
+                if slot.generation != generation {
+                    return;
+                }
+                let ended = match slot.child.as_mut() {
+                    Some(child) => !matches!(child.try_wait(), Ok(None)),
+                    None => true,
+                };
+                if ended {
+                    slot.child = None;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+fn powered(model: &Loaded) -> bool {
+    matches!(
+        model,
+        Some(Ok(Model {
+            adapter: Some(Adapter { powered: true, .. }),
+            ..
+        }))
+    )
+}
+
+/// The header line: visibility while on, or that Bluetooth is off.
+fn header_subtitle(model: &Loaded) -> Option<String> {
+    match model {
+        Some(Ok(Model {
+            adapter:
+                Some(Adapter {
+                    powered: true,
+                    discoverable: true,
+                    alias,
+                    ..
+                }),
+            ..
+        })) => Some(format!("Visible as {alias}")),
+        Some(Ok(Model {
+            adapter: Some(Adapter { powered: true, .. }),
+            ..
+        })) => Some("Not visible to other devices".to_string()),
+        Some(Ok(Model {
+            adapter: Some(_), ..
+        })) => Some("Off".to_string()),
+        _ => None,
     }
 }
 
@@ -248,11 +568,14 @@ fn device_icon(name: &str) -> Icon {
         "audio-headphones" | "audio-headset" => Icon::Headphones,
         "audio-card" | "audio-speakers" => Icon::Speakers,
         "input-keyboard" => Icon::Keyboard,
-        "input-mouse" | "input-tablet" => Icon::Mouse,
+        "input-mouse" => Icon::Mouse,
+        "input-tablet" => Icon::InputTablet,
         "input-gaming" => Icon::Gamepad,
         "phone" => Icon::Phone,
         "computer" => Icon::Computer,
         "video-display" => Icon::Display,
+        "printer" => Icon::Printer,
+        "camera-photo" | "camera-video" | "camera-web" => Icon::CameraWeb,
         _ => Icon::Bluetooth,
     }
 }
@@ -269,110 +592,125 @@ fn device_kind(name: &str) -> &'static str {
         "phone" => "Phone",
         "computer" => "Computer",
         "video-display" => "Display",
+        "printer" => "Printer",
+        "camera-photo" | "camera-video" | "camera-web" => "Camera",
         _ => "Other",
     }
 }
 
-/// The accent action a device allows: Pair for an unpaired one, Connect for
-/// a paired one and Disconnect for a connected one. Pairing that needs a
-/// passkey fails with BlueZ's message because bluetoothctl has no agent
-/// here. Nothing is shown while another action runs or Bluetooth is off.
-fn device_action(device: &Device, ctx: Ctx) -> Option<Element> {
-    if !(ctx.idle && ctx.powered) {
-        return None;
-    }
-    let mac = device.mac.clone();
-    let name = device.name.clone();
-    Some(if device.connected {
-        action_button("Disconnect", move |_| {
-            perform(
-                ctx,
-                format!("Disconnecting from {name}…"),
-                args(&["disconnect", mac.as_str()]),
-                TIMEOUT,
-            )
-        })
-        .compact()
-        .into()
-    } else if device.paired {
-        primary_button("Connect", move |_| {
-            perform(
-                ctx,
-                format!("Connecting to {name}…"),
-                args(&["connect", mac.as_str()]),
-                CONNECT_TIMEOUT,
-            )
-        })
-        .compact()
-        .into()
+fn battery_icon(level: u8) -> Icon {
+    if level > 50 {
+        Icon::BatteryLevel100
     } else {
-        primary_button("Pair", move |_| {
-            perform(
-                ctx,
-                format!("Pairing with {name}…"),
-                args(&["--timeout", "30", "pair", mac.as_str()]),
-                CONNECT_TIMEOUT,
-            )
-        })
-        .compact()
-        .into()
-    })
+        Icon::BatteryLevel50
+    }
 }
 
-/// Ask before removing a device, then remove it.
-fn confirm_remove(device: &Device, ctx: Ctx) {
-    let name = device.name.clone();
-    let mac = device.mac.clone();
-    ctx.overlays.show_dialog(
-        dialog(
-            format!("Remove \"{name}\"?"),
-            "The pairing is removed from this computer. Pair again to use it.",
-        )
-        .cancel("Cancel")
-        .response("Remove", ResponseKind::Destructive, move |_| {
-            perform(
-                ctx,
-                format!("Removing {name}…"),
-                args(&["remove", mac.as_str()]),
-                TIMEOUT,
-            )
-        }),
-    );
+/// The state of a device in words.
+fn device_word(device: &Device) -> &'static str {
+    if device.connected {
+        "Connected"
+    } else if device.paired {
+        "Not connected"
+    } else {
+        "Not set up"
+    }
 }
 
-/// One device in the list: its icon, name, status and address, the one
-/// action it allows, and a chevron to its page, where it can be removed.
-fn device_row(device: &Device, ctx: Ctx, open: impl Fn() + 'static) -> Row {
-    row(device.name.clone())
+/// The state of a device in words, with its battery level when known.
+fn device_state(device: &Device) -> String {
+    let state = device_word(device);
+    match device.battery {
+        Some(level) => format!("{state} · {level}% battery"),
+        None => state.to_string(),
+    }
+}
+
+fn device_action_label(device: &Device) -> &'static str {
+    if device.connected {
+        "Disconnect"
+    } else if device.paired {
+        "Connect"
+    } else {
+        "Pair"
+    }
+}
+
+/// The accent action for the device page. Nothing is shown while Bluetooth
+/// is off or another action runs.
+fn device_button(device: &Device, ctx: Ctx) -> Element {
+    let label = device_action_label(device);
+    let job = device_job(device);
+    let action = move |_| run_job(ctx, job.clone());
+    if device.connected {
+        action_button(label, action).into()
+    } else {
+        primary_button(label, action).into()
+    }
+}
+
+/// The name to show for a device. BlueZ uses the address when a device has
+/// no name of its own.
+fn device_name(device: &Device) -> String {
+    let as_address = device.name.replace('-', ":");
+    if device.name.is_empty() || as_address.eq_ignore_ascii_case(&device.mac) {
+        "Unnamed device".to_string()
+    } else {
+        device.name.clone()
+    }
+}
+
+/// One device in a list: its icon, name and state. The row opens the
+/// device's page, where the connect or pair action lives.
+fn device_row(device: &Device, busy: Option<&Busy>, tokens: Tokens, navigator: Navigator) -> Row {
+    let route = Route::Device {
+        mac: device.mac.clone(),
+        name: device_name(device),
+    };
+    let busy_label = busy
+        .filter(|busy| busy.mac == device.mac)
+        .map(|busy| busy.label.clone());
+    let mut glyphs = rect()
+        .direction(Direction::Horizontal)
+        .cross_align(Alignment::Center)
+        .spacing(S2);
+    if device.connected && busy_label.is_none() {
+        glyphs = glyphs.child(icons::icon(Icon::Check, ICON_MD, tokens.accent));
+    }
+    if let Some(level) = device.battery {
+        glyphs = glyphs
+            .child(icons::icon(battery_icon(level), ICON_MD, tokens.muted))
+            .child(caption(format!("{level}%")));
+    }
+    let subtitle =
+        busy_label.or_else(|| (!device.connected).then(|| device_word(device).to_string()));
+    let mut item = row(device_name(device))
         .leading(device_icon(&device.icon))
-        .subtitle(device_status(device))
-        .maybe_trailing(device_action(device, ctx))
+        .trailing(Element::from(glyphs))
         .navigates()
-        .on_press(move |_| open())
+        .on_press(move |_| navigator.push(route.clone()));
+    if let Some(subtitle) = subtitle {
+        item = item.subtitle(subtitle);
+    }
+    item
 }
 
-/// Read BlueZ now and every five seconds while no action is running.
-fn use_polling(model: State<Loaded>, busy: State<Option<String>>) {
+/// Read Bluetooth now, then again while the page is open: every 2.5 seconds
+/// while scanning and every 8 seconds otherwise.
+fn use_polling(model: State<Loaded>, scanner: Option<Scanner>) {
     use_hook(move || {
-        background(model, load);
+        refresh(model);
         spawn(async move {
             loop {
-                timer(POLL).await;
-                if busy.read().is_none() {
-                    background(model, load);
-                }
+                let wait = match &scanner {
+                    Some(scanner) if scanner.running() => POLL_SCANNING,
+                    _ => POLL_IDLE,
+                };
+                timer(wait).await;
+                refresh(model);
             }
         });
     });
-}
-
-/// A list row that opens the device's page.
-fn open_row(device: &Device, ctx: Ctx, navigator: crate::routes::Navigator) -> Row {
-    let route = Route::Device {
-        mac: device.mac.clone(),
-        name: device.name.clone(),
-    };
-    device_row(device, ctx, move || navigator.push(route.clone()))
 }
 
 #[derive(PartialEq)]
@@ -380,12 +718,55 @@ pub struct BluetoothPage;
 
 impl Component for BluetoothPage {
     fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
         let overlays = use_overlays();
         let navigator = use_navigator();
         let model = system::cached("bluetooth");
-        let error = use_state::<Option<String>>(|| None);
-        let busy = use_state::<Option<String>>(|| None);
-        use_polling(model, busy);
+        let busy_state = use_state::<Option<Busy>>(|| None);
+        let scanner = use_hook(Scanner::new);
+        use_polling(model, Some(scanner.clone()));
+
+        // Scan while Bluetooth is on; stop when it is off, and when the page closes.
+        {
+            let scanner = scanner.clone();
+            use_side_effect(move || {
+                if powered(&model.read()) {
+                    scanner.start();
+                } else {
+                    scanner.stop();
+                }
+            });
+        }
+        {
+            let scanner = scanner.clone();
+            use_drop(move || scanner.stop());
+        }
+        use_page_busy(
+            busy_state
+                .read()
+                .as_ref()
+                .is_some_and(|busy| busy.mac.is_empty()),
+        );
+        // The master switch lives in the header bar, as in GNOME.
+        let master = match &*model.read() {
+            Some(Ok(data)) if data.blocked.is_none() => data.adapter.as_ref().map(|a| a.powered),
+            _ => None,
+        };
+        let mut header = PageHeader {
+            subtitle: header_subtitle(&model.read()),
+            action: None,
+        };
+        if let Some(on) = master {
+            let ctx = Ctx {
+                model,
+                busy: busy_state,
+                overlays,
+            };
+            header = header.switch("Bluetooth", on, move |next: bool| {
+                run_job(ctx, power_job(next))
+            });
+        }
+        use_page_header(header);
 
         let Some(loaded) = model.read().clone() else {
             return page_column().child(skeleton());
@@ -394,72 +775,92 @@ impl Component for BluetoothPage {
             Ok(data) => data,
             Err(e) => {
                 return page_column().child(
-                    status(Status::Error(e.0))
-                        .action("Try again", move |_| background(model, load)),
+                    status(Status::Error(e.0)).action("Try again", move |_| refresh(model)),
                 );
             }
         };
-        let Some(adapter) = data.adapter else {
-            return page_column()
-                .child(status(Status::Empty("No Bluetooth adapter found.".into())));
+        let Some(adapter) = data.adapter.clone() else {
+            return page_column().child(
+                status_page(Icon::Bluetooth, "No Bluetooth adapter found")
+                    .description("This computer has no Bluetooth adapter that Settings can use."),
+            );
         };
+        if let Some(block) = data.blocked {
+            let reason = match block {
+                Block::Hardware => {
+                    "A switch on this computer has turned Bluetooth off. Turn the switch on to use Bluetooth."
+                }
+                Block::Software => {
+                    "A system setting has blocked Bluetooth. Turn off airplane mode or unblock Bluetooth to use it."
+                }
+            };
+            return page_column()
+                .child(status_page(Icon::Bluetooth, "Bluetooth is blocked").description(reason));
+        }
 
-        let busy_message = busy.read().clone();
+        let busy = busy_state.read().clone();
         let ctx = Ctx {
             model,
-            error,
-            busy,
-            powered: adapter.powered,
-            idle: busy_message.is_none(),
+            busy: busy_state,
             overlays,
         };
 
         let mut page = page_column();
-        if let Some(message) = error.read().clone() {
-            page = page.child(status(Status::Error(message)));
-        }
-        if let Some(message) = busy_message {
-            page = page.child(status(Status::Loading(message)));
-        }
-        page = page.child(adapter_group(&adapter, ctx));
-        if !adapter.powered {
-            page = page.child(status(Status::Info(
-                "Turn Bluetooth on to connect devices.".into(),
+        if adapter.powered {
+            page = page.child(Group::new(None::<String>).row(switch_row(
+                "Make this computer visible to other devices",
+                adapter.discoverable,
+                move |next: bool| run_job(ctx, visibility_job(next)),
             )));
         }
 
-        if data.devices.is_empty() {
-            page = page.child(status(Status::Empty(
-                "No devices known yet. Scan to find nearby devices.".into(),
-            )));
-        } else {
-            let (paired, other): (Vec<&Device>, Vec<&Device>) =
-                data.devices.iter().partition(|device| device.paired);
-            if !paired.is_empty() {
-                page = page.child(
-                    Group::titled("My devices").rows(
-                        paired
-                            .into_iter()
-                            .map(|device| Element::from(open_row(device, ctx, navigator))),
-                    ),
-                );
+        if !adapter.powered {
+            return page.child(
+                status_page(Icon::Bluetooth, "Bluetooth is off")
+                    .description("Turn on Bluetooth to find and connect devices.")
+                    .action("Turn on", move |_| run_job(ctx, power_job(true))),
+            );
+        }
+
+        let scanning = scanner.running();
+        let (mut mine, nearby): (Vec<&Device>, Vec<&Device>) =
+            data.devices.iter().partition(|device| device.paired);
+        mine.sort_by_key(|device| (!device.connected, device.name.to_lowercase()));
+        let no_mine = mine.is_empty();
+
+        if !no_mine {
+            page = page.child(
+                Group::titled("My devices").rows(mine.into_iter().map(|device| {
+                    Element::from(device_row(device, busy.as_ref(), tokens, navigator))
+                })),
+            );
+        }
+        // Nearby devices carries the scanning spinner. It stays on screen
+        // while a scan runs, so the page does not jump when the first device
+        // appears.
+        if !nearby.is_empty() || scanning {
+            let mut group = Group::titled("Nearby devices");
+            if scanning {
+                group = group.trailing(spinner(SpinnerSize::Small));
             }
-            if !other.is_empty() {
-                page = page.child(
-                    Group::titled("Other devices").rows(
-                        other
-                            .into_iter()
-                            .map(|device| Element::from(open_row(device, ctx, navigator))),
-                    ),
-                );
-            }
+            page = page.child(if nearby.is_empty() {
+                group.row(status(Status::Empty("Looking for nearby devices.".into())))
+            } else {
+                group.rows(nearby.into_iter().map(|device| {
+                    Element::from(device_row(device, busy.as_ref(), tokens, navigator))
+                }))
+            });
+        } else if no_mine {
+            page = page.child(Group::new(None::<String>).row(status(Status::Empty(
+                "No devices found. Turn on the device and make it visible.".into(),
+            ))));
         }
         page
     }
 }
 
-/// One device: its icon, name and status, the action it allows, what BlueZ
-/// reports about it, and Remove.
+/// One device: its state and its one action, its battery, what BlueZ knows
+/// about it, whether it connects by itself, and Forget.
 #[derive(PartialEq)]
 pub struct BluetoothDevicePage {
     pub mac: String,
@@ -471,9 +872,9 @@ impl Component for BluetoothDevicePage {
         let navigator = use_navigator();
         let tokens = use_tokens();
         let model = system::cached("bluetooth");
-        let error = use_state::<Option<String>>(|| None);
-        let busy = use_state::<Option<String>>(|| None);
-        use_polling(model, busy);
+        let busy_state = use_state::<Option<Busy>>(|| None);
+        use_polling(model, None);
+        use_page_busy(busy_state.read().is_some());
 
         // Go back to the list once BlueZ no longer knows the device.
         let mac = self.mac.clone();
@@ -491,13 +892,11 @@ impl Component for BluetoothDevicePage {
         let Some(device) = data.devices.iter().find(|device| device.mac == self.mac) else {
             return page_column();
         };
-        let busy_message = busy.read().clone();
+        let adapter_on = data.adapter.as_ref().is_some_and(|adapter| adapter.powered);
+        let busy = busy_state.read().clone();
         let ctx = Ctx {
             model,
-            error,
-            busy,
-            powered: data.adapter.as_ref().is_some_and(|adapter| adapter.powered),
-            idle: busy_message.is_none(),
+            busy: busy_state,
             overlays,
         };
 
@@ -511,36 +910,55 @@ impl Component for BluetoothDevicePage {
                 ICON_XL,
                 tokens.muted,
             ))
-            .child(heading(device.name.clone()))
-            .child(centered_caption(device_status(device)))
-            .maybe_child(device_action(device, ctx));
+            .child(heading(device_name(device)))
+            .child(centered_caption(device_state(device)))
+            .maybe_child((adapter_on && busy.is_none()).then(|| device_button(device, ctx)));
 
         let yes_no = |value: bool| if value { "Yes" } else { "No" };
-        let mut details = Group::titled("Details")
+        let mut details = Group::titled("Details");
+        if let Some(level) = device.battery {
+            details = details.row(
+                row("Battery")
+                    .leading(battery_icon(level))
+                    .value(format!("{level}%")),
+            );
+        }
+        details = details
             .row(row("Type").value(device_kind(&device.icon)))
             .row(row("Address").value(device.mac.clone()))
-            .row(row("Paired with this computer").value(yes_no(device.paired)))
-            .row(row("Connects automatically").value(yes_no(device.trusted)));
-        if let Some(level) = device.battery {
-            details = details.row(row("Battery").value(format!("{level}%")));
-        }
+            .row(row("Paired").value(yes_no(device.paired)));
+        let trust_device = device.clone();
+        details = details.row(switch_row(
+            "Connects automatically",
+            device.trusted,
+            move |on: bool| run_job(ctx, trust_job(&trust_device, on)),
+        ));
 
-        let removable = device.clone();
-        let mut page = page_column();
-        if let Some(message) = error.read().clone() {
-            page = page.child(status(Status::Error(message)));
-        }
-        if let Some(message) = busy_message {
-            page = page.child(status(Status::Loading(message)));
-        }
-        page.child(identity).child(details).child(
+        let page = page_column().child(identity);
+        let forget = device.clone();
+        page.child(details).child(
             Group::new(None::<String>).row(
-                row("Remove device")
+                row("Forget device")
                     .destructive()
-                    .on_press(move |_| confirm_remove(&removable, ctx)),
+                    .on_press(move |_| confirm_forget(ctx, &forget)),
             ),
         )
     }
+}
+
+/// Ask before forgetting a device, then forget it.
+fn confirm_forget(ctx: Ctx, device: &Device) {
+    let job = remove_job(device);
+    ctx.overlays.show_dialog(
+        dialog(
+            format!("Forget \"{}\"?", device_name(device)),
+            "This computer forgets the pairing. Pair again to use the device.",
+        )
+        .cancel("Cancel")
+        .response("Forget", ResponseKind::Destructive, move |_| {
+            run_job(ctx, job.clone())
+        }),
+    );
 }
 
 /// Start loading this page's data before it is opened.

@@ -1,26 +1,50 @@
-//! Keyboard: key repeat from GSettings, input sources from Gnoblin, and a
+//! Keyboard: key repeat and Num Lock from GSettings, the Caps Lock and
+//! Compose keys from the XKB options, input sources from Gnoblin, and a
 //! pointer at the Lua config for shortcuts.
 //!
 //! Gnoblin's Lua `input.keyboard` fields override the GSettings keys, so a
 //! row whose field is set in the committed snapshot is shown read-only.
+//! Input sources can be picked but not added: Gnoblin offers no way to add
+//! one from here.
 
 use freya::prelude::*;
 
+use crate::icons::Icon;
 use crate::pages::gnoblin::{self, InputSource, Json};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Status, page_column, row, row_button, skeleton, slider_row, status, switch_row,
+    Group, Overlays, Status, choice_row, page_column, row, row_button, skeleton, slider_row,
+    status, switch_row, text_field, use_overlays,
 };
 
 const KEYBOARD: &str = "org.gnome.desktop.peripherals.keyboard";
+const INPUT_SOURCES: &str = "org.gnome.desktop.input-sources";
 const DELAY_RANGE: (f64, f64) = (100.0, 2000.0);
 const INTERVAL_RANGE: (f64, f64) = (10.0, 200.0);
+
+/// Caps Lock choices: each is an XKB option, and "" leaves Caps Lock alone.
+const CAPS_LOCK: [(&str, &str); 4] = [
+    ("", "Default"),
+    ("caps:escape", "Works as Escape"),
+    ("ctrl:nocaps", "Works as Control"),
+    ("caps:none", "Turned off"),
+];
+/// Compose key choices: the key that starts a sequence for accented letters.
+const COMPOSE_KEY: [(&str, &str); 4] = [
+    ("", "Off"),
+    ("compose:ralt", "Right Alt"),
+    ("compose:rctrl", "Right Ctrl"),
+    ("compose:menu", "Menu key"),
+];
 
 #[derive(Clone, PartialEq)]
 struct Model {
     repeat: bool,
     delay_ms: f64,
     interval_ms: f64,
+    remember_numlock: bool,
+    numlock_on: bool,
+    xkb_options: Vec<String>,
     overrides: Json,
     sources: Result<Vec<InputSource>, String>,
     config_path: Option<String>,
@@ -34,14 +58,62 @@ fn gsettings_u32(key: &str) -> Result<f64, CommandError> {
         .map_err(|_| CommandError(format!("The keyboard {key} setting could not be read.")))
 }
 
+/// Parses a GSettings string list such as `['caps:escape', 'compose:ralt']`
+/// or the empty `@as []`.
+fn parse_list(raw: &str) -> Vec<String> {
+    raw.trim()
+        .trim_start_matches("@as")
+        .trim()
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .split(',')
+        .map(|item| item.trim().trim_matches('\'').to_string())
+        .filter(|item| !item.is_empty())
+        .collect()
+}
+
+fn list_value(items: &[String]) -> String {
+    let quoted: Vec<String> = items.iter().map(|item| format!("'{item}'")).collect();
+    format!("[{}]", quoted.join(", "))
+}
+
+/// The option from `group` that is set, or "" when none is.
+fn selected_in(current: &[String], group: &[(&str, &str)]) -> String {
+    current
+        .iter()
+        .find(|item| group.iter().any(|(key, _)| *key == item.as_str()))
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// `current` with every option from `group` removed and `choice` added. Other
+/// options in the list are kept as they are.
+fn with_choice(current: &[String], group: &[(&str, &str)], choice: &str) -> Vec<String> {
+    let mut next: Vec<String> = current
+        .iter()
+        .filter(|item| !group.iter().any(|(key, _)| *key == item.as_str()))
+        .cloned()
+        .collect();
+    if !choice.is_empty() {
+        next.push(choice.to_string());
+    }
+    next
+}
+
 fn load() -> Result<Model, CommandError> {
     let repeat = system::gsettings_get(KEYBOARD, "repeat")? == "true";
     let delay_ms = gsettings_u32("delay")?;
     let interval_ms = gsettings_u32("repeat-interval")?;
+    let remember_numlock = system::gsettings_get(KEYBOARD, "remember-numlock-state")? == "true";
+    let numlock_on = system::gsettings_get(KEYBOARD, "numlock-state")? == "true";
+    let xkb_options = parse_list(&system::gsettings_get(INPUT_SOURCES, "xkb-options")?);
     Ok(Model {
         repeat,
         delay_ms,
         interval_ms,
+        remember_numlock,
+        numlock_on,
+        xkb_options,
         overrides: gnoblin::overrides(),
         sources: gnoblin::input_sources().map_err(|e| e.0),
         config_path: gnoblin::config_path().ok(),
@@ -50,15 +122,14 @@ fn load() -> Result<Model, CommandError> {
 
 fn commit(
     loaded: State<Option<Result<Model, CommandError>>>,
-    mut error: State<Option<String>>,
+    overlays: Overlays,
     work: impl FnOnce() -> CommandResult + Send + 'static,
 ) {
     background_then(work, move |result| match result {
         Ok(_) => {
-            error.set(None);
             background(loaded, load);
         }
-        Err(e) => error.set(Some(e.0)),
+        Err(e) => overlays.toast(e.0),
     });
 }
 
@@ -93,7 +164,8 @@ pub struct KeyboardPage;
 impl Component for KeyboardPage {
     fn render(&self) -> impl IntoElement {
         let loaded = system::use_cached("keyboard", load);
-        let mut error = use_state::<Option<String>>(|| None);
+        let overlays = use_overlays();
+        let try_text = use_state(String::new);
 
         let Some(result) = loaded.read().clone() else {
             return page_column().child(skeleton());
@@ -123,7 +195,7 @@ impl Component for KeyboardPage {
                 "Repeat keys",
                 model.repeat,
                 move |next: bool| {
-                    commit(loaded, error, move || {
+                    commit(loaded, overlays, move || {
                         system::gsettings_set(
                             KEYBOARD,
                             "repeat",
@@ -135,17 +207,17 @@ impl Component for KeyboardPage {
         };
         repeat_group = match delay_lua {
             Some(value) => repeat_group.row(
-                row("Delay")
+                row("Delay before repeat")
                     .subtitle(gnoblin::MANAGED)
                     .value(format!("{value} ms")),
             ),
             None => repeat_group.row(
                 slider_row(
-                    "Delay",
+                    "Delay before repeat",
                     to_percent(model.delay_ms, DELAY_RANGE),
                     move |percent: f64| {
                         let ms = from_percent(percent, DELAY_RANGE).to_string();
-                        commit(loaded, error, move || {
+                        commit(loaded, overlays, move || {
                             system::gsettings_set(KEYBOARD, "delay", &ms)
                         })
                     },
@@ -166,7 +238,7 @@ impl Component for KeyboardPage {
                     100.0 - to_percent(model.interval_ms, INTERVAL_RANGE),
                     move |percent: f64| {
                         let ms = from_percent(100.0 - percent, INTERVAL_RANGE).to_string();
-                        commit(loaded, error, move || {
+                        commit(loaded, overlays, move || {
                             system::gsettings_set(KEYBOARD, "repeat-interval", &ms)
                         })
                     },
@@ -175,6 +247,110 @@ impl Component for KeyboardPage {
                 .enabled(model.repeat),
             ),
         };
+        repeat_group = repeat_group.row(
+            row("Try it")
+                .subtitle("Hold a key in this box to test the repeat.")
+                .trailing(text_field(try_text, |_| {}))
+                .enabled(model.repeat),
+        );
+
+        // Num Lock: the remembered state wins when remembering is on, so the
+        // "Num Lock on" switch is only live when remembering is off.
+        let numlock_remember_lua = overridden("remember-numlock-state");
+        let numlock_state_lua = overridden("numlock-state");
+        let mut typing_group = Group::titled("Typing");
+        typing_group = match numlock_remember_lua {
+            Some(value) => typing_group.row(
+                row("Remember Num Lock state")
+                    .subtitle(gnoblin::MANAGED)
+                    .value(value),
+            ),
+            None => typing_group.row(switch_row(
+                "Remember Num Lock state",
+                model.remember_numlock,
+                move |next: bool| {
+                    commit(loaded, overlays, move || {
+                        system::gsettings_set(
+                            KEYBOARD,
+                            "remember-numlock-state",
+                            if next { "true" } else { "false" },
+                        )
+                    })
+                },
+            )),
+        };
+        typing_group = match numlock_state_lua {
+            Some(value) => typing_group.row(
+                row("Num Lock on at sign-in")
+                    .subtitle(gnoblin::MANAGED)
+                    .value(value),
+            ),
+            None => typing_group.row(
+                switch_row(
+                    "Num Lock on at sign-in",
+                    model.numlock_on,
+                    move |next: bool| {
+                        commit(loaded, overlays, move || {
+                            system::gsettings_set(
+                                KEYBOARD,
+                                "numlock-state",
+                                if next { "true" } else { "false" },
+                            )
+                        })
+                    },
+                )
+                .subtitle("Used when Num Lock is not remembered.")
+                .enabled(!model.remember_numlock),
+            ),
+        };
+
+        // Caps Lock and Compose are XKB options in the input-sources list.
+        // Writing one replaces only its own group, so other options stay.
+        let xkb_lua = overridden("xkb-options");
+        let caps_current = selected_in(&model.xkb_options, &CAPS_LOCK);
+        let compose_current = selected_in(&model.xkb_options, &COMPOSE_KEY);
+        let caps_row = match xkb_lua.clone() {
+            Some(_) => row("Caps Lock key").subtitle(gnoblin::MANAGED),
+            None => {
+                let options = model.xkb_options.clone();
+                choice_row(
+                    "Caps Lock key",
+                    CAPS_LOCK
+                        .iter()
+                        .map(|(key, label)| (key.to_string(), label.to_string()))
+                        .collect(),
+                    &caps_current,
+                    move |choice: String| {
+                        let next = with_choice(&options, &CAPS_LOCK, &choice);
+                        commit(loaded, overlays, move || {
+                            system::gsettings_set(INPUT_SOURCES, "xkb-options", &list_value(&next))
+                        })
+                    },
+                )
+            }
+        };
+        let compose_row = match xkb_lua {
+            Some(_) => row("Compose key").subtitle(gnoblin::MANAGED),
+            None => {
+                let options = model.xkb_options.clone();
+                choice_row(
+                    "Compose key",
+                    COMPOSE_KEY
+                        .iter()
+                        .map(|(key, label)| (key.to_string(), label.to_string()))
+                        .collect(),
+                    &compose_current,
+                    move |choice: String| {
+                        let next = with_choice(&options, &COMPOSE_KEY, &choice);
+                        commit(loaded, overlays, move || {
+                            system::gsettings_set(INPUT_SOURCES, "xkb-options", &list_value(&next))
+                        })
+                    },
+                )
+                .subtitle("Type two keys to make accented letters and symbols.")
+            }
+        };
+        typing_group = typing_group.row(caps_row).row(compose_row);
 
         // The section always opens with where the list comes from. A missing
         // desktop is a calm muted line; any other failure is an error.
@@ -190,6 +366,7 @@ impl Component for KeyboardPage {
                     let active = source.active;
                     Element::from(
                         row(source.name.clone())
+                            .leading(Icon::Keyboard)
                             .subtitle(if source.kind == "xkb" {
                                 "Keyboard layout"
                             } else {
@@ -199,7 +376,7 @@ impl Component for KeyboardPage {
                             .enabled(!active)
                             .on_press(move |_| {
                                 let (kind, id) = (kind.clone(), id.clone());
-                                commit(loaded, error, move || {
+                                commit(loaded, overlays, move || {
                                     gnoblin::select_input_source(&kind, &id)
                                 })
                             }),
@@ -216,27 +393,27 @@ impl Component for KeyboardPage {
 
         // Shortcuts are set in a configuration file. The button opens that file
         // in the default editor.
-        let mut shortcuts_row =
-            row("Keyboard shortcuts").subtitle("Shortcuts are set in a configuration file.");
+        let mut shortcuts_row = row("Shortcuts")
+            .leading(Icon::PreferencesDesktopKeyboardShortcuts)
+            .subtitle("Change shortcuts in the configuration file.");
         if let Some(path) = model.config_path.clone() {
             shortcuts_row = shortcuts_row.trailing(row_button("Open file", move |_| {
                 let path = path.clone();
                 background_then(
                     move || open_file(&path),
-                    move |result| error.set(result.err().map(|e| e.0)),
+                    move |result| {
+                        if let Err(e) = result {
+                            overlays.toast(e.0);
+                        }
+                    },
                 );
             }));
         }
         let shortcuts = Group::titled("Shortcuts").row(shortcuts_row);
 
         page_column()
-            .maybe_child(
-                error
-                    .read()
-                    .clone()
-                    .map(|message| status(Status::Error(message))),
-            )
             .child(repeat_group)
+            .child(typing_group)
             .child(sources)
             .child(shortcuts)
     }

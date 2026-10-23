@@ -6,9 +6,12 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::system;
-use crate::ui::{Group, expander_row, page_column, property_row, skeleton};
+use crate::ui::{
+    Group, ICON_APP_LG, S2, app_icon, centered_caption, expander_row, heading, page_column,
+    property_row, use_page_busy,
+};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 struct Facts {
     hostname: String,
     os: String,
@@ -123,15 +126,34 @@ pub struct AboutPage;
 
 impl Component for AboutPage {
     fn render(&self) -> impl IntoElement {
-        let facts = system::use_cached("about", collect);
-
-        let Some(facts) = facts.read().clone() else {
-            return page_column().child(skeleton());
+        let loaded = system::use_cached("about", collect);
+        let loaded = loaded.read().clone();
+        use_page_busy(loaded.is_none());
+        // Until the facts arrive every value is blank. Rows keep their height,
+        // and the header lines keep a blank line box, so nothing moves when the
+        // values fill in.
+        let facts = loaded.unwrap_or_default();
+        let header_line = |text: String| {
+            if text.is_empty() {
+                "\u{a0}".to_string()
+            } else {
+                text
+            }
         };
 
         page_column()
             .child(
-                Group::titled("Device")
+                rect()
+                    .width(Size::fill())
+                    .cross_align(Alignment::Center)
+                    .spacing(S2)
+                    .padding((S2, 0.0, S2, 0.0))
+                    .child(app_icon("bingux-settings", ICON_APP_LG))
+                    .child(heading(header_line(facts.os.clone())))
+                    .child(centered_caption(header_line(facts.hostname.clone()))),
+            )
+            .child(
+                Group::titled("This device")
                     .row(property_row("Device name", facts.hostname))
                     .row(property_row("Hardware model", facts.hardware))
                     .row(property_row("Processor", facts.processor))
@@ -139,14 +161,14 @@ impl Component for AboutPage {
                     .row(property_row("Disk", facts.disk)),
             )
             .child(
-                Group::titled("System")
+                Group::titled("Software")
                     .row(property_row("Operating system", facts.os))
                     .row(property_row("Bingux version", env!("CARGO_PKG_VERSION")))
                     .row(expander_row(
                         "Technical details",
                         vec![
                             property_row("Kernel", facts.kernel).into(),
-                            property_row("Window manager version", facts.gnoblin).into(),
+                            property_row("Desktop version", facts.gnoblin).into(),
                             property_row("Display server", "Wayland").into(),
                         ],
                     )),

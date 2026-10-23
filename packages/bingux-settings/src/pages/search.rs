@@ -19,14 +19,14 @@ use crate::ui::{
 use bingux_ui::scale::*;
 
 const TIMEOUT: Duration = Duration::from_secs(5);
-const PROVIDERS: [(&str, &str); 7] = [
-    ("applications", "Applications"),
-    ("files", "Files"),
-    ("calculation", "Calculation"),
-    ("conversions", "Conversions"),
-    ("web", "Web"),
-    ("web-shortcuts", "Website shortcuts"),
-    ("external", "Add-on sources"),
+const PROVIDERS: [(&str, &str, Icon); 7] = [
+    ("applications", "Applications", Icon::Applications),
+    ("files", "Files", Icon::Folder),
+    ("calculation", "Calculation", Icon::AccessoriesCalculator),
+    ("conversions", "Conversions", Icon::Refresh),
+    ("web", "Web", Icon::WebBrowser),
+    ("web-shortcuts", "Website shortcuts", Icon::Bookmarks),
+    ("external", "Add-on sources", Icon::AddOn),
 ];
 const MIN_MEGABYTES: i64 = 1;
 const MAX_MEGABYTES: i64 = 20;
@@ -62,7 +62,6 @@ struct Model {
 #[derive(Clone, Copy, PartialEq)]
 struct Ctx {
     model: State<Option<Result<Model, CommandError>>>,
-    error: State<Option<String>>,
     overlays: Overlays,
 }
 
@@ -450,20 +449,15 @@ fn reload(ctx: Ctx) {
     background(ctx.model, load);
 }
 
-/// Runs one write in the background and reports whether it succeeded. The
-/// error state is set or cleared, but nothing reloads.
+/// Runs one write in the background and reports whether it succeeded. A
+/// failure is a toast; nothing reloads.
 fn write_then(ctx: Ctx, args: Vec<String>, after: impl FnOnce(bool) + 'static) {
     background_then(
         move || run_config(args),
         move |result| match result {
-            Ok(_) => {
-                let mut error = ctx.error;
-                error.set(None);
-                after(true);
-            }
+            Ok(_) => after(true),
             Err(e) => {
-                let mut error = ctx.error;
-                error.set(Some(e.0));
+                ctx.overlays.toast(e.0);
                 after(false);
             }
         },
@@ -495,8 +489,7 @@ fn write_engines(ctx: Ctx, default: &str, list: Vec<Engine>) {
         .find(|engine| engine.enabled)
         .map(|engine| engine.id.clone())
     else {
-        let mut error = ctx.error;
-        error.set(Some("At least one engine must stay enabled.".into()));
+        ctx.overlays.toast("At least one engine must stay enabled.");
         return;
     };
     write_then(
@@ -547,13 +540,8 @@ pub struct SearchPage;
 impl Component for SearchPage {
     fn render(&self) -> impl IntoElement {
         let model = system::cached("search");
-        let error = use_state::<Option<String>>(|| None);
         let overlays = use_overlays();
-        let ctx = Ctx {
-            model,
-            error,
-            overlays,
-        };
+        let ctx = Ctx { model, overlays };
 
         use_hook(move || reload(ctx));
 
@@ -571,11 +559,6 @@ impl Component for SearchPage {
         };
 
         let mut page = page_column();
-
-        if let Some(message) = error.read().clone() {
-            page = page.child(status(Status::Error(message)));
-        }
-
         page = page
             .child(providers_group(&data, ctx))
             .child(web_group(&data, ctx))
@@ -593,27 +576,31 @@ impl Component for SearchPage {
 
 fn providers_group(data: &Model, ctx: Ctx) -> Group {
     let disabled = data.disabled_providers.clone();
-    PROVIDERS
-        .iter()
-        .fold(Group::titled("Search sources"), |group, (id, label)| {
+    PROVIDERS.iter().fold(
+        Group::titled("Search sources"),
+        |group, (id, label, icon)| {
             let id = id.to_string();
             let enabled = !disabled.contains(&id);
             let current = disabled.clone();
-            group.row(switch_row(*label, enabled, move |on: bool| {
-                let mut next: Vec<String> = current
-                    .iter()
-                    .filter(|provider| provider.as_str() != id)
-                    .cloned()
-                    .collect();
-                if !on {
-                    next.push(id.clone());
-                }
-                commit(
-                    ctx,
-                    set_args("search.disabled_providers", string_array(&next)),
-                );
-            }))
-        })
+            group.row(
+                switch_row(*label, enabled, move |on: bool| {
+                    let mut next: Vec<String> = current
+                        .iter()
+                        .filter(|provider| provider.as_str() != id)
+                        .cloned()
+                        .collect();
+                    if !on {
+                        next.push(id.clone());
+                    }
+                    commit(
+                        ctx,
+                        set_args("search.disabled_providers", string_array(&next)),
+                    );
+                })
+                .leading(*icon),
+            )
+        },
+    )
 }
 
 fn web_group(data: &Model, ctx: Ctx) -> Group {
@@ -692,6 +679,7 @@ fn engine_row(engine: Engine, engines: &[Engine], default: &str, ctx: Ctx) -> Ro
             ),
         );
     row(engine.name.clone())
+        .leading(Icon::WebBrowser)
         .subtitle(format!("Shortcut {}", engine.shortcut))
         .trailing(trailing)
 }
@@ -719,10 +707,8 @@ impl Component for AddEngine {
             let shortcut_text = shortcut.read().trim().to_string();
             let url_text = url.read().trim().to_string();
             if name_text.is_empty() || shortcut_text.is_empty() || url_text.is_empty() {
-                let mut error = ctx.error;
-                error.set(Some(
-                    "Enter a name, a shortcut and a web address for the engine.".into(),
-                ));
+                ctx.overlays
+                    .toast("Enter a name, a shortcut and a web address for the engine.");
                 return;
             }
             let mut list = engines.clone();
@@ -842,8 +828,7 @@ impl Component for FileRootAdd {
                     Ok(Some(path)) => add_folder(ctx, &roots, path),
                     Ok(None) => {}
                     Err(failure) => {
-                        let mut error = ctx.error;
-                        error.set(Some(failure.0));
+                        ctx.overlays.toast(failure.0);
                     }
                 },
             );
@@ -855,13 +840,13 @@ impl Component for FileRootAdd {
 
 /// Checks a chosen folder and adds it to the file search roots.
 fn add_folder(ctx: Ctx, roots: &[String], path: String) {
-    let mut error = ctx.error;
     if !Path::new(&path).is_absolute() || !Path::new(&path).is_dir() {
-        error.set(Some("That folder cannot be searched.".into()));
+        ctx.overlays.toast("That folder cannot be searched.");
         return;
     }
     if roots.contains(&path) {
-        error.set(Some(format!("{} is already searched.", folder_name(&path))));
+        ctx.overlays
+            .toast(format!("{} is already searched.", folder_name(&path)));
         return;
     }
     let mut list = roots.to_vec();

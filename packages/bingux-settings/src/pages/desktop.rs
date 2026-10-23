@@ -6,7 +6,8 @@
 use std::time::Duration;
 
 use crate::ui::{
-    Group, Row, Status, dropdown, page_column, row, segmented, skeleton, slider, status, switch_row,
+    Group, Icon, Row, Status, dropdown, page_column, row, segmented, skeleton, slider, status,
+    switch_row,
 };
 use bingux_ui::scale::*;
 use freya::prelude::*;
@@ -14,13 +15,13 @@ use freya::prelude::*;
 use crate::pages::bingux_config;
 use crate::system::{self, CommandError, background, background_then};
 
-/// Control Centre tiles: the camelCase key in `dump` and its label.
-const TILES: [(&str, &str); 5] = [
-    ("vpn", "VPN"),
-    ("dnd", "Do not disturb"),
-    ("nightLight", "Night light"),
-    ("power", "Power mode"),
-    ("awake", "Keep awake"),
+/// Control Centre tiles: the camelCase key in `dump`, its label and its icon.
+const TILES: [(&str, &str, Icon); 5] = [
+    ("vpn", "VPN", Icon::NetworkVpn),
+    ("dnd", "Do not disturb", Icon::NotificationsDisabled),
+    ("nightLight", "Night light", Icon::NightLight),
+    ("power", "Power mode", Icon::PowerProfileBalanced),
+    ("awake", "Keep awake", Icon::ChangesPrevent),
 ];
 /// What the shell shows when `controlCentre` is absent (`ControlCentreServices.qml`).
 const TILE_DEFAULTS: [bool; 5] = [true, true, false, false, false];
@@ -59,7 +60,7 @@ impl Model {
             .get("controlCentre")
             .filter(|value| !matches!(value, Json::Null))
         {
-            for (slot, (key, _)) in tiles.iter_mut().zip(TILES) {
+            for (slot, (key, _, _)) in tiles.iter_mut().zip(TILES) {
                 *slot = flag(control, key)?;
             }
         }
@@ -112,7 +113,7 @@ fn tiles_patch(tiles: [bool; 5], index: usize, on: bool) -> String {
     let fields = TILES
         .iter()
         .enumerate()
-        .map(|(i, (key, _))| {
+        .map(|(i, (key, _, _))| {
             let value = if i == index { on } else { tiles[i] };
             format!("\"{key}\":{value}")
         })
@@ -279,9 +280,12 @@ impl Component for DesktopPage {
             .maybe_child(failure.map(|message| status(Status::Error(message))))
             .child(
                 Group::titled("Dock")
-                    .row(switch_row("Show dock", m.dock, move |on: bool| {
-                        write(ctx, Change::Set("desktop.dock", on.to_string()))
-                    }))
+                    .row(
+                        switch_row("Show dock", m.dock, move |on: bool| {
+                            write(ctx, Change::Set("desktop.dock", on.to_string()))
+                        })
+                        .leading(Icon::ViewGrid),
+                    )
                     .row(dock_size_row(ctx, m.dock_size))
                     .row(segment_row(
                         "Alignment",
@@ -344,9 +348,12 @@ impl Component for DesktopPage {
             )
             .child(
                 Group::titled("Sidebar")
-                    .row(switch_row("Show sidebar", m.sidebar, move |on: bool| {
-                        write(ctx, Change::Set("desktop.sidebar", on.to_string()))
-                    }))
+                    .row(
+                        switch_row("Show sidebar", m.sidebar, move |on: bool| {
+                            write(ctx, Change::Set("desktop.sidebar", on.to_string()))
+                        })
+                        .leading(Icon::SidebarShow),
+                    )
                     .row(menu_row(
                         "Side of the screen",
                         vec![
@@ -371,24 +378,31 @@ impl Component for DesktopPage {
                         switch_row("Show system usage", m.metrics, move |on: bool| {
                             write(ctx, Change::Set("desktop.metrics", on.to_string()))
                         })
-                        .subtitle("Shows how busy the processor, memory and network are."),
+                        .subtitle("Shows how busy the processor, memory and network are.")
+                        .leading(Icon::Computer),
                     )
-                    .row(switch_row(
-                        "Show seconds in the clock",
-                        m.clock_seconds,
-                        move |on: bool| {
-                            write(ctx, Change::Set("desktop.clock_seconds", on.to_string()))
-                        },
-                    )),
+                    .row(
+                        switch_row(
+                            "Show seconds in the clock",
+                            m.clock_seconds,
+                            move |on: bool| {
+                                write(ctx, Change::Set("desktop.clock_seconds", on.to_string()))
+                            },
+                        )
+                        .leading(Icon::Clock),
+                    ),
             )
             .child(
                 Group::titled("Control Centre")
                     .description("Choose which tiles the Control Centre shows.")
-                    .rows(TILES.iter().enumerate().map(|(index, (_, label))| {
+                    .rows(TILES.iter().enumerate().map(|(index, (_, label, icon))| {
                         let tiles = m.tiles;
-                        Element::from(switch_row(*label, tiles[index], move |on: bool| {
-                            write(ctx, Change::Save(tiles_patch(tiles, index, on)))
-                        }))
+                        Element::from(
+                            switch_row(*label, tiles[index], move |on: bool| {
+                                write(ctx, Change::Save(tiles_patch(tiles, index, on)))
+                            })
+                            .leading(*icon),
+                        )
                     })),
             )
             .child(
@@ -400,7 +414,8 @@ impl Component for DesktopPage {
                             write(ctx, Change::Set("privacy.public_ip_lookup", on.to_string()))
                         },
                     )
-                    .subtitle("Looks it up with an online service. Shown in the Control Centre."),
+                    .subtitle("Looks it up with an online service. Shown in the Control Centre.")
+                    .leading(Icon::ViewConceal),
                 ),
             )
     }

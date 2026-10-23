@@ -21,12 +21,14 @@ const TIMEOUT: Duration = Duration::from_secs(5);
 /// first type is the one the choices are read from; every type is set.
 struct Kind {
     title: &'static str,
+    icon: Icon,
     mimes: &'static [&'static str],
 }
 
 const KINDS: [Kind; 9] = [
     Kind {
         title: "Web",
+        icon: Icon::WebBrowser,
         mimes: &[
             "x-scheme-handler/http",
             "x-scheme-handler/https",
@@ -35,34 +37,42 @@ const KINDS: [Kind; 9] = [
     },
     Kind {
         title: "Mail",
+        icon: Icon::MailUnread,
         mimes: &["x-scheme-handler/mailto"],
     },
     Kind {
         title: "Calendar",
+        icon: Icon::XOfficeCalendar,
         mimes: &["text/calendar"],
     },
     Kind {
         title: "Files",
+        icon: Icon::Folder,
         mimes: &["inode/directory"],
     },
     Kind {
         title: "Text",
+        icon: Icon::DocumentEdit,
         mimes: &["text/plain"],
     },
     Kind {
         title: "Documents",
+        icon: Icon::DocumentOpen,
         mimes: &["application/pdf"],
     },
     Kind {
         title: "Photos",
+        icon: Icon::ImageGeneric,
         mimes: &["image/png", "image/jpeg"],
     },
     Kind {
         title: "Music",
+        icon: Icon::ApplicationsMultimedia,
         mimes: &["audio/mpeg", "audio/flac", "audio/ogg"],
     },
     Kind {
         title: "Video",
+        icon: Icon::VideoGeneric,
         mimes: &["video/mp4", "video/x-matroska", "video/webm"],
     },
 ];
@@ -120,13 +130,17 @@ fn load() -> Result<Model, CommandError> {
 }
 
 /// Set `app` as the default for every type of kind `kind`, then reload.
+/// The page shows busy while this runs. A failure is a toast with a retry.
 fn set_default(
     model: State<Option<Result<Model, CommandError>>>,
-    error: State<Option<String>>,
+    busy: State<bool>,
+    overlays: Overlays,
     kind: usize,
     app: String,
 ) {
-    let mut error = error;
+    let mut busy = busy;
+    busy.set(true);
+    let retry = app.clone();
     background_then(
         move || {
             let file = format!("{app}.desktop");
@@ -136,9 +150,14 @@ fn set_default(
             Ok::<(), CommandError>(())
         },
         move |result| {
+            busy.set(false);
             match result {
-                Ok(()) => error.set(None),
-                Err(failure) => error.set(Some(failure.0)),
+                Ok(()) => overlays.toast("Default application changed."),
+                Err(_) => overlays.toast_with_action(
+                    "Could not change the default application.",
+                    "Try again",
+                    move |_| set_default(model, busy, overlays, kind, retry.clone()),
+                ),
             }
             system::background(model, load);
         },
@@ -152,6 +171,7 @@ fn app_row(app: &AppEntry, open: impl Fn(Route) + 'static) -> Row {
     };
     row(app.name.clone())
         .leading_app(app.icon.clone())
+        .subtitle(app.category.clone())
         .navigates()
         .on_press(move |_| open(route.clone()))
 }
@@ -219,9 +239,19 @@ pub struct AppPage {
 impl Component for AppPage {
     fn render(&self) -> impl IntoElement {
         let model = system::use_cached("applications", load);
-        let error = use_state::<Option<String>>(|| None);
-        let Some(Ok(data)) = model.read().clone() else {
-            return page_column().child(skeleton());
+        let busy = use_state(|| false);
+        let overlays = use_overlays();
+        use_page_busy(*busy.read());
+
+        let data = match model.read().clone() {
+            None => return page_column().child(skeleton()),
+            Some(Err(failure)) => {
+                return page_column().child(
+                    status(Status::Error(failure.0))
+                        .action("Try again", move |_| system::background(model, load)),
+                );
+            }
+            Some(Ok(data)) => data,
         };
         let Some(app) = data.apps.iter().find(|app| app.id == self.id).cloned() else {
             return page_column().child(status(Status::Empty(
@@ -262,25 +292,19 @@ impl Component for AppPage {
             .maybe_child((!handled.is_empty()).then(|| {
                 Group::titled("Open by default").rows(handled.iter().map(|&(kind, is_default)| {
                     let id = app.id.clone();
-                    let item = row(KINDS[kind].title);
+                    let item = row(KINDS[kind].title).leading(KINDS[kind].icon);
                     Element::from(if is_default {
                         item.value("Default")
                     } else {
                         item.trailing(
                             action_button("Make default", move |_| {
-                                set_default(model, error, kind, id.clone())
+                                set_default(model, busy, overlays, kind, id.clone())
                             })
                             .compact(),
                         )
                     })
                 }))
             }))
-            .maybe_child(
-                error
-                    .read()
-                    .clone()
-                    .map(|message| status(Status::Error(message))),
-            )
     }
 }
 
@@ -292,7 +316,9 @@ pub struct DefaultAppsPage;
 impl Component for DefaultAppsPage {
     fn render(&self) -> impl IntoElement {
         let model = system::use_cached("applications", load);
-        let error = use_state::<Option<String>>(|| None);
+        let busy = use_state(|| false);
+        let overlays = use_overlays();
+        use_page_busy(*busy.read());
 
         let Some(loaded) = model.read().clone() else {
             return page_column().child(skeleton());
@@ -300,15 +326,14 @@ impl Component for DefaultAppsPage {
         let data = match loaded {
             Ok(data) => data,
             Err(failure) => {
-                return page_column().child(status(Status::Error(failure.0)));
+                return page_column().child(
+                    status(Status::Error(failure.0))
+                        .action("Try again", move |_| system::background(model, load)),
+                );
             }
         };
 
-        let mut page = page_column();
-        if let Some(message) = error.read().clone() {
-            page = page.child(status(Status::Error(message)));
-        }
-        page.child(Group::new(None).rows(data.choices.iter().map(|choice| {
+        page_column().child(Group::new(None).rows(data.choices.iter().map(|choice| {
             let kind = choice.kind;
             let listed: Vec<&AppEntry> = choice
                 .candidates
@@ -316,7 +341,11 @@ impl Component for DefaultAppsPage {
                 .filter_map(|id| data.apps.iter().find(|app| app.id == *id))
                 .collect();
             if listed.is_empty() {
-                return Element::from(row(KINDS[kind].title).value("No application"));
+                return Element::from(
+                    row(KINDS[kind].title)
+                        .leading(KINDS[kind].icon)
+                        .value("No application"),
+                );
             }
             let options = listed
                 .iter()
@@ -325,9 +354,9 @@ impl Component for DefaultAppsPage {
             let icons = listed.iter().map(|app| app.icon.clone()).collect();
             let selected = choice.current.clone().unwrap_or_default();
             Element::from(
-                row(KINDS[kind].title).trailing(
+                row(KINDS[kind].title).leading(KINDS[kind].icon).trailing(
                     dropdown(options, selected, move |id: String| {
-                        set_default(model, error, kind, id)
+                        set_default(model, busy, overlays, kind, id)
                     })
                     .app_icons(icons)
                     .width(FIELD_WIDTH_APPS),

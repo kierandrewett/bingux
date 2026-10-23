@@ -1,17 +1,21 @@
-//! Power: battery state, power profile, blank-screen and lock timeouts, and
-//! the power button action. Everything is read in the background when the
-//! page opens and reloaded after each successful change.
+//! Power: battery state, power mode, screen blanking and locking, automatic
+//! suspend and the power button action. Everything is read in the background
+//! when the page opens and reloaded after each successful change.
 
 use std::time::Duration;
 
 use freya::prelude::*;
 
+use crate::icons::Icon;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{Group, Status, choice_row, page_column, row, skeleton, status, switch_row};
 
 const SESSION: &str = "org.gnome.desktop.session";
 const SCREENSAVER: &str = "org.gnome.desktop.screensaver";
 const POWER_PLUGIN: &str = "org.gnome.settings-daemon.plugins.power";
+
+/// Delays offered for automatic suspend, in seconds.
+const SUSPEND_DELAYS: &[u32] = &[900, 1200, 1800, 2700, 3600, 5400, 7200];
 
 #[derive(Clone, PartialEq)]
 struct Battery {
@@ -26,6 +30,14 @@ struct Profiles {
     active: String,
 }
 
+/// Automatic suspend for one power source: whether it is on and the delay in
+/// seconds before it happens.
+#[derive(Clone, PartialEq)]
+struct Suspend {
+    enabled: bool,
+    delay: u32,
+}
+
 #[derive(Clone, PartialEq)]
 struct Model {
     battery: Result<Option<Battery>, CommandError>,
@@ -35,6 +47,10 @@ struct Model {
     lock_delay: Result<u32, CommandError>,
     /// `None` when the power plugin schema is missing: the row is hidden.
     power_button: Option<String>,
+    /// `None` when the key is missing: the row is hidden.
+    dim: Option<bool>,
+    suspend_ac: Option<Suspend>,
+    suspend_battery: Option<Suspend>,
 }
 
 fn load() -> Model {
@@ -48,6 +64,11 @@ fn load() -> Model {
         power_button: system::gsettings_get(POWER_PLUGIN, "power-button-action")
             .ok()
             .map(|raw| system::unquote(&raw)),
+        dim: system::gsettings_get(POWER_PLUGIN, "idle-dim")
+            .ok()
+            .map(|raw| raw.trim() == "true"),
+        suspend_ac: suspend("ac"),
+        suspend_battery: suspend("battery"),
     }
 }
 
@@ -102,7 +123,10 @@ fn profiles() -> Result<Profiles, CommandError> {
             (!name.is_empty()).then(|| (name.to_string(), profile_label(name)))
         })
         .collect();
-    Ok(Profiles { choices, active })
+    Ok(Profiles {
+        choices,
+        active: active.trim().to_string(),
+    })
 }
 
 fn profile_label(name: &str) -> String {
@@ -114,12 +138,50 @@ fn profile_label(name: &str) -> String {
     }
 }
 
+/// The plain sentence under each power mode.
+fn profile_meaning(name: &str) -> &'static str {
+    match name {
+        "power-saver" => "Uses less power. Slower under heavy load.",
+        "balanced" => "The usual choice for most work.",
+        "performance" => "Fastest. Uses more power and runs warmer.",
+        _ => "",
+    }
+}
+
+fn profile_icon(name: &str) -> Icon {
+    match name {
+        "power-saver" => Icon::PowerProfilePowerSaver,
+        "performance" => Icon::PowerProfilePerformance,
+        _ => Icon::PowerProfileBalanced,
+    }
+}
+
 fn gsettings_u32(schema: &str, key: &str) -> Result<u32, CommandError> {
     let raw = system::gsettings_get(schema, key)?;
     raw.trim()
         .strip_prefix("uint32 ")
         .and_then(|number| number.parse().ok())
         .ok_or_else(|| CommandError("This setting could not be read.".into()))
+}
+
+/// Automatic suspend for `source` (`ac` or `battery`). Missing keys hide the
+/// whole pair.
+fn suspend(source: &str) -> Option<Suspend> {
+    let kind =
+        system::gsettings_get(POWER_PLUGIN, &format!("sleep-inactive-{source}-type")).ok()?;
+    let delay =
+        system::gsettings_get(POWER_PLUGIN, &format!("sleep-inactive-{source}-timeout")).ok()?;
+    // int32 values print without a type prefix.
+    let seconds: i64 = delay
+        .trim()
+        .strip_prefix("int32 ")
+        .unwrap_or(delay.trim())
+        .parse()
+        .ok()?;
+    Some(Suspend {
+        enabled: system::unquote(&kind) == "suspend",
+        delay: u32::try_from(seconds.max(0)).unwrap_or(0),
+    })
 }
 
 /// Capitalise the first letter and turn dashes into spaces (`fully-charged`
@@ -191,6 +253,80 @@ fn apply(
     });
 }
 
+/// The three power modes as rows with icons. A mode the computer does not
+/// offer stays visible but cannot be chosen.
+fn mode_group(
+    loaded: State<Option<Model>>,
+    error: State<Option<String>>,
+    profiles: &Profiles,
+) -> Group {
+    let mut group = Group::titled("Power mode");
+    for name in ["power-saver", "balanced", "performance"] {
+        let offered = profiles.choices.iter().any(|(key, _)| key == name);
+        let active = profiles.active == name;
+        let key = name.to_string();
+        let mut item = row(profile_label(name))
+            .leading(profile_icon(name))
+            .subtitle(profile_meaning(name))
+            .selected(active)
+            .enabled(offered);
+        if !offered {
+            item = item.value("Not available");
+        } else if active {
+            item = item.value("In use");
+        } else {
+            item = item.on_press(move |_| {
+                let key = key.clone();
+                apply(loaded, error, move || {
+                    system::run("powerprofilesctl", &["set", &key], Duration::from_secs(5))
+                });
+            });
+        }
+        group = group.row(item);
+    }
+    group
+}
+
+/// A switch for automatic suspend on one power source, with the delay below
+/// it. The delay is editable only while the switch is on.
+fn suspend_rows(
+    loaded: State<Option<Model>>,
+    error: State<Option<String>>,
+    source: &'static str,
+    title: &str,
+    state: &Suspend,
+) -> Group {
+    let key_type = format!("sleep-inactive-{source}-type");
+    let key_timeout = format!("sleep-inactive-{source}-timeout");
+    let toggle_key = key_type.clone();
+    Group::titled(title)
+        .row(switch_row(
+            "Suspend when inactive",
+            state.enabled,
+            move |on: bool| {
+                let value = if on { "'suspend'" } else { "'nothing'" };
+                let key = toggle_key.clone();
+                apply(loaded, error, move || {
+                    system::gsettings_set(POWER_PLUGIN, &key, value)
+                });
+            },
+        ))
+        .row(
+            choice_row(
+                "Suspend after",
+                timeout_choices(SUSPEND_DELAYS, state.delay, "Never"),
+                &state.delay.to_string(),
+                move |key: String| {
+                    let key_timeout = key_timeout.clone();
+                    apply(loaded, error, move || {
+                        system::gsettings_set(POWER_PLUGIN, &key_timeout, &key)
+                    });
+                },
+            )
+            .enabled(state.enabled),
+        )
+}
+
 #[derive(PartialEq)]
 pub struct PowerPage;
 
@@ -212,7 +348,11 @@ impl Component for PowerPage {
         page = match model.battery.clone() {
             Ok(Some(battery)) => {
                 let mut group = Group::titled("Battery")
-                    .row(row("Charge").value(battery.percentage))
+                    .row(
+                        row("Charge")
+                            .leading(Icon::BatteryLevel50)
+                            .value(battery.percentage),
+                    )
                     .row(row("State").value(battery.state));
                 if let Some((label, value)) = battery.time {
                     group = group.row(row(label).value(value));
@@ -225,20 +365,8 @@ impl Component for PowerPage {
 
         // Power mode
         page = match model.profiles.clone() {
-            Ok(profiles) => {
-                let active = profiles.active.clone();
-                page.child(Group::titled("Power mode").row(choice_row(
-                    "Profile",
-                    profiles.choices,
-                    &active,
-                    move |key: String| {
-                        apply(loaded, error, move || {
-                            system::run("powerprofilesctl", &["set", &key], Duration::from_secs(5))
-                        })
-                    },
-                )))
-            }
-            Err(e) if e.0.contains("not installed") => {
+            Ok(profiles) => page.child(mode_group(loaded, error, &profiles)),
+            Err(_) if !system::which("powerprofilesctl") => {
                 page.child(Group::titled("Power mode").row(status(Status::Info(
                     "Power modes are not available on this computer.".into(),
                 ))))
@@ -246,11 +374,11 @@ impl Component for PowerPage {
             Err(e) => page.child(Group::titled("Power mode").row(status(Status::Error(e.0)))),
         };
 
-        // Power saving
+        // Screen: blanking, locking and dimming
         let lock_on = matches!(model.lock_enabled, Ok(true));
-        let mut saving = Group::titled("Power saving");
-        saving = match model.idle_delay.clone() {
-            Ok(current) => saving.row(choice_row(
+        let mut screen = Group::titled("Screen");
+        screen = match model.idle_delay.clone() {
+            Ok(current) => screen.row(choice_row(
                 "Blank screen after",
                 timeout_choices(&[0, 60, 120, 300, 600, 900, 1800], current, "Never"),
                 &current.to_string(),
@@ -260,10 +388,22 @@ impl Component for PowerPage {
                     })
                 },
             )),
-            Err(e) => saving.row(row("Blank screen after").subtitle(e.0).enabled(false)),
+            Err(e) => screen.row(row("Blank screen after").subtitle(e.0).enabled(false)),
         };
-        saving = match model.lock_enabled.clone() {
-            Ok(enabled) => saving.row(switch_row(
+        if let Some(dim) = model.dim {
+            screen = screen.row(switch_row(
+                "Dim screen when inactive",
+                dim,
+                move |on: bool| {
+                    let value = if on { "true" } else { "false" };
+                    apply(loaded, error, move || {
+                        system::gsettings_set(POWER_PLUGIN, "idle-dim", value)
+                    })
+                },
+            ));
+        }
+        screen = match model.lock_enabled.clone() {
+            Ok(enabled) => screen.row(switch_row(
                 "Automatic screen lock",
                 enabled,
                 move |on: bool| {
@@ -273,10 +413,10 @@ impl Component for PowerPage {
                     })
                 },
             )),
-            Err(e) => saving.row(row("Automatic screen lock").subtitle(e.0).enabled(false)),
+            Err(e) => screen.row(row("Automatic screen lock").subtitle(e.0).enabled(false)),
         };
-        saving = match model.lock_delay.clone() {
-            Ok(current) => saving.row(
+        screen = match model.lock_delay.clone() {
+            Ok(current) => screen.row(
                 choice_row(
                     "Lock after",
                     timeout_choices(&[0, 5, 30, 60, 300, 900], current, "Immediately"),
@@ -293,9 +433,17 @@ impl Component for PowerPage {
                 )
                 .enabled(lock_on),
             ),
-            Err(e) => saving.row(row("Lock after").subtitle(e.0).enabled(false)),
+            Err(e) => screen.row(row("Lock after").subtitle(e.0).enabled(false)),
         };
-        page = page.child(saving);
+        page = page.child(screen);
+
+        // Automatic suspend, one group per power source, only when the keys exist.
+        if let Some(state) = &model.suspend_ac {
+            page = page.child(suspend_rows(loaded, error, "ac", "When plugged in", state));
+        }
+        if let Some(state) = &model.suspend_battery {
+            page = page.child(suspend_rows(loaded, error, "battery", "On battery", state));
+        }
 
         // Power button, only when the schema exists
         if let Some(current) = model.power_button.clone() {

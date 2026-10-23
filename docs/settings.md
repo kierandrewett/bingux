@@ -42,7 +42,7 @@ desktop entry.
 
 ## Applications and subpages
 
-Applications lists every installed application with its full-colour icon.
+Applications lists every installed application with its full-colour icon and, under its name, its first category in plain words (for example Media or Office).
 Search filters the list by name. Pressing a row opens that application's
 page, with its icon and name, an Open button, a volume slider for each of its
 audio streams while it plays or records, and the kinds of file it can open
@@ -52,19 +52,25 @@ for web links, mail, calendar, files, text, documents, photos, music and
 video; each choice shows the application icons. Changes are written with
 `gio mime`, so GTK applications and `xdg-open` see them.
 
-The Sound page shows each application stream with the same icon. An
-application's icon comes from the icon the stream names when the icon theme
-has it, otherwise from the application's desktop entry.
+The Sound page shows one row for each application that plays or records sound,
+with its icon, a Playing or Recording state, the device it uses, a volume
+slider and a mute button. An application's icon comes from the icon the stream
+names when the icon theme has it, otherwise from the application's desktop entry.
 
-Bluetooth uses subpages too. Each device in the list shows an icon for its
-type, its status and the one action it allows (Pair, Connect or Disconnect).
-Pressing the row opens the device's page: the icon, name and status, the
-same action, the type, address, whether it is paired with this computer and
-connects automatically, its battery level, and Remove device, which asks first
-and returns to the list when the device is gone.
+Bluetooth uses subpages too. The list has two groups: My devices (paired or
+remembered) and Nearby devices, which fill in while a scan runs. A scan runs in
+25-second rounds while the page is open and Bluetooth is on. It stops when the
+page closes or Bluetooth is turned off.
+Each row shows an icon for the device type, its status and battery level when
+known. Pressing a row opens the device's page: the icon, name and status, the
+one action it allows (Pair or Connect, or Disconnect), the type, address,
+whether it is paired and connects automatically, its battery level, and Forget
+device. Forget device asks first and returns to the list when the device is
+gone. A device with no name shows as Unnamed device.
 
 Users opens an account's page the same way: full name, user name, account
-type and Change password.
+type and Change password. The account page opens with a large initials tile, the
+full name and the account type.
 
 Network shows an information button on each Wi-Fi row. It opens the network's
 page: its state, Connect or Disconnect (with a password row when the network
@@ -86,10 +92,10 @@ way round.
 | --------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Appearance      | `bingux-config desktop.wallpaper`, `appearance.font_family`, GSettings `org.gnome.desktop.interface` | The font is picked from the installed families on a subpage. Accent colour and colour scheme are the keys GTK apps and the portal read, and are hidden without gsettings. |
 | Desktop, Search | `bingux-config` (`~/.config/bingux/bingux.toml`)                                                     | Same validation as `bingux-config set`. See [configuration](configuration.md).                                                                                            |
-| Displays        | `org.gnome.Mutter.DisplayConfig` over D-Bus, GSettings night light                                   | Apply writes a persistent layout (`~/.config/monitors.xml`).                                                                                                              |
-| Sound           | `wpctl` (WirePlumber)                                                                                | Default devices, volumes, mute, and a volume slider for each application stream.                                                                                          |
+| Displays        | `org.gnome.Mutter.DisplayConfig` over D-Bus, GSettings night light                                   | Apply tries the layout for 15 seconds and reverts unless kept; Keep writes a persistent layout (`~/.config/monitors.xml`). Night light can follow a schedule.             |
+| Sound           | `wpctl` (WirePlumber)                                                                                | Default devices (inline list, or a subpage with three or more), device kind icons from device properties, volumes, mute, and a row for each application.                  |
 | Network         | `nmcli` (NetworkManager)                                                                             | Wi-Fi, wired status, airplane mode.                                                                                                                                       |
-| Bluetooth       | `bluetoothctl` (BlueZ)                                                                               | Power, scan, pair, connect, remove.                                                                                                                                       |
+| Bluetooth       | `bluetoothctl` (BlueZ)                                                                               | Power, visibility, scan, pair, connect, auto-connect, forget.                                                                                                             |
 | Power           | `powerprofilesctl`, `upower`, GSettings session and screensaver                                      | Blank screen and lock delays.                                                                                                                                             |
 | Keyboard, Mouse | GSettings `org.gnome.desktop.peripherals.*`, `gnoblinctl input`                                      | See the note below.                                                                                                                                                       |
 | Date and Time   | `timedatectl`, GSettings clock format, `bingux-config desktop.clock_seconds`                         | Time zone and manual time may ask for authorisation.                                                                                                                      |
@@ -99,6 +105,26 @@ way round.
 
 Each page shows a readable error when its tool is missing or refuses the
 request, and a Try again action where that makes sense.
+
+## Search
+
+The sidebar search finds pages first, then settings. Each settings row shows
+the page it lives on under its title. Up and Down move through the results,
+Enter opens the highlighted one, and Esc clears the search. At most 20 results
+show. Ctrl+F moves focus to the search field. The list of searchable settings
+is `src/settings_index.rs`; add a row there when a page gains a setting, with
+plain words a person might type in the keywords column.
+
+## Related pages
+
+Each top-level page ends with a Related group of two other pages that usually
+go with it. The pairs come from `PageId::related()` in `src/pages/mod.rs`.
+Choosing one opens that page at its top level. Subpages do not show the group.
+
+## Keyboard
+
+Ctrl+Q and Ctrl+W close the window. Ctrl+F focuses the search, and Esc clears
+it. The sidebar has no group headings: a hairline divides the groups instead.
 
 ## Window frame
 

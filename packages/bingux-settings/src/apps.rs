@@ -21,6 +21,9 @@ pub struct AppEntry {
     pub id: String,
     pub name: String,
     pub comment: String,
+    /// The first `Categories` entry with a plain name, such as `Internet`;
+    /// empty when none has one.
+    pub category: String,
     /// An icon name or an absolute path, as the desktop entry gives it.
     pub icon: String,
     /// The program `Exec` runs, without arguments or field codes.
@@ -98,6 +101,35 @@ fn exec_program(exec: &str) -> String {
     Path::new(program)
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_default()
+}
+
+/// The first `Categories` entry that has a plain name, or nothing.
+fn plain_category(categories: &str) -> String {
+    const NAMES: [(&str, &str); 14] = [
+        ("WebBrowser", "Internet"),
+        ("Network", "Internet"),
+        ("Email", "Email"),
+        ("Office", "Office"),
+        ("Graphics", "Graphics"),
+        ("Audio", "Music and audio"),
+        ("Video", "Video"),
+        ("AudioVideo", "Media"),
+        ("Development", "Development"),
+        ("Game", "Games"),
+        ("Education", "Education"),
+        ("Science", "Science"),
+        ("System", "System"),
+        ("Utility", "Utilities"),
+    ];
+    categories
+        .split(';')
+        .find_map(|category| {
+            NAMES
+                .iter()
+                .find(|(key, _)| *key == category)
+                .map(|(_, name)| name.to_string())
+        })
         .unwrap_or_default()
 }
 
@@ -204,6 +236,12 @@ fn read_installed() -> Vec<AppEntry> {
                 id,
                 name,
                 comment: localised(&values, "Comment", &suffixes),
+                category: plain_category(
+                    values
+                        .get("Categories")
+                        .map(String::as_str)
+                        .unwrap_or_default(),
+                ),
                 icon: values.get("Icon").cloned().unwrap_or_default(),
                 program: exec_program(values.get("Exec").map(String::as_str).unwrap_or_default()),
                 mime_types: values

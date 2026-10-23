@@ -13,7 +13,9 @@ use crate::icons::{self, Icon};
 use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::theme::Tokens;
-use crate::ui::{Group, Status, page_column, row, skeleton, status, text_row, use_tokens};
+use crate::ui::{
+    Group, Status, caption, page_column, row, skeleton, status, text_row, use_overlays, use_tokens,
+};
 use bingux_ui::scale::*;
 
 const ACCOUNTS: &str = "org.freedesktop.Accounts";
@@ -226,7 +228,8 @@ impl Component for AccountPage {
     fn render(&self) -> impl IntoElement {
         let model: State<Option<Result<Vec<Account>, CommandError>>> =
             system::use_cached("users", load);
-        let mut error = use_state::<Option<String>>(|| None);
+        let overlays = use_overlays();
+        let tokens: Tokens = use_tokens();
         let Some(Ok(accounts)) = model.read().clone() else {
             return page_column().child(skeleton());
         };
@@ -243,28 +246,56 @@ impl Component for AccountPage {
                 move || set_real_name(&path, &name),
                 move |result: CommandResult| match result {
                     Ok(_) => {
-                        error.set(None);
                         background(model, load);
                     }
-                    Err(e) => error.set(Some(e.0)),
+                    Err(e) => {
+                        overlays.toast(e.0);
+                    }
                 },
             );
         });
         let password_row = row("Change password").navigates().on_press(move |_| {
-            background_then(
-                change_password,
-                move |result: Result<(), CommandError>| match result {
-                    Ok(()) => error.set(None),
-                    Err(e) => error.set(Some(e.0)),
-                },
-            );
+            background_then(change_password, move |result: Result<(), CommandError>| {
+                if let Err(e) = result {
+                    overlays.toast(e.0);
+                }
+            });
         });
-        let banner = error
-            .read()
-            .clone()
-            .map(|message| status(Status::Error(message)));
+        let role = if account.administrator {
+            "Administrator"
+        } else {
+            "Standard"
+        };
+        let avatar = rect()
+            .width(Size::px(BOX_2XL))
+            .height(Size::px(BOX_2XL))
+            .corner_radius(BOX_2XL / 2.0)
+            .background(tokens.accent)
+            .center()
+            .child(
+                label()
+                    .text(initials(account.display_name()))
+                    .color(tokens.accent_foreground)
+                    .font_size(TEXT_DISPLAY)
+                    .font_weight(FontWeight::SEMI_BOLD),
+            );
+        let header = rect()
+            .width(Size::fill())
+            .spacing(S1)
+            .cross_align(Alignment::Center)
+            .child(avatar)
+            .child(
+                label()
+                    .text(account.display_name().to_string())
+                    .color(tokens.text)
+                    .font_size(TEXT_XL)
+                    .font_weight(FontWeight::SEMI_BOLD)
+                    .max_lines(1)
+                    .text_overflow(TextOverflow::Ellipsis),
+            )
+            .child(caption(role));
         page_column()
-            .maybe_child(banner)
+            .child(header)
             .child(
                 Group::titled("Account")
                     .row(name_row)

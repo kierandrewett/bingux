@@ -7,7 +7,7 @@
 
 use freya::prelude::*;
 
-use crate::pages::{PageId, appearance, applications, bluetooth, datetime, users, wifi};
+use crate::pages::{PageId, appearance, applications, bluetooth, datetime, sound, users, wifi};
 
 /// A page below a sidebar page.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -18,8 +18,8 @@ pub enum Route {
     DefaultApps,
     /// One Bluetooth device, by address, with its name for the header.
     Device { mac: String, name: String },
-    /// One Wi-Fi network, by name.
-    WifiNetwork { ssid: String },
+    /// The saved Wi-Fi networks.
+    WifiSaved,
     /// One user account, by account path, with its full name for the header.
     Account { path: String, name: String },
     /// The time zone list.
@@ -28,6 +28,9 @@ pub enum Route {
     SetTime,
     /// The installed fonts, for the window and the desktop.
     Font,
+    /// The full list of output or input devices, when there are too many to
+    /// show on the Sound page.
+    SoundDevices { input: bool },
 }
 
 impl Route {
@@ -36,11 +39,13 @@ impl Route {
             Self::App { name, .. } => name.clone(),
             Self::DefaultApps => "Default applications".to_string(),
             Self::Device { name, .. } => name.clone(),
-            Self::WifiNetwork { ssid } => ssid.clone(),
+            Self::WifiSaved => "Saved networks".to_string(),
             Self::Account { name, .. } => name.clone(),
             Self::TimeZone => "Time zone".to_string(),
             Self::SetTime => "Set date and time".to_string(),
             Self::Font => "Font".to_string(),
+            Self::SoundDevices { input: true } => "Input device".to_string(),
+            Self::SoundDevices { input: false } => "Output device".to_string(),
         }
     }
 
@@ -65,11 +70,12 @@ impl Route {
             Self::App { id, .. } => applications::AppPage { id: id.clone() }.into(),
             Self::DefaultApps => applications::DefaultAppsPage.into(),
             Self::Device { mac, .. } => bluetooth::BluetoothDevicePage { mac: mac.clone() }.into(),
-            Self::WifiNetwork { ssid } => wifi::NetworkDetailsPage { ssid: ssid.clone() }.into(),
+            Self::WifiSaved => wifi::SavedNetworksPage.into(),
             Self::Account { path, .. } => users::AccountPage { path: path.clone() }.into(),
             Self::TimeZone => datetime::TimeZonePage.into(),
             Self::SetTime => datetime::SetTimePage.into(),
             Self::Font => appearance::FontPage.into(),
+            Self::SoundDevices { input } => sound::DevicePage { input: *input }.into(),
         }
     }
 }
@@ -104,6 +110,13 @@ impl Navigator {
         routes.pop();
         let mut stack = self.stack;
         stack.set((*self.page.read(), routes));
+    }
+
+    /// Opens sidebar page `target` at its top level, as if the sidebar chose it.
+    /// Subpages of the page left behind are dropped.
+    pub fn goto(&self, target: PageId) {
+        let mut page = self.page;
+        page.set(target);
     }
 }
 

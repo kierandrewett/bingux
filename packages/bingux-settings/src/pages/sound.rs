@@ -1,20 +1,36 @@
-//! Sound: output and input devices with volume and mute through `wpctl`, and
-//! the applications playing or recording audio, read from `wpctl status`.
-//! Everything is read in the background and polled every five seconds.
+//! Sound: the output and input devices, what each one is, which one is the
+//! default, and the volume of each. Also the applications playing or
+//! recording audio.
+//!
+//! Devices and streams come from `wpctl status`. The kind of each device
+//! comes from `pw-dump`, which names the port of each device, such as
+//! "Headphones" or "HDMI / DisplayPort 2". Everything is read in the
+//! background and polled every five seconds.
 
+use std::collections::HashMap;
 use std::time::Duration;
 
 use freya::prelude::*;
+use serde_json::Value;
 
 use bingux_ui::scale::*;
 
 use crate::apps;
+use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then};
-use crate::ui::{Group, Status, dropdown, page_column, row, skeleton, slider, status, switch_row};
+use crate::ui::{
+    Group, Icon, Overlays, PageHeader, Status, caption, hstack, icon, icon_button, page_column,
+    row, skeleton, slider, status, use_overlays, use_page_header, use_tokens,
+};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const POLL: Duration = Duration::from_secs(5);
 const TREE: &[char] = &['│', '├', '└', '─'];
+/// Up to this many devices of one kind are listed on the page. More than
+/// this, the page shows the default and opens a list.
+const INLINE_DEVICES: usize = 3;
+
+type ModelState = State<Option<Result<Model, CommandError>>>;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Kind {
@@ -45,10 +61,43 @@ impl Kind {
     }
 }
 
+/// What a device is. It picks the device's icon.
+#[derive(Clone, Copy, Default, PartialEq)]
+enum Form {
+    Headphones,
+    Speakers,
+    Microphone,
+    Webcam,
+    Display,
+    Bluetooth,
+    #[default]
+    Card,
+}
+
+impl Form {
+    fn icon(self) -> Icon {
+        match self {
+            Form::Headphones => Icon::Headphones,
+            Form::Speakers => Icon::Speakers,
+            Form::Microphone => Icon::AudioInputMicrophone,
+            Form::Webcam => Icon::CameraWeb,
+            Form::Display => Icon::Display,
+            Form::Bluetooth => Icon::Bluetooth,
+            Form::Card => Icon::AudioCard,
+        }
+    }
+}
+
 #[derive(Clone, PartialEq)]
 struct Device {
     id: u32,
+    /// The port, such as "Headphones". The device's own name when the port
+    /// is not known.
     name: String,
+    /// The hardware behind the port, such as "Fosi Audio K5 Pro". Empty when
+    /// it is not known.
+    detail: String,
+    form: Form,
     is_default: bool,
 }
 
@@ -65,9 +114,12 @@ struct Level {
 struct Stream {
     id: u32,
     name: String,
+    /// Devices the stream plays to or records from, while it is not paused.
     playing_to: Vec<String>,
     recording_from: Vec<String>,
-    /// The stream's own volume, when WirePlumber reports one.
+    /// The stream has a link, and every link is paused.
+    paused: bool,
+    /// The stream's own volume and mute state, when WirePlumber reports them.
     level: Option<(f64, bool)>,
     /// The icon name to draw for the application that owns the stream.
     icon: String,
@@ -75,20 +127,29 @@ struct Stream {
     app: Option<String>,
 }
 
-impl Stream {
-    fn summary(&self) -> String {
-        let mut parts = Vec::new();
-        if !self.playing_to.is_empty() {
-            parts.push(format!("Plays to {}", self.playing_to.join(", ")));
+/// What the streams of one application are doing, for its subtitle.
+fn summary_of(streams: &[Stream]) -> String {
+    let mut playing_to = Vec::new();
+    let mut recording_from = Vec::new();
+    for stream in streams {
+        for name in &stream.playing_to {
+            push_unique(&mut playing_to, name.clone());
         }
-        if !self.recording_from.is_empty() {
-            parts.push(format!("Records from {}", self.recording_from.join(", ")));
+        for name in &stream.recording_from {
+            push_unique(&mut recording_from, name.clone());
         }
-        if parts.is_empty() {
-            "Not connected".to_string()
-        } else {
-            parts.join("; ")
-        }
+    }
+    let mut parts = Vec::new();
+    if !playing_to.is_empty() {
+        parts.push(format!("Playing to {}", playing_to.join(", ")));
+    }
+    if !recording_from.is_empty() {
+        parts.push(format!("Recording from {}", recording_from.join(", ")));
+    }
+    if parts.is_empty() {
+        "Paused".to_string()
+    } else {
+        parts.join("; ")
     }
 }
 
@@ -108,6 +169,16 @@ struct VolumeQueue {
     pending: State<Vec<(u32, u32)>>,
     /// Whether a `set-volume` is running.
     busy: State<bool>,
+}
+
+/// Everything a row needs to change the sound: the loaded model, the
+/// overlays for failures, the volume queue and the subpage navigator.
+#[derive(Clone, Copy)]
+struct Ctx {
+    model: ModelState,
+    overlays: Overlays,
+    queue: VolumeQueue,
+    navigator: Navigator,
 }
 
 /// Column of the `ID.` separator. wpctl right-aligns ids, so every node line
@@ -136,6 +207,8 @@ fn parse_device(body: &str) -> Option<Device> {
     Some(Device {
         id,
         name: name.trim().to_string(),
+        detail: String::new(),
+        form: Form::default(),
         is_default,
     })
 }
@@ -213,22 +286,38 @@ fn parse_status(text: &str) -> Model {
                         name: rest.to_string(),
                         playing_to: Vec::new(),
                         recording_from: Vec::new(),
+                        paused: false,
                         level: None,
                         icon: String::new(),
                         app: None,
                     });
                     current = Some(model.streams.len() - 1);
                 } else if let Some(stream) = current.and_then(|i| model.streams.get_mut(i)) {
+                    let paused = rest.contains("[paused]");
                     if let Some(index) = rest.find('>') {
-                        push_unique(&mut stream.playing_to, link_device(&rest[index + 1..]));
+                        let device = link_device(&rest[index + 1..]);
+                        if paused {
+                            stream.paused = true;
+                        } else {
+                            push_unique(&mut stream.playing_to, device);
+                        }
                     } else if let Some(index) = rest.find('<') {
-                        push_unique(&mut stream.recording_from, link_device(&rest[index + 1..]));
+                        let device = link_device(&rest[index + 1..]);
+                        if paused {
+                            stream.paused = true;
+                        } else {
+                            push_unique(&mut stream.recording_from, device);
+                        }
                     }
                 }
             }
             None => {}
         }
     }
+    // A stream with no link at all is not playing or recording anything.
+    model.streams.retain(|stream| {
+        stream.paused || !stream.playing_to.is_empty() || !stream.recording_from.is_empty()
+    });
     model
 }
 
@@ -252,9 +341,231 @@ fn read_level(kind: Kind, devices: &[Device]) -> Result<Option<Level>, CommandEr
     }))
 }
 
+/// What `pw-dump` says about one device node: the port it uses, the hardware
+/// behind the port, and the icon that suits it.
+#[derive(Clone, Default)]
+struct Hardware {
+    /// The port's name, such as "Headphones". Empty when the node has none.
+    port: String,
+    /// The hardware's name, such as "Fosi Audio K5 Pro", or what the node
+    /// is when it has no hardware, such as "Network speaker".
+    detail: String,
+    form: Form,
+}
+
+/// One port of a card, from a device's routes.
+struct Port {
+    index: u64,
+    direction: String,
+    description: String,
+    port_type: String,
+    product: String,
+}
+
+/// A piece of hardware, with the ports it offers.
+struct Card {
+    product: String,
+    ports: Vec<Port>,
+}
+
+impl Card {
+    /// The port that a device node with `index` uses in `direction`.
+    fn port(&self, index: Option<u64>, direction: &str) -> Option<&Port> {
+        let index = index?;
+        self.ports
+            .iter()
+            .find(|port| port.index == index && port.direction == direction)
+    }
+}
+
+fn field<'a>(value: &'a Value, key: &str) -> &'a str {
+    value.get(key).and_then(Value::as_str).unwrap_or_default()
+}
+
+/// A property that `pw-dump` may write as a number or as text.
+fn number(value: Option<&Value>) -> Option<u64> {
+    match value? {
+        Value::Number(number) => number.as_u64(),
+        Value::String(text) => text.parse().ok(),
+        _ => None,
+    }
+}
+
+/// One route of a device. Its `info` list is a count, then key and value
+/// pairs, all as text.
+fn read_port(route: &Value, product: &str) -> Option<Port> {
+    let index = route.get("device")?.as_u64()?;
+    let mut props: HashMap<&str, &str> = HashMap::new();
+    if let Some(info) = route.get("info").and_then(Value::as_array) {
+        for pair in info.get(1..).unwrap_or_default().chunks_exact(2) {
+            if let (Some(key), Some(value)) = (pair[0].as_str(), pair[1].as_str()) {
+                props.insert(key, value);
+            }
+        }
+    }
+    Some(Port {
+        index,
+        direction: field(route, "direction").to_string(),
+        description: field(route, "description").to_string(),
+        port_type: props
+            .get("port.type")
+            .copied()
+            .unwrap_or_default()
+            .to_string(),
+        product: props
+            .get("device.product.name")
+            .copied()
+            .filter(|name| !name.is_empty())
+            .unwrap_or(product)
+            .to_string(),
+    })
+}
+
+/// What a device node is, from its name, its bus, the hardware it belongs to
+/// and its port. A camera's microphone is a webcam, and a Bluetooth device
+/// is Bluetooth whatever its port is.
+fn form_of(node: &str, bus: &str, product: &str, port_type: &str, port: &str) -> Form {
+    let port_type = port_type.to_ascii_lowercase();
+    let port = port.to_ascii_lowercase();
+    if bus == "bluetooth" || node.starts_with("bluez_") {
+        Form::Bluetooth
+    } else if node.starts_with("raop_") {
+        Form::Speakers
+    } else if product.to_ascii_lowercase().contains("camera") {
+        Form::Webcam
+    } else if port_type.contains("mic") || port.contains("microphone") {
+        Form::Microphone
+    } else if port_type.contains("headphone")
+        || port_type.contains("headset")
+        || port.contains("headphone")
+        || port.contains("headset")
+    {
+        Form::Headphones
+    } else if port_type.contains("hdmi") || port_type.contains("displayport") {
+        Form::Display
+    } else if port_type.contains("speaker") {
+        Form::Speakers
+    } else {
+        Form::Card
+    }
+}
+
+/// Read every device node's hardware and port from `pw-dump`, keyed by node
+/// id. Empty when `pw-dump` is missing or fails: devices then keep the names
+/// from `wpctl` and the generic icon.
+fn read_hardware() -> HashMap<u32, Hardware> {
+    // `system::run` waits for the process to exit before reading its output,
+    // and `pw-dump` writes more than a pipe buffer holds, so it would block
+    // and time out. `output()` drains both pipes while the process runs.
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = sender.send(std::process::Command::new("pw-dump").output());
+    });
+    let Ok(Ok(output)) = receiver.recv_timeout(TIMEOUT) else {
+        return HashMap::new();
+    };
+    if !output.status.success() {
+        return HashMap::new();
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let Ok(Value::Array(objects)) = serde_json::from_str::<Value>(&text) else {
+        return HashMap::new();
+    };
+    let object_type = |object: &Value| field(object, "type").to_string();
+
+    let mut cards: HashMap<u64, Card> = HashMap::new();
+    for object in &objects {
+        if object_type(object) != "PipeWire:Interface:Device" {
+            continue;
+        }
+        let (Some(id), Some(props)) = (
+            object.get("id").and_then(Value::as_u64),
+            object.pointer("/info/props"),
+        ) else {
+            continue;
+        };
+        let product = field(props, "device.description").to_string();
+        let routes = object
+            .pointer("/info/params/Route")
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let ports = routes
+            .iter()
+            .filter_map(|route| read_port(route, &product))
+            .collect();
+        cards.insert(id, Card { product, ports });
+    }
+
+    let mut hardware = HashMap::new();
+    for object in &objects {
+        if object_type(object) != "PipeWire:Interface:Node" {
+            continue;
+        }
+        let (Some(id), Some(props)) = (
+            object.get("id").and_then(Value::as_u64),
+            object.pointer("/info/props"),
+        ) else {
+            continue;
+        };
+        let direction = match field(props, "media.class") {
+            "Audio/Sink" => "Output",
+            "Audio/Source" => "Input",
+            _ => continue,
+        };
+        let node = field(props, "node.name");
+        let bus = field(props, "device.bus");
+        let card = number(props.get("device.id")).and_then(|card| cards.get(&card));
+        let port =
+            card.and_then(|card| card.port(number(props.get("card.profile.device")), direction));
+        let port_name = port
+            .map(|port| port.description.clone())
+            .unwrap_or_default();
+        let port_type = port.map(|port| port.port_type.as_str()).unwrap_or_default();
+        let product = port
+            .map(|port| port.product.clone())
+            .or_else(|| card.map(|card| card.product.clone()))
+            .unwrap_or_default();
+        let detail = if node.starts_with("raop_") {
+            "Network speaker".to_string()
+        } else if bus == "bluetooth" || node.starts_with("bluez_") {
+            "Bluetooth".to_string()
+        } else {
+            product.clone()
+        };
+        let form = form_of(node, bus, &product, port_type, &port_name);
+        hardware.insert(
+            id as u32,
+            Hardware {
+                port: port_name,
+                detail,
+                form,
+            },
+        );
+    }
+    hardware
+}
+
+fn describe(device: &mut Device, hardware: &HashMap<u32, Hardware>) {
+    match hardware.get(&device.id) {
+        Some(info) => {
+            if !info.port.is_empty() {
+                device.name = info.port.clone();
+            }
+            device.detail = info.detail.clone();
+            device.form = info.form;
+        }
+        None => device.form = form_of(&device.name, "", "", "", ""),
+    }
+}
+
 fn load() -> Result<Model, CommandError> {
     let text = system::run("wpctl", &["status"], TIMEOUT)?;
     let mut model = parse_status(&text);
+    let hardware = read_hardware();
+    for device in model.outputs.iter_mut().chain(model.inputs.iter_mut()) {
+        describe(device, &hardware);
+    }
     model.output = read_level(Kind::Output, &model.outputs)?;
     model.input = read_level(Kind::Input, &model.inputs)?;
     let apps = apps::installed();
@@ -266,6 +577,12 @@ fn load() -> Result<Model, CommandError> {
             .and_then(|text| parse_volume(&text));
         identify(stream, &apps);
     }
+    model.streams.sort_by(|a, b| {
+        a.name
+            .to_lowercase()
+            .cmp(&b.name.to_lowercase())
+            .then(a.id.cmp(&b.id))
+    });
     Ok(model)
 }
 
@@ -305,33 +622,36 @@ fn identify(stream: &mut Stream, apps: &[apps::AppEntry]) {
     stream.app = app.map(|app| app.id);
 }
 
-/// Run a `wpctl` write on a background thread, then set or clear the error
-/// and reload the model so the page shows what the backend now reports.
-fn apply(
-    args: Vec<String>,
-    model: State<Option<Result<Model, CommandError>>>,
-    mut error: State<Option<String>>,
-) {
+/// Run a `wpctl` write on a background thread, then toast a failure and
+/// reload the model so the page shows what the backend now reports.
+fn apply(args: Vec<String>, model: ModelState, overlays: Overlays) {
     background_then(
         move || {
             let refs: Vec<&str> = args.iter().map(String::as_str).collect();
             system::run("wpctl", &refs, TIMEOUT)
         },
         move |result| {
-            match result {
-                Ok(_) => error.set(None),
-                Err(e) => error.set(Some(e.0)),
+            if let Err(e) = result {
+                overlays.toast(e.0);
             }
             background(model, load);
         },
     );
 }
 
-fn update_level(
-    mut model: State<Option<Result<Model, CommandError>>>,
-    kind: Kind,
-    change: impl FnOnce(&mut Level),
-) {
+fn set_mute(ctx: Ctx, id: u32, muted: bool) {
+    apply(
+        vec![
+            "set-mute".to_string(),
+            id.to_string(),
+            if muted { "1" } else { "0" }.to_string(),
+        ],
+        ctx.model,
+        ctx.overlays,
+    );
+}
+
+fn update_level(mut model: ModelState, kind: Kind, change: impl FnOnce(&mut Level)) {
     let mut guard = model.write();
     let Some(Ok(loaded)) = guard.as_mut() else {
         return;
@@ -348,7 +668,7 @@ fn update_level(
 /// Volume writes are coalesced: while one `set-volume` runs, a newer slider
 /// position for the same node replaces the pending one, so the last
 /// position always wins and a drag never queues a write per pixel.
-fn set_volume(queue: VolumeQueue, error: State<Option<String>>, id: u32, percent: u32) {
+fn set_volume(queue: VolumeQueue, overlays: Overlays, id: u32, percent: u32) {
     let mut pending = queue.pending;
     let mut busy = queue.busy;
     {
@@ -360,11 +680,11 @@ fn set_volume(queue: VolumeQueue, error: State<Option<String>>, id: u32, percent
     }
     if !*busy.read() {
         busy.set(true);
-        push_volume(queue, error);
+        push_volume(queue, overlays);
     }
 }
 
-fn push_volume(queue: VolumeQueue, mut error: State<Option<String>>) {
+fn push_volume(queue: VolumeQueue, overlays: Overlays) {
     let mut pending = queue.pending;
     let mut busy = queue.busy;
     let next = {
@@ -386,131 +706,224 @@ fn push_volume(queue: VolumeQueue, mut error: State<Option<String>>) {
             system::run("wpctl", &["set-volume", &id, &percent], TIMEOUT)
         },
         move |result| {
-            match result {
-                Ok(_) => error.set(None),
-                Err(e) => error.set(Some(e.0)),
+            if let Err(e) = result {
+                overlays.toast(e.0);
             }
-            push_volume(queue, error);
+            push_volume(queue, overlays);
         },
     );
 }
 
-/// Optimistic slider position for an application stream until the next poll.
-fn update_stream(mut model: State<Option<Result<Model, CommandError>>>, id: u32, volume: f64) {
+/// Optimistic volume or mute for an application stream until the next poll.
+fn update_stream(mut model: ModelState, id: u32, change: impl FnOnce(&mut (f64, bool))) {
     let mut guard = model.write();
     let Some(Ok(loaded)) = guard.as_mut() else {
         return;
     };
     if let Some(stream) = loaded.streams.iter_mut().find(|stream| stream.id == id) {
         if let Some(level) = stream.level.as_mut() {
-            level.0 = volume;
+            change(level);
         }
+    }
+}
+
+/// The icon that shows a volume: crossed out when muted, then three steps up.
+fn level_icon(volume: f64, muted: bool) -> Icon {
+    if muted || volume <= 0.0 {
+        Icon::AudioVolumeMuted
+    } else if volume < 0.34 {
+        Icon::AudioVolumeLow
+    } else if volume < 0.67 {
+        Icon::AudioVolumeMedium
+    } else {
+        Icon::Sound
     }
 }
 
 /// A volume slider for the shared control column: the track leaves room for
 /// the percentage, so the slider and its label end at the row's right edge.
-fn volume_slider(value: f64, on_moved: impl Into<EventHandler<f64>>) -> Element {
-    slider(value, on_moved)
+fn volume_slider(percent: f64, on_moved: impl Into<EventHandler<f64>>) -> Element {
+    slider(percent.min(100.0), on_moved)
         .width(FIELD_WIDTH - S2 - BOX_LG)
         .show_value()
         .into()
 }
 
-fn channel_group(
-    kind: Kind,
-    devices: &[Device],
-    level: Option<Level>,
-    model: State<Option<Result<Model, CommandError>>>,
-    error: State<Option<String>>,
-    queue: VolumeQueue,
-) -> Group {
+/// A volume control: a button that mutes and unmutes, then a slider. Its
+/// width is the shared control width, so it lines up with the other controls.
+fn level_control(
+    volume: f64,
+    muted: bool,
+    on_mute: impl Into<EventHandler<()>>,
+    on_moved: impl Into<EventHandler<f64>>,
+) -> Element {
+    let label = if muted { "Unmute" } else { "Mute" };
+    hstack(S2)
+        .child(
+            icon_button(level_icon(volume, muted), on_mute)
+                .tooltip(label)
+                .size(BOX_LG),
+        )
+        .child(volume_slider(volume * 100.0, on_moved))
+        .into()
+}
+
+/// One device as a row. Pressing it makes it the default.
+fn device_row(device: &Device, ctx: Ctx) -> Element {
+    let id = device.id;
+    let mut item = row(device.name.clone())
+        .leading(device.form.icon())
+        .selected(device.is_default)
+        .on_press(move |_| {
+            apply(
+                vec!["set-default".to_string(), id.to_string()],
+                ctx.model,
+                ctx.overlays,
+            )
+        });
+    if !device.detail.is_empty() {
+        item = item.subtitle(device.detail.clone());
+    }
+    item.into()
+}
+
+/// The default device, as a row that opens the full device list.
+fn current_device_row(devices: &[Device], input: bool, navigator: Navigator) -> Element {
+    let (name, detail, form) = match devices.iter().find(|device| device.is_default) {
+        Some(device) => (device.name.clone(), device.detail.clone(), device.form),
+        None => (
+            "Choose a device".to_string(),
+            String::new(),
+            Form::default(),
+        ),
+    };
+    let mut item = row(name)
+        .leading(form.icon())
+        .navigates()
+        .on_press(move |_| navigator.push(Route::SoundDevices { input }));
+    if !detail.is_empty() {
+        item = item.subtitle(detail);
+    }
+    item.into()
+}
+
+fn channel_group(kind: Kind, devices: &[Device], level: Option<Level>, ctx: Ctx) -> Group {
     let group = Group::titled(kind.title());
     if devices.is_empty() {
         return group.row(status(Status::Empty(kind.none_found().into())));
     }
-
-    let selected = devices
-        .iter()
-        .find(|device| device.is_default)
-        .map(|device| device.id.to_string())
-        .unwrap_or_default();
-    // One device is a fact. Several share a dropdown at the slider width, so
-    // every control on the page has the same width and right edge.
-    let device = match devices {
-        [only] => row("Device").value(only.name.clone()),
-        _ => {
-            let options: Vec<(String, String)> = devices
-                .iter()
-                .map(|device| (device.id.to_string(), device.name.clone()))
-                .collect();
-            row("Device").trailing(
-                dropdown(options, selected, move |key: String| {
-                    if let Ok(id) = key.parse::<u32>() {
-                        apply(
-                            vec!["set-default".to_string(), id.to_string()],
-                            model,
-                            error,
-                        );
-                    }
-                })
-                .min_width(FIELD_WIDTH),
-            )
-        }
+    let mut group = if devices.len() <= INLINE_DEVICES {
+        group.rows(devices.iter().map(|device| device_row(device, ctx)))
+    } else {
+        group.row(current_device_row(
+            devices,
+            kind == Kind::Input,
+            ctx.navigator,
+        ))
     };
-    let mut group = group.row(device);
 
     if let Some(level) = level {
         let id = level.id;
-        group = group
-            .row(row("Volume").trailing(volume_slider(
-                (level.volume * 100.0).min(100.0),
-                move |value: f64| {
-                    let percent = value.round().clamp(0.0, 100.0) as u32;
-                    update_level(model, kind, |level| {
-                        level.volume = f64::from(percent) / 100.0;
-                    });
-                    set_volume(queue, error, id, percent);
-                },
-            )))
-            .row(switch_row("Mute", level.muted, move |next: bool| {
-                update_level(model, kind, |level| level.muted = next);
-                apply(
-                    vec![
-                        "set-mute".to_string(),
-                        id.to_string(),
-                        if next { "1" } else { "0" }.to_string(),
-                    ],
-                    model,
-                    error,
-                );
-            }));
+        let mute_to = !level.muted;
+        group = group.row(row("Volume").trailing(level_control(
+            level.volume,
+            level.muted,
+            move |_| {
+                update_level(ctx.model, kind, |current| current.muted = mute_to);
+                set_mute(ctx, id, mute_to);
+            },
+            move |value: f64| {
+                let percent = value.round().clamp(0.0, 100.0) as u32;
+                update_level(ctx.model, kind, |current| {
+                    current.volume = f64::from(percent) / 100.0;
+                });
+                set_volume(ctx.queue, ctx.overlays, id, percent);
+            },
+        )));
     }
     group
 }
 
-/// One application stream: its icon, name, what it is connected to and a
-/// volume slider when WirePlumber reports a volume.
-fn stream_row(
-    stream: &Stream,
-    model: State<Option<Result<Model, CommandError>>>,
-    error: State<Option<String>>,
-    queue: VolumeQueue,
-) -> Element {
-    let id = stream.id;
-    let base = row(stream.name.clone())
-        .leading_app(stream.icon.clone())
-        .subtitle(stream.summary());
-    match stream.level {
-        Some((volume, _)) => Element::from(base.trailing(volume_slider(
-            (volume * 100.0).min(100.0),
-            move |value: f64| {
-                let percent = value.round().clamp(0.0, 100.0) as u32;
-                update_stream(model, id, f64::from(percent) / 100.0);
-                set_volume(queue, error, id, percent);
-            },
-        ))),
+/// One row per application: its icon, name, what its streams are connected to
+/// and a volume and mute control. The controls change every stream of the
+/// application at once.
+fn app_row(streams: &[Stream], ctx: Ctx) -> Element {
+    let first = &streams[0];
+    let ids: Vec<u32> = streams.iter().map(|stream| stream.id).collect();
+    let base = row(first.name.clone())
+        .leading_app(first.icon.clone())
+        .subtitle(summary_of(streams));
+    match first.level {
+        Some((volume, muted)) => {
+            let mute_ids = ids.clone();
+            Element::from(base.trailing(level_control(
+                volume,
+                muted,
+                move |_| {
+                    for id in &mute_ids {
+                        update_stream(ctx.model, *id, |level| level.1 = !muted);
+                        set_mute(ctx, *id, !muted);
+                    }
+                },
+                move |value: f64| {
+                    let percent = value.round().clamp(0.0, 100.0) as u32;
+                    for id in &ids {
+                        update_stream(ctx.model, *id, |level| {
+                            level.0 = f64::from(percent) / 100.0;
+                        });
+                        set_volume(ctx.queue, ctx.overlays, *id, percent);
+                    }
+                },
+            )))
+        }
         None => Element::from(base.value("Volume cannot be changed")),
+    }
+}
+
+/// Group streams by application, keeping the order of each group's first
+/// stream. Streams of one application share an id, or else a name.
+fn by_application(streams: &[Stream]) -> Vec<Vec<Stream>> {
+    let key = |stream: &Stream| stream.app.clone().unwrap_or_else(|| stream.name.clone());
+    let mut groups: Vec<Vec<Stream>> = Vec::new();
+    for stream in streams {
+        match groups
+            .iter_mut()
+            .find(|group| key(&group[0]) == key(stream))
+        {
+            Some(group) => group.push(stream.clone()),
+            None => groups.push(vec![stream.clone()]),
+        }
+    }
+    groups
+}
+
+/// Poll the sound state while the page is open, and load it once now.
+fn use_sound_model() -> ModelState {
+    let model = system::cached("sound");
+    use_hook(move || {
+        background(model, load);
+        spawn(async move {
+            loop {
+                timer(POLL).await;
+                background(model, load);
+            }
+        });
+    });
+    model
+}
+
+fn use_ctx() -> Ctx {
+    let model = use_sound_model();
+    let overlays = use_overlays();
+    let queue = VolumeQueue {
+        pending: use_state(Vec::new),
+        busy: use_state(|| false),
+    };
+    Ctx {
+        model,
+        overlays,
+        queue,
+        navigator: use_navigator(),
     }
 }
 
@@ -519,24 +932,21 @@ pub struct SoundPage;
 
 impl Component for SoundPage {
     fn render(&self) -> impl IntoElement {
-        let model = system::cached("sound");
-        let error = use_state::<Option<String>>(|| None);
-        let queue = VolumeQueue {
-            pending: use_state(Vec::new),
-            busy: use_state(|| false),
-        };
-
-        use_hook(move || {
-            background(model, load);
-            spawn(async move {
-                loop {
-                    timer(POLL).await;
-                    background(model, load);
-                }
-            });
+        let ctx = use_ctx();
+        let tokens = use_tokens();
+        let subtitle = ctx
+            .model
+            .read()
+            .as_ref()
+            .and_then(|loaded| loaded.as_ref().ok())
+            .and_then(|data| data.outputs.iter().find(|device| device.is_default))
+            .map(|device| device.name.clone());
+        use_page_header(PageHeader {
+            subtitle,
+            action: None,
         });
 
-        let Some(loaded) = model.read().clone() else {
+        let Some(loaded) = ctx.model.read().clone() else {
             return page_column().child(skeleton());
         };
         let data = match loaded {
@@ -544,53 +954,88 @@ impl Component for SoundPage {
             Err(e) => {
                 return page_column().child(
                     status(Status::Error(e.0))
-                        .action("Try again", move |_| background(model, load)),
+                        .action("Try again", move |_| background(ctx.model, load)),
                 );
             }
         };
 
         let mut page = page_column();
-        if let Some(message) = error.read().clone() {
-            page = page.child(status(Status::Error(message)));
-        }
 
         page = page
             .child(channel_group(
                 Kind::Output,
                 &data.outputs,
                 data.output.clone(),
-                model,
-                error,
-                queue,
+                ctx,
             ))
             .child(channel_group(
                 Kind::Input,
                 &data.inputs,
                 data.input.clone(),
-                model,
-                error,
-                queue,
+                ctx,
             ));
 
         let applications = Group::titled("Applications");
         if data.streams.is_empty() {
-            page = page.child(applications.row(status(Status::Empty(
-                "No applications are playing or recording audio.".into(),
-            ))));
-        } else {
             page = page.child(
-                applications.rows(
-                    data.streams
-                        .iter()
-                        .map(|stream| stream_row(stream, model, error, queue)),
+                applications.row(
+                    hstack(S3)
+                        .child(icon(Icon::Sound, ICON_MD, tokens.muted))
+                        .child(caption("No application is playing or recording sound.")),
                 ),
             );
+        } else {
+            let groups = by_application(&data.streams);
+            page = page.child(applications.rows(groups.iter().map(|group| app_row(group, ctx))));
         }
         page
     }
 }
 
-/// The sound of one application: a volume slider for each of its streams,
+/// The full list of output or input devices, opened from the Sound page when
+/// there are more devices than fit there.
+#[derive(PartialEq)]
+pub struct DevicePage {
+    pub input: bool,
+}
+
+impl Component for DevicePage {
+    fn render(&self) -> impl IntoElement {
+        let ctx = use_ctx();
+        let kind = if self.input {
+            Kind::Input
+        } else {
+            Kind::Output
+        };
+
+        let Some(loaded) = ctx.model.read().clone() else {
+            return page_column().child(skeleton());
+        };
+        let data = match loaded {
+            Ok(data) => data,
+            Err(e) => {
+                return page_column().child(
+                    status(Status::Error(e.0))
+                        .action("Try again", move |_| background(ctx.model, load)),
+                );
+            }
+        };
+
+        let page = page_column();
+        let devices = if self.input {
+            &data.inputs
+        } else {
+            &data.outputs
+        };
+        if devices.is_empty() {
+            return page
+                .child(Group::new(None).row(status(Status::Empty(kind.none_found().into()))));
+        }
+        page.child(Group::new(None).rows(devices.iter().map(|device| device_row(device, ctx))))
+    }
+}
+
+/// The sound of one application: a volume control for each of its streams,
 /// shown on the application's page. It draws nothing while the application
 /// is not playing or recording.
 #[derive(PartialEq)]
@@ -600,23 +1045,9 @@ pub struct AppSound {
 
 impl Component for AppSound {
     fn render(&self) -> impl IntoElement {
-        let model = system::cached("sound");
-        let error = use_state::<Option<String>>(|| None);
-        let queue = VolumeQueue {
-            pending: use_state(Vec::new),
-            busy: use_state(|| false),
-        };
-        use_hook(move || {
-            background(model, load);
-            spawn(async move {
-                loop {
-                    timer(POLL).await;
-                    background(model, load);
-                }
-            });
-        });
+        let ctx = use_ctx();
 
-        let Some(Ok(data)) = model.read().clone() else {
+        let Some(Ok(data)) = ctx.model.read().clone() else {
             return Element::from(rect());
         };
         let streams: Vec<&Stream> = data
@@ -627,16 +1058,13 @@ impl Component for AppSound {
         if streams.is_empty() {
             return Element::from(rect());
         }
-        let mut group = page_column();
-        if let Some(message) = error.read().clone() {
-            group = group.child(status(Status::Error(message)));
-        }
+        let group = page_column();
         group
             .child(
                 Group::titled("Sound").rows(
                     streams
                         .iter()
-                        .map(|stream| stream_row(stream, model, error, queue)),
+                        .map(|stream| app_row(std::slice::from_ref(*stream), ctx)),
                 ),
             )
             .into()

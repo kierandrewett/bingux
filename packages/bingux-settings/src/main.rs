@@ -10,6 +10,7 @@ mod app;
 mod apps;
 mod pages;
 mod routes;
+mod settings_index;
 
 /// Pages were written against these module paths; they map onto bingux-ui.
 pub(crate) use bingux_ui::icons;

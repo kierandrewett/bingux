@@ -536,6 +536,7 @@ version = "0.1.0"
 dependencies = [
  "bingux-ui",
  "freya",
+ "serde_json",
 ]
 
 [[package]]

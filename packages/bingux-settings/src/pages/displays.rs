@@ -12,9 +12,11 @@ use freya::prelude::*;
 use crate::pages::gnoblin;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Status, action_row, choice_row, page_column, primary_button, row, skeleton, slider,
-    status, switch_row,
+    ARRANGEMENT_HEIGHT, ARRANGEMENT_WIDTH, Group, Overlays, RADIUS, RADIUS_SM, ResponseKind,
+    Status, Tokens, action_row, caption, choice_row, dialog, page_column, primary_button, row,
+    skeleton, slider, status, switch_row, use_overlays, use_tokens,
 };
+use bingux_ui::scale::{S2, TEXT_SM};
 
 const SERVICE: &str = "org.gnome.Mutter.DisplayConfig";
 const OBJECT: &str = "/org/gnome/Mutter/DisplayConfig";
@@ -23,6 +25,10 @@ const INTERFACE: &str = "org.gnome.Mutter.DisplayConfig";
 const APPLY_SIGNATURE: &str = "uua(iiduba(ssa{sv}))a{sv}";
 /// Method 2 stores the configuration persistently, method 1 is temporary.
 const METHOD_PERSISTENT: &str = "2";
+/// A trial applies the layout for this session only. Nothing is saved.
+const METHOD_TEMPORARY: &str = "1";
+/// Seconds the user has to keep a trial layout before it reverts.
+const KEEP_SECONDS: u64 = 15;
 const COLOR: &str = "org.gnome.settings-daemon.plugins.color";
 const TEMP_MIN: u32 = 1700;
 const TEMP_MAX: u32 = 4700;
@@ -493,6 +499,11 @@ enum Displays {
 struct Night {
     enabled: bool,
     kelvin: u32,
+    /// Whether the night light follows the schedule.
+    automatic: bool,
+    /// Schedule hours, from 0 to 24.
+    from: f64,
+    to: f64,
 }
 
 #[derive(Clone, PartialEq)]
@@ -769,6 +780,9 @@ fn yes_no(flag: Option<bool>) -> String {
 fn load_night() -> Result<Night, CommandError> {
     let enabled = system::gsettings_get(COLOR, "night-light-enabled")?;
     let temperature = system::gsettings_get(COLOR, "night-light-temperature")?;
+    let automatic = system::gsettings_get(COLOR, "night-light-schedule-automatic")?;
+    let from = system::gsettings_get(COLOR, "night-light-schedule-from")?;
+    let to = system::gsettings_get(COLOR, "night-light-schedule-to")?;
     let kelvin = temperature
         .split_whitespace()
         .last()
@@ -777,7 +791,17 @@ fn load_night() -> Result<Night, CommandError> {
     Ok(Night {
         enabled: enabled.trim() == "true",
         kelvin,
+        automatic: automatic.trim() == "true",
+        from: hours(&from)?,
+        to: hours(&to)?,
     })
+}
+
+/// Reads a schedule hour such as `18.0`.
+fn hours(text: &str) -> Result<f64, CommandError> {
+    text.trim()
+        .parse::<f64>()
+        .map_err(|_| CommandError("Night light settings could not be read.".into()))
 }
 
 /// Maps 1700..4700 K onto the slider's 0..100.
@@ -950,11 +974,11 @@ fn validate(monitors: &[Monitor]) -> Result<(), String> {
 
 /// The `ApplyMonitorsConfig` arguments after the signature, for the enabled
 /// monitors only. Each logical monitor carries one physical monitor.
-fn apply_values(serial: u32, monitors: &[Monitor]) -> Vec<String> {
+fn apply_values(serial: u32, monitors: &[Monitor], method: &str) -> Vec<String> {
     let logical: Vec<&Monitor> = monitors.iter().filter(|monitor| monitor.enabled).collect();
     let mut values = vec![
         serial.to_string(),
-        METHOD_PERSISTENT.to_string(),
+        method.to_string(),
         logical.len().to_string(),
     ];
     for monitor in logical {
@@ -974,25 +998,39 @@ fn apply_values(serial: u32, monitors: &[Monitor]) -> Vec<String> {
     values
 }
 
-fn apply(model: State<Option<Page>>, mut error: State<Option<String>>) {
+/// The serial and the current layout, read fresh so a write never uses a
+/// stale serial.
+fn read_layout() -> Result<(u32, Vec<Monitor>), CommandError> {
+    mutter_call(true, "GetCurrentState", None, &[])
+        .and_then(|text| parse_mutter(&text).map_err(CommandError))
+}
+
+/// Applies the draft for a trial. Nothing is saved until the user keeps it.
+fn apply(ctx: Ctx) {
     let Some(Page {
-        displays: Ok(Displays::Editable { serial, monitors }),
+        displays: Ok(Displays::Editable { monitors, .. }),
         ..
-    }) = model.read().clone()
+    }) = ctx.model.read().clone()
     else {
         return;
     };
+    let mut error = ctx.error;
     if let Err(message) = validate(&monitors) {
         error.set(Some(message));
         return;
     }
-    let values = apply_values(serial, &monitors);
+    let trial = monitors.clone();
     background_then(
-        move || mutter_call(false, "ApplyMonitorsConfig", Some(APPLY_SIGNATURE), &values),
+        move || -> Result<Vec<Monitor>, CommandError> {
+            let (serial, before) = read_layout()?;
+            let values = apply_values(serial, &trial, METHOD_TEMPORARY);
+            mutter_call(false, "ApplyMonitorsConfig", Some(APPLY_SIGNATURE), &values)?;
+            Ok(before)
+        },
         move |result| match result {
-            Ok(_) => {
+            Ok(before) => {
                 error.set(None);
-                reload(model);
+                start_keep_prompt(ctx, monitors, before);
             }
             // busctl reports Mutter's stale-serial rejection as "Access denied".
             // The layout changed under the draft, so reload and ask the user to redo it.
@@ -1000,9 +1038,103 @@ fn apply(model: State<Option<Page>>, mut error: State<Option<String>>) {
                 error.set(Some(
                     "The display layout changed since it was loaded. It has been reloaded; apply again.".to_string(),
                 ));
-                reload(model);
+                reload(ctx.model);
             }
             Err(failure) => error.set(Some(failure.0)),
+        },
+    );
+}
+
+/// Shows the trial as a dialog with a countdown. Keep saves it. Revert, or the
+/// countdown reaching zero, restores the layout from before the trial.
+fn start_keep_prompt(ctx: Ctx, draft: Vec<Monitor>, before: Vec<Monitor>) {
+    let mut prompt = ctx.prompt;
+    let mut remaining = ctx.remaining;
+    let ticket = *prompt.read() + 1;
+    prompt.set(ticket);
+    remaining.set(KEEP_SECONDS);
+    let on_timeout = before.clone();
+    ctx.overlays.show_dialog(
+        dialog(
+            "Keep these display settings?",
+            "The new layout is active for now.",
+        )
+        .content(Countdown { remaining })
+        .response("Revert", ResponseKind::Default, move |_| {
+            close_prompt(ctx);
+            revert_layout(ctx, before.clone());
+        })
+        .response("Keep", ResponseKind::Suggested, move |_| {
+            close_prompt(ctx);
+            keep_layout(ctx, draft.clone());
+        }),
+    );
+    spawn(async move {
+        loop {
+            timer(Duration::from_secs(1)).await;
+            // The prompt was answered or replaced by a newer one.
+            if *prompt.read() != ticket {
+                return;
+            }
+            let left = *remaining.read();
+            if left <= 1 {
+                close_prompt(ctx);
+                revert_layout(ctx, on_timeout);
+                return;
+            }
+            remaining.set(left - 1);
+        }
+    });
+}
+
+/// Closes the keep prompt and stops its countdown.
+fn close_prompt(ctx: Ctx) {
+    let mut prompt = ctx.prompt;
+    let next = *prompt.read() + 1;
+    prompt.set(next);
+    ctx.overlays.dismiss_dialog();
+}
+
+/// Saves the trial layout with a fresh serial.
+fn keep_layout(ctx: Ctx, draft: Vec<Monitor>) {
+    let model = ctx.model;
+    let mut error = ctx.error;
+    background_then(
+        move || -> CommandResult {
+            let (serial, _) = read_layout()?;
+            let values = apply_values(serial, &draft, METHOD_PERSISTENT);
+            mutter_call(false, "ApplyMonitorsConfig", Some(APPLY_SIGNATURE), &values)
+        },
+        move |result| match result {
+            Ok(_) => {
+                error.set(None);
+                reload(model);
+            }
+            Err(failure) => {
+                error.set(Some(failure.0));
+                reload(model);
+            }
+        },
+    );
+}
+
+/// Restores the layout from before the trial. Temporary, so the saved layout
+/// is left as it was.
+fn revert_layout(ctx: Ctx, before: Vec<Monitor>) {
+    let model = ctx.model;
+    let mut error = ctx.error;
+    background_then(
+        move || -> CommandResult {
+            let (serial, _) = read_layout()?;
+            let values = apply_values(serial, &before, METHOD_TEMPORARY);
+            mutter_call(false, "ApplyMonitorsConfig", Some(APPLY_SIGNATURE), &values)
+        },
+        move |result| match result {
+            Ok(_) => reload(model),
+            Err(failure) => {
+                error.set(Some(failure.0));
+                reload(model);
+            }
         },
     );
 }
@@ -1075,6 +1207,103 @@ fn record_group(record: &Record) -> Group {
             .iter()
             .map(|(label, value)| Element::from(row(label.clone()).value(value.clone()))),
     )
+}
+
+/// Everything the page's actions need. All fields are handles, so the struct
+/// is copied into each callback.
+#[derive(Clone, Copy, PartialEq)]
+struct Ctx {
+    model: State<Option<Page>>,
+    error: State<Option<String>>,
+    night_ticket: State<u64>,
+    prompt: State<u64>,
+    remaining: State<u64>,
+    overlays: Overlays,
+}
+
+/// The line in the keep prompt that counts down to the revert.
+#[derive(Clone, PartialEq)]
+struct Countdown {
+    remaining: State<u64>,
+}
+
+impl Component for Countdown {
+    fn render(&self) -> impl IntoElement {
+        let seconds = *self.remaining.read();
+        caption(format!(
+            "It reverts in {seconds} seconds if you do not keep it."
+        ))
+    }
+}
+
+/// The layout as boxes: each enabled display at its place, scaled to fit.
+/// The primary display is filled with the accent colour.
+fn arrangement(monitors: &[Monitor], tokens: Tokens) -> Element {
+    let enabled: Vec<&Monitor> = monitors.iter().filter(|monitor| monitor.enabled).collect();
+    if enabled.is_empty() {
+        return caption("No displays are on.");
+    }
+    let left = enabled.iter().map(|monitor| monitor.x).min().unwrap_or(0);
+    let top = enabled.iter().map(|monitor| monitor.y).min().unwrap_or(0);
+    let right = enabled
+        .iter()
+        .map(|monitor| monitor.x + monitor.extent().0)
+        .max()
+        .unwrap_or(left);
+    let bottom = enabled
+        .iter()
+        .map(|monitor| monitor.y + monitor.extent().1)
+        .max()
+        .unwrap_or(top);
+    let span_x = f64::from((right - left).max(1));
+    let span_y = f64::from((bottom - top).max(1));
+    let fit = (f64::from(ARRANGEMENT_WIDTH) / span_x).min(f64::from(ARRANGEMENT_HEIGHT) / span_y);
+
+    let mut canvas = rect()
+        .width(Size::px(ARRANGEMENT_WIDTH))
+        .height(Size::px(ARRANGEMENT_HEIGHT))
+        .corner_radius(RADIUS)
+        .background(tokens.bg);
+    for monitor in &enabled {
+        let (width, height) = monitor.extent();
+        let fill = if monitor.primary {
+            tokens.accent
+        } else {
+            tokens.control
+        };
+        canvas = canvas.child(
+            rect()
+                .position(
+                    Position::new_absolute()
+                        .left((f64::from(monitor.x - left) * fit) as f32)
+                        .top((f64::from(monitor.y - top) * fit) as f32),
+                )
+                .width(Size::px((f64::from(width) * fit) as f32))
+                .height(Size::px((f64::from(height) * fit) as f32))
+                .corner_radius(RADIUS_SM)
+                .padding(S2)
+                .background(fill)
+                .child(
+                    label()
+                        .text(monitor.name.clone())
+                        .font_size(TEXT_SM)
+                        .color(if monitor.primary {
+                            tokens.accent_foreground
+                        } else {
+                            tokens.text
+                        })
+                        .max_lines(1)
+                        .text_overflow(TextOverflow::Ellipsis),
+                ),
+        );
+    }
+    canvas.into()
+}
+
+fn arrangement_group(monitors: &[Monitor], tokens: Tokens) -> Group {
+    Group::titled("Arrangement")
+        .description("Each box is one display, in the place it has on the desktop.")
+        .row(arrangement(monitors, tokens))
 }
 
 fn monitor_group(
@@ -1157,13 +1386,50 @@ fn monitor_group(
         )
 }
 
-fn night_group(
-    model: State<Option<Page>>,
-    error: State<Option<String>>,
-    ticket: State<u64>,
-    night: &Night,
-) -> Group {
-    Group::titled("Night light")
+/// Hours of the day for the schedule pickers, as `"0"` to `"23"`.
+fn hour_options() -> Vec<(String, String)> {
+    (0..24u32)
+        .map(|hour| (hour.to_string(), format!("{hour:02}:00")))
+        .collect()
+}
+
+fn hour_key(hours: f64) -> String {
+    ((hours.round() as u32) % 24).to_string()
+}
+
+fn set_night_schedule(model: State<Option<Page>>, error: State<Option<String>>, on: bool) {
+    update_night(model, |night| night.automatic = on);
+    write_night(
+        model,
+        error,
+        "night-light-schedule-automatic",
+        on.to_string(),
+    );
+}
+
+fn set_night_hour(model: State<Option<Page>>, error: State<Option<String>>, from: bool, key: &str) {
+    let Ok(hour) = key.parse::<f64>() else {
+        return;
+    };
+    update_night(model, |night| {
+        if from {
+            night.from = hour;
+        } else {
+            night.to = hour;
+        }
+    });
+    let gsettings_key = if from {
+        "night-light-schedule-from"
+    } else {
+        "night-light-schedule-to"
+    };
+    write_night(model, error, gsettings_key, format!("{hour:.1}"));
+}
+
+fn night_group(ctx: Ctx, night: &Night) -> Group {
+    let model = ctx.model;
+    let error = ctx.error;
+    let mut group = Group::titled("Night light")
         .row(switch_row("Enabled", night.enabled, move |on: bool| {
             set_night_enabled(model, error, on);
         }))
@@ -1171,9 +1437,30 @@ fn night_group(
             row("Colour temperature")
                 .subtitle(temperature_word(night.kelvin))
                 .trailing(slider(kelvin_level(night.kelvin), move |level: f64| {
-                    set_night_level(model, error, ticket, level)
+                    set_night_level(model, error, ctx.night_ticket, level)
                 })),
         )
+        .row(switch_row(
+            "On a schedule",
+            night.automatic,
+            move |on: bool| set_night_schedule(model, error, on),
+        ));
+    if night.automatic {
+        group = group
+            .row(choice_row(
+                "From",
+                hour_options(),
+                &hour_key(night.from),
+                move |key: String| set_night_hour(model, error, true, &key),
+            ))
+            .row(choice_row(
+                "Until",
+                hour_options(),
+                &hour_key(night.to),
+                move |key: String| set_night_hour(model, error, false, &key),
+            ));
+    }
+    group
 }
 
 /// The line under a monitor's name: whether it is on, and whether it is the
@@ -1188,11 +1475,12 @@ fn monitor_state(monitor: &Monitor) -> &'static str {
     }
 }
 
-/// Apply saves the draft layout. It sits under the last monitor group.
-fn apply_footer(model: State<Option<Page>>, error: State<Option<String>>) -> Element {
+/// Apply shows the new layout at once and asks the user to keep it. It sits
+/// under the last group.
+fn apply_footer(ctx: Ctx) -> Element {
     action_row(
-        Some("Also used the next time you sign in."),
-        primary_button("Apply", move |_| apply(model, error)).compact(),
+        Some("Asks you to keep the layout after it is applied."),
+        primary_button("Apply", move |_| apply(ctx)).compact(),
     )
 }
 
@@ -1201,6 +1489,17 @@ impl Component for DisplaysPage {
         let model = system::use_cached("displays", load);
         let error = use_state::<Option<String>>(|| None);
         let night_ticket = use_state::<u64>(|| 0);
+        let prompt = use_state::<u64>(|| 0);
+        let remaining = use_state::<u64>(|| KEEP_SECONDS);
+        let tokens = use_tokens();
+        let ctx = Ctx {
+            model,
+            error,
+            night_ticket,
+            prompt,
+            remaining,
+            overlays: use_overlays(),
+        };
 
         let mut page = page_column();
         let Some(loaded) = model.read().clone() else {
@@ -1224,16 +1523,16 @@ impl Component for DisplaysPage {
                 page
             }
             Ok(Displays::Editable { monitors, .. }) => {
-                let mut page = page;
+                let mut page = page.child(arrangement_group(&monitors, tokens));
                 for (index, monitor) in monitors.iter().enumerate() {
                     page = page.child(monitor_group(model, error, index, monitor));
                 }
-                page.child(apply_footer(model, error))
+                page.child(apply_footer(ctx))
             }
         };
 
         page = match loaded.night {
-            Ok(night) => page.child(night_group(model, error, night_ticket, &night)),
+            Ok(night) => page.child(night_group(ctx, &night)),
             Err(failure) => page.child(status(Status::Error(failure.0))),
         };
         page

@@ -4,7 +4,7 @@ use bingux_ui::prelude::*;
 use freya::prelude::*;
 
 use crate::pages::PageId;
-use crate::routes::{Route, provide_navigator};
+use crate::routes::{Route, provide_navigator, use_navigator};
 
 impl NavItem for PageId {
     fn title(self) -> &'static str {
@@ -40,8 +40,20 @@ impl Component for App {
         let navigator = provide_navigator(page, self.subpage.iter().cloned().collect());
         let open = navigator.routes();
         let top: Option<Route> = open.last().cloned();
-        let content = top.as_ref().map_or_else(|| page().render(), Route::render);
-        let mut split = NavigationSplitView::new("Settings", PageId::ALL.to_vec(), page, content);
+        let content: Element = match &top {
+            Some(route) => route.render(),
+            None => {
+                let current = page();
+                rect()
+                    .width(Size::fill())
+                    .spacing(S5)
+                    .child(current.render())
+                    .child(RelatedPages { page: current })
+                    .into()
+            }
+        };
+        let mut split = NavigationSplitView::new("Settings", PageId::ALL.to_vec(), page, content)
+            .search_hits(crate::settings_index::hits());
         if let Some(route) = &top {
             split = split.subpage(route.title(), move |_| navigator.pop());
         }
@@ -50,5 +62,28 @@ impl Component for App {
             .color(tokens.text)
             .font_family(bingux_ui::theme::font_family())
             .child(OverlayHost::new(split))
+    }
+}
+
+/// The Related group under a top-level page: links to the pages that go with
+/// it. Choosing one opens that page at its top level.
+#[derive(PartialEq)]
+struct RelatedPages {
+    page: PageId,
+}
+
+impl Component for RelatedPages {
+    fn render(&self) -> impl IntoElement {
+        let navigator = use_navigator();
+        let mut group = Group::new(Some("Related".to_string()));
+        for target in self.page.related().iter().copied() {
+            group = group.row(
+                row(target.title())
+                    .leading(target.icon())
+                    .navigates()
+                    .on_press(move |_| navigator.goto(target)),
+            );
+        }
+        group
     }
 }
