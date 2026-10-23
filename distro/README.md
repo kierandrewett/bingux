@@ -108,28 +108,63 @@ QEMU runs of the tests below):
   rebuilt the linker cache (about 20 s) before greetd on every boot. The image
   already holds that cache, the hwdb and the journal catalogue from pacman's
   hooks. `tests/distro-startup.py --iso ISO` checks what an image boots with.
-- Still Arch: the package names, the pacman configuration, the Arch mirror list
-  the base system comes from, and the `arch` directory inside the ISO (its
-  `install_dir`, which the tooling expects).
+- Still Arch, and listed here so they are not mistaken for branding bugs: the
+  package names (`archinstall`, `mkinitcpio-archiso`, `python-blivet` and the
+  rest of the base set), the pacman configuration and the Arch mirror list
+  (`/etc/pacman.d/mirrorlist`). The `choose-mirror` tool and its
+  `choose-mirror.service` keep their upstream names, and `Installation_guide`
+  stays in `/usr/local/bin`. The `arch` directory inside the ISO (its
+  `install_dir`) is what the tooling expects. `tests/distro-branding.py` checks
+  the names the user sees for "Arch"; the exceptions above are the ones it must tolerate.
+
+## Kiosk flow
+
+1. Power on the image; systemd-boot (UEFI) or syslinux (BIOS) waits 5 s.
+2. `greetd` starts the Gnoblin greeter session with `bingux-greeter`. Sign in
+   as `live` / `live` (the live account, created before greetd starts).
+3. Signing in starts a Gnoblin session with the Bingux shell. Lock with
+   `gnoblinctl session lock`; log out with `gnoblinctl session logout`.
+4. Install from the live session with the installer (next section), then reboot
+   and sign in to the installed system.
+
+To run the installer's own UI, see [docs/installer.md](../docs/installer.md).
 
 ## Install to disk
 
-Boot the image in UEFI mode, then:
+The live session opens the installer (`distro/installer`, see its README).
+User-facing steps, every page and the storage options are in
+[docs/installer.md](../docs/installer.md). From a terminal on the live image:
 
 ```sh
 bingux-installer probe
 sudo bingux-installer install --plan plan.json
 ```
 
-`probe` prints the disks as JSON. Write `plan.json` by hand: the v1 schema has
-the required keys `version`, `disk`, `confirm_erase`, `users`, `hostname`,
-`timezone`, `locale` and `keymap`, documented in `distro/installer/README.md`.
-`install` erases the disk named in the plan. The daemon,
-`bingux-installer-daemon`, is socket-activated. Interactive plan generation
-and a GUI installer are out of scope for v1. It supports UEFI only.
+`probe` prints the disks, firmware and the capabilities this build implements as
+JSON. `plan.json` is a schema v2 document; the minimum is:
+
+```json
+{
+  "version": 2,
+  "disk": "/dev/vda",
+  "confirm_erase": "/dev/vda",
+  "storage": {"mode": "erase"},
+  "users": [{"name": "kieran", "password": "correct horse", "admin": true}],
+  "hostname": "bingux-box",
+  "timezone": "Europe/London",
+  "locale": "en_GB.UTF-8",
+  "keymap": "uk"
+}
+```
+
+`confirm_erase` must equal `disk`. `storage.mode` is `erase` in this build; the
+keep-existing modes are validated but refused until implemented. The daemon,
+`bingux-installer.service`, is socket-activated. UEFI and BIOS are both
+supported for an erase; see the firmware table in the installer guide.
 
 `tests/distro-install.py` runs this end to end in QEMU: it installs onto a
 blank virtual disk, inspects the result, boots the disk alone and signs in.
+
 
 ## Package repository
 
@@ -161,6 +196,12 @@ tests/distro-boot.py      # the live image: sign in, lock, unlock, log out
 tests/distro-install.py   # install to a virtual disk, boot it, sign in
 tests/distro-branding.py [--iso ISO] [--root DIR]   # no "Arch" in names the user sees
 ```
+
+Screenshots for the docs come from `tests/installer-shots.py` (written to
+`build/installer-shots`, or `BINGUX_INSTALLER_SHOTS`), `tests/greeter-ui.py`
+(`build/kiosk-shots`, or `BINGUX_GREETER_SHOTS`) and `tests/lock-ui.py`
+(`BINGUX_LOCK_SHOT`). Convert the PNGs to webp before committing them under
+`docs/images/`.
 
 Both start QEMU headless (KVM when `/dev/kvm` is writable), press keys and
 take screenshots through the QEMU monitor, and write their results to
