@@ -210,6 +210,7 @@ impl Component for Banner {
                                         pr(S2),
                                         gap(S3),
                                         flex_row(),
+                                        grow_children(),
                                         items(Align::Center),
                                         rounded(Radius::Card),
                                     ],

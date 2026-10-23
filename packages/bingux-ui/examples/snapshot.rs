@@ -59,14 +59,14 @@ fn main() {
         (WINDOW_SIZE.0, 1100.0),
     );
     shot.settle(std::time::Duration::from_millis(400))
-        .click(850.0, 606.0)
+        .click(823.0, 943.0)
         .settle(std::time::Duration::from_millis(300))
-        .hover(780.0, 730.0)
+        .hover(780.0, 870.0)
         .settle(std::time::Duration::from_millis(100))
         .save(&path);
     println!("[snapshot] wrote {path}");
 
-    // A control inside a card under the pointer.
+    // A switch row under the pointer: the row lights and its hairlines go.
     let mut shot = Snapshot::new(
         move || {
             Element::from(
@@ -82,7 +82,7 @@ fn main() {
     );
     let path = format!("{out}/controls-hover.png");
     shot.settle(std::time::Duration::from_millis(400))
-        .hover(850.0, 606.0)
+        .hover(600.0, 192.0)
         .settle(std::time::Duration::from_millis(200))
         .save(&path);
     println!("[snapshot] wrote {path}");
@@ -103,7 +103,7 @@ fn main() {
     );
     let path = format!("{out}/rows-subpage.png");
     shot.settle(std::time::Duration::from_millis(400))
-        .click(630.0, 251.0)
+        .click(580.0, 393.0)
         .settle(std::time::Duration::from_millis(400))
         .save(&path);
     println!("[snapshot] wrote {path}");
@@ -120,18 +120,18 @@ fn main() {
                     }),
             )
         },
-        size,
+        (WINDOW_SIZE.0, 1100.0),
     );
     let path = format!("{out}/feedback-dialog.png");
     shot.settle(std::time::Duration::from_millis(400))
-        .click(919.0, 563.0)
+        .click(906.0, 858.0)
         .settle(std::time::Duration::from_millis(400))
         .save(&path);
     println!("[snapshot] wrote {path}");
     let path = format!("{out}/feedback-toast.png");
     shot.click(60.0, 500.0)
         .settle(std::time::Duration::from_millis(300))
-        .click(919.0, 604.0)
+        .click(906.0, 914.0)
         .settle(std::time::Duration::from_millis(500))
         .save(&path);
     println!("[snapshot] wrote {path}");
@@ -139,7 +139,11 @@ fn main() {
     // The sheet open on mount with one field: it should size to its content.
     let path = format!("{out}/feedback-sheet.png");
     Snapshot::new(
-        move || Element::from(OverlayHost::new(SheetOpen { long: false })),
+        move || {
+            Element::from(Themed {
+                child: OverlayHost::new(SheetOpen { long: false }).into(),
+            })
+        },
         size,
     )
     .settle(std::time::Duration::from_millis(600))
@@ -149,7 +153,11 @@ fn main() {
     // The same sheet with a body taller than the cap: the body should scroll.
     let path = format!("{out}/feedback-sheet-long.png");
     Snapshot::new(
-        move || Element::from(OverlayHost::new(SheetOpen { long: true })),
+        move || {
+            Element::from(Themed {
+                child: OverlayHost::new(SheetOpen { long: true }).into(),
+            })
+        },
         size,
     )
     .settle(std::time::Duration::from_millis(600))
@@ -163,7 +171,11 @@ fn main() {
     ] {
         let path = format!("{out}/{file}.png");
         Snapshot::new(
-            move || Element::from(OverlayHost::new(FormSheetOpen { security })),
+            move || {
+                Element::from(Themed {
+                    child: OverlayHost::new(FormSheetOpen { security }).into(),
+                })
+            },
             size,
         )
         .settle(std::time::Duration::from_millis(600))
@@ -187,7 +199,7 @@ fn main() {
     );
     let path = format!("{out}/feedback-menu.png");
     shot.settle(std::time::Duration::from_millis(400))
-        .click(900.0, 112.0)
+        .click(890.0, 215.0)
         .settle(std::time::Duration::from_millis(500))
         .save(&path);
     println!("[snapshot] wrote {path}");
@@ -209,14 +221,14 @@ fn main() {
     );
     let path = format!("{out}/navigation-keyboard.png");
     shot.settle(std::time::Duration::from_millis(300))
-        .click(120.0, 150.0)
+        .click(120.0, 118.0)
         .key(Key::Named(NamedKey::ArrowDown))
         .key(Key::Named(NamedKey::ArrowDown))
         .settle(std::time::Duration::from_millis(300))
         .save(&path);
     println!("[snapshot] wrote {path}");
 
-    // The overlay sidebar in a narrow window, opened from the header.
+    // A narrow window: the page's Back button opens the list of pages.
     let mut shot = Snapshot::new(
         move || {
             Element::from(
@@ -257,6 +269,23 @@ fn main() {
         .settle(std::time::Duration::from_millis(200))
         .save(&path);
     println!("[snapshot] wrote {path}");
+}
+
+/// Provides the tokens, as an application root does, for a capture that
+/// does not start from the gallery.
+#[derive(PartialEq)]
+struct Themed {
+    child: Element,
+}
+
+impl Component for Themed {
+    fn render(&self) -> impl IntoElement {
+        let tokens = bingux_ui::theme::provide_tokens();
+        rect()
+            .expanded()
+            .tw(&tokens, &[bg(Paint::Bg)])
+            .child(self.child.clone())
+    }
 }
 
 /// Opens a sheet on mount over the Feedback page, so the headless runner
