@@ -19,9 +19,9 @@ InstallerPage {
     property var zones: []
     property string query: ""
 
-    readonly property real listWidth: Math.round(256 * ui)
-    // The time zone line under the map: a text line and the 12 px gap above it.
-    readonly property real labelHeight: Math.round(22 * ui) + 12
+    readonly property real listWidth: Math.round(300 * ui)
+    // The time zone line under the map: the text row and the gap above it.
+    readonly property real labelHeight: Math.round(30 * ui) + Math.round(18 * ui)
     // The map takes the room beside the list, at the world map's aspect, and
     // stops at the height of the body less the line under it.
     readonly property real mapWidth: Math.max(0, Math.floor(Math.min(page.width - listWidth - Theme.gap, (page.height - labelHeight) * 360 / 145)))
@@ -58,12 +58,13 @@ InstallerPage {
     Column {
         id: mapColumn
         width: page.mapWidth
-        spacing: 12
+        spacing: 0
 
         Item {
             id: map
             width: parent.width
             height: page.mapHeight
+            clip: true
 
             // The city under the pointer, or null.
             property var hovered: null
@@ -188,9 +189,19 @@ InstallerPage {
                 }
             }
         }
-        InstallerText {
-            tone: "text"
-            text: "Time zone: " + InstallerState.timezone.replace(/_/g, " ")
+        Item {
+            width: parent.width
+            height: page.labelHeight
+
+            InstallerText {
+                anchors.top: parent.top
+                anchors.topMargin: Math.round(18 * page.ui)
+                tone: "text"
+                font.pixelSize: Math.round(24 * page.ui)
+                wrapMode: Text.NoWrap
+                elide: Text.ElideRight
+                text: "Time zone: " + InstallerState.timezone.replace(/_/g, " ")
+            }
         }
     }
 
@@ -198,7 +209,7 @@ InstallerPage {
         id: listColumn
         x: page.width - width
         width: page.listWidth
-        height: page.height
+        height: page.mapHeight
 
         InstallerField {
             id: search
