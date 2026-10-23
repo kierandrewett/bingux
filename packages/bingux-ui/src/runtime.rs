@@ -79,10 +79,33 @@ pub fn run_with_stdin(
         use std::io::Write;
         let _ = pipe.write_all(data.as_bytes());
     }
+    // Drain both pipes while the child runs. A command that prints more than
+    // the pipe buffer (about 64 KB) would otherwise block and look timed out.
+    let drain = |pipe: Option<Box<dyn std::io::Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut bytes = Vec::new();
+            if let Some(mut pipe) = pipe {
+                let _ = pipe.read_to_end(&mut bytes);
+            }
+            bytes
+        })
+    };
+    let out_reader = drain(
+        child
+            .stdout
+            .take()
+            .map(|pipe| Box::new(pipe) as Box<dyn std::io::Read + Send>),
+    );
+    let err_reader = drain(
+        child
+            .stderr
+            .take()
+            .map(|pipe| Box::new(pipe) as Box<dyn std::io::Read + Send>),
+    );
     let start = Instant::now();
-    loop {
+    let status = loop {
         match child.try_wait() {
-            Ok(Some(_)) => break,
+            Ok(Some(status)) => break status,
             Ok(None) if start.elapsed() < timeout => std::thread::sleep(Duration::from_millis(15)),
             Ok(None) => {
                 let _ = child.kill();
@@ -94,15 +117,14 @@ pub fn run_with_stdin(
             }
             Err(_) => return Err(CommandError(format!("{} failed.", feature(program)))),
         }
-    }
-    let output = child
-        .wait_with_output()
-        .map_err(|_| CommandError(format!("{} failed.", feature(program))))?;
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if output.status.success() {
+    };
+    let stdout_bytes = out_reader.join().unwrap_or_default();
+    let stderr_bytes = err_reader.join().unwrap_or_default();
+    let stdout = String::from_utf8_lossy(&stdout_bytes).trim().to_string();
+    if status.success() {
         return Ok(stdout);
     }
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stderr = String::from_utf8_lossy(&stderr_bytes);
     let detail = stderr
         .trim()
         .lines()

@@ -150,6 +150,8 @@ impl Component for Dropdown {
         // The rows' height, and the part of it the menu shows.
         let list_height = count as f32 * MENU_ITEM_HEIGHT;
         let viewport_height = list_height.min(MENU_MAX_ROWS_HEIGHT);
+        // Rows that one Page Up or Page Down press moves through.
+        let page_rows = ((viewport_height / MENU_ITEM_HEIGHT) as usize).max(1);
         let menu_height = viewport_height + 2.0 * S2;
         // Scroll offset that puts row `index` in the middle of the menu, or
         // keeps it in view when `centre` is false.
@@ -193,18 +195,31 @@ impl Component for Dropdown {
                         open.set(false);
                         highlighted.set(None);
                     }
-                    Key::Named(NamedKey::ArrowDown) => {
-                        let next = highlighted()
-                            .or(selected_index)
-                            .map_or(0, |index| (index + 1).min(count.saturating_sub(1)));
-                        highlighted.set(Some(next));
-                        scroll.scroll_to_y(offset_for(next, <(i32, i32)>::from(scroll).1, !open()));
-                        open.set(true);
-                    }
-                    Key::Named(NamedKey::ArrowUp) => {
-                        let next = highlighted()
-                            .or(selected_index)
-                            .map_or(0, |index| index.saturating_sub(1));
+                    Key::Named(named)
+                        if matches!(
+                            named,
+                            NamedKey::ArrowDown
+                                | NamedKey::ArrowUp
+                                | NamedKey::PageDown
+                                | NamedKey::PageUp
+                                | NamedKey::Home
+                                | NamedKey::End
+                        ) =>
+                    {
+                        let last = count.saturating_sub(1);
+                        let from = highlighted().or(selected_index);
+                        let next = match named {
+                            NamedKey::ArrowDown => from.map_or(0, |index| (index + 1).min(last)),
+                            NamedKey::ArrowUp => from.map_or(0, |index| index.saturating_sub(1)),
+                            NamedKey::PageDown => {
+                                from.map_or(0, |index| (index + page_rows).min(last))
+                            }
+                            NamedKey::PageUp => {
+                                from.map_or(0, |index| index.saturating_sub(page_rows))
+                            }
+                            NamedKey::Home => 0,
+                            _ => last,
+                        };
                         highlighted.set(Some(next));
                         scroll.scroll_to_y(offset_for(next, <(i32, i32)>::from(scroll).1, !open()));
                         open.set(true);

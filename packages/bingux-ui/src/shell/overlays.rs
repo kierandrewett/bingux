@@ -12,6 +12,8 @@ use freya::prelude::*;
 
 use crate::controls::button::{ActionButton, action_button, primary_button};
 use crate::scale::*;
+use crate::shell::menu::{Menu, MenuItem, MenuLayer};
+use crate::shell::sheet::{Sheet, SheetLayer};
 use crate::surface::{is_activation_key, use_tokens};
 
 const DIALOG_WIDTH: f32 = 400.0;
@@ -95,18 +97,81 @@ pub struct Toast {
 #[derive(Clone, Copy, PartialEq)]
 pub struct Overlays {
     dialog: State<Option<Dialog>>,
+    dialog_closing: State<bool>,
+    sheet: State<Option<Sheet>>,
+    sheet_closing: State<bool>,
+    menu: State<Option<Menu>>,
+    menu_closing: State<bool>,
     toasts: State<Vec<(u64, Toast)>>,
+    toast_closing: State<Option<u64>>,
     next_toast: State<u64>,
 }
 
 impl Overlays {
     /// Open `dialog`, replacing any dialog already open.
     pub fn show_dialog(mut self, dialog: Dialog) {
+        self.dialog_closing.set(false);
         self.dialog.set(Some(dialog));
     }
 
+    /// Close the open dialog. It animates out before it leaves the window.
     pub fn dismiss_dialog(mut self) {
-        self.dialog.set(None);
+        if self.dialog.read().is_some() && !*self.dialog_closing.read() {
+            self.dialog_closing.set(true);
+        }
+    }
+
+    fn finish_dialog(mut self) {
+        if *self.dialog_closing.read() {
+            self.dialog.set(None);
+            self.dialog_closing.set(false);
+        }
+    }
+
+    /// Open `sheet`, replacing any sheet already open.
+    pub fn show_sheet(mut self, sheet: Sheet) {
+        self.sheet_closing.set(false);
+        self.sheet.set(Some(sheet));
+    }
+
+    /// Close the open sheet. The primary action calls this once its work
+    /// succeeds; Cancel and Escape call it themselves.
+    pub fn close_sheet(mut self) {
+        if self.sheet.read().is_some() && !*self.sheet_closing.read() {
+            self.sheet_closing.set(true);
+        }
+    }
+
+    pub(crate) fn finish_sheet(mut self) {
+        if *self.sheet_closing.read() {
+            self.sheet.set(None);
+            self.sheet_closing.set(false);
+        }
+    }
+
+    /// Open a menu of `items` at `at`, a point in window coordinates. The
+    /// menu closes when an item is picked, on Escape, or on a press outside it.
+    pub fn show_menu(mut self, at: (f32, f32), items: Vec<MenuItem>) {
+        self.menu_closing.set(false);
+        self.menu.set(Some(Menu {
+            x: at.0,
+            y: at.1,
+            items,
+        }));
+    }
+
+    /// Close the open menu.
+    pub(crate) fn close_menu(mut self) {
+        if self.menu.read().is_some() && !*self.menu_closing.read() {
+            self.menu_closing.set(true);
+        }
+    }
+
+    pub(crate) fn finish_menu(mut self) {
+        if *self.menu_closing.read() {
+            self.menu.set(None);
+            self.menu_closing.set(false);
+        }
     }
 
     /// Queue a toast that dismisses itself after four seconds.
@@ -138,14 +203,62 @@ impl Overlays {
         self.toasts.write().push((id, toast));
     }
 
+    /// Start the exit of toast `id`, if it is the one on screen.
     fn dismiss_toast(mut self, id: u64) {
-        self.toasts.write().retain(|(other, _)| *other != id);
+        let on_screen = self
+            .toasts
+            .read()
+            .first()
+            .is_some_and(|(first, _)| *first == id);
+        if on_screen && self.toast_closing.read().is_none() {
+            self.toast_closing.set(Some(id));
+        }
+    }
+
+    fn finish_toast(mut self, id: u64) {
+        if *self.toast_closing.read() == Some(id) {
+            self.toasts.write().retain(|(other, _)| *other != id);
+            self.toast_closing.set(None);
+        }
     }
 }
 
 /// The handle provided by the nearest [`OverlayHost`].
 pub fn use_overlays() -> Overlays {
     use_consume::<Overlays>()
+}
+
+/// The enter and exit progress of one overlay layer, from 0 (hidden) to 1
+/// (shown), on the shared popup motion. When `closing` turns on, the progress
+/// runs back to 0 and `finish(key)` runs once it has, so the layer stays
+/// mounted through its exit. A new `key` plays the enter again.
+pub(crate) fn use_presence(
+    key: u64,
+    closing: bool,
+    motion: u64,
+    finish: impl Fn(u64) + Clone + 'static,
+) -> f32 {
+    let appear = use_animation(move |conf| {
+        conf.on_creation(OnCreation::Run);
+        AnimNum::new(0.0, 1.0)
+            .time(motion)
+            .function(Function::Quad)
+            .ease(Ease::Out)
+    });
+    use_side_effect_with_deps(&(key, closing), move |&(key, closing): &(u64, bool)| {
+        let mut appear = appear;
+        if closing {
+            appear.reverse();
+            let finish = finish.clone();
+            spawn(async move {
+                timer(Duration::from_millis(motion)).await;
+                finish(key);
+            });
+        } else {
+            appear.start();
+        }
+    });
+    appear.get().value()
 }
 
 /// Provides [`Overlays`] and draws the dialog and toasts over `child`.
@@ -166,21 +279,48 @@ impl Component for OverlayHost {
     fn render(&self) -> impl IntoElement {
         let overlays = use_hook(|| Overlays {
             dialog: State::create(None),
+            dialog_closing: State::create(false),
             toasts: State::create(Vec::new()),
             next_toast: State::create(0),
+            toast_closing: State::create(None),
+            sheet: State::create(None),
+            sheet_closing: State::create(false),
+            menu: State::create(None),
+            menu_closing: State::create(false),
         });
         use_provide_context(|| overlays);
         let dialog = overlays.dialog.read().clone();
+        let dialog_closing = *overlays.dialog_closing.read();
         let toast = overlays.toasts.read().first().cloned();
+        let toast_closing = *overlays.toast_closing.read();
+        let sheet = overlays.sheet.read().clone();
+        let sheet_closing = *overlays.sheet_closing.read();
+        let menu = overlays.menu.read().clone();
+        let menu_closing = *overlays.menu_closing.read();
 
         rect()
             .expanded()
             .child(self.child.clone())
-            .maybe_child(dialog.map(|dialog| DialogLayer { overlays, dialog }))
+            .maybe_child(dialog.map(|dialog| DialogLayer {
+                overlays,
+                dialog,
+                closing: dialog_closing,
+            }))
             .maybe_child(toast.map(|(id, toast)| ToastLayer {
                 overlays,
                 id,
                 toast,
+                closing: toast_closing == Some(id),
+            }))
+            .maybe_child(sheet.map(|sheet| SheetLayer {
+                overlays,
+                sheet,
+                closing: sheet_closing,
+            }))
+            .maybe_child(menu.map(|menu| MenuLayer {
+                overlays,
+                menu,
+                closing: menu_closing,
             }))
     }
 }
@@ -189,6 +329,7 @@ impl Component for OverlayHost {
 struct DialogLayer {
     overlays: Overlays,
     dialog: Dialog,
+    closing: bool,
 }
 
 impl Component for DialogLayer {
@@ -196,15 +337,9 @@ impl Component for DialogLayer {
         let tokens = use_tokens();
         let overlays = self.overlays;
         let a11y_id = use_a11y();
-        let motion = tokens.motion(160);
-        let appear = use_animation(move |conf| {
-            conf.on_creation(OnCreation::Run);
-            AnimNum::new(0.0, 1.0)
-                .time(motion)
-                .function(Function::Cubic)
-                .ease(Ease::Out)
+        let progress = use_presence(0, self.closing, tokens.motion(120), move |_| {
+            overlays.finish_dialog()
         });
-        let progress = appear.get().value();
         use_side_effect(move || a11y_id.request_focus());
 
         let responses = self.dialog.responses.clone();
@@ -300,6 +435,7 @@ struct ToastLayer {
     overlays: Overlays,
     id: u64,
     toast: Toast,
+    closing: bool,
 }
 
 impl Component for ToastLayer {
@@ -308,16 +444,11 @@ impl Component for ToastLayer {
         let overlays = self.overlays;
         let id = self.id;
         let timeout = self.toast.timeout;
-        let motion = tokens.motion(200);
-        let appear = use_animation(move |conf| {
-            conf.on_creation(OnCreation::Run);
-            AnimNum::new(0.0, 1.0)
-                .time(motion)
-                .function(Function::Expo)
-                .ease(Ease::Out)
+        let progress = use_presence(id, self.closing, tokens.motion(140), move |id| {
+            overlays.finish_toast(id)
         });
-        let progress = appear.get().value();
-        use_hook(move || {
+        // Each toast that takes over the layer gets its own timer.
+        use_side_effect_with_deps(&(id, timeout), move |&(id, timeout): &(u64, Duration)| {
             spawn(async move {
                 timer(timeout).await;
                 overlays.dismiss_toast(id);
@@ -365,7 +496,7 @@ impl Component for ToastLayer {
                             .color(Color::BLACK.with_af32(0.35)),
                     )
                     .opacity(progress)
-                    .offset_y(12.0 * (1.0 - progress))
+                    .offset_y(S2 * (1.0 - progress))
                     .child(
                         label()
                             .text(self.toast.text.clone())

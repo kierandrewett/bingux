@@ -27,14 +27,19 @@ pub const RADIUS_LG: f32 = 12.0;
 /// The shell's card radius: dialogs, popovers and toasts.
 pub const RADIUS_XL: f32 = 20.0;
 
-/// Type scale. Body is 14; secondary text 12; badges 11; section titles
-/// 16; status-page titles 20; the page title 28.
+/// Type scale. Body is 14; secondary text 12; badges 11. The ramp in
+/// `typography.rs` uses 11, 12, 14, 18, 28 and 36. 16 and 20 are older
+/// sizes that overlays, status text and the clock still use.
 pub const TEXT_XS: f32 = 11.0;
 pub const TEXT_SM: f32 = 12.0;
 pub const TEXT_MD: f32 = 14.0;
 pub const TEXT_LG: f32 = 16.0;
 pub const TEXT_XL: f32 = 20.0;
 pub const TEXT_DISPLAY: f32 = 28.0;
+/// The ramp's larger steps, each about 1.25x or more the one before: group
+/// titles 18, page titles 28, a hero value 36.
+pub const TEXT_HEADING: f32 = 18.0;
+pub const TEXT_HERO: f32 = 36.0;
 
 /// Icon sizes: chevrons and ticks, control glyphs, row and sidebar icons.
 pub const ICON_SM: f32 = 12.0;
@@ -59,6 +64,17 @@ pub const FIELD_WIDTH: f32 = 220.0;
 pub const FIELD_WIDTH_WIDE: f32 = 440.0;
 /// The width of a dropdown whose options carry application icons.
 pub const FIELD_WIDTH_APPS: f32 = 260.0;
+/// The width and height of a colour scheme card: a small window drawn in
+/// the scheme's colours, as GNOME's Style switcher shows.
+pub const PREVIEW_WIDTH: f32 = 144.0;
+pub const PREVIEW_HEIGHT: f32 = 96.0;
+/// The sidebar and the short accent line inside a scheme card.
+pub const PREVIEW_SIDEBAR: f32 = 40.0;
+pub const PREVIEW_LINE: f32 = 40.0;
+/// The display arrangement preview on the Displays page. Monitor boxes scale
+/// to fit inside it.
+pub const ARRANGEMENT_WIDTH: f32 = 360.0;
+pub const ARRANGEMENT_HEIGHT: f32 = 160.0;
 
 /// The keyboard focus ring.
 pub const RING_WIDTH: f32 = 2.0;
@@ -70,5 +86,7 @@ pub const RING_WIDTH: f32 = 2.0;
 pub const CONTROL_HEIGHT: f32 = 32.0;
 pub const BUTTON_HEIGHT: f32 = 36.0;
 pub const MENU_ITEM_HEIGHT: f32 = 36.0;
+/// The width of a menu of actions (see `shell::menu`).
+pub const MENU_WIDTH: f32 = 220.0;
 pub const ROW_HEIGHT: f32 = 40.0;
 pub const TALL_ROW_HEIGHT: f32 = 56.0;

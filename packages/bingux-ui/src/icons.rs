@@ -13,6 +13,7 @@ pub enum Icon {
     SidebarShow,
     Computer,
     PreferencesSystem,
+    EmblemSystem,
     Display,
     WindowClose,
     WindowMinimize,
@@ -81,11 +82,14 @@ pub enum Icon {
     PowerProfilePerformance,
     SystemShutdown,
     BatteryLevel50,
+    BatteryLevel100,
     ViewReveal,
     ViewConceal,
     DocumentEdit,
     UserInfo,
     Starred,
+    NonStarred,
+    ObjectRotateRight,
     DialogPassword,
     SystemLockScreen,
     SendTo,
@@ -108,16 +112,25 @@ pub enum Icon {
     WebBrowser,
     XOfficeCalendar,
     HelpBrowser,
+    ViewGrid,
+    TopBar,
+    NotificationsDisabled,
+    ChangesPrevent,
+    Bookmarks,
+    AddOn,
+    VideoGeneric,
+    ImageGeneric,
 }
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 100] = [
+    pub const ALL: [Icon; 112] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
         Self::Computer,
         Self::PreferencesSystem,
+        Self::EmblemSystem,
         Self::Display,
         Self::WindowClose,
         Self::WindowMinimize,
@@ -186,11 +199,14 @@ impl Icon {
         Self::PowerProfilePerformance,
         Self::SystemShutdown,
         Self::BatteryLevel50,
+        Self::BatteryLevel100,
         Self::ViewReveal,
         Self::ViewConceal,
         Self::DocumentEdit,
         Self::UserInfo,
         Self::Starred,
+        Self::NonStarred,
+        Self::ObjectRotateRight,
         Self::DialogPassword,
         Self::SystemLockScreen,
         Self::SendTo,
@@ -213,6 +229,14 @@ impl Icon {
         Self::WebBrowser,
         Self::XOfficeCalendar,
         Self::HelpBrowser,
+        Self::ViewGrid,
+        Self::TopBar,
+        Self::NotificationsDisabled,
+        Self::ChangesPrevent,
+        Self::Bookmarks,
+        Self::AddOn,
+        Self::VideoGeneric,
+        Self::ImageGeneric,
     ];
 
     /// The embedded SVG source for this icon.
@@ -223,6 +247,7 @@ impl Icon {
             Self::SidebarShow => include_bytes!("../icons/sidebar-show-symbolic.svg"),
             Self::Computer => include_bytes!("../icons/computer-symbolic.svg"),
             Self::PreferencesSystem => include_bytes!("../icons/preferences-system-symbolic.svg"),
+            Self::EmblemSystem => include_bytes!("../icons/emblem-system-symbolic.svg"),
             Self::Display => include_bytes!("../icons/video-display-symbolic.svg"),
             Self::WindowClose => include_bytes!("../icons/window-close-symbolic.svg"),
             Self::WindowMinimize => include_bytes!("../icons/window-minimize-symbolic.svg"),
@@ -317,11 +342,14 @@ impl Icon {
             }
             Self::SystemShutdown => include_bytes!("../icons/system-shutdown-symbolic.svg"),
             Self::BatteryLevel50 => include_bytes!("../icons/battery-level-50-symbolic.svg"),
+            Self::BatteryLevel100 => include_bytes!("../icons/battery-level-100-symbolic.svg"),
             Self::ViewReveal => include_bytes!("../icons/view-reveal-symbolic.svg"),
             Self::ViewConceal => include_bytes!("../icons/view-conceal-symbolic.svg"),
             Self::DocumentEdit => include_bytes!("../icons/document-edit-symbolic.svg"),
             Self::UserInfo => include_bytes!("../icons/user-info-symbolic.svg"),
             Self::Starred => include_bytes!("../icons/starred-symbolic.svg"),
+            Self::NonStarred => include_bytes!("../icons/non-starred-symbolic.svg"),
+            Self::ObjectRotateRight => include_bytes!("../icons/object-rotate-right-symbolic.svg"),
             Self::DialogPassword => include_bytes!("../icons/dialog-password-symbolic.svg"),
             Self::SystemLockScreen => include_bytes!("../icons/system-lock-screen-symbolic.svg"),
             Self::SendTo => include_bytes!("../icons/send-to-symbolic.svg"),
@@ -350,6 +378,16 @@ impl Icon {
             Self::WebBrowser => include_bytes!("../icons/web-browser-symbolic.svg"),
             Self::XOfficeCalendar => include_bytes!("../icons/x-office-calendar-symbolic.svg"),
             Self::HelpBrowser => include_bytes!("../icons/help-browser-symbolic.svg"),
+            Self::ViewGrid => include_bytes!("../icons/view-grid-symbolic.svg"),
+            Self::TopBar => include_bytes!("../icons/focus-top-bar-symbolic.svg"),
+            Self::NotificationsDisabled => {
+                include_bytes!("../icons/notifications-disabled-symbolic.svg")
+            }
+            Self::ChangesPrevent => include_bytes!("../icons/changes-prevent-symbolic.svg"),
+            Self::Bookmarks => include_bytes!("../icons/bookmarks-symbolic.svg"),
+            Self::AddOn => include_bytes!("../icons/addon-symbolic.svg"),
+            Self::VideoGeneric => include_bytes!("../icons/video-generic-symbolic.svg"),
+            Self::ImageGeneric => include_bytes!("../icons/image-generic-symbolic.svg"),
         }
     }
 }

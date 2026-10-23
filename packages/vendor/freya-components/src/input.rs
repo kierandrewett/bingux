@@ -1,43 +1,25 @@
 use std::{
     borrow::Cow,
-    cell::{
-        Ref,
-        RefCell,
-    },
+    cell::{Ref, RefCell},
     rc::Rc,
 };
 
 use freya_core::{
-    elements::paragraph::{
-        ParagraphCursorExt,
-        ParagraphHolderInner,
-    },
+    elements::paragraph::{ParagraphCursorExt, ParagraphHolderInner},
     prelude::*,
 };
 use freya_edit::*;
 use torin::{
     gaps::Gaps,
-    prelude::{
-        Alignment,
-        Area,
-        Content,
-        Direction,
-        Point2D,
-        Vector2D,
-    },
+    prelude::{Alignment, Area, Content, Direction, Point2D, Vector2D},
     size::Size,
 };
 use tracing::warn;
 
 use crate::{
     cursor_blink::use_cursor_blink,
-    define_theme,
-    get_theme,
-    scrollviews::{
-        ScrollConfig,
-        ScrollView,
-        use_scroll_controller,
-    },
+    define_theme, get_theme,
+    scrollviews::{ScrollConfig, ScrollView, use_scroll_controller},
 };
 
 define_theme! {
@@ -181,6 +163,58 @@ pub struct Input {
     leading: Option<Element>,
     trailing: Option<Element>,
     on_pre_key_down: Option<Callback<Event<KeyboardEventData>, bool>>,
+    command: Option<State<Option<InputCommand>>>,
+}
+
+/// An edit that runs on the text as if its keyboard shortcut was pressed.
+/// Set it through [`Input::command`]; the input clears it after running it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum InputCommand {
+    SelectAll,
+    Copy,
+    Cut,
+    Paste,
+}
+
+/// Runs one key edit on `editable` and writes the text to `value`, unless
+/// `on_validate` rejects it. Returns `true` when the edit changed the history.
+fn apply_key_edit(
+    editable: &mut UseEditable,
+    value: &mut Writable<String>,
+    on_validate: Option<&EventHandler<InputValidator>>,
+    key: &Key,
+    modifiers: Modifiers,
+    holder: &ParagraphHolder,
+) -> bool {
+    let previous_history_version = editable.editor().peek().editor_history().version;
+    editable.process_event(EditableEvent::KeyDown {
+        key,
+        modifiers,
+        editor_line: Some(EditorLine::SingleParagraph),
+        holder: Some(holder),
+    });
+    let text = editable.editor().read().committed_text();
+
+    let apply_change = match on_validate {
+        Some(on_validate) => {
+            let mut editor = editable.editor_mut().write();
+            let validator = InputValidator::new(text.clone());
+            on_validate.call(validator.clone());
+            if !validator.is_valid() {
+                if let Some(selection) = editor.undo() {
+                    *editor.selection_mut() = selection;
+                }
+                editor.editor_history_mut().clear_redos();
+            }
+            validator.is_valid()
+        }
+        None => true,
+    };
+
+    if apply_change {
+        *value.write() = text;
+    }
+    editable.editor().peek().editor_history().version != previous_history_version
 }
 
 impl KeyExt for Input {
@@ -212,6 +246,7 @@ impl Input {
             leading: None,
             trailing: None,
             on_pre_key_down: None,
+            command: None,
         }
     }
 
@@ -227,6 +262,12 @@ impl Input {
 
     pub fn on_validate(mut self, on_validate: impl Into<EventHandler<InputValidator>>) -> Self {
         self.on_validate = Some(on_validate.into());
+        self
+    }
+
+    /// Run `command` on the text when the state is set to it, then clear the state.
+    pub fn command(mut self, command: State<Option<InputCommand>>) -> Self {
+        self.command = Some(command);
         self
     }
 
@@ -496,6 +537,9 @@ impl Component for Input {
                 }
             })
         });
+        let mut value_for_command = value.clone();
+        let on_validate_for_command = on_validate.clone();
+
         let on_key_down = move |e: Event<KeyboardEventData>| {
             let key = e.key.clone();
             let modifiers = e.modifiers;
@@ -519,42 +563,54 @@ impl Component for Input {
                 // On change
                 _ => {
                     movement_timeout.reset();
-                    let previous_history_version =
-                        editable.editor().peek().editor_history().version;
-                    editable.process_event(EditableEvent::KeyDown {
-                        key: &key,
+                    let changed = apply_key_edit(
+                        &mut editable,
+                        &mut value,
+                        on_validate.as_ref(),
+                        &key,
                         modifiers,
-                        editor_line: Some(EditorLine::SingleParagraph),
-                        holder: Some(&holder.read()),
-                    });
-                    let text = editable.editor().read().committed_text();
-
-                    let apply_change = match &on_validate {
-                        Some(on_validate) => {
-                            let mut editor = editable.editor_mut().write();
-                            let validator = InputValidator::new(text.clone());
-                            on_validate.call(validator.clone());
-                            if !validator.is_valid() {
-                                if let Some(selection) = editor.undo() {
-                                    *editor.selection_mut() = selection;
-                                }
-                                editor.editor_history_mut().clear_redos();
-                            }
-                            validator.is_valid()
-                        }
-                        None => true,
-                    };
-
-                    if apply_change {
-                        *value.write() = text;
-                    }
-                    if editable.editor().peek().editor_history().version == previous_history_version
-                    {
+                        &holder.read(),
+                    );
+                    if !changed {
                         follow_cursor();
                     }
                 }
             }
         };
+
+        // Runs a command set by the surrounding UI, such as a context menu.
+        let command_state = self.command;
+        let pending = match self.command {
+            Some(command) => *command.read(),
+            None => None,
+        };
+        use_side_effect_with_deps(&pending, move |pending| {
+            let Some(command) = *pending else {
+                return;
+            };
+            if let Some(mut state) = command_state {
+                state.set(None);
+            }
+            let mut editable = editable;
+            let character = match command {
+                InputCommand::SelectAll => "a",
+                InputCommand::Copy => "c",
+                InputCommand::Cut => "x",
+                InputCommand::Paste => "v",
+            };
+            let changed = apply_key_edit(
+                &mut editable,
+                &mut value_for_command,
+                on_validate_for_command.as_ref(),
+                &Key::Character(character.to_string()),
+                Modifiers::ctrl_or_meta(),
+                &holder.peek(),
+            );
+            a11y_id.request_focus();
+            if !changed {
+                follow_cursor();
+            }
+        });
 
         let on_key_up = move |e: Event<KeyboardEventData>| {
             e.stop_propagation();

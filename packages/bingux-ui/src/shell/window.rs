@@ -3,6 +3,7 @@
 
 use freya::prelude::*;
 
+use crate::controls::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
 use crate::scale::*;
 use crate::surface::{surface_color, use_tokens};
@@ -28,20 +29,24 @@ pub fn drag_on_pointer_down(event: Event<PointerEventData>) {
 #[derive(PartialEq)]
 pub struct HeaderBar {
     title: String,
+    subtitle: Option<String>,
     centered: bool,
     leading: Vec<Element>,
     trailing: Vec<Element>,
     background: Option<Color>,
+    busy: bool,
 }
 
 impl HeaderBar {
     pub fn new(title: impl Into<String>) -> Self {
         Self {
             title: title.into(),
+            subtitle: None,
             centered: false,
             leading: Vec::new(),
             trailing: Vec::new(),
             background: None,
+            busy: false,
         }
     }
 
@@ -65,6 +70,19 @@ impl HeaderBar {
         self.background = Some(color);
         self
     }
+
+    /// Show a spinner beside the title while a page is busy.
+    pub fn busy(mut self, busy: bool) -> Self {
+        self.busy = busy;
+        self
+    }
+
+    /// A muted line under the title, such as a page's subtitle. The bar is
+    /// tall enough for both lines.
+    pub fn subtitle(mut self, subtitle: Option<String>) -> Self {
+        self.subtitle = subtitle;
+        self
+    }
 }
 
 impl Component for HeaderBar {
@@ -72,7 +90,7 @@ impl Component for HeaderBar {
         let tokens = use_tokens();
         let title = label()
             .text(self.title.clone())
-            .width(Size::flex(1.0))
+            .width(Size::fill())
             .font_size(TEXT_MD)
             .font_weight(FontWeight::SEMI_BOLD)
             .max_lines(1)
@@ -82,6 +100,23 @@ impl Component for HeaderBar {
             } else {
                 TextAlign::Left
             });
+        let text: Element = match &self.subtitle {
+            None => rect().width(Size::flex(1.0)).child(title).into(),
+            Some(subtitle) => rect()
+                .width(Size::flex(1.0))
+                .direction(Direction::Vertical)
+                .child(title)
+                .child(
+                    label()
+                        .text(subtitle.clone())
+                        .width(Size::fill())
+                        .color(tokens.muted)
+                        .font_size(TEXT_SM)
+                        .max_lines(1)
+                        .text_overflow(TextOverflow::Ellipsis),
+                )
+                .into(),
+        };
         rect()
             .width(Size::fill())
             .height(Size::px(HEADER_HEIGHT))
@@ -93,9 +128,17 @@ impl Component for HeaderBar {
             .background(self.background.unwrap_or(tokens.surface))
             .on_pointer_down(drag_on_pointer_down)
             .children(self.leading.clone())
-            .child(title)
+            .child(text)
+            .maybe_child(self.busy.then(busy_indicator))
             .children(self.trailing.clone())
     }
+}
+
+/// A small spinner with a "Working" tooltip, shown beside the header title.
+fn busy_indicator() -> Element {
+    TooltipContainer::new(Tooltip::new_text("Working"))
+        .child(spinner(SpinnerSize::Small))
+        .into()
 }
 
 /// Minimise, maximise/restore and close, drawn as 24 px circles.

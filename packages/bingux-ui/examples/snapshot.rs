@@ -5,6 +5,9 @@
 #[path = "gallery/pages.rs"]
 mod pages;
 
+use bingux_ui::controls::text_field::text_field;
+use bingux_ui::prelude::{OverlayHost, sheet, use_overlays};
+use bingux_ui::scale::S3;
 use bingux_ui::snapshot::{Snapshot, snapshot};
 use bingux_ui::theme::WINDOW_SIZE;
 use freya::prelude::*;
@@ -131,6 +134,62 @@ fn main() {
         .save(&path);
     println!("[snapshot] wrote {path}");
 
+    // The sheet open on mount with one field: it should size to its content.
+    let path = format!("{out}/feedback-sheet.png");
+    Snapshot::new(
+        move || Element::from(OverlayHost::new(SheetOpen { long: false })),
+        size,
+    )
+    .settle(std::time::Duration::from_millis(600))
+    .save(&path);
+    println!("[snapshot] wrote {path}");
+
+    // The same sheet with a body taller than the cap: the body should scroll.
+    let path = format!("{out}/feedback-sheet-long.png");
+    Snapshot::new(
+        move || Element::from(OverlayHost::new(SheetOpen { long: true })),
+        size,
+    )
+    .settle(std::time::Duration::from_millis(600))
+    .save(&path);
+    println!("[snapshot] wrote {path}");
+
+    // The tabbed sheet with form rows, opened on mount: details, then security.
+    for (file, security) in [
+        ("feedback-form-sheet", false),
+        ("feedback-form-security", true),
+    ] {
+        let path = format!("{out}/{file}.png");
+        Snapshot::new(
+            move || Element::from(OverlayHost::new(FormSheetOpen { security })),
+            size,
+        )
+        .settle(std::time::Duration::from_millis(600))
+        .save(&path);
+        println!("[snapshot] wrote {path}");
+    }
+
+    // The menu opened from the Menus group at the top of the Buttons page.
+    let mut shot = Snapshot::new(
+        move || {
+            Element::from(
+                rect()
+                    .expanded()
+                    .background(Color::from_rgb(28, 28, 32))
+                    .child(Gallery {
+                        initial: Page::Buttons,
+                    }),
+            )
+        },
+        size,
+    );
+    let path = format!("{out}/feedback-menu.png");
+    shot.settle(std::time::Duration::from_millis(400))
+        .click(900.0, 112.0)
+        .settle(std::time::Duration::from_millis(500))
+        .save(&path);
+    println!("[snapshot] wrote {path}");
+
     // Keyboard navigation: click Buttons in the sidebar, then ArrowDown
     // twice should land on Feedback.
     let mut shot = Snapshot::new(
@@ -175,4 +234,83 @@ fn main() {
         .settle(std::time::Duration::from_millis(400))
         .save(&path);
     println!("[snapshot] wrote {path}");
+}
+
+/// Opens a sheet on mount over the Feedback page, so the headless runner
+/// shows it without a click. `long` makes the body taller than the sheet's
+/// height cap, to check that the body scrolls.
+#[derive(PartialEq)]
+struct SheetOpen {
+    long: bool,
+}
+
+impl Component for SheetOpen {
+    fn render(&self) -> impl IntoElement {
+        let overlays = use_overlays();
+        let long = self.long;
+        let name = use_state(String::new);
+        use_side_effect(move || {
+            let mut body = rect()
+                .spacing(S3)
+                .child(text_field(name, |_| {}).placeholder("Network name"));
+            if long {
+                for index in 0..14 {
+                    body = body.child(label().text(format!("Row {index}")));
+                }
+            }
+            overlays.show_sheet(
+                sheet("Add a network", body)
+                    .primary("Save", move |_| overlays.close_sheet())
+                    .primary_enabled(!name.read().trim().is_empty()),
+            );
+        });
+        rect()
+            .expanded()
+            .background(Color::from_rgb(28, 28, 32))
+            .child(Gallery {
+                initial: Page::Feedback,
+            })
+    }
+}
+
+/// Opens the tabbed sheet with form rows on mount. `security` starts it on
+/// the Security tab.
+#[derive(PartialEq)]
+struct FormSheetOpen {
+    security: bool,
+}
+
+impl Component for FormSheetOpen {
+    fn render(&self) -> impl IntoElement {
+        let overlays = use_overlays();
+        let security = self.security;
+        let name = use_state(String::new);
+        let tab = use_state(move || String::from(if security { "security" } else { "details" }));
+        let security_key = use_state(|| "personal".to_string());
+        let password = use_state(String::new);
+        let auto_connect = use_state(|| true);
+        use_side_effect(move || {
+            overlays.show_sheet(
+                sheet(
+                    "Add a network",
+                    pages::FormDemoBody {
+                        name,
+                        tab,
+                        security: security_key,
+                        password,
+                        auto_connect,
+                    },
+                )
+                .tabs(pages::FormDemoTabs { tab })
+                .primary("Save", move |_| overlays.close_sheet())
+                .primary_enabled(!name.read().trim().is_empty()),
+            );
+        });
+        rect()
+            .expanded()
+            .background(Color::from_rgb(28, 28, 32))
+            .child(Gallery {
+                initial: Page::Feedback,
+            })
+    }
 }

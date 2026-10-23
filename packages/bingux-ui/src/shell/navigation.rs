@@ -7,10 +7,14 @@
 //! Below [`SIDEBAR_OVERLAY_BELOW`] the sidebar becomes an overlay opened
 //! from a button above the page, over a scrim.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use freya::animation::*;
 use freya::prelude::*;
 
-use crate::controls::{icon_button, search_field};
+use crate::controls::{action_button, icon_button, search_field};
 use crate::icons::{self, Icon};
 use crate::scale::*;
 use crate::shell::window::{HeaderBar, WindowControls};
@@ -46,6 +50,8 @@ pub struct NavigationSplitView<T: NavItem> {
     pub page_width: f32,
     /// Set while a subpage is open: its title and what Back does.
     pub subpage: Option<Subpage>,
+    /// Settings the sidebar search can find, after the pages.
+    pub hits: Vec<SearchHit<T>>,
 }
 
 /// An open subpage. The header shows a Back button and the title in place of
@@ -54,6 +60,195 @@ pub struct NavigationSplitView<T: NavItem> {
 pub struct Subpage {
     pub title: String,
     pub on_back: EventHandler<()>,
+}
+
+/// A setting the sidebar search can find. `detail` names the page it is on,
+/// and choosing the hit opens `target`. `keywords` are extra words to match.
+#[derive(Clone, PartialEq)]
+pub struct SearchHit<T> {
+    pub title: String,
+    pub detail: String,
+    pub keywords: String,
+    pub target: T,
+}
+
+impl<T> SearchHit<T> {
+    fn matches(&self, needle: &str) -> bool {
+        self.title.to_lowercase().contains(needle)
+            || self.detail.to_lowercase().contains(needle)
+            || self.keywords.to_lowercase().contains(needle)
+    }
+}
+
+/// The ids of the pages that are busy. The split view provides it, and a page
+/// marks itself busy with [`use_page_busy`].
+#[derive(Clone, Copy, PartialEq)]
+struct BusyPages(State<Vec<u64>>);
+
+/// Shows the header's busy spinner while `busy` is true. Use it instead of a
+/// loading block in the page, so the content does not move.
+pub fn use_page_busy(busy: bool) {
+    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+    let id = use_hook(|| NEXT_ID.fetch_add(1, Ordering::Relaxed));
+    let pages = use_try_consume::<BusyPages>().map(|found| found.0);
+    use_side_effect_with_deps(&busy, move |busy| {
+        let Some(mut pages) = pages else { return };
+        let listed = pages.read().contains(&id);
+        if *busy && !listed {
+            pages.write().push(id);
+        } else if !*busy && listed {
+            pages.write().retain(|other| *other != id);
+        }
+    });
+    use_drop(move || {
+        if let Some(mut pages) = pages {
+            pages.write().retain(|other| *other != id);
+        }
+    });
+}
+
+/// A button in the page header, shown at the right of the title.
+#[derive(Clone, PartialEq)]
+pub struct PageAction {
+    pub label: String,
+    pub on_press: EventHandler<()>,
+    /// When set, the action is a switch in this state and `on_press` is
+    /// called with no value to flip it; the label is its tooltip.
+    pub switch: Option<bool>,
+}
+
+/// What a page shows in the header bar. The title is the page's name, or the
+/// subpage's title. `subtitle` is a muted line under it and `action` a button
+/// at the right of the bar. Set it with [`use_page_header`].
+#[derive(Clone, Default, PartialEq)]
+pub struct PageHeader {
+    pub subtitle: Option<String>,
+    pub action: Option<PageAction>,
+}
+
+impl PageHeader {
+    pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
+        self.subtitle = Some(subtitle.into());
+        self
+    }
+
+    pub fn action(
+        mut self,
+        label: impl Into<String>,
+        on_press: impl Into<EventHandler<()>>,
+    ) -> Self {
+        self.action = Some(PageAction {
+            label: label.into(),
+            on_press: on_press.into(),
+            switch: None,
+        });
+        self
+    }
+
+    /// A master switch at the right of the header, as GNOME puts Wi-Fi and
+    /// Bluetooth. `label` names it for assistive tools; `on_toggle` receives
+    /// the new state.
+    pub fn switch(
+        mut self,
+        label: impl Into<String>,
+        on: bool,
+        on_toggle: impl Into<EventHandler<bool>>,
+    ) -> Self {
+        let on_toggle = on_toggle.into();
+        self.action = Some(PageAction {
+            label: label.into(),
+            on_press: EventHandler::new(move |_: ()| on_toggle.call(!on)),
+            switch: Some(on),
+        });
+        self
+    }
+}
+
+/// The headers that pages have set, most recent last. The last one is shown.
+#[derive(Clone, Copy, PartialEq)]
+struct PageHeaders(State<Vec<(u64, PageHeader)>>);
+
+/// Shows `header` in the header bar while the calling page is open. Call it
+/// on every render with the header the page wants; a changed header replaces
+/// the one shown.
+pub fn use_page_header(header: PageHeader) {
+    static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+    let id = use_hook(|| NEXT_ID.fetch_add(1, Ordering::Relaxed));
+    let headers = use_try_consume::<PageHeaders>().map(|found| found.0);
+    use_side_effect_with_deps(&header, move |header| {
+        let Some(mut headers) = headers else { return };
+        let shown = headers
+            .peek()
+            .iter()
+            .find(|(other, _)| *other == id)
+            .map(|(_, set)| set.clone());
+        if shown.as_ref() == Some(header) {
+            return;
+        }
+        let mut list = headers.write();
+        list.retain(|(other, _)| *other != id);
+        list.push((id, header.clone()));
+    });
+    use_drop(move || {
+        if let Some(mut headers) = headers {
+            headers.write().retain(|(other, _)| *other != id);
+        }
+    });
+}
+
+/// Where a page sits: its index in the sidebar and the title of its open subpage.
+type PageKey = (usize, Option<String>);
+
+/// The kind of move between two pages.
+#[derive(Clone, Copy, PartialEq)]
+enum PageMotion {
+    Push,
+    Pop,
+    Fade,
+}
+
+impl PageMotion {
+    fn ms(self) -> u64 {
+        match self {
+            PageMotion::Fade => 120,
+            PageMotion::Push | PageMotion::Pop => 160,
+        }
+    }
+}
+
+/// The move from `previous` to `next`, or none when the page did not change.
+fn page_motion(previous: &PageKey, next: &PageKey) -> Option<PageMotion> {
+    match (previous.1.is_some(), next.1.is_some()) {
+        (false, true) => Some(PageMotion::Push),
+        (true, false) => Some(PageMotion::Pop),
+        _ if previous.0 != next.0 => Some(PageMotion::Fade),
+        _ if previous.1 != next.1 => Some(PageMotion::Push),
+        _ => None,
+    }
+}
+
+/// What the split view remembers between renders to run page motion.
+#[derive(Default)]
+struct PageMemory {
+    key: Option<PageKey>,
+    element: Option<Element>,
+    pending: bool,
+    duration: u64,
+    active: Option<(PageMotion, Element)>,
+}
+
+/// The page column: centred, at most `page_width` wide, with the page margins.
+fn page_column(content: Element, side: f32, page_width: f32) -> impl IntoElement {
+    rect()
+        .width(Size::fill())
+        .cross_align(Alignment::Center)
+        .padding((S2, side, S5, side))
+        .child(
+            rect()
+                .width(Size::px(page_width))
+                .max_width(Size::fill())
+                .child(content),
+        )
 }
 
 impl<T: NavItem> NavigationSplitView<T> {
@@ -70,6 +265,7 @@ impl<T: NavItem> NavigationSplitView<T> {
             content: content.into(),
             page_width: PAGE_WIDTH,
             subpage: None,
+            hits: Vec::new(),
         }
     }
 
@@ -91,12 +287,23 @@ impl<T: NavItem> NavigationSplitView<T> {
         self.page_width = width;
         self
     }
+
+    /// Settings the sidebar search can find, listed after the pages.
+    pub fn search_hits(mut self, hits: Vec<SearchHit<T>>) -> Self {
+        self.hits = hits;
+        self
+    }
 }
 
 impl<T: NavItem> Component for NavigationSplitView<T> {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let query = use_state(String::new);
+        let mut query = use_state(String::new);
+        let highlight = use_state(|| 0usize);
+        let search_id = use_a11y();
+        let busy_pages = use_provide_context(|| BusyPages(State::create(Vec::new())));
+        let page_headers = use_provide_context(|| PageHeaders(State::create(Vec::new())));
+        let busy = !busy_pages.0.read().is_empty();
         let mut sidebar_open = use_state(|| false);
         let width = Platform::get().current_window().root_size.read().width;
         let narrow = width < SIDEBAR_OVERLAY_BELOW;
@@ -116,24 +323,47 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let overlay_progress = overlay_anim.get().value();
         let sidebar = |overlay: bool| Sidebar {
             items: self.items.clone(),
+            hits: self.hits.clone(),
             selected,
             query,
+            highlight,
+            search_id,
             sidebar_open,
             overlay,
         };
-        // The header carries only the window buttons; it is the drag region.
+        // The header carries the window buttons and the page's own header: its
+        // title, a subtitle under the title, and an action at the right. It is
+        // the drag region.
+        let page_header = page_headers
+            .0
+            .read()
+            .last()
+            .map(|(_, header)| header.clone())
+            .unwrap_or_default();
         let header = match &self.subpage {
-            None => HeaderBar::new("").background(tokens.bg),
+            None => HeaderBar::new(selected().title())
+                .background(tokens.bg)
+                .busy(busy),
             Some(subpage) => {
                 let on_back = subpage.on_back.clone();
-                HeaderBar::new(subpage.title.clone())
-                    .background(tokens.bg)
-                    .leading(
-                        icon_button(Icon::GoPrevious, move |_| on_back.call(()))
-                            .size(WINDOW_CONTROL_BUTTON)
-                            .tooltip("Back"),
-                    )
+                HeaderBar::new(subpage.title.clone()).busy(busy).leading(
+                    icon_button(Icon::GoPrevious, move |_| on_back.call(()))
+                        .size(WINDOW_CONTROL_BUTTON)
+                        .tooltip("Back"),
+                )
             }
+        }
+        .subtitle(page_header.subtitle.clone());
+        let header = match page_header.action {
+            Some(PageAction {
+                on_press,
+                switch: Some(on),
+                ..
+            }) => header.trailing(crate::controls::switch(on, move |_: bool| {
+                on_press.call(())
+            })),
+            Some(action) => header.trailing(action_button(action.label, action.on_press)),
+            None => header,
         }
         .trailing(WindowControls);
         // Alt+Left and the mouse Back button return from a subpage.
@@ -152,17 +382,146 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                     .tooltip("Show pages"),
                 )
         });
+        // Page changes move the content. A subpage slides in from the right, a
+        // pop slides it out to the right, and a sidebar switch cross-fades. The
+        // page being replaced stays on screen in `memory` while the motion runs.
+        let index = self
+            .items
+            .iter()
+            .position(|item| *item == selected())
+            .unwrap_or(0);
+        let page_key: PageKey = (index, self.subpage.as_ref().map(|s| s.title.clone()));
+        let memory = use_hook(|| Rc::new(RefCell::new(PageMemory::default())));
+        let mut generation = use_state(|| 0u64);
+        let anim_memory = memory.clone();
+        let anim = use_animation_transition(generation(), move |_, _| {
+            AnimNum::new(0.0, 1.0)
+                .time(anim_memory.borrow().duration)
+                .function(Function::Expo)
+                .ease(Ease::Out)
+        });
+        let scroll = use_scroll_controller(ScrollConfig::default);
+        let mut scroll_effect = scroll;
+        let effect_memory = memory.clone();
+        use_side_effect_with_deps(&page_key, move |_| {
+            scroll_effect.scroll_to_y(0);
+            if effect_memory.borrow().pending {
+                effect_memory.borrow_mut().pending = false;
+                *generation.write() += 1;
+            }
+        });
+        let mut changed = false;
+        {
+            let mut memory = memory.borrow_mut();
+            if let Some(previous) = memory.key.clone()
+                && previous != page_key
+            {
+                changed = true;
+                let motion = page_motion(&previous, &page_key)
+                    .filter(|motion| tokens.motion(motion.ms()) > 0);
+                memory.active = match (motion, memory.element.clone()) {
+                    (Some(motion), Some(outgoing)) => {
+                        memory.duration = tokens.motion(motion.ms());
+                        memory.pending = true;
+                        Some((motion, outgoing))
+                    }
+                    _ => None,
+                };
+            }
+            memory.key = Some(page_key.clone());
+            memory.element = Some(self.content.clone());
+        }
+        let progress = if changed {
+            0.0
+        } else {
+            anim.get().value().clamp(0.0, 1.0)
+        };
+        let active = {
+            let mut memory = memory.borrow_mut();
+            if !changed && progress >= 1.0 {
+                memory.active = None;
+            }
+            memory.active.clone()
+        };
+        // The incoming page: offset and opacity, and whether it draws over the
+        // outgoing page.
+        let travel = width;
+        let (in_offset, in_opacity, in_layer, outgoing) = match active {
+            None => (0.0, 1.0, 0, None),
+            Some((motion, element)) => match motion {
+                PageMotion::Push => (
+                    (1.0 - progress) * travel,
+                    1.0,
+                    1,
+                    Some((0.0, 1.0 - 0.12 * progress, 0, element)),
+                ),
+                PageMotion::Pop => (
+                    0.0,
+                    0.88 + 0.12 * progress,
+                    0,
+                    Some((progress * travel, 1.0, 1, element)),
+                ),
+                PageMotion::Fade => (0.0, progress, 0, Some((0.0, 1.0 - progress, 1, element))),
+            },
+        };
+        let page = rect()
+            .width(Size::fill())
+            .height(Size::flex(1.0))
+            .offset_x(in_offset)
+            .opacity(in_opacity)
+            .layer(Layer::Relative(in_layer))
+            .child(
+                ScrollView::new_controlled(scroll)
+                    .drag_scrolling(false)
+                    .auto_hide_scrollbars(false)
+                    .child(page_column(self.content.clone(), side, self.page_width)),
+            );
+        let outgoing = outgoing.map(|(offset, opacity, layer, element)| {
+            rect()
+                .position(Position::new_absolute().top(0.0).left(0.0))
+                .width(Size::fill())
+                .height(Size::fill())
+                .offset_x(offset)
+                .opacity(opacity)
+                .layer(Layer::Relative(layer))
+                .child(
+                    ScrollView::new()
+                        .drag_scrolling(false)
+                        .auto_hide_scrollbars(false)
+                        .child(page_column(element, side, self.page_width)),
+                )
+        });
+        let content_area = rect()
+            .width(Size::fill())
+            .height(Size::flex(1.0))
+            .child(page)
+            .maybe_child(outgoing);
         rect()
             .expanded()
             .direction(Direction::Horizontal)
             .content(Content::Flex)
             .background(tokens.bg)
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
+                let control = event.modifiers == Modifiers::CONTROL;
+                let letter = match &event.key {
+                    Key::Character(text) if control => text.to_lowercase(),
+                    _ => String::new(),
+                };
                 if let Some(on_back) = &back_key
                     && event.modifiers == Modifiers::ALT
                     && event.key == Key::Named(NamedKey::ArrowLeft)
                 {
                     on_back.call(());
+                } else if control && letter == "f" {
+                    // Focus the search. A narrow window opens its sidebar first.
+                    if narrow {
+                        sidebar_open.set(true);
+                    }
+                    search_id.request_focus();
+                } else if control && (letter == "q" || letter == "w") {
+                    Platform::get().close_window(Platform::window_id());
+                } else if event.key == Key::Named(NamedKey::Escape) && !query.read().is_empty() {
+                    query.set(String::new());
                 }
             })
             .on_global_pointer_down(move |event: Event<PointerEventData>| {
@@ -179,25 +538,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                     .height(Size::fill())
                     .child(header)
                     .maybe_child(show_pages)
-                    .child(
-                        rect().width(Size::fill()).height(Size::flex(1.0)).child(
-                            ScrollView::new()
-                                .drag_scrolling(false)
-                                .auto_hide_scrollbars(false)
-                                .child(
-                                    rect()
-                                        .width(Size::fill())
-                                        .cross_align(Alignment::Center)
-                                        .padding((S2, side, S5, side))
-                                        .child(
-                                            rect()
-                                                .width(Size::px(self.page_width))
-                                                .max_width(Size::fill())
-                                                .child(self.content.clone()),
-                                        ),
-                                ),
-                        ),
-                    ),
+                    .child(content_area)
             )
             .maybe_child(
                 (narrow && (sidebar_open() || overlay_progress > 0.0)).then(|| {
@@ -230,10 +571,100 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
 #[derive(PartialEq)]
 struct Sidebar<T: NavItem> {
     items: Vec<T>,
+    hits: Vec<SearchHit<T>>,
+    selected: State<T>,
+    query: State<String>,
+    highlight: State<usize>,
+    search_id: AccessibilityId,
+    sidebar_open: State<bool>,
+    overlay: bool,
+}
+
+/// The most settings the sidebar search lists.
+const MAX_HITS: usize = 20;
+
+/// Makes `target` the selected page and clears the search. An overlay sidebar
+/// closes too.
+fn open_result<T: NavItem>(
+    mut selected: State<T>,
+    mut query: State<String>,
+    mut sidebar_open: State<bool>,
+    overlay: bool,
+    target: T,
+) {
+    selected.set(target);
+    query.set(String::new());
+    if overlay {
+        sidebar_open.set(false);
+    }
+}
+
+/// A hairline between groups of pages and before the search results. Groups
+/// are split by a line, not a heading.
+fn divider(tokens: &Tokens) -> Element {
+    rect()
+        .width(Size::fill())
+        .height(Size::px(1.0))
+        .margin((S2, GUTTER, S2, GUTTER))
+        .background(tokens.separator)
+        .into()
+}
+
+/// A search result for a setting: its title, with the page it is on under it.
+#[derive(PartialEq)]
+struct HitRow<T: NavItem> {
+    hit: SearchHit<T>,
+    highlighted: bool,
     selected: State<T>,
     query: State<String>,
     sidebar_open: State<bool>,
     overlay: bool,
+}
+
+impl<T: NavItem> Component for HitRow<T> {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let mut hovering = use_state(|| false);
+        let a11y_id = use_a11y();
+        let focus = use_focus(a11y_id);
+        let target = self.hit.target;
+        let selected = self.selected;
+        let query = self.query;
+        let sidebar_open = self.sidebar_open;
+        let overlay = self.overlay;
+        let background = item_fill(&tokens, hovering() || self.highlighted, false, false);
+        rect()
+            .a11y_id(a11y_id)
+            .a11y_focusable(true)
+            .a11y_role(AccessibilityRole::Button)
+            .width(Size::fill())
+            .height(Size::auto())
+            .padding((S1, GUTTER, S1, GUTTER))
+            .corner_radius(RADIUS)
+            .background(background)
+            .border(focus_border(&tokens, focus()))
+            .on_pointer_enter(move |_| hovering.set(true))
+            .on_pointer_leave(move |_| hovering.set(false))
+            .on_press(move |_: Event<PressEventData>| {
+                open_result(selected, query, sidebar_open, overlay, target)
+            })
+            .child(
+                label()
+                    .text(self.hit.title.clone())
+                    .color(tokens.text)
+                    .font_size(TEXT_MD)
+                    .max_lines(1)
+                    .text_overflow(TextOverflow::Ellipsis),
+            )
+            .child(
+                label()
+                    .text(self.hit.detail.clone())
+                    .color(tokens.muted)
+                    .font_size(TEXT_SM)
+                    .max_lines(1)
+                    .text_overflow(TextOverflow::Ellipsis),
+            )
+    }
 }
 
 impl<T: NavItem> Component for Sidebar<T> {
@@ -241,9 +672,11 @@ impl<T: NavItem> Component for Sidebar<T> {
         let tokens = use_tokens();
         let selected = self.selected;
         let query = self.query;
+        let mut highlight = self.highlight;
         let sidebar_open = self.sidebar_open;
         let overlay = self.overlay;
         let needle = query.read().trim().to_lowercase();
+        let typing = !needle.is_empty();
         let visible: Vec<T> = self
             .items
             .iter()
@@ -257,25 +690,50 @@ impl<T: NavItem> Component for Sidebar<T> {
                         .any(|word| word.starts_with(&needle))
             })
             .collect();
+        let hits: Vec<SearchHit<T>> = if typing {
+            self.hits
+                .iter()
+                .filter(|hit| hit.matches(&needle))
+                .take(MAX_HITS)
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        };
+        // Pages first, then settings: one list that Up, Down and Enter walk.
+        let targets: Vec<T> = visible
+            .iter()
+            .copied()
+            .chain(hits.iter().map(|hit| hit.target))
+            .collect();
+        let count = targets.len();
+        let current = highlight().min(count.saturating_sub(1));
         let mut entries: Vec<Element> = Vec::new();
         let mut last_group = "";
-        for item in &visible {
+        for (index, item) in visible.iter().enumerate() {
             let group = item.group();
-            if group != last_group && !group.is_empty() {
-                entries.push(
-                    label()
-                        .text(group)
-                        .color(tokens.muted)
-                        .font_size(TEXT_SM)
-                        .margin((if entries.is_empty() { S1 } else { S4 }, 0.0, S1, GUTTER))
-                        .into(),
-                );
+            if group != last_group && !group.is_empty() && !entries.is_empty() {
+                entries.push(divider(&tokens));
             }
             last_group = group;
             entries.push(Element::from(NavEntry {
                 item: *item,
                 siblings: visible.clone(),
                 selected,
+                sidebar_open,
+                overlay,
+                highlighted: typing && index == current,
+            }));
+        }
+        if !visible.is_empty() && !hits.is_empty() {
+            entries.push(divider(&tokens));
+        }
+        for (offset, hit) in hits.iter().enumerate() {
+            entries.push(Element::from(HitRow {
+                hit: hit.clone(),
+                highlighted: visible.len() + offset == current,
+                selected,
+                query,
                 sidebar_open,
                 overlay,
             }));
@@ -320,7 +778,36 @@ impl<T: NavItem> Component for Sidebar<T> {
                         .color(Color::BLACK.with_af32(0.45)),
                 )
             })
-            .child(search_band(query, field_width, close))
+            .on_key_down(move |event: Event<KeyboardEventData>| {
+                // Up, Down and Enter walk the results only while a search is typed.
+                if !typing {
+                    return;
+                }
+                match &event.key {
+                    Key::Named(NamedKey::ArrowDown) => {
+                        event.stop_propagation();
+                        highlight.set((current + 1).min(count.saturating_sub(1)));
+                    }
+                    Key::Named(NamedKey::ArrowUp) => {
+                        event.stop_propagation();
+                        highlight.set(current.saturating_sub(1));
+                    }
+                    Key::Named(NamedKey::Enter) => {
+                        if let Some(target) = targets.get(current).copied() {
+                            event.stop_propagation();
+                            open_result(selected, query, sidebar_open, overlay, target);
+                        }
+                    }
+                    _ => {}
+                }
+            })
+            .child(search_band(
+                query,
+                self.highlight,
+                self.search_id,
+                field_width,
+                close,
+            ))
             .child(
                 rect().width(Size::fill()).height(Size::flex(1.0)).child(
                     ScrollView::new()
@@ -332,7 +819,7 @@ impl<T: NavItem> Component for Sidebar<T> {
                                 .padding((S2, S2, S4, S2))
                                 .spacing(S0)
                                 .children(entries)
-                                .maybe_child(visible.is_empty().then(|| {
+                                .maybe_child((typing && count == 0).then(|| {
                                     label()
                                         .text("Nothing matches.")
                                         .color(tokens.muted)
@@ -353,18 +840,30 @@ pub struct SearchField {
 
 impl Component for SearchField {
     fn render(&self) -> impl IntoElement {
-        search_band(self.query, SIDEBAR_WIDTH - 2.0 * S2, None::<Element>)
+        let highlight = use_state(|| 0usize);
+        let search_id = use_a11y();
+        search_band(
+            self.query,
+            highlight,
+            search_id,
+            SIDEBAR_WIDTH - 2.0 * S2,
+            None::<Element>,
+        )
     }
 }
 
 /// The top band of the sidebar. It is HEADER_HEIGHT tall, like the page
 /// header, so the search field sits on the window-control line. The overlay
-/// puts its close button to the right of the field.
+/// puts its close button to the right of the field. Typing resets the
+/// highlight to the first result.
 fn search_band(
     query: State<String>,
+    highlight: State<usize>,
+    search_id: AccessibilityId,
     field_width: f32,
     close: Option<impl IntoElement>,
 ) -> impl IntoElement {
+    let mut highlight = highlight;
     rect()
         .width(Size::fill())
         .height(Size::px(HEADER_HEIGHT))
@@ -372,7 +871,14 @@ fn search_band(
         .cross_align(Alignment::Center)
         .padding((0.0, S2))
         .spacing(S2)
-        .child(search_field(query, |_| {}).well().width(field_width))
+        .child(
+            search_field(query, move |_: String| {
+                highlight.set(0);
+            })
+            .a11y_id(search_id)
+            .well()
+            .width(field_width),
+        )
         .maybe_child(close)
 }
 
@@ -384,6 +890,8 @@ struct NavEntry<T: NavItem> {
     selected: State<T>,
     sidebar_open: State<bool>,
     overlay: bool,
+    /// Drawn with the hover layer: the keyboard highlight of the search.
+    highlighted: bool,
 }
 
 impl<T: NavItem> Component for NavEntry<T> {
@@ -399,7 +907,12 @@ impl<T: NavItem> Component for NavEntry<T> {
         let mut sidebar_open = self.sidebar_open;
         let overlay = self.overlay;
         let is_selected = selected() == item;
-        let background = item_fill(&tokens, hovering(), pressing(), is_selected);
+        let background = item_fill(
+            &tokens,
+            hovering() || self.highlighted,
+            pressing(),
+            is_selected,
+        );
         let icon_color = if is_selected {
             tokens.accent
         } else {

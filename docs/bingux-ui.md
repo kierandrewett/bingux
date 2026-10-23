@@ -58,21 +58,65 @@ dialogs and shows toasts from any component below it.
 
 ## Components
 
-| Family          | Components                                                                                                                                                                                                                                |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Controls        | `switch`, `checkbox` (tri-state), `radio_group`, `slider` (`step`, `show_value`), `segmented`, `dropdown` (`app_icons`, `width`), `stepper`, `text_field` (`password`, `invalid`, `clearable`), `search_field`, `progress_bar`, `spinner` |
-| Buttons         | `action_button` (`suggested`, `destructive`, `flat`, `loading`, `icon`), `primary_button`, `row_button`, `icon_button` (`tooltip`, `danger`)                                                                                              |
-| Rows            | `row` (`subtitle`, `value`, `badge`, `leading`, `leading_app`, `navigates`, `selected`, `destructive`), `switch_row`, `slider_row`, `choice_row`, `text_row`, `entry_row`, `expander_row`, `property_row`                                 |
-| Icons           | `icon` (bundled symbolic glyphs), `app_icon` (full-colour application icons from the icon theme)                                                                                                                                          |
-| Groups and text | `Group` (`description`), `section_label`, `caption`, `centered_caption`, `action_row`, `heading`, `status` (loading, empty, error, info blocks)                                                                                           |
-| Layout          | `hstack`, `vstack`, `spacer`, `divider`, `card`, `clamp`, `page_column`                                                                                                                                                                   |
-| Shell           | `NavigationSplitView` with `NavItem` and `subpage`, `HeaderBar`, `WindowControls`, `status_page`, `banner`                                                                                                                                |
-| Overlays        | `dialog` with `ResponseKind::{Default, Suggested, Destructive}`, `Overlays::toast`, `Overlays::toast_with_action`                                                                                                                         |
+| Family          | Components                                                                                                                                                                                                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Controls        | `switch`, `checkbox` (tri-state), `radio_group`, `slider` (`step`, `show_value`), `segmented`, `dropdown` (`app_icons`, `width`), `stepper`, `text_field` (`password`, `invalid`, `clearable`), `search_field`, `progress_bar`, `spinner`                                                        |
+| Buttons         | `action_button` (`suggested`, `destructive`, `flat`, `loading`, `icon`), `primary_button`, `row_button`, `icon_button` (`tooltip`, `danger`)                                                                                                                                                     |
+| Rows            | `row` (`subtitle`, `value`, `badge`, `leading`, `leading_app`, `navigates`, `selected`, `destructive`), `switch_row`, `slider_row`, `choice_row`, `text_row`, `entry_row`, `expander_row`, `property_row`                                                                                        |
+| Icons           | `icon` (bundled symbolic glyphs), `app_icon` (full-colour application icons from the icon theme)                                                                                                                                                                                                 |
+| Groups and text | `Group` (`description`), `section_label`, `caption`, `centered_caption`, `action_row`, `heading`, `status` (loading, empty, error, info blocks)                                                                                                                                                  |
+| Layout          | `hstack`, `vstack`, `spacer`, `divider`, `card`, `clamp`, `page_column`                                                                                                                                                                                                                          |
+| Shell           | `NavigationSplitView` with `NavItem` and `subpage`, `HeaderBar`, `WindowControls`, `status_page`, `banner`                                                                                                                                                                                       |
+| Page header     | `PageHeader` (`subtitle`, `action`) with `use_page_header`, a title, a muted subtitle under it and one action at the end                                                                                                                                                                         |
+| Search          | `NavigationSplitView::search_hits` with `SearchHit`: pages first, then matching settings, Up, Down and Enter, at most 20 results. Ctrl+F focuses it and Escape clears it                                                                                                                         |
+| Overlays        | `dialog` with `ResponseKind::{Default, Suggested, Destructive}`, `Overlays::toast`, `Overlays::toast_with_action`                                                                                                                                                                                |
+| Sheets          | `sheet` with `Sheet::primary` (`SheetAction`), `Sheet::tabs` (a tab strip under the title), `Overlays::show_sheet`, `Overlays::close_sheet`. Cancel and Escape close it; Enter runs the primary action. Sheets size to their content and scroll past 80% of the window height                    |
+| Forms           | `form_row(label, control)` for a label beside a control; `tabs(options, selected, on_select)` for an underlined tab strip with arrow keys                                                                                                                                                        |
+| Menus           | `menu_item` and `menu_button(label, items)`. `MenuItem::icon`, `MenuItem::checked`, `MenuItem::destructive` and `MenuItem::disabled`; `menu_separator()`. `Overlays::show_menu` opens at window coordinates. Picking an item closes the menu, then runs it; Escape and an outside press close it |
 
-Every control supports keyboard use: Enter and Space activate, arrows move
-sliders, steppers and segmented controls, Up and Down walk the sidebar,
-Escape closes dropdowns and dialogs. Each has an accessibility role and a focus ring. Animations are
+Every control supports keyboard use: Enter and Space activate. Arrows move
+sliders and steppers. Page Up and Page Down move sliders and steppers by ten
+steps, and Home and End go to the ends. Open dropdown menus take arrows, Page
+Up, Page Down, Home and End. Up and Down walk the sidebar. Escape closes
+dropdowns, menus, sheets and dialogs. Each has an accessibility role and a focus ring. Animations are
 short (80 to 200 ms) and stop when `BINGUX_REDUCED_MOTION=1` is set.
+
+Popups share one motion, all with an ease-out curve and all scaled by
+`tokens.motion(ms)`, so they are instant under `BINGUX_REDUCED_MOTION=1`.
+Each layer stays on screen until its exit finishes.
+
+- Sheet: fades in and drops 12 px in 140 ms. The scrim fades with it. Closing reverses it.
+- Dialog: fades in and scales from 96% to 100% in 120 ms. The scrim fades with it.
+- Menu: fades in and scales from 96% to 100% in 90 ms, pivoting on its top-left corner (the anchor).
+- Toast: slides up 8 px and fades in over 140 ms. Dismissing it slides it back down and fades it out.
+- Dropdown reveal: 90 ms, the same easing as the menu.
+
+## Typography
+
+`typography.rs` holds the type ramp. Text picks a named style and nothing
+sets its own size or weight, so each level reads apart at a glance: size
+steps of at least 1.25x, and a weight or colour change at each step. Use
+`styled_label` and `styled_paragraph`, or `TextStyle::label` and
+`TextStyle::paragraph`, to render a style.
+
+| Style      | Size | Weight   | Colour  | Use                                     |
+| ---------- | ---- | -------- | ------- | --------------------------------------- |
+| `HERO`     | 36   | light    | primary | One figure a page is about.             |
+| `TITLE`    | 28   | semibold | primary | A page or subpage name.                 |
+| `HEADING`  | 18   | semibold | primary | A group title above its card.           |
+| `BODY`     | 14   | normal   | primary | Row titles and body text.               |
+| `EMPHASIS` | 14   | semibold | primary | A name or state inside body text.       |
+| `VALUE`    | 14   | normal   | muted   | Read-only value at the right of a row.  |
+| `NUMERIC`  | 14   | normal   | primary | Changing numbers, with tabular figures. |
+| `CAPTION`  | 12   | normal   | muted   | Row subtitles, descriptions and hints.  |
+| `BADGE`    | 11   | semibold | accent  | Short tags such as "New".               |
+| `OVERLINE` | 11   | semibold | muted   | Tracked small capitals above a block.   |
+| `LINK`     | 14   | medium   | accent  | Inline links and actions.               |
+
+`Ink::Danger` recolours any style for destructive text. Weights come from
+`theme::with_font`. In the gallery render semibold reads clearly heavier than
+normal in Adwaita Sans; medium is only checked by eye, so re-check it if
+`LINK` ever looks like normal text.
 
 ## Rules
 
@@ -140,6 +184,13 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   header shows a Back button and the title, and Alt+Left and the mouse Back
   button call `on_back`. The application keeps the stack; the sidebar
   selection decides which page owns it.
+- **Busy pages** call `use_page_busy(bool)` (from the prelude). While it is
+  true the header shows a small spinner beside the title, with a "Working"
+  tooltip. Never show a loading block in the page: it pushes the content down.
+- **Page motion** runs in the split view's content column, not per page. A
+  subpage slides in from the right over 160 ms and the page behind it fades;
+  a pop slides out to the right. A sidebar switch cross-fades over 120 ms.
+  Motion is off under reduced motion (`tokens.motion(ms)` returns 0).
 - Icons are Adwaita symbolic SVGs under `packages/bingux-ui/icons/` with
   the hard-coded fill removed so they recolour. Add one by copying it from
   `/usr/share/icons/Adwaita/symbolic/` and adding a variant to `Icon`.

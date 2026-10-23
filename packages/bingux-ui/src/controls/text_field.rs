@@ -31,6 +31,7 @@ pub struct TextField {
     revert_to: Option<String>,
     on_submit: EventHandler<String>,
     on_change: Option<EventHandler<String>>,
+    a11y_id: Option<AccessibilityId>,
 }
 
 /// `value` is the live draft; `on_submit` fires on Enter with the text.
@@ -50,6 +51,7 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         revert_to: None,
         on_submit: on_submit.into(),
         on_change: None,
+        a11y_id: None,
     }
 }
 
@@ -129,6 +131,12 @@ impl TextField {
         self.on_change = Some(on_change.into());
         self
     }
+
+    /// Give the field an accessibility id, so a window can focus it.
+    pub fn a11y_id(mut self, id: AccessibilityId) -> Self {
+        self.a11y_id = Some(id);
+        self
+    }
 }
 
 impl Component for TextField {
@@ -194,6 +202,9 @@ impl Component for TextField {
             input = input
                 .multiline(true)
                 .height(Size::px(CONTROL_HEIGHT * MULTILINE_ROWS));
+        }
+        if let Some(id) = self.a11y_id {
+            input = input.a11y_id(id);
         }
         if let Some(placeholder) = &self.placeholder {
             input = input.placeholder(placeholder.clone());

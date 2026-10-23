@@ -214,6 +214,23 @@ impl Component for ButtonsPage {
         let bad = use_state(|| "relative/path".to_string());
         page_column()
             .child(
+                Group::new("Menus".to_string())
+                    .description("Opens where the pointer is pressed.")
+                    .row(row("Menu").trailing(menu_button(
+                        "Actions",
+                        vec![
+                            menu_item("Cut", |_| {}),
+                            menu_item("Copy", |_| {}).icon(Icon::EditCopy),
+                            menu_item("Paste", |_| {}).disabled(),
+                            menu_separator(),
+                            menu_item("Show hidden files", |_| {}).checked(true),
+                            menu_item("Show preview", |_| {}).checked(false),
+                            menu_separator(),
+                            menu_item("Delete", |_| {}).destructive(),
+                        ],
+                    ))),
+            )
+            .child(
                 Group::new("Buttons".to_string())
                     .description("Inside a row a button is 32 px high; on its own it is 36 px.")
                     .row(row("Default").trailing(action_button("Action", |_| {}).compact()))
@@ -350,6 +367,11 @@ impl Component for FeedbackPage {
         let tokens = use_tokens();
         let mut progress = use_state(|| 0.35_f64);
         let mut notice = use_state(|| true);
+        let sheet_name = use_state(String::new);
+        let sheet_tab = use_state(|| "details".to_string());
+        let sheet_security = use_state(|| "personal".to_string());
+        let sheet_password = use_state(String::new);
+        let sheet_auto = use_state(|| true);
         let overlays = use_overlays();
         page_column()
         .child(Group::new("Skeleton".to_string()).description("Shown for a page before its data has arrived.".to_string()))
@@ -391,7 +413,27 @@ impl Component for FeedbackPage {
                 )
                 .row(
                     row("Banner").trailing(action_button("Show again", move |_| notice.set(true)).compact()),
-                ),
+                )
+                .row(
+                    row("Sheet").trailing(action_button("Open", move |_| {
+                        overlays.show_sheet(
+                            sheet(
+                                "Add a network",
+                                FormDemoBody {
+                                    name: sheet_name,
+                                    tab: sheet_tab,
+                                    security: sheet_security,
+                                    password: sheet_password,
+                                    auto_connect: sheet_auto,
+                                },
+                            )
+                            .tabs(FormDemoTabs { tab: sheet_tab })
+                            .primary("Save", move |_| overlays.close_sheet())
+                            .primary_enabled(!sheet_name.read().trim().is_empty()),
+                        )
+                    })
+                    .compact()),
+                )
         )
         .child(
             Group::new("Progress".to_string())
@@ -440,42 +482,84 @@ struct TypographyPage;
 impl Component for TypographyPage {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        page_column()
+        let ramp: [(TextStyle, &str, &str); 12] = [
+            (
+                typography::HERO,
+                "72%",
+                "Hero, 36 light. One figure a page is about.",
+            ),
+            (
+                typography::TITLE,
+                "Display settings",
+                "Title, 28 semibold. The name of a page or subpage.",
+            ),
+            (
+                typography::HEADING,
+                "Network",
+                "Group title, 18 semibold. Names a card of rows.",
+            ),
+            (
+                typography::BODY,
+                "Wi-Fi password",
+                "Row title, 14 normal, primary text.",
+            ),
+            (
+                typography::EMPHASIS,
+                "Connected to HomeNet",
+                "Emphasis, 14 semibold. A name or state in body text.",
+            ),
+            (
+                typography::VALUE,
+                "Off",
+                "Value, 14 normal, muted. Read-only text at the right of a row.",
+            ),
+            (
+                typography::NUMERIC,
+                "1,024 files",
+                "Numeric, 14 normal, tabular figures so changing digits hold still.",
+            ),
+            (
+                typography::CAPTION,
+                "Stored on this device",
+                "Subtitle and caption, 12 normal, muted.",
+            ),
+            (typography::BADGE, "New", "Badge, 11 semibold, accent."),
+            (
+                typography::OVERLINE,
+                "Advanced",
+                "Overline, 11 semibold, muted, tracked. Small capitals above a block.",
+            ),
+            (typography::LINK, "Learn more", "Link, 14 medium, accent."),
+            (
+                typography::BODY.in_ink(Ink::Danger),
+                "Remove device",
+                "Danger, 14 normal. Errors and destructive text.",
+            ),
+        ];
+        let mut column = page_column()
             .padding((0.0, GUTTER))
             .child(
-                label()
-                    .text("Hero title, 24 bold")
-                    .font_size(TEXT_XL)
-                    .font_weight(FontWeight::SEMI_BOLD),
+                Group::new("Network".to_string())
+                    .description("Group description, 12 muted, under the group title.")
+                    .row(
+                        row("Wi-Fi")
+                            .subtitle("Connected to HomeNet")
+                            .trailing(typography::VALUE.label(&tokens, "On")),
+                    )
+                    .row(row("Notifications").badge("New"))
+                    .row(row("Night light").trailing(typography::VALUE.label(&tokens, "Off"))),
             )
-            .child(heading("Heading, 16 semibold"))
-            .child(section_label("Section label, 13 semibold"))
-            .child(label().text("Body, 14").font_size(TEXT_MD))
-            .child(caption("Caption, 12 muted"))
-            .child(
-                label()
-                    .text("Accent")
-                    .font_size(TEXT_MD)
-                    .color(tokens.accent),
-            )
-            .child(
-                label()
-                    .text("Danger")
-                    .font_size(TEXT_MD)
-                    .color(tokens.danger),
-            )
-            .child(
-                label()
-                    .text("Success")
-                    .font_size(TEXT_MD)
-                    .color(tokens.success),
-            )
-            .child(
-                label()
-                    .text("Warning")
-                    .font_size(TEXT_MD)
-                    .color(tokens.warning),
-            )
+            .child(status(Status::Info("Up to date".to_string())));
+        for (style, sample, note) in ramp {
+            column = column.child(
+                rect()
+                    .width(Size::fill())
+                    .spacing(S1)
+                    .child(style.label(&tokens, sample))
+                    .child(caption(note)),
+            );
+        }
+        column
     }
 }
 
@@ -526,5 +610,73 @@ impl Component for IconsPage {
                         )
                     })),
             )
+    }
+}
+
+/// The tab row of the gallery sheet. It reads its selection while rendering.
+#[derive(Clone, PartialEq)]
+pub struct FormDemoTabs {
+    pub tab: State<String>,
+}
+
+impl Component for FormDemoTabs {
+    fn render(&self) -> impl IntoElement {
+        let mut tab = self.tab;
+        tabs(
+            vec![
+                ("details".to_string(), "Details".to_string()),
+                ("security".to_string(), "Security".to_string()),
+            ],
+            tab.read().as_str(),
+            move |key: String| tab.set(key),
+        )
+    }
+}
+
+/// The body of the gallery sheet. Each tab shows its own form rows.
+#[derive(Clone, PartialEq)]
+pub struct FormDemoBody {
+    pub name: State<String>,
+    pub tab: State<String>,
+    pub security: State<String>,
+    pub password: State<String>,
+    pub auto_connect: State<bool>,
+}
+
+impl Component for FormDemoBody {
+    fn render(&self) -> impl IntoElement {
+        let tab = self.tab;
+        let mut security = self.security;
+        let mut auto_connect = self.auto_connect;
+        if tab.read().as_str() == "security" {
+            rect()
+                .spacing(S3)
+                .child(form_row(
+                    "Security",
+                    dropdown(
+                        vec![
+                            ("personal".to_string(), "Personal password".to_string()),
+                            ("open".to_string(), "Open, no password".to_string()),
+                        ],
+                        security.read().clone(),
+                        move |key: String| security.set(key),
+                    ),
+                ))
+                .child(form_row(
+                    "Password",
+                    text_field(self.password, |_| {}).password(),
+                ))
+        } else {
+            rect()
+                .spacing(S3)
+                .child(form_row(
+                    "Network name",
+                    text_field(self.name, |_| {}).placeholder("Network name"),
+                ))
+                .child(form_row(
+                    "Connect automatically",
+                    checkbox(auto_connect(), move |next: bool| auto_connect.set(next)),
+                ))
+        }
     }
 }

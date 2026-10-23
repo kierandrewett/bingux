@@ -21,6 +21,8 @@ const FOCUS_RING: f32 = THUMB + 2.0;
 const DISABLED_OPACITY: f32 = 0.45;
 const SCALE_MS: u64 = 120;
 const PERCENT: f64 = 100.0;
+/// Page Up and Page Down move the slider this many percent.
+const PAGE_STEP: f64 = 10.0;
 
 /// Every part of the slider is placed from this one line, the middle of the
 /// hit row, so the track, the fill and the thumb share one centre whatever
@@ -152,6 +154,8 @@ impl Component for Slider {
                     Key::Named(NamedKey::ArrowRight) | Key::Named(NamedKey::ArrowUp) => delta,
                     Key::Named(NamedKey::Home) => -value,
                     Key::Named(NamedKey::End) => PERCENT - value,
+                    Key::Named(NamedKey::PageUp) => PAGE_STEP,
+                    Key::Named(NamedKey::PageDown) => -PAGE_STEP,
                     _ => return,
                 };
                 on_moved.call(snap((value + delta).clamp(0.0, PERCENT)));

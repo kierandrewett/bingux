@@ -16,6 +16,7 @@ use crate::controls::text_field::text_field;
 use crate::icons::{self, Icon};
 use crate::scale::*;
 use crate::surface::{focus_border, provide_enabled, surface_color, use_tokens};
+use crate::typography::{BADGE, BODY, CAPTION, Ink, VALUE};
 
 /// The widest a read-only value gets before it is cut with an ellipsis.
 const VALUE_MAX_WIDTH: f32 = 340.0;
@@ -29,6 +30,7 @@ pub struct Row {
     trailing: Option<Element>,
     leading: Option<Icon>,
     leading_app: Option<String>,
+    leading_signal: Option<(u8, bool)>,
     on_press: Option<EventHandler<()>>,
     enabled: bool,
     navigates: bool,
@@ -44,6 +46,7 @@ pub fn row(title: impl Into<String>) -> Row {
         trailing: None,
         leading: None,
         leading_app: None,
+        leading_signal: None,
         on_press: None,
         enabled: true,
         navigates: false,
@@ -82,6 +85,12 @@ impl Row {
     }
 
     /// A full-colour application icon, by icon name, in place of a glyph.
+    /// Four signal bars at the start, `level` 0..=4.
+    pub fn leading_signal(mut self, level: u8, secured: bool) -> Self {
+        self.leading_signal = Some((level, secured));
+        self
+    }
+
     pub fn leading_app(mut self, icon_name: impl Into<String>) -> Self {
         self.leading_app = Some(icon_name.into());
         self
@@ -140,10 +149,8 @@ struct ValueText {
 impl Component for ValueText {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        label()
-            .text(self.text.clone())
-            .color(tokens.muted)
-            .font_size(TEXT_MD)
+        VALUE
+            .label(&tokens, self.text.clone())
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis)
             .max_width(Size::px(VALUE_MAX_WIDTH))
@@ -171,12 +178,12 @@ impl Component for Row {
             interactive && pressing(),
             self.selected,
         );
-        let text_color = if !self.enabled {
-            tokens.muted
+        let ink = if !self.enabled {
+            Ink::Muted
         } else if self.destructive {
-            tokens.danger
+            Ink::Danger
         } else {
-            tokens.text
+            Ink::Text
         };
         let icon_color = if self.selected {
             tokens.accent
@@ -184,10 +191,9 @@ impl Component for Row {
             tokens.muted
         };
 
-        let title = label()
-            .text(self.title.clone())
-            .color(text_color)
-            .font_size(TEXT_MD)
+        let title = BODY
+            .in_ink(ink)
+            .label(&tokens, self.title.clone())
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis);
         let title_line: Element = match &self.badge {
@@ -204,14 +210,7 @@ impl Component for Row {
                         .corner_radius(RADIUS)
                         .background(tokens.accent.with_af32(0.18))
                         .center()
-                        .child(
-                            label()
-                                .text(badge.clone())
-                                .color(tokens.accent)
-                                .font_size(TEXT_XS)
-                                .font_weight(FontWeight::SEMI_BOLD)
-                                .max_lines(1),
-                        ),
+                        .child(BADGE.label(&tokens, badge.clone()).max_lines(1)),
                 )
                 .into(),
         };
@@ -224,10 +223,8 @@ impl Component for Row {
             .spacing(S0)
             .child(title_line)
             .maybe_child(self.subtitle.as_ref().map(|subtitle| {
-                label()
-                    .text(subtitle.clone())
-                    .color(tokens.muted)
-                    .font_size(TEXT_SM)
+                CAPTION
+                    .label(&tokens, subtitle.clone())
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis)
             }));
@@ -269,6 +266,10 @@ impl Component for Row {
             .maybe_child(
                 self.leading
                     .map(|leading| icons::icon(leading, ICON_LG, icon_color)),
+            )
+            .maybe_child(
+                self.leading_signal
+                    .map(|(level, secured)| crate::controls::signal_bars(level, secured)),
             )
             .maybe_child(
                 self.leading_app
@@ -354,12 +355,10 @@ struct PropertyValue {
 impl Component for PropertyValue {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        paragraph()
+        VALUE
+            .paragraph(&tokens, self.text.clone())
             .width(Size::percent(55.0))
-            .color(tokens.muted)
-            .font_size(TEXT_MD)
             .text_align(TextAlign::End)
-            .child(self.text.clone())
     }
 }
 
@@ -578,10 +577,11 @@ impl Component for ChoiceList {
             )
             .child(list)
             .maybe_child((hidden > 0).then(|| {
-                label()
-                    .text(format!("{hidden} more. Keep typing to narrow the list."))
-                    .color(tokens.muted)
-                    .font_size(TEXT_SM)
+                CAPTION
+                    .label(
+                        &tokens,
+                        format!("{hidden} more. Keep typing to narrow the list."),
+                    )
                     .margin((0.0, GUTTER))
             }))
     }

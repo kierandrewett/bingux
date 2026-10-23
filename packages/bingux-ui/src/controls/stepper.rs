@@ -7,6 +7,9 @@ use crate::icons::{self, Icon};
 use crate::scale::*;
 use crate::surface::{focus_border, surface_color, use_enabled, use_tokens};
 
+/// Page Up and Page Down move the stepper this many steps.
+const PAGE_STEPS: i64 = 10;
+
 /// An integer stepper bounded by `min..=max`, moving by `step`.
 #[derive(PartialEq)]
 pub struct Stepper {
@@ -91,6 +94,16 @@ impl Component for Stepper {
                     Key::Named(NamedKey::ArrowUp) | Key::Named(NamedKey::ArrowRight) => {
                         if can_increment {
                             increment()
+                        }
+                    }
+                    Key::Named(NamedKey::PageDown) => {
+                        if can_decrement {
+                            on_change.call((value - step * PAGE_STEPS).max(min))
+                        }
+                    }
+                    Key::Named(NamedKey::PageUp) => {
+                        if can_increment {
+                            on_change.call((value + step * PAGE_STEPS).min(max))
                         }
                     }
                     Key::Named(NamedKey::Home) => on_change.call(min),

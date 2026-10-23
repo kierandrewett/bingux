@@ -13,6 +13,7 @@ use crate::layout::page_column;
 use crate::scale::*;
 use crate::surface::{over, use_tokens};
 use crate::theme::Tokens;
+use crate::typography::{self, BODY, CAPTION, HEADING, Ink, TITLE};
 
 /// A form's action row: an optional muted note at the left and the action
 /// at the right, on the row height and the gutter. Put it inside a group
@@ -28,6 +29,41 @@ pub fn action_row(note: Option<&str>, action: impl IntoElement) -> Element {
         .child(rect().width(Size::flex(1.0)).maybe_child(note.map(caption)))
         .child(action)
         .into()
+}
+
+/// A form row for a sheet or page: the label at the left and a control at the
+/// right, on the row height and the gutter. Put rows in a [`Group`].
+pub fn form_row(label: impl Into<String>, control: impl Into<Element>) -> Element {
+    FormRow {
+        label: label.into(),
+        control: control.into(),
+    }
+    .into()
+}
+
+#[derive(PartialEq)]
+struct FormRow {
+    label: String,
+    control: Element,
+}
+
+impl Component for FormRow {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        rect()
+            .width(Size::fill())
+            .height(Size::px(ROW_HEIGHT))
+            .padding((0.0, GUTTER))
+            .direction(Direction::Horizontal)
+            .cross_align(Alignment::Center)
+            .content(Content::Flex)
+            .child(
+                rect()
+                    .width(Size::flex(1.0))
+                    .child(BODY.label(&tokens, self.label.clone())),
+            )
+            .child(self.control.clone())
+    }
 }
 
 /// A short muted explanation under a title or group.
@@ -50,12 +86,10 @@ struct CenteredCaption {
 impl Component for CenteredCaption {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        paragraph()
+        CAPTION
+            .paragraph(&tokens, self.text.clone())
             .width(Size::fill())
             .text_align(TextAlign::Center)
-            .color(tokens.muted)
-            .font_size(TEXT_SM)
-            .child(self.text.clone())
     }
 }
 
@@ -67,10 +101,7 @@ struct CaptionText {
 impl Component for CaptionText {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        paragraph()
-            .color(tokens.muted)
-            .font_size(TEXT_SM)
-            .child(self.text.clone())
+        CAPTION.paragraph(&tokens, self.text.clone())
     }
 }
 
@@ -186,8 +217,8 @@ fn card_rows(tokens: &Tokens, rows: Vec<Element>) -> Vec<Element> {
     children
 }
 
-/// A group name: small and muted, as the section titles in
-/// `ControlCentreDetails.qml`, aligned with the row text.
+/// A group name: a heading above a card, larger and heavier than the row
+/// text it introduces.
 pub fn section_label(text: impl Into<String>) -> Element {
     let text = text.into();
     SectionLabel { text }.into()
@@ -201,11 +232,8 @@ struct SectionLabel {
 impl Component for SectionLabel {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        label()
-            .text(self.text.clone())
-            .color(tokens.muted)
-            .font_size(TEXT_SM)
-            .font_weight(FontWeight::MEDIUM)
+        HEADING
+            .label(&tokens, self.text.clone())
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis)
     }
@@ -245,12 +273,13 @@ impl StatusBlock {
 impl Component for StatusBlock {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let (text, color, glyph) = match &self.status {
-            Status::Loading(text) => (text.clone(), tokens.muted, None),
-            Status::Empty(text) => (text.clone(), tokens.muted, None),
-            Status::Error(text) => (text.clone(), tokens.danger, Some(Icon::DialogError)),
-            Status::Info(text) => (text.clone(), tokens.text, None),
+        let (text, ink, glyph) = match &self.status {
+            Status::Loading(text) => (text.clone(), Ink::Muted, None),
+            Status::Empty(text) => (text.clone(), Ink::Muted, None),
+            Status::Error(text) => (text.clone(), Ink::Danger, Some(Icon::DialogError)),
+            Status::Info(text) => (text.clone(), Ink::Text, None),
         };
+        let color = ink.color(&tokens);
         // Only an error is tinted; it is a danger layer over the card.
         let background = if matches!(self.status, Status::Error(_)) {
             over(tokens.danger.with_af32(0.12), tokens.card)
@@ -276,11 +305,9 @@ impl Component for StatusBlock {
             )
             .maybe_child(glyph.map(|glyph| icons::icon(glyph, ICON_LG, color)))
             .child(
-                paragraph()
-                    .width(Size::flex(1.0))
-                    .color(color)
-                    .font_size(TEXT_MD)
-                    .child(text),
+                BODY.in_ink(ink)
+                    .paragraph(&tokens, text)
+                    .width(Size::flex(1.0)),
             )
             .maybe_child(self.action.as_ref().map(|(label, on_press)| {
                 let on_press = on_press.clone();
@@ -346,12 +373,7 @@ impl Component for Skeleton {
     }
 }
 
-/// A heading-sized label for in-page headers such as a details view.
+/// A title for in-page headers such as a details view.
 pub fn heading(text: impl Into<String>) -> Element {
-    let text = text.into();
-    label()
-        .text(text)
-        .font_size(TEXT_LG)
-        .font_weight(FontWeight::SEMI_BOLD)
-        .into()
+    typography::styled_label(TITLE, text)
 }
