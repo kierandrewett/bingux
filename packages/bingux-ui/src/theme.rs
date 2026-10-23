@@ -14,11 +14,12 @@ const DEFAULT_FONT_FAMILY: &str = "Adwaita Sans";
 pub const HEADER_HEIGHT: f32 = 48.0;
 /// Sidebar width.
 pub const SIDEBAR_WIDTH: f32 = 260.0;
-/// Width below which the sidebar becomes an overlay.
-pub const SIDEBAR_OVERLAY_BELOW: f32 = 740.0;
+/// Width below which the window is laid out as a phone: the list of pages is
+/// a screen of its own and the window buttons are hidden.
+pub const NARROW_BELOW: f32 = 740.0;
 /// Window default and minimum size.
 pub const WINDOW_SIZE: (f32, f32) = (1000.0, 740.0);
-pub const WINDOW_MIN_SIZE: (f32, f32) = (520.0, 420.0);
+pub const WINDOW_MIN_SIZE: (f32, f32) = (360.0, 420.0);
 
 /// Window-control circle diameter and button size.
 pub const WINDOW_CONTROL_CIRCLE: f32 = 24.0;

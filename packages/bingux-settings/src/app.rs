@@ -25,11 +25,13 @@ impl NavItem for PageId {
 }
 
 /// Window root. `initial` is the page named on the command line, and
-/// `subpage` the subpage named after it, if any.
+/// `subpage` the subpage named after it, if any. With `list_first`, a narrow
+/// window opens on the list of pages: no page was asked for.
 #[derive(PartialEq)]
 pub struct App {
     pub initial: PageId,
     pub subpage: Option<Route>,
+    pub list_first: bool,
 }
 
 impl Component for App {
@@ -53,7 +55,8 @@ impl Component for App {
             }
         };
         let mut split = NavigationSplitView::new("Settings", PageId::ALL.to_vec(), page, content)
-            .search_hits(crate::settings_index::hits());
+            .search_hits(crate::settings_index::hits())
+            .start_on_list(self.list_first);
         if let Some(route) = &top {
             split = split.subpage(route.title(), move |_| navigator.pop());
         }

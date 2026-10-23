@@ -69,6 +69,7 @@ fn main() {
                 WindowConfig::new(move || app::App {
                     initial,
                     subpage: subpage.clone(),
+                    list_first: panel.is_empty(),
                 })
                 .with_title("Settings")
                 .with_app_id("bingux-settings")
@@ -125,6 +126,7 @@ fn snapshot_pages(dir: &str, only: &[String]) {
                         .child(app::App {
                             initial: page,
                             subpage: None,
+                            list_first: std::env::var_os("BINGUX_SETTINGS_SNAPSHOT_LIST").is_some(),
                         }),
                 )
             },

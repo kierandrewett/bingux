@@ -4,8 +4,9 @@
 //! muted icon and a normal-weight title; the selected row carries the accent
 //! selection layer, and hover and press are token layers drawn over it.
 //!
-//! Below [`SIDEBAR_OVERLAY_BELOW`] the sidebar becomes an overlay opened
-//! from a button above the page, over a scrim.
+//! Below [`NARROW_BELOW`] the window is a phone: the list of pages is a
+//! screen of its own, a page opens over it with a Back button in the header,
+//! and the window buttons are hidden.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -19,9 +20,7 @@ use crate::icons::{self, Icon};
 use crate::scale::*;
 use crate::shell::window::{HeaderBar, WindowControls};
 use crate::surface::{focus_border, is_activation_key, over, use_tokens};
-use crate::theme::{
-    HEADER_HEIGHT, SIDEBAR_OVERLAY_BELOW, SIDEBAR_WIDTH, Tokens, WINDOW_CONTROL_BUTTON,
-};
+use crate::theme::{HEADER_HEIGHT, NARROW_BELOW, SIDEBAR_WIDTH, Tokens, WINDOW_CONTROL_BUTTON};
 
 /// The widest the page column gets; it is centred in the content frame.
 const PAGE_WIDTH: f32 = 600.0;
@@ -52,6 +51,8 @@ pub struct NavigationSplitView<T: NavItem> {
     pub subpage: Option<Subpage>,
     /// Settings the sidebar search can find, after the pages.
     pub hits: Vec<SearchHit<T>>,
+    /// See [`NavigationSplitView::start_on_list`].
+    pub start_on_list: bool,
 }
 
 /// An open subpage. The header shows a Back button and the title in place of
@@ -266,6 +267,7 @@ impl<T: NavItem> NavigationSplitView<T> {
             page_width: PAGE_WIDTH,
             subpage: None,
             hits: Vec::new(),
+            start_on_list: false,
         }
     }
 
@@ -293,6 +295,13 @@ impl<T: NavItem> NavigationSplitView<T> {
         self.hits = hits;
         self
     }
+
+    /// On a narrow window, open on the list of pages instead of the selected
+    /// page. Use it when the user did not ask for a page.
+    pub fn start_on_list(mut self, start: bool) -> Self {
+        self.start_on_list = start;
+        self
+    }
 }
 
 impl<T: NavItem> Component for NavigationSplitView<T> {
@@ -304,24 +313,14 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let busy_pages = use_provide_context(|| BusyPages(State::create(Vec::new())));
         let page_headers = use_provide_context(|| PageHeaders(State::create(Vec::new())));
         let busy = !busy_pages.0.read().is_empty();
-        let mut sidebar_open = use_state(|| false);
+        // On a narrow window this is true while the list of pages is the screen.
         let width = Platform::get().current_window().root_size.read().width;
-        let narrow = width < SIDEBAR_OVERLAY_BELOW;
+        let narrow = width < NARROW_BELOW;
+        let start_on_list = self.start_on_list;
+        let mut sidebar_open = use_state(move || narrow && start_on_list);
         let side = if narrow { S4 } else { S6 };
         let selected = self.selected;
-        // The overlay sidebar slides in over 160 ms while the scrim fades.
-        let motion = tokens.motion(160);
-        let overlay_anim = use_animation_transition(
-            if narrow && sidebar_open() { 1.0 } else { 0.0 },
-            move |from, to| {
-                AnimNum::new(from, to)
-                    .time(motion)
-                    .function(Function::Expo)
-                    .ease(Ease::Out)
-            },
-        );
-        let overlay_progress = overlay_anim.get().value();
-        let sidebar = |overlay: bool| Sidebar {
+        let sidebar = |full_page: bool| Sidebar {
             items: self.items.clone(),
             hits: self.hits.clone(),
             selected,
@@ -329,8 +328,10 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             highlight,
             search_id,
             sidebar_open,
-            overlay,
+            full_page,
+            window_width: width,
         };
+        let show_list = narrow && sidebar_open();
         // The header carries the window buttons and the page's own header: its
         // title, a subtitle under the title, and an action at the right. It is
         // the drag region.
@@ -340,32 +341,46 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             .last()
             .map(|(_, header)| header.clone())
             .unwrap_or_default();
-        // With the sidebar hidden, a button at the left of the header opens it.
-        let show_pages = narrow.then(|| {
-            icon_button(Icon::SidebarShow, move |_| {
-                sidebar_open.set(!sidebar_open())
-            })
-            .size(WINDOW_CONTROL_BUTTON)
-            .tooltip("Show pages")
-        });
-        let header = match &self.subpage {
-            None => HeaderBar::new(selected().title())
-                .background(tokens.bg)
-                .busy(busy),
-            Some(subpage) => {
-                let on_back = subpage.on_back.clone();
-                HeaderBar::new(subpage.title.clone()).busy(busy).leading(
-                    icon_button(Icon::GoPrevious, move |_| on_back.call(()))
-                        .size(WINDOW_CONTROL_BUTTON)
-                        .tooltip("Back"),
-                )
+        // On a narrow window a page goes back to the list of pages.
+        let to_list: EventHandler<()> = (move |_: ()| {
+            let mut sidebar_open = sidebar_open;
+            sidebar_open.set(true);
+        })
+        .into();
+        let back = match &self.subpage {
+            Some(subpage) => Some(subpage.on_back.clone()),
+            None => (narrow && !show_list).then(|| to_list.clone()),
+        };
+        let header = if show_list {
+            HeaderBar::new(self.app_title.clone()).background(tokens.bg)
+        } else {
+            let title = match &self.subpage {
+                Some(subpage) => subpage.title.clone(),
+                None => selected().title().to_string(),
+            };
+            let header = HeaderBar::new(title).busy(busy);
+            let header = match &self.subpage {
+                Some(_) => header,
+                None => header.background(tokens.bg),
+            };
+            match &back {
+                Some(on_back) => {
+                    let on_back = on_back.clone();
+                    header.leading(
+                        icon_button(Icon::GoPrevious, move |_| on_back.call(()))
+                            .size(WINDOW_CONTROL_BUTTON)
+                            .tooltip("Back"),
+                    )
+                }
+                None => header,
             }
         };
-        let header = match show_pages {
-            Some(toggle) => header.leading(toggle),
-            None => header,
-        }
-        .subtitle(page_header.subtitle.clone());
+        let page_header = if show_list {
+            PageHeader::default()
+        } else {
+            page_header
+        };
+        let header = header.subtitle(page_header.subtitle.clone());
         let header = match page_header.action {
             Some(PageAction {
                 on_press,
@@ -376,10 +391,15 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             })),
             Some(action) => header.trailing(action_button(action.label, action.on_press)),
             None => header,
-        }
-        .trailing(WindowControls);
-        // Alt+Left and the mouse Back button return from a subpage.
-        let back_key = self.subpage.as_ref().map(|subpage| subpage.on_back.clone());
+        };
+        // A phone has no window buttons.
+        let header = if narrow {
+            header
+        } else {
+            header.trailing(WindowControls)
+        };
+        // Alt+Left and the mouse Back button go back one step.
+        let back_key = back;
         let back_pointer = back_key.clone();
         // Page changes move the content. A subpage slides in from the right, a
         // pop slides it out to the right, and a sidebar switch cross-fades. The
@@ -536,32 +556,11 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                     .width(Size::flex(1.0))
                     .height(Size::fill())
                     .child(header)
-                    .child(content_area)
-            )
-            .maybe_child(
-                (narrow && (sidebar_open() || overlay_progress > 0.0)).then(|| {
-                    rect()
-                        .position(Position::new_absolute().top(0.0).left(0.0))
-                        .width(Size::fill())
-                        .height(Size::fill())
-                        .direction(Direction::Horizontal)
-                        .content(Content::Flex)
-                        .layer(Layer::Overlay)
-                        .child(
-                            rect()
-                                .width(Size::px(SIDEBAR_WIDTH))
-                                .height(Size::fill())
-                                .offset_x(-SIDEBAR_WIDTH * (1.0 - overlay_progress))
-                                .child(sidebar(true)),
-                        )
-                        .child(
-                            rect()
-                                .width(Size::flex(1.0))
-                                .height(Size::fill())
-                                .background(Color::BLACK.with_af32(0.4 * overlay_progress))
-                                .on_press(move |_: Event<PressEventData>| sidebar_open.set(false)),
-                        )
-                }),
+                    .child(if show_list {
+                        Element::from(sidebar(true))
+                    } else {
+                        Element::from(content_area)
+                    }),
             )
     }
 }
@@ -575,24 +574,27 @@ struct Sidebar<T: NavItem> {
     highlight: State<usize>,
     search_id: AccessibilityId,
     sidebar_open: State<bool>,
-    overlay: bool,
+    /// Drawn as the whole window below the header, not as a column.
+    full_page: bool,
+    /// The window width, for the search field of a full page.
+    window_width: f32,
 }
 
 /// The most settings the sidebar search lists.
 const MAX_HITS: usize = 20;
 
-/// Makes `target` the selected page and clears the search. An overlay sidebar
-/// closes too.
+/// Makes `target` the selected page and clears the search. On a narrow window
+/// the page list closes too.
 fn open_result<T: NavItem>(
     mut selected: State<T>,
     mut query: State<String>,
     mut sidebar_open: State<bool>,
-    overlay: bool,
+    full_page: bool,
     target: T,
 ) {
     selected.set(target);
     query.set(String::new());
-    if overlay {
+    if full_page {
         sidebar_open.set(false);
     }
 }
@@ -616,7 +618,7 @@ struct HitRow<T: NavItem> {
     selected: State<T>,
     query: State<String>,
     sidebar_open: State<bool>,
-    overlay: bool,
+    full_page: bool,
 }
 
 impl<T: NavItem> Component for HitRow<T> {
@@ -629,7 +631,7 @@ impl<T: NavItem> Component for HitRow<T> {
         let selected = self.selected;
         let query = self.query;
         let sidebar_open = self.sidebar_open;
-        let overlay = self.overlay;
+        let full_page = self.full_page;
         let background = item_fill(&tokens, hovering() || self.highlighted, false, false);
         rect()
             .a11y_id(a11y_id)
@@ -644,7 +646,7 @@ impl<T: NavItem> Component for HitRow<T> {
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| hovering.set(false))
             .on_press(move |_: Event<PressEventData>| {
-                open_result(selected, query, sidebar_open, overlay, target)
+                open_result(selected, query, sidebar_open, full_page, target)
             })
             .child(
                 label()
@@ -672,7 +674,7 @@ impl<T: NavItem> Component for Sidebar<T> {
         let query = self.query;
         let mut highlight = self.highlight;
         let sidebar_open = self.sidebar_open;
-        let overlay = self.overlay;
+        let full_page = self.full_page;
         let needle = query.read().trim().to_lowercase();
         let typing = !needle.is_empty();
         let visible: Vec<T> = self
@@ -719,7 +721,7 @@ impl<T: NavItem> Component for Sidebar<T> {
                 siblings: visible.clone(),
                 selected,
                 sidebar_open,
-                overlay,
+                full_page,
                 highlighted: typing && index == current,
             }));
         }
@@ -733,47 +735,38 @@ impl<T: NavItem> Component for Sidebar<T> {
                 selected,
                 query,
                 sidebar_open,
-                overlay,
+                full_page,
             }));
         }
 
-        let close = overlay.then(|| {
-            icon_button(Icon::SidebarShow, move |_| {
-                let mut sidebar_open = sidebar_open;
-                sidebar_open.set(false)
-            })
-            .size(WINDOW_CONTROL_BUTTON)
-            .tooltip("Hide pages")
-        });
-        let field_width = SIDEBAR_WIDTH
-            - 2.0 * S2
-            - if overlay {
-                WINDOW_CONTROL_BUTTON + S2
-            } else {
-                0.0
-            };
+        let field_width = if full_page {
+            self.window_width - 2.0 * S2
+        } else {
+            SIDEBAR_WIDTH - 2.0 * S2
+        };
         rect()
-            .width(Size::px(SIDEBAR_WIDTH))
-            .height(Size::fill())
-            .background(tokens.sidebar)
-            .border(
-                Border::new()
-                    .width(BorderWidth {
-                        top: 0.0,
-                        right: 1.0,
-                        bottom: 0.0,
-                        left: 0.0,
-                    })
-                    .alignment(BorderAlignment::Inner)
-                    .fill(tokens.separator),
-            )
-            .maybe(overlay, |sidebar| {
-                sidebar.shadow(
-                    Shadow::new()
-                        .position(ShadowPosition::Normal)
-                        .y(8.0)
-                        .blur(24.0)
-                        .color(Color::BLACK.with_af32(0.45)),
+            .width(if full_page {
+                Size::fill()
+            } else {
+                Size::px(SIDEBAR_WIDTH)
+            })
+            .height(if full_page {
+                Size::flex(1.0)
+            } else {
+                Size::fill()
+            })
+            .background(if full_page { tokens.bg } else { tokens.sidebar })
+            .maybe(!full_page, |sidebar| {
+                sidebar.border(
+                    Border::new()
+                        .width(BorderWidth {
+                            top: 0.0,
+                            right: 1.0,
+                            bottom: 0.0,
+                            left: 0.0,
+                        })
+                        .alignment(BorderAlignment::Inner)
+                        .fill(tokens.separator),
                 )
             })
             .on_key_down(move |event: Event<KeyboardEventData>| {
@@ -793,7 +786,7 @@ impl<T: NavItem> Component for Sidebar<T> {
                     Key::Named(NamedKey::Enter) => {
                         if let Some(target) = targets.get(current).copied() {
                             event.stop_propagation();
-                            open_result(selected, query, sidebar_open, overlay, target);
+                            open_result(selected, query, sidebar_open, full_page, target);
                         }
                     }
                     _ => {}
@@ -804,7 +797,6 @@ impl<T: NavItem> Component for Sidebar<T> {
                 self.highlight,
                 self.search_id,
                 field_width,
-                close,
             ))
             .child(
                 rect().width(Size::fill()).height(Size::flex(1.0)).child(
@@ -840,26 +832,18 @@ impl Component for SearchField {
     fn render(&self) -> impl IntoElement {
         let highlight = use_state(|| 0usize);
         let search_id = use_a11y();
-        search_band(
-            self.query,
-            highlight,
-            search_id,
-            SIDEBAR_WIDTH - 2.0 * S2,
-            None::<Element>,
-        )
+        search_band(self.query, highlight, search_id, SIDEBAR_WIDTH - 2.0 * S2)
     }
 }
 
 /// The top band of the sidebar. It is HEADER_HEIGHT tall, like the page
-/// header, so the search field sits on the window-control line. The overlay
-/// puts its close button to the right of the field. Typing resets the
-/// highlight to the first result.
+/// header, so the search field sits on the window-control line. Typing resets
+/// the highlight to the first result.
 fn search_band(
     query: State<String>,
     highlight: State<usize>,
     search_id: AccessibilityId,
     field_width: f32,
-    close: Option<impl IntoElement>,
 ) -> impl IntoElement {
     let mut highlight = highlight;
     rect()
@@ -877,7 +861,6 @@ fn search_band(
             .well()
             .width(field_width),
         )
-        .maybe_child(close)
 }
 
 #[derive(PartialEq)]
@@ -887,7 +870,7 @@ struct NavEntry<T: NavItem> {
     siblings: Vec<T>,
     selected: State<T>,
     sidebar_open: State<bool>,
-    overlay: bool,
+    full_page: bool,
     /// Drawn with the hover layer: the keyboard highlight of the search.
     highlighted: bool,
 }
@@ -903,7 +886,7 @@ impl<T: NavItem> Component for NavEntry<T> {
         let siblings = self.siblings.clone();
         let mut selected = self.selected;
         let mut sidebar_open = self.sidebar_open;
-        let overlay = self.overlay;
+        let full_page = self.full_page;
         let is_selected = selected() == item;
         let background = item_fill(
             &tokens,
@@ -939,7 +922,7 @@ impl<T: NavItem> Component for NavEntry<T> {
             .on_global_pointer_up(move |_| pressing.set_if_modified(false))
             .on_press(move |_: Event<PressEventData>| {
                 selected.set(item);
-                if overlay {
+                if full_page {
                     sidebar_open.set(false);
                 }
                 a11y_id.request_focus();

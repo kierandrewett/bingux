@@ -3,7 +3,11 @@
 `bingux-settings` is the Settings application for the Bingux desktop. It is a
 native Wayland window (Rust, Freya) with the shell's look: a header bar,
 a page list on the left and boxed groups of rows on the right. Below 740 px of
-width the page list becomes an overlay opened from the header button.
+width the window is laid out as a phone. The page list is a screen of its own.
+Choosing a page opens it, and the Back button in the header returns to the
+list. A subpage's Back button returns to its page. The window buttons are
+hidden. Opening Settings with no page name starts on the list; opening it
+with a page name starts on that page.
 
 ## Open it
 
@@ -227,5 +231,6 @@ points after the page loads and before the capture. This drives a real
 write; for example clicking the Repeat keys switch on the Keyboard page
 changes `org.gnome.desktop.peripherals.keyboard repeat`, which `gsettings
 get` then shows. Set `BINGUX_SETTINGS_SNAPSHOT_SIZE="WxH"` to capture at
-another window size, for example `600x640` for the overlay sidebar or
+another window size, for example `390x780` for the phone layout (set
+`BINGUX_SETTINGS_SNAPSHOT_LIST=1` to start on the list of pages) or
 `1000x1500` to see a whole long page.
