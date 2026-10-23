@@ -8,7 +8,7 @@ InstallerPage {
 
     title: "Ready to install"
     bodyHeight: 600
-    primaryText: InstallerState.storageMode === "erase" ? "Erase and install" : "Install"
+    primaryText: InstallerState.storageMode === "erase" ? "Erase and install" : page.manualFormats().length > 0 ? "Format and install" : "Install"
     primaryEnabled: confirmedDisk !== "" && confirmedDisk === InstallerState.diskPath
 
     // InstallerClient, which starts the install.
@@ -30,15 +30,51 @@ InstallerPage {
             return "Resize " + InstallerState.shrinkPartition + " from " + from + " to "
                 + Schema.formatBytes(InstallerState.shrinkBytes) + " and install alongside it; its data is kept";
         }
+        if (InstallerState.storageMode === "manual")
+            return "Change the partitions on " + d.path + " as listed below";
         const other = d.other_os || [];
         return "Erase everything on " + d.path + (other.length ? " (including " + other.join(", ") + ")" : "");
     }
 
+    // Manual mode: one row per partition change, from the Partitions page list.
+    function changeRows() {
+        InstallerState.manualRevision;
+        if (InstallerState.storageMode !== "manual")
+            return [];
+        return InstallerState.manualEntries.map(e => {
+            const fs = e.role === "home" && e.action !== "reuse" ? " (" + e.fs + ")" : "";
+            const name = (Schema.ROLE_NAMES[e.role] || e.role) + fs;
+            let text;
+            if (e.action === "create")
+                text = "Create " + name + " on " + e.device + ", " + Schema.formatBytes(InstallerState.entrySizeBytes(e)) + " from the unallocated space";
+            else if (e.action === "format")
+                text = "Format " + e.device + " as " + name + "; its data is erased";
+            else
+                text = "Use " + e.device + " as " + name + " without formatting";
+            return {label: "Partition", value: text};
+        });
+    }
+
+    // Entries that format a partition: the data on them is erased.
+    function manualFormats() {
+        if (InstallerState.storageMode !== "manual")
+            return [];
+        return InstallerState.manualEntries.filter(e => e.action === "format");
+    }
+    function destructive() {
+        return InstallerState.storageMode === "erase" || manualFormats().length > 0;
+    }
+    function destructiveText() {
+        if (InstallerState.storageMode === "erase")
+            return "Installing erases " + (page.disk ? page.disk.path : "") + " completely.";
+        return "Formatting erases the data on " + manualFormats().map(e => e.device).join(", ") + ".";
+    }
+
     function swapText() {
-        switch (InstallerState.swap) {
+        switch (InstallerState.effectiveSwap()) {
         case "zram": return "zram (compressed in RAM)";
         case "file": return "Swap file of " + InstallerState.swapGiB + " GiB on the root file system";
-        case "partition": return "Swap partition of " + InstallerState.swapGiB + " GiB";
+        case "partition": return InstallerState.storageMode === "manual" ? "Swap partition (listed below)" : "Swap partition of " + InstallerState.swapGiB + " GiB";
         default: return "None";
         }
     }
@@ -48,6 +84,7 @@ InstallerPage {
         if (page.disk) {
             list.push({label: "Disk", value: page.disk.path + " (" + Schema.formatBytes(page.disk.size_bytes) + ", " + (page.disk.model || "unknown model") + ")"});
             list.push({label: "Storage", value: page.storageText()});
+            page.changeRows().forEach(row => list.push(row));
         }
         list.push({label: "File system", value: InstallerState.filesystem + (InstallerState.encryption ? ", encrypted with LUKS2" : ", not encrypted")});
         list.push({label: "Swap", value: page.swapText()});
@@ -75,8 +112,8 @@ InstallerPage {
 
         InstallerText {
             tone: "danger"
-            visible: page.disk !== null && InstallerState.storageMode === "erase"
-            text: "Installing erases " + (page.disk ? page.disk.path : "") + " completely."
+            visible: page.disk !== null && page.destructive()
+            text: page.destructiveText()
         }
         Repeater {
             model: page.rows

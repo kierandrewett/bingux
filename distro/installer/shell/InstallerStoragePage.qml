@@ -12,6 +12,7 @@ InstallerPage {
     property string passphraseConfirm: ""
     readonly property bool bios: InstallerState.firmware === "bios"
     readonly property bool encryptionOffered: InstallerState.encryptionOffered()
+    readonly property bool homeOnOwnPartition: InstallerState.storageMode === "manual" && InstallerState.manualHasRole("home")
     readonly property string passphraseError: InstallerState.encryption ? Schema.validPassphrase(InstallerState.passphrase) : ""
     readonly property string confirmError: InstallerState.encryption && passphraseConfirm !== InstallerState.passphrase
         ? "The passphrases do not match." : ""
@@ -72,36 +73,36 @@ InstallerPage {
             width: parent.width
             enabled: InstallerState.offers("swap", "none")
             text: "No swap"
-            selected: InstallerState.swap === "none"
+            selected: InstallerState.effectiveSwap() === "none"
             ticked: selected
-            onClicked: InstallerState.swap = "none"
+            onClicked: InstallerState.setSwap("none")
         }
         SessionRow {
             width: parent.width
             enabled: InstallerState.offers("swap", "zram")
             text: page.swapLabel("zram", "zram (compressed swap in RAM)")
-            selected: InstallerState.swap === "zram"
+            selected: InstallerState.effectiveSwap() === "zram"
             ticked: selected
-            onClicked: InstallerState.swap = "zram"
+            onClicked: InstallerState.setSwap("zram")
         }
         SessionRow {
             width: parent.width
             enabled: InstallerState.offers("swap", "file")
             text: page.swapLabel("file", "Swap file on the root file system")
-            selected: InstallerState.swap === "file"
+            selected: InstallerState.effectiveSwap() === "file"
             ticked: selected
-            onClicked: InstallerState.swap = "file"
+            onClicked: InstallerState.setSwap("file")
         }
         SessionRow {
             width: parent.width
-            enabled: InstallerState.offers("swap", "partition")
-            text: page.swapLabel("partition", "Swap partition")
-            selected: InstallerState.swap === "partition"
+            enabled: InstallerState.storageMode !== "manual" && InstallerState.offers("swap", "partition")
+            text: page.swapLabel("partition", InstallerState.storageMode === "manual" ? "Swap partition (set on the Partitions page)" : "Swap partition")
+            selected: InstallerState.effectiveSwap() === "partition"
             ticked: selected
-            onClicked: InstallerState.swap = "partition"
+            onClicked: InstallerState.setSwap("partition")
         }
         Row {
-            visible: InstallerState.swap === "file" || InstallerState.swap === "partition"
+            visible: InstallerState.storageMode !== "manual" && (InstallerState.swap === "file" || InstallerState.swap === "partition")
             width: parent.width
             spacing: Theme.gap
             Repeater {
@@ -119,9 +120,10 @@ InstallerPage {
             label: "Encrypt the system disk (LUKS2)"
             note: !InstallerState.firmware ? "Checking the firmware."
                 : !page.encryptionOffered ? "Encryption is not in this installer build for " + (page.bios ? "BIOS" : "UEFI") + " firmware yet."
+                : page.homeOnOwnPartition && !InstallerState.encryption ? "A separate home partition on the Partitions page cannot be encrypted. Remove it to encrypt the system."
                 : page.bios ? "You type the passphrase at every start. /boot stays unencrypted, so only the root is encrypted."
                 : "You type the passphrase at every start. Bingux cannot recover a lost passphrase."
-            enabled: page.encryptionOffered
+            enabled: page.encryptionOffered && (InstallerState.encryption || !page.homeOnOwnPartition)
             checked: InstallerState.encryption
             onToggled: value => InstallerState.encryption = value
         }

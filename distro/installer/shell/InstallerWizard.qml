@@ -99,6 +99,11 @@ KioskScreen {
             pageId: "disk"
             client: root.client
         }
+        InstallerPartitionsPage {
+            wizard: root
+            stack: stack
+            pageId: "partitions"
+        }
         InstallerStoragePage {
             wizard: root
             stack: stack

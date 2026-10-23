@@ -10,6 +10,7 @@ InstallerKeyboardPage 1.0 InstallerKeyboardPage.qml
 InstallerLog 1.0 InstallerLog.qml
 InstallerNetworkPage 1.0 InstallerNetworkPage.qml
 InstallerPage 1.0 InstallerPage.qml
+InstallerPartitionsPage 1.0 InstallerPartitionsPage.qml
 InstallerProgressPage 1.0 InstallerProgressPage.qml
 InstallerShell 1.0 InstallerShell.qml
 InstallerSlider 1.0 InstallerSlider.qml
