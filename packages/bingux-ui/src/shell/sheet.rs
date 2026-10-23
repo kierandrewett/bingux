@@ -125,9 +125,17 @@ impl Component for SheetLayer {
         let header = rect()
             .tw(
                 &tokens,
-                &[w_full(), flex_row(), items(Align::Center), p(S3)],
+                &[
+                    w_full(),
+                    flex_row(),
+                    grow_children(),
+                    items(Align::Center),
+                    p(S3),
+                ],
             )
-            .child(rect().tw(&tokens, &[flex(), flex_row()]).child(cancel))
+            // Cancel and the primary action take equal room on each side, so
+            // the title stays centred.
+            .child(rect().tw(&tokens, &[w_flex(), flex_row()]).child(cancel))
             .child(
                 SECTION
                     .in_ink(Ink::Text)
@@ -137,7 +145,7 @@ impl Component for SheetLayer {
             )
             .child(
                 rect()
-                    .tw(&tokens, &[flex(), flex_row(), justify(Align::End)])
+                    .tw(&tokens, &[w_flex(), flex_row(), justify(Align::End)])
                     .maybe_child(primary_element),
             );
 
@@ -158,6 +166,7 @@ impl Component for SheetLayer {
             .tw(
                 &tokens,
                 &[
+                    flex_col(),
                     w(Dim::Sheet),
                     rounded(Radius::Overlay),
                     bg(Paint::Popover),
@@ -166,7 +175,6 @@ impl Component for SheetLayer {
                 ],
             )
             .max_height(Size::window_percent(SHEET_MAX_HEIGHT_PERCENT))
-            .opacity(progress)
             .offset_y(-SHEET_DROP * (1.0 - progress))
             .on_press(|event: Event<PressEventData>| event.stop_propagation())
             .on_key_down(move |event: Event<KeyboardEventData>| {
@@ -208,15 +216,18 @@ impl Component for SheetLayer {
         rect()
             .position(Position::new_absolute().top(0.0).left(0.0))
             .layer(Layer::OverlayLevel(8))
-            .tw(&tokens, &[w_full(), h_full(), py(S6), items(Align::Center)])
-            // The scrim fades in under the panel; the panel keeps its own
-            // opacity.
-            .child(
-                rect()
-                    .position(Position::new_absolute().top(0.0).left(0.0))
-                    .tw(&tokens, &[w_full(), h_full(), bg(Paint::Scrim)])
-                    .opacity(progress),
+            .tw(
+                &tokens,
+                &[
+                    w_screen(),
+                    h_screen(),
+                    py(S6),
+                    items(Align::Center),
+                    bg(Paint::Scrim),
+                ],
             )
+            // The scrim and the panel fade in together.
+            .opacity(progress)
             .child(panel)
     }
 }

@@ -66,6 +66,8 @@ pub enum Extent {
     Flex,
     /// As big as the content.
     Auto,
+    /// The whole window, for an overlay layer.
+    Screen,
 }
 
 impl Extent {
@@ -75,6 +77,7 @@ impl Extent {
             Extent::Full => Size::fill(),
             Extent::Flex => Size::flex(1.0),
             Extent::Auto => Size::auto(),
+            Extent::Screen => Size::window_percent(100.0),
         }
     }
 }
@@ -231,6 +234,14 @@ pub const fn w_flex() -> Util {
 pub const fn h_flex() -> Util {
     Util::H(Extent::Flex)
 }
+/// As wide as the window, for an overlay layer (`w-screen`).
+pub const fn w_screen() -> Util {
+    Util::W(Extent::Screen)
+}
+/// As tall as the window, for an overlay layer (`h-screen`).
+pub const fn h_screen() -> Util {
+    Util::H(Extent::Screen)
+}
 pub const fn w_auto() -> Util {
     Util::W(Extent::Auto)
 }
@@ -255,7 +266,8 @@ pub const fn flex_row() -> Util {
 pub const fn flex_col() -> Util {
     Util::Col
 }
-pub const fn flex() -> Util {
+/// Children sized `w_flex()` or `h_flex()` share the room that is left.
+pub const fn grow_children() -> Util {
     Util::Flex
 }
 pub const fn wrap(space: Space) -> Util {

@@ -428,7 +428,7 @@ impl Component for AppearancePage {
                                             &tokens,
                                             &[
                                                 flex_row(),
-                                                flex(),
+                                                grow_children(),
                                                 w_full(),
                                                 max_w(Dim::PreviewRow),
                                                 gap(S4),

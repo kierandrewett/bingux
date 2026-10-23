@@ -388,7 +388,13 @@ impl Component for LevelRow {
         let heading = rect()
             .tw(
                 &tokens,
-                &[flex_row(), flex(), items(Align::Center), w_full(), gap(S2)],
+                &[
+                    flex_row(),
+                    grow_children(),
+                    items(Align::Center),
+                    w_full(),
+                    gap(S2),
+                ],
             )
             .child(
                 rect().tw(&tokens, &[w_flex()]).child(
@@ -410,7 +416,7 @@ impl Component for LevelRow {
             .tw(&tokens, ROW_STACKED)
             .tw(
                 &tokens,
-                &[flex_row(), flex(), items(Align::Center), gap(S4)],
+                &[flex_row(), grow_children(), items(Align::Center), gap(S4)],
             )
             .maybe_child(self.leading.clone())
             .child(

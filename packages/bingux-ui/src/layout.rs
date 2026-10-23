@@ -18,7 +18,7 @@ pub fn vstack(space: Space) -> Rect {
 }
 
 /// Fills the remaining space in a flex row or column. The parent needs
-/// `flex()`.
+/// `grow_children()`.
 pub fn spacer() -> Rect {
     rect().tw_layout(&[w_flex(), h_flex()])
 }

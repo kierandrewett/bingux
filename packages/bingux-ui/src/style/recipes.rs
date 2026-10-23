@@ -31,14 +31,26 @@ pub const PAGE: Recipe = &[flex_col(), w_full(), gap(S10)];
 /// The page title block over the page column: 28 px to the first group.
 pub const PAGE_BODY: Recipe = &[flex_col(), w_full(), gap(S7)];
 /// The page title and the sentence under it.
-pub const PAGE_HEAD: Recipe = &[flex_row(), flex(), items(Align::Center), w_full(), gap(S4)];
+pub const PAGE_HEAD: Recipe = &[
+    flex_row(),
+    grow_children(),
+    items(Align::Center),
+    w_full(),
+    gap(S4),
+];
 pub const PAGE_HEAD_TEXT: Recipe = &[flex_col(), w_flex(), gap(S1)];
 
 /// A group: its title block, then its cards 12 px under it.
 pub const GROUP: Recipe = &[flex_col(), w_full(), gap(S3)];
 /// A group's title block: title and description at the left, an optional
 /// action at the right.
-pub const GROUP_HEAD: Recipe = &[flex_row(), flex(), items(Align::End), w_full(), gap(S4)];
+pub const GROUP_HEAD: Recipe = &[
+    flex_row(),
+    grow_children(),
+    items(Align::End),
+    w_full(),
+    gap(S4),
+];
 pub const GROUP_HEAD_TEXT: Recipe = &[flex_col(), w_flex(), gap(S1)];
 /// Several cards in one group.
 pub const CARD_STACK: Recipe = &[flex_col(), w_full(), gap(S3)];
@@ -59,7 +71,7 @@ pub const CARD_BODY: Recipe = &[flex_col(), w_full(), p(S4), gap(S3)];
 /// A one-line row: 56 px, content 16 px from the card edge.
 pub const ROW: Recipe = &[
     flex_row(),
-    flex(),
+    grow_children(),
     items(Align::Center),
     w_full(),
     h(Dim::Row),
@@ -70,7 +82,7 @@ pub const ROW: Recipe = &[
 /// below the text.
 pub const ROW_TALL: Recipe = &[
     flex_row(),
-    flex(),
+    grow_children(),
     items(Align::Center),
     w_full(),
     h_auto(),
@@ -141,7 +153,7 @@ pub const MENU: Recipe = &[
 /// One item in a menu or dropdown list.
 pub const MENU_ITEM: Recipe = &[
     flex_row(),
-    flex(),
+    grow_children(),
     items(Align::Center),
     w_full(),
     h(Dim::MenuItem),
@@ -171,7 +183,7 @@ pub const TOOLTIP: Recipe = &[
 /// The header bar: back button, title, actions and window buttons.
 pub const HEADER: Recipe = &[
     flex_row(),
-    flex(),
+    grow_children(),
     items(Align::Center),
     w_full(),
     h(Dim::Header),

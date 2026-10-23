@@ -188,7 +188,7 @@ system is in `src/style/`:
       (shadows).
 - `mod.rs` holds the utilities. Each is one fact about a box, for example
   `px(S4)`, `gap(S2)`, `rounded(Radius::Card)`, `bg(Paint::Card)`,
-  `border(Line::Hairline)`, `h(Dim::Row)`, `flex_row()`,
+  `border(Line::Hairline)`, `h(Dim::Row)`, `flex_row()`, `grow_children()`,
   `items(Align::Center)`, `surface(base, hover, press, selected)`,
   `focus_ring(focus)`, `shadow(Elevation::Raised)`, `ink(Paint::Text)` (the
   text colour children inherit) and `font(BODY)` (for a component that draws

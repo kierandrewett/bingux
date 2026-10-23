@@ -174,7 +174,7 @@ impl Component for MenuLayer {
         // transparent, so the window stays visible behind the menu.
         rect()
             .position(Position::new_absolute().top(0.0).left(0.0))
-            .tw(&tokens, &[w_full(), h_full()])
+            .tw(&tokens, &[w_screen(), h_screen()])
             .layer(Layer::OverlayLevel(8))
             .on_press(move |event: Event<PressEventData>| {
                 event.stop_propagation();

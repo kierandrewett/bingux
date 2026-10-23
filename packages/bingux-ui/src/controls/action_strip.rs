@@ -61,7 +61,7 @@ impl Component for ActionStrip {
                 w_full(),
                 h(Dim::StripCell),
                 flex_row(),
-                flex(),
+                grow_children(),
                 items(Align::Center),
                 rounded(Radius::Card),
                 bg(Paint::Control),

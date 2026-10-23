@@ -99,7 +99,7 @@ impl<T: NavItem> Component for ProfileCard<T> {
                     &tokens,
                     &[
                         flex_row(),
-                        flex(),
+                        grow_children(),
                         items(Align::Center),
                         w_full(),
                         h(Dim::RowTall),
@@ -675,7 +675,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 &tokens,
                 &[
                     flex_row(),
-                    flex(),
+                    grow_children(),
                     bg(if narrow { Paint::Bg } else { Paint::Sidebar }),
                 ],
             )

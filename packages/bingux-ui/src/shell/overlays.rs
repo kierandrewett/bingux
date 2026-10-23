@@ -375,7 +375,10 @@ impl Component for DialogLayer {
         rect()
             .position(Position::new_absolute().top(0.0).left(0.0))
             .layer(Layer::OverlayLevel(8))
-            .tw(&tokens, &[w_full(), h_full(), center(), bg(Paint::Scrim)])
+            .tw(
+                &tokens,
+                &[w_screen(), h_screen(), center(), bg(Paint::Scrim)],
+            )
             .opacity(progress)
             .on_press(move |_: Event<PressEventData>| overlays.dismiss_dialog())
             .child(
@@ -409,7 +412,7 @@ impl Component for DialogLayer {
                     .maybe_child(self.dialog.content.clone())
                     .child(
                         rect()
-                            .tw(&tokens, &[w_full(), flex_row(), flex(), gap(S2)])
+                            .tw(&tokens, &[w_full(), flex_row(), grow_children(), gap(S2)])
                             .children(buttons),
                     ),
             )
@@ -455,7 +458,7 @@ impl Component for ToastLayer {
         rect()
             .position(Position::new_absolute().bottom(S6.px()).left(0.0))
             .layer(Layer::OverlayLevel(9))
-            .tw(&tokens, &[w_full(), flex_col(), items(Align::Center)])
+            .tw(&tokens, &[w_screen(), flex_col(), items(Align::Center)])
             .child(
                 rect()
                     .a11y_role(AccessibilityRole::Status)
