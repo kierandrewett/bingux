@@ -244,6 +244,25 @@ Before/after (ISO 6c65aa4, `tests/distro-installed-greeter.py 3`, stage medians 
 | Black gaps over 0.5 s in greeter recordings | not measured | 5-17 s, 38-40 s, 59 s (x3 runs) | 0 |
 | Wallpaper jump greeter shown to desktop painted | not measured | 13.1-13.4 s | not gated |
 
+Before/after (ISO e6048dc, one E2E chain run; `tests/distro-installed-greeter.py 3`, `distro-install.py` uefi-luks/uefi/bios, `distro-boot.py`, `distro-handover.py` over all recordings; stage medians in seconds from `stages.json` and `timeline.json`). The "Before" column is 6c65aa4 where it was measured; no start-up numbers exist for 6c65aa4, so the start-up row uses this run's boot timeline.
+
+| Metric | Before (6c65aa4) | Now (e6048dc) | Target |
+| --- | --- | --- | --- |
+| Greeter submit-to-session-bar (sign-in submit to desktop painted) | 11 (runs 10, 18, 11) | 9.02 (9.06, 9.01, 9.02) | 8 or less |
+| Power on to greeter | not measured | 45.5 (50.1, 44.4, 45.5) | - |
+| Greeter shown to desktop painted | not measured | 19.9 (19.9, 19.9, 19.9) | - |
+| Lock request to lock screen | not measured | 2.6 | - |
+| Unlock to desktop | not measured | 6.2 | - |
+| Logout request to logout done | not measured | 12.6 | - |
+| Installer restart to guest reset (`distro-install.py`) | not measured | 8.1 (luks), 11.9 (uefi), 3.4 (bios) | - |
+| Install page "Installing Bingux" to "Bingux is installed" | not measured | 775.5 s (luks), 674.0 s (uefi), 421.9 s (bios) | - |
+| Installer restart to guest reset black frames (`distro-handover.py`) | not measured | 1262.0-1266.5 s (luks, 4.5 s), 1245.2-1252.9 s (uefi, 7.7 s), 967.9-969.8 s (bios, 1.9 s) | 0 |
+| Greeter to session black (`distro-handover.py`) | not measured | 1408.3-1412.1 s (luks), 1328.9-1335.6 s (uefi), 1002.1-1003.2 s (bios); installed-greeter 0.9 s, 0.6 s, 0.8 s | 0 |
+| Black gaps over 0.5 s in installed-greeter recordings | not measured | 7.5-9.0, 10.1-17.8, 45.2-47.5, 67.1-67.9 s (run 1); 5.5-18.1, 39.1-40.9, 60.8-61.5 s (run 2); 5.3-18.0, 40.0-41.9, 61.8-62.6 s (run 3) | 0 |
+| Wallpaper jump greeter shown to desktop painted (`distro-handover.py`) | not measured | 13.19 / 13.45 / 13.31 (install luks/uefi/bios), 13.30 / 13.34 / 13.27 (installed-greeter x3) | not gated (limit 8.0, reported) |
+| Live desktop bar vs desktop after unlock (boot-test, `distro-handover.py`) | not measured | bar clock box moved; wallpaper jump 25.87 | 0 |
+
+Results: `tests/distro-install.py` uefi-luks 24/24, uefi 23/23, bios 24/24; `tests/distro-installed-greeter.py` 9/9 on each of three runs; `tests/distro-boot.py` 16/16; `tests/distro-handover.py` fails on every recording (installer->reboot and greeter->session content checks, black gaps above, and on the boot recording the bar and wallpaper checks). The handover failures reproduce the two open black spans above; the wallpaper jump is unchanged from 6c65aa4 (13.1-13.4), so seeding greeter snapshots at install did not reduce it.
 
 ## Shell maintenance
 
