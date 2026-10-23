@@ -19,8 +19,8 @@ use crate::apps;
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
-    Group, Icon, Overlays, PageHeader, Status, caption, hstack, icon, icon_button, page_column,
-    row, skeleton, slider, status, use_overlays, use_page_header, use_tokens,
+    Group, Icon, Overlays, PageHeader, Status, app_icon, caption, hstack, icon, icon_button,
+    level_row, page_column, row, skeleton, status, use_overlays, use_page_header, use_tokens,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -740,31 +740,12 @@ fn level_icon(volume: f64, muted: bool) -> Icon {
     }
 }
 
-/// A volume slider for the shared control column: the track leaves room for
-/// the percentage, so the slider and its label end at the row's right edge.
-fn volume_slider(percent: f64, on_moved: impl Into<EventHandler<f64>>) -> Element {
-    slider(percent.min(100.0), on_moved)
-        .width(FIELD_WIDTH - S2 - BOX_LG)
-        .show_value()
-        .into()
-}
-
-/// A volume control: a button that mutes and unmutes, then a slider. Its
-/// width is the shared control width, so it lines up with the other controls.
-fn level_control(
-    volume: f64,
-    muted: bool,
-    on_mute: impl Into<EventHandler<()>>,
-    on_moved: impl Into<EventHandler<f64>>,
-) -> Element {
+/// The button that mutes and unmutes. Its icon shows the current level.
+fn mute_button(volume: f64, muted: bool, on_mute: impl Into<EventHandler<()>>) -> Element {
     let label = if muted { "Unmute" } else { "Mute" };
-    hstack(S2)
-        .child(
-            icon_button(level_icon(volume, muted), on_mute)
-                .tooltip(label)
-                .size(BOX_LG),
-        )
-        .child(volume_slider(volume * 100.0, on_moved))
+    icon_button(level_icon(volume, muted), on_mute)
+        .tooltip(label)
+        .size(BOX_LG)
         .into()
 }
 
@@ -825,21 +806,21 @@ fn channel_group(kind: Kind, devices: &[Device], level: Option<Level>, ctx: Ctx)
     if let Some(level) = level {
         let id = level.id;
         let mute_to = !level.muted;
-        group = group.row(row("Volume").trailing(level_control(
-            level.volume,
-            level.muted,
-            move |_| {
-                update_level(ctx.model, kind, |current| current.muted = mute_to);
-                set_mute(ctx, id, mute_to);
-            },
-            move |value: f64| {
+        group = group.row(
+            level_row("Volume", level.volume * 100.0, move |value: f64| {
                 let percent = value.round().clamp(0.0, 100.0) as u32;
                 update_level(ctx.model, kind, |current| {
                     current.volume = f64::from(percent) / 100.0;
                 });
                 set_volume(ctx.queue, ctx.overlays, id, percent);
-            },
-        )));
+            })
+            // The blank leading box lines the text up with the device rows above.
+            .leading(rect().width(Size::px(ICON_LG)))
+            .trailing(mute_button(level.volume, level.muted, move |_| {
+                update_level(ctx.model, kind, |current| current.muted = mute_to);
+                set_mute(ctx, id, mute_to);
+            })),
+        );
     }
     group
 }
@@ -850,33 +831,34 @@ fn channel_group(kind: Kind, devices: &[Device], level: Option<Level>, ctx: Ctx)
 fn app_row(streams: &[Stream], ctx: Ctx) -> Element {
     let first = &streams[0];
     let ids: Vec<u32> = streams.iter().map(|stream| stream.id).collect();
-    let base = row(first.name.clone())
-        .leading_app(first.icon.clone())
-        .subtitle(summary_of(streams));
     match first.level {
         Some((volume, muted)) => {
             let mute_ids = ids.clone();
-            Element::from(base.trailing(level_control(
-                volume,
-                muted,
-                move |_| {
-                    for id in &mute_ids {
-                        update_stream(ctx.model, *id, |level| level.1 = !muted);
-                        set_mute(ctx, *id, !muted);
-                    }
-                },
-                move |value: f64| {
-                    let percent = value.round().clamp(0.0, 100.0) as u32;
-                    for id in &ids {
-                        update_stream(ctx.model, *id, |level| {
-                            level.0 = f64::from(percent) / 100.0;
-                        });
-                        set_volume(ctx.queue, ctx.overlays, *id, percent);
-                    }
-                },
-            )))
+            level_row(first.name.clone(), volume * 100.0, move |value: f64| {
+                let percent = value.round().clamp(0.0, 100.0) as u32;
+                for id in &ids {
+                    update_stream(ctx.model, *id, |level| {
+                        level.0 = f64::from(percent) / 100.0;
+                    });
+                    set_volume(ctx.queue, ctx.overlays, *id, percent);
+                }
+            })
+            .subtitle(summary_of(streams))
+            .leading(app_icon(first.icon.clone(), ICON_APP))
+            .trailing(mute_button(volume, muted, move |_| {
+                for id in &mute_ids {
+                    update_stream(ctx.model, *id, |level| level.1 = !muted);
+                    set_mute(ctx, *id, !muted);
+                }
+            }))
+            .into()
         }
-        None => Element::from(base.value("Volume cannot be changed")),
+        None => Element::from(
+            row(first.name.clone())
+                .leading_app(first.icon.clone())
+                .subtitle(summary_of(streams))
+                .value("Volume cannot be changed"),
+        ),
     }
 }
 

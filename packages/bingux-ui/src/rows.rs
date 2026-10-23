@@ -312,6 +312,93 @@ pub fn slider_row(
     row(title).trailing(slider(value, on_moved))
 }
 
+/// A level row: the title and its value on one line, with a slider as wide
+/// as the row beneath. Use it where the slider is the point of the row, such
+/// as a volume. An optional leading element (an icon or a mute button) sits
+/// before the text and an optional trailing one after it.
+#[derive(PartialEq)]
+pub struct LevelRow {
+    title: String,
+    subtitle: Option<String>,
+    leading: Option<Element>,
+    trailing: Option<Element>,
+    value: f64,
+    on_moved: EventHandler<f64>,
+}
+
+pub fn level_row(
+    title: impl Into<String>,
+    value: f64,
+    on_moved: impl Into<EventHandler<f64>>,
+) -> LevelRow {
+    LevelRow {
+        title: title.into(),
+        subtitle: None,
+        leading: None,
+        trailing: None,
+        value: value.clamp(0.0, 100.0),
+        on_moved: on_moved.into(),
+    }
+}
+
+impl LevelRow {
+    pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
+        self.subtitle = Some(subtitle.into());
+        self
+    }
+
+    pub fn leading(mut self, leading: impl Into<Element>) -> Self {
+        self.leading = Some(leading.into());
+        self
+    }
+
+    pub fn trailing(mut self, trailing: impl Into<Element>) -> Self {
+        self.trailing = Some(trailing.into());
+        self
+    }
+}
+
+impl Component for LevelRow {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let heading = rect()
+            .width(Size::fill())
+            .direction(Direction::Horizontal)
+            .content(Content::Flex)
+            .cross_align(Alignment::Center)
+            .spacing(S2)
+            .child(
+                rect().width(Size::flex(1.0)).child(
+                    BODY.label(&tokens, self.title.clone())
+                        .max_lines(1)
+                        .text_overflow(TextOverflow::Ellipsis),
+                ),
+            )
+            .child(VALUE.label(&tokens, format!("{}%", self.value.round() as i64)));
+        rect()
+            .width(Size::fill())
+            .direction(Direction::Horizontal)
+            .content(Content::Flex)
+            .cross_align(Alignment::Center)
+            .padding((S1, GUTTER))
+            .spacing(S4)
+            .maybe_child(self.leading.clone())
+            .child(
+                rect()
+                    .width(Size::flex(1.0))
+                    .child(heading)
+                    .maybe_child(self.subtitle.as_ref().map(|subtitle| {
+                        CAPTION
+                            .label(&tokens, subtitle.clone())
+                            .max_lines(1)
+                            .text_overflow(TextOverflow::Ellipsis)
+                    }))
+                    .child(slider(self.value, self.on_moved.clone()).fill()),
+            )
+            .maybe_child(self.trailing.clone())
+    }
+}
+
 /// A row with a choice on the right: a segmented control for up to three
 /// short options, otherwise a dropdown. `options` are `(key, label)` pairs.
 pub fn choice_row(

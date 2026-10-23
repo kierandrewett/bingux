@@ -37,6 +37,7 @@ pub struct Slider {
     enabled: bool,
     on_moved: EventHandler<f64>,
     width: f32,
+    fluid: bool,
     step: Option<f64>,
     show_value: bool,
 }
@@ -47,6 +48,7 @@ pub fn slider(value: f64, on_moved: impl Into<EventHandler<f64>>) -> Slider {
         enabled: true,
         on_moved: on_moved.into(),
         width: FIELD_WIDTH,
+        fluid: false,
         step: None,
         show_value: false,
     }
@@ -60,6 +62,13 @@ impl Slider {
 
     pub fn width(mut self, width: f32) -> Self {
         self.width = width;
+        self
+    }
+
+    /// Fill the width the parent gives, instead of a fixed width. The track
+    /// follows the measured width, so the first frame uses the fixed width.
+    pub fn fill(mut self) -> Self {
+        self.fluid = true;
         self
     }
 
@@ -106,7 +115,13 @@ impl Component for Slider {
         });
         let thumb = THUMB * scale.get().value();
 
-        let travel = (self.width - THUMB).max(1.0);
+        let measured = size.read().width();
+        let width = if self.fluid && measured > THUMB {
+            measured
+        } else {
+            self.width
+        };
+        let travel = (width - THUMB).max(1.0);
         let step = self.step;
         let snap = move |percent: f64| -> f64 {
             match step {
@@ -184,7 +199,11 @@ impl Component for Slider {
                 builder.set_min_numeric_value(0.0);
                 builder.set_max_numeric_value(PERCENT);
             })
-            .width(Size::px(self.width))
+            .width(if self.fluid {
+                Size::fill()
+            } else {
+                Size::px(width)
+            })
             .height(Size::px(HIT))
             .maybe(!enabled, |element| element.opacity(DISABLED_OPACITY))
             .on_sized(move |event: Event<SizedEventData>| size.set(event.area))
@@ -202,7 +221,7 @@ impl Component for Slider {
                             .top(CENTRE - track_height / 2.0)
                             .left(0.0),
                     )
-                    .width(Size::px(self.width))
+                    .width(Size::px(width))
                     .height(Size::px(track_height))
                     .corner_radius(track_height / 2.0)
                     .background(tokens.outline),

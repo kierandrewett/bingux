@@ -53,8 +53,9 @@ video; each choice shows the application icons. Changes are written with
 `gio mime`, so GTK applications and `xdg-open` see them.
 
 The Sound page shows one row for each application that plays or records sound,
-with its icon, a Playing or Recording state, the device it uses, a volume
-slider and a mute button. An application's icon comes from the icon the stream
+with its icon, its name and the percentage on one line, a Playing or Recording
+state and the device it uses, a full-width volume slider and a mute button. The
+output and input volumes use the same layout. An application's icon comes from the icon the stream
 names when the icon theme has it, otherwise from the application's desktop entry.
 
 Bluetooth uses subpages too. The list has two groups: My devices (paired or
