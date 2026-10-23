@@ -340,6 +340,14 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             .last()
             .map(|(_, header)| header.clone())
             .unwrap_or_default();
+        // With the sidebar hidden, a button at the left of the header opens it.
+        let show_pages = narrow.then(|| {
+            icon_button(Icon::SidebarShow, move |_| {
+                sidebar_open.set(!sidebar_open())
+            })
+            .size(WINDOW_CONTROL_BUTTON)
+            .tooltip("Show pages")
+        });
         let header = match &self.subpage {
             None => HeaderBar::new(selected().title())
                 .background(tokens.bg)
@@ -352,6 +360,10 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                         .tooltip("Back"),
                 )
             }
+        };
+        let header = match show_pages {
+            Some(toggle) => header.leading(toggle),
+            None => header,
         }
         .subtitle(page_header.subtitle.clone());
         let header = match page_header.action {
@@ -369,19 +381,6 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         // Alt+Left and the mouse Back button return from a subpage.
         let back_key = self.subpage.as_ref().map(|subpage| subpage.on_back.clone());
         let back_pointer = back_key.clone();
-        // With the sidebar hidden, a button above the page opens it.
-        let show_pages = narrow.then(|| {
-            rect()
-                .width(Size::fill())
-                .padding((S2, side, 0.0, side))
-                .child(
-                    icon_button(Icon::SidebarShow, move |_| {
-                        sidebar_open.set(!sidebar_open())
-                    })
-                    .size(WINDOW_CONTROL_BUTTON)
-                    .tooltip("Show pages"),
-                )
-        });
         // Page changes move the content. A subpage slides in from the right, a
         // pop slides it out to the right, and a sidebar switch cross-fades. The
         // page being replaced stays on screen in `memory` while the motion runs.
@@ -537,7 +536,6 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                     .width(Size::flex(1.0))
                     .height(Size::fill())
                     .child(header)
-                    .maybe_child(show_pages)
                     .child(content_area)
             )
             .maybe_child(
