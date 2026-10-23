@@ -33,14 +33,14 @@ Item {
             color: Theme.muted
             elide: Text.ElideRight
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSmall
+            font.pixelSize: Math.round(15 * InstallerState.uiScale)
         }
         Text {
             id: valueLabel
             text: root.valueText
             color: Theme.text
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSmall
+            font.pixelSize: Math.round(15 * InstallerState.uiScale)
         }
     }
 

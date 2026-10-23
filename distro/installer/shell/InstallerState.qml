@@ -87,6 +87,8 @@ QtObject {
     property string liveDisk: ""
     property var toolsMissing: []
     property string installerVersion: ""
+    // Scale of the wide card (1 at the compact size); the text helpers read it.
+    property real uiScale: 1
 
     // Install status, written by InstallerClient.
     property string installState: "idle"  // idle | running | done | failed

@@ -13,8 +13,14 @@ AbstractButton {
     // Shows a tick on the right; used by single-choice lists. (`checked` is
     // AbstractButton state and would change the button semantics.)
     property bool ticked: false
+    // Opt-in sizing for large rows (installer options): the row height, a
+    // second line under the label, the label size and the left inset.
+    property int rowHeight: 36
+    property string detail: ""
+    property int labelPixelSize: Theme.fontSmall + 1
+    property int contentInset: 6
 
-    implicitHeight: 36
+    implicitHeight: rowHeight
     hoverEnabled: true
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
@@ -32,7 +38,7 @@ AbstractButton {
     contentItem: Item {
         Row {
             anchors.left: parent.left
-            anchors.leftMargin: 6
+            anchors.leftMargin: root.contentInset
             anchors.verticalCenter: parent.verticalCenter
             spacing: 10
             SessionAvatar {
@@ -56,13 +62,22 @@ AbstractButton {
                     color: "#ffffff"
                 }
             }
-            Text {
+            Column {
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.text
-                color: "#ffffff"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSmall + 1
-                font.weight: root.selected ? Font.DemiBold : Font.Normal
+                Text {
+                    text: root.text
+                    color: "#ffffff"
+                    font.family: Theme.fontFamily
+                    font.pixelSize: root.labelPixelSize
+                    font.weight: root.selected ? Font.DemiBold : Font.Normal
+                }
+                Text {
+                    visible: root.detail !== ""
+                    text: root.detail
+                    color: Qt.rgba(1, 1, 1, 0.62)
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Math.round(root.labelPixelSize * 0.82)
+                }
             }
         }
         SymbolicIcon {

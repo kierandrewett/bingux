@@ -31,6 +31,12 @@ Item {
     property string secondaryIcon: ""
     property bool secondaryVisible: false
     property int cardBodyHeight: 220
+    // Wide: the 16:9 window-like card (see KioskCard). Off keeps the compact card.
+    property bool cardWide: false
+    property string cardLead: ""
+    property bool cardBodyFull: false
+    // The card's scale factor; 1 for the compact card.
+    readonly property real cardScale: card.uiScale
     // The page content goes inside the card.
     default property alias content: card.body
 
@@ -139,7 +145,11 @@ Item {
         id: card
         objectName: "kioskCard"
         anchors.centerIn: parent
-        anchors.verticalCenterOffset: Math.round(root.height * 0.04)
+        anchors.verticalCenterOffset: root.cardWide ? Math.round(statusBar.height / 2) : Math.round(root.height * 0.04)
+        wide: root.cardWide
+        lead: root.cardLead
+        bodyFull: root.cardBodyFull
+        verticalReserve: statusBar.height
         title: root.cardTitle
         iconName: root.cardIcon
         backVisible: root.backVisible

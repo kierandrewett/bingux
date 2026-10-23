@@ -18,7 +18,7 @@ Column {
     property string message: ""
     property bool invalid: false
     property bool readOnly: false
-    property int fieldHeight: 36
+    property int fieldHeight: Math.round(46 * InstallerState.uiScale)
 
     signal accepted
     signal edited
@@ -30,7 +30,7 @@ Column {
         text: root.caption
         color: Theme.muted
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSmall
+        font.pixelSize: Math.round(15 * InstallerState.uiScale)
     }
 
     TextField {
@@ -43,7 +43,7 @@ Column {
         color: Theme.text
         placeholderTextColor: Theme.muted
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSmall + 1
+        font.pixelSize: Math.round(17 * InstallerState.uiScale)
         selectByMouse: true
         background: Rectangle {
             radius: height / 2
@@ -63,6 +63,6 @@ Column {
         wrapMode: Text.Wrap
         color: root.invalid ? Theme.danger : Theme.muted
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSmall
+        font.pixelSize: Math.round(15 * InstallerState.uiScale)
     }
 }

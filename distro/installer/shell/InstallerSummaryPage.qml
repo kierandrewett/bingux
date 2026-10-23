@@ -127,7 +127,7 @@ InstallerPage {
                     color: Theme.muted
                     wrapMode: Text.WordWrap
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSmall + 1
+                    font.pixelSize: Math.round(17 * InstallerState.uiScale)
                 }
                 Text {
                     width: parent.width * 0.64 - Theme.gap
@@ -135,7 +135,7 @@ InstallerPage {
                     color: Theme.text
                     wrapMode: Text.WordWrap
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSmall + 1
+                    font.pixelSize: Math.round(17 * InstallerState.uiScale)
                 }
             }
         }

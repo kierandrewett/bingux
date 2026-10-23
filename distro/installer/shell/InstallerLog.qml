@@ -31,7 +31,7 @@ Rectangle {
             wrapMode: Text.WrapAnywhere
             color: Theme.muted
             font.family: "monospace"
-            font.pixelSize: Theme.fontSmall
+            font.pixelSize: Math.round(15 * InstallerState.uiScale)
         }
     }
 }

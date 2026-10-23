@@ -9,6 +9,16 @@ KioskScreen {
     // InstallerClient, which reports install results.
     property var client: null
     property var pages: []
+    // The 16:9 card: title and lead on the left, the page on the right.
+    cardWide: true
+    cardLead: activePage ? activePage.lead : ""
+    cardBodyFull: activePage ? activePage.fullBody : false
+    Binding {
+        target: InstallerState
+        property: "uiScale"
+        value: root.cardScale
+    }
+
     readonly property var activePage: {
         for (const page of pages)
             if (page.pageId === stack.current)

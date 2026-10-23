@@ -10,6 +10,10 @@ KioskPage {
     required property var wizard
 
     property string title: ""
+    // One or two sentences under the title, on the left of the wide card.
+    property string lead: ""
+    // The body takes the full card width, with title and lead as a header row.
+    property bool fullBody: false
     property string primaryText: "Continue"
     property bool primaryEnabled: true
     property bool primaryVisible: true

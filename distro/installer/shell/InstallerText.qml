@@ -12,5 +12,5 @@ Text {
     wrapMode: Text.WordWrap
     color: tone === "text" ? Theme.text : tone === "danger" ? Theme.danger : tone === "warning" ? Theme.warning : tone === "success" ? Theme.success : Theme.muted
     font.family: Theme.fontFamily
-    font.pixelSize: Theme.fontSize
+    font.pixelSize: Math.round(18 * InstallerState.uiScale)
 }

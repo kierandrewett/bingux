@@ -7,13 +7,15 @@ driver prints "INSTALLER_SHOT <name> <count>". The harness then writes <count>
 to the ack file, which is what lets the driver advance. Shots go to
 BINGUX_INSTALLER_SHOTS (default build/installer-shots).
 
-usage: installer-shots.py [--shell BINARY]
+usage: installer-shots.py [--shell BINARY] [--size WIDTHxHEIGHT]
+The shots are taken at 1280x800 unless --size (or BINGUX_INSTALLER_SIZE) says otherwise.
 """
 
 import argparse
 import importlib.util
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -60,11 +62,11 @@ def grab_settled(target, environment):
     return False
 
 
-def make_wallpaper(scratch):
+def make_wallpaper(scratch, size):
     """A gradient test wallpaper standing in for /usr/share/backgrounds/bingux-os/default.jpg."""
     wallpaper = scratch / "wallpaper.png"
     subprocess.run(
-        ["magick", "-size", "1280x800", "plasma:#2b5a9e-#e8a35c", str(wallpaper)],
+        ["magick", "-size", size, "plasma:#2b5a9e-#e8a35c", str(wallpaper)],
         check=True,
         capture_output=True,
     )
@@ -74,7 +76,10 @@ def make_wallpaper(scratch):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--shell", default=str(ROOT / "build/bingux-shell/quickshell/src/bingux-shell"))
+    parser.add_argument("--size", default=os.environ.get("BINGUX_INSTALLER_SIZE", "1280x800"))
     arguments = parser.parse_args()
+    if not re.fullmatch(r"\d+x\d+", arguments.size):
+        parser.error("--size must be WIDTHxHEIGHT")
     installer_ui = load_installer_ui()
     shots_dir = Path(os.environ.get("BINGUX_INSTALLER_SHOTS", ROOT / "build/installer-shots"))
     shots_dir.mkdir(parents=True, exist_ok=True)
@@ -84,7 +89,7 @@ def main():
     try:
         tree = installer_ui.pack_tree(scratch)
         shutil.copy(ROOT / "tests/installer-shots.qml", tree / "InstallerShotsDriver.qml")
-        wallpaper = make_wallpaper(scratch)
+        wallpaper = make_wallpaper(scratch, arguments.size)
         daemon_socket = str(scratch / "shots.sock")
         daemon = installer_ui.FakeDaemon(daemon_socket)
         daemon.start()
@@ -94,7 +99,7 @@ def main():
         runtime.mkdir(parents=True, mode=0o700)
         home.mkdir()
         sway_config = scratch / "sway.conf"
-        sway_config.write_text("output HEADLESS-1 resolution 1280x800\n")
+        sway_config.write_text(f"output HEADLESS-1 resolution {arguments.size}\n")
         ack = scratch / "shots.ack"
         ack.write_text("0")
         environment = {k: v for k, v in os.environ.items() if k not in ("DISPLAY", "WAYLAND_DISPLAY")} | {

@@ -26,7 +26,7 @@ Column {
             text: root.label
             color: root.enabled ? Theme.text : Theme.muted
             font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize
+            font.pixelSize: Math.round(18 * InstallerState.uiScale)
             wrapMode: Text.WordWrap
         }
         ControlSwitch {
@@ -45,6 +45,6 @@ Column {
         color: Theme.muted
         wrapMode: Text.WordWrap
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSmall
+        font.pixelSize: Math.round(15 * InstallerState.uiScale)
     }
 }
