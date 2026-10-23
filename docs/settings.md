@@ -62,20 +62,24 @@ remembered) and Nearby devices, which fill in while a scan runs. A scan runs in
 25-second rounds while the page is open and Bluetooth is on. It stops when the
 page closes or Bluetooth is turned off.
 Each row shows an icon for the device type, its status and battery level when
-known. Pressing a row opens the device's page: the icon, name and status, the
-one action it allows (Pair or Connect, or Disconnect), the type, address,
-whether it is paired and connects automatically, its battery level, and Forget
-device. Forget device asks first and returns to the list when the device is
-gone. A device with no name shows as Unnamed device.
+known. Pressing a row opens Device details: the icon, name and status, then a
+strip of actions (Pair or Connect, or Disconnect, and Forget once the device is
+paired), the type, address, whether it is paired and connects automatically,
+and its battery level. Forget asks first and returns to the list when the
+device is gone. A device with no name shows as Unnamed device.
 
 Users opens an account's page the same way: full name, user name, account
 type and Change password. The account page opens with a large initials tile, the
 full name and the account type.
 
-Network shows an information button on each Wi-Fi row. It opens the network's
-page: its state, Connect or Disconnect (with a password row when the network
-needs one), signal, security, band and speed, and Forget network for a saved
-network. Date and Time opens the time zone as a searchable list of cities. The
+Wi-Fi opens Network details from the settings button on a saved or connected
+network, or from pressing the connected network. The page shows the signal
+icon, the name and the state (Connected, Saved, Out of range), then a strip of
+actions: Connect or Disconnect, and for a saved network Forget and Settings.
+Forget asks first and returns to the list. Settings opens the connection
+editor with the address, DNS and security tabs. Below the strip are the signal
+strength in words, the frequency band, the security and the speed.
+Date and Time opens the time zone as a searchable list of cities. The
 header shows the chosen city, and the zone list shows each UTC offset only for
 the selected zone. Set date and time opens a sheet with Date (day, month and
 year) and Time (hour and minute) rows and a Set button that stays disabled
@@ -104,7 +108,7 @@ way round.
 | Date and Time   | `timedatectl`, GSettings clock format, `bingux-config desktop.clock_seconds`                         | Time zone and manual time may ask for authorisation.                                                                                                                      |
 | Users           | AccountsService over D-Bus                                                                           | Full name changes may ask for authorisation.                                                                                                                              |
 | Applications    | Desktop entries in `XDG_DATA_DIRS`, `gio mime`, `wpctl`                                              | Installed applications with their icons, a page for each, and the default application for each kind of file.                                                              |
-| About           | `/etc/os-release`, DMI, `gnoblinctl --version`                                                       | Read-only.                                                                                                                                                                |
+| About           | `/etc/os-release`, DMI, `gnoblinctl --version`                                                       | Read-only. Storage shows the space used on the root file system.                                                                                                          |
 
 Each page shows its current state as a header subtitle where that helps (the
 battery level on Power, the colour scheme on Appearance, the city on Date and

@@ -12,9 +12,10 @@ use crate::icons::{self, Icon};
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
-    Group, Overlays, PageHeader, SpinnerSize, Status, Tokens, icon_button, page_column, row, sheet,
-    skeleton, spinner, status, switch_row, text_field, use_overlays, use_page_busy,
-    use_page_header, use_tokens,
+    Group, Overlays, PageHeader, ResponseKind, SpinnerSize, Status, Tokens, action_strip,
+    centered_caption, dialog, heading, icon_button, page_column, row, sheet, skeleton, spinner,
+    status, strip_action, switch_row, text_field, use_overlays, use_page_busy, use_page_header,
+    use_tokens,
 };
 use bingux_ui::scale::*;
 
@@ -264,6 +265,10 @@ fn start_hotspot(name: &str, password: &str) -> Result<(), CommandError> {
     .map(|_| ())
 }
 
+fn forget_connection(name: &str) -> Result<(), CommandError> {
+    nmcli(&["connection", "delete", "id", name], QUICK).map(|_| ())
+}
+
 fn down_connection(name: &str) -> Result<(), CommandError> {
     nmcli(&["connection", "down", "id", name], QUICK).map(|_| ())
 }
@@ -271,7 +276,24 @@ fn down_connection(name: &str) -> Result<(), CommandError> {
 /// Words for a signal strength from its percentage. Only the details view
 /// uses them; the list shows the signal icon alone.
 fn signal_detail(signal: u8) -> String {
-    format!("{signal}%")
+    match signal {
+        80..=u8::MAX => "Excellent",
+        60..=79 => "Good",
+        40..=59 => "Fair",
+        _ => "Weak",
+    }
+    .to_string()
+}
+
+/// The large signal icon at the head of the details page.
+fn signal_icon(signal: u8) -> Icon {
+    match signal_level(signal) {
+        4 => Icon::NetworkWirelessSignalExcellent,
+        3 => Icon::NetworkWirelessSignalGood,
+        2 => Icon::NetworkWirelessSignalOk,
+        1 => Icon::NetworkWirelessSignalWeak,
+        _ => Icon::NetworkWirelessSignalNone,
+    }
 }
 
 /// Filled bars for a row, 0 to 4, from the signal percentage.
@@ -313,10 +335,15 @@ fn band_label(freq: &str) -> String {
 /// The facts the connection editor shows for a visible network.
 fn network_facts(network: &Network) -> Vec<(String, String)> {
     let mut facts = vec![
-        ("Signal".to_string(), signal_detail(network.signal)),
+        ("Signal strength".to_string(), signal_detail(network.signal)),
         (
             "Security".to_string(),
-            if network.secured { "Secured" } else { "Open" }.to_string(),
+            if network.secured {
+                "Password protected"
+            } else {
+                "Open"
+            }
+            .to_string(),
         ),
     ];
     if !network.band.is_empty() {
@@ -433,12 +460,38 @@ impl Ui {
         );
     }
 
-    fn edit_network(self, network: &Network) {
-        self.editor.open(Target {
-            name: network.ssid.clone(),
-            wireless: true,
-            facts: network_facts(network),
-        });
+    /// Connect to a network: straight away when it is open or saved, after
+    /// asking for the password otherwise.
+    fn join(self, network: &Network) {
+        if network.saved || !network.secured {
+            self.connect(network.ssid.clone(), None);
+        } else {
+            self.open_join(network.ssid.clone());
+        }
+    }
+
+    fn disconnect(self, name: String) {
+        self.act("Disconnecting.", move || down_connection(&name), || {});
+    }
+
+    /// Ask first: forgetting drops the saved password.
+    fn confirm_forget(self, name: String) {
+        let navigator = self.navigator;
+        self.overlays.show_dialog(
+            dialog(
+                format!("Forget \"{name}\"?"),
+                "The saved password is removed. Connecting again asks for it.",
+            )
+            .cancel("Cancel")
+            .response("Forget", ResponseKind::Destructive, move |_| {
+                let target = name.clone();
+                self.act(
+                    "Forgetting the network.",
+                    move || forget_connection(&target),
+                    move || navigator.pop(),
+                );
+            }),
+        );
     }
 
     /// The password sheet for a secured network that is not saved yet.
@@ -715,21 +768,23 @@ fn network_rows(ui: Ui, networks: &[Network], tokens: Tokens) -> Vec<Element> {
                 cluster = cluster.child(lock_icon(tokens));
             }
             if network.in_use || network.saved {
-                let target = network.clone();
+                let ssid = network.ssid.clone();
                 cluster = cluster.child(Element::from(
-                    icon_button(Icon::EmblemSystem, move |_| ui.edit_network(&target))
-                        .tooltip("Connection settings"),
+                    icon_button(Icon::PreferencesSystem, move |_| {
+                        ui.navigator.push(Route::Network { ssid: ssid.clone() })
+                    })
+                    .tooltip("Network details"),
                 ));
             }
 
             let press = network.clone();
             let item = item.on_press(move |_| {
                 if press.in_use {
-                    ui.edit_network(&press);
-                } else if press.saved || !press.secured {
-                    ui.connect(press.ssid.clone(), None);
+                    ui.navigator.push(Route::Network {
+                        ssid: press.ssid.clone(),
+                    });
                 } else {
-                    ui.open_join(press.ssid.clone());
+                    ui.join(&press);
                 }
             });
             Element::from(item.trailing(action_slot(Some(Element::from(cluster)))))
@@ -887,17 +942,140 @@ impl Component for SavedNetworksPage {
         }
         let rows = model.saved_names.iter().map(|name| {
             let target = name.clone();
-            Element::from(row(name.clone()).on_press(move |_| {
-                ui.editor.open(Target {
-                    name: target.clone(),
-                    wireless: true,
-                    facts: Vec::new(),
-                });
+            Element::from(row(name.clone()).navigates().on_press(move |_| {
+                ui.navigator.push(Route::Network {
+                    ssid: target.clone(),
+                })
             }))
         });
         page(vec![Element::from(
             Group::new(None::<String>).rows(rows.collect::<Vec<_>>()),
         )])
+    }
+}
+
+/// One network: its signal, what you can do with it, and the facts about it.
+#[derive(PartialEq)]
+pub struct NetworkPage {
+    pub ssid: String,
+}
+
+impl Component for NetworkPage {
+    fn render(&self) -> impl IntoElement {
+        let ui = use_ui();
+        let tokens = use_tokens();
+        use_polling(ui);
+        use_page_busy(ui.busy.read().is_some());
+
+        // Go back to the list once the network is neither in range nor saved.
+        let gone = self.ssid.clone();
+        use_side_effect(move || {
+            if let Some(Ok(model)) = &*ui.model.read()
+                && !model.networks.iter().any(|network| network.ssid == gone)
+                && !model.saved_names.contains(&gone)
+            {
+                ui.navigator.pop();
+            }
+        });
+
+        let loaded = ui.model.read().clone();
+        let Some(loaded) = loaded else {
+            return page(vec![skeleton()]);
+        };
+        let model = match loaded {
+            Ok(model) => model,
+            Err(error) => {
+                return page(vec![Element::from(
+                    status(Status::Error(error.0)).action("Try again", move |_| ui.reload()),
+                )]);
+            }
+        };
+
+        let ssid = self.ssid.clone();
+        let visible = model.networks.iter().find(|network| network.ssid == ssid);
+        let saved =
+            visible.is_some_and(|network| network.saved) || model.saved_names.contains(&ssid);
+        let connected = visible.is_some_and(|network| network.in_use);
+        let connecting =
+            ui.busy.read().as_deref() == Some(format!("Connecting to {ssid}.").as_str());
+
+        let state = if connecting {
+            "Connecting"
+        } else if connected {
+            "Connected"
+        } else if saved && visible.is_none() {
+            "Saved, out of range"
+        } else if saved {
+            "Saved"
+        } else if visible.is_none() {
+            "Out of range"
+        } else {
+            "Not connected"
+        };
+        let hero_icon = visible.map_or(Icon::NetworkWirelessSignalNone, |network| {
+            signal_icon(network.signal)
+        });
+        let hero = rect()
+            .width(Size::fill())
+            .cross_align(Alignment::Center)
+            .spacing(S2)
+            .padding((S2, 0.0, S2, 0.0))
+            .child(icons::icon(hero_icon, ICON_XL, tokens.text))
+            .child(heading(ssid.clone()))
+            .child(centered_caption(state));
+
+        let mut actions = Vec::new();
+        if connected {
+            let name = ssid.clone();
+            actions.push(strip_action(Icon::WindowClose, "Disconnect", move |_| {
+                ui.disconnect(name.clone())
+            }));
+        } else if let Some(network) = visible {
+            let network = network.clone();
+            actions.push(strip_action(
+                Icon::NetworkWirelessSignalExcellent,
+                "Connect",
+                move |_| ui.join(&network),
+            ));
+        }
+        if saved {
+            let name = ssid.clone();
+            actions.push(strip_action(Icon::UserTrash, "Forget", move |_| {
+                ui.confirm_forget(name.clone())
+            }));
+            let target = Target {
+                name: ssid.clone(),
+                wireless: true,
+                facts: visible.map(network_facts).unwrap_or_default(),
+            };
+            actions.push(strip_action(
+                Icon::PreferencesSystem,
+                "Settings",
+                move |_| ui.editor.open(target.clone()),
+            ));
+        }
+
+        let mut blocks = vec![Element::from(hero)];
+        if !actions.is_empty() {
+            blocks.push(Element::from(action_strip(actions)));
+        }
+        if let Some(network) = visible {
+            let mut facts = Group::titled("Details")
+                .row(row("Signal strength").value(signal_detail(network.signal)));
+            if !network.band.is_empty() {
+                facts = facts.row(row("Frequency").value(network.band.clone()));
+            }
+            facts = facts.row(row("Security").value(if network.secured {
+                "Password protected"
+            } else {
+                "Open"
+            }));
+            if !network.rate.is_empty() {
+                facts = facts.row(row("Speed").value(network.rate.clone()));
+            }
+            blocks.push(Element::from(facts));
+        }
+        page(blocks)
     }
 }
 

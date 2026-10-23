@@ -272,6 +272,14 @@ impl Component for ButtonsPage {
                     ),
                 ),
             )
+            .child(section_label("Action strip"))
+            .child(action_strip(vec![
+                strip_action(Icon::Delete, "Forget", |_| {}),
+                strip_action(Icon::WindowClose, "Disconnect", |_| {}),
+                strip_action(Icon::EmblemSystem, "Settings", |_| {}).enabled(false),
+            ]))
+            .child(section_label("Usage meter"))
+            .child(usage_meter("35", "GB used", "256 GB total", 35.0 / 256.0))
             .child(
                 Group::new("Text fields".to_string())
                     .row(row("Plain").trailing(text_field(plain, |_| {}).placeholder("Type here")))

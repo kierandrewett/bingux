@@ -20,6 +20,8 @@ pub enum Route {
     Device { mac: String, name: String },
     /// The saved Wi-Fi networks.
     WifiSaved,
+    /// One Wi-Fi network, by name.
+    Network { ssid: String },
     /// One user account, by account path, with its full name for the header.
     Account { path: String, name: String },
     /// The time zone list.
@@ -36,8 +38,9 @@ impl Route {
         match self {
             Self::App { name, .. } => name.clone(),
             Self::DefaultApps => "Default applications".to_string(),
-            Self::Device { name, .. } => name.clone(),
+            Self::Device { .. } => "Device details".to_string(),
             Self::WifiSaved => "Saved networks".to_string(),
+            Self::Network { .. } => "Network details".to_string(),
             Self::Account { name, .. } => name.clone(),
             Self::TimeZone => "Time zone".to_string(),
             Self::Font => "Font".to_string(),
@@ -68,6 +71,7 @@ impl Route {
             Self::DefaultApps => applications::DefaultAppsPage.into(),
             Self::Device { mac, .. } => bluetooth::BluetoothDevicePage { mac: mac.clone() }.into(),
             Self::WifiSaved => wifi::SavedNetworksPage.into(),
+            Self::Network { ssid } => wifi::NetworkPage { ssid: ssid.clone() }.into(),
             Self::Account { path, .. } => users::AccountPage { path: path.clone() }.into(),
             Self::TimeZone => datetime::TimeZonePage.into(),
             Self::Font => appearance::FontPage.into(),

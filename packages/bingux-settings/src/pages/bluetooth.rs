@@ -14,9 +14,9 @@ use crate::icons::{self, Icon};
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
-    Group, Overlays, PageHeader, ResponseKind, Row, SpinnerSize, Status, Tokens, action_button,
-    caption, centered_caption, dialog, heading, page_column, primary_button, row, skeleton,
-    spinner, status, status_page, switch_row, use_overlays, use_page_busy, use_page_header,
+    Group, Overlays, PageHeader, ResponseKind, Row, SpinnerSize, Status, Tokens, action_strip,
+    caption, centered_caption, dialog, heading, page_column, row, skeleton, spinner, status,
+    status_page, strip_action, switch_row, use_overlays, use_page_busy, use_page_header,
     use_tokens,
 };
 use bingux_ui::scale::*;
@@ -626,27 +626,27 @@ fn device_state(device: &Device) -> String {
     }
 }
 
-fn device_action_label(device: &Device) -> &'static str {
-    if device.connected {
-        "Disconnect"
-    } else if device.paired {
-        "Connect"
-    } else {
-        "Pair"
-    }
-}
-
-/// The accent action for the device page. Nothing is shown while Bluetooth
-/// is off or another action runs.
-fn device_button(device: &Device, ctx: Ctx) -> Element {
-    let label = device_action_label(device);
+/// The actions for one device, as a strip: connect, disconnect or pair, and
+/// forget once the device is paired.
+fn device_strip(device: &Device, ctx: Ctx) -> Element {
     let job = device_job(device);
-    let action = move |_| run_job(ctx, job.clone());
-    if device.connected {
-        action_button(label, action).into()
+    let (icon, label) = if device.connected {
+        (Icon::WindowClose, "Disconnect")
+    } else if device.paired {
+        (Icon::Bluetooth, "Connect")
     } else {
-        primary_button(label, action).into()
+        (Icon::ListAdd, "Pair")
+    };
+    let mut actions = vec![strip_action(icon, label, move |_| {
+        run_job(ctx, job.clone())
+    })];
+    if device.paired {
+        let forget = device.clone();
+        actions.push(strip_action(Icon::UserTrash, "Forget", move |_| {
+            confirm_forget(ctx, &forget)
+        }));
     }
+    action_strip(actions).into()
 }
 
 /// The name to show for a device. BlueZ uses the address when a device has
@@ -911,8 +911,7 @@ impl Component for BluetoothDevicePage {
                 tokens.muted,
             ))
             .child(heading(device_name(device)))
-            .child(centered_caption(device_state(device)))
-            .maybe_child((adapter_on && busy.is_none()).then(|| device_button(device, ctx)));
+            .child(centered_caption(device_state(device)));
 
         let yes_no = |value: bool| if value { "Yes" } else { "No" };
         let mut details = Group::titled("Details");
@@ -934,15 +933,10 @@ impl Component for BluetoothDevicePage {
             move |on: bool| run_job(ctx, trust_job(&trust_device, on)),
         ));
 
-        let page = page_column().child(identity);
-        let forget = device.clone();
-        page.child(details).child(
-            Group::new(None::<String>).row(
-                row("Forget device")
-                    .destructive()
-                    .on_press(move |_| confirm_forget(ctx, &forget)),
-            ),
-        )
+        page_column()
+            .child(identity)
+            .maybe_child((adapter_on && busy.is_none()).then(|| device_strip(device, ctx)))
+            .child(details)
     }
 }
 

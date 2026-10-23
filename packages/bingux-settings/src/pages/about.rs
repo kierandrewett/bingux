@@ -8,7 +8,7 @@ use freya::prelude::*;
 use crate::system;
 use crate::ui::{
     Group, ICON_APP_LG, S2, app_icon, centered_caption, expander_row, heading, page_column,
-    property_row, use_page_busy,
+    property_row, usage_meter, use_page_busy,
 };
 
 #[derive(Clone, Default, PartialEq)]
@@ -19,7 +19,8 @@ struct Facts {
     hardware: String,
     processor: String,
     memory: String,
-    disk: String,
+    /// Bytes used and bytes in total on the root file system.
+    disk: Option<(u64, u64)>,
     gnoblin: String,
 }
 
@@ -69,22 +70,31 @@ fn memory() -> String {
         .unwrap_or_else(|| "Unknown".to_string())
 }
 
-fn disk() -> String {
-    system::run(
+fn disk() -> Option<(u64, u64)> {
+    let text = system::run(
         "df",
-        &["-h", "--output=size,used", "/"],
+        &["-B1", "--output=size,used", "/"],
         Duration::from_secs(3),
     )
-    .ok()
-    .and_then(|text| {
-        let mut fields = text.lines().nth(1)?.split_whitespace();
-        Some(format!(
-            "{} used of {}",
-            fields.nth(1)?,
-            text.lines().nth(1)?.split_whitespace().next()?
-        ))
-    })
-    .unwrap_or_else(|| "Unknown".to_string())
+    .ok()?;
+    let mut fields = text.lines().nth(1)?.split_whitespace();
+    let total = fields.next()?.parse().ok()?;
+    let used = fields.next()?.parse().ok()?;
+    Some((used, total))
+}
+
+/// A size in decimal units, as storage is sold: "35" and "GB", "1.2" and "TB".
+fn size_parts(bytes: u64) -> (String, &'static str) {
+    const GB: f64 = 1e9;
+    const TB: f64 = 1e12;
+    let bytes = bytes as f64;
+    if bytes >= TB {
+        (format!("{:.1}", bytes / TB), "TB")
+    } else if bytes >= 10.0 * GB {
+        (format!("{:.0}", bytes / GB), "GB")
+    } else {
+        (format!("{:.1}", bytes / GB), "GB")
+    }
 }
 
 fn gnoblin_version() -> String {
@@ -141,6 +151,24 @@ impl Component for AboutPage {
             }
         };
 
+        // A blank meter keeps the room until the figures arrive.
+        let storage = {
+            let (value, unit, total, fraction) = match facts.disk {
+                Some((used, total)) => {
+                    let (value, unit) = size_parts(used);
+                    let (total_value, total_unit) = size_parts(total);
+                    (
+                        value,
+                        format!("{unit} used"),
+                        format!("{total_value} {total_unit} total"),
+                        used as f64 / total.max(1) as f64,
+                    )
+                }
+                None => ("\u{a0}".to_string(), String::new(), String::new(), 0.0),
+            };
+            Group::titled("Storage").row(usage_meter(value, unit, total, fraction))
+        };
+
         page_column()
             .child(
                 rect()
@@ -157,9 +185,9 @@ impl Component for AboutPage {
                     .row(property_row("Device name", facts.hostname))
                     .row(property_row("Hardware model", facts.hardware))
                     .row(property_row("Processor", facts.processor))
-                    .row(property_row("Memory", facts.memory))
-                    .row(property_row("Disk", facts.disk)),
+                    .row(property_row("Memory", facts.memory)),
             )
+            .child(storage)
             .child(
                 Group::titled("Software")
                     .row(property_row("Operating system", facts.os))
