@@ -261,7 +261,9 @@ Results (`~/.cache/bingux-storage/matrix/<case>/results.json`; log `~/.cache/bin
 | uefi-alongside-ntfs | PASS (17/17 checks; NTFS volume left flagged for chkdsk by `ntfsresize`, read with `ntfscat -f`) | `~/.cache/bingux-storage/matrix/uefi-alongside-ntfs/` |
 | manual-bios | PASS (17/17 checks) | `~/.cache/bingux-storage/matrix/manual-bios/` |
 | manual-luks | PASS (19/19 checks, LUKS2 root) | `~/.cache/bingux-storage/matrix/manual-luks/` |
+| uefi-free-space-refused | PASS (5/5 checks: refused with `no_free_space`, disk byte-identical to the fixture, nothing booted) | `~/.cache/bingux-storage/matrix/uefi-free-space-refused/` |
 
+- `dual_boot` stays `false` in `capabilities`: the matrix proves install and boot with the other OS intact, but no case shows the other OS as a selectable boot menu entry. Chainloading a detected foreign ESP entry is not implemented.
 - Artifacts: `distro/out/installer-backend/matrix/<case>/{install,boot}/` (serial transcript, command
   log, screenshots) and `distro/out/installer-backend/matrix/<case>/results.json`. Exit status is 0 only
   when every case passes.

@@ -192,14 +192,19 @@ The disk is ready. **Restart** reboots; remove the install medium first.
 
 ## Dual boot
 
-Dual boot is not available in the installer interface yet. The backend already
-accepts the two keep-existing-partitions modes (`free_space` and `alongside`)
-in a plan file, but the Disk page marks both unavailable in this build, and the
-TODO tracks the remaining work. Resizing a real disk has not been tested. To
-share a disk today, shrink the other system with its own tools first, then
-install with **Partition by hand**, or with a plan file that uses `manual`
-partitioning. Keep the existing EFI system partition and create the new
-partitions from the unallocated space. Test that on a disk you can afford to lose.
+The backend implements the two keep-existing-partitions modes (`free_space` and
+`alongside`). The install matrix (`distro/installer/tests/matrix`) passes `free_space`
+on UEFI and BIOS, and `alongside` on UEFI (ext4 and NTFS), in QEMU. Each run starts from a
+host-built disk with another OS first. The other OS's files still verify afterwards, and the
+installed disk boots to the greeter. `alongside` shrinks ext4 and NTFS (`ntfsresize`, which
+leaves the NTFS volume scheduled for chkdsk). BIOS `alongside` has no matrix case.
+
+The `dual_boot` capability stays `false`: no test shows the other OS as a selectable entry
+in the Bingux boot menu (systemd-boot lists Windows only when it is on the same ESP; GRUB
+uses os-prober, which is not tested here). The Disk page's gating is unchanged by this.
+Resizing a real disk has not been tested. To share a disk on real hardware, shrink the other
+system with its own tools first, then install with **Partition by hand**, or with a plan file
+that uses `manual` partitioning. Test that on a disk you can afford to lose.
 
 ## Firmware
 
