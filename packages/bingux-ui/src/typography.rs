@@ -125,6 +125,17 @@ pub const TITLE: TextStyle = TextStyle {
 };
 
 /// A group title, above its card. Clearly larger and heavier than row text.
+/// A group title above its rows: the shell's `SettingsHeading`, 14 px
+/// semibold.
+pub const SECTION: TextStyle = TextStyle {
+    size: TEXT_MD,
+    weight: FontWeight::SEMI_BOLD,
+    ink: Ink::Text,
+    leading: LEADING,
+    tracking: 0.0,
+    tabular: false,
+};
+
 pub const HEADING: TextStyle = TextStyle {
     size: TEXT_HEADING,
     weight: FontWeight::SEMI_BOLD,

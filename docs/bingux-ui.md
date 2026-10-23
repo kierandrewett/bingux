@@ -154,7 +154,8 @@ steps of at least 1.25x, and a weight or colour change at each step. Use
 | ---------- | ---- | -------- | ------- | --------------------------------------- |
 | `HERO`     | 36   | light    | primary | One figure a page is about.             |
 | `TITLE`    | 28   | semibold | primary | A page or subpage name.                 |
-| `HEADING`  | 18   | semibold | primary | A group title above its card.           |
+| `HEADING`  | 18   | semibold | primary | A large value inside a chart or ring.   |
+| `SECTION`  | 14   | semibold | primary | A group title above its card.           |
 | `BODY`     | 14   | normal   | primary | Row titles and body text.               |
 | `EMPHASIS` | 14   | semibold | primary | A name or state inside body text.       |
 | `VALUE`    | 14   | normal   | muted   | Read-only value at the right of a row.  |
@@ -186,10 +187,11 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
 - **One scale, in `src/scale.rs`.** Spacing is `S0` to `S7` on a 4 px grid.
   Radius is 8 for controls and row hover, 12 for group cards and 20 for
   dialogs, popovers and toasts (`RADIUS`, `RADIUS_LG`, `RADIUS_XL`). Type is
-  14 body, 12 secondary, 16 section titles. A row is 40 px, or 56 px with a
-  subtitle, and every row keeps that height. A control in a row (dropdown,
-  field, segmented control, stepper, `compact()` or row button) is 32 px, so
-  it leaves 4 px above and below. A standalone `ActionButton` and a menu item
+  14 body, 12 secondary, 14 semibold section titles. A row is 48 px, or 64 px
+  with a subtitle, as the shell's `SettingsRow`, and every row keeps that
+  height. A control in a row (dropdown, field, segmented control, stepper,
+  `compact()` or row button) is 32 px, so it leaves 8 px above and below.
+  The page column is 600 px wide. A standalone `ActionButton` and a menu item
   are 36 px. Dropdowns and fields in a row share one 220 px column
   (`FIELD_WIDTH`), so their left edges line up; a field for a URL or a path
   uses `FIELD_WIDTH_WIDE` (440 px); a dropdown grows to fit a

@@ -13,7 +13,7 @@ use crate::layout::page_column;
 use crate::scale::*;
 use crate::surface::{over, use_tokens};
 use crate::theme::Tokens;
-use crate::typography::{self, BODY, CAPTION, HEADING, Ink, TITLE};
+use crate::typography::{self, BODY, CAPTION, Ink, SECTION, TITLE};
 
 /// A form's action row: an optional muted note at the left and the action
 /// at the right, on the row height and the gutter. Put it inside a group
@@ -232,7 +232,7 @@ struct SectionLabel {
 impl Component for SectionLabel {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        HEADING
+        SECTION
             .label(&tokens, self.text.clone())
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis)

@@ -24,7 +24,7 @@ use crate::theme::{
 };
 
 /// The widest the page column gets; it is centred in the content frame.
-const PAGE_WIDTH: f32 = 680.0;
+const PAGE_WIDTH: f32 = 600.0;
 
 /// One sidebar destination.
 pub trait NavItem: Copy + PartialEq + 'static {
