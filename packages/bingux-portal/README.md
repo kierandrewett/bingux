@@ -72,13 +72,14 @@ returns response code 1. Any other failure returns response code 2.
 - `BindShortcuts` asks the shell for approval through `binguxctl ipc shortcuts`.
   The shell shows the approval UI and returns the approved bindings. The request
   waits for the user.
-- Approval needs an app_id. The frontend derives it from the caller. A host
-  program with no app_id is refused: the shell rejects an empty app_id, and the
-  provider has no other identity to use. The Gnoblin backend passes only
-  `app_id` to the provider, so the request handle that names a host caller is
-  not available. Fixing this needs a contract change in Gnoblin and here
-  together: `BindShortcuts` and `ConfigureShortcuts` take the request handle,
-  and grants are keyed by `identity::Identity::key()`. See `docs/portals.md`.
+- The caller is identified from the request handle, as in the Screenshot backend
+  (`identity::requester`). An app_id identifies a sandboxed app. An empty app_id
+  identifies a host program by `host-exe:<path>`. Grants are keyed by
+  `identity::Identity::key()`, and the approval dialog shows the app_id or the
+  executable's file name. Grants saved without an identity are dropped.
+- `BindShortcuts` and `ConfigureShortcuts` take a trailing request handle, and
+  `RebindShortcuts` also takes it. The three-argument form is no longer accepted.
+  See `docs/portals.md`.
 - A user denial returns `AccessDenied` on the provider. The frontend maps that
   error to response code 2, not 1.
 - Approved grants are kept in `$XDG_CONFIG_HOME/bingux/global-shortcuts.toml`,

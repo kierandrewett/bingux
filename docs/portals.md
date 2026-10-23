@@ -35,37 +35,30 @@ are kept in `$XDG_CONFIG_HOME/bingux/global-shortcuts.toml`, or under `~/.config
 | `/usr/share/dbus-1/services/org.gnoblin.Shell.GlobalShortcutsProvider.service` | D-Bus activation.                           |
 | `bingux-global-shortcuts.service`                                              | Systemd user unit, part of `bingux.target`. |
 
-The provider is not the screenshot backend. A caller with no app_id is refused,
-because the shell's approval request needs one. See
-[Interface known state](#interface-known-state).
+The provider is not the screenshot backend. It identifies the caller from the request
+handle, the same way the Screenshot backend does (`identity::requester`):
 
-Host programs (empty app_id) cannot be approved yet, and the provider cannot
-identify them under the current contract. The Gnoblin patch
-(`xdg-desktop-portal-gnome/39-global-shortcuts/0001-route-global-shortcuts-through-gnoblin.patch`)
-passes only `app_id` to `BindShortcuts` and `ConfigureShortcuts`. The request
-handle that names the caller's unique bus name stays in the backend. The
-Screenshot identity (`identity::resolve`) needs that handle, so the provider
-cannot reuse it here.
+- An app_id identifies a sandboxed app.
+- An empty app_id identifies a host program by `host-exe:<path>`.
 
-Proposed smallest contract change, which must land in Gnoblin and Bingux together:
+Grants are keyed by the identity key, so a grant for one host program does not
+apply to another. The approval dialog shows the app_id, or the executable's file
+name for a host program. Grants saved without an identity are dropped, so those
+applications are asked again.
+
+The contract. The Gnoblin backend and this provider deploy together, and the
+three-argument form is no longer accepted:
 
 - `BindShortcuts(app_id, parent, shortcuts, handle)` and
-  `ConfigureShortcuts(app_id, parent, handle)` take a trailing `o` request handle
-  from the backend's `arg_handle`. The provider calls
-  `identity::requester(connection, app_id, handle, uid)`: an `app_id` identifies
-  a sandboxed app, and an empty `app_id` identifies a host program by
-  `host-exe:<path>`.
-- Grants are keyed by the identity key, not the bare `app_id`. The approval
-  request carries the identity and a display name (the executable's file name
-  for a host program).
-- `RebindShortcuts` also needs the handle, so the backend can choose the session.
-- Callers that send the old three-argument form are rejected. The backend and
-  provider must be deployed together.
+  `ConfigureShortcuts(app_id, parent, handle)` take a trailing `o` request handle,
+  the caller's `Request` object path from the backend's `arg_handle`.
+- `RebindShortcuts` also takes the handle, so the backend can choose the session.
 
-Guest check, 2026-10-23: a host process with no Flatpak scope calls
-`BindShortcuts` and gets response 2 after 0.2 s with no empty results and no
-dialog. The shell rejects the empty `app_id` before any approval. The Allow path
-for a host caller cannot run until the contract changes.
+Guest check, 2026-10-23 (Gnoblin session, uid 1000): a host process with an empty app_id
+(`python3.14`) gets the dialog "Allow shortcuts for python3.14". Allow gives response 0,
+and ctrl+alt+g sends `Activated`. Deny gives response 2. A caller in a flatpak-style
+scope (app_id `org.bingux.Probe`) still gets its dialog and response 0, and ctrl+alt+f
+sends `Activated`.
 
 ## Routing
 
@@ -253,28 +246,28 @@ The table lists the 20 interfaces that Gnoblin's portal declaration names. It
 shows which package declares each one in the ISO. A declaration does not prove
 that a backend implements the interface.
 
-| Interface       | Declared in the ISO by                   | Bingux backend | Tested                    |
-| --------------- | ---------------------------------------- | -------------- | ------------------------- |
-| Screenshot      | `bingux`                                 | Served         | Real frontend, QEMU guest |
-| Access          | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
-| Account         | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
-| AppChooser      | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
-| Background      | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
-| Clipboard       | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
-| DynamicLauncher | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
-| Email           | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
-| FileChooser     | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
-| GlobalShortcuts | None (only `xdg-desktop-portal-gnoblin`) | Provider       | Partial: app_id only      |
-| InputCapture    | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
-| Inhibit         | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
-| Lockdown        | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
-| Notification    | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
-| Print           | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
-| RemoteDesktop   | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
-| ScreenCast      | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
-| Settings        | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                        |
-| Usb             | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
-| Wallpaper       | None (only `xdg-desktop-portal-gnoblin`) | No             | No                        |
+| Interface       | Declared in the ISO by                   | Bingux backend | Tested                     |
+| --------------- | ---------------------------------------- | -------------- | -------------------------- |
+| Screenshot      | `bingux`                                 | Served         | Real frontend, QEMU guest  |
+| Access          | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                         |
+| Account         | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                         |
+| AppChooser      | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                         |
+| Background      | None (only `xdg-desktop-portal-gnoblin`) | No             | No                         |
+| Clipboard       | None (only `xdg-desktop-portal-gnoblin`) | No             | No                         |
+| DynamicLauncher | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                         |
+| Email           | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                         |
+| FileChooser     | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                         |
+| GlobalShortcuts | None (only `xdg-desktop-portal-gnoblin`) | Provider       | Works: app_id and host exe |
+| InputCapture    | None (only `xdg-desktop-portal-gnoblin`) | No             | No                         |
+| Inhibit         | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                         |
+| Lockdown        | None (only `xdg-desktop-portal-gnoblin`) | No             | No                         |
+| Notification    | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                         |
+| Print           | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                         |
+| RemoteDesktop   | None (only `xdg-desktop-portal-gnoblin`) | No             | No                         |
+| ScreenCast      | None (only `xdg-desktop-portal-gnoblin`) | No             | No                         |
+| Settings        | `xdg-desktop-portal-gtk` (`UseIn=gnome`) | No             | No                         |
+| Usb             | None (only `xdg-desktop-portal-gnoblin`) | No             | No                         |
+| Wallpaper       | None (only `xdg-desktop-portal-gnoblin`) | No             | No                         |
 
 Notes:
 
@@ -340,18 +333,19 @@ not from the interface. A 512px PNG passed when sent as a bytes icon.
 
 Other interfaces:
 
-| Interface       | Request                      | Result                                                                        | Verdict               |
-| --------------- | ---------------------------- | ----------------------------------------------------------------------------- | --------------------- |
-| Background      | `RequestBackground`          | Response 0                                                                    | Works                 |
-| GlobalShortcuts | `CreateSession`              | Response 0                                                                    | Works                 |
-| GlobalShortcuts | `BindShortcuts`, Allow       | Response 0 with `gs-probe`. Key chord sends `Activated` to the session.       | Works, with an app_id |
-| GlobalShortcuts | `BindShortcuts`, Deny        | Response 2 (`AccessDenied` from the provider).                                | Refused               |
-| GlobalShortcuts | `BindShortcuts`, no app_id   | Response 2: the shell rejects an empty app_id. The provider has no requester. | Fails: host programs  |
-| Inhibit         | `Inhibit` and `Close`        | Accepted                                                                      | Works                 |
-| Settings        | `ReadAll`, `Read`, `ReadOne` | Values returned                                                               | Works                 |
-| Email           | `ComposeEmail`               | Response 2: no mail client                                                    | Cancelled             |
-| Usb             | `EnumerateDevices`           | Empty list. The session call got no response.                                 | Partial               |
-| Clipboard       | `RequestClipboard`           | Access denied: needs a started session                                        | Fails                 |
+| Interface       | Request                              | Result                                                                            | Verdict   |
+| --------------- | ------------------------------------ | --------------------------------------------------------------------------------- | --------- |
+| Background      | `RequestBackground`                  | Response 0                                                                        | Works     |
+| GlobalShortcuts | `CreateSession`                      | Response 0                                                                        | Works     |
+| GlobalShortcuts | `BindShortcuts`, Allow, app_id       | Response 0 with `gs-probe`. Key chord sends `Activated` to the session.           | Works     |
+| GlobalShortcuts | `BindShortcuts`, Deny, app_id        | Response 2 (`AccessDenied` from the provider).                                    | Refused   |
+| GlobalShortcuts | `BindShortcuts`, Allow, empty app_id | Dialog "Allow shortcuts for python3.14". Response 0. Key chord sends `Activated`. | Works     |
+| GlobalShortcuts | `BindShortcuts`, Deny, empty app_id  | Dialog shown. Response 2 after 15.3 s.                                            | Refused   |
+| Inhibit         | `Inhibit` and `Close`                | Accepted                                                                          | Works     |
+| Settings        | `ReadAll`, `Read`, `ReadOne`         | Values returned                                                                   | Works     |
+| Email           | `ComposeEmail`                       | Response 2: no mail client                                                        | Cancelled |
+| Usb             | `EnumerateDevices`                   | Empty list. The session call got no response.                                     | Partial   |
+| Clipboard       | `RequestClipboard`                   | Access denied: needs a started session                                            | Fails     |
 
 Access, AppChooser and Lockdown are not exported by the frontend. AppChooser
 was reached through `OpenURI` with `ask=true` above. Access was not driven. The
