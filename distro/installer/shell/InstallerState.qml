@@ -1,5 +1,6 @@
 pragma Singleton
 import QtQuick
+import "InstallerSchema.js" as Schema
 
 // Every value the installer collects, plus the probe and install status the
 // pages show. Pages write here, so Back keeps what the user chose. planObject()
@@ -61,12 +62,15 @@ QtObject {
     property bool rootPasswordSet: false
     property string rootPassword: ""
 
-    // Disk. storageMode is erase, free_space or alongside; shrinkPartition and
-    // shrinkBytes (the new size of that partition) are used by alongside only.
+    // Disk. storageMode is erase, free_space, alongside or manual; shrinkPartition
+    // and shrinkBytes (the new size of that partition) are used by alongside only.
+    // manualEntries is the partition list of manual mode: {device, action, role,
+    // sizeBytes, fs}. It is replaced, never edited in place, so bindings update.
     property string diskPath: ""
     property string storageMode: "erase"
     property string shrinkPartition: ""
     property real shrinkBytes: 0
+    property var manualEntries: []
     property string filesystem: "ext4"
     property string swap: "none"
     property int swapGiB: 4
@@ -110,6 +114,58 @@ QtObject {
     function offers(kind, value) {
         const list = capabilities[kind] || [];
         return list.indexOf(value) >= 0;
+    }
+    // The probe's firmware decides UEFI or BIOS rules; "" until the probe answers.
+    readonly property bool uefi: firmware === "uefi"
+    function manualHasRole(role) {
+        return manualEntries.some(e => e.role === role);
+    }
+    // Swap follows the manual list in manual mode: a swap role entry means
+    // "partition"; without one, the partition choice falls back to none.
+    function effectiveSwap() {
+        if (storageMode !== "manual")
+            return swap;
+        if (manualHasRole("swap"))
+            return "partition";
+        return swap === "partition" ? "none" : swap;
+    }
+    // Bumped when an entry changes in place (a size typed in, for one), so the
+    // bindings that check the list run again. Replacing manualEntries does too.
+    property int manualRevision: 0
+    function touchManual() {
+        manualRevision += 1;
+    }
+    // A size typed in GiB (sizeText, so a half-typed "0." is kept) as bytes; 0 when not a number above 0.
+    function entrySizeBytes(entry) {
+        const v = parseFloat(entry.sizeText);
+        return v > 0 ? Math.round(v * gib) : 0;
+    }
+    // The list with sizes in bytes, for the schema mirror.
+    function checkedEntries() {
+        return manualEntries.map(e => Object.assign({}, e, {sizeBytes: e.action === "create" ? entrySizeBytes(e) : 0}));
+    }
+    // The manual list as plan partitions (README, Plan schema v2).
+    function manualPlanPartitions() {
+        return manualEntries.map(e => {
+            const part = {device: e.device, action: e.action, role: e.role};
+            if (e.action === "create")
+                part.size_bytes = entrySizeBytes(e);
+            if (e.role === "home" && e.action !== "reuse")
+                part.fs = e.fs;
+            return part;
+        });
+    }
+    // Problems with the manual list, from the schema mirror; [] when it can be installed.
+    function manualProblems() {
+        manualRevision;
+        return Schema.manualProblems(checkedEntries(), {disk: selectedDisk, uefi: uefi, encrypted: encryption});
+    }
+    // The swap choice from the storage page. Leaving partition swap in manual mode
+    // drops the swap role entry, so the list and the choice agree.
+    function setSwap(value) {
+        swap = value;
+        if (storageMode === "manual" && value !== "partition")
+            manualEntries = manualEntries.filter(e => e.role !== "swap");
     }
     function encryptionOffered() {
         return firmware !== "" && capabilities.encryption !== undefined && capabilities.encryption[firmware] === true;
@@ -175,6 +231,8 @@ QtObject {
     function storageObject() {
         if (storageMode === "alongside")
             return {mode: "alongside", shrink: {partition: shrinkPartition, size_bytes: Math.round(shrinkBytes)}};
+        if (storageMode === "manual")
+            return {mode: "manual", partitions: manualPlanPartitions()};
         return {mode: storageMode};
     }
 
@@ -182,6 +240,7 @@ QtObject {
     // storage mode does not allow are left out.
     function planObject() {
         const erase = storageMode === "erase";
+        const confirmed = erase || storageMode === "manual";
         const plan = {
             version: 2,
             disk: diskPath,
@@ -199,11 +258,13 @@ QtObject {
             autologin: autoLogin ? username : null,
             users: [{name: username, password: password, admin: true, full_name: fullName}]
         };
-        if (erase) {
+        if (confirmed)
             plan.confirm_erase = diskPath;
+        if (erase)
             plan.other_os = otherOsAllow ? "allow" : "refuse";
-        }
-        if (swap === "file" || swap === "partition")
+        // A manual swap partition is the swap role entry; its size is that entry's.
+        plan.swap = effectiveSwap();
+        if (plan.swap === "file" || (plan.swap === "partition" && storageMode !== "manual"))
             plan.swap_bytes = swapGiB * gib;
         return plan;
     }

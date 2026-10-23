@@ -141,3 +141,130 @@ function nowStamp() {
     function two(n) { return (n < 10 ? "0" : "") + n; }
     return d.getFullYear() + two(d.getMonth() + 1) + two(d.getDate()) + "-" + two(d.getHours()) + two(d.getMinutes()) + two(d.getSeconds());
 }
+
+// Manual storage (plan schema v2, storage.partitions). These mirror the daemon's
+// rules in distro/installer/bingux_installer/plan.py; the daemon checks again.
+var PARTITION_ROLES = ["esp", "bios_boot", "boot", "root", "home", "swap"];
+var ROLE_ACTIONS = {
+    esp: ["reuse", "format", "create"],
+    bios_boot: ["reuse", "create"],
+    boot: ["format", "create"],
+    root: ["format", "create"],
+    home: ["reuse", "format", "create"],
+    swap: ["format", "create"]
+};
+var HOME_FILESYSTEMS = ["ext4", "btrfs", "xfs"];
+var CREATE_MIN = 64 * 1024 * 1024;
+var ROOT_CREATE_MIN = 1024 * 1024 * 1024;
+
+var ROLE_NAMES = {
+    esp: "EFI system partition",
+    bios_boot: "BIOS boot partition",
+    boot: "/boot partition",
+    root: "root partition",
+    home: "home partition",
+    swap: "swap partition"
+};
+
+// The partition path for a number on a disk: /dev/sda3, /dev/nvme0n1p3.
+function partitionPath(disk, number) {
+    return /\d$/.test(disk) ? disk + "p" + number : disk + number;
+}
+
+// The partition number at the end of a path (/dev/sda3 -> 3); 0 when none.
+function partitionNumber(path) {
+    var m = /(\d+)$/.exec(path || "");
+    return m ? parseInt(m[1], 10) : 0;
+}
+
+// The lowest partition number that is neither on the disk nor used by an entry.
+function freePartitionNumber(disk, entries) {
+    var taken = {};
+    (disk.partitions || []).forEach(function (p) { taken[partitionNumber(p.path)] = true; });
+    entries.forEach(function (e) { if (e.device) taken[partitionNumber(e.device)] = true; });
+    var n = 1;
+    while (taken[n])
+        n++;
+    return n;
+}
+
+function existingPartition(disk, path) {
+    var list = disk && disk.partitions ? disk.partitions : [];
+    for (var i = 0; i < list.length; i++)
+        if (list[i].path === path)
+            return list[i];
+    return null;
+}
+
+// Every problem with a manual partition list, as sentences. [] when the list
+// is valid. ctx: {disk (probe object), uefi (bool), encrypted (bool)}.
+function manualProblems(entries, ctx) {
+    var out = [];
+    var disk = ctx.disk;
+    var devices = {};
+    var counts = {};
+    var create = 0;
+    if (!disk)
+        return ["Choose a disk first."];
+    entries.forEach(function (e) {
+        var name = ROLE_NAMES[e.role] || e.role;
+        counts[e.role] = (counts[e.role] || 0) + 1;
+        if (!e.device) {
+            out.push("Choose a partition for the " + name + ".");
+            return;
+        }
+        if (devices[e.device])
+            out.push("Each device may appear only once (" + e.device + ").");
+        devices[e.device] = true;
+        if (!ROLE_ACTIONS[e.role] || ROLE_ACTIONS[e.role].indexOf(e.action) < 0)
+            out.push(e.action + " is not allowed for the " + name + ".");
+        if (e.action === "create") {
+            create += e.sizeBytes;
+            if (e.sizeBytes < CREATE_MIN)
+                out.push("The " + name + " is smaller than 64 MiB.");
+            if (e.role === "root" && e.sizeBytes < ROOT_CREATE_MIN)
+                out.push("The root partition needs at least 1 GiB.");
+            if (existingPartition(disk, e.device))
+                out.push(e.device + " already exists; choose reuse or format for it.");
+            return;
+        }
+        var part = existingPartition(disk, e.device);
+        if (!part) {
+            out.push(e.device + " is not a partition of " + disk.path + ".");
+            return;
+        }
+        if (e.action === "format" && part.mountpoint)
+            out.push(e.device + " is mounted at " + part.mountpoint + "; unmount it or pick another partition.");
+        if (e.action === "reuse" && e.role === "esp" && part.fstype !== "vfat")
+            out.push(e.device + " must be FAT (vfat) to reuse it as the EFI partition.");
+        if (e.action === "reuse" && e.role === "home" && HOME_FILESYSTEMS.indexOf(part.fstype) < 0)
+            out.push(e.device + " must be ext4, btrfs or xfs to reuse it as home.");
+    });
+    PARTITION_ROLES.forEach(function (role) {
+        if ((counts[role] || 0) > 1)
+            out.push("At most one " + (ROLE_NAMES[role] || role) + " is allowed.");
+    });
+    if (counts.root !== 1)
+        out.push("Exactly one root partition is required.");
+    if (ctx.uefi) {
+        if (counts.esp !== 1)
+            out.push("UEFI needs exactly one EFI system partition.");
+        if (counts.bios_boot || counts.boot)
+            out.push("A BIOS boot or /boot partition is only used with BIOS.");
+    } else {
+        if (counts.bios_boot !== 1)
+            out.push("BIOS needs exactly one BIOS boot partition.");
+        if (counts.esp)
+            out.push("An EFI system partition is only used with UEFI.");
+        if (ctx.encrypted && !counts.boot)
+            out.push("BIOS with encryption needs a /boot partition.");
+    }
+    if (ctx.encrypted && counts.home)
+        out.push("A separate home partition cannot be encrypted yet.");
+    var free = disk.free_bytes;
+    if (create > 0 && (free === null || free === undefined))
+        out.push("The unallocated space is unknown, so new partitions cannot be checked.");
+    else if (create > 0 && create > free)
+        out.push("The new partitions need " + formatBytes(create) + "; the disk has " + formatBytes(free) + " unallocated.");
+    return out;
+}

@@ -12,6 +12,7 @@ InstallerNetworkPage 1.0 InstallerNetworkPage.qml
 InstallerPage 1.0 InstallerPage.qml
 InstallerProgressPage 1.0 InstallerProgressPage.qml
 InstallerShell 1.0 InstallerShell.qml
+InstallerSlider 1.0 InstallerSlider.qml
 InstallerStoragePage 1.0 InstallerStoragePage.qml
 InstallerSummaryPage 1.0 InstallerSummaryPage.qml
 InstallerSwitchRow 1.0 InstallerSwitchRow.qml

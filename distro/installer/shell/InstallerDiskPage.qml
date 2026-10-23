@@ -4,6 +4,8 @@ import "InstallerSchema.js" as Schema
 // Disk and how Bingux uses it. The probe's partitions and capabilities decide
 // what is offered: a way of using the disk is enabled only when this installer
 // build implements it (capabilities.storage_modes) and the disk can take it.
+// The daemon reads the partition table for every mode but erase, so those
+// modes need GPT.
 InstallerPage {
     id: page
 
@@ -18,17 +20,22 @@ InstallerPage {
     // InstallerClient, used to probe again.
     property var client: null
 
-    // Room left for Bingux when installing alongside: the partition shrinks by this much.
+    // Room left for Bingux when installing alongside: the default new size of the partition.
     readonly property real keepForBingux: 20 * InstallerState.gib
+    // The least Bingux can be installed into; alongside leaves at least this much free.
+    readonly property real minFreeForBingux: Schema.MIN_DISK_BYTES
 
     readonly property var disk: InstallerState.selectedDisk
     readonly property var otherOs: disk && disk.other_os ? disk.other_os : []
     readonly property bool otherOsOnDisk: otherOs.length > 0
     readonly property var partitions: disk && disk.partitions ? disk.partitions : []
     readonly property string mode: InstallerState.storageMode
+    readonly property bool gpt: disk !== null && disk.partition_table === "gpt"
+    readonly property var shrinkPart: partitionByPath(InstallerState.shrinkPartition)
 
     readonly property bool freeSpaceOffered: InstallerState.offers("storage_modes", "free_space")
     readonly property bool alongsideOffered: InstallerState.offers("storage_modes", "alongside")
+    readonly property bool manualOffered: InstallerState.offers("storage_modes", "manual")
     readonly property bool freeSpaceUsable: disk !== null && disk.free_bytes !== null && disk.free_bytes >= Schema.MIN_DISK_BYTES
 
     primaryEnabled: disk !== null && diskProblem(disk) === "" && modeProblem() === ""
@@ -46,9 +53,16 @@ InstallerPage {
     function modeProblem() {
         if (mode === "free_space" && !freeSpaceUsable)
             return "no unallocated space";
-        if (mode === "alongside" && InstallerState.shrinkPartition === "")
+        if (mode === "alongside" && shrinkPart === null)
             return "no partition chosen";
         return "";
+    }
+
+    function partitionByPath(path) {
+        for (const part of partitions)
+            if (part.path === path)
+                return part;
+        return null;
     }
 
     function shrinkProblem(part) {
@@ -56,21 +70,35 @@ InstallerPage {
             return "cannot be shrunk";
         if (part.size_bytes === null || part.min_bytes === null)
             return "size unknown";
-        if (part.size_bytes - keepForBingux < part.min_bytes)
-            return "not enough room to free " + Schema.formatBytes(keepForBingux);
+        if (part.size_bytes - minFreeForBingux < part.min_bytes)
+            return "not enough room to free " + Schema.formatBytes(minFreeForBingux);
         return "";
+    }
+
+    // Why a mode that needs the partition table is off; "" when it is available.
+    function gptProblem() {
+        return gpt ? "" : "needs a GPT partition table";
     }
 
     function chooseDisk(path) {
         InstallerState.diskPath = path;
         InstallerState.storageMode = "erase";
         InstallerState.shrinkPartition = "";
+        InstallerState.manualEntries = [];
+    }
+
+    function chooseMode(value) {
+        InstallerState.storageMode = value;
+        if (value !== "alongside")
+            InstallerState.shrinkPartition = "";
     }
 
     function choosePartition(part) {
+        const top = part.size_bytes - minFreeForBingux;
+        const start = Math.max(part.min_bytes, Math.min(top, part.size_bytes - keepForBingux));
         InstallerState.storageMode = "alongside";
         InstallerState.shrinkPartition = part.path;
-        InstallerState.shrinkBytes = part.size_bytes - keepForBingux;
+        InstallerState.shrinkBytes = start;
     }
 
     function partitionLine(part) {
@@ -86,7 +114,7 @@ InstallerPage {
     }
 
     function primary() {
-        page.wizard.go("storage");
+        page.wizard.go(mode === "manual" ? "partitions" : "storage");
     }
 
     Column {
@@ -150,9 +178,14 @@ InstallerPage {
         }
 
         InstallerText {
-            visible: page.disk !== null
+            visible: page.disk !== null && page.mode === "erase"
             tone: "danger"
-            text: "Everything on " + (page.disk ? page.disk.path : "") + " will be erased when you install with erase. Bingux cannot undo this."
+            text: "Everything on " + (page.disk ? page.disk.path : "") + " will be erased when you install. Bingux cannot undo this."
+        }
+        InstallerText {
+            visible: page.disk !== null && page.mode === "manual"
+            tone: "warning"
+            text: "You choose on the next page which partitions are formatted. Only those lose their data."
         }
         InstallerText {
             visible: page.otherOsOnDisk
@@ -176,26 +209,25 @@ InstallerPage {
             text: "Erase the whole disk"
             selected: page.mode === "erase"
             ticked: selected
-            onClicked: InstallerState.storageMode = "erase"
+            onClicked: page.chooseMode("erase")
         }
         SessionRow {
             width: parent.width
-            enabled: page.disk !== null && page.freeSpaceOffered && page.freeSpaceUsable
+            enabled: page.disk !== null && page.freeSpaceOffered && page.gpt && page.freeSpaceUsable
             text: !page.freeSpaceOffered ? "Use free space (not in this installer build yet)"
+                : !page.gpt && page.disk !== null ? "Use free space (" + page.gptProblem() + ")"
                 : !page.freeSpaceUsable ? "Use free space (no unallocated space of 8 GiB or more)"
                 : "Use free space"
             selected: page.mode === "free_space"
             ticked: selected
-            onClicked: {
-                InstallerState.storageMode = "free_space";
-                InstallerState.shrinkPartition = "";
-            }
+            onClicked: page.chooseMode("free_space")
         }
         SessionRow {
             width: parent.width
-            enabled: page.disk !== null && page.alongsideOffered && page.partitions.some(p => page.shrinkProblem(p) === "")
+            enabled: page.disk !== null && page.alongsideOffered && page.gpt && page.partitions.some(p => page.shrinkProblem(p) === "")
             text: !page.alongsideOffered ? "Install alongside another system (not in this installer build yet)"
-                : "Install alongside another system (free " + Schema.formatBytes(page.keepForBingux) + " by resizing a partition)"
+                : !page.gpt && page.disk !== null ? "Install alongside another system (" + page.gptProblem() + ")"
+                : "Install alongside another system (keep at least " + Schema.formatBytes(page.minFreeForBingux) + " free by resizing a partition)"
             selected: page.mode === "alongside"
             ticked: selected
             onClicked: {
@@ -210,7 +242,7 @@ InstallerPage {
                 required property var modelData
                 readonly property string problem: page.shrinkProblem(modelData)
                 width: parent.width
-                enabled: problem === ""
+                enabled: problem === "" && page.gpt
                 text: "Resize " + modelData.path + " (" + (modelData.fstype || "no filesystem")
                     + ", " + Schema.formatBytes(modelData.size_bytes) + ")" + (problem !== "" ? "   (" + problem + ")" : "")
                 selected: page.mode === "alongside" && InstallerState.shrinkPartition === modelData.path
@@ -218,10 +250,27 @@ InstallerPage {
                 onClicked: page.choosePartition(modelData)
             }
         }
+        InstallerSlider {
+            visible: page.mode === "alongside" && page.shrinkPart !== null
+            enabled: page.shrinkPart !== null
+            from: page.shrinkPart ? page.shrinkPart.min_bytes : 0
+            to: page.shrinkPart ? page.shrinkPart.size_bytes - page.minFreeForBingux : 1
+            value: InstallerState.shrinkBytes
+            caption: page.shrinkPart ? "New size of " + page.shrinkPart.path : ""
+            valueText: page.shrinkPart
+                ? Schema.formatBytes(InstallerState.shrinkBytes) + "   " + Schema.formatBytes(page.shrinkPart.size_bytes - InstallerState.shrinkBytes) + " free for Bingux"
+                : ""
+            onMoved: v => InstallerState.shrinkBytes = Math.round(v)
+        }
         SessionRow {
             width: parent.width
-            enabled: false
-            text: "Partition by hand (no partition editor in this installer yet)"
+            enabled: page.disk !== null && page.manualOffered && page.gpt
+            text: !page.manualOffered ? "Partition by hand (not in this installer build yet)"
+                : !page.gpt && page.disk !== null ? "Partition by hand (" + page.gptProblem() + ")"
+                : "Partition by hand"
+            selected: page.mode === "manual"
+            ticked: selected
+            onClicked: page.chooseMode("manual")
         }
     }
 }
