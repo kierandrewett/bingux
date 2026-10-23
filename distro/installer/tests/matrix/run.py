@@ -360,6 +360,9 @@ def run_case(name, iso, out_root, disk_dir, checks, cdrom=None):
         raw = disk_dir / f"{name}.raw"
         build_other_os_disk(raw, DISK_BYTES, *FIXTURES[name])
         build_qcow2(raw, disk)
+        if name in REFUSALS:
+            pristine = disk_dir / f"{name}.pristine.qcow2"
+            shutil.copyfile(disk, pristine)
 
     installed = False
     with LiveVm(out / "install") as vm:
@@ -387,12 +390,11 @@ def run_case(name, iso, out_root, disk_dir, checks, cdrom=None):
         checks.expect(ok, f"{name}: other OS manifest verifies after install (host ntfscat)", detail)
     if name in REFUSALS and name in FIXTURES:
         # a refused install must leave the other OS untouched: the whole disk still equals the fixture
-        raw = disk_dir / f"{name}.raw"
-        compare = subprocess.run(["qemu-img", "compare", str(raw), str(disk)],
+        compare = subprocess.run(["qemu-img", "compare", str(pristine), str(disk)],
                                  capture_output=True, text=True, check=False)
         checks.expect(compare.returncode == 0, f"{name}: disk unchanged by the refused install",
                       (compare.stdout + compare.stderr)[-300:])
-        raw.unlink(missing_ok=True)
+        pristine.unlink(missing_ok=True)
     disk.unlink(missing_ok=True)
 
 
