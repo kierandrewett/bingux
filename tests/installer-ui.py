@@ -5,10 +5,10 @@ Packs shell/bingux plus distro/installer/shell into a merged tree (as
 installer-merged-tree.py does), copies tests/installer-ui.qml into it as the
 entry point, and runs it under bingux-shell -p (offscreen, no compositor).
 The fake daemon speaks the protocol in distro/installer/README.md:
-  probe    -> two 8 GiB disks, UEFI
-  install /dev/vda -> progress through every phase, then result ok
+  probe    -> two 8 GiB disks, plus /dev/vdc (32 GiB, partitions vdc1 and vdc2), UEFI
   install /dev/vdb -> progress up to mount, then error storage_failed
   log mode -> no daemon; 5000 appended log lines must stay within InstallerState.logLimit
+  install /dev/vdc (manual plan) -> checks the partition list and the swap, then ok
   unreachable mode -> no daemon listens, so the probe must fail
 After the shell exits the test checks the plans the daemon received.
 
@@ -37,11 +37,15 @@ PROBE_RESULT = {
     "disks": [
         {"path": "/dev/vda", "size_bytes": 8 * GIB, "model": "virtio", "removable": False, "is_live_medium": False, "other_os": [], "partition_table": "gpt", "free_bytes": 8 * GIB, "partitions": []},
         {"path": "/dev/vdb", "size_bytes": 8 * GIB, "model": "virtio", "removable": False, "is_live_medium": False, "other_os": [], "partition_table": "gpt", "free_bytes": 8 * GIB, "partitions": []},
+        {"path": "/dev/vdc", "size_bytes": 32 * GIB, "model": "virtio", "removable": False, "is_live_medium": False, "other_os": [], "partition_table": "gpt", "free_bytes": 23 * GIB // 2, "partitions": [
+            {"path": "/dev/vdc1", "fstype": "vfat", "label": "ESP", "size_bytes": GIB // 2, "mountpoint": None, "used_bytes": None, "free_bytes": None, "os": None, "shrinkable": False, "min_bytes": None},
+            {"path": "/dev/vdc2", "fstype": "ext4", "label": "root", "size_bytes": 20 * GIB, "mountpoint": None, "used_bytes": 4 * GIB, "free_bytes": 16 * GIB, "os": None, "shrinkable": True, "min_bytes": 6 * GIB},
+        ]},
     ],
     "tools_missing": [],
     "installer_version": "0.1.0",
     "capabilities": {
-        "storage_modes": ["erase"],
+        "storage_modes": ["erase", "free_space", "manual"],
         "filesystems": ["ext4", "btrfs", "xfs"],
         "swap": ["none", "zram", "file", "partition"],
         "encryption": {"uefi": True, "bios": True},
@@ -96,12 +100,30 @@ class FakeDaemon:
             return [{"event": "error", "code": "bad_request", "message": f"unknown op: {op}"}]
         plan = request["plan"]
         disk = plan["disk"]
+        if disk == "/dev/vdc":
+            return self.manual_reply(plan)
         if disk == "/dev/vdb":
             lines = [{"event": "progress", "phase": phase, "percent": None, "message": ""} for phase in PHASES[:4]]
             lines.append({"event": "error", "code": "storage_failed", "message": "storage_failed: RuntimeError: fake partition table write failed"})
             return lines
         if disk != "/dev/vda" or plan.get("confirm_erase") != disk:
             return [{"event": "error", "code": "invalid_plan", "message": "invalid plan: disk: fake daemon rule"}]
+        lines = [{"event": "progress", "phase": phase, "percent": round(100 * index / len(PHASES)), "message": f"{phase} step"} for index, phase in enumerate(PHASES)]
+        lines.append({"event": "result", "ok": True, "data": {"disk": disk, "firmware": "uefi", "filesystem": plan["filesystem"]}})
+        return lines
+
+    def manual_reply(self, plan):
+        """A manual plan on /dev/vdc: the partition list must be well formed, else invalid_plan."""
+        disk = plan["disk"]
+        storage = plan.get("storage") or {}
+        if plan.get("confirm_erase") != disk or storage.get("mode") != "manual":
+            return [{"event": "error", "code": "invalid_plan", "message": "invalid plan: storage: fake daemon rule"}]
+        partitions = storage.get("partitions") or []
+        for part in partitions:
+            if part.get("action") == "create" and not part.get("size_bytes"):
+                return [{"event": "error", "code": "invalid_plan", "message": "invalid plan: partitions: create needs size_bytes"}]
+        if any(part.get("role") == "home" for part in partitions) and plan.get("encryption", {}).get("enabled"):
+            return [{"event": "error", "code": "unsupported", "message": "encryption with a separate home partition is not implemented yet"}]
         lines = [{"event": "progress", "phase": phase, "percent": round(100 * index / len(PHASES)), "message": f"{phase} step"} for index, phase in enumerate(PHASES)]
         lines.append({"event": "result", "ok": True, "data": {"disk": disk, "firmware": "uefi", "filesystem": plan["filesystem"]}})
         return lines
@@ -167,6 +189,27 @@ def check_plan(plan, disk):
     if user.get("name") != "ada" or user.get("password") != "correct horse" or user.get("admin") is not True or user.get("full_name") != "Ada Lovelace":
         raise SystemExit(f"plan user is {user!r}")
 
+def check_manual_plan(plan):
+    partitions = [
+        {"device": "/dev/vdc1", "action": "reuse", "role": "esp"},
+        {"device": "/dev/vdc2", "action": "format", "role": "root"},
+        {"device": "/dev/vdc3", "action": "create", "role": "swap", "size_bytes": 2 * GIB},
+    ]
+    expected = {
+        "version": 2,
+        "disk": "/dev/vdc",
+        "confirm_erase": "/dev/vdc",
+        "storage": {"mode": "manual", "partitions": partitions},
+        "encryption": {"enabled": False},
+        "swap": "partition",
+        "filesystem": "ext4",
+    }
+    for key, value in expected.items():
+        if plan.get(key) != value:
+            raise SystemExit(f"manual plan {key} is {plan.get(key)!r}, expected {value!r}")
+    if plan.get("swap_bytes") is not None:
+        raise SystemExit(f"manual plan swap_bytes is {plan.get('swap_bytes')!r}, expected None")
+
 
 def pack_tree(scratch):
     """Packs shell/bingux and the installer overlay into scratch/tree and returns the tree."""
@@ -218,6 +261,18 @@ def main():
         check_plan(daemon.requests[1]["plan"], "/dev/vda")
         check_plan(daemon.requests[2]["plan"], "/dev/vdb")
 
+        # Manual: a partition list on /dev/vdc, checked by the schema mirror, then installed.
+        manual_path = probe_socket_path(scratch, "manual.sock")
+        daemon = FakeDaemon(manual_path)
+        daemon.start()
+        output = run_shell(arguments.shell, tree, "manual", manual_path)
+        if "INSTALLER_UI_FAILED" in output or "INSTALLER_UI_MANUAL_OK" not in output:
+            raise SystemExit("installer-ui manual failed:\n" + "\n".join(line for line in output.splitlines() if "INSTALLER_UI" in line or "ERROR" in line))
+        ops = [request["op"] for request in daemon.requests]
+        if ops != ["probe", "install"]:
+            raise SystemExit(f"daemon saw {ops} in manual mode")
+        check_manual_plan(daemon.requests[1]["plan"])
+
         # Unreachable: nothing listens on the socket, so the probe must fail cleanly.
         missing_path = probe_socket_path(scratch, "absent.sock")
         output = run_shell(arguments.shell, tree, "unreachable", missing_path)
@@ -230,7 +285,7 @@ def main():
         if "INSTALLER_UI_FAILED" in output or "INSTALLER_UI_LOG_OK" not in output:
             raise SystemExit("installer-ui log failed:\n" + "\n".join(line for line in output.splitlines() if "INSTALLER_UI" in line or "ERROR" in line))
 
-        print("installer-ui: probe, install and failure flows pass against the fake daemon; unreachable probe fails cleanly; the install log stays capped")
+        print("installer-ui: probe, install and failure flows pass against the fake daemon; a manual partition plan is checked and installed; unreachable probe fails cleanly; the install log stays capped")
         print("INSTALLER_UI_PASSED")
     finally:
         shutil.rmtree(scratch, ignore_errors=True)

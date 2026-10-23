@@ -7,6 +7,7 @@ import Quickshell
 // failed check prints INSTALLER_UI_FAILED and exits 1. Mode "unreachable"
 // points at a socket with no daemon and expects the probe to fail. Mode "log"
 // appends 5000 lines to the install log without a daemon and checks the cap.
+// Mode "manual" builds a partition list on /dev/vdc (reuse the ESP, format root, new swap) and installs it.
 ShellRoot {
     id: root
 
@@ -51,23 +52,69 @@ ShellRoot {
             return;
         if (InstallerState.firmware !== "uefi")
             fail("firmware is " + InstallerState.firmware);
-        if (InstallerState.disks.length !== 2 || InstallerState.disks[0].path !== "/dev/vda")
+        if (InstallerState.disks.length !== 3 || InstallerState.disks[0].path !== "/dev/vda" || InstallerState.disks[2].path !== "/dev/vdc")
             fail("disks are " + JSON.stringify(InstallerState.disks));
         if (!InstallerState.offers("filesystems", "xfs") || !InstallerState.offers("swap", "zram"))
             fail("probe capabilities are " + JSON.stringify(InstallerState.capabilities));
         report("INSTALLER_UI_PROBE_OK");
+        setAccount();
+        stage = 1;
+        if (mode === "manual") {
+            startManual();
+            return;
+        }
+        InstallerState.filesystem = "xfs";
+        InstallerState.swap = "zram";
+        InstallerState.ntp = false;
+        startInstall("/dev/vda");
+    }
+
+    function setAccount() {
         InstallerState.fullName = "Ada Lovelace";
         InstallerState.username = "ada";
         InstallerState.usernameEdited = true;
         InstallerState.password = "correct horse";
-        InstallerState.filesystem = "xfs";
-        InstallerState.swap = "zram";
-        InstallerState.ntp = false;
         InstallerState.rootPasswordSet = true;
         InstallerState.rootPassword = "root secret";
         InstallerState.autoLogin = true;
-        stage = 1;
-        startInstall("/dev/vda");
+    }
+
+    // Manual mode: reuse the ESP, format root, and create a 2 GiB swap partition on /dev/vdc.
+    function startManual() {
+        InstallerState.diskPath = "/dev/vdc";
+        InstallerState.storageMode = "manual";
+        InstallerState.setSwap("partition");
+        InstallerState.encryption = false;
+        const list = [
+            {role: "esp", action: "reuse", device: "/dev/vdc1", sizeText: "", typed: false, fs: "ext4"},
+            {role: "root", action: "format", device: "/dev/vdc2", sizeText: "", typed: false, fs: "ext4"},
+            {role: "swap", action: "create", device: "/dev/vdc3", sizeText: "2", typed: true, fs: "ext4"}
+        ];
+        InstallerState.manualEntries = list;
+        const problems = InstallerState.manualProblems();
+        if (problems.length !== 0)
+            fail("manual list has problems: " + problems.join("; "));
+        // A separate home partition cannot be encrypted yet: the schema mirror must say so.
+        InstallerState.manualEntries = list.concat([{role: "home", action: "create", device: "/dev/vdc4", sizeText: "1", typed: true, fs: "ext4"}]);
+        InstallerState.encryption = true;
+        if (InstallerState.manualProblems().indexOf("A separate home partition cannot be encrypted yet.") < 0)
+            fail("encrypted home is not refused: " + JSON.stringify(InstallerState.manualProblems()));
+        InstallerState.encryption = false;
+        InstallerState.manualEntries = list;
+        if (InstallerState.manualProblems().length !== 0)
+            fail("the list does not validate after undoing the home partition");
+        report("INSTALLER_UI_MANUAL_CHECK_OK");
+        const plan = InstallerState.planObject();
+        const want = [
+            {device: "/dev/vdc1", action: "reuse", role: "esp"},
+            {device: "/dev/vdc2", action: "format", role: "root"},
+            {device: "/dev/vdc3", action: "create", role: "swap", size_bytes: 2 * 1073741824}
+        ];
+        if (plan.storage.mode !== "manual" || plan.confirm_erase !== "/dev/vdc")
+            fail("plan storage is " + JSON.stringify(plan.storage) + ", confirm_erase " + plan.confirm_erase);
+        if (JSON.stringify(plan.storage.partitions) !== JSON.stringify(want))
+            fail("plan partitions are " + JSON.stringify(plan.storage.partitions));
+        startInstall("/dev/vdc");
     }
 
     function onInstalled(data) {
@@ -75,7 +122,8 @@ ShellRoot {
             fail("unexpected success at stage " + stage);
         if (InstallerState.installState !== "done")
             fail("installState is " + InstallerState.installState);
-        if (data.disk !== "/dev/vda" || InstallerState.percent !== 100)
+        const disk = mode === "manual" ? "/dev/vdc" : "/dev/vda";
+        if (data.disk !== disk || InstallerState.percent !== 100)
             fail("result " + JSON.stringify(data) + " percent " + InstallerState.percent);
         const want = ["validate", "preflight", "partition", "mount", "copy", "strip", "configure", "bootloader", "finish"];
         if (JSON.stringify(phases) !== JSON.stringify(want))
@@ -83,6 +131,11 @@ ShellRoot {
         if (InstallerState.logModel.count === 0)
             fail("install wrote no log lines");
         report("INSTALLER_UI_INSTALL_OK");
+        if (mode === "manual") {
+            report("INSTALLER_UI_MANUAL_OK");
+            finish();
+            return;
+        }
         stage = 2;
         startInstall("/dev/vdb");
     }
