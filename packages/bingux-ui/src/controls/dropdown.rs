@@ -155,6 +155,13 @@ impl Component for Dropdown {
                     .max(min)
             }
         };
+        // On a phone the value never takes more than the field column, so the
+        // row's title keeps its room; a long value is cut with an ellipsis.
+        let width = if touch() {
+            width.min(Dim::Field.px())
+        } else {
+            width
+        };
         let current_icon = selected_index.and_then(|index| self.icons.get(index).cloned());
         // The rows' height, and the part of it the menu shows.
         let item_height = Dim::MenuItem.px();

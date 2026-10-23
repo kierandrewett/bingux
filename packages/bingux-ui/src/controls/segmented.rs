@@ -35,6 +35,18 @@ pub fn segmented(
 
 impl Component for Segmented {
     fn render(&self) -> impl IntoElement {
+        // On a phone a row has no room for a track of segments beside its
+        // title, so the same choice is a value picker, as the dropdown is.
+        // The density only changes with a remount, so the hooks below keep
+        // their order for the life of the control.
+        if touch() {
+            return crate::controls::dropdown::dropdown(
+                self.options.clone(),
+                self.selected.clone(),
+                self.on_select.clone(),
+            )
+            .into_element();
+        }
         let tokens = use_tokens();
         let enabled = use_enabled(true);
         let options = self.options.clone();
@@ -54,50 +66,52 @@ impl Component for Segmented {
                 .collect()
         };
         let key_ids = ids.clone();
-        rect()
-            .tw(
-                &tokens,
-                &[
-                    h(Dim::Control),
-                    flex_row(),
-                    items(Align::Center),
-                    p(S1),
-                    gap(S1),
-                    rounded(Radius::Control),
-                    bg(Paint::Control),
-                ],
-            )
-            .maybe(!enabled, |element| element.opacity(0.45))
-            .on_key_down(move |event: Event<KeyboardEventData>| {
-                if !enabled {
-                    return;
-                }
-                let Some(index) = options.iter().position(|(key, _)| *key == selected) else {
-                    return;
-                };
-                let last = options.len().saturating_sub(1);
-                let next = match &event.key {
-                    Key::Named(NamedKey::ArrowLeft) => index.saturating_sub(1),
-                    Key::Named(NamedKey::ArrowRight) => (index + 1).min(last),
-                    Key::Named(NamedKey::Home) => 0,
-                    Key::Named(NamedKey::End) => last,
-                    _ => return,
-                };
-                event.stop_propagation();
-                if next != index {
-                    on_select.call(options[next].0.clone());
-                }
-                key_ids[next].request_focus();
-            })
-            .children(self.options.iter().enumerate().map(|(index, (key, text))| {
-                Element::from(Segment {
-                    key: key.clone(),
-                    text: text.clone(),
-                    selected: *key == self.selected,
-                    on_select: self.on_select.clone(),
-                    a11y_id: ids[index],
+        Element::from(
+            rect()
+                .tw(
+                    &tokens,
+                    &[
+                        h(Dim::Control),
+                        flex_row(),
+                        items(Align::Center),
+                        p(S1),
+                        gap(S1),
+                        rounded(Radius::Control),
+                        bg(Paint::Control),
+                    ],
+                )
+                .maybe(!enabled, |element| element.opacity(0.45))
+                .on_key_down(move |event: Event<KeyboardEventData>| {
+                    if !enabled {
+                        return;
+                    }
+                    let Some(index) = options.iter().position(|(key, _)| *key == selected) else {
+                        return;
+                    };
+                    let last = options.len().saturating_sub(1);
+                    let next = match &event.key {
+                        Key::Named(NamedKey::ArrowLeft) => index.saturating_sub(1),
+                        Key::Named(NamedKey::ArrowRight) => (index + 1).min(last),
+                        Key::Named(NamedKey::Home) => 0,
+                        Key::Named(NamedKey::End) => last,
+                        _ => return,
+                    };
+                    event.stop_propagation();
+                    if next != index {
+                        on_select.call(options[next].0.clone());
+                    }
+                    key_ids[next].request_focus();
                 })
-            }))
+                .children(self.options.iter().enumerate().map(|(index, (key, text))| {
+                    Element::from(Segment {
+                        key: key.clone(),
+                        text: text.clone(),
+                        selected: *key == self.selected,
+                        on_select: self.on_select.clone(),
+                        a11y_id: ids[index],
+                    })
+                })),
+        )
     }
 }
 
