@@ -61,6 +61,8 @@ pub struct TextStyle {
     pub tracking: f32,
     /// Digits share one width, so a changing number does not shift the text.
     pub tabular: bool,
+    /// Set in the serif display face when the system has one.
+    pub display: bool,
 }
 
 impl TextStyle {
@@ -79,6 +81,10 @@ impl TextStyle {
             .font_weight(self.weight)
             .line_height(self.leading)
             .letter_spacing(self.tracking);
+        let label = match crate::theme::display_family() {
+            Some(_) if self.display => label.font_family(crate::theme::DISPLAY_FONT),
+            _ => label,
+        };
         if self.tabular {
             label.font_tabular()
         } else {
@@ -95,6 +101,10 @@ impl TextStyle {
             .line_height(self.leading)
             .letter_spacing(self.tracking)
             .child(text.into());
+        let paragraph = match crate::theme::display_family() {
+            Some(_) if self.display => paragraph.font_family(crate::theme::DISPLAY_FONT),
+            _ => paragraph,
+        };
         if self.tabular {
             paragraph.font_tabular()
         } else {
@@ -106,11 +116,12 @@ impl TextStyle {
 /// A single large value: a clock, a percentage, the figure a page is about.
 pub const HERO: TextStyle = TextStyle {
     size: TEXT_HERO,
-    weight: FontWeight::LIGHT,
+    weight: FontWeight::NORMAL,
     ink: Ink::Text,
     leading: LEADING_TIGHT,
     tracking: 0.0,
     tabular: false,
+    display: true,
 };
 
 /// A page or detail title: the name at the head of an identity block or a
@@ -122,6 +133,30 @@ pub const TITLE: TextStyle = TextStyle {
     leading: LEADING_TIGHT,
     tracking: 0.0,
     tabular: false,
+    display: true,
+};
+
+/// The title of a sheet or dialog.
+pub const MODAL_TITLE: TextStyle = TextStyle {
+    size: TEXT_MODAL,
+    weight: FontWeight::NORMAL,
+    ink: Ink::Text,
+    leading: LEADING_TIGHT,
+    tracking: 0.0,
+    tabular: false,
+    display: true,
+};
+
+/// A group title: small, muted and medium weight, so it labels the rows
+/// below without competing with the page title.
+pub const SECTION: TextStyle = TextStyle {
+    size: TEXT_MD,
+    weight: FontWeight::MEDIUM,
+    ink: Ink::Muted,
+    leading: LEADING,
+    tracking: 0.0,
+    tabular: false,
+    display: false,
 };
 
 /// A group title, above its card. Clearly larger and heavier than row text.
@@ -132,6 +167,7 @@ pub const HEADING: TextStyle = TextStyle {
     leading: LEADING,
     tracking: 0.0,
     tabular: false,
+    display: false,
 };
 
 /// Row titles and body text.
@@ -142,6 +178,7 @@ pub const BODY: TextStyle = TextStyle {
     leading: LEADING,
     tracking: 0.0,
     tabular: false,
+    display: false,
 };
 
 /// Body text that must stand out in its row: a name or a state.
@@ -152,6 +189,7 @@ pub const EMPHASIS: TextStyle = TextStyle {
     leading: LEADING,
     tracking: 0.0,
     tabular: false,
+    display: false,
 };
 
 /// A read-only value on the right of a row.
@@ -162,6 +200,7 @@ pub const VALUE: TextStyle = TextStyle {
     leading: LEADING,
     tracking: 0.0,
     tabular: false,
+    display: false,
 };
 
 /// A number that changes, such as a count or a level.
@@ -172,6 +211,7 @@ pub const NUMERIC: TextStyle = TextStyle {
     leading: LEADING,
     tracking: 0.0,
     tabular: true,
+    display: false,
 };
 
 /// A subtitle, caption or note under a title.
@@ -182,6 +222,7 @@ pub const CAPTION: TextStyle = TextStyle {
     leading: LEADING_LOOSE,
     tracking: 0.0,
     tabular: false,
+    display: false,
 };
 
 /// A badge or a count after a title.
@@ -192,6 +233,7 @@ pub const BADGE: TextStyle = TextStyle {
     leading: LEADING,
     tracking: 0.0,
     tabular: false,
+    display: false,
 };
 
 /// Small capitals above a block of text, tracked out.
@@ -202,6 +244,7 @@ pub const OVERLINE: TextStyle = TextStyle {
     leading: LEADING,
     tracking: TRACKING_OVERLINE,
     tabular: false,
+    display: false,
 };
 
 /// A link or an action set in text.
@@ -212,6 +255,7 @@ pub const LINK: TextStyle = TextStyle {
     leading: LEADING,
     tracking: 0.0,
     tabular: false,
+    display: false,
 };
 
 /// A single line of text in a style, for a component that has no tokens.

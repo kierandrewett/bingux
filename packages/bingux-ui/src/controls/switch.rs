@@ -7,14 +7,14 @@ use freya::prelude::*;
 
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
 
-const SWITCH_WIDTH: f32 = 36.0;
-const SWITCH_HEIGHT: f32 = 20.0;
+const SWITCH_WIDTH: f32 = 48.0;
+const SWITCH_HEIGHT: f32 = 28.0;
 /// Pill radius: half the track height.
-const SWITCH_RADIUS: f32 = 10.0;
-const THUMB: f32 = 16.0;
+const SWITCH_RADIUS: f32 = 14.0;
+const THUMB: f32 = 20.0;
 /// The thumb widens to this while the switch is pressed.
-const THUMB_PRESSED: f32 = 18.0;
-const THUMB_INSET: f32 = 2.0;
+const THUMB_PRESSED: f32 = 24.0;
+const THUMB_INSET: f32 = 4.0;
 const HOVER_OVERLAY: f32 = 0.08;
 const PRESSED_OVERLAY: f32 = 0.16;
 const DISABLED_OPACITY: f32 = 0.45;
@@ -57,9 +57,9 @@ impl Component for Switch {
         let on_toggle = self.on_toggle.clone();
         let enabled = use_enabled(self.enabled);
 
-        let track = if on { tokens.accent } else { tokens.control };
+        let track = if on { tokens.text } else { tokens.control };
         let outline = tokens.outline;
-        let thumb_color = if on { Color::WHITE } else { tokens.text };
+        let thumb_color = if on { tokens.bg } else { tokens.muted };
         let overlay = if enabled && pressing() {
             Color::BLACK.with_af32(PRESSED_OVERLAY)
         } else if enabled && hovering() {

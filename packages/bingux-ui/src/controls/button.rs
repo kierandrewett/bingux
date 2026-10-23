@@ -151,7 +151,7 @@ impl Component for ActionButton {
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
             .main_align(Alignment::Center)
-            .corner_radius(RADIUS)
+            .corner_radius(RADIUS_PILL)
             .background(background)
             .maybe(!usable, |element| element.opacity(0.5))
             .border(border)
@@ -249,9 +249,9 @@ impl Component for RowButton {
             .a11y_role(AccessibilityRole::Button)
             .maybe(!enabled, |element| element.opacity(0.5))
             .height(Size::px(CONTROL_HEIGHT))
-            .padding((0.0, S3))
+            .padding((0.0, S4))
             .center()
-            .corner_radius(RADIUS)
+            .corner_radius(RADIUS_PILL)
             .background(surface_color(
                 &tokens,
                 if self.prominent {
@@ -365,7 +365,7 @@ impl Component for IconButton {
             .width(Size::px(self.size))
             .height(Size::px(self.size))
             .center()
-            .corner_radius(RADIUS)
+            .corner_radius(RADIUS_PILL)
             .background(background)
             .border(focus_border(&tokens, focus()))
             .on_pointer_enter(move |_| hovering.set(true))

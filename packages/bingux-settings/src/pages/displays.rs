@@ -15,14 +15,14 @@ use freya::prelude::*;
 use crate::pages::gnoblin;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    ARRANGEMENT_HEIGHT, ARRANGEMENT_WIDTH, Group, Icon, Overlays, RADIUS_LG, RADIUS_SM,
-    ResponseKind, Status, Tokens, action_row, caption, choice_row, dialog, icon, icon_button,
-    page_column, primary_button, row, skeleton, status, switch_row, typography, use_overlays,
-    use_tokens,
+    ARRANGEMENT_HEIGHT, ARRANGEMENT_WIDTH, Group, Icon, Overlays, RADIUS_LG, ResponseKind, Status,
+    Tokens, action_row, caption, choice_row, dialog, icon_button, page_column, primary_button, row,
+    skeleton, status, switch_row, typography, use_overlays, use_tokens,
 };
 use bingux_ui::scale::{
-    ARRANGEMENT_SNAP, BUTTON_HEIGHT, FIELD_WIDTH, ICON_SM, RING_WIDTH, S0, S1, S2, S4, S5,
+    ARRANGEMENT_SNAP, BUTTON_HEIGHT, FIELD_WIDTH, RADIUS_PILL, RING_WIDTH, S0, S1, S2, S3, S4, S5,
 };
+use bingux_ui::surface::over;
 
 const SERVICE: &str = "org.gnome.Mutter.DisplayConfig";
 const OBJECT: &str = "/org/gnome/Mutter/DisplayConfig";
@@ -1602,12 +1602,12 @@ impl Component for Arrangement {
             .width(Size::fill())
             .height(Size::px(ARRANGEMENT_HEIGHT))
             .corner_radius(RADIUS_LG)
-            .background(tokens.control)
+            .background(tokens.sidebar)
             .border(
                 Border::new()
                     .width(1.0)
                     .alignment(BorderAlignment::Inner)
-                    .fill(tokens.separator),
+                    .fill(tokens.outline),
             )
             .on_sized(move |event: Event<SizedEventData>| size.set(event.area))
             .on_capture_global_pointer_move(move |event: Event<PointerEventData>| {
@@ -1714,41 +1714,42 @@ impl Component for Tile {
                 .ease(Ease::Out)
         });
 
-        let (fill, ink) = if monitor.primary {
-            (tokens.accent, tokens.accent_foreground)
+        // A display is a quiet outlined tile. The selected one takes the accent:
+        // a tinted fill and a ring.
+        let fill = if self.selected {
+            over(tokens.accent.with_af32(0.20), tokens.control)
         } else {
-            (tokens.elevated, tokens.text)
+            tokens.control
         };
-        let border = if self.selected {
-            Border::new()
-                .width(RING_WIDTH)
-                .alignment(BorderAlignment::Inner)
-                .fill(if monitor.primary {
-                    tokens.text
-                } else {
-                    tokens.accent
-                })
-        } else {
-            Border::new()
-        };
-        let mut title = rect()
-            .width(Size::fill())
-            .direction(Direction::Horizontal)
-            .cross_align(Alignment::Center)
-            .child(
-                typography::EMPHASIS
-                    .label(&tokens, monitor.name.clone())
-                    .color(ink)
-                    .width(Size::fill())
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis),
-            );
-        if monitor.primary {
-            title = title.child(icon(Icon::Starred, ICON_SM, ink));
-        }
-        let details = typography::CAPTION
-            .label(&tokens, monitor.selected().resolution())
-            .color(ink.with_af32(0.8));
+        let border = Border::new()
+            .width(if self.selected { RING_WIDTH } else { 1.0 })
+            .alignment(BorderAlignment::Inner)
+            .fill(if self.selected {
+                tokens.accent
+            } else {
+                tokens.outline
+            });
+        let number = typography::HERO
+            .label(&tokens, (self.index + 1).to_string())
+            .color(if self.selected {
+                tokens.accent
+            } else {
+                tokens.muted
+            });
+        let badge = monitor.primary.then(|| {
+            rect()
+                .position(Position::new_absolute().top(S2).right(S2))
+                .padding((S0, S2))
+                .corner_radius(RADIUS_PILL)
+                .background(tokens.text)
+                .child(typography::BADGE.label(&tokens, "Main").color(tokens.bg))
+        });
+        let name = typography::CAPTION
+            .label(&tokens, monitor.name.clone())
+            .color(tokens.text)
+            .max_lines(1)
+            .text_overflow(TextOverflow::Ellipsis);
+        let details = typography::CAPTION.label(&tokens, monitor.selected().resolution());
 
         let ctx = self.ctx;
         let index = self.index;
@@ -1777,13 +1778,20 @@ impl Component for Tile {
             )
             .width(Size::px(box_width))
             .height(Size::px(box_height))
-            .corner_radius(RADIUS_SM)
-            .padding(S2)
+            .corner_radius(RADIUS_LG)
+            .padding(S3)
             .background(fill)
             .border(border)
+            .overflow(Overflow::Clip)
             .on_pointer_down(on_press)
-            .child(title)
-            .child(details)
+            .maybe_child(badge)
+            .child(
+                rect()
+                    .expanded()
+                    .main_align(Alignment::SpaceBetween)
+                    .child(number)
+                    .child(rect().spacing(S0).child(name).child(details)),
+            )
     }
 }
 

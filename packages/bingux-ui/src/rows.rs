@@ -244,7 +244,8 @@ impl Component for Row {
             .content(Content::Flex)
             .cross_align(Alignment::Center)
             .padding((S1, GUTTER))
-            .spacing(S3)
+            .spacing(S4)
+            .corner_radius(RADIUS_LG)
             .background(background)
             .border(focus_border(&tokens, focus()))
             .maybe(interactive, |element| {

@@ -161,31 +161,32 @@ impl Tokens {
             // The shell's flat surfaces (`flatSurfaces` in Theme.qml), computed
             // once: popupSurface is the window, shellSurface the sidebar and
             // elevated the group cards, buttons and fields.
-            bg: rgba(0.1716, 0.1716, 0.1716, 1.0),
-            surface: rgba(0.1716, 0.1716, 0.1716, 1.0),
-            sidebar: rgba(0.0960, 0.0960, 0.0960, 1.0),
-            elevated: rgba(0.2054, 0.2054, 0.2109, 1.0),
-            control: rgba(0.2560, 0.2560, 0.2629, 1.0),
-            separator: rgba(0.980, 0.980, 0.980, 0.08),
-            card: rgba(0.2054, 0.2054, 0.2109, 1.0),
-            // State layers drawn over any base, as ControlCentreButtonSurface
-            // does: hover 0.34 at 0.42, pressed 0.46 at 0.72, selected 0.28
-            // at 0.44.
-            hover: rgba(0.42, 0.42, 0.44, 0.1428),
-            pressed: rgba(0.52, 0.52, 0.54, 0.3312),
-            selection: accent.with_af32(0.1232),
+            // A near-black, slightly cool palette in layers: the page, the
+            // sidebar a step darker, cards a step lighter with a hairline
+            // border, and popups lighter again with a stronger one. State
+            // layers are white at low opacity, so they work over any layer.
+            bg: rgb8(24, 24, 26),
+            surface: rgb8(24, 24, 26),
+            sidebar: rgb8(18, 18, 20),
+            elevated: rgb8(26, 27, 31),
+            control: rgb8(37, 38, 44),
+            separator: rgba(1.0, 1.0, 1.0, 0.06),
+            card: rgb8(24, 25, 29),
+            hover: rgba(1.0, 1.0, 1.0, 0.05),
+            pressed: rgba(1.0, 1.0, 1.0, 0.09),
+            selection: accent.with_af32(0.16),
             border: rgba(1.0, 1.0, 1.0, 1.0),
-            outline: rgba(0.314, 0.314, 0.314, 0.75),
-            text: rgba(0.980, 0.980, 0.980, 1.0),
-            muted: rgba(0.690, 0.690, 0.690, 1.0),
-            bar_divider: rgba(0.980, 0.980, 0.980, 0.08),
+            outline: rgba(1.0, 1.0, 1.0, 0.08),
+            text: rgb8(236, 236, 240),
+            muted: rgb8(141, 143, 154),
+            bar_divider: rgba(1.0, 1.0, 1.0, 0.06),
             success: rgba(0.561, 0.941, 0.643, 1.0),
             warning: rgba(0.976, 0.941, 0.420, 1.0),
             danger: rgba(1.0, 0.482, 0.388, 1.0),
             accent_foreground: rgba(1.0, 1.0, 1.0, 1.0),
-            tooltip_surface: rgba(0.12, 0.12, 0.13, 0.82),
-            tooltip_outline: rgba(1.0, 1.0, 1.0, 0.16),
-            popover: rgba(0.2054, 0.2054, 0.2109, 1.0),
+            tooltip_surface: rgba(0.10, 0.10, 0.12, 0.92),
+            tooltip_outline: rgba(1.0, 1.0, 1.0, 0.12),
+            popover: rgb8(28, 29, 34),
         }
     }
 
@@ -390,6 +391,30 @@ pub fn font_family() -> &'static str {
     })
 }
 
+/// The face for page titles and large figures: a serif with some character,
+/// the first of these that is installed. `None` when none is, and titles then
+/// use the interface font.
+pub fn display_family() -> Option<&'static str> {
+    static FAMILY: std::sync::OnceLock<Option<&'static str>> = std::sync::OnceLock::new();
+    *FAMILY.get_or_init(|| {
+        [
+            "Newsreader 16pt",
+            "Newsreader",
+            "Source Serif 4",
+            "Source Serif Pro",
+            "Noto Serif Display",
+            "Noto Serif",
+            "Liberation Serif",
+            "DejaVu Serif",
+        ]
+        .into_iter()
+        .find(|name| !font_files(name, 1).is_empty())
+    })
+}
+
+/// The name the display face is registered under in the window.
+pub const DISPLAY_FONT: &str = "Bingux Display";
+
 /// The font files fontconfig has for `family`, regular first, at most
 /// `limit` of them. Only files whose family really is `family` are kept, so
 /// a missing family gives an empty list instead of a substitute.
@@ -450,9 +475,19 @@ pub fn with_font(config: LaunchConfig) -> LaunchConfig {
         config = config.with_font(family, bytes);
         found = true;
     }
+    if let Some(display) = display_family()
+        && let Some(bytes) = font_files(display, 1).into_iter().next()
+    {
+        config = config.with_font(DISPLAY_FONT, bytes);
+    }
     if found {
         config.with_default_font(family)
     } else {
         config
     }
+}
+
+/// An opaque colour from 8-bit channels.
+fn rgb8(r: u8, g: u8, b: u8) -> Color {
+    Color::from_rgb(r, g, b)
 }

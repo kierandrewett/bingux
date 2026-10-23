@@ -128,7 +128,7 @@ impl Component for Stepper {
             .height(Size::px(CONTROL_HEIGHT))
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
-            .corner_radius(RADIUS)
+            .corner_radius(RADIUS_PILL)
             .background(tokens.control)
             .maybe(!enabled, |element| element.opacity(0.45))
             .border(focus_border(&tokens, focus()))

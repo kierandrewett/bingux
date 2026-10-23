@@ -12,8 +12,8 @@ use crate::icons::{self, Icon};
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
-    Group, Overlays, PageHeader, SpinnerSize, Status, Tokens, checkbox, icon_button, page_column,
-    row, sheet, skeleton, spinner, status, switch_row, text_field, use_overlays, use_page_busy,
+    Group, Overlays, PageHeader, SpinnerSize, Status, Tokens, icon_button, page_column, row, sheet,
+    skeleton, spinner, status, switch_row, text_field, use_overlays, use_page_busy,
     use_page_header, use_tokens,
 };
 use bingux_ui::scale::*;
@@ -580,21 +580,11 @@ impl Component for JoinBody {
     fn render(&self) -> impl IntoElement {
         let ui = self.ui;
         let submit = self.ssid.clone();
-        let show = *ui.show_password.read();
         let field = text_field(ui.password, move |_: String| ui.join_now(submit.clone()));
-        let field = if show { field } else { field.password() };
-        let toggle = checkbox(show, move |on: bool| {
-            let mut state = ui.show_password;
-            state.set(on);
-        })
-        .text("Show password");
+        let field = field.password();
         let error = ui.sheet_error.read().clone();
         page_column()
-            .child(
-                Group::new(None::<String>)
-                    .row(row("Password").trailing(field))
-                    .row(toggle),
-            )
+            .child(Group::new(None::<String>).row(row("Password").trailing(field)))
             .maybe_child(error.map(|text| Element::from(status(Status::Error(text)))))
     }
 }
@@ -608,24 +598,17 @@ struct HiddenBody {
 impl Component for HiddenBody {
     fn render(&self) -> impl IntoElement {
         let ui = self.ui;
-        let show = *ui.show_password.read();
         let name = text_field(ui.hidden_ssid, move |_: String| ui.connect_hidden())
             .placeholder("Network name");
         let password = text_field(ui.hidden_password, move |_: String| ui.connect_hidden())
             .placeholder("Leave empty for an open network");
-        let password = if show { password } else { password.password() };
-        let toggle = checkbox(show, move |on: bool| {
-            let mut state = ui.show_password;
-            state.set(on);
-        })
-        .text("Show password");
+        let password = password.password();
         let error = ui.sheet_error.read().clone();
         page_column()
             .child(
                 Group::new(None::<String>)
                     .row(row("Network name").trailing(name))
-                    .row(row("Password").trailing(password))
-                    .row(toggle),
+                    .row(row("Password").trailing(password)),
             )
             .maybe_child(error.map(|text| Element::from(status(Status::Error(text)))))
     }
@@ -640,24 +623,17 @@ struct HotspotBody {
 impl Component for HotspotBody {
     fn render(&self) -> impl IntoElement {
         let ui = self.ui;
-        let show = *ui.show_password.read();
         let name = text_field(ui.hotspot_name, move |_: String| ui.start_hotspot())
             .placeholder("Network name");
         let password = text_field(ui.hotspot_password, move |_: String| ui.start_hotspot())
             .placeholder("At least 8 characters");
-        let password = if show { password } else { password.password() };
-        let toggle = checkbox(show, move |on: bool| {
-            let mut state = ui.show_password;
-            state.set(on);
-        })
-        .text("Show password");
+        let password = password.password();
         let error = ui.sheet_error.read().clone();
         page_column()
             .child(
                 Group::new(None::<String>)
                     .row(row("Network name").trailing(name))
-                    .row(row("Password").trailing(password))
-                    .row(toggle),
+                    .row(row("Password").trailing(password)),
             )
             .maybe_child(error.map(|text| Element::from(status(Status::Error(text)))))
     }

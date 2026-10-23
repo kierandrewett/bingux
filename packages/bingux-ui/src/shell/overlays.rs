@@ -15,8 +15,11 @@ use crate::scale::*;
 use crate::shell::menu::{Menu, MenuItem, MenuLayer};
 use crate::shell::sheet::{Sheet, SheetLayer};
 use crate::surface::{is_activation_key, use_tokens};
+use crate::typography::MODAL_TITLE;
 
-const DIALOG_WIDTH: f32 = 400.0;
+const DIALOG_WIDTH: f32 = 420.0;
+/// The corner radius of an alert dialog.
+const RADIUS_DIALOG: f32 = S5 + S1;
 
 /// How a dialog response is styled.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -356,7 +359,7 @@ impl Component for DialogLayer {
                 }
                 ResponseKind::Default => action_button(response.label.clone(), press),
             };
-            Element::from(button.grow())
+            Element::from(button)
         });
 
         rect()
@@ -374,9 +377,9 @@ impl Component for DialogLayer {
                     .a11y_role(AccessibilityRole::AlertDialog)
                     .a11y_alt(self.dialog.title.clone())
                     .width(Size::px(DIALOG_WIDTH))
-                    .padding(S4)
+                    .padding(S5)
                     .spacing(S3)
-                    .corner_radius(RADIUS_XL)
+                    .corner_radius(RADIUS_DIALOG)
                     .background(tokens.popover)
                     .border(
                         Border::new()
@@ -387,9 +390,9 @@ impl Component for DialogLayer {
                     .shadow(
                         Shadow::new()
                             .position(ShadowPosition::Normal)
-                            .y(16.0)
-                            .blur(48.0)
-                            .color(Color::BLACK.with_af32(0.45)),
+                            .y(24.0)
+                            .blur(64.0)
+                            .color(Color::BLACK.with_af32(0.55)),
                     )
                     .scale(0.96 + 0.04 * progress)
                     .opacity(progress)
@@ -401,12 +404,8 @@ impl Component for DialogLayer {
                         }
                     })
                     .child(
-                        label()
-                            .text(self.dialog.title.clone())
-                            .font_size(TEXT_LG)
-                            .font_weight(FontWeight::SEMI_BOLD)
-                            .color(tokens.text)
-                            .text_align(TextAlign::Center)
+                        MODAL_TITLE
+                            .paragraph(&tokens, self.dialog.title.clone())
                             .width(Size::fill()),
                     )
                     .maybe_child((!self.dialog.body.is_empty()).then(|| {
@@ -414,7 +413,6 @@ impl Component for DialogLayer {
                             .width(Size::fill())
                             .color(tokens.muted)
                             .font_size(TEXT_MD)
-                            .text_align(TextAlign::Center)
                             .child(self.dialog.body.clone())
                     }))
                     .maybe_child(self.dialog.content.clone())
@@ -422,8 +420,9 @@ impl Component for DialogLayer {
                         rect()
                             .width(Size::fill())
                             .direction(Direction::Horizontal)
-                            .content(Content::Flex)
+                            .main_align(Alignment::End)
                             .spacing(S2)
+                            .padding((S2, 0.0, 0.0, 0.0))
                             .children(buttons),
                     ),
             )

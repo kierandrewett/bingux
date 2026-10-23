@@ -22,10 +22,12 @@ pub const GUTTER: f32 = S3;
 /// Corner radius: small marks (checkbox, tick), controls and rows, and
 /// cards, banners and dialogs.
 pub const RADIUS_SM: f32 = 4.0;
-pub const RADIUS: f32 = 8.0;
-pub const RADIUS_LG: f32 = 12.0;
+pub const RADIUS: f32 = 10.0;
+pub const RADIUS_LG: f32 = 14.0;
 /// The shell's card radius: dialogs, popovers and toasts.
 pub const RADIUS_XL: f32 = 20.0;
+/// A fully rounded end: buttons, segmented controls and fields are pills.
+pub const RADIUS_PILL: f32 = 999.0;
 
 /// Type scale. Body is 14; secondary text 12; badges 11. The ramp in
 /// `typography.rs` uses 11, 12, 14, 18, 28 and 36. 16 and 20 are older
@@ -35,11 +37,13 @@ pub const TEXT_SM: f32 = 12.0;
 pub const TEXT_MD: f32 = 14.0;
 pub const TEXT_LG: f32 = 16.0;
 pub const TEXT_XL: f32 = 20.0;
-pub const TEXT_DISPLAY: f32 = 28.0;
+pub const TEXT_DISPLAY: f32 = 40.0;
 /// The ramp's larger steps, each about 1.25x or more the one before: group
 /// titles 18, page titles 28, a hero value 36.
 pub const TEXT_HEADING: f32 = 18.0;
-pub const TEXT_HERO: f32 = 36.0;
+pub const TEXT_HERO: f32 = 56.0;
+/// The title of a sheet or dialog, in the display face.
+pub const TEXT_MODAL: f32 = 26.0;
 
 /// Icon sizes: chevrons and ticks, control glyphs, row and sidebar icons.
 pub const ICON_SM: f32 = 12.0;
@@ -74,7 +78,7 @@ pub const PREVIEW_LINE: f32 = 40.0;
 /// The display arrangement preview on the Displays page. Monitor boxes scale
 /// to fit inside it.
 pub const ARRANGEMENT_WIDTH: f32 = 360.0;
-pub const ARRANGEMENT_HEIGHT: f32 = 240.0;
+pub const ARRANGEMENT_HEIGHT: f32 = 280.0;
 /// How close, in logical pixels, a dragged display must be to another's edge
 /// to snap flush with it.
 pub const ARRANGEMENT_SNAP: i32 = 12;
@@ -91,7 +95,7 @@ pub const BUTTON_HEIGHT: f32 = 36.0;
 pub const MENU_ITEM_HEIGHT: f32 = 36.0;
 /// The width of a menu of actions (see `shell::menu`).
 pub const MENU_WIDTH: f32 = 220.0;
-pub const ROW_HEIGHT: f32 = 40.0;
-pub const TALL_ROW_HEIGHT: f32 = 56.0;
+pub const ROW_HEIGHT: f32 = 48.0;
+pub const TALL_ROW_HEIGHT: f32 = 60.0;
 /// The height of a compact line or bar chart in the gallery edge cases.
 pub const CHART_HEIGHT: f32 = 120.0;

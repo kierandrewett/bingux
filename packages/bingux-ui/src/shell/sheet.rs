@@ -13,19 +13,23 @@
 use freya::prelude::*;
 
 use crate::controls::button::{action_button, primary_button};
-use crate::layout::divider;
 use crate::scale::*;
 use crate::shell::overlays::{Overlays, use_presence};
 use crate::surface::use_tokens;
+use crate::typography::MODAL_TITLE;
 
 /// The width of a sheet, as a GNOME dialog of its kind.
-const SHEET_WIDTH: f32 = 480.0;
-/// The gap between the top and bottom of the window and the sheet.
-const SHEET_MARGIN: f32 = S5;
+const SHEET_WIDTH: f32 = 520.0;
 /// How far the sheet drops in from above as it opens.
 const SHEET_DROP: f32 = S3;
-/// The height of the sheet header: padding, a compact control and the divider.
-const SHEET_HEADER_HEIGHT: f32 = S3 * 2.0 + CONTROL_HEIGHT + 1.0;
+/// The padding inside a sheet.
+const SHEET_PADDING: f32 = S5;
+/// The title block: top padding, one line of the modal title and a gap.
+const SHEET_TITLE_HEIGHT: f32 = SHEET_PADDING + TEXT_MODAL * 1.2 + S4;
+/// The footer: a gap, a button and the bottom padding.
+const SHEET_FOOTER_HEIGHT: f32 = S3 + BUTTON_HEIGHT + SHEET_PADDING;
+/// The sheet's corner radius.
+const RADIUS_SHEET: f32 = S5 + S1;
 /// The height of the tab bar slot under the header, when a sheet has tabs.
 const SHEET_TABS_HEIGHT: f32 = BUTTON_HEIGHT + S2;
 /// The tallest a sheet grows before its body scrolls, as a share of the window.
@@ -109,50 +113,39 @@ impl Component for SheetLayer {
         let progress = use_presence(0, self.closing, tokens.motion(140), move |_| {
             overlays.finish_sheet()
         });
-        let cancel = action_button("Cancel", move |_: ()| overlays.close_sheet()).compact();
+        let cancel = action_button("Cancel", move |_: ()| overlays.close_sheet()).flat();
         let primary = self.sheet.primary.clone();
         let primary_press = primary.clone();
         let primary_element = primary.map(|action| {
             let on_press = action.on_press.clone();
             Element::from(
                 primary_button(action.label, move |_: ()| on_press.call(()))
-                    .compact()
                     .enabled(action.enabled),
             )
         });
 
-        let header = rect()
+        // The title sits at the top in the display face. The actions sit at the
+        // bottom right, the way a web app's modal does.
+        let title = rect()
             .width(Size::fill())
-            .content(Content::Flex)
-            .direction(Direction::Horizontal)
-            .cross_align(Alignment::Center)
-            .padding((S3, S3, S3, S3))
+            .padding((SHEET_PADDING, SHEET_PADDING, S4, SHEET_PADDING))
             .child(
-                rect()
-                    .width(Size::flex(1.0))
-                    .direction(Direction::Horizontal)
-                    .main_align(Alignment::Start)
-                    .child(cancel),
-            )
-            .child(
-                label()
-                    .width(Size::flex(1.0))
-                    .text(self.sheet.title.clone())
-                    .font_size(TEXT_LG)
-                    .font_weight(FontWeight::SEMI_BOLD)
-                    .color(tokens.text)
-                    .text_align(TextAlign::Center)
+                MODAL_TITLE
+                    .label(&tokens, self.sheet.title.clone())
                     .max_lines(1),
-            )
-            .child(
-                rect()
-                    .width(Size::flex(1.0))
-                    .direction(Direction::Horizontal)
-                    .main_align(Alignment::End)
-                    .maybe_child(primary_element),
             );
+        let footer = rect()
+            .width(Size::fill())
+            .direction(Direction::Horizontal)
+            .main_align(Alignment::End)
+            .cross_align(Alignment::Center)
+            .spacing(S2)
+            .padding((S3, SHEET_PADDING, SHEET_PADDING, SHEET_PADDING))
+            .child(cancel)
+            .maybe_child(primary_element);
 
-        let header_height = SHEET_HEADER_HEIGHT
+        let chrome_height = SHEET_TITLE_HEIGHT
+            + SHEET_FOOTER_HEIGHT
             + if self.sheet.tabs.is_some() {
                 SHEET_TABS_HEIGHT
             } else {
@@ -169,7 +162,7 @@ impl Component for SheetLayer {
             .width(Size::px(SHEET_WIDTH))
             .height(Size::auto())
             .max_height(Size::window_percent(SHEET_MAX_HEIGHT_PERCENT))
-            .corner_radius(RADIUS_XL)
+            .corner_radius(RADIUS_SHEET)
             .background(tokens.popover)
             .border(
                 Border::new()
@@ -180,12 +173,12 @@ impl Component for SheetLayer {
             .shadow(
                 Shadow::new()
                     .position(ShadowPosition::Normal)
-                    .y(16.0)
-                    .blur(48.0)
-                    .color(Color::BLACK.with_af32(0.45)),
+                    .y(24.0)
+                    .blur(64.0)
+                    .color(Color::BLACK.with_af32(0.55)),
             )
             .opacity(progress)
-            .offset_y(-SHEET_DROP * (1.0 - progress))
+            .offset_y(SHEET_DROP * (1.0 - progress))
             .on_press(|event: Event<PressEventData>| event.stop_propagation())
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 if event.key == Key::Named(NamedKey::Escape) {
@@ -199,13 +192,12 @@ impl Component for SheetLayer {
                     action.on_press.call(());
                 }
             })
-            .child(header)
-            .child(divider(&tokens))
+            .child(title)
             .maybe_child(self.sheet.tabs.clone().map(|tabs| {
                 rect()
                     .width(Size::fill())
                     .height(Size::px(SHEET_TABS_HEIGHT))
-                    .padding((S2, S4, 0.0, S4))
+                    .padding((0.0, SHEET_PADDING, 0.0, SHEET_PADDING))
                     .child(tabs)
             }))
             .child(
@@ -215,15 +207,16 @@ impl Component for SheetLayer {
                     .width(Size::fill())
                     .height(Size::auto())
                     .max_height(Size::func(move |ctx| {
-                        Some(ctx.root / WHOLE_PERCENT * SHEET_MAX_HEIGHT_PERCENT - header_height)
+                        Some(ctx.root / WHOLE_PERCENT * SHEET_MAX_HEIGHT_PERCENT - chrome_height)
                     }))
                     .child(
                         rect()
                             .width(Size::fill())
-                            .padding(S4)
+                            .padding((S2, SHEET_PADDING, S2, SHEET_PADDING))
                             .child(self.sheet.body.clone()),
                     ),
-            );
+            )
+            .child(footer);
 
         rect()
             .position(Position::new_absolute().top(0.0).left(0.0))
@@ -231,8 +224,8 @@ impl Component for SheetLayer {
             .height(Size::window_percent(100.0))
             .layer(Layer::OverlayLevel(8))
             .cross_align(Alignment::Center)
-            .padding((SHEET_MARGIN, 0.0, SHEET_MARGIN, 0.0))
-            .background(Color::BLACK.with_af32(0.4 * progress))
+            .main_align(Alignment::Center)
+            .background(Color::BLACK.with_af32(0.55 * progress))
             .child(panel)
     }
 }

@@ -35,7 +35,13 @@ impl Snapshot {
         );
         let family = font_family();
         if let Some(font) = crate::theme::font_files(family, 1).pop() {
-            runner.set_fonts([(family, font.as_slice())].into_iter().collect());
+            let display = crate::theme::display_family()
+                .and_then(|name| crate::theme::font_files(name, 1).pop());
+            let mut fonts: Vec<(&str, &[u8])> = vec![(family, font.as_slice())];
+            if let Some(display) = display.as_ref() {
+                fonts.push((crate::theme::DISPLAY_FONT, display.as_slice()));
+            }
+            runner.set_fonts(fonts.into_iter().collect());
             runner.set_default_fonts(&[family.into()]);
         }
         Self { runner }

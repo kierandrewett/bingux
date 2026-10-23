@@ -154,7 +154,7 @@ impl Component for MenuLayer {
             .transform_origin(TransformOrigin::top_left())
             .width(Size::px(MENU_WIDTH))
             .padding(S2)
-            .corner_radius(RADIUS_XL)
+            .corner_radius(RADIUS_LG + S1)
             .background(tokens.popover)
             .border(
                 Border::new()

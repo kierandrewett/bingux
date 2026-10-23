@@ -445,8 +445,8 @@ impl Component for AppearancePage {
                             rect()
                                 .width(Size::fill())
                                 .direction(Direction::Horizontal)
-                                .main_align(Alignment::Center)
-                                .padding((S3, GUTTER - S1))
+                                .main_align(Alignment::Start)
+                                .padding((S3, GUTTER))
                                 .spacing(S4)
                                 .child(scheme_card(
                                     "Default",
