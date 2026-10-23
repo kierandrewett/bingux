@@ -20,6 +20,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import tempfile
 import sys
 from pathlib import Path
 
@@ -28,8 +29,7 @@ sys.path.insert(0, str(HERE.parent / "vm"))
 
 from vmdrive.checks import Checks  # noqa: E402
 from vmdrive.vm import LiveVm  # noqa: E402
-
-from fixtures import CHECK_MANIFEST, build_other_os_disk, build_qcow2  # noqa: E402
+from fixtures import CHECK_MANIFEST, build_other_os_disk, build_qcow2, verify_ntfs_manifest  # noqa: E402
 
 DISK_BYTES = 10 * 1024**3
 DISK = "/dev/vda"
@@ -372,12 +372,17 @@ def run_case(name, iso, out_root, disk_dir, checks, cdrom=None):
         with LiveVm(out / "boot") as vm:
             vm.start(iso=None, disks=[(disk, DISK_BYTES)], firmware=firmware)
             boot_phase(GuestVm(vm), checks, name, firmware, filesystem, encrypted, extra, out)
-            if name in FIXTURES:
+            if name in FIXTURES and FIXTURES[name][1] == "ext4":
                 rc, manifest = GuestVm(vm).run(
                     f"printf %s {USER_PASSWORD} | sudo -S -p '' sh -c {shlex.quote(CHECK_MANIFEST)}", timeout=120)
                 checks.expect(rc == 0, f"{name}: other OS manifest verifies after install",
                               f"rc={rc} out={manifest[-300:]!r}")
             vm.poweroff()
+    if installed and name in FIXTURES and FIXTURES[name][1] == "ntfs":
+        # the installed guest has no NTFS driver: read the partition from the host once the guest is off
+        with tempfile.TemporaryDirectory(dir=disk_dir) as scratch:
+            ok, detail = verify_ntfs_manifest(disk, "qcow2", Path(scratch))
+        checks.expect(ok, f"{name}: other OS manifest verifies after install (host ntfscat)", detail)
     disk.unlink(missing_ok=True)
 
 

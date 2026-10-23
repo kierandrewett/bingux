@@ -7,6 +7,7 @@ sha256 manifest so the booted system can prove the install left it intact.
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 import tempfile
 from pathlib import Path
@@ -90,6 +91,42 @@ def build_qcow2(raw: Path, qcow2: Path) -> None:
     qcow2.unlink(missing_ok=True)
     _run(["qemu-img", "convert", "-f", "raw", "-O", "qcow2", str(raw), str(qcow2)])
     raw.unlink(missing_ok=True)
+
+
+def _extract_sectors(fmt: str, src: Path, dst: Path, skip: int, count: int) -> None:
+    """Copy `count` 512-byte sectors starting at sector `skip` of a qcow2/raw image into a raw file."""
+    flat = dst.with_suffix(".full")
+    _run(["qemu-img", "convert", "-f", fmt, "-O", "raw", str(src), str(flat)])
+    try:
+        with flat.open("rb") as whole, dst.open("wb") as out:
+            whole.seek(skip * 512)
+            out.write(whole.read(count * 512))
+    finally:
+        flat.unlink(missing_ok=True)
+
+
+def verify_ntfs_manifest(image: Path, fmt: str, scratch: Path) -> tuple[bool, str]:
+    """Check the NTFS other-OS partition against its manifest from the host, after the guest is off.
+
+    The installed guest has no NTFS driver, so the partition is read with ntfscat. The size comes
+    from the NTFS boot sector (total sectors at offset 0x28), so a shrunk volume is read in full.
+    """
+    boot = scratch / "boot.bin"
+    _extract_sectors(fmt, image, boot, FIRST_SECTOR, 1)
+    total = int.from_bytes(boot.read_bytes()[0x28:0x30], "little")
+    part = scratch / "other.img"
+    _extract_sectors(fmt, image, part, FIRST_SECTOR, total + 1)
+    listing = subprocess.run(["ntfscat", str(part), MANIFEST], capture_output=True, check=False)
+    lines = listing.stdout.decode(errors="replace").splitlines()
+    if listing.returncode != 0 or not lines:
+        return False, f"manifest unreadable: rc={listing.returncode} {listing.stderr.decode(errors='replace')[-200:]!r}"
+    bad = []
+    for line in lines:
+        digest, rel = line.split("  ", 1)
+        data = subprocess.run(["ntfscat", str(part), rel], capture_output=True, check=False).stdout
+        if hashlib.sha256(data).hexdigest() != digest:
+            bad.append(rel)
+    return (not bad, f"{len(lines)} files, mismatched: {bad}")
 
 
 # Guest-side check: the other OS manifest still verifies after the install.
