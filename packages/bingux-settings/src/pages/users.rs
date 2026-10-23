@@ -14,7 +14,8 @@ use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::theme::Tokens;
 use crate::ui::{
-    Group, Status, caption, page_column, row, skeleton, status, text_row, use_overlays, use_tokens,
+    Group, Status, caption, heading, page_column, row, skeleton, status, text_row, use_overlays,
+    use_tokens,
 };
 use bingux_ui::scale::*;
 
@@ -284,15 +285,7 @@ impl Component for AccountPage {
             .spacing(S1)
             .cross_align(Alignment::Center)
             .child(avatar)
-            .child(
-                label()
-                    .text(account.display_name().to_string())
-                    .color(tokens.text)
-                    .font_size(TEXT_XL)
-                    .font_weight(FontWeight::SEMI_BOLD)
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis),
-            )
+            .child(heading(account.display_name().to_string()))
             .child(caption(role));
         page_column()
             .child(header)

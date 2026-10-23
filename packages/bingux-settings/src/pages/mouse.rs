@@ -6,7 +6,6 @@
 
 use freya::prelude::*;
 
-use crate::icons::Icon;
 use crate::pages::gnoblin::{self, Json};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::theme::Tokens;
@@ -144,14 +143,13 @@ fn option_label(options: &[(&str, &str)], value: &str) -> String {
         .map_or_else(|| value.to_string(), |(_, label)| label.to_string())
 }
 
-/// One editable setting: the GSettings key, how to show it, the icon for its
-/// kind of device, and the Lua field that may override it.
+/// One editable setting: the GSettings key, how to show it, and the Lua
+/// field that may override it.
 struct Setting<'a> {
     schema: &'static str,
     key: &'static str,
     group: &'static str,
     title: &'static str,
-    icon: Icon,
     overrides: &'a Json,
     loaded: State<Option<Result<Model, CommandError>>>,
     error: State<Option<String>>,
@@ -165,7 +163,6 @@ impl Setting<'_> {
     fn switch(&self, on: bool) -> Row {
         match self.lua() {
             Some(value) => row(self.title)
-                .leading(self.icon)
                 .subtitle(gnoblin::MANAGED)
                 .value(if value == "true" { "On" } else { "Off" }),
             None => {
@@ -175,7 +172,6 @@ impl Setting<'_> {
                         system::gsettings_set(schema, key, bool_value(next))
                     })
                 })
-                .leading(self.icon)
             }
         }
     }
@@ -184,38 +180,32 @@ impl Setting<'_> {
     /// names the current speed in words.
     fn speed(&self, speed: f64, tokens: &Tokens) -> Row {
         match self.lua() {
-            Some(value) => row(self.title)
-                .leading(self.icon)
-                .subtitle(gnoblin::MANAGED)
-                .value(value),
+            Some(value) => row(self.title).subtitle(gnoblin::MANAGED).value(value),
             None => {
                 let (schema, loaded, error) = (self.schema, self.loaded, self.error);
-                row(self.title)
-                    .leading(self.icon)
-                    .subtitle(speed_label(speed))
-                    .trailing(
-                        rect()
-                            .width(Size::px(FIELD_WIDTH))
-                            .spacing(S0)
-                            .child(slider(speed_percent(speed), move |percent: f64| {
-                                let value = speed_value(percent);
-                                commit(loaded, error, move || {
-                                    system::gsettings_set(schema, "speed", &value)
-                                })
-                            }))
-                            .child(
-                                rect()
-                                    .width(Size::px(FIELD_WIDTH))
-                                    .direction(Direction::Horizontal)
-                                    .child(end_label(
-                                        "Slow",
-                                        FIELD_WIDTH - BOX_2XL,
-                                        TextAlign::Start,
-                                        tokens,
-                                    ))
-                                    .child(end_label("Fast", BOX_2XL, TextAlign::End, tokens)),
-                            ),
-                    )
+                row(self.title).subtitle(speed_label(speed)).trailing(
+                    rect()
+                        .width(Size::px(FIELD_WIDTH))
+                        .spacing(S0)
+                        .child(slider(speed_percent(speed), move |percent: f64| {
+                            let value = speed_value(percent);
+                            commit(loaded, error, move || {
+                                system::gsettings_set(schema, "speed", &value)
+                            })
+                        }))
+                        .child(
+                            rect()
+                                .width(Size::px(FIELD_WIDTH))
+                                .direction(Direction::Horizontal)
+                                .child(end_label(
+                                    "Slow",
+                                    FIELD_WIDTH - BOX_2XL,
+                                    TextAlign::Start,
+                                    tokens,
+                                ))
+                                .child(end_label("Fast", BOX_2XL, TextAlign::End, tokens)),
+                        ),
+                )
             }
         }
     }
@@ -223,7 +213,6 @@ impl Setting<'_> {
     fn choice(&self, options: &[(&str, &str)], selected: &str) -> Row {
         match self.lua() {
             Some(value) => row(self.title)
-                .leading(self.icon)
                 .subtitle(gnoblin::MANAGED)
                 .value(option_label(options, &value)),
             None => {
@@ -242,7 +231,6 @@ impl Setting<'_> {
                         })
                     },
                 )
-                .leading(self.icon)
             }
         }
     }
@@ -291,12 +279,11 @@ impl Component for MousePage {
                 );
             }
         };
-        let setting = |schema, group, key, title, icon| Setting {
+        let setting = |schema, group, key, title| Setting {
             schema,
             key,
             group,
             title,
-            icon,
             overrides: &model.overrides,
             loaded,
             error,
@@ -304,43 +291,21 @@ impl Component for MousePage {
         let mouse = &model.mouse;
         let mouse_group = Group::titled("Mouse")
             .row(
-                setting(
-                    MOUSE,
-                    "mouse",
-                    "natural-scroll",
-                    "Natural scrolling",
-                    Icon::Mouse,
-                )
-                .switch(mouse.natural_scroll),
+                setting(MOUSE, "mouse", "natural-scroll", "Natural scrolling")
+                    .switch(mouse.natural_scroll),
+            )
+            .row(setting(MOUSE, "mouse", "speed", "Pointer speed").speed(mouse.speed, &tokens))
+            .row(
+                setting(MOUSE, "mouse", "left-handed", "Left-handed buttons")
+                    .switch(mouse.left_handed),
             )
             .row(
-                setting(MOUSE, "mouse", "speed", "Pointer speed", Icon::Mouse)
-                    .speed(mouse.speed, &tokens),
-            )
-            .row(
-                setting(
-                    MOUSE,
-                    "mouse",
-                    "left-handed",
-                    "Left-handed buttons",
-                    Icon::Mouse,
-                )
-                .switch(mouse.left_handed),
-            )
-            .row(
-                setting(
-                    MOUSE,
-                    "mouse",
-                    "accel-profile",
-                    "Pointer acceleration",
-                    Icon::Mouse,
-                )
-                .choice(&ACCEL_PROFILES, &mouse.accel_profile),
+                setting(MOUSE, "mouse", "accel-profile", "Pointer acceleration")
+                    .choice(&ACCEL_PROFILES, &mouse.accel_profile),
             );
 
         let touchpad_group = model.touchpad.as_ref().map(|pad| {
-            let touchpad =
-                |key, title| setting(TOUCHPAD, "touchpad", key, title, Icon::InputTouchpad);
+            let touchpad = |key, title| setting(TOUCHPAD, "touchpad", key, title);
             Group::titled("Touchpad")
                 .row(touchpad("send-events", "Use touchpad").choice(&SEND_EVENTS, &pad.send_events))
                 .row(touchpad("tap-to-click", "Tap to click").switch(pad.tap_to_click))

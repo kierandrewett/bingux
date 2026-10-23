@@ -3,16 +3,25 @@
 //!
 //! A text field sits on `control` at radius 8 and is 32 px tall. Like every
 //! control it has no idle outline; focus draws the accent ring, an invalid
-//! value the danger one.
+//! value the danger one. A password field has a reveal button, and a right
+//! click opens Cut, Copy, Paste and Select all. Enter submits; Escape
+//! restores the last committed text and leaves the field.
 
 use freya::prelude::*;
 
+use crate::controls::button::icon_button;
 use crate::icons::{self, Icon};
 use crate::scale::*;
+use crate::shell::menu::{MenuItem, menu_item, menu_separator};
+use crate::shell::overlays::Overlays;
 use crate::surface::{use_enabled, use_tokens};
 
 /// A multiline field is this many controls high.
 const MULTILINE_ROWS: f32 = 3.0;
+
+/// The height of one line of message text, reserved under a field that
+/// validates so the row does not jump when an error appears.
+const MESSAGE_LINE: f32 = TEXT_SM * 1.3;
 
 /// A single-line (or multi-line) text field bound to a `State<String>`.
 #[derive(PartialEq)]
@@ -28,10 +37,12 @@ pub struct TextField {
     leading: Option<Icon>,
     clearable: bool,
     invalid: Option<String>,
+    validates: bool,
     revert_to: Option<String>,
     on_submit: EventHandler<String>,
     on_change: Option<EventHandler<String>>,
     a11y_id: Option<AccessibilityId>,
+    autofocus: bool,
 }
 
 /// `value` is the live draft; `on_submit` fires on Enter with the text.
@@ -48,10 +59,12 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         leading: None,
         clearable: false,
         invalid: None,
+        validates: false,
         revert_to: None,
         on_submit: on_submit.into(),
         on_change: None,
         a11y_id: None,
+        autofocus: false,
     }
 }
 
@@ -84,7 +97,7 @@ impl TextField {
         self
     }
 
-    /// Mask the text with bullets.
+    /// Mask the text with bullets. A reveal button shows it while held open.
     pub fn password(mut self) -> Self {
         self.password = true;
         self
@@ -114,9 +127,11 @@ impl TextField {
     }
 
     /// Outline in the danger colour and show `message` under the field.
-    /// `None` clears the error.
+    /// `None` clears the error. The message line is always reserved once this
+    /// is called, so the row keeps its height when an error comes and goes.
     pub fn invalid(mut self, message: Option<String>) -> Self {
         self.invalid = message;
+        self.validates = true;
         self
     }
 
@@ -137,6 +152,19 @@ impl TextField {
         self.a11y_id = Some(id);
         self
     }
+
+    /// Take keyboard focus when the field first appears, such as the first
+    /// field of a sheet. Only one field should ask for it.
+    pub fn autofocus(mut self) -> Self {
+        self.autofocus = true;
+        self
+    }
+}
+
+/// One context-menu entry; greyed out when `enabled` is false.
+fn edit_item(label: &str, enabled: bool, on_press: impl FnMut(()) + 'static) -> MenuItem {
+    let item = menu_item(label, on_press);
+    if enabled { item } else { item.disabled() }
 }
 
 impl Component for TextField {
@@ -146,7 +174,13 @@ impl Component for TextField {
         let on_submit = self.on_submit.clone();
         let on_change = self.on_change.clone();
         let revert_to = self.revert_to.clone();
+        let multiline = self.multiline;
         let invalid = self.invalid.is_some();
+        let own_id = use_a11y();
+        let input_id = self.a11y_id.unwrap_or(own_id);
+        let mut revealed = use_state(|| false);
+        let mut command = use_state::<Option<InputCommand>>(|| None);
+        let overlays: Option<Overlays> = try_consume_context::<Overlays>();
         let outline = if invalid {
             tokens.danger
         } else {
@@ -176,6 +210,14 @@ impl Component for TextField {
             padding: Some(Preference::Specific(Gaps::new(6.0, 10.0, 6.0, 10.0))),
         };
 
+        let has_text = !value.read().is_empty();
+        let masked = self.password && !revealed();
+        let mode = if masked {
+            InputMode::new_password()
+        } else {
+            InputMode::Shown
+        };
+
         let mut input = Input::new(value)
             .width(if self.fill {
                 Size::fill()
@@ -185,16 +227,33 @@ impl Component for TextField {
             .enabled(use_enabled(self.enabled))
             .theme_colors(colors)
             .theme_layout(layout)
+            .mode(mode)
+            .command(command)
+            .a11y_id(input_id)
             .on_submit(move |text: String| on_submit.call(text))
+            .auto_focus(self.autofocus)
             .on_pre_key_down(move |event: Event<KeyboardEventData>| {
-                if event.key == Key::Named(NamedKey::Escape)
-                    && let Some(text) = revert_to.clone()
-                {
-                    value.set(text);
-                    event.stop_propagation();
-                    return false;
+                match &event.key {
+                    Key::Named(NamedKey::Escape) => {
+                        if let Some(text) = revert_to.clone() {
+                            value.set(text);
+                        }
+                        event.stop_propagation();
+                        input_id.request_unfocus();
+                        false
+                    }
+                    // A single-line Enter bubbles up, so a sheet can act on it.
+                    Key::Named(NamedKey::Enter) if !multiline => true,
+                    // Tab moves focus, as Freya's own field does.
+                    Key::Named(NamedKey::Tab) => false,
+                    _ => {
+                        // Keys the field edits stay here: a multiline Enter
+                        // must not trigger a sheet's primary action.
+                        event.stop_propagation();
+                        event.prevent_default();
+                        true
+                    }
                 }
-                true
             });
         if !self.multiline {
             input = input.height(Size::px(CONTROL_HEIGHT));
@@ -203,14 +262,8 @@ impl Component for TextField {
                 .multiline(true)
                 .height(Size::px(CONTROL_HEIGHT * MULTILINE_ROWS));
         }
-        if let Some(id) = self.a11y_id {
-            input = input.a11y_id(id);
-        }
         if let Some(placeholder) = &self.placeholder {
             input = input.placeholder(placeholder.clone());
-        }
-        if self.password {
-            input = input.mode(InputMode::new_password());
         }
         if let Some(icon) = self.leading {
             input = input.leading(rect().margin((0.0, S1, 0.0, 0.0)).child(icons::icon(
@@ -219,23 +272,40 @@ impl Component for TextField {
                 tokens.muted,
             )));
         }
-        if self.clearable && !value.read().is_empty() {
+        let clear = self.clearable && has_text;
+        if clear || self.password {
             let on_change = on_change.clone();
-            input = input.trailing(
-                rect()
-                    .width(Size::px(BOX_SM))
-                    .height(Size::px(BOX_SM))
-                    .corner_radius(RADIUS_LG)
-                    .center()
-                    .on_press(move |event: Event<PressEventData>| {
-                        event.stop_propagation();
-                        value.set(String::new());
-                        if let Some(on_change) = &on_change {
-                            on_change.call(String::new());
-                        }
-                    })
-                    .child(icons::icon(Icon::EditClear, ICON_SM, tokens.muted)),
-            );
+            let mut trailing = rect().horizontal().center().spacing(S1);
+            if clear {
+                trailing = trailing.child(
+                    rect()
+                        .width(Size::px(BOX_SM))
+                        .height(Size::px(BOX_SM))
+                        .corner_radius(RADIUS_LG)
+                        .center()
+                        .on_press(move |event: Event<PressEventData>| {
+                            event.stop_propagation();
+                            value.set(String::new());
+                            if let Some(on_change) = &on_change {
+                                on_change.call(String::new());
+                            }
+                        })
+                        .child(icons::icon(Icon::EditClear, ICON_SM, tokens.muted)),
+                );
+            }
+            if self.password {
+                let (icon, tip) = if revealed() {
+                    (Icon::ViewConceal, "Hide password")
+                } else {
+                    (Icon::ViewReveal, "Show password")
+                };
+                trailing = trailing.child(
+                    icon_button(icon, move |_| revealed.set(!revealed()))
+                        .size(BOX_SM)
+                        .tooltip(tip),
+                );
+            }
+            input = input.trailing(trailing);
         }
         if let Some(on_change) = on_change {
             input = input.on_validate(move |validator: InputValidator| {
@@ -244,21 +314,65 @@ impl Component for TextField {
             });
         }
 
+        // Right click: the edit commands, greyed out when they do not apply.
+        // A password is never copied out, so Cut and Copy stay off for it.
+        let copyable = has_text && !self.password;
+        let items = vec![
+            edit_item("Cut", copyable, move |_| {
+                command.set(Some(InputCommand::Cut))
+            }),
+            edit_item("Copy", copyable, move |_| {
+                command.set(Some(InputCommand::Copy));
+            }),
+            edit_item("Paste", true, move |_| {
+                command.set(Some(InputCommand::Paste));
+            }),
+            menu_separator(),
+            edit_item("Select all", has_text, move |_| {
+                command.set(Some(InputCommand::SelectAll));
+            }),
+        ];
+        let field = rect()
+            .width(if self.fill {
+                Size::fill()
+            } else {
+                Size::px(self.width)
+            })
+            .on_pointer_down(move |event: Event<PointerEventData>| {
+                let right = matches!(event.data(), PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Right));
+                if !right {
+                    return;
+                }
+                event.stop_propagation();
+                if let Some(overlays) = overlays {
+                    let at = event.global_location();
+                    overlays.show_menu((at.x as f32, at.y as f32), items.clone());
+                }
+            })
+            .child(input);
+
         rect()
             .spacing(S1)
             .font_size(TEXT_MD)
-            .child(input)
-            .maybe_child(self.invalid.clone().map(|message| {
-                label()
-                    .text(message)
-                    .font_size(TEXT_SM)
-                    .color(tokens.danger)
-                    .max_lines(2)
-            }))
+            .child(field)
+            .maybe(self.validates, |column| {
+                column.child(
+                    rect()
+                        .width(Size::fill())
+                        .min_height(Size::px(MESSAGE_LINE))
+                        .maybe_child(self.invalid.clone().map(|message| {
+                            label()
+                                .text(message)
+                                .font_size(TEXT_SM)
+                                .color(tokens.danger)
+                                .max_lines(2)
+                        })),
+                )
+            })
     }
 }
 
-/// The rounded search well with a search glyph and a clear button.
+/// The search well is the same field with a search glyph and a clear button.
 pub fn search_field(value: State<String>, on_change: impl Into<EventHandler<String>>) -> TextField {
     text_field(value, |_| {})
         .leading(Icon::Search)

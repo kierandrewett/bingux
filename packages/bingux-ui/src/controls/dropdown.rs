@@ -174,6 +174,7 @@ impl Component for Dropdown {
         };
         let on_key_down = {
             let choose = choose.clone();
+            let type_options = options.clone();
             move |event: Event<KeyboardEventData>| {
                 match &event.key {
                     key if is_activation_key(key) => {
@@ -223,6 +224,37 @@ impl Component for Dropdown {
                         highlighted.set(Some(next));
                         scroll.scroll_to_y(offset_for(next, <(i32, i32)>::from(scroll).1, !open()));
                         open.set(true);
+                    }
+                    // Type-ahead: the next option, after the current one, whose
+                    // label starts with the typed letter. Closed, it chooses.
+                    Key::Character(typed) if event.modifiers.is_empty() => {
+                        let Some(letter) = typed.chars().next() else {
+                            return;
+                        };
+                        let start = highlighted()
+                            .or(selected_index)
+                            .map_or(0, |index| index + 1);
+                        let found =
+                            (0..count)
+                                .map(|offset| (start + offset) % count)
+                                .find(|&index| {
+                                    type_options[index].1.chars().next().is_some_and(|first| {
+                                        first.to_lowercase().eq(letter.to_lowercase())
+                                    })
+                                });
+                        let Some(index) = found else {
+                            return;
+                        };
+                        if open() {
+                            highlighted.set(Some(index));
+                            scroll.scroll_to_y(offset_for(
+                                index,
+                                <(i32, i32)>::from(scroll).1,
+                                false,
+                            ));
+                        } else {
+                            choose.call(index);
+                        }
                     }
                     _ => return,
                 }

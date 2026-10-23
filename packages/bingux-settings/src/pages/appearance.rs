@@ -18,8 +18,8 @@ use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then, which};
 use crate::theme::{Scheme, SharedTokens, Tokens, accent_for, accent_names, read_gsettings};
 use crate::ui::{
-    Group, Icon, Status, choice_list, icon, page_column, row, row_button, skeleton, status,
-    use_tokens,
+    Group, Icon, Overlays, PageHeader, Status, choice_list, icon, page_column, row, row_button,
+    skeleton, status, use_overlays, use_page_header, use_tokens,
 };
 use bingux_ui::scale::*;
 
@@ -102,17 +102,17 @@ fn file_name(path: &str) -> String {
 }
 
 /// Sets the accent immediately, writes GNOME's key, and rolls back on failure.
-fn apply_accent(mut shared: State<Tokens>, mut error: State<Option<String>>, name: &'static str) {
+fn apply_accent(mut shared: State<Tokens>, overlays: Overlays, name: &'static str) {
     let previous = *shared.read();
     shared.set(Tokens::new(name, previous.scheme, previous.reduced_motion));
     let value = format!("'{name}'");
     background_then(
         move || system::gsettings_set(INTERFACE, "accent-color", &value),
         move |result| match result {
-            Ok(_) => error.set(None),
+            Ok(_) => {}
             Err(failure) => {
                 shared.set(previous);
-                error.set(Some(failure.0));
+                overlays.toast(failure.0);
             }
         },
     );
@@ -120,7 +120,7 @@ fn apply_accent(mut shared: State<Tokens>, mut error: State<Option<String>>, nam
 
 /// Sets the colour scheme immediately, writes GNOME's key, and rolls back on
 /// failure.
-fn apply_scheme(mut shared: State<Tokens>, mut error: State<Option<String>>, scheme: Scheme) {
+fn apply_scheme(mut shared: State<Tokens>, overlays: Overlays, scheme: Scheme) {
     let previous = *shared.read();
     shared.set(Tokens::new(
         previous.accent_name,
@@ -131,10 +131,10 @@ fn apply_scheme(mut shared: State<Tokens>, mut error: State<Option<String>>, sch
     background_then(
         move || system::gsettings_set(INTERFACE, "color-scheme", &value),
         move |result| match result {
-            Ok(_) => error.set(None),
+            Ok(_) => {}
             Err(failure) => {
                 shared.set(previous);
-                error.set(Some(failure.0));
+                overlays.toast(failure.0);
             }
         },
     );
@@ -144,16 +144,15 @@ fn apply_scheme(mut shared: State<Tokens>, mut error: State<Option<String>>, sch
 /// A cancelled chooser leaves the page as it was.
 fn run_wallpaper_change(
     mut model: State<Option<Loaded>>,
-    mut error: State<Option<String>>,
+    overlays: Overlays,
     work: fn() -> Result<Option<Model>, CommandError>,
 ) {
     background_then(work, move |result| match result {
         Ok(Some(loaded)) => {
-            error.set(None);
             model.set(Some(Ok(loaded)));
         }
         Ok(None) => {}
-        Err(failure) => error.set(Some(failure.0)),
+        Err(failure) => overlays.toast(failure.0),
     });
 }
 
@@ -335,9 +334,18 @@ pub struct AppearancePage;
 impl Component for AppearancePage {
     fn render(&self) -> impl IntoElement {
         let model = system::use_cached("appearance", load);
-        let error = use_state::<Option<String>>(|| None);
+        let overlays = use_overlays();
         let shared = use_consume::<SharedTokens>().0;
         let tokens = use_tokens();
+        let scheme_name = match tokens.scheme {
+            Scheme::Default => "Default",
+            Scheme::PreferLight => "Light",
+            Scheme::PreferDark => "Dark",
+        };
+        use_page_header(PageHeader {
+            subtitle: Some(scheme_name.to_string()),
+            action: None,
+        });
         let navigator = use_navigator();
 
         let Some(loaded) = model.read().clone() else {
@@ -367,18 +375,12 @@ impl Component for AppearancePage {
                     name == tokens.accent_name,
                     tokens.text,
                     tokens.accent_foreground,
-                    move |_| apply_accent(shared, error, name),
+                    move |_| apply_accent(shared, overlays, name),
                 )
             })
             .collect();
 
         page_column()
-            .maybe_child(
-                error
-                    .read()
-                    .clone()
-                    .map(|message| Element::from(status(Status::Error(message)))),
-            )
             .child(
                 Group::titled("Wallpaper")
                     .row(match wallpaper_path {
@@ -389,20 +391,20 @@ impl Component for AppearancePage {
                                 .spacing(S3)
                                 .child(wallpaper_thumbnail(&path))
                                 .child(row_button("Choose picture", move |_| {
-                                    run_wallpaper_change(model, error, choose_wallpaper)
+                                    run_wallpaper_change(model, overlays, choose_wallpaper)
                                 })),
                         ),
                         None => row("No picture chosen")
                             .subtitle("The system wallpaper is in use.")
                             .trailing(row_button("Choose picture", move |_| {
-                                run_wallpaper_change(model, error, choose_wallpaper)
+                                run_wallpaper_change(model, overlays, choose_wallpaper)
                             })),
                     })
                     .row(
                         row("System wallpaper")
                             .subtitle("Go back to the wallpaper that came with the system.")
                             .trailing(row_button("Use it", move |_| {
-                                run_wallpaper_change(model, error, use_gnome_background)
+                                run_wallpaper_change(model, overlays, use_gnome_background)
                             })),
                     ),
             )
@@ -450,19 +452,19 @@ impl Component for AppearancePage {
                                     "Default",
                                     Scheme::Default,
                                     tokens,
-                                    move |_| apply_scheme(shared, error, Scheme::Default),
+                                    move |_| apply_scheme(shared, overlays, Scheme::Default),
                                 ))
                                 .child(scheme_card(
                                     "Light",
                                     Scheme::PreferLight,
                                     tokens,
-                                    move |_| apply_scheme(shared, error, Scheme::PreferLight),
+                                    move |_| apply_scheme(shared, overlays, Scheme::PreferLight),
                                 ))
                                 .child(scheme_card(
                                     "Dark",
                                     Scheme::PreferDark,
                                     tokens,
-                                    move |_| apply_scheme(shared, error, Scheme::PreferDark),
+                                    move |_| apply_scheme(shared, overlays, Scheme::PreferDark),
                                 )),
                         ),
                 )
@@ -514,7 +516,7 @@ impl Component for FontPage {
     fn render(&self) -> impl IntoElement {
         let model: State<Option<Loaded>> = system::cached("appearance");
         let navigator = use_navigator();
-        let error = use_state::<Option<String>>(|| None);
+        let overlays = use_overlays();
         let fonts = use_state::<Option<Result<Vec<String>, CommandError>>>(|| None);
         use_hook(move || background(fonts, installed_fonts));
 
@@ -532,24 +534,18 @@ impl Component for FontPage {
         let mut options = vec![(String::new(), "System default".to_string())];
         options.extend(list.into_iter().map(|family| (family.clone(), family)));
 
-        let mut page = page_column();
-        if let Some(message) = error.read().clone() {
-            page = page.child(status(Status::Error(message)));
-        }
-        page.child(
+        page_column().child(
             choice_list(options, current, move |family: String| {
-                let mut error = error;
                 let mut model = model;
                 background_then(
                     move || set_font(&family),
                     move |result| match result {
                         Ok(Some(loaded)) => {
-                            error.set(None);
                             model.set(Some(Ok(loaded)));
                             navigator.pop();
                         }
                         Ok(None) => {}
-                        Err(failure) => error.set(Some(failure.0)),
+                        Err(failure) => overlays.toast(failure.0),
                     },
                 );
             })

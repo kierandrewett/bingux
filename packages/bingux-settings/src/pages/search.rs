@@ -12,8 +12,8 @@ use crate::icons::Icon;
 use crate::pages::bingux_config;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Overlays, ResponseKind, Row, Status, action_row, choice_row, dialog, icon_button,
-    page_column, primary_button, row, skeleton, slider_row, status, switch, switch_row, text_field,
+    Group, Overlays, ResponseKind, Row, Status, choice_row, dialog, icon_button, page_column,
+    primary_button, row, sheet, skeleton, slider_row, status, switch, switch_row, text_field,
     use_overlays,
 };
 use bingux_ui::scale::*;
@@ -562,10 +562,6 @@ impl Component for SearchPage {
         page = page
             .child(providers_group(&data, ctx))
             .child(web_group(&data, ctx))
-            .child(AddEngine {
-                engines: data.engines.clone(),
-                ctx,
-            })
             .child(files_group(&data, ctx))
             .child(previews_group(&data, ctx))
             .child(assistant_group(&data, ctx));
@@ -626,7 +622,10 @@ fn web_group(data: &Model, ctx: Ctx) -> Group {
             ctx,
         ));
     }
-    group
+    group.row(AddEngine {
+        engines: data.engines.clone(),
+        ctx,
+    })
 }
 
 fn engine_row(engine: Engine, engines: &[Engine], default: &str, ctx: Ctx) -> Row {
@@ -684,7 +683,7 @@ fn engine_row(engine: Engine, engines: &[Engine], default: &str, ctx: Ctx) -> Ro
         .trailing(trailing)
 }
 
-/// Form for a new engine. Writes the full array with the new engine appended.
+/// The add-engine row. Its sheet writes the full engines array with the new engine appended.
 #[derive(PartialEq)]
 struct AddEngine {
     engines: Vec<Engine>,
@@ -693,66 +692,164 @@ struct AddEngine {
 
 impl Component for AddEngine {
     fn render(&self) -> impl IntoElement {
-        let name = use_state(String::new);
-        let shortcut = use_state(String::new);
-        let url = use_state(String::new);
-        let engines = self.engines.clone();
-        let ctx = self.ctx;
-
-        let add = move |_| {
-            let mut name = name;
-            let mut shortcut = shortcut;
-            let mut url = url;
-            let name_text = name.read().trim().to_string();
-            let shortcut_text = shortcut.read().trim().to_string();
-            let url_text = url.read().trim().to_string();
-            if name_text.is_empty() || shortcut_text.is_empty() || url_text.is_empty() {
-                ctx.overlays
-                    .toast("Enter a name, a shortcut and a web address for the engine.");
-                return;
-            }
-            let mut list = engines.clone();
-            list.push(Engine {
-                id: engine_id(&shortcut_text),
-                name: name_text,
-                shortcut: shortcut_text,
-                url: url_text,
-                enabled: true,
-            });
-            write_then(
-                ctx,
-                set_args("search.engines", engines_toml(&list)),
-                move |ok| {
-                    if ok {
-                        name.set(String::new());
-                        shortcut.set(String::new());
-                        url.set(String::new());
-                        reload(ctx);
-                    }
-                },
-            );
+        let form = EngineForm {
+            name: use_state(String::new),
+            shortcut: use_state(String::new),
+            url: use_state(String::new),
+            ctx: self.ctx,
         };
+        let engines = self.engines.clone();
+        let open = move |_| {
+            let (mut name, mut shortcut, mut url) = (form.name, form.shortcut, form.url);
+            name.set(String::new());
+            shortcut.set(String::new());
+            url.set(String::new());
+            open_engine_sheet(form, engines.clone());
+        };
+        row("Add a search engine…").trailing(primary_button("Add", open).compact())
+    }
+}
 
-        Group::titled("Add engine")
+/// The add-engine fields. Copy, so the row, the sheet body and the Add action share them.
+#[derive(Clone, Copy, PartialEq)]
+struct EngineForm {
+    name: State<String>,
+    shortcut: State<String>,
+    url: State<String>,
+    ctx: Ctx,
+}
+
+/// Why a shortcut or web address cannot be used. Empty fields are not problems: Add stays off until they are filled in.
+#[derive(Default)]
+struct EngineProblems {
+    shortcut: Option<&'static str>,
+    url: Option<&'static str>,
+}
+
+fn engine_fields(form: EngineForm) -> (String, String, String) {
+    (
+        form.name.read().trim().to_string(),
+        form.shortcut.read().trim().to_string(),
+        form.url.read().trim().to_string(),
+    )
+}
+
+fn engine_problems(shortcut: &str, url: &str, engines: &[Engine]) -> EngineProblems {
+    let shortcut_problem = if shortcut.chars().any(char::is_whitespace) {
+        Some("A shortcut has no spaces.")
+    } else if !shortcut.is_empty()
+        && engines
+            .iter()
+            .any(|engine| engine.id == engine_id(shortcut))
+    {
+        Some("Another engine uses this shortcut.")
+    } else {
+        None
+    };
+    let url_problem = if url.is_empty() {
+        None
+    } else if !(url.starts_with("https://") || url.starts_with("http://")) {
+        Some("Start the address with https:// or http://.")
+    } else if !url.contains("{query}") {
+        Some("Put {query} where the search words go.")
+    } else {
+        None
+    };
+    EngineProblems {
+        shortcut: shortcut_problem,
+        url: url_problem,
+    }
+}
+
+fn engine_ready(name: &str, shortcut: &str, url: &str, engines: &[Engine]) -> bool {
+    let problems = engine_problems(shortcut, url, engines);
+    !name.is_empty()
+        && !shortcut.is_empty()
+        && !url.is_empty()
+        && problems.shortcut.is_none()
+        && problems.url.is_none()
+}
+
+/// Opens the add-engine sheet. Called again on every edit, so the Add button follows the fields.
+fn open_engine_sheet(form: EngineForm, engines: Vec<Engine>) {
+    let (name, shortcut, url) = engine_fields(form);
+    let ready = engine_ready(&name, &shortcut, &url, &engines);
+    let body = EngineBody {
+        form,
+        engines: engines.clone(),
+    };
+    form.ctx.overlays.show_sheet(
+        sheet("Add a search engine", body)
+            .primary("Add", move |_| add_engine(form, engines.clone()))
+            .primary_enabled(ready),
+    );
+}
+
+/// Writes the engines with the new one appended. The sheet closes only once the write succeeds.
+fn add_engine(form: EngineForm, engines: Vec<Engine>) {
+    let (name, shortcut, url) = engine_fields(form);
+    if !engine_ready(&name, &shortcut, &url, &engines) {
+        return;
+    }
+    let mut list = engines;
+    list.push(Engine {
+        id: engine_id(&shortcut),
+        name,
+        shortcut,
+        url,
+        enabled: true,
+    });
+    let ctx = form.ctx;
+    write_then(
+        ctx,
+        set_args("search.engines", engines_toml(&list)),
+        move |ok| {
+            if ok {
+                ctx.overlays.close_sheet();
+                reload(ctx);
+            }
+        },
+    );
+}
+
+/// The add-engine sheet body. It reads the form state, so the fields and their problems redraw as they change.
+#[derive(Clone, PartialEq)]
+struct EngineBody {
+    form: EngineForm,
+    engines: Vec<Engine>,
+}
+
+impl Component for EngineBody {
+    fn render(&self) -> impl IntoElement {
+        let form = self.form;
+        let engines = self.engines.clone();
+        let edited = move |_: String| open_engine_sheet(form, engines.clone());
+        let (_, shortcut, url) = engine_fields(form);
+        let problems = engine_problems(&shortcut, &url, &self.engines);
+        Group::new(None::<String>)
             .description(
                 "Type the shortcut in search to use this engine. Put {query} in the address where the search words go.",
             )
             .row(row("Name").trailing(
-                text_field(name, |_: String| {})
+                text_field(form.name, |_: String| {})
+                    .on_change(edited.clone())
                     .width(FIELD_WIDTH_WIDE)
                     .placeholder("Example Search"),
             ))
             .row(row("Shortcut").trailing(
-                text_field(shortcut, |_: String| {})
+                text_field(form.shortcut, |_: String| {})
+                    .on_change(edited.clone())
+                    .invalid(problems.shortcut.map(str::to_string))
                     .width(FIELD_WIDTH_WIDE)
                     .placeholder("ex"),
             ))
             .row(row("Web address").trailing(
-                text_field(url, |_: String| {})
+                text_field(form.url, |_: String| {})
+                    .on_change(edited)
+                    .invalid(problems.url.map(str::to_string))
                     .width(FIELD_WIDTH_WIDE)
                     .placeholder("https://example.com/?q={query}"),
             ))
-            .row(action_row(None, primary_button("Add", add).compact()))
     }
 }
 

@@ -1,6 +1,12 @@
 //! Tabs: a row of equal tabs with an accent underline under the selected one,
-//! as GNOME's view switcher. Left and Right arrow keys move the selection to
-//! the neighbouring tab when a tab has focus.
+//! as GNOME's view switcher. The row uses a roving tab stop: only the selected
+//! tab takes focus from Tab and Shift+Tab. Left and Right arrows move the
+//! selection and focus to the neighbouring tab, and Home and End go to the
+//! first and last tab.
+
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 
 use freya::prelude::*;
 
@@ -35,34 +41,56 @@ impl Component for Tabs {
         let selected = self.selected.clone();
         let on_select = self.on_select.clone();
         let share = 100.0 / self.options.len().max(1) as f32;
+        // One accessibility id per tab key, kept for the life of the row, so
+        // the arrow keys can move focus to a neighbour that is not in the tab
+        // order.
+        let ids = use_hook(|| Rc::new(RefCell::new(HashMap::<String, AccessibilityId>::new())));
+        let ids: Vec<AccessibilityId> = {
+            let mut map = ids.borrow_mut();
+            self.options
+                .iter()
+                .map(|(key, _)| {
+                    *map.entry(key.clone())
+                        .or_insert_with(AccessibilityId::new_unique)
+                })
+                .collect()
+        };
+        let key_ids = ids.clone();
         rect()
             .width(Size::fill())
             .height(Size::px(BUTTON_HEIGHT))
             .direction(Direction::Horizontal)
             .on_key_down(move |event: Event<KeyboardEventData>| {
-                let step: isize = match event.key {
-                    Key::Named(NamedKey::ArrowLeft) => -1,
-                    Key::Named(NamedKey::ArrowRight) => 1,
-                    _ => return,
-                };
                 let Some(index) = options.iter().position(|(key, _)| *key == selected) else {
                     return;
                 };
-                let next = index
-                    .saturating_add_signed(step)
-                    .min(options.len().saturating_sub(1));
+                let last = options.len().saturating_sub(1);
+                let next = match &event.key {
+                    Key::Named(NamedKey::ArrowLeft) => index.saturating_sub(1),
+                    Key::Named(NamedKey::ArrowRight) => (index + 1).min(last),
+                    Key::Named(NamedKey::Home) => 0,
+                    Key::Named(NamedKey::End) => last,
+                    _ => return,
+                };
+                event.stop_propagation();
                 if next != index {
-                    event.stop_propagation();
                     on_select.call(options[next].0.clone());
                 }
+                key_ids[next].request_focus();
             })
-            .children(self.options.iter().map(|(key, text)| Tab {
-                key: key.clone(),
-                text: text.clone(),
-                selected: *key == self.selected,
-                on_select: self.on_select.clone(),
-                share,
-            }))
+            .children(
+                self.options
+                    .iter()
+                    .enumerate()
+                    .map(|(index, (key, text))| Tab {
+                        key: key.clone(),
+                        text: text.clone(),
+                        selected: *key == self.selected,
+                        on_select: self.on_select.clone(),
+                        share,
+                        a11y_id: ids[index],
+                    }),
+            )
     }
 }
 
@@ -73,6 +101,7 @@ struct Tab {
     selected: bool,
     on_select: EventHandler<String>,
     share: f32,
+    a11y_id: AccessibilityId,
 }
 
 impl Component for Tab {
@@ -80,7 +109,7 @@ impl Component for Tab {
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
-        let a11y_id = use_a11y();
+        let a11y_id = self.a11y_id;
         let focus = use_focus(a11y_id);
         let key = self.key.clone();
         let on_select = self.on_select.clone();
@@ -91,7 +120,7 @@ impl Component for Tab {
         };
         rect()
             .a11y_id(a11y_id)
-            .a11y_focusable(true)
+            .a11y_focusable(self.selected)
             .a11y_enabled(true)
             .a11y_role(AccessibilityRole::Tab)
             .a11y_builder(|builder| builder.set_selected(self.selected))

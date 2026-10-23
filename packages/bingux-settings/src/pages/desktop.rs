@@ -6,8 +6,8 @@
 use std::time::Duration;
 
 use crate::ui::{
-    Group, Icon, Row, Status, dropdown, page_column, row, segmented, skeleton, slider, status,
-    switch_row,
+    Group, Icon, Overlays, Row, Status, dropdown, page_column, row, segmented, skeleton, slider,
+    status, switch_row, use_overlays,
 };
 use bingux_ui::scale::*;
 use freya::prelude::*;
@@ -160,7 +160,7 @@ fn apply(change: &Change) -> Result<(), CommandError> {
 #[derive(Clone, Copy)]
 struct Ctx {
     model: State<Option<Result<Model, CommandError>>>,
-    error: State<Option<String>>,
+    overlays: Overlays,
     /// The dock slider's percent while it is dragged, until the write lands.
     pending: State<Option<f64>>,
 }
@@ -170,11 +170,9 @@ fn write(ctx: Ctx, change: Change) {
     background_then(
         move || apply(&change),
         move |result| {
-            let mut error = ctx.error;
             let mut pending = ctx.pending;
             match result {
                 Ok(()) => {
-                    error.set(None);
                     background_then(load, move |loaded| {
                         let mut model = ctx.model;
                         model.set(Some(loaded));
@@ -183,7 +181,7 @@ fn write(ctx: Ctx, change: Change) {
                     });
                 }
                 Err(failure) => {
-                    error.set(Some(failure.0));
+                    ctx.overlays.toast(failure.0);
                     pending.set(None);
                 }
             }
@@ -254,11 +252,11 @@ pub struct DesktopPage;
 impl Component for DesktopPage {
     fn render(&self) -> impl IntoElement {
         let model = system::use_cached("desktop", load);
-        let error = use_state::<Option<String>>(|| None);
+        let overlays = use_overlays();
         let pending = use_state::<Option<f64>>(|| None);
         let ctx = Ctx {
             model,
-            error,
+            overlays,
             pending,
         };
 
@@ -275,17 +273,12 @@ impl Component for DesktopPage {
             }
         };
         let edge = m.sidebar_edge.clone().unwrap_or_else(|| "auto".to_string());
-        let failure = error.read().clone();
         page_column()
-            .maybe_child(failure.map(|message| status(Status::Error(message))))
             .child(
                 Group::titled("Dock")
-                    .row(
-                        switch_row("Show dock", m.dock, move |on: bool| {
-                            write(ctx, Change::Set("desktop.dock", on.to_string()))
-                        })
-                        .leading(Icon::ViewGrid),
-                    )
+                    .row(switch_row("Show dock", m.dock, move |on: bool| {
+                        write(ctx, Change::Set("desktop.dock", on.to_string()))
+                    }))
                     .row(dock_size_row(ctx, m.dock_size))
                     .row(segment_row(
                         "Alignment",
@@ -348,12 +341,9 @@ impl Component for DesktopPage {
             )
             .child(
                 Group::titled("Sidebar")
-                    .row(
-                        switch_row("Show sidebar", m.sidebar, move |on: bool| {
-                            write(ctx, Change::Set("desktop.sidebar", on.to_string()))
-                        })
-                        .leading(Icon::SidebarShow),
-                    )
+                    .row(switch_row("Show sidebar", m.sidebar, move |on: bool| {
+                        write(ctx, Change::Set("desktop.sidebar", on.to_string()))
+                    }))
                     .row(menu_row(
                         "Side of the screen",
                         vec![
@@ -378,19 +368,15 @@ impl Component for DesktopPage {
                         switch_row("Show system usage", m.metrics, move |on: bool| {
                             write(ctx, Change::Set("desktop.metrics", on.to_string()))
                         })
-                        .subtitle("Shows how busy the processor, memory and network are.")
-                        .leading(Icon::Computer),
+                        .subtitle("Shows how busy the processor, memory and network are."),
                     )
-                    .row(
-                        switch_row(
-                            "Show seconds in the clock",
-                            m.clock_seconds,
-                            move |on: bool| {
-                                write(ctx, Change::Set("desktop.clock_seconds", on.to_string()))
-                            },
-                        )
-                        .leading(Icon::Clock),
-                    ),
+                    .row(switch_row(
+                        "Show seconds in the clock",
+                        m.clock_seconds,
+                        move |on: bool| {
+                            write(ctx, Change::Set("desktop.clock_seconds", on.to_string()))
+                        },
+                    )),
             )
             .child(
                 Group::titled("Control Centre")

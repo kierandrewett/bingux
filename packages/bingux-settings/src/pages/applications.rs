@@ -112,7 +112,10 @@ fn parse_mime(text: &str) -> (Option<String>, Vec<String>) {
 }
 
 fn load() -> Result<Model, CommandError> {
-    let installed = apps::rescan();
+    let mut installed = apps::rescan();
+    // Two desktop files can describe one program. Keep the first of each name and icon.
+    let mut seen = std::collections::HashSet::new();
+    installed.retain(|app| seen.insert((app.name.clone(), app.icon.clone())));
     let mut choices = Vec::new();
     for (index, kind) in KINDS.iter().enumerate() {
         let text = system::run("gio", &["mime", kind.mimes[0]], TIMEOUT)?;
@@ -185,35 +188,31 @@ impl Component for ApplicationsPage {
         let query = use_state(String::new);
         let navigator = use_navigator();
 
-        let Some(loaded) = model.read().clone() else {
-            return page_column().child(skeleton());
-        };
-        let data = match loaded {
-            Ok(data) => data,
-            Err(failure) => {
-                return page_column().child(
-                    status(Status::Error(failure.0))
-                        .action("Try again", move |_| system::background(model, load)),
-                );
-            }
-        };
-
-        let needle = query.read().trim().to_lowercase();
-        let shown: Vec<&AppEntry> = data
-            .apps
-            .iter()
-            .filter(|app| needle.is_empty() || app.name.to_lowercase().contains(&needle))
-            .collect();
-
-        let list = if shown.is_empty() {
-            Group::titled("Installed")
-                .row(status(Status::Empty("No application matches.".to_string())))
-        } else {
-            Group::titled("Installed").rows(
-                shown
+        let loaded = model.read().clone();
+        let list = match loaded {
+            None => Group::titled("Installed").row(skeleton()),
+            Some(Err(failure)) => Group::titled("Installed").row(
+                status(Status::Error(failure.0))
+                    .action("Try again", move |_| system::background(model, load)),
+            ),
+            Some(Ok(data)) => {
+                let needle = query.read().trim().to_lowercase();
+                let shown: Vec<&AppEntry> = data
+                    .apps
                     .iter()
-                    .map(|app| Element::from(app_row(app, move |route| navigator.push(route)))),
-            )
+                    .filter(|app| needle.is_empty() || app.name.to_lowercase().contains(&needle))
+                    .collect();
+                if shown.is_empty() {
+                    Group::titled("Installed")
+                        .row(status(Status::Empty("No application matches.".to_string())))
+                } else {
+                    Group::titled("Installed").rows(
+                        shown.iter().map(|app| {
+                            Element::from(app_row(app, move |route| navigator.push(route)))
+                        }),
+                    )
+                }
+            }
         };
 
         page_column()

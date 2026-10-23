@@ -9,8 +9,8 @@ use freya::prelude::*;
 use crate::icons::Icon;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Curve, Group, Series, Status, Unit, choice_row, line_chart, page_column, ring, row, skeleton,
-    status, switch_row,
+    Curve, Group, Overlays, PageHeader, Series, Status, Unit, choice_row, line_chart, page_column,
+    ring, row, skeleton, status, switch_row, use_overlays, use_page_header,
 };
 
 const SESSION: &str = "org.gnome.desktop.session";
@@ -323,29 +323,39 @@ fn timeout_choices(values: &[u32], current: u32, zero: &str) -> Vec<(String, Str
     options
 }
 
+/// The header line: the charge and its state, `Plugged in` without a battery,
+/// and nothing while the battery cannot be read.
+fn header_subtitle(battery: &Result<Option<Battery>, CommandError>) -> Option<String> {
+    match battery {
+        Ok(Some(battery)) if battery.percentage.is_empty() => Some(battery.state.to_lowercase()),
+        Ok(Some(battery)) => Some(format!(
+            "{}, {}",
+            battery.percentage,
+            battery.state.to_lowercase()
+        )),
+        Ok(None) => Some("Plugged in".to_string()),
+        Err(_) => None,
+    }
+}
+
 /// Run a write in the background; on success reload the model, on failure
-/// show the message at the top of the page.
+/// show the message as a toast.
 fn apply(
     loaded: State<Option<Model>>,
-    mut error: State<Option<String>>,
+    overlays: Overlays,
     work: impl FnOnce() -> CommandResult + Send + 'static,
 ) {
     background_then(work, move |result| match result {
         Ok(_) => {
-            error.set(None);
             background(loaded, load);
         }
-        Err(e) => error.set(Some(e.0)),
+        Err(e) => overlays.toast(e.0),
     });
 }
 
 /// The three power modes as rows with icons. A mode the computer does not
 /// offer stays visible but cannot be chosen.
-fn mode_group(
-    loaded: State<Option<Model>>,
-    error: State<Option<String>>,
-    profiles: &Profiles,
-) -> Group {
+fn mode_group(loaded: State<Option<Model>>, overlays: Overlays, profiles: &Profiles) -> Group {
     let mut group = Group::titled("Power mode");
     for name in ["power-saver", "balanced", "performance"] {
         let offered = profiles.choices.iter().any(|(key, _)| key == name);
@@ -363,7 +373,7 @@ fn mode_group(
         } else {
             item = item.on_press(move |_| {
                 let key = key.clone();
-                apply(loaded, error, move || {
+                apply(loaded, overlays, move || {
                     system::run("powerprofilesctl", &["set", &key], Duration::from_secs(5))
                 });
             });
@@ -377,7 +387,7 @@ fn mode_group(
 /// it. The delay is editable only while the switch is on.
 fn suspend_rows(
     loaded: State<Option<Model>>,
-    error: State<Option<String>>,
+    overlays: Overlays,
     source: &'static str,
     title: &str,
     state: &Suspend,
@@ -392,7 +402,7 @@ fn suspend_rows(
             move |on: bool| {
                 let value = if on { "'suspend'" } else { "'nothing'" };
                 let key = toggle_key.clone();
-                apply(loaded, error, move || {
+                apply(loaded, overlays, move || {
                     system::gsettings_set(POWER_PLUGIN, &key, value)
                 });
             },
@@ -404,7 +414,7 @@ fn suspend_rows(
                 &state.delay.to_string(),
                 move |key: String| {
                     let key_timeout = key_timeout.clone();
-                    apply(loaded, error, move || {
+                    apply(loaded, overlays, move || {
                         system::gsettings_set(POWER_PLUGIN, &key_timeout, &key)
                     });
                 },
@@ -488,16 +498,21 @@ pub struct PowerPage;
 impl Component for PowerPage {
     fn render(&self) -> impl IntoElement {
         let loaded = system::use_cached("power", load);
-        let error = use_state::<Option<String>>(|| None);
+        let overlays = use_overlays();
+        let subtitle = loaded
+            .read()
+            .as_ref()
+            .and_then(|model| header_subtitle(&model.battery));
+        use_page_header(PageHeader {
+            subtitle,
+            action: None,
+        });
 
         let Some(model) = loaded.read().clone() else {
             return page_column().child(skeleton());
         };
 
         let mut page = page_column();
-        if let Some(message) = error.read().clone() {
-            page = page.child(status(Status::Error(message)));
-        }
 
         // Battery: no group on a machine without one.
         page = match model.battery.clone() {
@@ -514,7 +529,7 @@ impl Component for PowerPage {
 
         // Power mode
         page = match model.profiles.clone() {
-            Ok(profiles) => page.child(mode_group(loaded, error, &profiles)),
+            Ok(profiles) => page.child(mode_group(loaded, overlays, &profiles)),
             Err(_) if !system::which("powerprofilesctl") => {
                 page.child(Group::titled("Power mode").row(status(Status::Info(
                     "Power modes are not available on this computer.".into(),
@@ -532,7 +547,7 @@ impl Component for PowerPage {
                 timeout_choices(&[0, 60, 120, 300, 600, 900, 1800], current, "Never"),
                 &current.to_string(),
                 move |key: String| {
-                    apply(loaded, error, move || {
+                    apply(loaded, overlays, move || {
                         system::gsettings_set(SESSION, "idle-delay", &format!("uint32 {key}"))
                     })
                 },
@@ -545,7 +560,7 @@ impl Component for PowerPage {
                 dim,
                 move |on: bool| {
                     let value = if on { "true" } else { "false" };
-                    apply(loaded, error, move || {
+                    apply(loaded, overlays, move || {
                         system::gsettings_set(POWER_PLUGIN, "idle-dim", value)
                     })
                 },
@@ -557,7 +572,7 @@ impl Component for PowerPage {
                 enabled,
                 move |on: bool| {
                     let value = if on { "true" } else { "false" };
-                    apply(loaded, error, move || {
+                    apply(loaded, overlays, move || {
                         system::gsettings_set(SCREENSAVER, "lock-enabled", value)
                     })
                 },
@@ -571,7 +586,7 @@ impl Component for PowerPage {
                     timeout_choices(&[0, 5, 30, 60, 300, 900], current, "Immediately"),
                     &current.to_string(),
                     move |key: String| {
-                        apply(loaded, error, move || {
+                        apply(loaded, overlays, move || {
                             system::gsettings_set(
                                 SCREENSAVER,
                                 "lock-delay",
@@ -588,10 +603,22 @@ impl Component for PowerPage {
 
         // Automatic suspend, one group per power source, only when the keys exist.
         if let Some(state) = &model.suspend_ac {
-            page = page.child(suspend_rows(loaded, error, "ac", "When plugged in", state));
+            page = page.child(suspend_rows(
+                loaded,
+                overlays,
+                "ac",
+                "When plugged in",
+                state,
+            ));
         }
         if let Some(state) = &model.suspend_battery {
-            page = page.child(suspend_rows(loaded, error, "battery", "On battery", state));
+            page = page.child(suspend_rows(
+                loaded,
+                overlays,
+                "battery",
+                "On battery",
+                state,
+            ));
         }
 
         // Power button, only when the schema exists
@@ -614,7 +641,7 @@ impl Component for PowerPage {
                 options,
                 &current,
                 move |key: String| {
-                    apply(loaded, error, move || {
+                    apply(loaded, overlays, move || {
                         system::gsettings_set(
                             POWER_PLUGIN,
                             "power-button-action",

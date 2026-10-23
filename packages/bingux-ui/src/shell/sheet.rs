@@ -109,8 +109,6 @@ impl Component for SheetLayer {
         let progress = use_presence(0, self.closing, tokens.motion(140), move |_| {
             overlays.finish_sheet()
         });
-        use_side_effect(move || a11y_id.request_focus());
-
         let cancel = action_button("Cancel", move |_: ()| overlays.close_sheet()).compact();
         let primary = self.sheet.primary.clone();
         let primary_press = primary.clone();
@@ -160,8 +158,11 @@ impl Component for SheetLayer {
             } else {
                 0.0
             };
+        // The panel takes focus when the sheet opens. A text field marked
+        // `autofocus` is created after it, and freya keeps the last request.
         let panel = rect()
             .a11y_id(a11y_id)
+            .a11y_auto_focus(true)
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Dialog)
             .a11y_alt(self.sheet.title.clone())

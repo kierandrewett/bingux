@@ -75,8 +75,11 @@ full name and the account type.
 Network shows an information button on each Wi-Fi row. It opens the network's
 page: its state, Connect or Disconnect (with a password row when the network
 needs one), signal, security, band and speed, and Forget network for a saved
-network. Date and Time opens the time zone as a searchable list of cities, and
-Set date and time as steppers for day, month, year, hour and minute.
+network. Date and Time opens the time zone as a searchable list of cities. The
+header shows the chosen city, and the zone list shows each UTC offset only for
+the selected zone. Set date and time opens a sheet with Date (day, month and
+year) and Time (hour and minute) rows and a Set button that stays disabled
+until the values change.
 
 A subpage replaces the page and puts a Back button and the subpage title in
 the header. Back, Alt+Left and the mouse Back button return to the page
@@ -103,8 +106,11 @@ way round.
 | Applications    | Desktop entries in `XDG_DATA_DIRS`, `gio mime`, `wpctl`                                              | Installed applications with their icons, a page for each, and the default application for each kind of file.                                                              |
 | About           | `/etc/os-release`, DMI, `gnoblinctl --version`                                                       | Read-only.                                                                                                                                                                |
 
-Each page shows a readable error when its tool is missing or refuses the
-request, and a Try again action where that makes sense.
+Each page shows its current state as a header subtitle where that helps (the
+battery level on Power, the colour scheme on Appearance, the city on Date and
+Time). A failed change shows a toast instead of an inline message, and a page
+whose tool is missing shows a readable error with a Try again action where that
+makes sense.
 
 ## Search
 

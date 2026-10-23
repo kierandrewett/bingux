@@ -24,8 +24,6 @@ pub enum Route {
     Account { path: String, name: String },
     /// The time zone list.
     TimeZone,
-    /// Setting the date and time by hand.
-    SetTime,
     /// The installed fonts, for the window and the desktop.
     Font,
     /// The full list of output or input devices, when there are too many to
@@ -42,7 +40,6 @@ impl Route {
             Self::WifiSaved => "Saved networks".to_string(),
             Self::Account { name, .. } => name.clone(),
             Self::TimeZone => "Time zone".to_string(),
-            Self::SetTime => "Set date and time".to_string(),
             Self::Font => "Font".to_string(),
             Self::SoundDevices { input: true } => "Input device".to_string(),
             Self::SoundDevices { input: false } => "Output device".to_string(),
@@ -73,7 +70,6 @@ impl Route {
             Self::WifiSaved => wifi::SavedNetworksPage.into(),
             Self::Account { path, .. } => users::AccountPage { path: path.clone() }.into(),
             Self::TimeZone => datetime::TimeZonePage.into(),
-            Self::SetTime => datetime::SetTimePage.into(),
             Self::Font => appearance::FontPage.into(),
             Self::SoundDevices { input } => sound::DevicePage { input: *input }.into(),
         }

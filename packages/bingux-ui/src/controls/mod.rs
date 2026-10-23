@@ -11,6 +11,7 @@ pub mod stepper;
 pub mod switch;
 pub mod tabs;
 pub mod text_field;
+pub mod tooltip;
 
 pub use button::{
     ActionButton, IconButton, RowButton, action_button, icon_button, primary_button, row_button,
@@ -19,9 +20,10 @@ pub use checkbox::{CheckState, Checkbox, RadioGroup, checkbox, radio_group};
 pub use dropdown::{Dropdown, dropdown};
 pub use progress::{ProgressBar, Spinner, SpinnerSize, progress_bar, spinner};
 pub use segmented::{Segmented, segmented};
-pub use signal::signal_bars;
+pub use signal::{signal_bars, signal_bars_labelled};
 pub use slider::{Slider, slider};
 pub use stepper::{Stepper, stepper};
 pub use switch::{Switch, switch};
 pub use tabs::{Tabs, tabs};
 pub use text_field::{TextField, search_field, text_field};
+pub use tooltip::tooltip_icon;

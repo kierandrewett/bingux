@@ -78,6 +78,44 @@ pub(crate) struct Menu {
     pub(crate) items: Vec<MenuItem>,
 }
 
+/// Space kept between a menu and the window edges.
+const MENU_EDGE: f32 = S2;
+
+/// The height of a menu of `items`: its rows, separators and padding.
+fn menu_height(items: &[MenuItem]) -> f32 {
+    let rows: f32 = items
+        .iter()
+        .map(|item| if item.separator { S2 } else { MENU_ITEM_HEIGHT })
+        .sum();
+    rows + S2 + S2
+}
+
+/// Where a menu of `size` opened at `at` sits on a window of `window`. It
+/// opens down and to the right of the pointer, flips up or left when there is
+/// no room, and is then held inside the window on all four edges. With no
+/// window size yet, it stays where it was opened.
+fn place_menu(at: (f32, f32), size: (f32, f32), window: (f32, f32)) -> (f32, f32) {
+    let (x, y) = at;
+    let (width, height) = size;
+    let (window_width, window_height) = window;
+    if window_width <= 0.0 || window_height <= 0.0 {
+        return at;
+    }
+    let x = if x + width + MENU_EDGE > window_width {
+        x - width
+    } else {
+        x
+    };
+    let y = if y + height + MENU_EDGE > window_height {
+        y - height
+    } else {
+        y
+    };
+    let x = x.min(window_width - width - MENU_EDGE).max(MENU_EDGE);
+    let y = y.min(window_height - height - MENU_EDGE).max(MENU_EDGE);
+    (x, y)
+}
+
 #[derive(Clone, PartialEq)]
 pub(crate) struct MenuLayer {
     pub(crate) menu: Menu,
@@ -102,9 +140,15 @@ impl Component for MenuLayer {
             })
         });
 
+        let window = *Platform::get().current_window().root_size.read();
+        let (x, y) = place_menu(
+            (self.menu.x, self.menu.y),
+            (MENU_WIDTH, menu_height(&self.menu.items)),
+            (window.width, window.height),
+        );
         let panel = rect()
             .layer(Layer::Overlay)
-            .position(Position::new_absolute().top(self.menu.y).left(self.menu.x))
+            .position(Position::new_absolute().top(y).left(x))
             .opacity(progress)
             .scale(0.96 + 0.04 * progress)
             .transform_origin(TransformOrigin::top_left())
@@ -201,6 +245,7 @@ impl Component for MenuRow {
             .width(Size::fill())
             .height(Size::px(MENU_ITEM_HEIGHT))
             .padding((0.0, S2))
+            .spacing(S2)
             .direction(Direction::Horizontal)
             .content(Content::Flex)
             .cross_align(Alignment::Center)

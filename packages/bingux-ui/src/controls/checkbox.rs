@@ -1,6 +1,10 @@
 //! Checkbox and radio controls (libadwaita `GtkCheckButton`, SwiftUI
 //! `Toggle(.checkbox)` and `Picker(.radioGroup)`).
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
+
 use accesskit::Toggled;
 use freya::animation::*;
 use freya::prelude::*;
@@ -198,7 +202,8 @@ impl Component for Checkbox {
 }
 
 /// A set of mutually exclusive 18 px radio buttons, one per option, laid
-/// out vertically by default.
+/// out vertically by default. Only the selected option is in the tab order.
+/// Arrow keys move the selection and focus to the next or previous option.
 #[derive(PartialEq)]
 pub struct RadioGroup {
     options: Vec<(String, String)>,
@@ -239,23 +244,68 @@ impl Component for RadioGroup {
     fn render(&self) -> impl IntoElement {
         let enabled = use_enabled(self.enabled);
         let on_select = self.on_select.clone();
+        let key_select = on_select.clone();
+        let options = self.options.clone();
         let selected = self.selected.clone();
+        // One accessibility id per option, kept for the life of the group, so
+        // the arrow keys can move focus to a neighbouring option.
+        let ids = use_hook(|| Rc::new(RefCell::new(HashMap::<String, AccessibilityId>::new())));
+        let ids: Vec<AccessibilityId> = {
+            let mut map = ids.borrow_mut();
+            self.options
+                .iter()
+                .map(|(key, _)| {
+                    *map.entry(key.clone())
+                        .or_insert_with(AccessibilityId::new_unique)
+                })
+                .collect()
+        };
+        let key_ids = ids.clone();
+        // The selected option is the tab stop; with no selection, the first is.
+        let tab_stop = self
+            .options
+            .iter()
+            .position(|(key, _)| *key == selected)
+            .unwrap_or(0);
         let mut container = rect().spacing(if self.horizontal { S4 } else { S2 });
         if self.horizontal {
             container = container.direction(Direction::Horizontal);
         }
         container
             .a11y_role(AccessibilityRole::RadioGroup)
-            .children(self.options.iter().map(|(key, text)| {
+            .on_key_down(move |event: Event<KeyboardEventData>| {
+                let count = options.len();
+                if !enabled || count == 0 {
+                    return;
+                }
+                // Arrows wrap around, as in a native radio group.
+                let next = match &event.key {
+                    Key::Named(NamedKey::ArrowUp | NamedKey::ArrowLeft) => {
+                        (tab_stop + count - 1) % count
+                    }
+                    Key::Named(NamedKey::ArrowDown | NamedKey::ArrowRight) => {
+                        (tab_stop + 1) % count
+                    }
+                    _ => return,
+                };
+                event.stop_propagation();
+                if next != tab_stop {
+                    key_select.call(options[next].0.clone());
+                }
+                key_ids[next].request_focus();
+            })
+            .children(self.options.iter().enumerate().map(|(index, (key, text))| {
                 let on_select = on_select.clone();
                 let key_for_press = key.clone();
                 Element::from(RadioButton {
                     text: text.clone(),
                     selected: *key == selected,
+                    focusable: index == tab_stop,
                     enabled,
                     on_select: EventHandler::new(move |_: ()| {
                         on_select.call(key_for_press.clone())
                     }),
+                    a11y_id: ids[index],
                 })
             }))
     }
@@ -265,8 +315,11 @@ impl Component for RadioGroup {
 struct RadioButton {
     text: String,
     selected: bool,
+    /// The group's tab stop: the only option Tab reaches.
+    focusable: bool,
     enabled: bool,
     on_select: EventHandler<()>,
+    a11y_id: AccessibilityId,
 }
 
 impl Component for RadioButton {
@@ -274,7 +327,7 @@ impl Component for RadioButton {
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
-        let a11y_id = use_a11y();
+        let a11y_id = self.a11y_id;
         let focus = use_focus(a11y_id);
         let enabled = use_enabled(self.enabled);
         let selected = self.selected;
@@ -309,7 +362,7 @@ impl Component for RadioButton {
         };
         rect()
             .a11y_id(a11y_id)
-            .a11y_focusable(enabled)
+            .a11y_focusable(enabled && self.focusable)
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::RadioButton)
             .a11y_builder(move |builder| builder.set_toggled(Toggled::from(selected)))
