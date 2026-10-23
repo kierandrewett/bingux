@@ -17,6 +17,7 @@ import argparse
 import base64
 import json
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -73,16 +74,31 @@ CASES = {
     # another OS (ext4, 6 GiB) shrunk to 4 GiB to make room for the root
     "uefi-alongside-ext4": ("uefi", "ext4", False, {"storage": {"mode": "alongside", "shrink": {
         "partition": DISK + "1", "size_bytes": 4 * 1024**3}}}),
+    # another OS (NTFS, 6 GiB, manifest-checked) shrunk to 4 GiB with ntfsresize, then the root is created
+    "uefi-alongside-ntfs": ("uefi", "ext4", False, {"storage": {"mode": "alongside", "shrink": {
+        "partition": DISK + "1", "size_bytes": 4 * 1024**3}}}),
+    # BIOS manual: reuse the bios_boot partition, format a home partition, create the root in free space
+    "manual-bios": ("bios", "ext4", False, {"storage": {"mode": "manual", "partitions": [
+        {"device": DISK + "1", "action": "reuse", "role": "bios_boot"},
+        {"device": DISK + "2", "action": "format", "role": "home", "fs": "ext4"},
+        {"device": DISK + "3", "action": "create", "role": "root", "size_bytes": 6 * 1024**3},
+    ]}}),
+    # UEFI manual with an encrypted root: reuse the ESP, create the LUKS root in free space (no home)
+    "manual-luks": ("uefi", "ext4", True, {"storage": {"mode": "manual", "partitions": [
+        {"device": DISK + "1", "action": "reuse", "role": "esp"},
+        {"device": DISK + "2", "action": "create", "role": "root", "size_bytes": 6 * 1024**3},
+    ]}}),
     # only ~0.5 GiB unallocated: free_space must refuse and leave the other OS untouched
     "uefi-free-space-refused": ("uefi", "ext4", False, {"storage": {"mode": "free_space"}}),
 }
 
-# Cases whose disk starts as another OS: name -> (other-OS partition bytes). Built on the host.
+# Cases whose disk starts as another OS: name -> (other-OS partition bytes, filesystem). Built on the host.
 FIXTURES = {
-    "uefi-free-space": 4 * 1024**3,
-    "bios-free-space": 4 * 1024**3,
-    "uefi-alongside-ext4": 6 * 1024**3,
-    "uefi-free-space-refused": int(9.5 * 1024**3),
+    "uefi-free-space": (4 * 1024**3, "ext4"),
+    "bios-free-space": (4 * 1024**3, "ext4"),
+    "uefi-alongside-ext4": (6 * 1024**3, "ext4"),
+    "uefi-alongside-ntfs": (6 * 1024**3, "ntfs"),
+    "uefi-free-space-refused": (int(9.5 * 1024**3), "ext4"),
 }
 # Cases that must refuse at install time: the install result is not ok and nothing is booted.
 REFUSALS = {"uefi-free-space-refused"}
@@ -90,6 +106,11 @@ REFUSALS = {"uefi-free-space-refused"}
 # Guest disk layout a case needs before the probe: the matrix blank disk has no partition table.
 PREPARE = {
     "uefi-manual": (f"printf '%s\\n' 'label: gpt' ',512MiB,U' ',2GiB,L' | sfdisk --wipe always {DISK} && "
+                    f"udevadm settle && mkfs.vfat -F 32 -n BINGUX_ESP {DISK}1"),
+    # BIOS boot partition (GUID 21686148-...) then a home partition for the manual case to format
+    "manual-bios": (f"printf '%s\\n' 'label: gpt' ',1MiB,21686148-6449-6E6F-744E-656564454649' ',2GiB,L' | "
+                    f"sfdisk --wipe always {DISK} && udevadm settle"),
+    "manual-luks": (f"printf '%s\\n' 'label: gpt' ',512MiB,U' | sfdisk --wipe always {DISK} && "
                     f"udevadm settle && mkfs.vfat -F 32 -n BINGUX_ESP {DISK}1"),
 }
 
@@ -114,7 +135,10 @@ def make_plan(firmware, filesystem, encrypted, extra=None):
         "kernel_args": ["console=ttyS0"],
     }
     plan.update(extra or {})
-    if plan.get("storage", {}).get("mode", "erase") != "erase":
+    mode = plan.get("storage", {}).get("mode", "erase")
+    if mode not in ("erase", "manual"):
+        del plan["confirm_erase"]  # the plan schema allows confirm_erase only where the disk may be erased
+    if mode != "erase":
         del plan["other_os"]  # the plan schema allows other_os only in erase mode
     return plan
 
@@ -332,7 +356,7 @@ def run_case(name, iso, out_root, disk_dir, checks, cdrom=None):
     disk.unlink(missing_ok=True)
     if name in FIXTURES:
         raw = disk_dir / f"{name}.raw"
-        build_other_os_disk(raw, DISK_BYTES, FIXTURES[name])
+        build_other_os_disk(raw, DISK_BYTES, *FIXTURES[name])
         build_qcow2(raw, disk)
 
     installed = False
@@ -349,7 +373,8 @@ def run_case(name, iso, out_root, disk_dir, checks, cdrom=None):
             vm.start(iso=None, disks=[(disk, DISK_BYTES)], firmware=firmware)
             boot_phase(GuestVm(vm), checks, name, firmware, filesystem, encrypted, extra, out)
             if name in FIXTURES:
-                rc, manifest = GuestVm(vm).run(CHECK_MANIFEST, timeout=120)
+                rc, manifest = GuestVm(vm).run(
+                    f"printf %s {USER_PASSWORD} | sudo -S -p '' sh -c {shlex.quote(CHECK_MANIFEST)}", timeout=120)
                 checks.expect(rc == 0, f"{name}: other OS manifest verifies after install",
                               f"rc={rc} out={manifest[-300:]!r}")
             vm.poweroff()

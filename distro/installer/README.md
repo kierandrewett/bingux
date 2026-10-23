@@ -249,6 +249,14 @@ sd-vconsole block [sd-encrypt] filesystems fsck`), built with `mkinitcpio -P` in
   `uefi-btrfs-zram`, and `uefi-luks-ext4-swappart` (encrypted swap partition). Feature checks read
   `systemd-timesyncd` enablement, `passwd -S root`, and `swapon` output.
   Storage case `uefi-manual` pre-partitions the guest disk (ESP formatted, home formatted, root created in the free space) and checks the same boot results.
+  Other-OS cases start from a host-built disk whose first partition is another OS (`OTHEROS` label, sha256 manifest). `uefi-free-space` and `bios-free-space` install into the unallocated rest (`free_space`); `uefi-alongside-ext4` and `uefi-alongside-ntfs` shrink that partition to 4 GiB first (`alongside`; NTFS via `ntfsresize`). After install the guest verifies the manifest with `sudo` and the disk must still boot. Manual cases: `manual-bios` (reuses the bios_boot partition, formats home, creates root) and `manual-luks` (reuses the ESP, creates a LUKS2 root). `uefi-free-space-refused` leaves only ~0.5 GiB free and must refuse with the other OS untouched.
+
+Results (`~/.cache/bingux-storage/matrix/<case>/results.json`; log `~/.cache/bingux-storage/<case>.log`):
+
+| Case | Result | Artifact |
+|------|--------|----------|
+| uefi-free-space | PASS (17/17 checks) | `~/.cache/bingux-storage/matrix/uefi-free-space/` |
+
 - Artifacts: `distro/out/installer-backend/matrix/<case>/{install,boot}/` (serial transcript, command
   log, screenshots) and `distro/out/installer-backend/matrix/<case>/results.json`. Exit status is 0 only
   when every case passes.
