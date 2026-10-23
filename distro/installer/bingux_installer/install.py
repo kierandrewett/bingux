@@ -269,6 +269,9 @@ def _plan_shrink(plan: Plan, disk: probe.DiskInfo, table: layout.GptTable) -> _S
     fstype = info["fstype"]
     if fstype not in probe.SHRINKABLE_FSTYPES:
         raise InstallerError("cannot_shrink", f"{fstype or 'unknown'} cannot be shrunk")
+    missing = probe.missing_shrink_tools(fstype)
+    if missing:
+        raise InstallerError("missing_tool", "missing tools: " + ", ".join(missing))
     min_bytes = info["min_bytes"]
     if min_bytes is None:
         raise InstallerError("cannot_shrink", f"the smallest size of {target} could not be read")

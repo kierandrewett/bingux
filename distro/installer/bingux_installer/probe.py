@@ -27,6 +27,9 @@ BASE_TOOLS = ("sgdisk", "mkfs.fat", "mkfs.ext4", "mkfs.btrfs", "mkfs.xfs", "rsyn
               "mkinitcpio", "cryptsetup", "mount", "umount", "chroot")
 UEFI_TOOLS = ("bootctl",)
 BIOS_TOOLS = ("grub-install", "grub-mkconfig")
+# Tools an alongside shrink needs for one filesystem. ntfsresize comes from ntfsprogs, which the
+# live ISO may not carry, so it is checked when an NTFS partition is actually shrunk.
+SHRINK_TOOLS = {"ext4": ("e2fsck", "resize2fs"), "btrfs": ("btrfs",), "ntfs": ("ntfsresize",)}
 SKIP_BLOCK_PREFIXES = ("loop", "sr", "zram", "ram", "fd")
 OS_SCAN_FSTYPES = frozenset({"ext2", "ext3", "ext4", "btrfs", "xfs", "vfat", "ntfs",
                              "ntfs3", "exfat", "f2fs"})
@@ -84,6 +87,11 @@ def missing_tools(
     if not blivet_available:
         missing.append("python-blivet")
     return missing
+
+
+def missing_shrink_tools(fstype: str, which: Callable[[str], str | None] = shutil.which) -> list[str]:
+    """Shrink tools absent for one filesystem type; empty when it needs none or all are present."""
+    return [name for name in SHRINK_TOOLS.get(fstype, ()) if which(name) is None]
 
 
 def _to_int(value: Any) -> int:
@@ -280,8 +288,12 @@ def ext4_min_bytes(runner: Runner, device: str) -> int | None:
 
 
 def ntfs_min_bytes(runner: Runner, device: str) -> int | None:
-    """Smallest size of an unmounted NTFS volume. Read-only: ntfsresize --info."""
-    result = runner.run(["ntfsresize", "--info", device], check=False)
+    """Smallest size of an unmounted NTFS volume. Read-only: ntfsresize --info. None when the
+    tool is not installed (ntfsprogs), so the scan reports the limit as unknown."""
+    try:
+        result = runner.run(["ntfsresize", "--info", device], check=False)
+    except OSError:
+        return None
     return parse_ntfsresize_min(result.stdout) if result.returncode == 0 else None
 
 

@@ -155,3 +155,24 @@ def test_plan_manual_refuses_a_reused_home_that_is_not_a_linux_filesystem() -> N
     with pytest.raises(InstallerError) as exc:
         _plan_manual(plan, _manual_disk("vfat"), _manual_table())
     assert exc.value.code == "invalid_plan"
+
+
+def test_plan_shrink_refuses_ntfs_when_ntfsresize_is_missing(monkeypatch) -> None:  # noqa: ANN001
+    from dataclasses import replace
+    from types import SimpleNamespace
+
+    from bingux_installer import probe
+    from bingux_installer.install import _plan_shrink
+    from bingux_installer.plan import Shrink
+
+    monkeypatch.setattr(probe, "missing_shrink_tools", lambda fstype, which=None: ["ntfsresize"])
+    plan = replace(_base_plan(), storage_mode="alongside", shrink=Shrink("/dev/vda2", 20 * 1024 ** 3))
+    table = layout.GptTable(
+        sector_size=512, first_usable=34, last_usable=200 * 1024 ** 3 // 512,
+        partitions=(layout.GptPartition(2, 2048, 100 * 1024 ** 3 // 512, layout.GPT_LINUX, "Windows"),))
+    disk = SimpleNamespace(partitions=[{"path": "/dev/vda2", "fstype": "ntfs", "mountpoint": None,
+                                        "min_bytes": 10 * 1024 ** 3}])
+    with pytest.raises(InstallerError) as exc:
+        _plan_shrink(plan, disk, table)
+    assert exc.value.code == "missing_tool"
+    assert "ntfsresize" in str(exc.value)

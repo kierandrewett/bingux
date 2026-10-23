@@ -176,3 +176,20 @@ def test_find_disk_unknown_path_is_disk_not_found() -> None:
     with pytest.raises(InstallerError) as exc:
         probe.find_disk([], "/dev/vda")
     assert exc.value.code == "disk_not_found"
+
+
+def test_missing_shrink_tools_names_only_what_the_filesystem_needs() -> None:
+    present = {"e2fsck", "resize2fs", "btrfs"}
+    which = lambda n: "/x" if n in present else None  # noqa: E731
+    assert probe.missing_shrink_tools("ext4", which=which) == []
+    assert probe.missing_shrink_tools("btrfs", which=which) == []
+    assert probe.missing_shrink_tools("ntfs", which=which) == ["ntfsresize"]
+    assert probe.missing_shrink_tools("xfs", which=which) == []
+
+
+def test_ntfs_min_bytes_is_none_when_ntfsresize_is_not_installed() -> None:
+    class _NoTool(_FakeRunner):
+        def run(self, argv, *, check: bool = True, stdin: str | None = None):  # noqa: ANN001, ANN201
+            raise FileNotFoundError(argv[0])
+
+    assert probe.ntfs_min_bytes(_NoTool({}), "/dev/vda2") is None
