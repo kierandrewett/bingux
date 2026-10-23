@@ -13,6 +13,7 @@ disk and account values are placeholders.
 - Boot the ISO in UEFI mode. BIOS machines can install too, with the limits
   listed under [firmware](#firmware).
 - Back up anything on the target disk. An erase destroys every partition on it.
+  In manual mode only the partitions marked format are erased.
 - The installed system is copied from the ISO, so the install itself does not
   need a network. A connection enables time sync and later updates.
 
@@ -28,6 +29,7 @@ earlier answer before the install starts.
 | Network | Whether the machine is online. |
 | Timezone | The timezone for the clock. |
 | Disk | The disk, and how to use it. |
+| Partitions | Manual partitioning only: keep, format or create each partition. |
 | Storage | Root file system, swap and encryption. |
 | Account | Your account, an optional root password and automatic login. |
 | Hostname | The machine name. |
@@ -72,14 +74,37 @@ runs from is not offered.
 
 Under **How to use the disk** there are three choices:
 
-- **Erase the whole disk** wipes the disk and creates the Bingux layout. This
-  is the only choice that works in this build. The page warns that everything on
-  the disk will be erased.
+- **Erase the whole disk** wipes the disk and creates the Bingux layout. The
+  page warns that everything on the disk will be erased.
 - **Use free space** and **Install alongside another system** keep the existing
   partitions. The page marks both as *not in this installer build yet*, so they
   cannot be selected. See [dual boot](#dual-boot).
-- **Partition by hand** is greyed out, with the note *no partition editor in this
-  installer yet*.
+- **Partition by hand** lists the disk's partitions and sets what happens to
+  each one. It needs a GPT disk. See [Partitions](#partitions).
+
+### Partitions
+
+![Installer partitions page](images/installer-partitions.webp)
+
+This page appears after the Disk page when you choose **Partition by hand**.
+Each row is one partition that Bingux uses:
+
+- **Role** cycles through the roles for the firmware. UEFI uses an EFI system
+  partition; BIOS uses a BIOS boot partition. Each install also needs a root
+  partition, and home and swap are optional.
+- **Keep (reuse)** leaves the partition and its files as they are. It is offered
+  for the EFI partition (FAT), a BIOS boot partition and home (ext4, btrfs or xfs).
+- **Format** erases the partition and makes a new file system on it. Its data is
+  lost.
+- **Create new** makes a partition from the unallocated space, at the size you
+  type. A new partition needs at least 64 MiB, and root needs at least 1 GiB. A
+  partition that already exists must be kept or formatted, not created.
+- **File system** for home, when it is formatted or created, is ext4, btrfs or xfs.
+- **Remove** drops the row. The partition on the disk is not touched.
+
+**Continue** stays off until the list can be installed: one root partition, one
+EFI system partition (UEFI) or one BIOS boot partition (BIOS), at most one of each
+role, and no partition used twice. A mounted partition cannot be formatted.
 
 ### Storage
 
@@ -96,6 +121,10 @@ Under **How to use the disk** there are three choices:
 | zram | Compressed swap in RAM, with no disk writes. |
 | Swap file | A file `/swapfile` on the root file system. |
 | Swap partition | A separate partition. With encryption it uses a random key on each boot. |
+
+In manual mode the swap partition comes from the Partitions list. A swap row
+makes a swap partition; without one, the **Swap partition** choice falls back to
+no swap.
 
 **Encrypt the system disk (LUKS2).** When it is offered for your firmware, the
 toggle asks for a passphrase and its confirmation. The passphrase is typed at
@@ -126,8 +155,10 @@ on the network and in the terminal.
 ![Installer summary page](images/installer-summary.webp)
 
 The summary lists the disk, layout, file system, swap, encryption, account and
-hostname. The erase is confirmed with the toggle on this page; the install does
-not start until it is on.
+hostname. In manual mode it lists each partition change: created, formatted or
+kept. The button reads **Erase and install** for an erase, **Format and install**
+when the list formats a partition, and **Install** otherwise. The install does
+not start until the confirm toggle on this page is on.
 
 ### Progress
 
@@ -166,8 +197,9 @@ accepts the two keep-existing-partitions modes (`free_space` and `alongside`)
 in a plan file, but the Disk page marks both unavailable in this build, and the
 TODO tracks the remaining work. Resizing a real disk has not been tested. To
 share a disk today, shrink the other system with its own tools first, then
-install with a plan file that uses `manual` partitioning and reuses the existing
-EFI system partition. Test that on a disk you can afford to lose.
+install with **Partition by hand**, or with a plan file that uses `manual`
+partitioning. Keep the existing EFI system partition and create the new
+partitions from the unallocated space. Test that on a disk you can afford to lose.
 
 ## Firmware
 
