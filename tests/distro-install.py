@@ -492,6 +492,16 @@ def run_variant(name, variant, iso, out, work):
     return bool(checks) and all(checks.values())
 
 
+KEEP = Path.home() / ".cache" / "bingux-e2e" / "keep"
+
+
+def keep_installed(work):
+    """Keep the uefi-luks install as the base image for tests/distro-installed-greeter.py."""
+    KEEP.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(work / "disk.qcow2", KEEP / "uefi-luks-installed.qcow2")
+    shutil.copyfile(work / "OVMF_VARS.fd", KEEP / "uefi-luks-OVMF_VARS.fd")
+
+
 def main():
     args = sys.argv[1:]
     name = args.pop(0) if args and args[0] in VARIANTS else "uefi"
@@ -507,11 +517,13 @@ def main():
     out = ROOT / "distro" / "out" / f"install-test-{name}"
     if out.exists():
         shutil.rmtree(out)
-    scratch = Path.home() / ".cache" / "bingux-e2e"
+    scratch = Path(os.environ.get("BINGUX_E2E_SCRATCH", Path.home() / ".cache" / "bingux-e2e"))
     scratch.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="install-", dir=scratch))
     try:
         ok = run_variant(name, variant, iso, out, work)
+        if ok and name == "uefi-luks":
+            keep_installed(work)
     finally:
         shutil.rmtree(work, ignore_errors=True)
     print("artifacts:", out)

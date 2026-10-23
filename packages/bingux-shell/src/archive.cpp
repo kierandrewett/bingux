@@ -120,14 +120,29 @@ bool extractTo(const QString& archivePath, const QString& destination, QString* 
 
 } // namespace
 
+// A cached tree counts only when its manifest parses. A power cut can leave the
+// final name with an empty manifest.json (the rename reached the disk, the data
+// did not); such a tree is removed and unpacked again.
+static bool completeUnpack(const QString& dir) {
+    QFile file(dir + QStringLiteral("/manifest.json"));
+    if (!file.open(QFile::ReadOnly))
+        return false;
+    auto document = QJsonDocument::fromJson(file.readAll());
+    return document.isObject() &&
+           document.object().value(QStringLiteral("format")).toString() ==
+               QStringLiteral("bingux-shell");
+}
+
 QString unpackShellArchive(const QString& archivePath, QString* error) {
     auto id = contentId(archivePath, error);
     if (id.isEmpty())
         return {};
     auto root = cacheRoot();
     auto target = root + QStringLiteral("/") + id;
-    if (QFileInfo::exists(target + QStringLiteral("/manifest.json")))
+    if (completeUnpack(target))
         return target;
+    if (QFileInfo::exists(target))
+        QDir(target).removeRecursively();
 
     // Unpack beside the target and rename, so a crash or two shells starting
     // at once never leave a half-written tree under the final name.
@@ -146,6 +161,9 @@ QString unpackShellArchive(const QString& archivePath, QString* error) {
         *error = QStringLiteral("%1 has no manifest.json").arg(archivePath);
         return {};
     }
+    // The data must reach the disk before the rename does, or a power cut can
+    // leave the final name with an empty tree.
+    ::sync();
     if (!QDir().rename(staging, target)) {
         QDir(staging).removeRecursively();
         if (!QFileInfo::exists(target + QStringLiteral("/manifest.json"))) {
