@@ -8,6 +8,7 @@ sha256 manifest so the booted system can prove the install left it intact.
 from __future__ import annotations
 
 import hashlib
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -93,16 +94,36 @@ def build_qcow2(raw: Path, qcow2: Path) -> None:
     raw.unlink(missing_ok=True)
 
 
-def _extract_sectors(fmt: str, src: Path, dst: Path, skip: int, count: int) -> None:
-    """Copy `count` 512-byte sectors starting at sector `skip` of a qcow2/raw image into a raw file."""
-    flat = dst.with_suffix(".full")
+def _slice_sectors(flat: Path, dst: Path, skip: int, count: int) -> None:
+    """Copy `count` 512-byte sectors starting at sector `skip` of a raw image into `dst`.
+
+    Zero runs are written as holes, so the scratch file holds only the data it contains.
+    """
+    chunk = 1024**2
+    with flat.open("rb") as src, dst.open("wb") as out:
+        src.seek(skip * 512)
+        remaining = count * 512
+        while remaining:
+            got = src.read(min(chunk, remaining))
+            if not got:
+                raise RuntimeError("image ended inside the partition")
+            remaining -= len(got)
+            if got.count(0) == len(got):
+                out.seek(len(got), 1)
+            else:
+                out.write(got)
+        out.truncate()
+
+
+def _flat_copy(fmt: str, src: Path) -> Path:
+    """Convert a qcow2/raw image to a sparse raw file in RAM-backed /dev/shm and return its path.
+
+    The copy holds only allocated data (zeros become holes), and /dev/shm keeps the large sparse
+    file off the disk that holds the matrix scratch files. The caller removes its directory.
+    """
+    flat = Path(tempfile.mkdtemp(prefix="matrix-flat-", dir="/dev/shm")) / "disk.raw"
     _run(["qemu-img", "convert", "-f", fmt, "-O", "raw", str(src), str(flat)])
-    try:
-        with flat.open("rb") as whole, dst.open("wb") as out:
-            whole.seek(skip * 512)
-            out.write(whole.read(count * 512))
-    finally:
-        flat.unlink(missing_ok=True)
+    return flat
 
 
 def verify_ntfs_manifest(image: Path, fmt: str, scratch: Path) -> tuple[bool, str]:
@@ -111,11 +132,19 @@ def verify_ntfs_manifest(image: Path, fmt: str, scratch: Path) -> tuple[bool, st
     The installed guest has no NTFS driver, so the partition is read with ntfscat. The size comes
     from the NTFS boot sector (total sectors at offset 0x28), so a shrunk volume is read in full.
     """
+    flat = _flat_copy(fmt, image)
+    try:
+        return _verify_partition(flat, scratch)
+    finally:
+        shutil.rmtree(flat.parent, ignore_errors=True)
+
+
+def _verify_partition(flat: Path, scratch: Path) -> tuple[bool, str]:
     boot = scratch / "boot.bin"
-    _extract_sectors(fmt, image, boot, FIRST_SECTOR, 1)
+    _slice_sectors(flat, boot, FIRST_SECTOR, 1)
     total = int.from_bytes(boot.read_bytes()[0x28:0x30], "little")
     part = scratch / "other.img"
-    _extract_sectors(fmt, image, part, FIRST_SECTOR, total + 1)
+    _slice_sectors(flat, part, FIRST_SECTOR, total + 1)
     listing = subprocess.run(["ntfscat", str(part), MANIFEST], capture_output=True, check=False)
     lines = listing.stdout.decode(errors="replace").splitlines()
     if listing.returncode != 0 or not lines:

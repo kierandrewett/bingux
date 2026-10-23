@@ -41,7 +41,7 @@ def test_ntfs_manifest_verifies_then_catches_a_changed_file(tmp_path: Path) -> N
 
     # change one payload byte in place (same length, manifest untouched) and splice it back
     part = tmp_path / "part.img"
-    fixtures._extract_sectors("raw", image, part, fixtures.FIRST_SECTOR, PART_BYTES // 512)
+    fixtures._slice_sectors(image, part, fixtures.FIRST_SECTOR, PART_BYTES // 512)
     data = bytearray(part.read_bytes())
     at = data.find(b"keep me\n")
     assert at > 0, "payload text not found in the NTFS partition"
