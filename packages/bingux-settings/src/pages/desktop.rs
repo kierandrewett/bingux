@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use crate::ui::{
-    Group, Icon, Overlays, Row, Status, dropdown, page_column, row, segmented, skeleton, slider,
+    Group, Icon, Overlays, Row, Status, dropdown, level_row, page_column, row, segmented, skeleton,
     status, switch_row, use_overlays,
 };
 use bingux_ui::scale::*;
@@ -204,25 +204,20 @@ fn release_dock_size(ctx: Ctx, current: u32) {
     write(ctx, Change::Set("desktop.dock_size", size.to_string()));
 }
 
-fn dock_size_row(ctx: Ctx, size: u32) -> Row {
+fn dock_size_row(ctx: Ctx, size: u32) -> Element {
     let dragged = *ctx.pending.read();
     let percent = dragged.unwrap_or_else(|| percent_for_size(size));
-    row("Icon size")
-        .subtitle(format!("{} px", size_for_percent(percent)))
-        .trailing(
-            rect()
-                .width(Size::px(FIELD_WIDTH))
-                .on_global_pointer_up(move |_: Event<PointerEventData>| {
-                    release_dock_size(ctx, size)
-                })
-                .child(
-                    slider(percent, move |value: f64| {
-                        let mut pending = ctx.pending;
-                        pending.set(Some(value));
-                    })
-                    .width(FIELD_WIDTH),
-                ),
+    rect()
+        .width(Size::fill())
+        .on_global_pointer_up(move |_: Event<PointerEventData>| release_dock_size(ctx, size))
+        .child(
+            level_row("Icon size", percent, move |value: f64| {
+                let mut pending = ctx.pending;
+                pending.set(Some(value));
+            })
+            .value_text(format!("{} px", size_for_percent(percent))),
         )
+        .into()
 }
 
 /// Segmented control on the right, for two or three short options.

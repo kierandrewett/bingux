@@ -8,24 +8,12 @@ use freya::prelude::*;
 
 use crate::pages::gnoblin::{self, Json};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
-use crate::theme::Tokens;
 use crate::ui::{
-    Group, Row, Status, choice_row, page_column, row, skeleton, slider, status, switch_row,
-    use_tokens,
+    Group, Row, Status, choice_row, level_row, page_column, row, skeleton, status, switch_row,
 };
-use bingux_ui::scale::{BOX_2XL, FIELD_WIDTH, S0, TEXT_SM};
 
 /// One end of a slider's scale: "Slow" starts it, "Fast" ends it. Each label
 /// gets a fixed width so the two never squeeze each other.
-fn end_label(text: &'static str, width: f32, align: TextAlign, tokens: &Tokens) -> Paragraph {
-    paragraph()
-        .width(Size::px(width))
-        .text_align(align)
-        .color(tokens.muted)
-        .font_size(TEXT_SM)
-        .child(text)
-}
-
 const MOUSE: &str = "org.gnome.desktop.peripherals.mouse";
 
 const TOUCHPAD: &str = "org.gnome.desktop.peripherals.touchpad";
@@ -176,36 +164,24 @@ impl Setting<'_> {
         }
     }
 
-    /// A pointer speed slider with "Slow" and "Fast" at its ends. The subtitle
-    /// names the current speed in words.
-    fn speed(&self, speed: f64, tokens: &Tokens) -> Row {
+    /// A pointer speed slider. The value text names the current speed in
+    /// words.
+    fn speed(&self, speed: f64) -> Element {
         match self.lua() {
-            Some(value) => row(self.title).subtitle(gnoblin::MANAGED).value(value),
+            Some(value) => row(self.title)
+                .subtitle(gnoblin::MANAGED)
+                .value(value)
+                .into(),
             None => {
                 let (schema, loaded, error) = (self.schema, self.loaded, self.error);
-                row(self.title).subtitle(speed_label(speed)).trailing(
-                    rect()
-                        .width(Size::px(FIELD_WIDTH))
-                        .spacing(S0)
-                        .child(slider(speed_percent(speed), move |percent: f64| {
-                            let value = speed_value(percent);
-                            commit(loaded, error, move || {
-                                system::gsettings_set(schema, "speed", &value)
-                            })
-                        }))
-                        .child(
-                            rect()
-                                .width(Size::px(FIELD_WIDTH))
-                                .direction(Direction::Horizontal)
-                                .child(end_label(
-                                    "Slow",
-                                    FIELD_WIDTH - BOX_2XL,
-                                    TextAlign::Start,
-                                    tokens,
-                                ))
-                                .child(end_label("Fast", BOX_2XL, TextAlign::End, tokens)),
-                        ),
-                )
+                level_row(self.title, speed_percent(speed), move |percent: f64| {
+                    let value = speed_value(percent);
+                    commit(loaded, error, move || {
+                        system::gsettings_set(schema, "speed", &value)
+                    })
+                })
+                .value_text(speed_label(speed))
+                .into()
             }
         }
     }
@@ -265,7 +241,6 @@ impl Component for MousePage {
     fn render(&self) -> impl IntoElement {
         let loaded = system::use_cached("mouse", load);
         let error = use_state::<Option<String>>(|| None);
-        let tokens = use_tokens();
 
         let Some(result) = loaded.read().clone() else {
             return page_column().child(skeleton());
@@ -294,7 +269,7 @@ impl Component for MousePage {
                 setting(MOUSE, "mouse", "natural-scroll", "Natural scrolling")
                     .switch(mouse.natural_scroll),
             )
-            .row(setting(MOUSE, "mouse", "speed", "Pointer speed").speed(mouse.speed, &tokens))
+            .row(setting(MOUSE, "mouse", "speed", "Pointer speed").speed(mouse.speed))
             .row(
                 setting(MOUSE, "mouse", "left-handed", "Left-handed buttons")
                     .switch(mouse.left_handed),
@@ -321,7 +296,7 @@ impl Component for MousePage {
                     touchpad("edge-scrolling-enabled", "Scrolling along edges")
                         .switch(pad.edge_scrolling),
                 )
-                .row(touchpad("speed", "Pointer speed").speed(pad.speed, &tokens))
+                .row(touchpad("speed", "Pointer speed").speed(pad.speed))
                 .row(
                     touchpad("disable-while-typing", "Disable while typing")
                         .switch(pad.disable_while_typing),
