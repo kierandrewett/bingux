@@ -613,9 +613,13 @@ def decode_window(video, start, end, fps=FPS):
 
 
 def frame_at(video, t):
-    """The recorded frame nearest t, or None past the end of the video."""
-    frames = decode_window(video, t, t)
-    return frames[0][1] if frames else None
+    """The last recorded frame at or before t (within two slots), or None.
+
+    A stage can be stamped on the video's final frame; seeking exactly there decodes
+    nothing, so the window opens two slots earlier and its last frame is taken.
+    """
+    frames = decode_window(video, max(0.0, t - 2 / FPS), t)
+    return frames[-1][1] if frames else None
 
 
 def in_any(t, spans):

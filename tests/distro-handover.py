@@ -13,8 +13,9 @@ Checks, per recording:
   firmware owns the screen there);
 - installer -> reboot: every frame from "restart pressed" to the guest reset is content;
 - greeter -> session (installed system): every frame from "greeter shown" to
-  "desktop painted" is content; the bar clock box matches between the two stages,
-  and the wallpaper corner moves less than WALLPAPER_LIMIT;
+  "desktop painted" is content; the bar clock box matches between the two stages.
+  The greeter draws its own gradient rather than the session wallpaper, so the
+  wallpaper corner jump there is reported as a measure, not gated;
 - installer -> live desktop (boot run): every frame from "submit try bingux" to
   "live desktop bar" is content;
 - session -> lock -> unlock -> logout (boot run): every frame from "lock requested"
@@ -22,6 +23,10 @@ Checks, per recording:
   from "logout requested" to "logout done" is content; the bar clock box matches
   between the desktop before lock and after unlock; the wallpaper corner matches
   within WALLPAPER_LIMIT.
+
+The black-gap check lists black runs outside the firmware reset; the installer's
+shutdown after Restart is reported as a black run too, since the screen is blank
+before the firmware takes over.
 
 Writes handover.json next to each recording and exits 1 on any defect.
 """
@@ -68,9 +73,7 @@ def check_recording(out_dir: Path) -> dict:
         result["checks"]["greeter -> session is content"] = not defects
         result["defects"] += [f"greeter->session black/placeholder at {t:.1f}s ({k})" for t, k in defects]
         result["checks"]["greeter -> session bar matches"] = pair_bar(video, events, INSTALLED_PAIRS[0], result)
-        result["checks"]["greeter -> session wallpaper continuous"] = pair_wallpaper(
-            video, events, INSTALLED_PAIRS[0], result
-        )
+        measure_wallpaper(video, events, INSTALLED_PAIRS[0], result)
 
     if "live desktop bar" in events:
         windows = [
@@ -113,14 +116,18 @@ def pair_bar(video, events, pair, result):
     return same
 
 
-def pair_wallpaper(video, events, pair, result):
+def measure_wallpaper(video, events, pair, result):
     a, b = pair
-    first = frame_at(video, events[a])
-    second = frame_at(video, events[b])
-    jump = wallpaper_jump(first, second)
+    jump = wallpaper_jump(frame_at(video, events[a]), frame_at(video, events[b]))
     result["measures"][f"wallpaper jump {a} vs {b}"] = round(jump, 2)
+    return jump
+
+
+def pair_wallpaper(video, events, pair, result):
+    """Gated: the wallpaper corner must not change between the two stages."""
+    jump = measure_wallpaper(video, events, pair, result)
     if jump >= WALLPAPER_LIMIT:
-        result["defects"].append(f"wallpaper jump {jump:.1f} between {a!r} and {b!r}")
+        result["defects"].append(f"wallpaper jump {jump:.1f} between {pair[0]!r} and {pair[1]!r}")
         return False
     return True
 
