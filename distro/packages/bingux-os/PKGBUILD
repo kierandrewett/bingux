@@ -15,7 +15,7 @@ makedepends=('imagemagick' 'bingux')
 install=bingux-os.install
 backup=('etc/pacman.d/bingux-os-mirrorlist')
 source=('init.lua' 'bingux-background.lua' 'bingux-os.gschema.override' 'bingux-os-mirrorlist'
-        'bingux.plymouth' 'bingux.script' 'plymouth/bingux-mark.png' 'plymouth/spinner-dot.png' 'greetd-plymouth.conf'
+        'bingux.plymouth' 'bingux.script' 'bingux-mark.png' 'spinner-dot.png' 'greetd-plymouth.conf'
         'bingux-os-release' 'bingux-os-issue' 'bingux-os-release.hook')
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
@@ -49,7 +49,7 @@ package() {
     # install hook selects this theme with plymouth-set-default-theme.
     install -Dm644 bingux.plymouth "$pkgdir/usr/share/plymouth/themes/bingux/bingux.plymouth"
     install -Dm644 bingux.script "$pkgdir/usr/share/plymouth/themes/bingux/bingux.script"
-    # Artwork for the splash; plymouth/bingux-mark.svg and spinner-dot.svg are the sources.
+    # Artwork for the splash; bingux-mark.svg and spinner-dot.svg are the sources.
     install -Dm644 bingux-mark.png "$pkgdir/usr/share/plymouth/themes/bingux/bingux-mark.png"
     install -Dm644 spinner-dot.png "$pkgdir/usr/share/plymouth/themes/bingux/spinner-dot.png"
     # Hold greetd until the splash has released the display.
