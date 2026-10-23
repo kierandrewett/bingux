@@ -14,8 +14,10 @@ Checks, per recording:
 - installer -> reboot: every frame from "restart pressed" to the guest reset is content;
 - greeter -> session (installed system): every frame from "greeter shown" to
   "desktop painted" is content; the bar clock box matches between the two stages.
-  The greeter draws its own gradient rather than the session wallpaper, so the
-  wallpaper corner jump there is reported as a measure, not gated;
+  The greeter shows the blurred wallpaper twin under a scrim, and the session
+  paints the same twin first, then fades to the sharp wallpaper. The gated
+  wallpaper check compares the greeter with the session's first painted frame
+  (session_first_frame); the greeter-to-desktop jump after the fade is reported only;
 - installer -> live desktop (boot run): every frame from "submit try bingux" to
   "live desktop bar" is content;
 - session -> lock -> unlock -> logout (boot run): every frame from "lock requested"
@@ -42,6 +44,7 @@ from distro_capture import (
     frame_at,
     handover_defects,
     recording_events,
+    session_first_frame,
     wallpaper_jump,
 )
 
@@ -73,7 +76,10 @@ def check_recording(out_dir: Path) -> dict:
         result["checks"]["greeter -> session is content"] = not defects
         result["defects"] += [f"greeter->session black/placeholder at {t:.1f}s ({k})" for t, k in defects]
         result["checks"]["greeter -> session bar matches"] = pair_bar(video, events, INSTALLED_PAIRS[0], result)
-        measure_wallpaper(video, events, INSTALLED_PAIRS[0], result)
+        result["checks"]["greeter -> session wallpaper matches"] = pair_session_wallpaper(
+            video, out_dir, events, result
+        )
+        measure_wallpaper(video, events, INSTALLED_PAIRS[0], result, note=" (after the sharp fade-in, not gated)")
 
     if "live desktop bar" in events:
         windows = [
@@ -116,10 +122,10 @@ def pair_bar(video, events, pair, result):
     return same
 
 
-def measure_wallpaper(video, events, pair, result):
+def measure_wallpaper(video, events, pair, result, note=""):
     a, b = pair
     jump = wallpaper_jump(frame_at(video, events[a]), frame_at(video, events[b]))
-    result["measures"][f"wallpaper jump {a} vs {b}"] = round(jump, 2)
+    result["measures"][f"wallpaper jump {a} vs {b}{note}"] = round(jump, 2)
     return jump
 
 
@@ -128,6 +134,21 @@ def pair_wallpaper(video, events, pair, result):
     jump = measure_wallpaper(video, events, pair, result)
     if jump >= WALLPAPER_LIMIT:
         result["defects"].append(f"wallpaper jump {jump:.1f} between {pair[0]!r} and {pair[1]!r}")
+        return False
+    return True
+
+
+def pair_session_wallpaper(video, out_dir, events, result):
+    """Gated: the greeter's wallpaper matches the session's first painted frame within WALLPAPER_LIMIT."""
+    start, end = events["greeter shown"], events["desktop painted"]
+    first = session_first_frame(out_dir, start, end)
+    if first is None:
+        result["defects"].append("no session first frame: no black update between 'greeter shown' and 'desktop painted'")
+        return False
+    jump = wallpaper_jump(frame_at(video, start), frame_at(video, first))
+    result["measures"]["wallpaper jump greeter shown vs session first frame"] = round(jump, 2)
+    if jump >= WALLPAPER_LIMIT:
+        result["defects"].append(f"wallpaper jump {jump:.1f} between 'greeter shown' and the session's first frame at {first:.1f}s")
         return False
     return True
 

@@ -653,6 +653,27 @@ def black_gaps(out_dir, exclude=()):
     ]
 
 
+def session_first_frame(out_dir, start, end):
+    """Time of the session's first painted update in [start, end], or None.
+
+    The handover goes black, then the session paints. The session's wallpaper
+    fades from its blurred twin to the sharp image after that first frame
+    (Wallpaper.qml), so the first content update after the last black one is the
+    frame to compare with the greeter's wallpaper. Without a black update there
+    is no boundary to find, so None.
+    """
+    events = [json.loads(line) for line in (Path(out_dir) / "frame-events.jsonl").read_text().splitlines() if line]
+    window = [e for e in events if start <= e["t"] <= end]
+    blacks = [e["t"] for e in window if e["class"] == "black"]
+    if not blacks:
+        return None
+    last_black = max(blacks)
+    for e in window:
+        if e["t"] > last_black and e["class"] == "content":
+            return e["t"]
+    return None
+
+
 def handover_defects(video, start, end, exclude=()):
     """Frames in [start, end] that are not content: black, placeholder or size change. Excluded spans are skipped."""
     defects = []
