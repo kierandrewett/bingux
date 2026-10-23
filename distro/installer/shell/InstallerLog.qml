@@ -21,6 +21,7 @@ Rectangle {
         anchors.fill: parent
         anchors.margins: Theme.gap
         clip: true
+        spacing: 4
         model: InstallerState.logModel
         onCountChanged: positionViewAtEnd()
 
@@ -29,9 +30,10 @@ Rectangle {
             width: list.width
             text: line
             wrapMode: Text.WrapAnywhere
-            color: Theme.muted
+            color: Theme.text
             font.family: "monospace"
-            font.pixelSize: Math.round(15 * InstallerState.uiScale)
+            font.pixelSize: Math.round(18 * InstallerState.uiScale)
+            lineHeight: 1.25
         }
     }
 }

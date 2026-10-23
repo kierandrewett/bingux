@@ -1,12 +1,13 @@
 import QtQuick
 import "InstallerSchema.js" as Schema
 
-// Lists exactly what the install will do, then asks for the disk to be
-// confirmed. Install starts from here; the progress page follows the result.
+// Lists exactly what the install will do, grouped, then asks for the disk to
+// be confirmed. Install starts from here; the progress page follows the result.
 InstallerPage {
     id: page
 
     title: "Ready to install"
+    fullBody: true
     bodyHeight: 600
     primaryText: InstallerState.storageMode === "erase" ? "Erase and install" : page.manualFormats().length > 0 ? "Format and install" : "Install"
     primaryEnabled: confirmedDisk !== "" && confirmedDisk === InstallerState.diskPath
@@ -16,7 +17,8 @@ InstallerPage {
     property string confirmedDisk: ""
 
     readonly property var disk: InstallerState.selectedDisk
-    readonly property var rows: buildRows()
+    readonly property var groups: buildGroups()
+    readonly property real us: InstallerState.uiScale
 
     function storageText() {
         const d = page.disk;
@@ -79,24 +81,35 @@ InstallerPage {
         }
     }
 
-    function buildRows() {
-        const list = [];
+    // Three groups for the grid: disk and plan, system, account.
+    function buildGroups() {
+        const storage = [];
         if (page.disk) {
-            list.push({label: "Disk", value: page.disk.path + " (" + Schema.formatBytes(page.disk.size_bytes) + ", " + (page.disk.model || "unknown model") + ")"});
-            list.push({label: "Storage", value: page.storageText()});
-            page.changeRows().forEach(row => list.push(row));
+            storage.push({label: "Disk", value: page.disk.path + " (" + Schema.formatBytes(page.disk.size_bytes) + ", " + (page.disk.model || "unknown model") + ")"});
+            storage.push({label: "Storage", value: page.storageText()});
+            page.changeRows().forEach(row => storage.push(row));
         }
-        list.push({label: "File system", value: InstallerState.filesystem + (InstallerState.encryption ? ", encrypted with LUKS2" : ", not encrypted")});
-        list.push({label: "Swap", value: page.swapText()});
-        list.push({label: "Computer name", value: InstallerState.hostname});
-        list.push({label: "Time zone", value: InstallerState.timezone.replace(/_/g, " ")});
-        list.push({label: "Clock", value: InstallerState.ntp ? "Set automatically (systemd-timesyncd)" : "Not set automatically"});
-        list.push({label: "Language", value: InstallerState.locale});
-        list.push({label: "Keyboard", value: InstallerState.keymap});
-        list.push({label: "User", value: (InstallerState.fullName !== "" ? InstallerState.fullName + " (" + InstallerState.username + ")" : InstallerState.username) + ", administrator"
-            + (InstallerState.autoLogin ? ", logs in automatically" : "")});
-        list.push({label: "Root account", value: InstallerState.rootPasswordSet ? "Password set" : "Locked"});
-        return list;
+        storage.push({label: "File system", value: InstallerState.filesystem});
+        storage.push({label: "Encryption", value: InstallerState.encryption ? "LUKS2" : "Off"});
+        storage.push({label: "Swap", value: page.swapText()});
+
+        const system = [
+            {label: "Computer name", value: InstallerState.hostname},
+            {label: "Time zone", value: InstallerState.timezone.replace(/_/g, " ")},
+            {label: "Clock", value: InstallerState.ntp ? "Set automatically" : "Not set automatically"},
+            {label: "Language", value: InstallerState.locale},
+            {label: "Keyboard", value: InstallerState.keymap}
+        ];
+        const account = [
+            {label: "User", value: (InstallerState.fullName !== "" ? InstallerState.fullName + " (" + InstallerState.username + ")" : InstallerState.username) + ", administrator"
+                + (InstallerState.autoLogin ? ", logs in automatically" : "")},
+            {label: "Root account", value: InstallerState.rootPasswordSet ? "Password set" : "Locked"}
+        ];
+        return [
+            {title: "Disk and plan", rows: storage},
+            {title: "System", rows: system},
+            {title: "Account", rows: account}
+        ];
     }
 
     function primary() {
@@ -106,39 +119,84 @@ InstallerPage {
         page.wizard.go("progress");
     }
 
-    Column {
-        width: parent.width
-        spacing: Theme.gap
+    InstallerScroll {
+        spacing: Math.round(16 * page.us)
 
-        InstallerText {
-            tone: "danger"
+        InstallerNotice {
             visible: page.disk !== null && page.destructive()
-            text: page.destructiveText()
+            tone: "danger"
+            title: "This erases data"
+            body: page.destructiveText()
         }
-        Repeater {
-            model: page.rows
-            Row {
-                required property var modelData
-                width: parent.width
-                spacing: Theme.gap
-                Text {
-                    width: parent.width * 0.36
-                    text: modelData.label
-                    color: Theme.muted
-                    wrapMode: Text.WordWrap
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Math.round(17 * InstallerState.uiScale)
-                }
-                Text {
-                    width: parent.width * 0.64 - Theme.gap
-                    text: modelData.value
-                    color: Theme.text
-                    wrapMode: Text.WordWrap
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Math.round(17 * InstallerState.uiScale)
+        InstallerNotice {
+            visible: page.disk !== null && !page.destructive()
+            tone: "info"
+            title: "Existing data is kept"
+            body: page.storageText()
+        }
+
+        // Grouped cards in three columns.
+        Grid {
+            id: grid
+            width: parent.width
+            columns: 3
+            spacing: Theme.gap
+
+            Repeater {
+                model: page.groups
+                Rectangle {
+                    required property var modelData
+                    width: (grid.width - grid.spacing * 2) / 3
+                    height: cardColumn.implicitHeight + Math.round(32 * page.us)
+                    radius: Theme.radius
+                    color: Theme.elevated
+                    border.width: 1
+                    border.color: Qt.rgba(1, 1, 1, 0.10)
+
+                    Column {
+                        id: cardColumn
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: Math.round(16 * page.us)
+                        spacing: Math.round(10 * page.us)
+
+                        Text {
+                            text: modelData.title
+                            color: Theme.accent
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Math.round(17 * page.us)
+                            font.weight: Font.DemiBold
+                        }
+                        Repeater {
+                            model: modelData.rows
+                            Row {
+                                required property var modelData
+                                width: cardColumn.width
+                                spacing: Theme.gap
+                                Text {
+                                    width: parent.width * 0.36
+                                    text: modelData.label
+                                    color: Theme.muted
+                                    wrapMode: Text.WordWrap
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Math.round(15 * page.us)
+                                }
+                                Text {
+                                    width: parent.width * 0.64 - Theme.gap
+                                    text: modelData.value
+                                    color: Theme.text
+                                    wrapMode: Text.WordWrap
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Math.round(15 * page.us)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
+
         InstallerSwitchRow {
             visible: page.disk !== null
             label: InstallerState.storageMode === "erase"
