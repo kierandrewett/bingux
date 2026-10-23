@@ -8,7 +8,10 @@ use freya::prelude::*;
 
 use crate::icons::Icon;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
-use crate::ui::{Group, Status, choice_row, page_column, row, skeleton, status, switch_row};
+use crate::ui::{
+    Curve, Group, Series, Status, Unit, choice_row, line_chart, page_column, ring, row, skeleton,
+    status, switch_row,
+};
 
 const SESSION: &str = "org.gnome.desktop.session";
 const SCREENSAVER: &str = "org.gnome.desktop.screensaver";
@@ -19,9 +22,16 @@ const SUSPEND_DELAYS: &[u32] = &[900, 1200, 1800, 2700, 3600, 5400, 7200];
 
 #[derive(Clone, PartialEq)]
 struct Battery {
+    /// Charge as a fraction in `0..=1`, when UPower reports a percentage.
+    fraction: Option<f64>,
     percentage: String,
     state: String,
     time: Option<(String, String)>,
+    /// Charge over the last day as (Unix seconds, percent). Empty when UPower
+    /// keeps no history for the battery.
+    history: Vec<(f64, f64)>,
+    /// Local offset from UTC in seconds, for the time axis.
+    offset: i64,
 }
 
 #[derive(Clone, PartialEq)]
@@ -73,6 +83,10 @@ fn load() -> Model {
 }
 
 fn battery() -> Result<Option<Battery>, CommandError> {
+    #[cfg(feature = "snapshot")]
+    if let Some(fake) = fake_battery() {
+        return Ok(Some(fake));
+    }
     let devices = system::run("upower", &["-e"], Duration::from_secs(5))?;
     let Some(path) = devices
         .lines()
@@ -100,11 +114,83 @@ fn battery() -> Result<Option<Battery>, CommandError> {
         }
     }
 
+    let fraction = percentage.as_deref().and_then(parse_fraction);
     Ok(Some(Battery {
+        fraction,
         percentage: percentage.unwrap_or_else(|| "Unknown".to_string()),
         state: state.unwrap_or_else(|| "Unknown".to_string()),
         time,
+        history: charge_history(path).unwrap_or_default(),
+        offset: utc_offset(),
     }))
+}
+
+/// A percentage such as `87%` as a fraction in `0..=1`.
+fn parse_fraction(text: &str) -> Option<f64> {
+    let value: f64 = text.trim().strip_suffix('%')?.trim().parse().ok()?;
+    Some((value / 100.0).clamp(0.0, 1.0))
+}
+
+/// Charge over the last day from UPower's history of `device`, as (Unix
+/// seconds, percent). The daemon refuses the call when it keeps no history.
+fn charge_history(device: &str) -> Result<Vec<(f64, f64)>, CommandError> {
+    let reply = system::run(
+        "gdbus",
+        &[
+            "call",
+            "--system",
+            "--dest",
+            "org.freedesktop.UPower",
+            "--object-path",
+            device,
+            "--method",
+            "org.freedesktop.UPower.Device.GetHistory",
+            "charge",
+            "86400",
+            "600",
+        ],
+        Duration::from_secs(5),
+    )?;
+    Ok(parse_history(&reply))
+}
+
+/// Read gdbus's reply, `([(time, percent, state), …],)`, into (time, percent)
+/// pairs. Each tuple sits between a `(` and the `)` after it.
+fn parse_history(reply: &str) -> Vec<(f64, f64)> {
+    reply
+        .split(')')
+        .filter_map(|piece| {
+            let inner = &piece[piece.rfind('(')? + 1..];
+            let mut fields = inner.split(',').map(str::trim);
+            let time: f64 = last_word(fields.next()?)?.parse().ok()?;
+            let percent: f64 = last_word(fields.next()?)?.parse().ok()?;
+            Some((time, percent))
+        })
+        .collect()
+}
+
+/// The last word of a field, so `uint64 1700000000` reads as its number.
+fn last_word(field: &str) -> Option<&str> {
+    field.split_whitespace().last()
+}
+
+/// The local offset from UTC in seconds, from `date +%z` (`+0100`).
+fn utc_offset() -> i64 {
+    system::run("date", &["+%z"], Duration::from_secs(5))
+        .ok()
+        .and_then(|text| parse_offset(text.trim()))
+        .unwrap_or(0)
+}
+
+fn parse_offset(text: &str) -> Option<i64> {
+    let sign = match text.chars().next()? {
+        '+' => 1,
+        '-' => -1,
+        _ => return None,
+    };
+    let hours: i64 = text.get(1..3)?.parse().ok()?;
+    let minutes: i64 = text.get(3..5)?.parse().ok()?;
+    Some(sign * (hours * 3600 + minutes * 60))
 }
 
 fn profiles() -> Result<Profiles, CommandError> {
@@ -327,6 +413,75 @@ fn suspend_rows(
         )
 }
 
+/// The charge as a ring with the state under the percentage, then the time
+/// left. A battery that reports no percentage gets plain rows instead.
+fn battery_group(battery: &Battery) -> Group {
+    let group = Group::titled("Battery");
+    let group = match battery.fraction {
+        Some(fraction) => group.row(
+            row("Charge").leading(Icon::BatteryLevel50).trailing(
+                ring(fraction)
+                    .caption(battery.state.clone())
+                    .label(format!("Charge {}, {}", battery.percentage, battery.state)),
+            ),
+        ),
+        None => group
+            .row(
+                row("Charge")
+                    .leading(Icon::BatteryLevel50)
+                    .value(battery.percentage.clone()),
+            )
+            .row(row("State").value(battery.state.clone())),
+    };
+    match &battery.time {
+        Some((label, value)) => group.row(row(label.clone()).value(value.clone())),
+        None => group,
+    }
+}
+
+/// The charge over the last day as an area chart, or nothing when UPower
+/// keeps no history for the battery.
+fn history_group(battery: &Battery) -> Option<Group> {
+    if battery.history.is_empty() {
+        return None;
+    }
+    let chart = line_chart([Series::new("Charge", battery.history.clone())])
+        .y_unit(Unit::Percent)
+        .x_unit(Unit::Clock {
+            offset: battery.offset,
+        })
+        .curve(Curve::Monotone)
+        .area()
+        .label("Battery charge over the last 24 hours");
+    Some(Group::titled("Last 24 hours").row(chart))
+}
+
+/// Snapshot builds only: `BINGUX_SETTINGS_FAKE_BATTERY` swaps in a charging
+/// battery with a day of history, for rendering on a machine without one.
+#[cfg(feature = "snapshot")]
+fn fake_battery() -> Option<Battery> {
+    std::env::var_os("BINGUX_SETTINGS_FAKE_BATTERY")?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0.0, |elapsed| elapsed.as_secs_f64());
+    let history = (0..=144)
+        .map(|step| {
+            let progress = f64::from(step) / 144.0;
+            let ago = f64::from(144 - step) * 600.0;
+            let percent = 22.0 + 42.0 * progress + 3.0 * (progress * 11.0).sin() * (1.0 - progress);
+            (now - ago, percent)
+        })
+        .collect();
+    Some(Battery {
+        fraction: Some(0.64),
+        percentage: "64%".to_string(),
+        state: "Charging".to_string(),
+        time: Some(("Time to full".to_string(), "1 hour 20 minutes".to_string())),
+        history,
+        offset: utc_offset(),
+    })
+}
+
 #[derive(PartialEq)]
 pub struct PowerPage;
 
@@ -347,17 +502,11 @@ impl Component for PowerPage {
         // Battery: no group on a machine without one.
         page = match model.battery.clone() {
             Ok(Some(battery)) => {
-                let mut group = Group::titled("Battery")
-                    .row(
-                        row("Charge")
-                            .leading(Icon::BatteryLevel50)
-                            .value(battery.percentage),
-                    )
-                    .row(row("State").value(battery.state));
-                if let Some((label, value)) = battery.time {
-                    group = group.row(row(label).value(value));
+                let page = page.child(battery_group(&battery));
+                match history_group(&battery) {
+                    Some(group) => page.child(group),
+                    None => page,
                 }
-                page.child(group)
             }
             Ok(None) => page,
             Err(e) => page.child(Group::titled("Battery").row(status(Status::Error(e.0)))),

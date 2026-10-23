@@ -535,6 +535,7 @@ name = "bingux-settings"
 version = "0.1.0"
 dependencies = [
  "bingux-ui",
+ "bytes",
  "freya",
  "serde_json",
 ]

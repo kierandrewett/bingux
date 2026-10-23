@@ -7,19 +7,28 @@
 
 use std::time::Duration;
 
+use bytes::Bytes;
+
+use freya::animation::*;
 use freya::prelude::*;
 
 use crate::pages::gnoblin;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    ARRANGEMENT_HEIGHT, ARRANGEMENT_WIDTH, Group, Overlays, RADIUS, RADIUS_SM, ResponseKind,
-    Status, Tokens, action_row, caption, choice_row, dialog, page_column, primary_button, row,
-    skeleton, slider, status, switch_row, use_overlays, use_tokens,
+    ARRANGEMENT_HEIGHT, ARRANGEMENT_WIDTH, Group, Icon, Overlays, RADIUS_LG, RADIUS_SM,
+    ResponseKind, Status, Tokens, action_row, caption, choice_row, dialog, icon, icon_button,
+    page_column, primary_button, row, skeleton, status, switch_row, typography, use_overlays,
+    use_tokens,
 };
-use bingux_ui::scale::{S2, TEXT_SM};
+use bingux_ui::scale::{
+    ARRANGEMENT_SNAP, BUTTON_HEIGHT, FIELD_WIDTH, ICON_SM, RING_WIDTH, S0, S1, S2, S4, S5,
+};
 
 const SERVICE: &str = "org.gnome.Mutter.DisplayConfig";
 const OBJECT: &str = "/org/gnome/Mutter/DisplayConfig";
+
+/// How long a display takes to ease into its settled place after a drag.
+const DRAG_SETTLE_MS: u64 = 120;
 const INTERFACE: &str = "org.gnome.Mutter.DisplayConfig";
 /// `ApplyMonitorsConfig(serial, method, logical monitors, properties)`.
 const APPLY_SIGNATURE: &str = "uua(iiduba(ssa{sv}))a{sv}";
@@ -519,7 +528,65 @@ fn load() -> Page {
     }
 }
 
+/// Snapshot builds only. `BINGUX_SETTINGS_FAKE_DISPLAYS` swaps in a two-display
+/// layout, so the arrangement can be checked on a machine with one monitor.
+/// The layout is never sent to Mutter: `apply` refuses it.
+#[cfg(feature = "snapshot")]
+fn fake_layout() -> Option<Displays> {
+    std::env::var_os("BINGUX_SETTINGS_FAKE_DISPLAYS")?;
+    let mode = |id: &str, width: u32, height: u32, refresh: f64, preferred: bool| Mode {
+        id: id.to_string(),
+        width,
+        height,
+        refresh,
+        scales: vec![1.0, 1.25, 1.5, 2.0],
+        preferred,
+    };
+    let monitor = |connector: &str, modes: Vec<Mode>, primary: bool, x: i32, y: i32| Monitor {
+        connector: connector.to_string(),
+        name: format!("Test display {connector}"),
+        modes,
+        mode: 0,
+        enabled: true,
+        primary,
+        x,
+        y,
+        scale: 1.0,
+        transform: 0,
+    };
+    Some(Displays::Editable {
+        serial: 0,
+        monitors: vec![
+            monitor(
+                "DP-1",
+                vec![
+                    mode("2560x1440@59.95", 2560, 1440, 59.95, true),
+                    mode("1920x1080@60", 1920, 1080, 60.0, false),
+                ],
+                true,
+                0,
+                0,
+            ),
+            monitor(
+                "HDMI-1",
+                vec![mode("1920x1080@60", 1920, 1080, 60.0, true)],
+                false,
+                2560,
+                180,
+            ),
+        ],
+    })
+}
+
+#[cfg(not(feature = "snapshot"))]
+fn fake_layout() -> Option<Displays> {
+    None
+}
+
 fn load_displays() -> Result<Displays, CommandError> {
+    if let Some(layout) = fake_layout() {
+        return Ok(layout);
+    }
     if let Ok((serial, monitors)) = mutter_call(true, "GetCurrentState", None, &[])
         .and_then(|text| parse_mutter(&text).map_err(CommandError))
     {
@@ -958,6 +1025,240 @@ fn set_transform(monitors: &mut [Monitor], index: usize, key: &str) -> Result<()
     Ok(())
 }
 
+/// The orientation after a quarter turn. Flipped orientations (4 to 7) keep
+/// their flip.
+fn next_orientation(transform: u32) -> u32 {
+    if transform >= 4 {
+        4 + (transform - 3) % 4
+    } else {
+        (transform + 1) % 4
+    }
+}
+
+/// The hint for the arrangement card: the live position while a display is
+/// dragged, or how to arrange the displays.
+fn arrangement_hint(ctx: Ctx, monitors: &[Monitor]) -> String {
+    let enabled = monitors.iter().filter(|monitor| monitor.enabled).count();
+    match *ctx.drag.read() {
+        Some(drag) => format!(
+            "Position {}, {}",
+            monitors[drag.index].x, monitors[drag.index].y
+        ),
+        None if enabled >= 2 => "Drag displays to arrange them.".to_string(),
+        None => String::new(),
+    }
+}
+
+/// The height of the footer on the arrangement card: one button high, with a
+/// gap of `S2` above it and below it.
+const ARRANGEMENT_FOOTER: f32 = BUTTON_HEIGHT + S2 * 2.0;
+
+/// The width of the hint text in the arrangement footer. A fixed width stops
+/// the text from taking the row, which would push the quick controls off the card.
+const ARRANGEMENT_HINT_WIDTH: f32 = 260.0;
+
+/// The footer of the arrangement card: the hint on the left and the quick
+/// controls for the selected display on the right, on one baseline.
+fn arrangement_footer(ctx: Ctx, monitors: &[Monitor], selected: usize) -> Element {
+    rect()
+        .position(Position::new_absolute().left(S2).right(S2).bottom(S2))
+        .width(Size::fill())
+        .height(Size::px(BUTTON_HEIGHT))
+        .direction(Direction::Horizontal)
+        .main_align(Alignment::SpaceBetween)
+        .cross_align(Alignment::Center)
+        .child(
+            rect()
+                .width(Size::px(ARRANGEMENT_HINT_WIDTH))
+                .child(caption(arrangement_hint(ctx, monitors))),
+        )
+        .maybe_child(canvas_controls(ctx, monitors, selected))
+        .into()
+}
+
+/// The rotate and main display buttons, at the right of the arrangement footer.
+/// Shown for the selected display when it is on.
+fn canvas_controls(ctx: Ctx, monitors: &[Monitor], selected: usize) -> Option<Element> {
+    let monitor = monitors.get(selected).filter(|monitor| monitor.enabled)?;
+    let index = selected;
+    let primary = monitor.primary;
+    Some(
+        rect()
+            .width(Size::Inner)
+            .direction(Direction::Horizontal)
+            .spacing(S2)
+            .child(
+                icon_button(Icon::ObjectRotateRight, move |_| {
+                    edit(ctx.model, ctx.error, move |monitors| {
+                        let next = next_orientation(monitors[index].transform);
+                        set_transform(monitors, index, &next.to_string())
+                    });
+                })
+                .tooltip("Rotate"),
+            )
+            .child(
+                icon_button(
+                    if primary {
+                        Icon::Starred
+                    } else {
+                        Icon::NonStarred
+                    },
+                    move |_| {
+                        if !primary {
+                            edit(ctx.model, ctx.error, move |monitors| {
+                                set_primary(monitors, index)
+                            });
+                        }
+                    },
+                )
+                .tooltip(if primary {
+                    "Main display"
+                } else {
+                    "Use as main display"
+                }),
+            )
+            .into(),
+    )
+}
+
+/// The bounds, scale and origin of the enabled displays in a canvas of `area`
+/// size, or `None` when none is on. The layout fits inside the canvas inset by
+/// `S4` on every side and is centred there.
+fn frame_of(monitors: &[Monitor], area: (f32, f32)) -> Option<Frame> {
+    let enabled: Vec<&Monitor> = monitors.iter().filter(|monitor| monitor.enabled).collect();
+    if enabled.is_empty() {
+        return None;
+    }
+    let left = enabled.iter().map(|monitor| monitor.x).min().unwrap_or(0);
+    let top = enabled.iter().map(|monitor| monitor.y).min().unwrap_or(0);
+    let right = enabled
+        .iter()
+        .map(|monitor| monitor.x + monitor.extent().0)
+        .max()
+        .unwrap_or(left);
+    let bottom = enabled
+        .iter()
+        .map(|monitor| monitor.y + monitor.extent().1)
+        .max()
+        .unwrap_or(top);
+    let span_x = f64::from((right - left).max(1));
+    let span_y = f64::from((bottom - top).max(1));
+    let inner_x = f64::from(area.0 - 2.0 * S4).max(1.0);
+    let inner_y = f64::from(area.1 - 2.0 * S4).max(1.0);
+    let fit = (inner_x / span_x).min(inner_y / span_y);
+    let origin = (
+        S4 + ((inner_x - span_x * fit) / 2.0) as f32,
+        S4 + ((inner_y - span_y * fit) / 2.0) as f32,
+    );
+    Some(Frame {
+        left,
+        top,
+        fit,
+        origin,
+    })
+}
+
+/// Whether two enabled displays share an edge segment of at least one pixel.
+fn touches(a: &Monitor, b: &Monitor) -> bool {
+    let (a_width, a_height) = a.extent();
+    let (b_width, b_height) = b.extent();
+    let side_by_side = (a.x + a_width == b.x || b.x + b_width == a.x)
+        && a.y < b.y + b_height
+        && b.y < a.y + a_height;
+    let stacked = (a.y + a_height == b.y || b.y + b_height == a.y)
+        && a.x < b.x + b_width
+        && b.x < a.x + a_width;
+    side_by_side || stacked
+}
+
+/// Whether the enabled displays form one group that touches end to end. Mutter
+/// needs a contiguous layout.
+fn connected(monitors: &[Monitor]) -> bool {
+    let enabled: Vec<usize> = (0..monitors.len())
+        .filter(|&index| monitors[index].enabled)
+        .collect();
+    let Some(&start) = enabled.first() else {
+        return true;
+    };
+    let mut seen = vec![false; monitors.len()];
+    seen[start] = true;
+    let mut stack = vec![start];
+    while let Some(current) = stack.pop() {
+        for &other in &enabled {
+            if !seen[other] && touches(&monitors[current], &monitors[other]) {
+                seen[other] = true;
+                stack.push(other);
+            }
+        }
+    }
+    enabled.iter().all(|&index| seen[index])
+}
+
+/// The start, along one axis, of a display of length `own` that touches the
+/// edge of an anchor starting at `anchor_start` with length `anchor_span`. A
+/// start within `ARRANGEMENT_SNAP` of the anchor's start or end aligns with
+/// it. Otherwise it is the nearest start that still overlaps the anchor by a
+/// pixel.
+fn touching_start(raw: i32, own: i32, anchor_start: i32, anchor_span: i32) -> i32 {
+    let aligned_start = anchor_start;
+    let aligned_end = anchor_start + anchor_span - own;
+    if (raw - aligned_start).abs() <= ARRANGEMENT_SNAP {
+        aligned_start
+    } else if (raw - aligned_end).abs() <= ARRANGEMENT_SNAP {
+        aligned_end
+    } else {
+        raw.clamp(anchor_start - own + 1, anchor_start + anchor_span - 1)
+    }
+}
+
+/// Whether display `index` can sit at (`x`, `y`) without overlapping another
+/// enabled display and with the layout still connected.
+fn placement_valid(monitors: &[Monitor], index: usize, x: i32, y: i32) -> bool {
+    let mut trial = monitors.to_vec();
+    trial[index].x = x;
+    trial[index].y = y;
+    let moved = &trial[index];
+    let clash = trial
+        .iter()
+        .enumerate()
+        .any(|(other, monitor)| other != index && monitor.enabled && overlaps(moved, monitor));
+    !clash && connected(&trial)
+}
+
+/// The nearest place to (`x`, `y`) for display `index` that touches another
+/// enabled display, does not overlap any, and keeps the layout connected.
+/// `None` when there is no such place.
+fn settled_point(monitors: &[Monitor], index: usize, x: i32, y: i32) -> Option<(i32, i32)> {
+    let (width, height) = monitors[index].extent();
+    let mut best = None;
+    let mut best_distance = i64::MAX;
+    for (_, anchor) in monitors
+        .iter()
+        .enumerate()
+        .filter(|(other, monitor)| *other != index && monitor.enabled)
+    {
+        let (anchor_width, anchor_height) = anchor.extent();
+        let beside_y = touching_start(y, height, anchor.y, anchor_height);
+        let beside_x = touching_start(x, width, anchor.x, anchor_width);
+        let spots = [
+            (anchor.x + anchor_width, beside_y),
+            (anchor.x - width, beside_y),
+            (beside_x, anchor.y + anchor_height),
+            (beside_x, anchor.y - height),
+        ];
+        for (spot_x, spot_y) in spots {
+            let dx = i64::from(spot_x - x);
+            let dy = i64::from(spot_y - y);
+            let distance = dx * dx + dy * dy;
+            if distance < best_distance && placement_valid(monitors, index, spot_x, spot_y) {
+                best = Some((spot_x, spot_y));
+                best_distance = distance;
+            }
+        }
+    }
+    best
+}
+
 fn validate(monitors: &[Monitor]) -> Result<(), String> {
     if !monitors.iter().any(|monitor| monitor.enabled) {
         return Err("Enable at least one display.".to_string());
@@ -1015,6 +1316,12 @@ fn apply(ctx: Ctx) {
         return;
     };
     let mut error = ctx.error;
+    if fake_layout().is_some() {
+        error.set(Some(
+            "The test layout is for previewing only and cannot be applied.".to_string(),
+        ));
+        return;
+    }
     if let Err(message) = validate(&monitors) {
         error.set(Some(message));
         return;
@@ -1209,6 +1516,27 @@ fn record_group(record: &Record) -> Group {
     )
 }
 
+/// The bounds and scale of the arrangement, frozen while a display is dragged
+/// so the canvas does not rescale under the pointer.
+#[derive(Clone, Copy, PartialEq)]
+struct Frame {
+    left: i32,
+    top: i32,
+    fit: f64,
+    /// Where the layout's top-left corner sits inside the canvas.
+    origin: (f32, f32),
+}
+
+/// A display being dragged: where the pointer went down, where the display was
+/// then, and the frame at that moment.
+#[derive(Clone, Copy, PartialEq)]
+struct Drag {
+    index: usize,
+    pointer: (f64, f64),
+    origin: (i32, i32),
+    frame: Frame,
+}
+
 /// Everything the page's actions need. All fields are handles, so the struct
 /// is copied into each callback.
 #[derive(Clone, Copy, PartialEq)]
@@ -1218,6 +1546,8 @@ struct Ctx {
     night_ticket: State<u64>,
     prompt: State<u64>,
     remaining: State<u64>,
+    selected: State<usize>,
+    drag: State<Option<Drag>>,
     overlays: Overlays,
 }
 
@@ -1237,73 +1567,238 @@ impl Component for Countdown {
 }
 
 /// The layout as boxes: each enabled display at its place, scaled to fit.
-/// The primary display is filled with the accent colour.
-fn arrangement(monitors: &[Monitor], tokens: Tokens) -> Element {
-    let enabled: Vec<&Monitor> = monitors.iter().filter(|monitor| monitor.enabled).collect();
-    if enabled.is_empty() {
-        return caption("No displays are on.");
-    }
-    let left = enabled.iter().map(|monitor| monitor.x).min().unwrap_or(0);
-    let top = enabled.iter().map(|monitor| monitor.y).min().unwrap_or(0);
-    let right = enabled
-        .iter()
-        .map(|monitor| monitor.x + monitor.extent().0)
-        .max()
-        .unwrap_or(left);
-    let bottom = enabled
-        .iter()
-        .map(|monitor| monitor.y + monitor.extent().1)
-        .max()
-        .unwrap_or(top);
-    let span_x = f64::from((right - left).max(1));
-    let span_y = f64::from((bottom - top).max(1));
-    let fit = (f64::from(ARRANGEMENT_WIDTH) / span_x).min(f64::from(ARRANGEMENT_HEIGHT) / span_y);
-
-    let mut canvas = rect()
-        .width(Size::px(ARRANGEMENT_WIDTH))
-        .height(Size::px(ARRANGEMENT_HEIGHT))
-        .corner_radius(RADIUS)
-        .background(tokens.bg);
-    for monitor in &enabled {
-        let (width, height) = monitor.extent();
-        let fill = if monitor.primary {
-            tokens.accent
-        } else {
-            tokens.control
-        };
-        canvas = canvas.child(
-            rect()
-                .position(
-                    Position::new_absolute()
-                        .left((f64::from(monitor.x - left) * fit) as f32)
-                        .top((f64::from(monitor.y - top) * fit) as f32),
-                )
-                .width(Size::px((f64::from(width) * fit) as f32))
-                .height(Size::px((f64::from(height) * fit) as f32))
-                .corner_radius(RADIUS_SM)
-                .padding(S2)
-                .background(fill)
-                .child(
-                    label()
-                        .text(monitor.name.clone())
-                        .font_size(TEXT_SM)
-                        .color(if monitor.primary {
-                            tokens.accent_foreground
-                        } else {
-                            tokens.text
-                        })
-                        .max_lines(1)
-                        .text_overflow(TextOverflow::Ellipsis),
-                ),
-        );
-    }
-    canvas.into()
+/// The primary display is filled with the accent colour. The selected display
+/// has an accent outline. Dragging a box moves it; releasing settles it beside
+/// another display.
+#[derive(Clone, PartialEq)]
+struct Arrangement {
+    ctx: Ctx,
+    monitors: Vec<Monitor>,
+    selected: usize,
+    tokens: Tokens,
 }
 
-fn arrangement_group(monitors: &[Monitor], tokens: Tokens) -> Group {
+impl Component for Arrangement {
+    fn render(&self) -> impl IntoElement {
+        let ctx = self.ctx;
+        let monitors = &self.monitors;
+        let selected = self.selected;
+        let tokens = self.tokens;
+        let mut size = use_state(Area::default);
+        let measured = size.read().width();
+        let width = if measured > 0.0 {
+            measured
+        } else {
+            ARRANGEMENT_WIDTH
+        };
+        let active = *ctx.drag.read();
+        let Some(current) = frame_of(monitors, (width, ARRANGEMENT_HEIGHT - ARRANGEMENT_FOOTER))
+        else {
+            return caption("No displays are on.").into_element();
+        };
+        let frame = active.map_or(current, |drag| drag.frame);
+
+        let mut canvas = rect()
+            .width(Size::fill())
+            .height(Size::px(ARRANGEMENT_HEIGHT))
+            .corner_radius(RADIUS_LG)
+            .background(tokens.control)
+            .border(
+                Border::new()
+                    .width(1.0)
+                    .alignment(BorderAlignment::Inner)
+                    .fill(tokens.separator),
+            )
+            .on_sized(move |event: Event<SizedEventData>| size.set(event.area))
+            .on_capture_global_pointer_move(move |event: Event<PointerEventData>| {
+                let Some(drag) = *ctx.drag.peek() else {
+                    return;
+                };
+                let pointer = event.global_location();
+                let dx = ((pointer.x - drag.pointer.0) / drag.frame.fit).round() as i32;
+                let dy = ((pointer.y - drag.pointer.1) / drag.frame.fit).round() as i32;
+                let (x, y) = (drag.origin.0 + dx, drag.origin.1 + dy);
+                edit(ctx.model, ctx.error, move |monitors| {
+                    monitors[drag.index].x = x;
+                    monitors[drag.index].y = y;
+                    Ok(())
+                });
+            })
+            .on_global_pointer_up(move |_| {
+                let Some(drag) = *ctx.drag.peek() else {
+                    return;
+                };
+                let mut drag_state = ctx.drag;
+                drag_state.set(None);
+                edit(ctx.model, ctx.error, move |monitors| {
+                    let (x, y) = (monitors[drag.index].x, monitors[drag.index].y);
+                    match settled_point(monitors, drag.index, x, y) {
+                        Some((x, y)) => {
+                            monitors[drag.index].x = x;
+                            monitors[drag.index].y = y;
+                            Ok(())
+                        }
+                        None => {
+                            monitors[drag.index].x = drag.origin.0;
+                            monitors[drag.index].y = drag.origin.1;
+                            Err("Keep each display touching another one.".to_string())
+                        }
+                    }
+                });
+            });
+
+        let dragging = active.map(|drag| drag.index);
+        for (index, monitor) in monitors
+            .iter()
+            .enumerate()
+            .filter(|(_, monitor)| monitor.enabled)
+        {
+            canvas = canvas.child(Tile {
+                ctx,
+                index,
+                monitor: monitor.clone(),
+                frame,
+                selected: index == selected,
+                dragging: dragging == Some(index),
+                tokens,
+            });
+        }
+        canvas
+            .child(arrangement_footer(ctx, monitors, selected))
+            .into_element()
+    }
+}
+
+/// One enabled display in the arrangement. It is its own component so that
+/// its position can ease into the settled place.
+#[derive(Clone, PartialEq)]
+struct Tile {
+    ctx: Ctx,
+    index: usize,
+    monitor: Monitor,
+    frame: Frame,
+    selected: bool,
+    dragging: bool,
+    tokens: Tokens,
+}
+
+impl Component for Tile {
+    fn render(&self) -> impl IntoElement {
+        let tokens = self.tokens;
+        let monitor = &self.monitor;
+        let frame = self.frame;
+        let (width, height) = monitor.extent();
+        // Each box is inset by half the gap, so neighbouring boxes are S0 apart.
+        let inset = S0 / 2.0;
+        let target_left =
+            frame.origin.0 + (f64::from(monitor.x - frame.left) * frame.fit) as f32 + inset;
+        let target_top =
+            frame.origin.1 + (f64::from(monitor.y - frame.top) * frame.fit) as f32 + inset;
+        let box_width = ((f64::from(width) * frame.fit) as f32 - S0).max(0.0);
+        let box_height = ((f64::from(height) * frame.fit) as f32 - S0).max(0.0);
+        let time = if self.dragging {
+            0
+        } else {
+            tokens.motion(DRAG_SETTLE_MS)
+        };
+        let left = use_animation_transition(target_left, move |from, to| {
+            AnimNum::new(from, to)
+                .time(time)
+                .function(Function::Expo)
+                .ease(Ease::Out)
+        });
+        let top = use_animation_transition(target_top, move |from, to| {
+            AnimNum::new(from, to)
+                .time(time)
+                .function(Function::Expo)
+                .ease(Ease::Out)
+        });
+
+        let (fill, ink) = if monitor.primary {
+            (tokens.accent, tokens.accent_foreground)
+        } else {
+            (tokens.elevated, tokens.text)
+        };
+        let border = if self.selected {
+            Border::new()
+                .width(RING_WIDTH)
+                .alignment(BorderAlignment::Inner)
+                .fill(if monitor.primary {
+                    tokens.text
+                } else {
+                    tokens.accent
+                })
+        } else {
+            Border::new()
+        };
+        let mut title = rect()
+            .width(Size::fill())
+            .direction(Direction::Horizontal)
+            .cross_align(Alignment::Center)
+            .child(
+                typography::EMPHASIS
+                    .label(&tokens, monitor.name.clone())
+                    .color(ink)
+                    .width(Size::fill())
+                    .max_lines(1)
+                    .text_overflow(TextOverflow::Ellipsis),
+            );
+        if monitor.primary {
+            title = title.child(icon(Icon::Starred, ICON_SM, ink));
+        }
+        let details = typography::CAPTION
+            .label(&tokens, monitor.selected().resolution())
+            .color(ink.with_af32(0.8));
+
+        let ctx = self.ctx;
+        let index = self.index;
+        let origin = (monitor.x, monitor.y);
+        let on_press = move |event: Event<PointerEventData>| {
+            if !event.data().is_primary() {
+                return;
+            }
+            let pointer = event.global_location();
+            let mut selected_state = ctx.selected;
+            selected_state.set(index);
+            let mut drag_state = ctx.drag;
+            drag_state.set(Some(Drag {
+                index,
+                pointer: (pointer.x, pointer.y),
+                origin,
+                frame,
+            }));
+        };
+
+        rect()
+            .position(
+                Position::new_absolute()
+                    .left(left.get().value())
+                    .top(top.get().value()),
+            )
+            .width(Size::px(box_width))
+            .height(Size::px(box_height))
+            .corner_radius(RADIUS_SM)
+            .padding(S2)
+            .background(fill)
+            .border(border)
+            .on_pointer_down(on_press)
+            .child(title)
+            .child(details)
+    }
+}
+
+fn arrangement_group(ctx: Ctx, monitors: &[Monitor], selected: usize, tokens: Tokens) -> Group {
     Group::titled("Arrangement")
         .description("Each box is one display, in the place it has on the desktop.")
-        .row(arrangement(monitors, tokens))
+        .row(
+            Arrangement {
+                ctx,
+                monitors: monitors.to_vec(),
+                selected,
+                tokens,
+            }
+            .into_element(),
+        )
 }
 
 fn monitor_group(
@@ -1426,6 +1921,215 @@ fn set_night_hour(model: State<Option<Page>>, error: State<Option<String>>, from
     write_night(model, error, gsettings_key, format!("{hour:.1}"));
 }
 
+/// The colour a display shows at `kelvin`, from Tanner Helland's fit of
+/// blackbody radiation.
+fn kelvin_rgb(kelvin: u32) -> (u8, u8, u8) {
+    let temp = f64::from(kelvin) / 100.0;
+    let red = if temp <= 66.0 {
+        255.0
+    } else {
+        329.698_727_446 * (temp - 60.0).powf(-0.133_204_759_2)
+    };
+    let green = if temp <= 66.0 {
+        99.470_802_586_1 * temp.ln() - 161.119_568_166_1
+    } else {
+        288.122_169_528_3 * (temp - 60.0).powf(-0.075_514_849_2)
+    };
+    let blue = if temp >= 66.0 {
+        255.0
+    } else if temp <= 19.0 {
+        0.0
+    } else {
+        138.517_731_223_1 * (temp - 10.0).ln() - 305.044_792_730_7
+    };
+    let channel = |value: f64| value.clamp(0.0, 255.0).round() as u8;
+    (channel(red), channel(green), channel(blue))
+}
+
+/// The night light control: a strip of colours from the warmest to the coolest
+/// temperature. The strip is the control itself, and a white pill marks the
+/// chosen temperature (see `KelvinStrip`).
+fn temperature_control(kelvin: u32, on_moved: impl Into<EventHandler<f64>>) -> Element {
+    use std::fmt::Write as _;
+    const STOPS: u32 = 24;
+    let mut stops = String::new();
+    for step in 0..STOPS {
+        let fraction = f64::from(step) / f64::from(STOPS - 1);
+        let at = TEMP_MIN + (f64::from(TEMP_MAX - TEMP_MIN) * fraction).round() as u32;
+        let (red, green, blue) = kelvin_rgb(at);
+        let _ = write!(
+            stops,
+            r##"<stop offset="{}%" stop-color="#{red:02x}{green:02x}{blue:02x}"/>"##,
+            fraction * 100.0
+        );
+    }
+    let svg = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{FIELD_WIDTH}" height="{S2}" viewBox="0 0 {FIELD_WIDTH} {S2}"><defs><linearGradient id="kelvin" x1="0" y1="0" x2="1" y2="0">{stops}</linearGradient></defs><rect width="{FIELD_WIDTH}" height="{S2}" rx="{S1}" fill="url(#kelvin)"/></svg>"#
+    );
+    KelvinStrip {
+        kelvin,
+        svg,
+        on_moved: on_moved.into(),
+    }
+    .into()
+}
+
+const SCALE_PRESSED: f32 = 1.1;
+const SCALE_MS: u64 = 120;
+const LEVEL_MAX: f64 = 100.0;
+/// Arrow keys move the strip this many percent, Page Up and Page Down by ten.
+const KELVIN_STEP: f64 = 5.0;
+const KELVIN_PAGE_STEP: f64 = 10.0;
+
+/// The night light strip. It is the control itself: press or drag anywhere on
+/// it, or use the arrow, Home, End, Page Up and Page Down keys. The white pill
+/// is the thumb, S2 wide and S5 tall.
+#[derive(Clone, PartialEq)]
+struct KelvinStrip {
+    kelvin: u32,
+    svg: String,
+    on_moved: EventHandler<f64>,
+}
+
+impl Component for KelvinStrip {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let mut pressing = use_state(|| false);
+        let mut size = use_state(Area::default);
+        let a11y_id = use_a11y();
+        let focus = use_focus(a11y_id);
+        let on_moved = self.on_moved.clone();
+        let kelvin = self.kelvin;
+        let level = kelvin_level(kelvin);
+        let svg = self.svg.clone();
+
+        let scale_target = if pressing() { SCALE_PRESSED } else { 1.0 };
+        let motion = tokens.motion(SCALE_MS);
+        let scale = use_animation_transition(scale_target, move |from, to| {
+            AnimNum::new(from, to)
+                .time(motion)
+                .function(Function::Expo)
+                .ease(Ease::Out)
+        });
+        let thumb_width = S2 * scale.get().value();
+        let thumb_height = S5 * scale.get().value();
+        let travel = (FIELD_WIDTH - S2).max(1.0);
+        let centre_x = S2 / 2.0 + travel * (level / LEVEL_MAX) as f32;
+        let percent_at = move |x: f64| -> f64 {
+            let half = f64::from(S2 / 2.0);
+            ((x - half) / f64::from(travel) * LEVEL_MAX).clamp(0.0, LEVEL_MAX)
+        };
+        let on_pointer_down = {
+            let on_moved = on_moved.clone();
+            move |event: Event<PointerEventData>| {
+                if !event.data().is_primary() {
+                    return;
+                }
+                event.stop_propagation();
+                a11y_id.request_focus();
+                pressing.set(true);
+                on_moved.call(percent_at(event.element_location().x));
+            }
+        };
+        let on_move = {
+            let on_moved = on_moved.clone();
+            move |event: Event<PointerEventData>| {
+                if *pressing.peek() {
+                    event.prevent_default();
+                    let x = event.global_location().x - size.read().min_x() as f64;
+                    on_moved.call(percent_at(x));
+                }
+            }
+        };
+        let on_release = move |_| {
+            pressing.set_if_modified(false);
+        };
+        let on_key_down = {
+            let on_moved = on_moved.clone();
+            move |event: Event<KeyboardEventData>| {
+                let delta = match event.key {
+                    Key::Named(NamedKey::ArrowLeft) | Key::Named(NamedKey::ArrowDown) => {
+                        -KELVIN_STEP
+                    }
+                    Key::Named(NamedKey::ArrowRight) | Key::Named(NamedKey::ArrowUp) => KELVIN_STEP,
+                    Key::Named(NamedKey::Home) => -level,
+                    Key::Named(NamedKey::End) => LEVEL_MAX - level,
+                    Key::Named(NamedKey::PageUp) => KELVIN_PAGE_STEP,
+                    Key::Named(NamedKey::PageDown) => -KELVIN_PAGE_STEP,
+                    _ => return,
+                };
+                on_moved.call((level + delta).clamp(0.0, LEVEL_MAX));
+            }
+        };
+
+        let ring = S2 + RING_WIDTH * 2.0;
+        rect()
+            .a11y_id(a11y_id)
+            .a11y_focusable(true)
+            .a11y_role(AccessibilityRole::Slider)
+            .a11y_builder(move |builder| {
+                builder.set_numeric_value(f64::from(kelvin));
+                builder.set_min_numeric_value(f64::from(TEMP_MIN));
+                builder.set_max_numeric_value(f64::from(TEMP_MAX));
+            })
+            .width(Size::px(FIELD_WIDTH))
+            .height(Size::px(S5))
+            .on_sized(move |event: Event<SizedEventData>| size.set(event.area))
+            .on_pointer_down(on_pointer_down)
+            .on_capture_global_pointer_move(on_move)
+            .on_global_pointer_up(on_release)
+            .on_key_down(on_key_down)
+            .child(
+                rect()
+                    .position(Position::new_absolute().top((S5 - S2) / 2.0).left(0.0))
+                    .width(Size::px(FIELD_WIDTH))
+                    .height(Size::px(S2))
+                    .child(
+                        SvgViewer::new((svg.clone(), Bytes::from(svg)))
+                            .width(Size::px(FIELD_WIDTH))
+                            .height(Size::px(S2)),
+                    ),
+            )
+            .maybe_child((focus() == Focus::Keyboard).then(|| {
+                rect()
+                    .position(
+                        Position::new_absolute()
+                            .top((S5 - ring) / 2.0)
+                            .left(centre_x - ring / 2.0),
+                    )
+                    .width(Size::px(ring))
+                    .height(Size::px(ring))
+                    .corner_radius(ring / 2.0)
+                    .border(
+                        Border::new()
+                            .width(1.0)
+                            .alignment(BorderAlignment::Inner)
+                            .fill(tokens.accent),
+                    )
+            }))
+            .child(
+                rect()
+                    .layer(Layer::Relative(3))
+                    .position(
+                        Position::new_absolute()
+                            .top((S5 - thumb_height) / 2.0)
+                            .left(centre_x - thumb_width / 2.0),
+                    )
+                    .width(Size::px(thumb_width))
+                    .height(Size::px(thumb_height))
+                    .corner_radius(thumb_width / 2.0)
+                    .background(Color::from_rgb(255, 255, 255))
+                    .border(
+                        Border::new()
+                            .width(S0 / 2.0)
+                            .alignment(BorderAlignment::Outer)
+                            .fill(Color::from_rgb(64, 64, 64)),
+                    ),
+            )
+            .into_element()
+    }
+}
+
 fn night_group(ctx: Ctx, night: &Night) -> Group {
     let model = ctx.model;
     let error = ctx.error;
@@ -1436,7 +2140,7 @@ fn night_group(ctx: Ctx, night: &Night) -> Group {
         .row(
             row("Colour temperature")
                 .subtitle(temperature_word(night.kelvin))
-                .trailing(slider(kelvin_level(night.kelvin), move |level: f64| {
+                .trailing(temperature_control(night.kelvin, move |level: f64| {
                     set_night_level(model, error, ctx.night_ticket, level)
                 })),
         )
@@ -1491,6 +2195,8 @@ impl Component for DisplaysPage {
         let night_ticket = use_state::<u64>(|| 0);
         let prompt = use_state::<u64>(|| 0);
         let remaining = use_state::<u64>(|| KEEP_SECONDS);
+        let selected = use_state::<usize>(|| 0);
+        let drag = use_state::<Option<Drag>>(|| None);
         let tokens = use_tokens();
         let ctx = Ctx {
             model,
@@ -1498,6 +2204,8 @@ impl Component for DisplaysPage {
             night_ticket,
             prompt,
             remaining,
+            selected,
+            drag,
             overlays: use_overlays(),
         };
 
@@ -1523,9 +2231,10 @@ impl Component for DisplaysPage {
                 page
             }
             Ok(Displays::Editable { monitors, .. }) => {
-                let mut page = page.child(arrangement_group(&monitors, tokens));
-                for (index, monitor) in monitors.iter().enumerate() {
-                    page = page.child(monitor_group(model, error, index, monitor));
+                let chosen = (*selected.read()).min(monitors.len().saturating_sub(1));
+                let mut page = page.child(arrangement_group(ctx, &monitors, chosen, tokens));
+                if let Some(monitor) = monitors.get(chosen) {
+                    page = page.child(monitor_group(model, error, chosen, monitor));
                 }
                 page.child(apply_footer(ctx))
             }

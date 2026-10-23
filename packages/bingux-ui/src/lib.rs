@@ -10,6 +10,7 @@
 //! [`surface::use_tokens`].
 
 pub mod app_icon;
+pub mod charts;
 pub mod controls;
 pub mod group;
 pub mod icons;
@@ -27,6 +28,9 @@ pub mod typography;
 /// Everything an application window normally needs.
 pub mod prelude {
     pub use crate::app_icon::{AppIcon, app_icon};
+    pub use crate::charts::{
+        Curve, Segment, Series, Unit, bar_chart, donut, line_chart, ring, sparkline,
+    };
     pub use crate::controls::*;
     pub use crate::group::{
         Group, Status, StatusBlock, action_row, caption, centered_caption, form_row, heading,

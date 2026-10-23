@@ -21,8 +21,9 @@ pub(crate) const LABEL_HEIGHT: f32 = 16.0;
 pub(crate) const LABEL_GAP: f32 = S1;
 /// Horizontal room a thinned x label needs beside its text.
 pub(crate) const LABEL_PAD: f32 = S4;
-/// Average advance of a glyph in ems, for estimating text width.
-pub(crate) const GLYPH_EM: f32 = 0.6;
+/// Average advance of a glyph in ems, for estimating text width. Set high
+/// enough that "100%" at caption size never wraps in its gutter.
+pub(crate) const GLYPH_EM: f32 = 0.85;
 /// Stroke of gridlines, axes and crosshairs. Half a pixel is added so they
 /// land on pixel centres and stay sharp.
 pub(crate) const HAIRLINE: f32 = 1.0;
@@ -40,8 +41,6 @@ pub(crate) const BASELINE_OPACITY: f32 = 0.5;
 pub(crate) const CROSSHAIR_OPACITY: f32 = 0.6;
 /// How long a chart takes to draw in when it first appears.
 pub(crate) const DRAW_MS: u64 = 700;
-/// Percentages run `0..=PERCENT`.
-pub(crate) const PERCENT: f32 = 100.0;
 /// Bars: the share of a band a bar group fills, the widest bar, and the gap
 /// between bars of one group.
 pub(crate) const BAR_FILL: f32 = 0.72;
@@ -59,12 +58,14 @@ pub(crate) const RING_SIZE: f32 = 120.0;
 pub(crate) const RING_STROKE: f32 = 10.0;
 pub(crate) const RING_TRACK_OPACITY: f32 = 0.18;
 pub(crate) const RING_FROM_OPACITY: f32 = 0.55;
-pub(crate) const RING_VALUE_HALF: f32 = 18.0;
 pub(crate) const DONUT_SIZE: f32 = 128.0;
 pub(crate) const DONUT_STROKE: f32 = 14.0;
 pub(crate) const DONUT_GAP: f32 = 0.05;
-pub(crate) const DONUT_BAR: f32 = 4.0;
 pub(crate) const DONUT_ROW: f32 = 36.0;
+/// Line height of the centre value inside a donut or ring hole (HEADING style).
+pub(crate) const CENTRE_LINE: f32 = 22.0;
+/// Width of the box for a constant series' value label.
+pub(crate) const POINT_LABEL_WIDTH: f32 = 72.0;
 /// A gauge is a 270 degree arc opening at the bottom, starting at 225 degrees.
 pub(crate) const GAUGE_START: f32 = 1.25 * PI_F32;
 pub(crate) const GAUGE_SWEEP: f32 = 1.5 * PI_F32;
@@ -74,7 +75,7 @@ pub(crate) const TIP_WIDTH: f32 = 176.0;
 pub(crate) const TIP_GAP: f32 = S3;
 pub(crate) const TIP_PAD: f32 = S3;
 pub(crate) const TIP_ROW: f32 = 20.0;
-pub(crate) const TIP_LAYER: i32 = 1;
+pub(crate) const TIP_LAYER: i16 = 1;
 pub(crate) const SWATCH: f32 = 8.0;
 pub(crate) const SHADOW_Y: f32 = 8.0;
 pub(crate) const SHADOW_BLUR: f32 = 24.0;

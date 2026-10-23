@@ -234,6 +234,27 @@ fn main() {
         .settle(std::time::Duration::from_millis(400))
         .save(&path);
     println!("[snapshot] wrote {path}");
+
+    // A chart under the pointer: the crosshair and tooltip follow it.
+    let mut shot = Snapshot::new(
+        move || {
+            Element::from(
+                rect()
+                    .expanded()
+                    .background(Color::from_rgb(28, 28, 32))
+                    .child(Gallery {
+                        initial: Page::Charts,
+                    }),
+            )
+        },
+        (WINDOW_SIZE.0, 1100.0),
+    );
+    let path = format!("{out}/charts-hover.png");
+    shot.settle(std::time::Duration::from_millis(400))
+        .hover(560.0, 210.0)
+        .settle(std::time::Duration::from_millis(200))
+        .save(&path);
+    println!("[snapshot] wrote {path}");
 }
 
 /// Opens a sheet on mount over the Feedback page, so the headless runner

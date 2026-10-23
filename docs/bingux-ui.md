@@ -91,6 +91,49 @@ Each layer stays on screen until its exit finishes.
 - Toast: slides up 8 px and fades in over 140 ms. Dismissing it slides it back down and fades it out.
 - Dropdown reveal: 90 ms, the same easing as the menu.
 
+## Charts
+
+`charts` draws sparklines, line and area charts, bar charts, rings and
+donuts. Each chart fills the width it is given and keeps a fixed height from
+its first frame, so data that arrives later never moves the layout. Before it
+has points it shows a muted baseline and "No data yet" at the same height.
+A single x value is centred with one tick at the value, not a -1 to 1 axis. A constant series sits in the middle of a window and labels its one value. Time axes span the data, not whole hours.
+
+```rust
+use bingux_ui::prelude::*;
+
+line_chart([Series::new("Charge", points)])
+    .y_unit(Unit::Percent)
+    .curve(Curve::Monotone)
+    .area()
+    .label("Battery charge over the last day")
+```
+
+| Builder              | Use                                                                            |
+| -------------------- | ------------------------------------------------------------------------------ |
+| `sparkline(values)`  | A small trend with no axes. `colour`, `unit`, `area`, `label`.                 |
+| `line_chart(series)` | Several series over x. `y_unit`, `x_unit`, `curve`, `area`, `label`, `height`. |
+| `bar_chart(series)`  | Grouped bars, or `stacked()`. `categories`, `y_unit`, `label`, `height`.       |
+| `ring(value)`        | A 0 to 1 gauge with a centre caption. `caption`, `colour`, `label`.            |
+| `donut(segments)`    | A share of a whole, with a legend. `unit`, `caption`, `label`.                 |
+
+`Series::new(name, points)` takes `(x, y)` pairs, and `Series::values` reads
+values by position. `Segment::new(name, value)` is one slice of a donut.
+
+`Unit` formats values: `Number`, `Percent` (values already in percent),
+`Bytes` (binary units), `Duration` (seconds as `2 h 15 min`) and
+`Clock { offset }` (Unix seconds in local time). `Curve` is `Linear`, `Step`
+or `Monotone` (the default, a smooth curve that never overshoots).
+
+Data handling: a `NaN` or infinite point breaks the line instead of joining
+across it. Points are sorted by x, and a repeated x keeps its last value.
+
+Motion: lines draw in from left to right, bars grow from the baseline and
+rings sweep, over 700 ms. Under `BINGUX_REDUCED_MOTION=1` they appear at once.
+
+Keyboard: a chart with points is focusable. Left and Right move between
+points, Home and End jump to the ends, and a tooltip follows the point.
+
 ## Typography
 
 `typography.rs` holds the type ramp. Text picks a named style and nothing

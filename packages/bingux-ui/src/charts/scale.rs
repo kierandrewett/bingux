@@ -33,15 +33,6 @@ impl Linear {
         let t = ((value - self.lo) / span) as f32;
         self.from + t * (self.to - self.from)
     }
-
-    /// The data value at `pixel`.
-    pub fn invert(self, pixel: f32) -> f64 {
-        let span = f64::from(self.to - self.from);
-        if span == 0.0 {
-            return self.lo;
-        }
-        self.lo + f64::from(pixel - self.from) / span * (self.hi - self.lo)
-    }
 }
 
 /// A domain and its ticks. `step` is the spacing between ticks, or zero when
@@ -88,12 +79,29 @@ pub(crate) fn nice(min: f64, max: f64, target: usize, include_zero: bool) -> Dom
         hi = hi.max(0.0);
     }
     if hi - lo <= 0.0 {
-        let pad = if lo == 0.0 { 1.0 } else { lo.abs() * 0.2 };
-        lo -= pad;
-        hi += pad;
+        // One value gets a window of one nice step either side: the value
+        // sits in the middle and the ticks are whole steps around it.
+        let window = lone(lo);
+        return grid(window.lo, window.hi, window.step, 0.0);
     }
     let step = nice_step((hi - lo) / target.max(1) as f64);
     grid(lo, hi, step, 0.0)
+}
+
+/// The x axis for a single x value: a window of one unit either side, with
+/// one tick, at the value itself, so the axis does not read as -1, 0, 1.
+pub(crate) fn lone(value: f64) -> Domain {
+    let unit = if value == 0.0 {
+        1.0
+    } else {
+        nice_step(value.abs() * 0.2)
+    };
+    Domain {
+        lo: value - unit,
+        hi: value + unit,
+        ticks: vec![value],
+        step: unit,
+    }
 }
 
 /// Time ticks for Unix seconds, on whole local hours and days. `offset` is
@@ -112,7 +120,25 @@ pub(crate) fn time(min: f64, max: f64, target: usize, offset: f64) -> Domain {
         .into_iter()
         .find(|step| span / step <= target)
         .unwrap_or_else(|| nice_step(span / target));
-    grid(lo, hi, step, offset)
+    // The plot starts and ends where the data does, so ticks outside the
+    // data are dropped. A span with no tick inside keeps its two ends.
+    let domain = grid(lo, hi, step, offset);
+    let inside: Vec<f64> = domain
+        .ticks
+        .iter()
+        .copied()
+        .filter(|tick| (lo..=hi).contains(tick))
+        .collect();
+    Domain {
+        lo,
+        hi,
+        ticks: if inside.is_empty() {
+            vec![lo, hi]
+        } else {
+            inside
+        },
+        step: domain.step,
+    }
 }
 
 /// Ticks on multiples of `step`, shifted by `offset`, that cover `lo..=hi`.
@@ -184,11 +210,5 @@ mod tests {
         for tick in &domain.ticks {
             assert_eq!((tick + 3600.0).rem_euclid(HOUR), 0.0);
         }
-    }
-
-    #[test]
-    fn invert_round_trips() {
-        let scale = Linear::new((0.0, 10.0), (0.0, 100.0));
-        assert!((scale.invert(scale.map(4.0)) - 4.0).abs() < 1e-4);
     }
 }

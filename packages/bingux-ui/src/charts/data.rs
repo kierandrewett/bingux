@@ -72,6 +72,24 @@ impl Series {
     pub(crate) fn cleaned(&self) -> Vec<Point> {
         clean(&self.points)
     }
+
+    /// The finite points split into runs at each non-finite point, so a
+    /// line breaks where the data is missing instead of joining across it.
+    pub(crate) fn runs(&self) -> Vec<Vec<Point>> {
+        let mut runs: Vec<Vec<Point>> = Vec::new();
+        let mut current: Vec<Point> = Vec::new();
+        for point in &self.points {
+            if point.x.is_finite() && point.y.is_finite() {
+                current.push(*point);
+            } else if !current.is_empty() {
+                runs.push(std::mem::take(&mut current));
+            }
+        }
+        if !current.is_empty() {
+            runs.push(current);
+        }
+        runs.into_iter().map(|run| clean(&run)).collect()
+    }
 }
 
 /// A named share of a whole, drawn as one arc of a donut.
@@ -153,28 +171,6 @@ pub(crate) fn xs(all: &[Vec<Point>]) -> Vec<f64> {
     xs.sort_by(f64::total_cmp);
     xs.dedup();
     xs
-}
-
-/// The point of a sorted series whose x is nearest `x`.
-pub(crate) fn nearest(points: &[Point], x: f64) -> Option<Point> {
-    let after = points.partition_point(|p| p.x < x);
-    let before = after.checked_sub(1).map(|i| points[i]);
-    let next = points.get(after).copied();
-    [before, next]
-        .into_iter()
-        .flatten()
-        .min_by(|a, b| (a.x - x).abs().total_cmp(&(b.x - x).abs()))
-}
-
-/// The index into sorted `xs` nearest `x`.
-pub(crate) fn nearest_index(xs: &[f64], x: f64) -> Option<usize> {
-    let after = xs.partition_point(|v| *v < x);
-    let before = after.checked_sub(1);
-    let next = (after < xs.len()).then_some(after);
-    [before, next]
-        .into_iter()
-        .flatten()
-        .min_by(|a, b| (xs[*a] - x).abs().total_cmp(&(xs[*b] - x).abs()))
 }
 
 /// The y value at exactly `x`, for series read by position.

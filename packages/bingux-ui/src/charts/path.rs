@@ -1,6 +1,6 @@
 //! Path data for chart marks: smooth and stepped lines, rounded bars, and arcs.
 
-use std::f32::consts::{PI, TAU};
+use std::f32::consts::PI;
 use std::fmt::Write as _;
 
 use super::svg::num;
@@ -181,6 +181,3 @@ pub(crate) fn arc(cx: f32, cy: f32, r: f32, start: f32, end: f32) -> String {
 fn point(cx: f32, cy: f32, r: f32, angle: f32) -> Pt {
     (cx + r * angle.sin(), cy - r * angle.cos())
 }
-
-/// A full turn, re-exported for ring code.
-pub(crate) const FULL_TURN: f32 = TAU;

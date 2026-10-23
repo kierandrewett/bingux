@@ -74,7 +74,10 @@ pub const PREVIEW_LINE: f32 = 40.0;
 /// The display arrangement preview on the Displays page. Monitor boxes scale
 /// to fit inside it.
 pub const ARRANGEMENT_WIDTH: f32 = 360.0;
-pub const ARRANGEMENT_HEIGHT: f32 = 160.0;
+pub const ARRANGEMENT_HEIGHT: f32 = 240.0;
+/// How close, in logical pixels, a dragged display must be to another's edge
+/// to snap flush with it.
+pub const ARRANGEMENT_SNAP: i32 = 12;
 
 /// The keyboard focus ring.
 pub const RING_WIDTH: f32 = 2.0;
@@ -90,3 +93,5 @@ pub const MENU_ITEM_HEIGHT: f32 = 36.0;
 pub const MENU_WIDTH: f32 = 220.0;
 pub const ROW_HEIGHT: f32 = 40.0;
 pub const TALL_ROW_HEIGHT: f32 = 56.0;
+/// The height of a compact line or bar chart in the gallery edge cases.
+pub const CHART_HEIGHT: f32 = 120.0;

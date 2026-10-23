@@ -1,5 +1,8 @@
 //! Gallery pages shared by the windowed gallery and the snapshot example.
 
+use bingux_ui::charts::{
+    Segment, Series, SeriesColour, Unit, bar_chart, donut, line_chart, ring, sparkline,
+};
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
@@ -9,16 +12,18 @@ pub enum Page {
     Buttons,
     Rows,
     Feedback,
+    Charts,
     Typography,
     Icons,
 }
 
 impl Page {
-    pub const ALL: [Page; 6] = [
+    pub const ALL: [Page; 7] = [
         Page::Controls,
         Page::Buttons,
         Page::Rows,
         Page::Feedback,
+        Page::Charts,
         Page::Typography,
         Page::Icons,
     ];
@@ -31,6 +36,7 @@ impl NavItem for Page {
             Page::Buttons => "Buttons",
             Page::Rows => "Rows and groups",
             Page::Feedback => "Feedback",
+            Page::Charts => "Charts",
             Page::Typography => "Typography",
             Page::Icons => "Icons",
         }
@@ -42,6 +48,7 @@ impl NavItem for Page {
             Page::Buttons => Icon::Check,
             Page::Rows => Icon::Display,
             Page::Feedback => Icon::Refresh,
+            Page::Charts => Icon::Computer,
             Page::Typography => Icon::About,
             Page::Icons => Icon::Appearance,
         }
@@ -70,6 +77,7 @@ impl Component for Gallery {
             }
             .into(),
             Page::Feedback => FeedbackPage.into(),
+            Page::Charts => ChartsPage.into(),
             Page::Typography => TypographyPage.into(),
             Page::Icons => IconsPage.into(),
         };
@@ -611,6 +619,141 @@ impl Component for IconsPage {
                     })),
             )
     }
+}
+
+/// A size in gibibytes, as the byte count the bytes unit expects.
+fn gib(value: f64) -> f64 {
+    value * 1024.0 * 1024.0 * 1024.0
+}
+
+#[derive(PartialEq)]
+struct ChartsPage;
+
+impl Component for ChartsPage {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        page_column()
+            .child(section_label("Trends"))
+            .child(chart_card(
+                &tokens,
+                line_chart([Series::new("CPU", day_wave(0.0, 8.0, 92.0))])
+                    .y_unit(Unit::Percent)
+                    .x_unit(Unit::Clock { offset: 0 })
+                    .area()
+                    .label("CPU use over 24 hours"),
+            ))
+            .child(chart_card(
+                &tokens,
+                line_chart([
+                    Series::new("Memory", day_wave(1.0, 30.0, 70.0)),
+                    Series::new("Swap", day_wave(2.5, 0.0, 12.0)),
+                ])
+                .y_unit(Unit::Percent)
+                .x_unit(Unit::Clock { offset: 0 })
+                .label("Memory and swap"),
+            ))
+            .child(section_label("Comparison"))
+            .child(chart_card(
+                &tokens,
+                bar_chart([
+                    Series::values("Reads", [42.0, 55.0, 38.0, 61.0, 70.0, 22.0, 18.0]),
+                    Series::values("Writes", [12.0, 25.0, 31.0, 18.0, 40.0, 9.0, 6.0]),
+                ])
+                .categories(days)
+                .label("Reads and writes per day"),
+            ))
+            .child(chart_card(
+                &tokens,
+                bar_chart([
+                    Series::values("Apps", [4.0, 6.0, 5.0, 8.0, 7.0, 3.0, 2.0]),
+                    Series::values("System", [2.0, 1.0, 3.0, 2.0, 2.0, 1.0, 1.0]),
+                ])
+                .categories(days)
+                .stacked()
+                .label("Stacked hours by category"),
+            ))
+            .child(section_label("Share"))
+            .child(
+                hstack(S5)
+                    .child(chart_card(
+                        &tokens,
+                        donut([
+                            Segment::new("Apps", gib(210.0)),
+                            Segment::new("System", gib(90.0)),
+                            Segment::new("Cache", gib(45.0)),
+                        ])
+                        .unit(Unit::Bytes)
+                        .caption("Used")
+                        .label("Storage used by category"),
+                    ))
+                    .child(chart_card(
+                        &tokens,
+                        ring(0.62)
+                            .caption("62%")
+                            .colour(SeriesColour::Success)
+                            .label("Battery"),
+                    )),
+            )
+            .child(section_label("Sparklines"))
+            .child(chart_card(
+                &tokens,
+                hstack(S5)
+                    .child(
+                        sparkline(day_wave(0.5, 20.0, 80.0).iter().map(|point| point.1))
+                            .area()
+                            .label("Requests"),
+                    )
+                    .child(sparkline([3.0, 5.0, 4.0, 8.0, 6.0, 9.0, 7.0]).label("Errors")),
+            ))
+            .child(section_label("Edge cases"))
+            .child(chart_card(
+                &tokens,
+                vstack(S4)
+                    .child(
+                        line_chart([Series::new("Empty", [])])
+                            .height(CHART_HEIGHT)
+                            .label("Empty"),
+                    )
+                    .child(
+                        line_chart([Series::new("One point", [(0.0, 5.0)])])
+                            .height(CHART_HEIGHT)
+                            .label("One point"),
+                    )
+                    .child(
+                        line_chart([Series::values("Flat", [40.0, 40.0, 40.0])])
+                            .height(CHART_HEIGHT)
+                            .label("Flat"),
+                    )
+                    .child(
+                        line_chart([Series::values("Gaps", [1.0, f64::NAN, 3.0, 2.0])])
+                            .height(CHART_HEIGHT)
+                            .label("Gaps"),
+                    ),
+            ))
+    }
+}
+
+/// Hourly values over 24 hours: a smooth wave between `low` and `high`.
+fn day_wave(phase: f64, low: f64, high: f64) -> Vec<(f64, f64)> {
+    (0..=24)
+        .map(|hour| {
+            let wave = (hour as f64 / 24.0 * std::f64::consts::TAU + phase).sin();
+            (
+                hour as f64 * 3600.0,
+                low + (high - low) * (0.5 + 0.5 * wave),
+            )
+        })
+        .collect()
+}
+
+/// A bordered card holding one chart, at full width.
+fn chart_card(tokens: &Tokens, chart: impl IntoElement) -> Element {
+    card(tokens)
+        .padding(S4)
+        .min_width(Size::px(0.0))
+        .child(chart)
+        .into()
 }
 
 /// The tab row of the gallery sheet. It reads its selection while rendering.
