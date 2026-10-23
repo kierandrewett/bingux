@@ -9,6 +9,7 @@ InstallerPage {
     id: page
 
     title: "Network"
+    lead: "Joining a network is optional. The installer can continue without one."
     bodyHeight: 420
 
     property var networks: []
@@ -65,6 +66,12 @@ InstallerPage {
         networks = list.slice(0, 6);
     }
 
+    function networkDetail(network) {
+        const state = network.connected ? "Connected" : "Available";
+        const security = network.secured ? "Secured" : "Open";
+        return state + " · " + security + " · " + network.signal + "%";
+    }
+
     function join() {
         if (!canJoin)
             return;
@@ -116,24 +123,32 @@ InstallerPage {
         }
     }
 
-    Column {
-        width: parent.width
-        spacing: Theme.gap
+    InstallerScroll {
+        id: body
+        spacing: Math.round(10 * InstallerState.uiScale)
 
-        InstallerText {
-            text: "Joining a network is optional. The installer can continue without one."
-        }
-        InstallerText {
+        InstallerNotice {
             visible: page.wired !== ""
-            tone: "text"
-            text: page.wired
+            tone: "info"
+            title: page.wired
+        }
+        Text {
+            visible: page.networks.length === 0 && page.status === ""
+            width: parent.width
+            text: "No Wi-Fi networks found yet."
+            wrapMode: Text.WordWrap
+            color: Theme.muted
+            font.family: Theme.fontFamily
+            font.pixelSize: Math.round(18 * InstallerState.uiScale)
         }
         Repeater {
             model: page.networks
-            SessionRow {
+            InstallerOption {
                 required property var modelData
-                width: parent.width
-                text: modelData.ssid + (modelData.connected ? " (connected)" : "") + (modelData.secured ? " (secured)" : "")
+                width: body.width
+                rowHeight: Math.round(64 * InstallerState.uiScale)
+                text: modelData.ssid
+                detail: page.networkDetail(modelData)
                 selected: page.selected === modelData.ssid
                 ticked: modelData.connected
                 onClicked: {
@@ -143,15 +158,12 @@ InstallerPage {
                 }
             }
         }
-        InstallerText {
-            visible: page.networks.length === 0 && page.status === ""
-            text: "No Wi-Fi networks found yet."
-        }
         InstallerField {
             visible: page.needsPassword
             caption: "Password for " + page.selected
             echoMode: TextInput.Password
             text: page.password
+            fieldHeight: Math.round(60 * InstallerState.uiScale)
             onEdited: page.password = text
             onAccepted: page.join()
         }
@@ -173,10 +185,14 @@ InstallerPage {
                 onClicked: page.join()
             }
         }
-        InstallerText {
+        Text {
             visible: page.status !== ""
-            tone: page.status.indexOf("Could not") === 0 || page.status.indexOf("not available") >= 0 ? "danger" : "text"
+            width: parent.width
+            wrapMode: Text.WordWrap
             text: page.status
+            color: page.status.indexOf("Could not") === 0 || page.status.indexOf("not available") >= 0 ? Theme.danger : Theme.text
+            font.family: Theme.fontFamily
+            font.pixelSize: Math.round(18 * InstallerState.uiScale)
         }
     }
 }

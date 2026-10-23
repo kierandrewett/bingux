@@ -6,6 +6,7 @@ InstallerPage {
     id: page
 
     title: "Computer name"
+    lead: "The computer name shows on the network and in the terminal."
     bodyHeight: 200
     primaryEnabled: hostnameError === ""
 
@@ -17,11 +18,8 @@ InstallerPage {
 
     Column {
         width: parent.width
-        spacing: Theme.gap
+        spacing: Math.round(16 * InstallerState.uiScale)
 
-        InstallerText {
-            text: "The name shows on the network and in the terminal. Letters, digits and hyphens."
-        }
         InstallerField {
             caption: "Computer name"
             placeholderText: "bingux"
@@ -29,8 +27,13 @@ InstallerPage {
             invalid: page.hostnameError !== ""
             message: page.hostnameError
             maximumLength: 63
+            fieldHeight: Math.round(66 * InstallerState.uiScale)
+            textField.font.pixelSize: Math.round(28 * InstallerState.uiScale)
             onEdited: InstallerState.hostname = text
             onAccepted: page.primary()
+        }
+        InstallerText {
+            text: "Use letters, digits and hyphens: 1 to 63 characters. Start and end with a letter or digit."
         }
     }
 }
