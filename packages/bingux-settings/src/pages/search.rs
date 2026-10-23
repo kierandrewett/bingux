@@ -1033,7 +1033,7 @@ impl Component for MaxMegabytes {
                 }
             },
         )
-        .subtitle(format!("{shown} MB"))
+        .value_text(format!("{shown} MB"))
     }
 }
 

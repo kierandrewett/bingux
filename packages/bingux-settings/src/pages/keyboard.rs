@@ -222,7 +222,7 @@ impl Component for KeyboardPage {
                         })
                     },
                 )
-                .subtitle(format!("{} ms", model.delay_ms))
+                .value_text(format!("{} ms", model.delay_ms))
                 .enabled(model.repeat),
             ),
         };
@@ -243,7 +243,7 @@ impl Component for KeyboardPage {
                         })
                     },
                 )
-                .subtitle(format!("{} ms", model.interval_ms))
+                .value_text(format!("{} ms", model.interval_ms))
                 .enabled(model.repeat),
             ),
         };

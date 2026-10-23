@@ -303,13 +303,14 @@ pub fn switch_row(
         .on_press(move |_| press.call(!on))
 }
 
-/// A row with a slider on the right. `value` and the callback use 0 to 100.
+/// A level row for a setting: the title and its value over a full-width
+/// slider. `value` and the callback use 0 to 100.
 pub fn slider_row(
     title: impl Into<String>,
     value: f64,
     on_moved: impl Into<EventHandler<f64>>,
-) -> Row {
-    row(title).trailing(slider(value, on_moved))
+) -> LevelRow {
+    level_row(title, value, on_moved)
 }
 
 /// A level row: the title and its value on one line, with a slider as wide
@@ -323,6 +324,8 @@ pub struct LevelRow {
     leading: Option<Element>,
     trailing: Option<Element>,
     value: f64,
+    value_text: Option<String>,
+    enabled: bool,
     on_moved: EventHandler<f64>,
 }
 
@@ -337,11 +340,26 @@ pub fn level_row(
         leading: None,
         trailing: None,
         value: value.clamp(0.0, 100.0),
+        value_text: None,
+        enabled: true,
         on_moved: on_moved.into(),
     }
 }
 
 impl LevelRow {
+    /// The text at the right of the title line, such as "500 ms". Without
+    /// it the row shows the value as a percentage.
+    pub fn value_text(mut self, text: impl Into<String>) -> Self {
+        self.value_text = Some(text.into());
+        self
+    }
+
+    /// A disabled row dims and its slider ignores input.
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+
     pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
         self.subtitle = Some(subtitle.into());
         self
@@ -361,6 +379,8 @@ impl LevelRow {
 impl Component for LevelRow {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        provide_enabled(self.enabled);
+        let ink = if self.enabled { Ink::Text } else { Ink::Muted };
         let heading = rect()
             .width(Size::fill())
             .direction(Direction::Horizontal)
@@ -369,12 +389,20 @@ impl Component for LevelRow {
             .spacing(S2)
             .child(
                 rect().width(Size::flex(1.0)).child(
-                    BODY.label(&tokens, self.title.clone())
+                    BODY.in_ink(ink)
+                        .label(&tokens, self.title.clone())
                         .max_lines(1)
                         .text_overflow(TextOverflow::Ellipsis),
                 ),
             )
-            .child(VALUE.label(&tokens, format!("{}%", self.value.round() as i64)));
+            .child(
+                VALUE.label(
+                    &tokens,
+                    self.value_text
+                        .clone()
+                        .unwrap_or_else(|| format!("{}%", self.value.round() as i64)),
+                ),
+            );
         rect()
             .width(Size::fill())
             .direction(Direction::Horizontal)
