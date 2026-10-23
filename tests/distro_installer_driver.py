@@ -44,6 +44,7 @@ PAGE_TITLES = [
     "Bingux is installed",
 ]
 SWITCH_WIDTH = 36  # ControlSwitch implicitWidth (shell/bingux/ControlSwitch.qml)
+CARD_FILL = 44  # flat grey of the installer card (shell/bingux/KioskCard.qml), RGB all equal
 FIELD_DROP = 26  # caption glyph bottom to the middle of the 36 px field below it
 FIELD_INSET = 60  # from a caption's left edge into the field
 
@@ -271,15 +272,6 @@ def screen_name(frame: np.ndarray | None) -> str:
     return page_title(frame) or headline(frame) or "nothing readable"
 
 
-def lowest_word(frame: np.ndarray, accept) -> Word | None:
-    """The lowest word on screen that `accept` takes, from the first OCR pass that finds one."""
-    for words in _passes(frame):
-        hits = [w for w in words if accept(w)]
-        if hits:
-            return max(hits, key=lambda w: w.y0)
-    return None
-
-
 def zone_on_label(frame: np.ndarray, zone_names: list[str]) -> str | None:
     """The zone the 'Time zone:' line names, or None. Letters only are compared, so OCR spacing and
     punctuation do not matter; the longest name found wins (Etc/GMT+1 over Etc/GMT)."""
@@ -294,6 +286,30 @@ def zone_on_label(frame: np.ndarray, zone_names: list[str]) -> str | None:
         if found:
             return max(found, key=len)
     return None
+
+
+def switch_x(frame: np.ndarray, y: float) -> float:
+    """x of the switch centre on row `y`. The card fill is flat and the wallpaper beyond the card is not, so
+    the rightmost card-coloured pixel is the card's edge; the switch track is the first non-card run left of
+    it, and its right end sits SWITCH_WIDTH / 2 from its centre."""
+    row = frame[int(round(y))].astype(int)
+    card = np.all(row == CARD_FILL, axis=1)
+    x = int(np.flatnonzero(card).max())
+    while x > 0 and card[x]:
+        x -= 1
+    return x - SWITCH_WIDTH / 2
+
+
+MAP_OCEAN = (31, 31, 31)  # the sea colour of the time zone map (shell/bingux InstallerTimezonePage.qml)
+
+
+def map_rect(frame: np.ndarray) -> tuple[int, int, int, int]:
+    """The time zone map as (left, top, right, bottom) in screen pixels: the bounding box of its sea colour,
+    which covers every map pixel that is neither land nor a city dot. The list and the label never use it."""
+    ys, xs = np.nonzero(np.all(frame == MAP_OCEAN, axis=2))
+    if xs.size == 0:
+        raise RuntimeError("time zone map not on screen")
+    return int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
 
 
 class Pointer:
@@ -373,24 +389,23 @@ class Installer:
         return True
 
     def click_switch(self, label: str, timeout: float = 30, last_line: str | None = None) -> bool:
-        """Toggle the switch on the settings row whose label starts with `label`. The switch is at the
-        right edge of the card, and the card is centred, so its x mirrors the label's left edge. The switch
-        is centred on the whole label block: a label that wraps passes `last_line`, a phrase on its final
-        line, and the block runs from `label` down to it."""
+        """Toggle the switch on the settings row whose label starts with `label`. The switch sits at the
+        right edge of the card, on the row of its label. A label that wraps passes `last_line`, a phrase on
+        its final line; the switch is centred on the whole label block, from `label` down to it."""
         start = self.wait_text(label, timeout)
         if start is None:
             self.log(f"  no switch label '{label}' on screen")
             return False
-        left, top, bottom = start.x0, start.y0, start.y1
+        top, bottom = start.y0, start.y1
         if last_line is not None:
             end = self.wait_text(last_line, timeout)
             if end is None:
                 self.log(f"  no line '{last_line}' under switch label '{label}'")
                 return False
-            left = min(left, end.x0)
+            top = min(top, end.y0)
             bottom = max(bottom, end.y1)
         frame = self.frame()
-        self.pointer.click(frame.shape[1] - left - SWITCH_WIDTH / 2, (top + bottom) / 2)
+        self.pointer.click(switch_x(frame, (top + bottom) / 2), (top + bottom) / 2)
         return True
 
     def click_field(self, caption: str, timeout: float = 30) -> bool:

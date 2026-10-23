@@ -44,7 +44,7 @@ from distro_installer_driver import (
     Installer,
     Pointer,
     error_page_up,
-    lowest_word,
+    map_rect,
     page_title,
     text_on_screen,
     zone_on_label,
@@ -61,7 +61,6 @@ CITY_ZONE = "Europe/Berlin"
 CITY_LON_LAT = (13.4, 52.5)
 # Offsets (px) tried in turn when a click on the map picks another zone.
 MAP_NUDGES = [(0, 0), (4, 0), (-4, 0), (0, 4), (0, -4)]
-MAP_GAP = 12  # px between the bottom of the time zone map and the "Time zone:" label
 ZONE_NAMES = [entry["zone"] for entry in json.loads((ROOT / "distro/installer/shell/assets/timezones.json").read_text())]
 VARIANTS = {
     "uefi": {"uefi": True, "luks": False},
@@ -140,24 +139,17 @@ def collect_diagnostics(vm, out):
 def pick_city(inst, timeline, checks):
     """Click Berlin on the time zone map and check that the page's label names it.
 
-    The map is the first item of the page column, so its width is the column
-    width (the column starts at the left edge of the hint text and the card is
-    centred), its height is width * 145 / 360, and it sits just above the
-    "Time zone:" label with the theme gap in between. The installer picks the
+    The map is the left column of the wide time zone card. Its rectangle is found from its sea colour
+    (map_rect), so the click scales with the screen rather than with fixed offsets. The installer picks the
     nearest zone to the click, so each click is nudged until the label names it.
     """
     frame = inst.frame()
-    label = lowest_word(frame, lambda w: w.text.lower().startswith("zone"))  # the title "Time zone" is higher up
-    hint = lowest_word(frame, lambda w: w.text == "Click")
-    if label is None or hint is None:
-        raise Fail("time zone label or map hint not found")
-    body_left = hint.x0
-    width = 2 * (frame.shape[1] / 2 - body_left)
-    height = width * 145 / 360
-    map_top = label.y0 - MAP_GAP - height
+    left, top, right, bottom = map_rect(frame)
+    width = right - left
+    height = bottom - top
     lon, lat = CITY_LON_LAT
-    x = body_left + (lon + 180) / 360 * width
-    y = map_top + (85 - lat) / 145 * height
+    x = left + (lon + 180) / 360 * width
+    y = top + (85 - lat) / 145 * height
     picked = None
     for dx, dy in MAP_NUDGES:
         timeline.mark(f"clicking the time zone map at {x + dx:.0f},{y + dy:.0f} for {CITY_ZONE}")
