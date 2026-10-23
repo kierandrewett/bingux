@@ -336,3 +336,8 @@ Results: `tests/distro-install.py` uefi-luks 24/24, uefi 23/23, bios 24/24; `tes
       gnoblin runs for the user at boot and greetd keeps the greeter as the default session.
 - [ ] F4 `free_space` and `alongside` (blivet shrink: ext4, btrfs, NTFS; os-prober and systemd-boot entries).
 - [x] F5 `manual` partitioning (explicit partition list, validated server-side; matrix case `uefi-manual`).
+
+- [x] Graphical install E2E on the ISO built with 6a9ecd7 (2026.10.23): `tests/distro-install.py`
+      passes for uefi (23 checks), bios (24) and uefi-luks (24): every page, finished page,
+      no installer, no live account, no Arch name, installed boot, greeter, sign-in to desktop.
+      Artifacts: distro/out/install-test-{uefi,bios,uefi-luks}.
