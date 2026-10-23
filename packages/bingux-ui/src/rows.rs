@@ -13,6 +13,7 @@ use crate::controls::segmented::segmented;
 use crate::controls::slider::slider;
 use crate::controls::switch::switch;
 use crate::controls::text_field::text_field;
+use crate::group::use_row_lit;
 use crate::icons::{self, Icon};
 use crate::scale::*;
 use crate::surface::{focus_border, provide_enabled, surface_color, use_tokens};
@@ -166,6 +167,7 @@ impl Component for Row {
         let focus = use_focus(a11y_id);
         provide_enabled(self.enabled);
         let interactive = self.on_press.is_some() && self.enabled;
+        use_row_lit((interactive && (hovering() || pressing())) || self.selected);
         let single_line = self.subtitle.is_none();
         let height = row_height();
         let background = surface_color(

@@ -45,9 +45,10 @@ pub mod prelude {
     pub use crate::scale::*;
     pub use crate::shell::{
         Banner, BannerKind, Dialog, HeaderBar, MenuButton, MenuItem, NavItem, NavigationSplitView,
-        OverlayHost, Overlays, PageAction, PageHeader, ResponseKind, SearchField, SearchHit, Sheet,
-        SheetAction, StatusPage, WindowControls, banner, dialog, menu_button, menu_item,
-        menu_separator, sheet, status_page, use_overlays, use_page_busy, use_page_header,
+        OverlayHost, Overlays, PageAction, PageHeader, Profile, ResponseKind, SearchField,
+        SearchHit, Sheet, SheetAction, StatusPage, WindowControls, banner, dialog, menu_button,
+        menu_item, menu_separator, sheet, status_page, use_overlays, use_page_busy,
+        use_page_header,
     };
     pub use crate::surface::use_tokens;
     pub use crate::theme::{Scheme, SharedTokens, Tokens, provide_tokens};

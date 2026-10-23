@@ -271,15 +271,27 @@ impl Component for Dropdown {
             .a11y_builder(move |builder| builder.set_expanded(open()))
             .height(Size::px(control_height()))
             .width(Size::px(width))
-            .padding((0.0, S2, 0.0, S3))
+            .padding(if touch() {
+                (0.0, S0, 0.0, 0.0)
+            } else {
+                (0.0, S2, 0.0, S3)
+            })
             .spacing(S2)
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
-            .main_align(Alignment::SpaceBetween)
+            .main_align(if touch() {
+                Alignment::End
+            } else {
+                Alignment::SpaceBetween
+            })
             .corner_radius(RADIUS)
             .background(surface_color(
                 &tokens,
-                tokens.control,
+                if touch() {
+                    Color::TRANSPARENT
+                } else {
+                    tokens.control
+                },
                 enabled && hovering(),
                 enabled && pressing(),
                 false,
@@ -331,7 +343,12 @@ impl Component for Dropdown {
                         label()
                             .text(current)
                             .font_size(TEXT_MD)
-                            .color(tokens.text)
+                            .color(if touch() { tokens.muted } else { tokens.text })
+                            .text_align(if touch() {
+                                TextAlign::Right
+                            } else {
+                                TextAlign::Left
+                            })
                             .width(Size::px(width - BUTTON_CHROME - icon_space))
                             .max_lines(1)
                             .text_overflow(TextOverflow::Ellipsis),

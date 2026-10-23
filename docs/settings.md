@@ -143,8 +143,10 @@ Choosing one opens that page at its top level. Subpages do not show the group.
 ## Keyboard
 
 Ctrl+Q and Ctrl+W close the window. Ctrl+F focuses the search, and Esc clears
-it. The sidebar lists the pages under group names (Connections, Devices,
-Desktop, System). Search results appear under a Settings name.
+it. The sidebar shows the signed-in person at the top (the full name from the
+passwd entry); pressing it opens Users. The pages sit under group names
+(Connections, Devices, Desktop, System). Search results appear under a
+Settings name, and the person is hidden while a search is typed.
 
 ## Window frame
 

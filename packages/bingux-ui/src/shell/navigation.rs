@@ -58,6 +58,102 @@ pub struct NavigationSplitView<T: NavItem> {
     pub hits: Vec<SearchHit<T>>,
     /// See [`NavigationSplitView::start_on_list`].
     pub start_on_list: bool,
+    pub profile: Option<Profile<T>>,
+}
+
+/// The signed-in person at the top of the sidebar: an avatar with
+/// `initials`, the name, a muted line under it, and a chevron. Pressing it
+/// opens `target`.
+#[derive(Clone, PartialEq)]
+pub struct Profile<T> {
+    pub name: String,
+    pub detail: String,
+    pub initials: String,
+    pub target: T,
+}
+
+#[derive(PartialEq)]
+struct ProfileCard<T: NavItem> {
+    profile: Profile<T>,
+    selected: State<T>,
+    sidebar_open: State<bool>,
+    full_page: bool,
+}
+
+impl<T: NavItem> Component for ProfileCard<T> {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let mut hovering = use_state(|| false);
+        let mut pressing = use_state(|| false);
+        let a11y_id = use_a11y();
+        let focus = use_focus(a11y_id);
+        let target = self.profile.target;
+        let mut selected = self.selected;
+        let mut sidebar_open = self.sidebar_open;
+        let full_page = self.full_page;
+        // The Users page is also in the page list, which shows the selection.
+        let background = item_fill(&tokens, hovering(), pressing(), false);
+        let avatar = rect()
+            .width(Size::px(BOX_XL))
+            .height(Size::px(BOX_XL))
+            .corner_radius(BOX_XL / 2.0)
+            .background(tokens.accent)
+            .center()
+            .child(
+                label()
+                    .text(self.profile.initials.clone())
+                    .color(tokens.accent_foreground)
+                    .font_size(TEXT_MD)
+                    .font_weight(FontWeight::SEMI_BOLD),
+            );
+        rect().width(Size::fill()).padding((0.0, S2, S1, S2)).child(
+            rect()
+                .a11y_id(a11y_id)
+                .a11y_focusable(true)
+                .a11y_role(AccessibilityRole::Button)
+                .width(Size::fill())
+                .height(Size::px(TALL_ROW_HEIGHT))
+                .direction(Direction::Horizontal)
+                .content(Content::Flex)
+                .cross_align(Alignment::Center)
+                .padding((0.0, S3))
+                .spacing(S3)
+                .corner_radius(RADIUS)
+                .background(background)
+                .border(focus_border(&tokens, focus()))
+                .on_pointer_enter(move |_| hovering.set(true))
+                .on_pointer_leave(move |_| {
+                    hovering.set(false);
+                    pressing.set_if_modified(false);
+                })
+                .on_pointer_down(move |_: Event<PointerEventData>| pressing.set(true))
+                .on_global_pointer_up(move |_| pressing.set_if_modified(false))
+                .on_press(move |_: Event<PressEventData>| {
+                    selected.set(target);
+                    if full_page {
+                        sidebar_open.set(false);
+                    }
+                    a11y_id.request_focus();
+                })
+                .child(avatar)
+                .child(
+                    rect()
+                        .width(Size::flex(1.0))
+                        .child(
+                            BODY.label(&tokens, self.profile.name.clone())
+                                .max_lines(1)
+                                .text_overflow(TextOverflow::Ellipsis),
+                        )
+                        .child(
+                            CAPTION
+                                .label(&tokens, self.profile.detail.clone())
+                                .max_lines(1)
+                                .text_overflow(TextOverflow::Ellipsis),
+                        ),
+                )
+                .child(icons::icon(Icon::GoNext, ICON_SM, tokens.muted)),
+        )
+    }
 }
 
 /// An open subpage. The header shows a Back button and the title in place of
@@ -308,6 +404,7 @@ impl<T: NavItem> NavigationSplitView<T> {
             subpage: None,
             hits: Vec::new(),
             start_on_list: false,
+            profile: None,
         }
     }
 
@@ -342,6 +439,13 @@ impl<T: NavItem> NavigationSplitView<T> {
         self.start_on_list = start;
         self
     }
+
+    /// The signed-in person, shown at the top of the sidebar. Pressing it
+    /// opens `profile.target`.
+    pub fn profile(mut self, profile: Profile<T>) -> Self {
+        self.profile = Some(profile);
+        self
+    }
 }
 
 impl<T: NavItem> Component for NavigationSplitView<T> {
@@ -371,7 +475,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             search_id,
             sidebar_open,
             full_page,
-            window_width: width,
+            profile: self.profile.clone(),
         };
         let show_list = narrow && sidebar_open();
         // The header is the drag region. It carries Back, the spinner while a
@@ -647,8 +751,7 @@ struct Sidebar<T: NavItem> {
     sidebar_open: State<bool>,
     /// Drawn as the whole window below the header, not as a column.
     full_page: bool,
-    /// The window width, for the search field of a full page.
-    window_width: f32,
+    profile: Option<Profile<T>>,
 }
 
 /// The most settings the sidebar search lists.
@@ -808,11 +911,6 @@ impl<T: NavItem> Component for Sidebar<T> {
             }));
         }
 
-        let field_width = if full_page {
-            self.window_width - 2.0 * S2
-        } else {
-            SIDEBAR_WIDTH - 2.0 * S2
-        };
         rect()
             .width(if full_page {
                 Size::fill()
@@ -848,12 +946,15 @@ impl<T: NavItem> Component for Sidebar<T> {
                     _ => {}
                 }
             })
-            .child(search_band(
-                query,
-                self.highlight,
-                self.search_id,
-                field_width,
-            ))
+            .child(search_band(query, self.highlight, self.search_id))
+            .maybe_child(self.profile.clone().filter(|_| !typing).map(|profile| {
+                Element::from(ProfileCard {
+                    profile,
+                    selected,
+                    sidebar_open,
+                    full_page,
+                })
+            }))
             .child(
                 rect().width(Size::fill()).height(Size::flex(1.0)).child(
                     ScrollView::new()
@@ -888,7 +989,7 @@ impl Component for SearchField {
     fn render(&self) -> impl IntoElement {
         let highlight = use_state(|| 0usize);
         let search_id = use_a11y();
-        search_band(self.query, highlight, search_id, SIDEBAR_WIDTH - 2.0 * S2)
+        search_band(self.query, highlight, search_id)
     }
 }
 
@@ -899,7 +1000,6 @@ fn search_band(
     query: State<String>,
     highlight: State<usize>,
     search_id: AccessibilityId,
-    field_width: f32,
 ) -> impl IntoElement {
     let mut highlight = highlight;
     rect()
@@ -915,7 +1015,7 @@ fn search_band(
             })
             .a11y_id(search_id)
             .well()
-            .width(field_width),
+            .fill_width(),
         )
 }
 

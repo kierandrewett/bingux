@@ -46,6 +46,7 @@ impl Component for App {
         let navigator = provide_navigator(page, self.subpage.iter().cloned().collect());
         let open = navigator.routes();
         let top: Option<Route> = open.last().cloned();
+        let signed_in = use_hook(crate::pages::users::signed_in);
         let content: Element = match &top {
             Some(route) => route.render(),
             None => {
@@ -61,6 +62,18 @@ impl Component for App {
         let mut split = NavigationSplitView::new("Settings", PageId::ALL.to_vec(), page, content)
             .search_hits(crate::settings_index::hits())
             .start_on_list(self.list_first);
+        if let Some((name, user)) = &signed_in {
+            split = split.profile(Profile {
+                initials: crate::pages::users::initials(name),
+                detail: if name == user {
+                    "Your account".to_string()
+                } else {
+                    user.clone()
+                },
+                name: name.clone(),
+                target: PageId::Users,
+            });
+        }
         if let Some(route) = &top {
             split = split.subpage(route.title(), move |_| navigator.pop());
         }

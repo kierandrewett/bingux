@@ -165,6 +165,25 @@ fn change_password() -> Result<(), CommandError> {
     Ok(())
 }
 
+/// The signed-in person for the sidebar: the full name from the passwd entry
+/// (the user name when it has none) and the user name. A quick local lookup.
+pub fn signed_in() -> Option<(String, String)> {
+    let user = std::env::var("USER").ok().filter(|user| !user.is_empty())?;
+    let output = Command::new("getent")
+        .args(["passwd", &user])
+        .output()
+        .ok()?;
+    let entry = String::from_utf8_lossy(&output.stdout);
+    let full_name = entry
+        .trim()
+        .split(':')
+        .nth(4)
+        .and_then(|gecos| gecos.split(',').next())
+        .map(str::trim)
+        .filter(|name| !name.is_empty());
+    Some((full_name.unwrap_or(&user).to_string(), user.clone()))
+}
+
 /// Up to two capital letters: the first letter of the first and last words.
 /// Up to two initials for an avatar, from the first and last word.
 pub fn initials(name: &str) -> String {

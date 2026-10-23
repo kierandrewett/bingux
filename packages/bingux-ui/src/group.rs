@@ -157,7 +157,8 @@ impl Group {
 impl Component for Group {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let children = card_rows(&tokens, self.rows.clone());
+        let lit = use_state(Vec::<usize>::new);
+        let children = card_rows(self.rows.clone(), lit);
         let heading = (self.title.is_some() || self.description.is_some()).then(|| {
             rect()
                 .width(Size::fill())
@@ -205,8 +206,87 @@ fn card_surface(tokens: &Tokens) -> Rect {
         .overflow(Overflow::Clip)
 }
 
-/// Rows with a hairline between each pair, inset by the gutter on the left.
-fn card_rows(tokens: &Tokens, rows: Vec<Element>) -> Vec<Element> {
+/// The row a [`Slot`] holds, given to the `Row` inside it so the row can
+/// tell the group when it is lit.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) struct RowSlot {
+    pub index: usize,
+    /// The indexes of the rows that are hovered, pressed or selected.
+    pub lit: State<Vec<usize>>,
+}
+
+/// Marks the calling row as lit or not in its group, if it is in one. A lit
+/// row has no hairline above or below it, so its highlight reads as one
+/// block; the row calls this on every render.
+pub(crate) fn use_row_lit(lit: bool) {
+    let slot = use_try_consume::<RowSlot>();
+    use_side_effect_with_deps(&lit, move |lit| {
+        let Some(slot) = slot else { return };
+        let mut rows = slot.lit;
+        let listed = rows.peek().contains(&slot.index);
+        if *lit && !listed {
+            rows.write().push(slot.index);
+        } else if !*lit && listed {
+            rows.write().retain(|index| *index != slot.index);
+        }
+    });
+    use_drop(move || {
+        if let Some(slot) = slot {
+            let mut rows = slot.lit;
+            rows.write().retain(|index| *index != slot.index);
+        }
+    });
+}
+
+/// One row of a group with the hairline above it. The hairline is hidden
+/// while this row or the one above it is lit.
+#[derive(PartialEq)]
+struct Slot {
+    index: usize,
+    lit: State<Vec<usize>>,
+    row: Element,
+}
+
+impl Component for Slot {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let (index, lit) = (self.index, self.lit);
+        use_provide_context(move || RowSlot { index, lit });
+        let hide = {
+            let lit = self.lit.read();
+            lit.contains(&index)
+                || index
+                    .checked_sub(1)
+                    .is_some_and(|above| lit.contains(&above))
+        };
+        rect()
+            .width(Size::fill())
+            .maybe_child((index > 0).then(|| {
+                rect()
+                    .width(Size::fill())
+                    .height(Size::px(1.0))
+                    .margin((0.0, GUTTER))
+                    .background(if hide {
+                        Color::TRANSPARENT
+                    } else {
+                        tokens.separator
+                    })
+            }))
+            .child(self.row.clone())
+    }
+}
+
+/// Rows with a hairline between each pair, inset by the gutter on both
+/// sides, that goes while either neighbour is lit.
+fn card_rows(rows: Vec<Element>, lit: State<Vec<usize>>) -> Vec<Element> {
+    rows.into_iter()
+        .enumerate()
+        .map(|(index, row)| Element::from(Slot { index, lit, row }))
+        .collect()
+}
+
+/// The same hairlines for a group that has no interactive rows.
+fn plain_rows(tokens: &Tokens, rows: Vec<Element>) -> Vec<Element> {
     let mut children = Vec::with_capacity(rows.len() * 2);
     for (index, row) in rows.into_iter().enumerate() {
         if index > 0 {
@@ -374,7 +454,7 @@ impl Component for Skeleton {
                         .padding((0.0, GUTTER))
                         .child(bar(SKELETON_TITLE_WIDTH)),
                 )
-                .child(card_surface(&tokens).children(card_rows(&tokens, rows.collect())))
+                .child(card_surface(&tokens).children(plain_rows(&tokens, rows.collect())))
         };
         page_column().child(section()).child(section())
     }

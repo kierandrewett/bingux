@@ -201,7 +201,8 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   `set_touch(true)`: a row is 60 px, a sidebar page 56 px, a control 44 px, a
   standalone button 48 px, and the switch and slider handles grow (switch
   48 x 28, slider thumb 22). A dropdown, field or slider in a row is cut to
-  168 px so the row's text keeps room. Read these sizes through
+  168 px so the row's text keeps room, and a dropdown there shows only its
+  value and a chevron, with no box. Read these sizes through
   `row_height()`, `nav_height()`, `control_height()`, `button_height()` and
   `fit_field()`, not the constants, so the layout follows. Crossing the
   threshold remounts the page once.
@@ -213,9 +214,12 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   row text and the hairline start `GUTTER` from the card's edge.
 - **A group is a card.** A 16 px semibold title sits above a 16 px card with a
   hairline edge, aligned with the card. Rows sit flush in it with a hairline
-  between them, inset by the gutter on both sides. A row is an optional icon,
-  a normal-weight title, an optional muted subtitle that wraps to three lines
-  and trailing content. A row with a subtitle grows to fit it.
+  between them, inset by the gutter on both sides. The hairline above and
+  below a row goes while the row is hovered, pressed or selected, so its
+  highlight reads as one block (`Row` reports this to its group). A row is an
+  optional icon, a normal-weight title, an optional muted subtitle that
+  wraps to three lines and trailing content. A row with a subtitle grows to
+  fit it.
 - **Controls are the shell's.** The switch is 36 x 20 with a 16 px thumb. The
   slider has a 6 px track (8 px while dragging), a text-coloured fill that
   turns accent while dragging and a 16 px thumb. Buttons are filled with
@@ -232,9 +236,10 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   row: `PAGE_TITLE`, one sentence from `NavItem::lead` (or the page's
   `PageHeader::subtitle` status when it sets one) and the page's action at the
   right. On a phone the title is in the header and the sentence is the first
-  line of the page. The sidebar is a search field, then rows under
-  `NavItem::group` names, with a neutral selection layer and an accent icon
-  on the selected row.
+  line of the page. The sidebar is a search field, the signed-in person
+  (`NavigationSplitView::profile`, which opens `Profile::target`), then rows
+  under `NavItem::group` names, with a neutral selection layer and an accent
+  icon on the selected row.
 - The window is opaque and square. Gnoblin draws the corners, border and
   shadow, so an application sets no corner radius, transparency or shadow on
   its root.

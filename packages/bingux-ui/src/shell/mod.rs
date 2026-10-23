@@ -10,7 +10,7 @@ pub mod window;
 
 pub use menu::{MenuButton, MenuItem, menu_button, menu_item, menu_separator};
 pub use navigation::{
-    NavItem, NavigationSplitView, PageAction, PageHeader, SearchField, SearchHit, Subpage,
+    NavItem, NavigationSplitView, PageAction, PageHeader, Profile, SearchField, SearchHit, Subpage,
     use_page_busy, use_page_header,
 };
 pub use overlays::{
