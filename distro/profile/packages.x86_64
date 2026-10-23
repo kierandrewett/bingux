@@ -111,6 +111,7 @@ python
 python-blivet
 bingux-installer
 ntfs-3g
+ntfsprogs
 squashfs-tools
 openssl
 firefox
