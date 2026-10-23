@@ -42,6 +42,7 @@ ALLOW_UNLISTED = {
     "EmojiHost.qml": "private host instantiated by name in EmojiShell.qml and PopoutsShell.qml",
     "SearchHost.qml": "private host instantiated by name in SearchShell.qml and PopoutsShell.qml",
     "SwitcherHost.qml": "private host instantiated by name in SwitcherShell.qml and PopoutsShell.qml",
+    "ShortcutHost.qml": "private host instantiated by name in PopoutsShell.qml",
 }
 
 # Unlisted files the shell already instantiates by name. These are real load breaks, reported as
@@ -101,7 +102,9 @@ def check_directory(root, directory, entries):
         if filename in KNOWN_BREAKS:
             problems.append(f"{WARNING}{rel}/{filename}: {KNOWN_BREAKS[filename]}")
             continue
-        problems.append(f"{rel}/{filename}: not in qmldir, not a pack-shell entry, not in ALLOW_UNLISTED or KNOWN_BREAKS")
+        problems.append(
+            f"{rel}/{filename}: not in qmldir, not a pack-shell entry, not in ALLOW_UNLISTED or KNOWN_BREAKS"
+        )
     for filename in sorted((set(ALLOW_UNLISTED) | set(KNOWN_BREAKS)) & listed):
         problems.append(f"{rel}/{filename}: listed in qmldir but also in an allow/known-break dict; drop the entry")
     return problems

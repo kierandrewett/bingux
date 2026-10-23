@@ -43,4 +43,8 @@ ShellRoot {
         active: root.desktopReady
         EmojiHost {}
     }
+    LazyLoader {
+        active: root.desktopReady
+        ShortcutHost {}
+    }
 }

@@ -8,4 +8,5 @@ pub mod identity;
 pub mod policy;
 pub mod portal;
 pub mod screenshot;
+pub mod shortcuts;
 pub mod store;

@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.gnoblin.Shell.GlobalShortcutsProvider
+Exec=/usr/libexec/bingux/bingux-global-shortcuts
+SystemdService=bingux-global-shortcuts.service

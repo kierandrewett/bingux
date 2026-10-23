@@ -36,6 +36,20 @@ class ControlCommands(unittest.TestCase):
                         execute.call_args.args[0], ["qs", "ipc", "--path", path, "call", "--", target, "status"]
                     )
         self.assertEqual(self.route(["search", "toggle"]), ["call", "--", "search", "toggle"])
+        with (
+            patch.dict(ctl.os.environ, {"XDG_CONFIG_HOME": "/configs"}, clear=True),
+            patch.object(ctl, "execute", return_value=0) as execute,
+        ):
+            self.assertEqual(
+                ctl.main(
+                    ["--quickshell", "qs", "--path", "/desktop/shell.qml", "ipc", "shortcuts", "requestResult", "a1"]
+                ),
+                0,
+            )
+            self.assertEqual(
+                execute.call_args.args[0],
+                ["qs", "ipc", "--path", "/desktop/PopoutsShell.qml", "call", "--", "shortcuts", "requestResult", "a1"],
+            )
 
     def route(self, words):
         cli = ctl.parser()

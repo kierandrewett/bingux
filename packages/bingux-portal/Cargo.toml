@@ -13,6 +13,10 @@ path = "src/lib.rs"
 name = "xdg-desktop-portal-bingux"
 path = "src/main.rs"
 
+[[bin]]
+name = "bingux-global-shortcuts"
+path = "src/bin/bingux-global-shortcuts.rs"
+
 [dependencies]
 async-io = "2"
 async-process = "2.5"

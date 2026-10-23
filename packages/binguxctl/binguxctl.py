@@ -512,6 +512,7 @@ def main(argv=None):
         "switcher": "PopoutsShell.qml",
         "capture": "PopoutsShell.qml",
         "emoji": "PopoutsShell.qml",
+        "shortcuts": "PopoutsShell.qml",
     }
     if target in companions:
         # Invoke the companion directly, even when the desktop is frozen.
