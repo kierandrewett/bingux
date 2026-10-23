@@ -19,13 +19,13 @@ pub const S7: f32 = 48.0;
 /// The one horizontal inset. Row text, section titles, the page title and
 /// sidebar items all start this far from their container's edge, so
 /// everything lines up.
-pub const GUTTER: f32 = S3;
+pub const GUTTER: f32 = S4;
 
 /// Corner radius: small marks (checkbox, tick), controls and rows, and
 /// cards, banners and dialogs.
 pub const RADIUS_SM: f32 = 4.0;
-pub const RADIUS: f32 = 8.0;
-pub const RADIUS_LG: f32 = 12.0;
+pub const RADIUS: f32 = 12.0;
+pub const RADIUS_LG: f32 = 16.0;
 /// The shell's card radius: dialogs, popovers and toasts.
 pub const RADIUS_XL: f32 = 20.0;
 
@@ -33,7 +33,7 @@ pub const RADIUS_XL: f32 = 20.0;
 /// `typography.rs` uses 11, 12, 14, 18, 28 and 36. 16 and 20 are older
 /// sizes that overlays, status text and the clock still use.
 pub const TEXT_XS: f32 = 11.0;
-pub const TEXT_SM: f32 = 12.0;
+pub const TEXT_SM: f32 = 13.0;
 pub const TEXT_MD: f32 = 14.0;
 pub const TEXT_LG: f32 = 16.0;
 pub const TEXT_XL: f32 = 20.0;
@@ -61,7 +61,10 @@ pub const BOX_LG: f32 = 36.0;
 pub const BOX_XL: f32 = 44.0;
 pub const BOX_2XL: f32 = 96.0;
 /// The width of a slider or a text field in a row.
-pub const FIELD_WIDTH: f32 = 220.0;
+pub const FIELD_WIDTH: f32 = 240.0;
+/// The widest a field, dropdown or slider in a row gets on a phone-width
+/// window, so the row's text keeps room. Read it through [`fit_field`].
+pub const FIELD_WIDTH_TOUCH: f32 = 168.0;
 /// The width of a text field that takes a URL, a path or a name.
 pub const FIELD_WIDTH_WIDE: f32 = 440.0;
 /// The width of a dropdown whose options carry application icons.
@@ -93,17 +96,20 @@ pub const RING_WIDTH: f32 = 2.0;
 /// the switch and slider handles grow to fingertip size. Read these sizes
 /// through [`control_height`], [`button_height`] and [`row_height`], never
 /// the constants, so the layout follows.
-pub const CONTROL_HEIGHT: f32 = 32.0;
-pub const BUTTON_HEIGHT: f32 = 36.0;
+pub const CONTROL_HEIGHT: f32 = 36.0;
+pub const BUTTON_HEIGHT: f32 = 40.0;
 pub const MENU_ITEM_HEIGHT: f32 = 36.0;
 /// The width of a menu of actions (see `shell::menu`).
 pub const MENU_WIDTH: f32 = 220.0;
-pub const ROW_HEIGHT: f32 = 48.0;
-pub const TALL_ROW_HEIGHT: f32 = 64.0;
+pub const ROW_HEIGHT: f32 = 56.0;
+pub const TALL_ROW_HEIGHT: f32 = 72.0;
 /// The fingertip sizes of the same things.
-pub const CONTROL_HEIGHT_TOUCH: f32 = 40.0;
-pub const BUTTON_HEIGHT_TOUCH: f32 = 44.0;
-pub const ROW_HEIGHT_TOUCH: f32 = 52.0;
+pub const CONTROL_HEIGHT_TOUCH: f32 = 44.0;
+pub const BUTTON_HEIGHT_TOUCH: f32 = 48.0;
+pub const ROW_HEIGHT_TOUCH: f32 = 60.0;
+/// A page in the sidebar list.
+pub const NAV_ITEM_HEIGHT: f32 = 40.0;
+pub const NAV_ITEM_HEIGHT_TOUCH: f32 = 56.0;
 
 static TOUCH: AtomicBool = AtomicBool::new(false);
 
@@ -135,6 +141,20 @@ pub fn button_height() -> f32 {
 /// The height of a one-line row.
 pub fn row_height() -> f32 {
     pick(ROW_HEIGHT, ROW_HEIGHT_TOUCH)
+}
+
+/// A width for a control in a row, cut to [`FIELD_WIDTH_TOUCH`] on a phone.
+pub fn fit_field(width: f32) -> f32 {
+    if touch() {
+        width.min(FIELD_WIDTH_TOUCH)
+    } else {
+        width
+    }
+}
+
+/// The height of a page in the sidebar list.
+pub fn nav_height() -> f32 {
+    pick(NAV_ITEM_HEIGHT, NAV_ITEM_HEIGHT_TOUCH)
 }
 
 /// The height of a compact line or bar chart in the gallery edge cases.

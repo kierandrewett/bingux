@@ -21,9 +21,10 @@ use crate::scale::*;
 use crate::shell::window::{HeaderBar, WindowControls};
 use crate::surface::{focus_border, is_activation_key, over, use_tokens};
 use crate::theme::{HEADER_HEIGHT, NARROW_BELOW, SIDEBAR_WIDTH, Tokens, WINDOW_CONTROL_BUTTON};
+use crate::typography::{BODY, CAPTION, Ink, PAGE_TITLE};
 
 /// The widest the page column gets; it is centred in the content frame.
-const PAGE_WIDTH: f32 = 600.0;
+const PAGE_WIDTH: f32 = 720.0;
 
 /// One sidebar destination.
 pub trait NavItem: Copy + PartialEq + 'static {
@@ -35,6 +36,10 @@ pub trait NavItem: Copy + PartialEq + 'static {
     }
     /// Extra words the search field matches, space separated.
     fn keywords(self) -> &'static str {
+        ""
+    }
+    /// One sentence under the page title that says what the page is for.
+    fn lead(self) -> &'static str {
         ""
     }
 }
@@ -118,9 +123,10 @@ pub struct PageAction {
     pub switch: Option<bool>,
 }
 
-/// What a page shows in the header bar. The title is the page's name, or the
-/// subpage's title. `subtitle` is a muted line under it and `action` a button
-/// at the right of the bar. Set it with [`use_page_header`].
+/// What a page adds to its title row: a status line that replaces the
+/// sentence under the title, such as "Connected to Home", and an action at
+/// the right of the title, a button or a master switch. Set it with
+/// [`use_page_header`].
 #[derive(Clone, Default, PartialEq)]
 pub struct PageHeader {
     pub subtitle: Option<String>,
@@ -243,13 +249,47 @@ fn page_column(content: Element, side: f32, page_width: f32) -> impl IntoElement
     rect()
         .width(Size::fill())
         .cross_align(Alignment::Center)
-        .padding((S2, side, S5, side))
+        .padding((S4, side, S6, side))
         .child(
             rect()
                 .width(Size::px(page_width))
                 .max_width(Size::fill())
                 .child(content),
         )
+}
+
+/// The title row at the top of a page on a desktop window: the page name
+/// large, a sentence under it that says what the page is for, and the page's
+/// action at the right.
+fn title_row(tokens: &Tokens, title: String, lead: String, action: Option<Element>) -> Element {
+    rect()
+        .width(Size::fill())
+        .direction(Direction::Horizontal)
+        .content(Content::Flex)
+        .cross_align(Alignment::Center)
+        .spacing(S4)
+        .child(
+            rect()
+                .width(Size::flex(1.0))
+                .spacing(S1)
+                .child(
+                    PAGE_TITLE
+                        .label(tokens, title)
+                        .max_lines(1)
+                        .text_overflow(TextOverflow::Ellipsis),
+                )
+                .maybe_child((!lead.is_empty()).then(|| lead_line(tokens, &lead))),
+        )
+        .maybe_child(action)
+        .into()
+}
+
+/// The sentence under a page title.
+fn lead_line(tokens: &Tokens, lead: &str) -> Element {
+    BODY.in_ink(Ink::Muted)
+        .paragraph(tokens, lead)
+        .width(Size::fill())
+        .into()
 }
 
 impl<T: NavItem> NavigationSplitView<T> {
@@ -334,9 +374,10 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             window_width: width,
         };
         let show_list = narrow && sidebar_open();
-        // The header carries the window buttons and the page's own header: its
-        // title, a subtitle under the title, and an action at the right. It is
-        // the drag region.
+        // The header is the drag region. It carries Back, the spinner while a
+        // page is busy and the window buttons. On a phone it also carries the
+        // page title and the page's action; on a desktop window those are the
+        // title row at the top of the page.
         let page_header = page_headers
             .0
             .read()
@@ -353,18 +394,35 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             Some(subpage) => Some(subpage.on_back.clone()),
             None => (narrow && !show_list).then(|| to_list.clone()),
         };
+        let (title, mut lead) = match &self.subpage {
+            Some(subpage) => (subpage.title.clone(), String::new()),
+            None => (
+                selected().title().to_string(),
+                selected().lead().to_string(),
+            ),
+        };
+        let page_header = if show_list {
+            PageHeader::default()
+        } else {
+            page_header
+        };
+        if let Some(status) = &page_header.subtitle {
+            lead = status.clone();
+        }
+        let action: Option<Element> = page_header.action.map(|action| match action {
+            PageAction {
+                on_press,
+                switch: Some(on),
+                ..
+            } => crate::controls::switch(on, move |_: bool| on_press.call(())).into(),
+            action => action_button(action.label, action.on_press).into(),
+        });
         let header = if show_list {
             HeaderBar::new(self.app_title.clone()).background(tokens.bg)
         } else {
-            let title = match &self.subpage {
-                Some(subpage) => subpage.title.clone(),
-                None => selected().title().to_string(),
-            };
-            let header = HeaderBar::new(title).busy(busy);
-            let header = match &self.subpage {
-                Some(_) => header,
-                None => header.background(tokens.bg),
-            };
+            let header = HeaderBar::new(if narrow { title.clone() } else { String::new() })
+                .busy(busy)
+                .background(tokens.bg);
             match &back {
                 Some(on_back) => {
                     let on_back = on_back.clone();
@@ -377,29 +435,28 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 None => header,
             }
         };
-        let page_header = if show_list {
-            PageHeader::default()
-        } else {
-            page_header
-        };
-        let header = header.subtitle(page_header.subtitle.clone());
-        let header = match page_header.action {
-            Some(PageAction {
-                on_press,
-                switch: Some(on),
-                ..
-            }) => header.trailing(crate::controls::switch(on, move |_: bool| {
-                on_press.call(())
-            })),
-            Some(action) => header.trailing(action_button(action.label, action.on_press)),
-            None => header,
-        };
         // A phone has no window buttons.
         let header = if narrow {
-            header
+            match action.clone() {
+                Some(action) => header.trailing(action),
+                None => header,
+            }
         } else {
             header.trailing(WindowControls)
         };
+        let head: Option<Element> = if show_list {
+            None
+        } else if narrow {
+            (!lead.is_empty()).then(|| lead_line(&tokens, &lead))
+        } else {
+            Some(title_row(&tokens, title, lead, action))
+        };
+        let body: Element = rect()
+            .width(Size::fill())
+            .spacing(S6)
+            .maybe_child(head)
+            .child(self.content.clone())
+            .into();
         // Alt+Left and the mouse Back button go back one step.
         let back_key = back;
         let back_pointer = back_key.clone();
@@ -450,7 +507,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 };
             }
             memory.key = Some(page_key.clone());
-            memory.element = Some(self.content.clone());
+            memory.element = Some(body.clone());
         }
         let progress = if changed {
             0.0
@@ -495,7 +552,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 ScrollView::new_controlled(scroll)
                     .drag_scrolling(false)
                     .auto_hide_scrollbars(false)
-                    .child(page_column(self.content.clone(), side, self.page_width)),
+                    .child(page_column(body, side, self.page_width)),
             );
         let outgoing = outgoing.map(|(offset, opacity, layer, element)| {
             rect()
@@ -521,7 +578,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             .expanded()
             .direction(Direction::Horizontal)
             .content(Content::Flex)
-            .background(tokens.bg)
+            .background(if narrow { tokens.bg } else { tokens.sidebar })
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
                 let control = event.modifiers == Modifiers::CONTROL;
                 let letter = match &event.key {
@@ -560,6 +617,15 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                     .key(narrow)
                     .width(Size::flex(1.0))
                     .height(Size::fill())
+                    .background(tokens.bg)
+                    // On a desktop window the page is a rounded panel inset
+                    // in the sidebar's frame.
+                    .maybe(!narrow, |panel| {
+                        panel
+                            .margin((S2, S2, S2, 0.0))
+                            .corner_radius(RADIUS_LG)
+                            .overflow(Overflow::Clip)
+                    })
                     .child(header)
                     .child(if show_list {
                         Element::from(sidebar(true))
@@ -604,15 +670,13 @@ fn open_result<T: NavItem>(
     }
 }
 
-/// A hairline between groups of pages and before the search results. Groups
-/// are split by a line, not a heading.
-fn divider(tokens: &Tokens) -> Element {
-    rect()
-        .width(Size::fill())
-        .height(Size::px(1.0))
-        .margin((S2, GUTTER, S2, GUTTER))
-        .background(tokens.separator)
-        .into()
+/// The name of a group of pages, in small muted type above its first page.
+fn group_label(tokens: &Tokens, group: &str) -> Element {
+    let mut name = group.to_string();
+    if let Some(first) = name.get_mut(0..1) {
+        first.make_ascii_uppercase();
+    }
+    CAPTION.label(tokens, name).margin((S4, S3, S1, S3)).into()
 }
 
 /// A search result for a setting: its title, with the page it is on under it.
@@ -717,8 +781,8 @@ impl<T: NavItem> Component for Sidebar<T> {
         let mut last_group = "";
         for (index, item) in visible.iter().enumerate() {
             let group = item.group();
-            if group != last_group && !group.is_empty() && !entries.is_empty() {
-                entries.push(divider(&tokens));
+            if group != last_group && !group.is_empty() {
+                entries.push(group_label(&tokens, group));
             }
             last_group = group;
             entries.push(Element::from(NavEntry {
@@ -730,8 +794,8 @@ impl<T: NavItem> Component for Sidebar<T> {
                 highlighted: typing && index == current,
             }));
         }
-        if !visible.is_empty() && !hits.is_empty() {
-            entries.push(divider(&tokens));
+        if !hits.is_empty() {
+            entries.push(group_label(&tokens, "settings"));
         }
         for (offset, hit) in hits.iter().enumerate() {
             entries.push(Element::from(HitRow {
@@ -760,20 +824,7 @@ impl<T: NavItem> Component for Sidebar<T> {
             } else {
                 Size::fill()
             })
-            .background(if full_page { tokens.bg } else { tokens.sidebar })
-            .maybe(!full_page, |sidebar| {
-                sidebar.border(
-                    Border::new()
-                        .width(BorderWidth {
-                            top: 0.0,
-                            right: 1.0,
-                            bottom: 0.0,
-                            left: 0.0,
-                        })
-                        .alignment(BorderAlignment::Inner)
-                        .fill(tokens.separator),
-                )
-            })
+            .maybe(full_page, |list| list.background(tokens.bg))
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 // Up, Down and Enter walk the results only while a search is typed.
                 if !typing {
@@ -910,11 +961,11 @@ impl<T: NavItem> Component for NavEntry<T> {
             .a11y_role(AccessibilityRole::Tab)
             .a11y_builder(move |builder| builder.set_selected(is_selected))
             .width(Size::fill())
-            .height(Size::px(row_height()))
+            .height(Size::px(nav_height()))
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
-            .spacing(GUTTER)
-            .padding((0.0, GUTTER))
+            .spacing(S3)
+            .padding((0.0, S3))
             .corner_radius(RADIUS)
             .background(background)
             .border(focus_border(&tokens, focus()))

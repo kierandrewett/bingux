@@ -120,7 +120,7 @@ impl Component for Slider {
         let width = if self.fluid && measured > thumb_size {
             measured
         } else {
-            self.width
+            fit_field(self.width)
         };
         let travel = (width - thumb_size).max(1.0);
         let step = self.step;

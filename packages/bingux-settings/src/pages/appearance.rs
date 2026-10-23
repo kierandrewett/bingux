@@ -18,8 +18,8 @@ use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then, which};
 use crate::theme::{Scheme, SharedTokens, Tokens, accent_for, accent_names, read_gsettings};
 use crate::ui::{
-    Group, Icon, Overlays, PageHeader, Status, choice_list, icon, page_column, row, row_button,
-    skeleton, status, use_overlays, use_page_header, use_tokens,
+    Group, Icon, Overlays, Status, choice_list, icon, page_column, row, row_button, skeleton,
+    status, use_overlays, use_tokens,
 };
 use bingux_ui::scale::*;
 
@@ -299,7 +299,7 @@ fn scheme_card(
         .overflow(Overflow::Clip)
         .child(windows);
     let frame = rect()
-        .width(Size::px(PREVIEW_WIDTH))
+        .width(Size::fill())
         .height(Size::px(PREVIEW_HEIGHT))
         .corner_radius(RADIUS_LG)
         .border(border)
@@ -319,7 +319,8 @@ fn scheme_card(
             .a11y_role(AccessibilityRole::Button)
             .a11y_alt(format!("{title} colour scheme"))
             .a11y_focusable(true)
-            .width(Size::px(PREVIEW_WIDTH))
+            .width(Size::flex(1.0))
+            .max_width(Size::px(PREVIEW_WIDTH))
             .spacing(S2)
             .cross_align(Alignment::Center)
             .on_press(on_press)
@@ -337,15 +338,6 @@ impl Component for AppearancePage {
         let overlays = use_overlays();
         let shared = use_consume::<SharedTokens>().0;
         let tokens = use_tokens();
-        let scheme_name = match tokens.scheme {
-            Scheme::Default => "Default",
-            Scheme::PreferLight => "Light",
-            Scheme::PreferDark => "Dark",
-        };
-        use_page_header(PageHeader {
-            subtitle: Some(scheme_name.to_string()),
-            action: None,
-        });
         let navigator = use_navigator();
 
         let Some(loaded) = model.read().clone() else {
@@ -426,7 +418,7 @@ impl Component for AppearancePage {
                         rect()
                             .width(Size::fill())
                             .direction(Direction::Horizontal)
-                            .content(Content::Flex)
+                            .content(Content::wrap_spacing(S1))
                             .cross_align(Alignment::Center)
                             .padding((S1, GUTTER - S1))
                             .spacing(S1)
@@ -445,6 +437,7 @@ impl Component for AppearancePage {
                             rect()
                                 .width(Size::fill())
                                 .direction(Direction::Horizontal)
+                                .content(Content::Flex)
                                 .main_align(Alignment::Center)
                                 .padding((S3, GUTTER - S1))
                                 .spacing(S4)

@@ -19,8 +19,8 @@ use crate::apps;
 use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
-    Group, Icon, Overlays, PageHeader, Status, app_icon, caption, hstack, icon, icon_button,
-    level_row, page_column, row, skeleton, status, use_overlays, use_page_header, use_tokens,
+    Group, Icon, Overlays, Status, app_icon, caption, hstack, icon, icon_button, level_row,
+    page_column, row, skeleton, status, use_overlays, use_tokens,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -916,18 +916,6 @@ impl Component for SoundPage {
     fn render(&self) -> impl IntoElement {
         let ctx = use_ctx();
         let tokens = use_tokens();
-        let subtitle = ctx
-            .model
-            .read()
-            .as_ref()
-            .and_then(|loaded| loaded.as_ref().ok())
-            .and_then(|data| data.outputs.iter().find(|device| device.is_default))
-            .map(|device| device.name.clone());
-        use_page_header(PageHeader {
-            subtitle,
-            action: None,
-        });
-
         let Some(loaded) = ctx.model.read().clone() else {
             return page_column().child(skeleton());
         };

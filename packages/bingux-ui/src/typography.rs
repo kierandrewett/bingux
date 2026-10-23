@@ -124,11 +124,20 @@ pub const TITLE: TextStyle = TextStyle {
     tabular: false,
 };
 
-/// A group title, above its card. Clearly larger and heavier than row text.
-/// A group title above its rows: the shell's `SettingsHeading`, 14 px
-/// semibold.
+/// The name of a page, at the head of its column.
+pub const PAGE_TITLE: TextStyle = TextStyle {
+    size: TEXT_DISPLAY,
+    weight: FontWeight::MEDIUM,
+    ink: Ink::Text,
+    leading: LEADING_TIGHT,
+    tracking: -0.3,
+    tabular: false,
+};
+
+/// A group title, above its card. Clearly larger and heavier than row text:
+/// 16 px semibold.
 pub const SECTION: TextStyle = TextStyle {
-    size: TEXT_MD,
+    size: TEXT_LG,
     weight: FontWeight::SEMI_BOLD,
     ink: Ink::Text,
     leading: LEADING,

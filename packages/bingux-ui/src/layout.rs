@@ -61,5 +61,5 @@ pub fn clamp(max_width: f32, child: impl Into<Element>) -> Rect {
 /// the spacing between `ControlCentreDetails` sections. Groups and status
 /// blocks carry no outer margin of their own.
 pub fn page_column() -> Rect {
-    rect().width(Size::fill()).spacing(S5)
+    rect().width(Size::fill()).spacing(S6)
 }

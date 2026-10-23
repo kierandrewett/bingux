@@ -29,7 +29,6 @@ pub fn drag_on_pointer_down(event: Event<PointerEventData>) {
 #[derive(PartialEq)]
 pub struct HeaderBar {
     title: String,
-    subtitle: Option<String>,
     centered: bool,
     leading: Vec<Element>,
     trailing: Vec<Element>,
@@ -41,7 +40,6 @@ impl HeaderBar {
     pub fn new(title: impl Into<String>) -> Self {
         Self {
             title: title.into(),
-            subtitle: None,
             centered: false,
             leading: Vec::new(),
             trailing: Vec::new(),
@@ -76,13 +74,6 @@ impl HeaderBar {
         self.busy = busy;
         self
     }
-
-    /// A muted line under the title, such as a page's subtitle. The bar is
-    /// tall enough for both lines.
-    pub fn subtitle(mut self, subtitle: Option<String>) -> Self {
-        self.subtitle = subtitle;
-        self
-    }
 }
 
 impl Component for HeaderBar {
@@ -100,23 +91,7 @@ impl Component for HeaderBar {
             } else {
                 TextAlign::Left
             });
-        let text: Element = match &self.subtitle {
-            None => rect().width(Size::flex(1.0)).child(title).into(),
-            Some(subtitle) => rect()
-                .width(Size::flex(1.0))
-                .direction(Direction::Vertical)
-                .child(title)
-                .child(
-                    label()
-                        .text(subtitle.clone())
-                        .width(Size::fill())
-                        .color(tokens.muted)
-                        .font_size(TEXT_SM)
-                        .max_lines(1)
-                        .text_overflow(TextOverflow::Ellipsis),
-                )
-                .into(),
-        };
+        let text: Element = rect().width(Size::flex(1.0)).child(title).into();
         rect()
             .width(Size::fill())
             .height(Size::px(HEADER_HEIGHT))

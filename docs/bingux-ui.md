@@ -67,7 +67,7 @@ dialogs and shows toasts from any component below it.
 | Groups and text | `Group` (`description`), `section_label`, `caption`, `centered_caption`, `action_row`, `heading`, `status` (loading, empty, error, info blocks)                                                                                                                                                                                                                                                  |
 | Layout          | `hstack`, `vstack`, `spacer`, `divider`, `card`, `clamp`, `page_column`                                                                                                                                                                                                                                                                                                                          |
 | Shell           | `NavigationSplitView` with `NavItem` and `subpage`, `HeaderBar`, `WindowControls`, `status_page`, `banner`                                                                                                                                                                                                                                                                                       |
-| Page header     | `PageHeader` (`subtitle`, `action`) with `use_page_header`, a title, a muted subtitle under it and one action at the end                                                                                                                                                                                                                                                                         |
+| Page header     | `PageHeader` (`subtitle`, `action`) with `use_page_header`, a status line that replaces the sentence under the page title, and one action at the right of the title                                                                                                                                                                                                                              |
 | Search          | `NavigationSplitView::search_hits` with `SearchHit`: pages first, then matching settings, Up, Down and Enter, at most 20 results. Ctrl+F focuses it and Escape clears it                                                                                                                                                                                                                         |
 | Overlays        | `dialog` with `ResponseKind::{Default, Suggested, Destructive}`, `Overlays::toast`, `Overlays::toast_with_action`                                                                                                                                                                                                                                                                                |
 | Sheets          | `sheet` with `Sheet::primary` (`SheetAction`), `Sheet::tabs` (a tab strip under the title), `Overlays::show_sheet`, `Overlays::close_sheet`. Cancel and Escape close it; Enter runs the primary action. Sheets size to their content and scroll past 80% of the window height                                                                                                                    |
@@ -150,20 +150,21 @@ steps of at least 1.25x, and a weight or colour change at each step. Use
 `styled_label` and `styled_paragraph`, or `TextStyle::label` and
 `TextStyle::paragraph`, to render a style.
 
-| Style      | Size | Weight   | Colour  | Use                                     |
-| ---------- | ---- | -------- | ------- | --------------------------------------- |
-| `HERO`     | 36   | light    | primary | One figure a page is about.             |
-| `TITLE`    | 28   | semibold | primary | A page or subpage name.                 |
-| `HEADING`  | 18   | semibold | primary | A large value inside a chart or ring.   |
-| `SECTION`  | 14   | semibold | primary | A group title above its card.           |
-| `BODY`     | 14   | normal   | primary | Row titles and body text.               |
-| `EMPHASIS` | 14   | semibold | primary | A name or state inside body text.       |
-| `VALUE`    | 14   | normal   | muted   | Read-only value at the right of a row.  |
-| `NUMERIC`  | 14   | normal   | primary | Changing numbers, with tabular figures. |
-| `CAPTION`  | 12   | normal   | muted   | Row subtitles, descriptions and hints.  |
-| `BADGE`    | 11   | semibold | accent  | Short tags such as "New".               |
-| `OVERLINE` | 11   | semibold | muted   | Tracked small capitals above a block.   |
-| `LINK`     | 14   | medium   | accent  | Inline links and actions.               |
+| Style        | Size | Weight   | Colour  | Use                                     |
+| ------------ | ---- | -------- | ------- | --------------------------------------- |
+| `HERO`       | 36   | light    | primary | One figure a page is about.             |
+| `TITLE`      | 28   | semibold | primary | A name in an identity block.            |
+| `HEADING`    | 18   | semibold | primary | A large value inside a chart or ring.   |
+| `PAGE_TITLE` | 28   | medium   | primary | The name at the top of a page.          |
+| `SECTION`    | 16   | semibold | primary | A group title above its card.           |
+| `BODY`       | 14   | normal   | primary | Row titles and body text.               |
+| `EMPHASIS`   | 14   | semibold | primary | A name or state inside body text.       |
+| `VALUE`      | 14   | normal   | muted   | Read-only value at the right of a row.  |
+| `NUMERIC`    | 14   | normal   | primary | Changing numbers, with tabular figures. |
+| `CAPTION`    | 13   | normal   | muted   | Row subtitles, descriptions and hints.  |
+| `BADGE`      | 11   | semibold | accent  | Short tags such as "New".               |
+| `OVERLINE`   | 11   | semibold | muted   | Tracked small capitals above a block.   |
+| `LINK`       | 14   | medium   | accent  | Inline links and actions.               |
 
 `Ink::Danger` recolours any style for destructive text. Weights come from
 `theme::with_font`. In the gallery render semibold reads clearly heavier than
@@ -185,33 +186,36 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   any base, as `ControlCentreButtonSurface` does, and selection is tinted with
   the accent. Text is `#fafafa`, secondary text `#b0b0b0`.
 - **One scale, in `src/scale.rs`.** Spacing is `S0` to `S7` on a 4 px grid.
-  Radius is 8 for controls and row hover, 12 for group cards and 20 for
-  dialogs, popovers and toasts (`RADIUS`, `RADIUS_LG`, `RADIUS_XL`). Type is
-  14 body, 12 secondary, 14 semibold section titles. A row is 48 px, or 64 px
-  with a subtitle, as the shell's `SettingsRow`, and every row keeps that
-  height. A control in a row (dropdown, field, segmented control, stepper,
-  `compact()` or row button) is 32 px, so it leaves 8 px above and below.
-  The page column is 600 px wide. A standalone `ActionButton` and a menu item
-  are 36 px. Dropdowns and fields in a row share one 220 px column
+  Radius is 12 for controls, row hover and sidebar items, 16 for group cards
+  and 20 for dialogs, popovers and toasts (`RADIUS`, `RADIUS_LG`,
+  `RADIUS_XL`). Type is 14 body, 13 secondary, 16 semibold section titles
+  and a 28 page title. A row is 56 px, or as tall as its subtitle needs. A
+  control in a row (dropdown, field, segmented control, stepper, `compact()`
+  or row button) is 36 px. The page column is 720 px wide and groups sit
+  32 px apart. A standalone `ActionButton` and a menu item are 40 px and
+  36 px. Dropdowns and fields in a row share one 240 px column
   (`FIELD_WIDTH`), so their left edges line up; a field for a URL or a path
   uses `FIELD_WIDTH_WIDE` (440 px); a dropdown grows to fit a
   longer option.
 - **Phone width uses fingertip sizes.** Below 740 px the split view calls
-  `set_touch(true)`: a row is 52 px, a control 40 px, a standalone button
-  44 px, and the switch and slider handles grow (switch 48 x 28, slider
-  thumb 22). Read these sizes through `row_height()`, `control_height()` and
-  `button_height()`, not the constants, so the layout follows. Crossing the
+  `set_touch(true)`: a row is 60 px, a sidebar page 56 px, a control 44 px, a
+  standalone button 48 px, and the switch and slider handles grow (switch
+  48 x 28, slider thumb 22). A dropdown, field or slider in a row is cut to
+  168 px so the row's text keeps room. Read these sizes through
+  `row_height()`, `nav_height()`, `control_height()`, `button_height()` and
+  `fit_field()`, not the constants, so the layout follows. Crossing the
   threshold remounts the page once.
 - **`scripts/ui-lint.py` enforces it.** It fails on a raw number in a spacing,
   padding, margin, radius, font-size, width, height or icon-size call, and on
   `FontWeight::BOLD`. To use a new value, add it to `scale.rs` first.
   `make check` runs it.
-- **One inset.** `GUTTER` (12) is the only horizontal inset: row text,
-  section titles and sidebar items start `GUTTER` from their container.
-- **A group is a card.** A small title sits above a 12 px card whose rows are
-  flush against it, with a hairline between rows. A row is an optional icon,
-  a normal-weight title, an optional small muted subtitle and trailing
-  content. A page starts with its first group; there is no page title.
+- **One inset.** `GUTTER` (16) is the only horizontal inset inside a card:
+  row text and the hairline start `GUTTER` from the card's edge.
+- **A group is a card.** A 16 px semibold title sits above a 16 px card with a
+  hairline edge, aligned with the card. Rows sit flush in it with a hairline
+  between them, inset by the gutter on both sides. A row is an optional icon,
+  a normal-weight title, an optional muted subtitle that wraps to three lines
+  and trailing content. A row with a subtitle grows to fit it.
 - **Controls are the shell's.** The switch is 36 x 20 with a 16 px thumb. The
   slider has a 6 px track (8 px while dragging), a text-coloured fill that
   turns accent while dragging and a 16 px thumb. Buttons are filled with
@@ -222,9 +226,15 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   the gutter. Put it inside a group, or under the last group on a page.
 - **A message** (loading, empty, error) is a `status` row inside a group; only
   an error is tinted. A page that has no data yet shows `skeleton()`, not text.
-- **Chrome.** The header bar carries the window buttons only. The sidebar is
-  a search field, then rows under `NavItem::group` labels, with the selection
-  layer and an accent icon on the selected row.
+- **Chrome.** The header bar carries the window buttons, Back and the busy
+  spinner. On a desktop window the page is a rounded panel inset in the
+  window frame, which is the sidebar colour. A page starts with its title
+  row: `PAGE_TITLE`, one sentence from `NavItem::lead` (or the page's
+  `PageHeader::subtitle` status when it sets one) and the page's action at the
+  right. On a phone the title is in the header and the sentence is the first
+  line of the page. The sidebar is a search field, then rows under
+  `NavItem::group` names, with a neutral selection layer and an accent icon
+  on the selected row.
 - The window is opaque and square. Gnoblin draws the corners, border and
   shadow, so an application sets no corner radius, transparency or shadow on
   its root.

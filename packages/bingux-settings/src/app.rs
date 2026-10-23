@@ -22,6 +22,10 @@ impl NavItem for PageId {
     fn keywords(self) -> &'static str {
         PageId::keywords(self)
     }
+
+    fn lead(self) -> &'static str {
+        PageId::lead(self)
+    }
 }
 
 /// Window root. `initial` is the page named on the command line, and
@@ -48,7 +52,7 @@ impl Component for App {
                 let current = page();
                 rect()
                     .width(Size::fill())
-                    .spacing(S5)
+                    .spacing(S6)
                     .child(current.render())
                     .child(RelatedPages { page: current })
                     .into()

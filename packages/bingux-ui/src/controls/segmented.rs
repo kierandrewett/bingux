@@ -127,7 +127,7 @@ impl Component for Segment {
             .height(Size::fill())
             .padding((0.0, S2))
             .center()
-            .corner_radius(RADIUS)
+            .corner_radius(RADIUS - S1)
             .background(surface_color(&tokens, base, hovering(), pressing(), false))
             .border(focus_border(&tokens, focus()))
             .maybe(enabled, |element| {

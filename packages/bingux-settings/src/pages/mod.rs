@@ -108,6 +108,27 @@ impl PageId {
         }
     }
 
+    /// One sentence under the page title that says what the page is for.
+    pub fn lead(self) -> &'static str {
+        match self {
+            Self::WiFi => "Connect to a wireless network and manage the ones you saved.",
+            Self::Network => "Wired connections, VPNs and the proxy.",
+            Self::Bluetooth => "Pair headphones, keyboards and other devices.",
+            Self::Appearance => "Wallpaper, accent colour, font and light or dark mode.",
+            Self::Desktop => "The dock, the top bar and the Control Centre.",
+            Self::Search => "Where search looks and which web searches it offers.",
+            Self::Displays => "Resolution, scale and where each screen sits.",
+            Self::Sound => "Speakers, microphones and the volume of each app.",
+            Self::Power => "Battery, power mode and when the screen turns off.",
+            Self::Keyboard => "Typing, key repeat, shortcuts and input languages.",
+            Self::Mouse => "Pointer speed, scrolling and touchpad gestures.",
+            Self::DateTime => "The time, the date and the time zone.",
+            Self::Users => "The accounts on this computer.",
+            Self::Applications => "Default apps and what each installed app can do.",
+            Self::About => "This computer and the software on it.",
+        }
+    }
+
     /// The pages a person is likely to want next from this one. Shown under
     /// the page as the Related group. Never includes the page itself.
     pub fn related(self) -> &'static [PageId] {

@@ -222,7 +222,7 @@ impl Component for TextField {
             .width(if self.fill {
                 Size::fill()
             } else {
-                Size::px(self.width)
+                Size::px(fit_field(self.width))
             })
             .enabled(use_enabled(self.enabled))
             .theme_colors(colors)
@@ -336,7 +336,7 @@ impl Component for TextField {
             .width(if self.fill {
                 Size::fill()
             } else {
-                Size::px(self.width)
+                Size::px(fit_field(self.width))
             })
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 let right = matches!(event.data(), PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Right));

@@ -13,7 +13,7 @@ const DEFAULT_FONT_FAMILY: &str = "Adwaita Sans";
 /// Height of the window header bar.
 pub const HEADER_HEIGHT: f32 = 48.0;
 /// Sidebar width.
-pub const SIDEBAR_WIDTH: f32 = 260.0;
+pub const SIDEBAR_WIDTH: f32 = 280.0;
 /// Width below which the window is laid out as a phone: the list of pages is
 /// a screen of its own and the window buttons are hidden.
 pub const NARROW_BELOW: f32 = 740.0;
@@ -174,7 +174,7 @@ impl Tokens {
             // at 0.44.
             hover: rgba(0.42, 0.42, 0.44, 0.1428),
             pressed: rgba(0.52, 0.52, 0.54, 0.3312),
-            selection: accent.with_af32(0.1232),
+            selection: rgba(1.0, 1.0, 1.0, 0.09),
             border: rgba(1.0, 1.0, 1.0, 1.0),
             outline: rgba(0.314, 0.314, 0.314, 0.75),
             text: rgba(0.980, 0.980, 0.980, 1.0),

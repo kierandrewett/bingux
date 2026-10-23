@@ -1,12 +1,15 @@
 # Bingux Settings
 
 `bingux-settings` is the Settings application for the Bingux desktop. It is a
-native Wayland window (Rust, Freya) with the shell's look: a header bar,
-a page list on the left and boxed groups of rows on the right. Below 740 px of
+native Wayland window (Rust, Freya) with the shell's look: a page list on the
+left and, on the right, a rounded panel inset in the window. Each page starts
+with a large title and one sentence that says what the page is for, then
+boxed groups of rows. Below 740 px of
 width the window is laid out as a phone. The page list is a screen of its own.
 Choosing a page opens it, and the Back button in the header returns to the
 list. A subpage's Back button returns to its page. The window buttons are
-hidden. Opening Settings with no page name starts on the list; opening it
+hidden, and rows, controls and buttons are bigger for a finger. Opening
+Settings with no page name starts on the list; opening it
 with a page name starts on that page.
 
 ## Open it
@@ -85,14 +88,15 @@ Forget asks first and returns to the list. Settings opens the connection
 editor with the address, DNS and security tabs. Below the strip are the signal
 strength in words, the frequency band, the security and the speed.
 Date and Time opens the time zone as a searchable list of cities. The
-header shows the chosen city, and the zone list shows each UTC offset only for
+zone list shows each UTC offset only for
 the selected zone. Set date and time opens a sheet with Date (day, month and
 year) and Time (hour and minute) rows and a Set button that stays disabled
 until the values change.
 
-A subpage replaces the page and puts a Back button and the subpage title in
-the header. Back, Alt+Left and the mouse Back button return to the page
-below; choosing another page in the sidebar closes the subpage.
+A subpage replaces the page. The header shows a Back button and the subpage
+title is the large title at the top of the page. Back, Alt+Left and the mouse
+Back button return to the page below; choosing another page in the sidebar
+closes the subpage.
 
 ## Where each setting lives
 
@@ -115,10 +119,10 @@ way round.
 | Applications    | Desktop entries in `XDG_DATA_DIRS`, `gio mime`, `wpctl`                                              | Installed applications with their icons, a page for each, and the default application for each kind of file.                                                              |
 | About           | `/etc/os-release`, DMI, `gnoblinctl --version`                                                       | Read-only. Storage shows the space used on the root file system.                                                                                                          |
 
-Each page shows its current state as a header subtitle where that helps (the
-battery level on Power, the colour scheme on Appearance, the city on Date and
-Time). A failed change shows a toast instead of an inline message, and a page
-whose tool is missing shows a readable error with a Try again action where that
+A page can replace the sentence under its title with its current state when
+that helps (the connection on Wi-Fi and Network, the battery level on Power).
+A failed change shows a toast instead of an inline message, and a page whose
+tool is missing shows a readable error with a Try again action where that
 makes sense.
 
 ## Search
@@ -139,12 +143,13 @@ Choosing one opens that page at its top level. Subpages do not show the group.
 ## Keyboard
 
 Ctrl+Q and Ctrl+W close the window. Ctrl+F focuses the search, and Esc clears
-it. The sidebar has no group headings: a hairline divides the groups instead.
+it. The sidebar lists the pages under group names (Connections, Devices,
+Desktop, System). Search results appear under a Settings name.
 
 ## Window frame
 
-Bingux Settings draws its own header bar with the page title and the
-minimise, maximise and close buttons, because the sidebar and header form one
+Bingux Settings draws its own header bar with the minimise, maximise and
+close buttons, because the sidebar and the page panel form one
 layout. It does not ask for server decorations, so Gnoblin's `auto` frame mode
 adds no titlebar. Gnoblin still clips the window and draws the corners,
 border and shadow, so the app window itself is square and opaque. See

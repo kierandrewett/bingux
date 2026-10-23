@@ -146,6 +146,7 @@ impl Component for Dropdown {
         let width = (longest * GLYPH_WIDTH + BUTTON_CHROME + icon_space)
             .min(self.max_width)
             .max(self.min_width);
+        let width = fit_field(width);
         let current_icon = selected_index.and_then(|index| self.icons.get(index).cloned());
         // The rows' height, and the part of it the menu shows.
         let list_height = count as f32 * MENU_ITEM_HEIGHT;

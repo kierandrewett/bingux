@@ -161,7 +161,7 @@ impl Component for Group {
         let heading = (self.title.is_some() || self.description.is_some()).then(|| {
             rect()
                 .width(Size::fill())
-                .padding((0.0, GUTTER))
+                .padding((0.0, 0.0))
                 .direction(Direction::Horizontal)
                 .content(Content::Flex)
                 .cross_align(Alignment::Center)
@@ -179,22 +179,29 @@ impl Component for Group {
                 .maybe_child(self.trailing.clone())
         });
         // The page column owns the space between groups; the name sits
-        // a small step above its card.
+        // a step above its card.
         rect()
             .width(Size::fill())
-            .spacing(S1)
+            .spacing(S2)
             .maybe_child(heading)
             .child(card_surface(&tokens).children(children))
     }
 }
 
 /// The card every group and skeleton section sits on: the card colour, a
-/// 12 px radius, and content clipped to that radius so flush rows follow it.
+/// 16 px radius and a hairline edge, and content clipped to that radius so
+/// flush rows follow it.
 fn card_surface(tokens: &Tokens) -> Rect {
     rect()
         .width(Size::fill())
         .corner_radius(RADIUS_LG)
         .background(tokens.card)
+        .border(
+            Border::new()
+                .width(1.0)
+                .alignment(BorderAlignment::Inner)
+                .fill(tokens.separator),
+        )
         .overflow(Overflow::Clip)
 }
 
@@ -207,7 +214,7 @@ fn card_rows(tokens: &Tokens, rows: Vec<Element>) -> Vec<Element> {
                 rect()
                     .width(Size::fill())
                     .height(Size::px(1.0))
-                    .margin((0.0, 0.0, 0.0, GUTTER))
+                    .margin((0.0, GUTTER))
                     .background(tokens.separator)
                     .into(),
             );

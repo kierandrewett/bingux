@@ -12,9 +12,9 @@ use crate::pages::bingux_config;
 use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Overlays, PageHeader, Status, caption, choice_list, choice_row, dropdown, form_row,
-    page_column, row, sheet, skeleton, status, stepper, styled_label, switch_row, typography,
-    use_overlays, use_page_busy, use_page_header,
+    Group, Overlays, Status, caption, choice_list, choice_row, dropdown, form_row, page_column,
+    row, sheet, skeleton, status, stepper, styled_label, switch_row, typography, use_overlays,
+    use_page_busy,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -162,11 +162,6 @@ fn zone_label(zone: &str) -> String {
     } else {
         format!("{city}, {}", parts.join(" / "))
     }
-}
-
-/// The city alone, for the header: `Europe/London` as "London".
-fn zone_city(zone: &str) -> String {
-    zone.rsplit('/').next().unwrap_or(zone).replace('_', " ")
 }
 
 /// Reloads the model in the background.
@@ -374,15 +369,6 @@ impl Component for DateTimePage {
             });
         });
 
-        let subtitle = model
-            .read()
-            .as_ref()
-            .and_then(|loaded| loaded.as_ref().ok())
-            .map(|data| zone_city(&data.timezone));
-        use_page_header(PageHeader {
-            subtitle,
-            action: None,
-        });
         use_page_busy(setting());
 
         let Some(loaded) = model.read().clone() else {

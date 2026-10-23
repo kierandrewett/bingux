@@ -166,11 +166,8 @@ impl Component for Row {
         let focus = use_focus(a11y_id);
         provide_enabled(self.enabled);
         let interactive = self.on_press.is_some() && self.enabled;
-        let height = if self.subtitle.is_some() {
-            TALL_ROW_HEIGHT
-        } else {
-            row_height()
-        };
+        let single_line = self.subtitle.is_none();
+        let height = row_height();
         let background = surface_color(
             &tokens,
             Color::TRANSPARENT,
@@ -214,19 +211,19 @@ impl Component for Row {
                 )
                 .into(),
         };
-        // Freya centres children against the content height, not against
-        // `min_height`, so the column carries the row's inner height itself.
+        // A subtitle wraps onto a second or third line, so a row that has one
+        // grows to fit it. A row without one has the row height, and its
+        // text is centred by the row.
         let text_column = rect()
             .width(Size::flex(1.0))
-            .height(Size::px(height - 2.0 * S1))
-            .main_align(Alignment::Center)
             .spacing(S0)
             .child(title_line)
             .maybe_child(self.subtitle.as_ref().map(|subtitle| {
                 CAPTION
-                    .label(&tokens, subtitle.clone())
-                    .max_lines(1)
+                    .paragraph(&tokens, subtitle.clone())
+                    .max_lines(3)
                     .text_overflow(TextOverflow::Ellipsis)
+                    .width(Size::fill())
             }));
 
         let on_press = self.on_press.clone();
@@ -239,11 +236,11 @@ impl Component for Row {
                 AccessibilityRole::GenericContainer
             })
             .width(Size::fill())
-            .min_height(Size::px(height))
+            .maybe(single_line, |row| row.height(Size::px(height)))
             .direction(Direction::Horizontal)
             .content(Content::Flex)
             .cross_align(Alignment::Center)
-            .padding((S1, GUTTER))
+            .padding((if single_line { 0.0 } else { S3 + S0 }, GUTTER))
             .spacing(S3)
             .background(background)
             .border(focus_border(&tokens, focus()))
