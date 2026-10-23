@@ -332,29 +332,6 @@ fn band_label(freq: &str) -> String {
     .to_string()
 }
 
-/// The facts the connection editor shows for a visible network.
-fn network_facts(network: &Network) -> Vec<(String, String)> {
-    let mut facts = vec![
-        ("Signal strength".to_string(), signal_detail(network.signal)),
-        (
-            "Security".to_string(),
-            if network.secured {
-                "Password protected"
-            } else {
-                "Open"
-            }
-            .to_string(),
-        ),
-    ];
-    if !network.band.is_empty() {
-        facts.push(("Band".to_string(), network.band.clone()));
-    }
-    if !network.rate.is_empty() {
-        facts.push(("Speed".to_string(), network.rate.clone()));
-    }
-    facts
-}
-
 /// The page's shared state. Copy, so every event handler owns a copy.
 #[derive(Clone, Copy)]
 struct Ui {
@@ -1046,7 +1023,7 @@ impl Component for NetworkPage {
             let target = Target {
                 name: ssid.clone(),
                 wireless: true,
-                facts: visible.map(network_facts).unwrap_or_default(),
+                facts: Vec::new(),
             };
             actions.push(strip_action(
                 Icon::PreferencesSystem,
