@@ -206,7 +206,7 @@ impl Component for TextField {
             placeholder_color: Some(Preference::Specific(tokens.muted.with_a(170))),
         };
         let layout = InputLayoutThemePartial {
-            corner_radius: Some(Preference::Specific(CornerRadius::new_all(RADIUS_PILL))),
+            corner_radius: Some(Preference::Specific(CornerRadius::new_all(RADIUS))),
             padding: Some(Preference::Specific(Gaps::new(6.0, 10.0, 6.0, 10.0))),
         };
 

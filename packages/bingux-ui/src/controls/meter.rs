@@ -73,13 +73,13 @@ impl Component for UsageMeter {
                 rect()
                     .width(Size::fill())
                     .height(Size::px(TRACK_HEIGHT))
-                    .corner_radius(RADIUS_PILL)
+                    .corner_radius(RADIUS_SM)
                     .background(tokens.control)
                     .child(
                         rect()
                             .width(Size::percent(fraction as f32 * 100.0))
                             .height(Size::fill())
-                            .corner_radius(RADIUS_PILL)
+                            .corner_radius(RADIUS_SM)
                             .background(tokens.text),
                     ),
             )

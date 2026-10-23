@@ -22,10 +22,9 @@ use crate::surface::{focus_border, is_activation_key, over, use_tokens};
 use crate::theme::{
     HEADER_HEIGHT, SIDEBAR_OVERLAY_BELOW, SIDEBAR_WIDTH, Tokens, WINDOW_CONTROL_BUTTON,
 };
-use crate::typography::{TITLE, VALUE};
 
 /// The widest the page column gets; it is centred in the content frame.
-const PAGE_WIDTH: f32 = 720.0;
+const PAGE_WIDTH: f32 = 680.0;
 
 /// One sidebar destination.
 pub trait NavItem: Copy + PartialEq + 'static {
@@ -243,7 +242,7 @@ fn page_column(content: Element, side: f32, page_width: f32) -> impl IntoElement
     rect()
         .width(Size::fill())
         .cross_align(Alignment::Center)
-        .padding((0.0, side, S6, side))
+        .padding((S2, side, S5, side))
         .child(
             rect()
                 .width(Size::px(page_width))
@@ -341,35 +340,32 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             .last()
             .map(|(_, header)| header.clone())
             .unwrap_or_default();
-        // The header bar carries only the back button and the window buttons.
-        // The page's own title, subtitle and action sit at the top of the page.
         let header = match &self.subpage {
-            None => HeaderBar::new("").background(tokens.bg),
+            None => HeaderBar::new(selected().title())
+                .background(tokens.bg)
+                .busy(busy),
             Some(subpage) => {
                 let on_back = subpage.on_back.clone();
-                HeaderBar::new("").background(tokens.bg).leading(
+                HeaderBar::new(subpage.title.clone()).busy(busy).leading(
                     icon_button(Icon::GoPrevious, move |_| on_back.call(()))
                         .size(WINDOW_CONTROL_BUTTON)
                         .tooltip("Back"),
                 )
             }
         }
+        .subtitle(page_header.subtitle.clone());
+        let header = match page_header.action {
+            Some(PageAction {
+                on_press,
+                switch: Some(on),
+                ..
+            }) => header.trailing(crate::controls::switch(on, move |_: bool| {
+                on_press.call(())
+            })),
+            Some(action) => header.trailing(action_button(action.label, action.on_press)),
+            None => header,
+        }
         .trailing(WindowControls);
-        let title_text = self
-            .subpage
-            .as_ref()
-            .map(|subpage| subpage.title.clone())
-            .unwrap_or_else(|| selected().title().to_string());
-        let page_content: Element = rect()
-            .width(Size::fill())
-            .child(PageTitle {
-                title: title_text,
-                subtitle: page_header.subtitle.clone(),
-                action: page_header.action.clone(),
-                busy,
-            })
-            .child(self.content.clone())
-            .into();
         // Alt+Left and the mouse Back button return from a subpage.
         let back_key = self.subpage.as_ref().map(|subpage| subpage.on_back.clone());
         let back_pointer = back_key.clone();
@@ -433,7 +429,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 };
             }
             memory.key = Some(page_key.clone());
-            memory.element = Some(page_content.clone());
+            memory.element = Some(self.content.clone());
         }
         let progress = if changed {
             0.0
@@ -478,7 +474,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 ScrollView::new_controlled(scroll)
                     .drag_scrolling(false)
                     .auto_hide_scrollbars(false)
-                    .child(page_column(page_content.clone(), side, self.page_width)),
+                    .child(page_column(self.content.clone(), side, self.page_width)),
             );
         let outgoing = outgoing.map(|(offset, opacity, layer, element)| {
             rect()
@@ -569,64 +565,6 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                         )
                 }),
             )
-    }
-}
-
-/// The top of a page: its name in the title style, a muted line under it, a
-/// small spinner while the page works, and the page's action at the right.
-#[derive(PartialEq)]
-struct PageTitle {
-    title: String,
-    subtitle: Option<String>,
-    action: Option<PageAction>,
-    busy: bool,
-}
-
-impl Component for PageTitle {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let action = self.action.clone().map(|action| match action {
-            PageAction {
-                on_press,
-                switch: Some(on),
-                ..
-            } => Element::from(crate::controls::switch(on, move |_: bool| {
-                on_press.call(())
-            })),
-            action => Element::from(action_button(action.label, action.on_press)),
-        });
-        rect()
-            .width(Size::fill())
-            .direction(Direction::Horizontal)
-            .content(Content::Flex)
-            .cross_align(Alignment::Center)
-            .padding((S6, GUTTER, S6, GUTTER))
-            .child(
-                rect()
-                    .width(Size::flex(1.0))
-                    .spacing(S1)
-                    .child(
-                        rect()
-                            .direction(Direction::Horizontal)
-                            .cross_align(Alignment::Center)
-                            .spacing(S3)
-                            .child(TITLE.label(&tokens, self.title.clone()))
-                            .maybe_child(self.busy.then(|| {
-                                crate::controls::spinner(crate::controls::SpinnerSize::Small)
-                            })),
-                    )
-                    .child(
-                        // Reserve the line so a subtitle arriving later does not
-                        // move the page.
-                        VALUE.label(
-                            &tokens,
-                            self.subtitle
-                                .clone()
-                                .unwrap_or_else(|| "\u{a0}".to_string()),
-                        ),
-                    ),
-            )
-            .maybe_child(action)
     }
 }
 

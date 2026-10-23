@@ -176,42 +176,39 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
 `ControlSwitch.qml`, `ControlCentreButtonSurface.qml`, `ActionButton.qml` and
 `SeekSlider.qml`. When the shell changes, change these to match.
 
-- **A near-black, flat look.** The page is `bg`, the sidebar a step darker,
-  popups (sheets, dialogs, menus) a step lighter with a hairline outline and
-  a soft shadow. Buttons, fields, dropdowns and segmented controls use
-  `control`. Hover, pressed and selected are white alpha layers over any
-  base, and selection is tinted with the accent. Text is `#ececf0`,
-  secondary text `#8d8f9a`.
+- **Colours are the shell's `flatSurfaces` palette** (`Tokens::new`): the
+  window is `popupSurface`, the sidebar `shellSurface`, group cards, dialogs
+  and popovers `elevated`. Buttons, fields, dropdowns and segmented controls
+  use `control`, one step lighter than `elevated`, so they stay visible on a
+  card. Hover, pressed and selected are alpha layers drawn over
+  any base, as `ControlCentreButtonSurface` does, and selection is tinted with
+  the accent. Text is `#fafafa`, secondary text `#b0b0b0`.
 - **One scale, in `src/scale.rs`.** Spacing is `S0` to `S7` on a 4 px grid.
-  Radius is 10 for row and control layers, 14 for rows' hover layer and
-  cards, 20 and more for popups, and `RADIUS_PILL` for buttons, fields,
-  dropdowns, steppers and segmented controls. A row is 48 px, or 60 px with
-  a subtitle, and keeps that height. A control in a row is 32 px; a
-  standalone button and a menu item are 36 px. Dropdowns and fields in a
-  row share one 220 px column (`FIELD_WIDTH`); a field for a URL or a path
-  uses `FIELD_WIDTH_WIDE` (440 px).
+  Radius is 8 for controls and row hover, 12 for group cards and 20 for
+  dialogs, popovers and toasts (`RADIUS`, `RADIUS_LG`, `RADIUS_XL`). Type is
+  14 body, 12 secondary, 16 section titles. A row is 40 px, or 56 px with a
+  subtitle, and every row keeps that height. A control in a row (dropdown,
+  field, segmented control, stepper, `compact()` or row button) is 32 px, so
+  it leaves 4 px above and below. A standalone `ActionButton` and a menu item
+  are 36 px. Dropdowns and fields in a row share one 220 px column
+  (`FIELD_WIDTH`), so their left edges line up; a field for a URL or a path
+  uses `FIELD_WIDTH_WIDE` (440 px); a dropdown grows to fit a
+  longer option.
 - **`scripts/ui-lint.py` enforces it.** It fails on a raw number in a spacing,
   padding, margin, radius, font-size, width, height or icon-size call, and on
   `FontWeight::BOLD`. To use a new value, add it to `scale.rs` first.
   `make check` runs it.
 - **One inset.** `GUTTER` (12) is the only horizontal inset: row text,
   section titles and sidebar items start `GUTTER` from their container.
-- **A group is flat.** A small muted medium-weight name sits above rows
-  that lie directly on the page: no card, no outline, no hairlines. Space,
-  size and weight make the hierarchy; a row's hover and selection layer is a
-  rounded fill behind it. A page starts with its title in the serif display
-  face (the first installed of Newsreader, Source Serif, Noto Serif,
-  Liberation Serif, DejaVu Serif; the interface font when none is), a muted
-  subtitle line and the page's master switch at the right, then its groups.
-- **Controls are pills.** The switch is 48 x 28 with a light track and a dark
-  thumb when on. The selected segment of a segmented control is a light pill
-  with dark text. Buttons, fields, dropdowns and steppers are fully rounded.
-  The slider has a thin track and a round thumb. A disabled row
+- **A group is a card.** A small title sits above a 12 px card whose rows are
+  flush against it, with a hairline between rows. A row is an optional icon,
+  a normal-weight title, an optional small muted subtitle and trailing
+  content. A page starts with its first group; there is no page title.
+- **Controls are the shell's.** The switch is 36 x 20 with a 16 px thumb. The
+  slider has a 6 px track (8 px while dragging), a text-coloured fill that
+  turns accent while dragging and a 16 px thumb. Buttons are filled with
+  `control` and have no idle outline; no control has one. A disabled row
   (`row(..).enabled(false)`) dims and disables every control in it.
-- **Popups are modals in the display face.** A sheet or alert dialog has a
-  26 px display-face title at the top left, content, and Cancel and the
-  primary action as pills at the bottom right; sheets add a tab strip under
-  the title.
 - **An action row** (`action_row`) is a form's last row: a small muted
   note at the left and a compact button at the right, on the row height and
   the gutter. Put it inside a group, or under the last group on a page.

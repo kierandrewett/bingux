@@ -9,7 +9,7 @@ use std::rc::Rc;
 use freya::prelude::*;
 
 use crate::scale::*;
-use crate::surface::{focus_border, surface_color, use_enabled, use_tokens};
+use crate::surface::{focus_border, over, surface_color, use_enabled, use_tokens};
 
 /// The shell's segmented control: a quiet `control` rail where only the
 /// selected segment is raised.
@@ -56,7 +56,7 @@ impl Component for Segmented {
         rect()
             .height(Size::px(CONTROL_HEIGHT))
             .maybe(!enabled, |element| element.opacity(0.45))
-            .corner_radius(RADIUS_PILL)
+            .corner_radius(RADIUS)
             .background(tokens.control)
             .padding(S1)
             .spacing(S1)
@@ -113,9 +113,8 @@ impl Component for Segment {
         let enabled = use_enabled(true);
         let key = self.key.clone();
         let on_select = self.on_select.clone();
-        // The selected segment is a light pill with dark text.
         let base = if self.selected {
-            tokens.text
+            over(tokens.pressed, tokens.control)
         } else {
             Color::TRANSPARENT
         };
@@ -126,9 +125,9 @@ impl Component for Segment {
             .a11y_role(AccessibilityRole::Tab)
             .a11y_builder(|builder| builder.set_selected(self.selected))
             .height(Size::fill())
-            .padding((0.0, S3))
+            .padding((0.0, S2))
             .center()
-            .corner_radius(RADIUS_PILL)
+            .corner_radius(RADIUS)
             .background(surface_color(&tokens, base, hovering(), pressing(), false))
             .border(focus_border(&tokens, focus()))
             .maybe(enabled, |element| {
@@ -153,7 +152,7 @@ impl Component for Segment {
                 label()
                     .text(self.text.clone())
                     .color(if self.selected {
-                        tokens.bg
+                        tokens.text
                     } else {
                         tokens.muted
                     })

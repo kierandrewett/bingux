@@ -13,7 +13,7 @@ use crate::layout::page_column;
 use crate::scale::*;
 use crate::surface::{over, use_tokens};
 use crate::theme::Tokens;
-use crate::typography::{self, BODY, CAPTION, Ink, MODAL_TITLE, SECTION};
+use crate::typography::{self, BODY, CAPTION, HEADING, Ink, TITLE};
 
 /// A form's action row: an optional muted note at the left and the action
 /// at the right, on the row height and the gutter. Put it inside a group
@@ -182,23 +182,39 @@ impl Component for Group {
         // a small step above its card.
         rect()
             .width(Size::fill())
-            .spacing(S2)
+            .spacing(S1)
             .maybe_child(heading)
             .child(card_surface(&tokens).children(children))
     }
 }
 
-/// What a group's rows sit on. Rows lie flat on the page: no card fill, no
-/// outline and no hairlines, so a page reads as one calm column and the
-/// hierarchy comes from spacing, size and weight. Hover and selection draw a
-/// rounded layer behind a row.
-fn card_surface(_tokens: &Tokens) -> Rect {
-    rect().width(Size::fill()).spacing(S0)
+/// The card every group and skeleton section sits on: the card colour, a
+/// 12 px radius, and content clipped to that radius so flush rows follow it.
+fn card_surface(tokens: &Tokens) -> Rect {
+    rect()
+        .width(Size::fill())
+        .corner_radius(RADIUS_LG)
+        .background(tokens.card)
+        .overflow(Overflow::Clip)
 }
 
-/// The rows of a group, one under another.
-fn card_rows(_tokens: &Tokens, rows: Vec<Element>) -> Vec<Element> {
-    rows
+/// Rows with a hairline between each pair, inset by the gutter on the left.
+fn card_rows(tokens: &Tokens, rows: Vec<Element>) -> Vec<Element> {
+    let mut children = Vec::with_capacity(rows.len() * 2);
+    for (index, row) in rows.into_iter().enumerate() {
+        if index > 0 {
+            children.push(
+                rect()
+                    .width(Size::fill())
+                    .height(Size::px(1.0))
+                    .margin((0.0, 0.0, 0.0, GUTTER))
+                    .background(tokens.separator)
+                    .into(),
+            );
+        }
+        children.push(row);
+    }
+    children
 }
 
 /// A group name: a heading above a card, larger and heavier than the row
@@ -216,7 +232,7 @@ struct SectionLabel {
 impl Component for SectionLabel {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        SECTION
+        HEADING
             .label(&tokens, self.text.clone())
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis)
@@ -266,9 +282,9 @@ impl Component for StatusBlock {
         let color = ink.color(&tokens);
         // Only an error is tinted; it is a danger layer over the card.
         let background = if matches!(self.status, Status::Error(_)) {
-            over(tokens.danger.with_af32(0.12), tokens.bg)
+            over(tokens.danger.with_af32(0.12), tokens.card)
         } else {
-            Color::TRANSPARENT
+            tokens.card
         };
         let short = text.chars().count() <= 70;
         // A status has the metrics of a row. A long message wraps and grows
@@ -359,5 +375,5 @@ impl Component for Skeleton {
 
 /// A title for in-page headers such as a details view.
 pub fn heading(text: impl Into<String>) -> Element {
-    typography::styled_label(MODAL_TITLE, text)
+    typography::styled_label(TITLE, text)
 }

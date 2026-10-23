@@ -275,7 +275,7 @@ impl Component for Dropdown {
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
             .main_align(Alignment::SpaceBetween)
-            .corner_radius(RADIUS_PILL)
+            .corner_radius(RADIUS)
             .background(surface_color(
                 &tokens,
                 tokens.control,

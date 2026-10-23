@@ -63,7 +63,7 @@ impl Component for ActionStrip {
             .direction(Direction::Horizontal)
             .content(Content::Flex)
             .cross_align(Alignment::Center)
-            .corner_radius(RADIUS_XL)
+            .corner_radius(RADIUS_LG)
             .background(tokens.control);
         for (index, action) in self.actions.iter().enumerate() {
             if index > 0 {
@@ -111,7 +111,7 @@ impl Component for StripCell {
             .height(Size::fill())
             .center()
             .spacing(S1)
-            .corner_radius(RADIUS_XL)
+            .corner_radius(RADIUS_LG)
             .background(background)
             .border(focus_border(&tokens, focus()))
             .opacity(if enabled { 1.0 } else { DISABLED_OPACITY })
