@@ -198,6 +198,12 @@ Rectangle {
             enabled: root.primaryEnabled
             text: root.primaryText
             height: root.footerHeight
+            background: Rectangle {
+                radius: widePrimary.cornerRadius
+                color: !widePrimary.enabled ? Theme.elevated : widePrimary.down ? Qt.darker(Theme.accent, 1.2) : widePrimary.hovered ? Qt.lighter(Theme.accent, 1.1) : Theme.accent
+                border.width: widePrimary.activeFocus ? 2 : 0
+                border.color: Theme.text
+            }
             implicitWidth: Math.round(150 * root.uiScale)
             anchors.right: parent.right
             anchors.bottom: parent.bottom
