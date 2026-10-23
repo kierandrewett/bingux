@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRATCH_BASE = Path.home() / ".cache" / "bingux-InstallerUI"
 ICON_DIR = ROOT / "subprojects/adwaita-icon-theme/Adwaita"
 EXPECTED = [
-    "welcome", "keyboard", "network", "timezone", "hostname", "disk", "storage",
+    "welcome", "keyboard", "network", "timezone", "hostname", "disk", "partitions", "storage",
     "account", "summary", "progress", "finished", "error",
 ]
 

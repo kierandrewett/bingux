@@ -59,6 +59,17 @@ ShellRoot {
         InstallerState.diskPath = "/dev/vda";
     }
 
+    // The partitions page on /dev/vdc: the ESP reused, root formatted, a 2 GiB swap created.
+    function setManualDisk() {
+        InstallerState.diskPath = "/dev/vdc";
+        InstallerState.storageMode = "manual";
+        InstallerState.manualEntries = [
+            {role: "esp", action: "reuse", device: "/dev/vdc1", sizeText: "", typed: false, fs: "ext4"},
+            {role: "root", action: "format", device: "/dev/vdc2", sizeText: "", typed: false, fs: "ext4"},
+            {role: "swap", action: "create", device: "/dev/vdc3", sizeText: "2", typed: true, fs: "ext4"}
+        ];
+    }
+
     Timer {
         id: waitTimer
         interval: 100
@@ -97,7 +108,9 @@ ShellRoot {
         queue(() => root.shot("hostname"));
         queue(() => root.when(() => InstallerState.probeState === "ready", () => go("disk")));
         queue(() => root.shot("disk"));
-        queue(() => { InstallerState.diskPath = "/dev/vda"; InstallerState.filesystem = "xfs"; InstallerState.swap = "zram"; go("storage"); });
+        queue(() => { root.setManualDisk(); go("partitions"); });
+        queue(() => root.shot("partitions"));
+        queue(() => { InstallerState.diskPath = "/dev/vda"; InstallerState.storageMode = "erase"; InstallerState.manualEntries = []; InstallerState.filesystem = "xfs"; InstallerState.swap = "zram"; go("storage"); });
         queue(() => root.shot("storage"));
         queue(() => { root.fillAccount(); go("account"); });
         queue(() => root.shot("account"));
