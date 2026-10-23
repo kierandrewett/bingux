@@ -100,6 +100,11 @@ only that user can write. The greeter only trusts a snapshot whose directory is
 owned by the account it names. Accounts without a snapshot, and the "Other"
 prompt, keep the last shown wallpaper or a deep tint of the accent colour.
 
+The installer runs `bingux-session export` as each new account inside the target
+(`configure.seed_greeter_snapshots`), so the first login screen already shows that
+account's wallpaper and blurred twin, the same wallpaper the first session paints.
+Without it, the first greeter shows the accent gradient until the first login.
+
 ### Wallpaper blur
 
 Alongside the snapshot wallpaper, `bingux-session export` writes a blurred,

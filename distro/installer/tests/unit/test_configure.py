@@ -201,6 +201,18 @@ def test_create_users_sets_root_password_when_given(tmp_path) -> None:  # noqa: 
     assert not any("passwd" in argv and "-l" in argv for argv, _ in runner.calls)
 
 
+def test_seed_greeter_snapshots_exports_each_account_as_itself(tmp_path) -> None:  # noqa: ANN001
+    runner = RecordingRunner()
+    configure.seed_greeter_snapshots(runner, tmp_path, _plan())
+    snapshots = tmp_path / "var/lib/bingux/greeter"
+    assert snapshots.is_dir()
+    assert snapshots.stat().st_mode & 0o7777 == 0o1777
+    assert [argv for argv, _ in runner.calls] == [
+        ["chroot", str(tmp_path), "runuser", "-u", "kieran", "--", "env",
+         "HOME=/home/kieran", "bingux-session", "export"],
+    ]
+
+
 def test_create_users_locks_root_without_root_password(tmp_path) -> None:  # noqa: ANN001
     runner = RecordingRunner()
     configure.create_users(runner, tmp_path, _plan())

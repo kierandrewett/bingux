@@ -80,6 +80,7 @@ LIVE_ONLY_PACKAGES = ("archinstall", "mkinitcpio-archiso", "bingux-installer", "
 GREETD_CONFIG = "etc/greetd/config.toml"
 GREETD_PACKAGED = "usr/share/bingux/greeter/greetd.toml"
 GREETD_GNOBLIN_SESSION = "usr/share/wayland-sessions/gnoblin.desktop"
+GREETER_SNAPSHOTS = "var/lib/bingux/greeter"
 PLYMOUTH_HOOK = "usr/lib/initcpio/install/plymouth"
 HOOKS_RE = re.compile(r"^HOOKS=.*$", re.MULTILINE)
 ZRAM_CONF = "etc/systemd/zram-generator.conf"
@@ -299,6 +300,22 @@ def create_users(runner: Runner, target: Path, plan: Plan) -> None:
     _chroot(runner, target, ["chpasswd", "-e"], stdin="".join(lines), secrets=secrets)
     if plan.root_password is None:
         _chroot(runner, target, ["passwd", "-l", "root"])
+
+
+def seed_greeter_snapshots(runner: Runner, target: Path, plan: Plan) -> None:
+    """Write each new account's greeter snapshot before its first login.
+
+    The login screen paints the account's exported wallpaper and its blurred twin, and
+    the session's first compositor frame names the same twin. Without this the first
+    greeter shows the accent gradient until the first session exports. `bingux-session
+    export` runs as the account, so the snapshot directory it creates is owned by it, as
+    the greeter requires."""
+    snapshots = target / GREETER_SNAPSHOTS
+    snapshots.mkdir(parents=True, exist_ok=True)
+    os.chmod(snapshots, 0o1777)
+    for user in plan.users:
+        _chroot(runner, target, ["runuser", "-u", user.name, "--", "env",
+                                 f"HOME=/home/{user.name}", "bingux-session", "export"])
 
 
 def set_ntp(runner: Runner, target: Path, enabled: bool) -> None:
