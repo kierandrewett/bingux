@@ -191,6 +191,9 @@ work belongs in Git history and does not stay here as a second changelog.
 - [ ] The installer's first frame is the bright, unblurred gradient for about 0.1 s
       (frame mean 53.7, then 37.9) before the dimmed background; seen on every
       installer start.
+      installer.lua now names the packaged blurred wallpaper before the drop-ins load
+      (not yet seen in a boot; `tests/installer-gnoblin-config.py` did not build its probe
+      against the current Gnoblin build tree). Verify on the next ISO.
 - [ ] Greeter user manager (fix 4): `bingux.target` pulled bingux-searchd,
       bingux-statusd, xdg-desktop-portal-bingux and bingux-greeter-export into the
       `greeter` account's user manager. Those five units now carry

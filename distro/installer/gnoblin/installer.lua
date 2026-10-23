@@ -14,6 +14,18 @@ gnoblin.configure.autostart["bingux-greeter"] = { name = "bingux-greeter", enabl
 -- A second one exits on the busy socket, and Gnoblin shows that as an error.
 gnoblin.configure.autostart["bingux-statusd"] = { name = "bingux-statusd", enable = false }
 
+-- Name the packaged blurred wallpaper before the drop-ins load, so the first
+-- compositor frame never depends on the account's home being seeded yet. The
+-- drop-ins below still replace it with the account's own wallpaper.
+gnoblin.configure {
+    compositor = {
+        background = {
+            color = "#161616",
+            image = "/usr/share/backgrounds/bingux-os/default-blur.jpg",
+        },
+    },
+}
+
 -- The same wallpaper and blur drop-ins the live desktop loads, so the installer
 -- card sits on the picture the greeter showed. `~/` is the account's home.
 gnoblin.load("~/.config/gnoblin/conf.d/**/*.lua")
