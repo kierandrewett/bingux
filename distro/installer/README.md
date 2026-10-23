@@ -256,6 +256,7 @@ Results (`~/.cache/bingux-storage/matrix/<case>/results.json`; log `~/.cache/bin
 | Case | Result | Artifact |
 |------|--------|----------|
 | uefi-free-space | PASS (17/17 checks) | `~/.cache/bingux-storage/matrix/uefi-free-space/` |
+| bios-free-space | PASS (17/17 checks) | `~/.cache/bingux-storage/matrix/bios-free-space/` |
 
 - Artifacts: `distro/out/installer-backend/matrix/<case>/{install,boot}/` (serial transcript, command
   log, screenshots) and `distro/out/installer-backend/matrix/<case>/results.json`. Exit status is 0 only
