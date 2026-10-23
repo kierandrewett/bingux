@@ -1,6 +1,6 @@
 [Plymouth Theme]
 Name=Bingux OS
-Description=Bingux OS boot splash: a dark blue gradient with the product name.
+Description=Bingux OS boot splash: black, the Bingux mark and name, with a spinner.
 ModuleName=script
 
 [script]

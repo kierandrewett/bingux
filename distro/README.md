@@ -96,7 +96,7 @@ QEMU runs of the tests below):
   `/opt/bingux-os/repo`, so installing needs no network for those packages.
 - The image names itself Bingux OS: `/etc/os-release`, `/etc/issue`, the motd,
   the boot menus (GRUB, syslinux, systemd-boot) and the Plymouth boot splash
-  (theme `bingux`, a gradient with the product name). The `bingux-os` package
+  (theme `bingux`: black, with the Bingux mark, the product name and a spinner). The `bingux-os` package
   ships the release files and the alpm hook `bingux-os-release.hook`, which puts
   them in place after every transaction that touches `filesystem` or
   `bingux-os`; `ID_LIKE=arch` keeps Arch tooling working. The package adds the

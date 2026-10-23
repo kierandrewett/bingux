@@ -1,34 +1,83 @@
-// Bingux OS boot splash. Colours match the default wallpaper gradient
-// (#2b3a67 to #101523) so the splash hands over to the login screen without a jump.
-Window.SetBackgroundTopColor(0.169, 0.227, 0.404);
-Window.SetBackgroundBottomColor(0.063, 0.082, 0.137);
+// Bingux OS boot splash, Fedora-style: a near-black field with the mark and
+// the product name centred, and a spinner below. Everything is laid out from
+// the screen height, so 1280x800, 1366x768 and 1920x1080 get the same design.
+// The same file runs in the live initramfs and in the installed system.
 
-title.image = Image.Text("Bingux OS", 1, 1, 1);
-title.sprite = Sprite(title.image);
-title.sprite.SetX(Window.GetX() + Window.GetWidth() / 2 - title.image.GetWidth() / 2);
-title.sprite.SetY(Window.GetY() + Window.GetHeight() / 2 - title.image.GetHeight() / 2);
+// Layout is designed on a 1080-line screen; `u` is one design pixel scaled to this screen.
+screen_h = Window.GetHeight();
+screen_w = Window.GetWidth();
+u = screen_h / 1080;
+
+// Near-black, not pure black, so the panel edge of a monitor does not look like a hole.
+Window.SetBackgroundTopColor(0.043, 0.043, 0.051);
+Window.SetBackgroundBottomColor(0.043, 0.043, 0.051);
+
+// Mark and wordmark, centred as one block a little above the middle.
+mark_size = Math.Int(190 * u);
+mark.image = Image("bingux-mark.png");
+mark.image = mark.image.Scale(mark_size, mark_size);
+mark.sprite = Sprite(mark.image);
+mark.x = screen_w / 2 - mark_size / 2;
+mark.y = screen_h * 0.40 - mark_size / 2;
+mark.sprite.SetPosition(mark.x, mark.y, 0);
+
+name.image = Image.Text("Bingux OS", 0.95, 0.95, 0.96, 1, "Sans Bold " + Math.Int(44 * u), "center");
+name.sprite = Sprite(name.image);
+name.sprite.SetPosition(screen_w / 2 - name.image.GetWidth() / 2, mark.y + mark_size + 28 * u, 0);
+
+// Spinner: eight dots on a ring below the wordmark. The dot that leads is
+// fully opaque and the trail fades, which reads as motion without a fade-in.
+spinner_dots = 8;
+spinner_ring = 30 * u;
+spinner_cx = screen_w / 2;
+spinner_cy = screen_h * 0.70;
+spinner_dot_size = Math.Int(16 * u);
+spinner_dot_img = Image("spinner-dot.png");
+spinner_dot_img = spinner_dot_img.Scale(spinner_dot_size, spinner_dot_size);
+
+spinner_sprite = [];
+for (i = 0; i < spinner_dots; i += 1) {
+    angle = 2 * Math.Pi * i / spinner_dots;
+    spinner_sprite[i] = Sprite(spinner_dot_img);
+    spinner_sprite[i].SetPosition(
+        spinner_cx + spinner_ring * Math.Cos(angle) - spinner_dot_size / 2,
+        spinner_cy + spinner_ring * Math.Sin(angle) - spinner_dot_size / 2,
+        0);
+}
 
 phase = 0;
 
+fun spinner_opacity(index) {
+    // Distance behind the leading dot, 0 (leader) to 7 (tail).
+    behind = index - phase;
+    if (behind < 0)
+        behind += spinner_dots;
+    return 1 - behind / spinner_dots * 0.85;
+}
+
 fun refresh_callback() {
-    phase += 0.08;
-    title.sprite.SetOpacity(0.55 + 0.45 * (Math.Sin(phase) * 0.5 + 0.5));
+    phase += 0.25;
+    if (phase >= spinner_dots)
+        phase -= spinner_dots;
+    for (i = 0; i < spinner_dots; i += 1)
+        spinner_sprite[i].SetOpacity(spinner_opacity(i));
 }
 
 Plymouth.SetRefreshFunction(refresh_callback);
 
-// The encrypted root asks for its passphrase through Plymouth. Without these
-// callbacks the splash keeps only the title, so the prompt is typed blind.
+// The encrypted root asks for its passphrase through Plymouth. The prompt sits
+// under the spinner in the same type so it reads as part of the splash.
+prompt_size = Math.Int(22 * u);
 prompt.sprite = Sprite();
+prompt.y = screen_h * 0.80;
 
 fun display_password_callback(text, bullets) {
     stars = "";
     for (i = 0; i < bullets; i += 1)
         stars += "*";
-    prompt.image = Image.Text(text + " " + stars, 1, 1, 1);
+    prompt.image = Image.Text(text + " " + stars, 0.95, 0.95, 0.96, 1, "Sans " + prompt_size, "center");
     prompt.sprite.SetImage(prompt.image);
-    prompt.sprite.SetX(Window.GetX() + Window.GetWidth() / 2 - prompt.image.GetWidth() / 2);
-    prompt.sprite.SetY(Window.GetY() + Window.GetHeight() * 0.6);
+    prompt.sprite.SetPosition(screen_w / 2 - prompt.image.GetWidth() / 2, prompt.y, 0);
     prompt.sprite.SetOpacity(1);
 }
 
@@ -38,3 +87,26 @@ fun display_normal_callback() {
 
 Plymouth.SetDisplayPasswordFunction(display_password_callback);
 Plymouth.SetDisplayNormalFunction(display_normal_callback);
+
+// `plymouth display-message --text=...` shows a dim line at the bottom, for
+// example why a mount is waiting.
+message_size = Math.Int(18 * u);
+message.sprite = Sprite();
+message.y = screen_h * 0.90;
+
+fun display_message_callback(text) {
+    message.image = Image.Text(text, 0.55, 0.55, 0.58, 1, "Sans " + message_size, "center");
+    message.sprite.SetImage(message.image);
+    message.sprite.SetPosition(screen_w / 2 - message.image.GetWidth() / 2, message.y, 0);
+    message.sprite.SetOpacity(1);
+}
+
+fun hide_message_callback(text) {
+    message.sprite.SetOpacity(0);
+}
+
+Plymouth.SetDisplayMessageFunction(display_message_callback);
+Plymouth.SetHideMessageFunction(hide_message_callback);
+
+// No quit callback: the splash is cut as soon as Plymouth quits, so the first
+// compositor frame follows directly without a fade-out.

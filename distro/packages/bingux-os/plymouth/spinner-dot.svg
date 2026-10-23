@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  One dot of the boot splash spinner. Original artwork for this project; GPL-3.0-or-later.
+  spinner-dot.png is the 64 px render used by bingux.script:
+    rsvg-convert -w 64 -h 64 spinner-dot.svg -o spinner-dot.png
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <circle cx="32" cy="32" r="30" fill="#f2f2f4"/>
+</svg>
