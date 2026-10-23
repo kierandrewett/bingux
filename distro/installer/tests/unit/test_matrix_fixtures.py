@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -53,3 +54,23 @@ def test_ntfs_manifest_verifies_then_catches_a_changed_file(tmp_path: Path) -> N
     ok, detail = fixtures.verify_ntfs_manifest(image, "raw", scratch)
     assert not ok
     assert "keep.txt" in detail
+
+
+@needs_ntfs
+def test_ntfs_manifest_verifies_after_ntfsresize_shrink(tmp_path: Path) -> None:
+    """The alongside case shrinks the volume with ntfsresize, which schedules chkdsk (dirty flag).
+    The host check must still read the shrunk volume in full."""
+    fixtures = _fixtures()
+    image = tmp_path / "disk.raw"
+    fixtures.build_other_os_disk(image, 64 * 1024**2, PART_BYTES, "ntfs")
+    part = tmp_path / "part.img"
+    fixtures._slice_sectors(image, part, fixtures.FIRST_SECTOR, PART_BYTES // 512)
+    subprocess.run(["ntfsresize", "--force", "--no-progress-bar", "--size", str(24 * 1024**2), str(part)],
+                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    with image.open("r+b") as handle:
+        handle.seek(fixtures.FIRST_SECTOR * 512)
+        handle.write(part.read_bytes())
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    ok, detail = fixtures.verify_ntfs_manifest(image, "raw", scratch)
+    assert ok, detail

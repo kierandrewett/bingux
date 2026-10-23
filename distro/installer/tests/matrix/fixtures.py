@@ -145,14 +145,15 @@ def _verify_partition(flat: Path, scratch: Path) -> tuple[bool, str]:
     total = int.from_bytes(boot.read_bytes()[0x28:0x30], "little")
     part = scratch / "other.img"
     _slice_sectors(flat, part, FIRST_SECTOR, total + 1)
-    listing = subprocess.run(["ntfscat", str(part), MANIFEST], capture_output=True, check=False)
+    # ntfsresize marks the volume "scheduled for chkdsk" on purpose, so reads need -f (read-only here)
+    listing = subprocess.run(["ntfscat", "-f", str(part), MANIFEST], capture_output=True, check=False)
     lines = listing.stdout.decode(errors="replace").splitlines()
     if listing.returncode != 0 or not lines:
         return False, f"manifest unreadable: rc={listing.returncode} {listing.stderr.decode(errors='replace')[-200:]!r}"
     bad = []
     for line in lines:
         digest, rel = line.split("  ", 1)
-        data = subprocess.run(["ntfscat", str(part), rel], capture_output=True, check=False).stdout
+        data = subprocess.run(["ntfscat", "-f", str(part), rel], capture_output=True, check=False).stdout
         if hashlib.sha256(data).hexdigest() != digest:
             bad.append(rel)
     return (not bad, f"{len(lines)} files, mismatched: {bad}")
