@@ -6,6 +6,7 @@
 use std::process::ExitCode;
 
 use bingux_portal::binguxctl::Ctl;
+use bingux_portal::identity;
 use bingux_portal::shortcuts::{self, PROVIDER_NAME, PROVIDER_PATH, Provider};
 
 fn main() -> ExitCode {
@@ -19,7 +20,11 @@ fn main() -> ExitCode {
 }
 
 async fn serve() -> zbus::Result<()> {
-    let provider = Provider::new(Ctl::from_env(), shortcuts::grants_path());
+    let provider = Provider::new(
+        Ctl::from_env(),
+        shortcuts::grants_path(),
+        identity::current_uid(),
+    );
     let _connection = zbus::connection::Builder::session()?
         .name(PROVIDER_NAME)?
         .serve_at(PROVIDER_PATH, provider)?

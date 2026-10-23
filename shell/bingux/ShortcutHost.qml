@@ -54,10 +54,10 @@ Scope {
                 error: "Unknown shortcut mode"
             };
         const request = parsed.request ?? {};
-        if (typeof request.app_id !== "string" || request.app_id === "")
+        if (typeof request.name !== "string" || request.name === "")
             return {
                 ok: false,
-                error: "Request needs an app_id"
+                error: "Request needs a name"
             };
         const list = Array.isArray(request.shortcuts) ? request.shortcuts : [];
         if (list.length === 0 || list.length > maxShortcuts)
@@ -81,7 +81,7 @@ Scope {
         return {
             ok: true,
             mode: parsed.mode,
-            appId: request.app_id,
+            name: request.name,
             shortcuts: shortcuts
         };
     }
@@ -99,7 +99,7 @@ Scope {
         setRequest(id, {
             id: id,
             mode: parsed.mode,
-            appId: parsed.appId,
+            name: parsed.name,
             shortcuts: parsed.shortcuts,
             state: "pending",
             approved: [],
@@ -244,7 +244,7 @@ Scope {
 
                 Text {
                     Layout.fillWidth: true
-                    text: root.active ? (root.active.mode === "configure" ? "Change shortcuts for " : "Allow shortcuts for ") + root.active.appId : ""
+                    text: root.active ? (root.active.mode === "configure" ? "Change shortcuts for " : "Allow shortcuts for ") + root.active.name : ""
                     textFormat: Text.PlainText
                     color: Theme.text
                     font.pixelSize: Theme.fontSize + 2

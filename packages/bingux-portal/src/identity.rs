@@ -43,6 +43,17 @@ impl Identity {
             Identity::HostExe(exe) => Some(exe),
         }
     }
+
+    /// The name the approval UI shows: the app ID, or a host program's executable file name.
+    pub fn display_name(&self) -> &str {
+        match self {
+            Identity::AppId(app_id) => app_id,
+            Identity::HostExe(exe) => Path::new(exe)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or(exe),
+        }
+    }
 }
 
 /// The parts of a portal request handle.
@@ -127,10 +138,11 @@ pub async fn frontend_is(connection: &Connection, caller: &str) -> bool {
     owner_is(connection, caller, PORTAL_DESKTOP_NAME).await
 }
 
-/// Resolves the requester identity, or `None` when the request must be refused.
+/// Resolves the identity of a portal request, or `None` when it must be refused.
 ///
-/// `caller` is the unique name that called the backend. `uid` is this
-/// backend's user ID.
+/// `caller` is the unique name that called the backend. Only the desktop portal
+/// frontend may make a request for an application, so `caller` must own
+/// `org.freedesktop.portal.Desktop`.
 pub async fn resolve(
     connection: &Connection,
     caller: &str,
@@ -141,12 +153,27 @@ pub async fn resolve(
     if !frontend_is(connection, caller).await {
         return None;
     }
+    requester(connection, app_id, handle, uid).await
+}
+
+/// Resolves the identity of the application that made the request `handle`.
+///
+/// The Gnoblin backend calls the shortcut provider for the frontend, so the
+/// caller there is not the frontend and the frontend check does not apply. The
+/// handle must still name a request from this user, and an empty `app_id`
+/// identifies a host program by its executable.
+pub async fn requester(
+    connection: &Connection,
+    app_id: &str,
+    handle: &str,
+    uid: u32,
+) -> Option<Identity> {
     let proxy = fdo::DBusProxy::new(connection).await.ok()?;
 
     let request = parse_request_handle(handle)?;
-    let requester = BusName::try_from(request.sender.as_str()).ok()?;
+    let bus_name = BusName::try_from(request.sender.as_str()).ok()?;
     let requester_uid = proxy
-        .get_connection_unix_user(requester.clone())
+        .get_connection_unix_user(bus_name.clone())
         .await
         .ok()?;
     if requester_uid != uid {
@@ -157,7 +184,7 @@ pub async fn resolve(
         return Some(identity);
     }
 
-    let pid = proxy.get_connection_unix_process_id(requester).await.ok()?;
+    let pid = proxy.get_connection_unix_process_id(bus_name).await.ok()?;
     if pid == 0 {
         return None;
     }

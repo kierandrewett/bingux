@@ -13,11 +13,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use zbus::fdo;
 use zbus::message::Header;
-use zbus::zvariant::{OwnedValue, Value};
+use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 use zbus::{Connection, interface};
 
 use crate::binguxctl::{Ctl, parse_request_reply};
-use crate::identity;
+use crate::identity::{self, Identity};
 use crate::screenshot::{MAX_CONSECUTIVE_FAILURES, POLL_INTERVAL};
 use crate::store;
 
@@ -45,7 +45,9 @@ pub type ShortcutList = Vec<(String, HashMap<String, OwnedValue>)>;
 /// One accelerator the user has allowed for one application's shortcut.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Grant {
-    pub app_id: String,
+    /// The requester's identity key, from `Identity::key()`. Grants saved without one are dropped.
+    #[serde(default)]
+    pub identity: String,
     pub id: String,
     #[serde(default)]
     pub description: String,
@@ -148,12 +150,12 @@ pub fn parse_requested(shortcuts: &ShortcutList) -> Result<Vec<Requested>, Strin
 }
 
 /// The grants an approval would cover: one per requested shortcut with a trigger.
-pub fn offered_grants(app_id: &str, requested: &[Requested]) -> Vec<Grant> {
+pub fn offered_grants(identity: &str, requested: &[Requested]) -> Vec<Grant> {
     requested
         .iter()
         .filter(|entry| !entry.trigger.is_empty())
         .map(|entry| Grant {
-            app_id: app_id.to_owned(),
+            identity: identity.to_owned(),
             id: entry.id.clone(),
             description: entry.description.clone(),
             accelerator: entry.trigger.clone(),
@@ -163,7 +165,7 @@ pub fn offered_grants(app_id: &str, requested: &[Requested]) -> Vec<Grant> {
 
 fn granted(grants: &[Grant], offer: &Grant) -> bool {
     grants.iter().any(|grant| {
-        grant.app_id == offer.app_id
+        grant.identity == offer.identity
             && grant.id == offer.id
             && grant.accelerator == offer.accelerator
     })
@@ -187,23 +189,23 @@ pub fn approved_grants(offered: &[Grant], approved: &[Approval]) -> Vec<Grant> {
         .collect()
 }
 
-/// The grants for `app_id`.
-pub fn app_grants(grants: &[Grant], app_id: &str) -> Vec<Grant> {
+/// The grants for `identity`.
+pub fn app_grants(grants: &[Grant], identity: &str) -> Vec<Grant> {
     grants
         .iter()
-        .filter(|grant| grant.app_id == app_id)
+        .filter(|grant| grant.identity == identity)
         .cloned()
         .collect()
 }
 
-/// Replaces the grants for `app_id` whose IDs are in `scope` with `approved`.
+/// Replaces the grants for `identity` whose IDs are in `scope` with `approved`.
 pub fn replace_grants(
     grants: &mut Vec<Grant>,
-    app_id: &str,
+    identity: &str,
     scope: &[String],
     approved: Vec<Grant>,
 ) {
-    grants.retain(|grant| !(grant.app_id == app_id && scope.contains(&grant.id)));
+    grants.retain(|grant| !(grant.identity == identity && scope.contains(&grant.id)));
     grants.extend(approved);
 }
 
@@ -213,7 +215,7 @@ pub fn replace_grants(
 /// an empty `shortcuts` list, which the portal treats as not registered.
 pub fn results_for(
     grants: &[Grant],
-    app_id: &str,
+    identity: &str,
     entries: &[(String, String)],
 ) -> fdo::Result<ShortcutList> {
     let mut results = Vec::with_capacity(entries.len());
@@ -221,7 +223,7 @@ pub fn results_for(
         let mut options = HashMap::new();
         let mine: Vec<&Grant> = grants
             .iter()
-            .filter(|grant| grant.app_id == app_id && grant.id == *id)
+            .filter(|grant| grant.identity == identity && grant.id == *id)
             .collect();
         let label = if description.is_empty() {
             mine.first()
@@ -263,7 +265,13 @@ pub fn parse_decision(text: &str) -> Result<Option<Decision>, String> {
 pub fn load_grants(path: &Path) -> Result<Vec<Grant>, String> {
     match std::fs::read_to_string(path) {
         Ok(text) => toml::from_str::<GrantFile>(&text)
-            .map(|file| file.grant)
+            .map(|file| {
+                // Grants saved before they were keyed by identity are dropped, so the user is asked again.
+                file.grant
+                    .into_iter()
+                    .filter(|grant| !grant.identity.is_empty())
+                    .collect()
+            })
             .map_err(|e| format!("cannot read {}: {e}", path.display())),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
         Err(error) => Err(format!("cannot read {}: {error}", path.display())),
@@ -296,15 +304,17 @@ impl Drop for Busy<'_> {
 pub struct Provider {
     ctl: Ctl,
     grants_path: PathBuf,
+    uid: u32,
     busy: AtomicBool,
     sequence: AtomicU64,
 }
 
 impl Provider {
-    pub fn new(ctl: Ctl, grants_path: PathBuf) -> Self {
+    pub fn new(ctl: Ctl, grants_path: PathBuf, uid: u32) -> Self {
         Provider {
             ctl,
             grants_path,
+            uid,
             busy: AtomicBool::new(false),
             sequence: AtomicU64::new(0),
         }
@@ -330,6 +340,22 @@ impl Provider {
 
     fn save(&self, grants: &[Grant]) -> fdo::Result<()> {
         save_grants(&self.grants_path, grants).map_err(fdo::Error::Failed)
+    }
+
+    /// Resolves the application that made the request `handle`, or refuses it.
+    async fn requester(
+        &self,
+        connection: &Connection,
+        app_id: &str,
+        handle: &ObjectPath<'_>,
+    ) -> fdo::Result<Identity> {
+        identity::requester(connection, app_id, handle.as_str(), self.uid)
+            .await
+            .ok_or_else(|| {
+                fdo::Error::AccessDenied(
+                    "cannot identify the application that made the request".to_owned(),
+                )
+            })
     }
 
     /// Opens the approval UI with `payload` and waits for the user.
@@ -397,14 +423,19 @@ async fn authorize(connection: &Connection, header: &Header<'_>) -> fdo::Result<
 }
 
 /// Tells the Gnoblin backend about changed saved bindings.
-async fn rebind(connection: &Connection, app_id: &str, results: &ShortcutList) -> zbus::Result<()> {
+async fn rebind(
+    connection: &Connection,
+    app_id: &str,
+    results: &ShortcutList,
+    handle: &ObjectPath<'_>,
+) -> zbus::Result<()> {
     connection
         .call_method(
             Some(BACKEND_NAME),
             REBIND_PATH,
             Some(REBIND_INTERFACE),
             REBIND_METHOD,
-            &(app_id, results),
+            &(app_id, results, handle),
         )
         .await?;
     Ok(())
@@ -423,6 +454,15 @@ fn offered_entries(offered: &[Grant]) -> serde_json::Value {
         .collect()
 }
 
+/// The approval UI's request: the name to show and the identity grants are keyed by.
+fn approval_payload(requester: &Identity, offered: &[Grant]) -> serde_json::Value {
+    json!({
+        "name": requester.display_name(),
+        "identity": requester.key(),
+        "shortcuts": offered_entries(offered),
+    })
+}
+
 #[interface(name = "org.gnoblin.Shell.GlobalShortcutsProvider")]
 impl Provider {
     async fn bind_shortcuts(
@@ -432,15 +472,18 @@ impl Provider {
         app_id: &str,
         _parent_window: &str,
         shortcuts: ShortcutList,
+        handle: ObjectPath<'_>,
     ) -> fdo::Result<ShortcutList> {
         let sender = authorize(connection, &header).await?;
         check_text(app_id, "app_id").map_err(invalid)?;
         let requested = parse_requested(&shortcuts).map_err(invalid)?;
-        let offered = offered_grants(app_id, &requested);
+        let requester = self.requester(connection, app_id, &handle).await?;
+        let identity = requester.key();
+        let offered = offered_grants(&identity, &requested);
         let mut grants = self.load()?;
 
         if needs_approval(&offered, &grants) {
-            let payload = json!({ "app_id": app_id, "shortcuts": offered_entries(&offered) });
+            let payload = approval_payload(&requester, &offered);
             match self.ask(connection, &sender, "bind", payload).await? {
                 Decision::Declined => {
                     return Err(fdo::Error::AccessDenied(
@@ -455,7 +498,7 @@ impl Provider {
                         ));
                     }
                     let scope: Vec<String> = requested.iter().map(|r| r.id.clone()).collect();
-                    replace_grants(&mut grants, app_id, &scope, kept);
+                    replace_grants(&mut grants, &identity, &scope, kept);
                     self.save(&grants)?;
                 }
             }
@@ -465,7 +508,7 @@ impl Provider {
             .into_iter()
             .map(|r| (r.id, r.description))
             .collect();
-        results_for(&grants, app_id, &entries)
+        results_for(&grants, &identity, &entries)
     }
 
     async fn configure_shortcuts(
@@ -474,42 +517,45 @@ impl Provider {
         #[zbus(connection)] connection: &Connection,
         app_id: &str,
         _parent_window: &str,
+        handle: ObjectPath<'_>,
     ) -> fdo::Result<ShortcutList> {
         let sender = authorize(connection, &header).await?;
         check_text(app_id, "app_id").map_err(invalid)?;
+        let requester = self.requester(connection, app_id, &handle).await?;
+        let identity = requester.key();
         let mut grants = self.load()?;
-        let offered = app_grants(&grants, app_id);
+        let offered = app_grants(&grants, &identity);
         if offered.is_empty() {
             return Ok(Vec::new());
         }
 
-        let payload = json!({ "app_id": app_id, "shortcuts": offered_entries(&offered) });
+        let payload = approval_payload(&requester, &offered);
         if let Decision::Approved(approved) =
             self.ask(connection, &sender, "configure", payload).await?
         {
             let kept = approved_grants(&offered, &approved);
             if kept != offered {
                 let scope: Vec<String> = offered.iter().map(|g| g.id.clone()).collect();
-                replace_grants(&mut grants, app_id, &scope, kept);
+                replace_grants(&mut grants, &identity, &scope, kept);
                 self.save(&grants)?;
                 let entries: Vec<(String, String)> = offered
                     .iter()
                     .map(|g| (g.id.clone(), g.description.clone()))
                     .collect();
-                let results = results_for(&grants, app_id, &entries)?;
+                let results = results_for(&grants, &identity, &entries)?;
                 // The grants are saved. A failed rebind only delays the change until
                 // the backend next binds, so it is logged, not returned as an error.
-                if let Err(error) = rebind(connection, app_id, &results).await {
+                if let Err(error) = rebind(connection, app_id, &results, &handle).await {
                     eprintln!("bingux-global-shortcuts: cannot apply saved bindings: {error}");
                 }
             }
         }
 
-        let entries: Vec<(String, String)> = app_grants(&grants, app_id)
+        let entries: Vec<(String, String)> = app_grants(&grants, &identity)
             .into_iter()
             .map(|g| (g.id, g.description))
             .collect();
-        results_for(&grants, app_id, &entries)
+        results_for(&grants, &identity, &entries)
     }
 }
 
@@ -519,7 +565,7 @@ mod tests {
 
     fn grant(app: &str, id: &str, accelerator: &str) -> Grant {
         Grant {
-            app_id: app.to_owned(),
+            identity: app.to_owned(),
             id: id.to_owned(),
             description: format!("{id} label"),
             accelerator: accelerator.to_owned(),
