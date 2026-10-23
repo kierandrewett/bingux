@@ -215,6 +215,21 @@ work belongs in Git history and does not stay here as a second changelog.
 - [ ] Re-run `tests/distro-install.py` on an ISO that contains `bingux-installer`;
       the 2026.10.21 image predates the package and the test cannot pass on it.
 
+Before/after (ISO 6c65aa4, `tests/distro-installed-greeter.py 3`, stage medians in seconds from `stages.json`):
+
+| Metric | Before | Now | Target |
+| --- | --- | --- | --- |
+| Greeter submit-to-session-bar (sign-in submit to desktop painted) | 11 (runs 10, 18, 11) | 9.0 (9.01 x3) | 8 or less |
+| Power on to greeter | not measured | 42.8 | - |
+| Greeter shown to desktop painted | not measured | 19.9 | - |
+| Lock request to lock screen | not measured | 2.6 | - |
+| Unlock to desktop | not measured | 6.2 | - |
+| Logout request to logout done | not measured | 12.6 | - |
+| Installer restart to guest reset black frames (`tests/distro-handover.py`) | not measured | 261-263 s (uefi), 297-299 s (uefi-luks), from 255 s (bios) | 0 |
+| Black gaps over 0.5 s in greeter recordings | not measured | 5-17 s, 38-40 s, 59 s (x3 runs) | 0 |
+| Wallpaper jump greeter shown to desktop painted | not measured | 13.1-13.4 s | not gated |
+
+
 ## Shell maintenance
 
 - [x] Build Quickshell into `bingux-shell` and run the shells from the packed

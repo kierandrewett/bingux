@@ -31,6 +31,7 @@ runs go to distro/out/installed-greeter/summary.json.
 
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import statistics
@@ -95,7 +96,23 @@ def serial_login(vm, timeout=300):
     # Turn the echo off so only command output is captured.
     vm._serial.sendall(b"stty -echo; export PAGER=cat XDG_RUNTIME_DIR=/run/user/$(id -u)\n")
     time.sleep(2)
-    return vm.run("id -un", 30).strip().endswith(USER)
+    # The console echoes the prompt after the output; compare the answer lines only.
+    return USER in clean_lines(vm.run("id -un", 30))
+
+
+ANSI_ESCAPE = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[[0-9;?]*[A-Za-z]|\x1b[=>]")
+
+
+def clean_lines(output):
+    """Console lines with terminal escapes removed, blanks dropped."""
+    text = ANSI_ESCAPE.sub("", output).replace("\r", "")
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
+def last_answer(output):
+    """The last console line that is not the shell prompt."""
+    lines = [line for line in clean_lines(output) if not line.endswith("$")]
+    return lines[-1] if lines else ""
 
 
 def run_once(index, out_root):
@@ -140,6 +157,9 @@ def run_once(index, out_root):
         frame = None
         for attempt in range(3):
             time.sleep(10)
+            if attempt:
+                for _ in range(len(PASSWORD) + 8):
+                    vm.key("backspace")
             vm.type_text(PASSWORD)
             vm.key("ret")
             stamp(f"sign-in submitted {attempt}")
@@ -155,7 +175,7 @@ def run_once(index, out_root):
             still("desktop", frame)
 
             checks["serial login as the account"] = serial_login(vm)
-            vm.recorder.mark("lock requested")
+            stamp("lock requested")
             report.append("$ gnoblinctl session lock\n" + vm.run("gnoblinctl session lock 2>&1", 30) + "\n")
             vm.recorder.mark("lock requested done")
             lock_out = vm.poll(LOCK_STATE, lambda o: '"locked"' in o, attempts=20, delay=2)
@@ -182,11 +202,11 @@ def run_once(index, out_root):
             report.append("$ gnoblinctl session logout\n" + vm.run("gnoblinctl session logout 2>&1", 30) + "\n")
             left = vm.poll(
                 f"pgrep -c -u {USER} -x gnoblin",
-                lambda o: o.strip().splitlines()[-1:] == ["0"],
+                lambda o: last_answer(o) == "0",
                 attempts=30,
                 delay=2,
             )
-            checks["user session ends on log out"] = left.strip().splitlines()[-1:] == ["0"]
+            checks["user session ends on log out"] = last_answer(left) == "0"
             time.sleep(10)
             still("logged-out")
             stamp("logout done")
@@ -197,7 +217,7 @@ def run_once(index, out_root):
     finally:
         vm.stop()
         shutil.rmtree(work, ignore_errors=True)
-    (out / "timeline.json").write_text(json.dumps(timeline, indent=2) + "\n")
+    (out / "stages.json").write_text(json.dumps(timeline, indent=2) + "\n")
     for name, ok in checks.items():
         print(f"[{index}] " + ("ok   " if ok else "FAIL ") + name)
     return timeline, checks
