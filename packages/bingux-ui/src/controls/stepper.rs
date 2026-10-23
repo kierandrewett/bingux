@@ -125,7 +125,7 @@ impl Component for Stepper {
                 builder.set_max_numeric_value(max as f64);
                 builder.set_numeric_value_step(step as f64);
             })
-            .height(Size::px(CONTROL_HEIGHT))
+            .height(Size::px(control_height()))
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
             .corner_radius(RADIUS)

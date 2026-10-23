@@ -169,7 +169,7 @@ impl Component for Row {
         let height = if self.subtitle.is_some() {
             TALL_ROW_HEIGHT
         } else {
-            ROW_HEIGHT
+            row_height()
         };
         let background = surface_color(
             &tokens,

@@ -268,7 +268,7 @@ impl Component for Dropdown {
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::ComboBox)
             .a11y_builder(move |builder| builder.set_expanded(open()))
-            .height(Size::px(CONTROL_HEIGHT))
+            .height(Size::px(control_height()))
             .width(Size::px(width))
             .padding((0.0, S2, 0.0, S3))
             .spacing(S2)
@@ -353,7 +353,7 @@ impl Component for Dropdown {
         let open_up = menu_height > below && above > below;
         let slide = MENU_SLIDE * (1.0 - progress);
         let menu_offset = if open_up {
-            -(CONTROL_HEIGHT + menu_height + MENU_GAP) + slide
+            -(control_height() + menu_height + MENU_GAP) + slide
         } else {
             MENU_GAP - slide
         };

@@ -316,6 +316,8 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         // On a narrow window this is true while the list of pages is the screen.
         let width = Platform::get().current_window().root_size.read().width;
         let narrow = width < NARROW_BELOW;
+        // Controls and rows read their sizes from this before they are built.
+        set_touch(narrow);
         let start_on_list = self.start_on_list;
         let mut sidebar_open = use_state(move || narrow && start_on_list);
         let side = if narrow { S4 } else { S6 };
@@ -553,6 +555,9 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             .maybe_child((!narrow).then(|| sidebar(false)))
             .child(
                 rect()
+                    // Sizes change with the touch density, so a change
+                    // remounts the page and it is laid out again.
+                    .key(narrow)
                     .width(Size::flex(1.0))
                     .height(Size::fill())
                     .child(header)
@@ -905,7 +910,7 @@ impl<T: NavItem> Component for NavEntry<T> {
             .a11y_role(AccessibilityRole::Tab)
             .a11y_builder(move |builder| builder.set_selected(is_selected))
             .width(Size::fill())
-            .height(Size::px(ROW_HEIGHT))
+            .height(Size::px(row_height()))
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
             .spacing(GUTTER)

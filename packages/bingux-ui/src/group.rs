@@ -21,7 +21,7 @@ use crate::typography::{self, BODY, CAPTION, Ink, SECTION, TITLE};
 pub fn action_row(note: Option<&str>, action: impl IntoElement) -> Element {
     rect()
         .width(Size::fill())
-        .height(Size::px(ROW_HEIGHT))
+        .height(Size::px(row_height()))
         .padding((0.0, GUTTER))
         .direction(Direction::Horizontal)
         .cross_align(Alignment::Center)
@@ -52,7 +52,7 @@ impl Component for FormRow {
         let tokens = use_tokens();
         rect()
             .width(Size::fill())
-            .height(Size::px(ROW_HEIGHT))
+            .height(Size::px(row_height()))
             .padding((0.0, GUTTER))
             .direction(Direction::Horizontal)
             .cross_align(Alignment::Center)
@@ -291,8 +291,8 @@ impl Component for StatusBlock {
         // the block.
         rect()
             .width(Size::fill())
-            .maybe(short, |card| card.height(Size::px(ROW_HEIGHT)))
-            .maybe(!short, |card| card.min_height(Size::px(ROW_HEIGHT)))
+            .maybe(short, |card| card.height(Size::px(row_height())))
+            .maybe(!short, |card| card.min_height(Size::px(row_height())))
             .padding((S2, GUTTER))
             .spacing(S3)
             .background(background)
@@ -346,7 +346,7 @@ impl Component for Skeleton {
                 Element::from(
                     rect()
                         .width(Size::fill())
-                        .height(Size::px(ROW_HEIGHT))
+                        .height(Size::px(row_height()))
                         .padding((0.0, GUTTER))
                         .direction(Direction::Horizontal)
                         .content(Content::Flex)

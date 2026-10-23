@@ -5,15 +5,30 @@ use accesskit::Toggled;
 use freya::animation::*;
 use freya::prelude::*;
 
+use crate::scale::touch;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
 
-const SWITCH_WIDTH: f32 = 36.0;
-const SWITCH_HEIGHT: f32 = 20.0;
-/// Pill radius: half the track height.
-const SWITCH_RADIUS: f32 = 10.0;
-const THUMB: f32 = 16.0;
-/// The thumb widens to this while the switch is pressed.
-const THUMB_PRESSED: f32 = 18.0;
+/// The pill, the thumb and the width the thumb takes while pressed, for a
+/// mouse and for a fingertip. The radius is half the track height.
+struct Sizes {
+    width: f32,
+    height: f32,
+    thumb: f32,
+    thumb_pressed: f32,
+}
+
+const MOUSE: Sizes = Sizes {
+    width: 36.0,
+    height: 20.0,
+    thumb: 16.0,
+    thumb_pressed: 18.0,
+};
+const FINGER: Sizes = Sizes {
+    width: 48.0,
+    height: 28.0,
+    thumb: 22.0,
+    thumb_pressed: 24.0,
+};
 const THUMB_INSET: f32 = 2.0;
 const HOVER_OVERLAY: f32 = 0.08;
 const PRESSED_OVERLAY: f32 = 0.16;
@@ -48,6 +63,7 @@ impl Switch {
 
 impl Component for Switch {
     fn render(&self) -> impl IntoElement {
+        let sizes = if touch() { FINGER } else { MOUSE };
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
@@ -68,11 +84,11 @@ impl Component for Switch {
             Color::TRANSPARENT
         };
         let thumb_width = if enabled && pressing() {
-            THUMB_PRESSED
+            sizes.thumb_pressed
         } else {
-            THUMB
+            sizes.thumb
         };
-        let travel_end = SWITCH_WIDTH - THUMB_INSET - thumb_width;
+        let travel_end = sizes.width - THUMB_INSET - thumb_width;
         let travel_start = THUMB_INSET;
         let travel = if on { travel_end } else { travel_start };
 
@@ -111,9 +127,9 @@ impl Component for Switch {
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::Switch)
             .a11y_builder(move |builder| builder.set_toggled(Toggled::from(on)))
-            .width(Size::px(SWITCH_WIDTH))
-            .height(Size::px(SWITCH_HEIGHT))
-            .corner_radius(SWITCH_RADIUS)
+            .width(Size::px(sizes.width))
+            .height(Size::px(sizes.height))
+            .corner_radius(sizes.height / 2.0)
             .background(track)
             .border(border)
             .maybe(!enabled, |element| element.opacity(DISABLED_OPACITY))
@@ -147,19 +163,19 @@ impl Component for Switch {
             .child(
                 rect()
                     .expanded()
-                    .corner_radius(SWITCH_RADIUS)
+                    .corner_radius(sizes.height / 2.0)
                     .background(overlay),
             )
             .child(
                 rect()
                     .position(
                         Position::new_absolute()
-                            .top((SWITCH_HEIGHT - THUMB) / 2.0)
+                            .top((sizes.height - sizes.thumb) / 2.0)
                             .left(thumb_x.get().value()),
                     )
                     .width(Size::px(thumb_w.get().value()))
-                    .height(Size::px(THUMB))
-                    .corner_radius(THUMB / 2.0)
+                    .height(Size::px(sizes.thumb))
+                    .corner_radius(sizes.thumb / 2.0)
                     .background(thumb_color),
             )
     }

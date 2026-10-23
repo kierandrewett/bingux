@@ -196,6 +196,12 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   (`FIELD_WIDTH`), so their left edges line up; a field for a URL or a path
   uses `FIELD_WIDTH_WIDE` (440 px); a dropdown grows to fit a
   longer option.
+- **Phone width uses fingertip sizes.** Below 740 px the split view calls
+  `set_touch(true)`: a row is 52 px, a control 40 px, a standalone button
+  44 px, and the switch and slider handles grow (switch 48 x 28, slider
+  thumb 22). Read these sizes through `row_height()`, `control_height()` and
+  `button_height()`, not the constants, so the layout follows. Crossing the
+  threshold remounts the page once.
 - **`scripts/ui-lint.py` enforces it.** It fails on a raw number in a spacing,
   padding, margin, radius, font-size, width, height or icon-size call, and on
   `FontWeight::BOLD`. To use a new value, add it to `scale.rs` first.

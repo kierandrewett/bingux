@@ -256,11 +256,11 @@ impl Component for TextField {
                 }
             });
         if !self.multiline {
-            input = input.height(Size::px(CONTROL_HEIGHT));
+            input = input.height(Size::px(control_height()));
         } else {
             input = input
                 .multiline(true)
-                .height(Size::px(CONTROL_HEIGHT * MULTILINE_ROWS));
+                .height(Size::px(control_height() * MULTILINE_ROWS));
         }
         if let Some(placeholder) = &self.placeholder {
             input = input.placeholder(placeholder.clone());

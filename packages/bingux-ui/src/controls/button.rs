@@ -140,9 +140,9 @@ impl Component for ActionButton {
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::Button)
             .height(Size::px(if self.compact {
-                CONTROL_HEIGHT
+                control_height()
             } else {
-                BUTTON_HEIGHT
+                button_height()
             }))
             .min_width(Size::px(BOX_LG))
             .maybe(self.grow, |element| element.width(Size::flex(1.0)))
@@ -248,7 +248,7 @@ impl Component for RowButton {
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::Button)
             .maybe(!enabled, |element| element.opacity(0.5))
-            .height(Size::px(CONTROL_HEIGHT))
+            .height(Size::px(control_height()))
             .padding((0.0, S3))
             .center()
             .corner_radius(RADIUS)
@@ -316,7 +316,7 @@ pub struct IconButton {
 pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconButton {
     IconButton {
         icon,
-        size: BUTTON_HEIGHT,
+        size: button_height(),
         tooltip: None,
         on_press: on_press.into(),
         danger: false,

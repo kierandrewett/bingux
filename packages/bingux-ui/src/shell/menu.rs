@@ -316,7 +316,7 @@ impl Component for MenuButton {
         let items = self.items.clone();
         rect()
             .a11y_role(AccessibilityRole::Button)
-            .height(Size::px(CONTROL_HEIGHT))
+            .height(Size::px(control_height()))
             .min_width(Size::px(BOX_LG))
             .padding((0.0, S3))
             .spacing(S2)

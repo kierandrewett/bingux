@@ -21,7 +21,7 @@ use crate::ui::{
     use_tokens,
 };
 use bingux_ui::scale::{
-    ARRANGEMENT_SNAP, BUTTON_HEIGHT, FIELD_WIDTH, ICON_SM, RING_WIDTH, S0, S1, S2, S4, S5,
+    ARRANGEMENT_SNAP, FIELD_WIDTH, ICON_SM, RING_WIDTH, S0, S1, S2, S4, S5, button_height,
 };
 
 const SERVICE: &str = "org.gnome.Mutter.DisplayConfig";
@@ -1051,7 +1051,9 @@ fn arrangement_hint(ctx: Ctx, monitors: &[Monitor]) -> String {
 
 /// The height of the footer on the arrangement card: one button high, with a
 /// gap of `S2` above it and below it.
-const ARRANGEMENT_FOOTER: f32 = BUTTON_HEIGHT + S2 * 2.0;
+fn arrangement_footer_height() -> f32 {
+    button_height() + S2 * 2.0
+}
 
 /// The width of the hint text in the arrangement footer. A fixed width stops
 /// the text from taking the row, which would push the quick controls off the card.
@@ -1063,7 +1065,7 @@ fn arrangement_footer(ctx: Ctx, monitors: &[Monitor], selected: usize) -> Elemen
     rect()
         .position(Position::new_absolute().left(S2).right(S2).bottom(S2))
         .width(Size::fill())
-        .height(Size::px(BUTTON_HEIGHT))
+        .height(Size::px(button_height()))
         .direction(Direction::Horizontal)
         .main_align(Alignment::SpaceBetween)
         .cross_align(Alignment::Center)
@@ -1592,8 +1594,10 @@ impl Component for Arrangement {
             ARRANGEMENT_WIDTH
         };
         let active = *ctx.drag.read();
-        let Some(current) = frame_of(monitors, (width, ARRANGEMENT_HEIGHT - ARRANGEMENT_FOOTER))
-        else {
+        let Some(current) = frame_of(
+            monitors,
+            (width, ARRANGEMENT_HEIGHT - arrangement_footer_height()),
+        ) else {
             return caption("No displays are on.").into_element();
         };
         let frame = active.map_or(current, |drag| drag.frame);

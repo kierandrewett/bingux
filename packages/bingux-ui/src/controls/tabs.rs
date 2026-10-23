@@ -58,7 +58,7 @@ impl Component for Tabs {
         let key_ids = ids.clone();
         rect()
             .width(Size::fill())
-            .height(Size::px(BUTTON_HEIGHT))
+            .height(Size::px(button_height()))
             .direction(Direction::Horizontal)
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 let Some(index) = options.iter().position(|(key, _)| *key == selected) else {

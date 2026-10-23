@@ -10,24 +10,17 @@ use crate::surface::{use_enabled, use_tokens};
 /// The track is 6 px, or 8 px while it is being dragged.
 const TRACK: f32 = 6.0;
 const TRACK_ACTIVE: f32 = 8.0;
-/// The thumb is a 16 px circle.
+/// The thumb is a 16 px circle, 22 px for a fingertip.
 const THUMB: f32 = 16.0;
+const THUMB_TOUCH: f32 = 22.0;
 /// Thumb scale while pressed and while dragging.
 const SCALE_PRESSED: f32 = 1.1;
 const SCALE_DRAGGING: f32 = 1.3;
-/// The pointer hit row, and the focus ring: a 1 px circle hugging the thumb.
-const HIT: f32 = CONTROL_HEIGHT;
-const FOCUS_RING: f32 = THUMB + 2.0;
 const DISABLED_OPACITY: f32 = 0.45;
 const SCALE_MS: u64 = 120;
 const PERCENT: f64 = 100.0;
 /// Page Up and Page Down move the slider this many percent.
 const PAGE_STEP: f64 = 10.0;
-
-/// Every part of the slider is placed from this one line, the middle of the
-/// hit row, so the track, the fill and the thumb share one centre whatever
-/// size the track and thumb are at that frame.
-const CENTRE: f32 = HIT / 2.0;
 
 /// A thin track filled up to a 16 px thumb. The thumb stays inside the
 /// track, so 0 and 100 are the ends of the travel.
@@ -88,6 +81,14 @@ impl Slider {
 
 impl Component for Slider {
     fn render(&self) -> impl IntoElement {
+        // The pointer hit row, and the focus ring: a 1 px circle hugging the
+        // thumb. Every part of the slider is placed from the centre of the hit
+        // row, so the track, the fill and the thumb share one centre whatever
+        // size the track and thumb are at that frame.
+        let thumb_size = if touch() { THUMB_TOUCH } else { THUMB };
+        let hit = control_height();
+        let centre = hit / 2.0;
+        let focus_ring = thumb_size + 2.0;
         let tokens = use_tokens();
         let mut pressing = use_state(|| false);
         let mut dragging = use_state(|| false);
@@ -113,15 +114,15 @@ impl Component for Slider {
                 .function(Function::Expo)
                 .ease(Ease::Out)
         });
-        let thumb = THUMB * scale.get().value();
+        let thumb = thumb_size * scale.get().value();
 
         let measured = size.read().width();
-        let width = if self.fluid && measured > THUMB {
+        let width = if self.fluid && measured > thumb_size {
             measured
         } else {
             self.width
         };
-        let travel = (width - THUMB).max(1.0);
+        let travel = (width - thumb_size).max(1.0);
         let step = self.step;
         let snap = move |percent: f64| -> f64 {
             match step {
@@ -130,7 +131,7 @@ impl Component for Slider {
             }
         };
         let percent_at = move |x: f64| -> f64 {
-            let half = THUMB as f64 / 2.0;
+            let half = thumb_size as f64 / 2.0;
             snap(((x - half) / travel as f64 * PERCENT).clamp(0.0, PERCENT))
         };
         let on_pointer_down = {
@@ -186,7 +187,7 @@ impl Component for Slider {
             tokens.text
         };
         let thumb_x = travel * (value as f32 / PERCENT as f32);
-        let centre_x = THUMB / 2.0 + thumb_x;
+        let centre_x = thumb_size / 2.0 + thumb_x;
         let fill_width = centre_x;
 
         let row = rect()
@@ -204,7 +205,7 @@ impl Component for Slider {
             } else {
                 Size::px(width)
             })
-            .height(Size::px(HIT))
+            .height(Size::px(hit))
             .maybe(!enabled, |element| element.opacity(DISABLED_OPACITY))
             .on_sized(move |event: Event<SizedEventData>| size.set(event.area))
             .maybe(enabled, |element| {
@@ -218,7 +219,7 @@ impl Component for Slider {
                 rect()
                     .position(
                         Position::new_absolute()
-                            .top(CENTRE - track_height / 2.0)
+                            .top(centre - track_height / 2.0)
                             .left(0.0),
                     )
                     .width(Size::px(width))
@@ -231,7 +232,7 @@ impl Component for Slider {
                     .layer(Layer::Relative(1))
                     .position(
                         Position::new_absolute()
-                            .top(CENTRE - track_height / 2.0)
+                            .top(centre - track_height / 2.0)
                             .left(0.0),
                     )
                     .width(Size::px(fill_width))
@@ -243,12 +244,12 @@ impl Component for Slider {
                 rect()
                     .position(
                         Position::new_absolute()
-                            .top(CENTRE - FOCUS_RING / 2.0)
-                            .left(centre_x - FOCUS_RING / 2.0),
+                            .top(centre - focus_ring / 2.0)
+                            .left(centre_x - focus_ring / 2.0),
                     )
-                    .width(Size::px(FOCUS_RING))
-                    .height(Size::px(FOCUS_RING))
-                    .corner_radius(FOCUS_RING / 2.0)
+                    .width(Size::px(focus_ring))
+                    .height(Size::px(focus_ring))
+                    .corner_radius(focus_ring / 2.0)
                     .border(
                         Border::new()
                             .width(1.0)
@@ -261,7 +262,7 @@ impl Component for Slider {
                     .layer(Layer::Relative(3))
                     .position(
                         Position::new_absolute()
-                            .top(CENTRE - thumb / 2.0)
+                            .top(centre - thumb / 2.0)
                             .left(centre_x - thumb / 2.0),
                     )
                     .width(Size::px(thumb))

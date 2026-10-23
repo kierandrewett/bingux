@@ -25,9 +25,13 @@ const SHEET_MARGIN: f32 = S5;
 /// How far the sheet drops in from above as it opens.
 const SHEET_DROP: f32 = S3;
 /// The height of the sheet header: padding, a compact control and the divider.
-const SHEET_HEADER_HEIGHT: f32 = S3 * 2.0 + CONTROL_HEIGHT + 1.0;
+fn sheet_header_height() -> f32 {
+    S3 * 2.0 + control_height() + 1.0
+}
 /// The height of the tab bar slot under the header, when a sheet has tabs.
-const SHEET_TABS_HEIGHT: f32 = BUTTON_HEIGHT + S2;
+fn sheet_tabs_height() -> f32 {
+    button_height() + S2
+}
 /// The tallest a sheet grows before its body scrolls, as a share of the window.
 const SHEET_MAX_HEIGHT_PERCENT: f32 = 80.0;
 /// One hundred percent, to turn `SHEET_MAX_HEIGHT_PERCENT` into a fraction.
@@ -152,9 +156,9 @@ impl Component for SheetLayer {
                     .maybe_child(primary_element),
             );
 
-        let header_height = SHEET_HEADER_HEIGHT
+        let header_height = sheet_header_height()
             + if self.sheet.tabs.is_some() {
-                SHEET_TABS_HEIGHT
+                sheet_tabs_height()
             } else {
                 0.0
             };
@@ -204,7 +208,7 @@ impl Component for SheetLayer {
             .maybe_child(self.sheet.tabs.clone().map(|tabs| {
                 rect()
                     .width(Size::fill())
-                    .height(Size::px(SHEET_TABS_HEIGHT))
+                    .height(Size::px(sheet_tabs_height()))
                     .padding((S2, S4, 0.0, S4))
                     .child(tabs)
             }))

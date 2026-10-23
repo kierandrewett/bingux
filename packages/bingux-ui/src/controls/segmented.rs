@@ -54,7 +54,7 @@ impl Component for Segmented {
         };
         let key_ids = ids.clone();
         rect()
-            .height(Size::px(CONTROL_HEIGHT))
+            .height(Size::px(control_height()))
             .maybe(!enabled, |element| element.opacity(0.45))
             .corner_radius(RADIUS)
             .background(tokens.control)

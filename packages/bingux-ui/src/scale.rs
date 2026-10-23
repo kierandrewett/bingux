@@ -4,6 +4,8 @@
 //! these names. `scripts/ui-lint.py` fails the build on a raw number in a
 //! layout call, so a new value has to be added here first, on purpose.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 /// Spacing, on a 4 px grid. `S0` is the half step for the gap between a
 /// title and its subtitle.
 pub const S0: f32 = 2.0;
@@ -86,6 +88,11 @@ pub const RING_WIDTH: f32 = 2.0;
 /// row button) is 32 px high, as `Theme.controlHeight`, so a 40 px row keeps
 /// 4 px above and below it. A standalone `ActionButton` and a menu item are
 /// 36 px. A row is 48 px, or 64 px with a subtitle, as `SettingsRow.qml`.
+///
+/// On a phone-width window (see [`set_touch`]) controls, buttons, rows and
+/// the switch and slider handles grow to fingertip size. Read these sizes
+/// through [`control_height`], [`button_height`] and [`row_height`], never
+/// the constants, so the layout follows.
 pub const CONTROL_HEIGHT: f32 = 32.0;
 pub const BUTTON_HEIGHT: f32 = 36.0;
 pub const MENU_ITEM_HEIGHT: f32 = 36.0;
@@ -93,5 +100,42 @@ pub const MENU_ITEM_HEIGHT: f32 = 36.0;
 pub const MENU_WIDTH: f32 = 220.0;
 pub const ROW_HEIGHT: f32 = 48.0;
 pub const TALL_ROW_HEIGHT: f32 = 64.0;
+/// The fingertip sizes of the same things.
+pub const CONTROL_HEIGHT_TOUCH: f32 = 40.0;
+pub const BUTTON_HEIGHT_TOUCH: f32 = 44.0;
+pub const ROW_HEIGHT_TOUCH: f32 = 52.0;
+
+static TOUCH: AtomicBool = AtomicBool::new(false);
+
+/// Switch the sizes between mouse and fingertip. The split view sets it from
+/// the window width and remounts its content when it changes.
+pub fn set_touch(touch: bool) {
+    TOUCH.store(touch, Ordering::Relaxed);
+}
+
+/// Whether the sizes are the fingertip sizes.
+pub fn touch() -> bool {
+    TOUCH.load(Ordering::Relaxed)
+}
+
+fn pick(mouse: f32, finger: f32) -> f32 {
+    if touch() { finger } else { mouse }
+}
+
+/// The height of a control in a row.
+pub fn control_height() -> f32 {
+    pick(CONTROL_HEIGHT, CONTROL_HEIGHT_TOUCH)
+}
+
+/// The height of a standalone button.
+pub fn button_height() -> f32 {
+    pick(BUTTON_HEIGHT, BUTTON_HEIGHT_TOUCH)
+}
+
+/// The height of a one-line row.
+pub fn row_height() -> f32 {
+    pick(ROW_HEIGHT, ROW_HEIGHT_TOUCH)
+}
+
 /// The height of a compact line or bar chart in the gallery edge cases.
 pub const CHART_HEIGHT: f32 = 120.0;
