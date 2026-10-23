@@ -553,7 +553,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         } else if narrow {
             (!lead.is_empty()).then(|| lead_line(&tokens, &lead))
         } else {
-            Some(title_row(&tokens, title, lead, action))
+            Some(title_row(&tokens, title.clone(), lead, action))
         };
         let body: Element = rect()
             .width(Size::fill())
@@ -677,7 +677,13 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             .width(Size::fill())
             .height(Size::flex(1.0))
             .child(page)
-            .maybe_child(outgoing);
+            .maybe_child(outgoing)
+            .child(ScrollEdge { scroll });
+        let header = if narrow || show_list {
+            header
+        } else {
+            header.title_slot(ScrolledTitle { scroll, title })
+        };
         rect()
             .expanded()
             .direction(Direction::Horizontal)
@@ -737,6 +743,59 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                         Element::from(content_area)
                     }),
             )
+    }
+}
+
+/// How far the page has to scroll before its title row is out of view and
+/// the title moves to the header bar.
+const TITLE_SCROLLED_OUT: i32 = 48;
+
+/// The page title in the header bar, centred, shown once the title row at
+/// the top of the page has scrolled out of view.
+#[derive(PartialEq)]
+struct ScrolledTitle {
+    scroll: ScrollController,
+    title: String,
+}
+
+impl Component for ScrolledTitle {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let shown = -<(i32, i32)>::from(self.scroll).1 > TITLE_SCROLLED_OUT;
+        rect().width(Size::fill()).maybe_child(shown.then(|| {
+            label()
+                .text(self.title.clone())
+                .width(Size::fill())
+                .color(tokens.text)
+                .font_size(TEXT_MD)
+                .font_weight(FontWeight::SEMI_BOLD)
+                .text_align(TextAlign::Center)
+                .max_lines(1)
+                .text_overflow(TextOverflow::Ellipsis)
+        }))
+    }
+}
+
+/// A hairline under the header bar while the page is scrolled.
+#[derive(PartialEq)]
+struct ScrollEdge {
+    scroll: ScrollController,
+}
+
+impl Component for ScrollEdge {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let scrolled = <(i32, i32)>::from(self.scroll).1 < 0;
+        rect()
+            .position(Position::new_absolute().top(0.0).left(0.0))
+            .width(Size::fill())
+            .height(Size::px(1.0))
+            .layer(Layer::Relative(2))
+            .background(if scrolled {
+                tokens.separator
+            } else {
+                Color::TRANSPARENT
+            })
     }
 }
 

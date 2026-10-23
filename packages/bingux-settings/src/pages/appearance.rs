@@ -320,7 +320,6 @@ fn scheme_card(
             .a11y_alt(format!("{title} colour scheme"))
             .a11y_focusable(true)
             .width(Size::flex(1.0))
-            .max_width(Size::px(PREVIEW_WIDTH))
             .spacing(S2)
             .cross_align(Alignment::Center)
             .on_press(on_press)
@@ -436,29 +435,40 @@ impl Component for AppearancePage {
                         .row(
                             rect()
                                 .width(Size::fill())
-                                .direction(Direction::Horizontal)
-                                .content(Content::Flex)
-                                .main_align(Alignment::Center)
+                                .cross_align(Alignment::Center)
                                 .padding((S3, GUTTER - S1))
-                                .spacing(S4)
-                                .child(scheme_card(
-                                    "Default",
-                                    Scheme::Default,
-                                    tokens,
-                                    move |_| apply_scheme(shared, overlays, Scheme::Default),
-                                ))
-                                .child(scheme_card(
-                                    "Light",
-                                    Scheme::PreferLight,
-                                    tokens,
-                                    move |_| apply_scheme(shared, overlays, Scheme::PreferLight),
-                                ))
-                                .child(scheme_card(
-                                    "Dark",
-                                    Scheme::PreferDark,
-                                    tokens,
-                                    move |_| apply_scheme(shared, overlays, Scheme::PreferDark),
-                                )),
+                                .child(
+                                    rect()
+                                        .width(Size::fill())
+                                        .max_width(Size::px(PREVIEW_ROW_WIDTH))
+                                        .direction(Direction::Horizontal)
+                                        .content(Content::Flex)
+                                        .spacing(S4)
+                                        .child(scheme_card(
+                                            "Default",
+                                            Scheme::Default,
+                                            tokens,
+                                            move |_| {
+                                                apply_scheme(shared, overlays, Scheme::Default)
+                                            },
+                                        ))
+                                        .child(scheme_card(
+                                            "Light",
+                                            Scheme::PreferLight,
+                                            tokens,
+                                            move |_| {
+                                                apply_scheme(shared, overlays, Scheme::PreferLight)
+                                            },
+                                        ))
+                                        .child(scheme_card(
+                                            "Dark",
+                                            Scheme::PreferDark,
+                                            tokens,
+                                            move |_| {
+                                                apply_scheme(shared, overlays, Scheme::PreferDark)
+                                            },
+                                        )),
+                                ),
                         ),
                 )
             }))

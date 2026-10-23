@@ -33,6 +33,7 @@ pub struct HeaderBar {
     leading: Vec<Element>,
     trailing: Vec<Element>,
     background: Option<Color>,
+    title_slot: Option<Element>,
     busy: bool,
 }
 
@@ -44,6 +45,7 @@ impl HeaderBar {
             leading: Vec::new(),
             trailing: Vec::new(),
             background: None,
+            title_slot: None,
             busy: false,
         }
     }
@@ -74,6 +76,12 @@ impl HeaderBar {
         self.busy = busy;
         self
     }
+
+    /// Draw `element` where the title goes, in place of the title text.
+    pub fn title_slot(mut self, element: impl Into<Element>) -> Self {
+        self.title_slot = Some(element.into());
+        self
+    }
 }
 
 impl Component for HeaderBar {
@@ -91,7 +99,10 @@ impl Component for HeaderBar {
             } else {
                 TextAlign::Left
             });
-        let text: Element = rect().width(Size::flex(1.0)).child(title).into();
+        let text: Element = match &self.title_slot {
+            Some(slot) => rect().width(Size::flex(1.0)).child(slot.clone()).into(),
+            None => rect().width(Size::flex(1.0)).child(title).into(),
+        };
         rect()
             .width(Size::fill())
             .height(Size::px(HEADER_HEIGHT))

@@ -61,6 +61,14 @@ impl Snapshot {
         self
     }
 
+    /// Scroll the wheel by `dy` logical pixels over a point; negative moves
+    /// the content up.
+    pub fn scroll(&mut self, x: f32, y: f32, dy: f32) -> &mut Self {
+        self.runner.scroll((x as f64, y as f64), (0.0, dy as f64));
+        self.runner.sync_and_update();
+        self
+    }
+
     /// Press and release a key on the focused element.
     pub fn key(&mut self, key: Key) -> &mut Self {
         self.runner.press_key(key);

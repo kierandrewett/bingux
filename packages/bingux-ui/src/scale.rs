@@ -73,6 +73,8 @@ pub const FIELD_WIDTH_APPS: f32 = 260.0;
 /// the scheme's colours, as GNOME's Style switcher shows.
 pub const PREVIEW_WIDTH: f32 = 144.0;
 pub const PREVIEW_HEIGHT: f32 = 96.0;
+/// Three scheme cards side by side with their gaps.
+pub const PREVIEW_ROW_WIDTH: f32 = 3.0 * PREVIEW_WIDTH + 2.0 * S4;
 /// The sidebar and the short accent line inside a scheme card.
 pub const PREVIEW_SIDEBAR: f32 = 40.0;
 pub const PREVIEW_LINE: f32 = 40.0;

@@ -143,7 +143,29 @@ fn snapshot_pages(dir: &str, only: &[String]) {
             shot.click(*x, *y)
                 .settle(std::time::Duration::from_millis(1000));
         }
+        // BINGUX_SETTINGS_SNAPSHOT_SCROLL="x,y,dy" scrolls the wheel by dy over
+        // (x, y), and BINGUX_SETTINGS_SNAPSHOT_HOVER="x,y" then moves the
+        // pointer there, before the capture.
+        if let Some([x, y, dy]) = snapshot_numbers::<3>("BINGUX_SETTINGS_SNAPSHOT_SCROLL") {
+            shot.scroll(x, y, dy)
+                .settle(std::time::Duration::from_millis(500));
+        }
+        if let Some([x, y]) = snapshot_numbers::<2>("BINGUX_SETTINGS_SNAPSHOT_HOVER") {
+            shot.hover(x, y)
+                .settle(std::time::Duration::from_millis(500));
+        }
         shot.save(&path);
         println!("[snapshot] wrote {path}");
     }
+}
+
+/// `N` comma-separated numbers from an environment variable, if it holds them.
+#[cfg(feature = "snapshot")]
+fn snapshot_numbers<const N: usize>(name: &str) -> Option<[f32; N]> {
+    let text = std::env::var(name).ok()?;
+    let numbers: Vec<f32> = text
+        .split(',')
+        .filter_map(|part| part.trim().parse().ok())
+        .collect();
+    numbers.try_into().ok()
 }
