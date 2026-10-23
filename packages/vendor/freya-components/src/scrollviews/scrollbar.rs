@@ -9,7 +9,6 @@ use freya_animation::prelude::{
     use_animation_with_dependencies,
 };
 use freya_core::prelude::*;
-use freya_sdk::timeout::Timeout;
 use torin::{
     prelude::{
         Alignment,
@@ -30,6 +29,7 @@ use crate::{
         ScrollThumb,
         shared::{
             Axis,
+            IdleTimer,
             SCROLLBAR_MARGIN,
         },
     },
@@ -60,7 +60,7 @@ pub struct ScrollBarContext {
     pub viewport_size: Size2D,
     pub content_size: Size2D,
     pub scroll_controller: ScrollController,
-    pub timeout: Timeout,
+    pub timeout: IdleTimer,
     /// Whether idle scrollbars should hide when the timeout elapses.
     pub auto_hide_scrollbars: bool,
     pub clicking_scrollbar: State<Option<(Axis, f64)>>,
@@ -156,7 +156,21 @@ impl ComponentOwned for ScrollBar {
         } = context;
         let mut hovering = use_state(|| false);
         let is_expanded = clicking_scrollbar.read().is_some() || *hovering.read();
-        let is_hidden = auto_hide_scrollbars && timeout.elapsed() && !is_expanded;
+        // Bingux patch: an idle scrollbar fades out instead of vanishing, and
+        // fades back in quickly when the content scrolls or the pointer moves.
+        let shown = !(auto_hide_scrollbars && timeout.elapsed() && !is_expanded);
+        let fade = use_animation_with_dependencies(&shown, move |conf, shown| {
+            conf.on_creation(OnCreation::Finish);
+            conf.on_change(OnChange::Rerun);
+            let time = if *shown { 120 } else { 400 };
+            let value = AnimNum::new(0., 1.)
+                .time(time)
+                .function(Function::Quad)
+                .ease(Ease::InOut);
+            if *shown { value } else { value.into_reversed() }
+        });
+        let fade = fade.get().value();
+        let is_hidden = !shown && fade <= 0.0;
 
         let animation = use_animation_with_dependencies(&is_expanded, move |conf, is_expanded| {
             conf.on_creation(OnCreation::Finish);
@@ -247,6 +261,7 @@ impl ComponentOwned for ScrollBar {
             .offset_x(offset_x)
             .offset_y(offset_y)
             .layer(999)
+            .opacity(fade)
             .cursor(CursorIcon::Default)
             .on_pointer_down(|e: Event<PointerEventData>| {
                 e.stop_propagation();

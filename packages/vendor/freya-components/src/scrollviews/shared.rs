@@ -4,6 +4,48 @@ use torin::{
     size::Size,
 };
 
+/// Bingux patch: how long a scrollbar stays after the last scroll or pointer
+/// movement before it fades out, and how often the idle check runs.
+pub const SCROLLBAR_IDLE: std::time::Duration = std::time::Duration::from_secs(3);
+const IDLE_TICK: std::time::Duration = std::time::Duration::from_millis(200);
+
+/// Bingux patch: freya-sdk's `Timeout` only checks once per duration, so a
+/// 3 s timeout fired anywhere between 3 and 6 s. This one checks every 200 ms.
+#[derive(Clone, Copy, PartialEq)]
+pub struct IdleTimer {
+    elapsed: State<bool>,
+    since: State<std::time::Instant>,
+}
+
+impl IdleTimer {
+    /// Whether nothing has reset the timer for [`SCROLLBAR_IDLE`].
+    pub fn elapsed(&self) -> bool {
+        (self.elapsed)()
+    }
+
+    /// Start the idle period again.
+    pub fn reset(&mut self) {
+        self.since.set_if_modified(std::time::Instant::now());
+        self.elapsed.set_if_modified(false);
+    }
+}
+
+pub fn use_idle_timer() -> IdleTimer {
+    use_hook(|| {
+        let mut elapsed = State::create(false);
+        let since = State::create(std::time::Instant::now());
+        spawn(async move {
+            loop {
+                timer(IDLE_TICK).await;
+                if since.peek().elapsed() >= SCROLLBAR_IDLE && !*elapsed.peek() {
+                    elapsed.set(true);
+                }
+            }
+        });
+        IdleTimer { elapsed, since }
+    })
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Axis {
     X,

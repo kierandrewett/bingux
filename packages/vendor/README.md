@@ -16,6 +16,11 @@ The only changes are scroll feel for a desktop:
   interrupted. Turning the wheel the other way drops the pending travel and
   starts from the content's current position. `BINGUX_SCROLL_DEBUG=1` prints
   every wheel event and animation frame to stderr.
+- `freya-components/src/scrollviews/shared.rs`, `scrollbar.rs`,
+  `scrollview.rs` and `virtual_scrollview.rs`: an auto-hidden scrollbar stays
+  for 3 s after the last scroll or pointer movement, then fades out over
+  400 ms, and fades back in over 120 ms (upstream: it vanishes after 0.8 to
+  1.6 s with no fade). The idle check runs every 200 ms.
 
 Both crates are MIT licensed by the Freya authors. Tests and examples are not
 copied. Drop this directory and the patch entries when upstream exposes these

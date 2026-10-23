@@ -1,10 +1,6 @@
-use std::{
-    ops::Range,
-    time::Duration,
-};
+use std::ops::Range;
 
 use freya_core::prelude::*;
-use freya_sdk::timeout::use_timeout;
 use torin::{
     geometry::{
         CursorPoint,
@@ -469,7 +465,7 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
 {
     fn render(self: &VirtualScrollView<D, B>) -> impl IntoElement {
         let a11y_id = use_a11y();
-        let mut timeout = use_timeout(|| Duration::from_millis(800));
+        let mut timeout = super::shared::use_idle_timer();
         let mut pressing_shift = use_state(|| false);
         let mut clicking_scrollbar = use_state::<Option<(Axis, f64)>>(|| None);
         let mut size = use_state(SizedEventData::default);
