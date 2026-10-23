@@ -214,6 +214,21 @@ work belongs in Git history and does not stay here as a second changelog.
 - [ ] Re-run `tests/distro-boot.py` on the new ISO with the fixed sign-in wait.
 - [ ] Re-run `tests/distro-install.py` on an ISO that contains `bingux-installer`;
       the 2026.10.21 image predates the package and the test cannot pass on it.
+- [ ] Installer restart black (ISO 6c65aa4 live, `systemctl reboot`, about 9 VM runs of `exp_reboot.py`,
+      frames in /tmp/h2/reboot-*/rec): black 0.8 s (base: restart 60.63 s, black 60.72-61.55 s,
+      guest reset 61.96 s). Plymouth's "Bingux OS" splash first shows at about 61.7 s. Cause
+      [INFERENCE]: the live greetd (installer compositor) is stopped by shutdown.target
+      (`Conflicts=`), which releases DRM master before plymouth-reboot draws. Tried, no
+      reproducible gain: reboot.target.d `Wants=plymouth-reboot.service` (black 0.81 s);
+      greetd `After=plymouth-reboot.service` (0.82 s); both (0.51 s once, 0.80 s on repeat).
+      Not fixed; nothing shipped. Next: keep the compositor's DRM until plymouth draws.
+- [ ] Greeter to session black (installed-greeter-1, `flow.mp4`): black 59.14-59.74 s,
+      between sign-in submitted (53.9 s) and desktop painted (62.9 s). At 58.6 s the console
+      text from the greeter's gnoblin shows, then black, then the session wallpaper at 59.9 s.
+      Cause [INFERENCE]: DRM master handoff from the greeter's compositor to the session's
+      compositor; no splash is held across it. The plymouth-retain experiments were not run.
+      Not fixed. Next: a splash or wallpaper that survives the handoff, or one compositor
+      process that takes the session over without releasing the display.
 
 Before/after (ISO 6c65aa4, `tests/distro-installed-greeter.py 3`, stage medians in seconds from `stages.json`):
 
