@@ -194,6 +194,9 @@ work belongs in Git history and does not stay here as a second changelog.
       installer.lua now names the packaged blurred wallpaper before the drop-ins load
       (not yet seen in a boot; `tests/installer-gnoblin-config.py` did not build its probe
       against the current Gnoblin build tree). Verify on the next ISO.
+      ISO rebuilt with 6a9ecd7: `tests/distro-boot.py` passes (boot menu 6.3 s, installer
+      interactive 52.4 s, live desktop bar 56.2 s after Try). The first-frame brightness
+      itself was not re-measured from the frames yet.
 - [ ] Greeter user manager (fix 4): `bingux.target` pulled bingux-searchd,
       bingux-statusd, xdg-desktop-portal-bingux and bingux-greeter-export into the
       `greeter` account's user manager. Those five units now carry
