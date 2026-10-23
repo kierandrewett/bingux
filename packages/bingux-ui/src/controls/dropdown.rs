@@ -9,6 +9,7 @@ use freya::prelude::*;
 
 use crate::app_icon::app_icon;
 use crate::icons::{self, Icon};
+use crate::shell::overlays::input_shield;
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
 use crate::typography::{BODY, Ink};
@@ -329,13 +330,7 @@ impl Component for Dropdown {
                         event.stop_propagation();
                         pressing.set(true);
                     })
-                    .on_global_pointer_up(move |_| {
-                        pressing.set_if_modified(false);
-                        if open() {
-                            open.set(false);
-                            highlighted.set(None);
-                        }
-                    })
+                    .on_global_pointer_up(move |_| pressing.set_if_modified(false))
                     .on_press(move |event: Event<PressEventData>| {
                         event.stop_propagation();
                         event.prevent_default();
@@ -392,8 +387,18 @@ impl Component for Dropdown {
         };
         // `offset_x`/`offset_y` move an element's children, so the card sits
         // inside a zero-sized anchor that carries the offsets.
+        // The list sits two overlay jumps up and the shield one, so the list
+        // is above the shield; boxes on one layer have no defined order.
+        let shield = open().then(|| {
+            input_shield(&tokens, move || {
+                open.set(false);
+                highlighted.set(None);
+            })
+            .layer(Layer::Overlay)
+        });
         let menu = visible.then(|| {
             rect()
+                .layer(Layer::Overlay)
                 .width(Size::px(0.0))
                 .height(Size::px(0.0))
                 .offset_x((button_width() - menu_width).min(0.0))
@@ -404,6 +409,10 @@ impl Component for Dropdown {
                         .opacity(progress)
                         .width(Size::px(menu_width))
                         .tw(&tokens, MENU)
+                        // A wheel turn at the end of the list stops here
+                        // instead of scrolling the page behind it.
+                        .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
+                        .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
                         .child(
                             rect()
                                 .width(Size::fill())
@@ -441,7 +450,7 @@ impl Component for Dropdown {
                 )
         });
 
-        rect().child(button).maybe_child(menu)
+        rect().child(button).maybe_child(shield).maybe_child(menu)
     }
 }
 

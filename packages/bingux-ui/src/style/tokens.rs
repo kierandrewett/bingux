@@ -341,6 +341,11 @@ pub enum Paint {
     Popover,
     /// The dimmed layer behind a dialog or sheet: black at 40 %.
     Scrim,
+    /// The clear layer behind a menu or dropdown list. It paints nothing,
+    /// but Freya lets presses, the wheel and hover reach a box below only
+    /// through a box whose fill is exactly `Color::TRANSPARENT`; this one is
+    /// not, so the window behind the open menu takes no input.
+    Shield,
     Accent,
     /// The accent at low strength, behind a badge.
     AccentSoft,
@@ -414,6 +419,7 @@ impl Paint {
     pub fn color(self, tokens: &Tokens) -> Color {
         match self {
             Paint::Transparent => Color::TRANSPARENT,
+            Paint::Shield => Color::from_argb(0, 0, 0, 1),
             Paint::Bg => tokens.bg,
             Paint::Surface => tokens.surface,
             Paint::Sidebar => tokens.sidebar,

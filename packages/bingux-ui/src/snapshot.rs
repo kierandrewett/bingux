@@ -11,6 +11,7 @@ use std::time::Duration;
 use freya::prelude::*;
 use freya::torin::prelude::Size2D;
 use freya_testing::TestingRunner;
+use freya_testing::prelude::{MouseEventName, PlatformEvent};
 
 use crate::theme::font_family;
 
@@ -51,6 +52,20 @@ impl Snapshot {
     pub fn click(&mut self, x: f32, y: f32) -> &mut Self {
         self.runner.click_cursor((x as f64, y as f64));
         self.runner.sync_and_update();
+        self
+    }
+
+    /// Press and release the right mouse button at a logical point.
+    pub fn right_click(&mut self, x: f32, y: f32) -> &mut Self {
+        let cursor = CursorPoint::new(x as f64, y as f64);
+        for name in [MouseEventName::MouseDown, MouseEventName::MouseUp] {
+            self.runner.send_event(PlatformEvent::Mouse {
+                name,
+                cursor,
+                button: Some(MouseButton::Right),
+            });
+            self.runner.sync_and_update();
+        }
         self
     }
 

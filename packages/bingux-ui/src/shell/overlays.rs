@@ -15,6 +15,7 @@ use crate::shell::menu::{Menu, MenuItem, MenuLayer};
 use crate::shell::sheet::{Sheet, SheetLayer};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_tokens};
+use crate::theme::Tokens;
 use crate::typography::{BODY, EMPHASIS, Ink, SECTION};
 
 /// The toast pill: 44 px tall, text then action and dismiss, on a raised popover.
@@ -234,6 +235,23 @@ impl Overlays {
             self.toast_closing.set(None);
         }
     }
+}
+
+/// A clear layer over the whole window, under an open menu or list. It
+/// takes every press, wheel turn and hover outside the popup, so nothing
+/// behind it reacts, and a press of any button on it calls `on_dismiss`.
+/// Give the popup a higher layer than the shield.
+pub(crate) fn input_shield(tokens: &Tokens, mut on_dismiss: impl FnMut() + 'static) -> Rect {
+    rect()
+        .position(Position::new_global().top(0.0).left(0.0))
+        .tw(tokens, &[w_screen(), h_screen(), bg(Paint::Shield)])
+        .on_pointer_down(move |event: Event<PointerEventData>| {
+            event.stop_propagation();
+            event.prevent_default();
+            on_dismiss();
+        })
+        .on_press(|event: Event<PressEventData>| event.stop_propagation())
+        .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
 }
 
 /// The handle provided by the nearest [`OverlayHost`].

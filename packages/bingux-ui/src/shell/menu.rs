@@ -9,7 +9,7 @@ use crate::style::*;
 use crate::surface::use_tokens;
 use crate::typography::{BODY, Ink};
 
-use super::overlays::{Overlays, use_overlays, use_presence};
+use super::overlays::{Overlays, input_shield, use_overlays, use_presence};
 
 /// One action in a menu. Build with [`menu_item`].
 #[derive(Clone, PartialEq)]
@@ -162,6 +162,7 @@ impl Component for MenuLayer {
             .tw(&tokens, MENU)
             .tw(&tokens, &[w(Dim::Menu)])
             .on_press(|event: Event<PressEventData>| event.stop_propagation())
+            .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 if event.key == Key::Named(NamedKey::Escape) {
                     event.stop_propagation();
@@ -170,16 +171,10 @@ impl Component for MenuLayer {
             })
             .children(rows);
 
-        // The scrim catches presses outside the menu and closes it. It is
-        // transparent, so the window stays visible behind the menu.
-        rect()
-            .position(Position::new_absolute().top(0.0).left(0.0))
-            .tw(&tokens, &[w_screen(), h_screen()])
+        // The shield closes the menu on a press outside it and keeps the
+        // window behind from reacting while the menu is open.
+        input_shield(&tokens, move || overlays.close_menu())
             .layer(Layer::OverlayLevel(8))
-            .on_press(move |event: Event<PressEventData>| {
-                event.stop_propagation();
-                overlays.close_menu();
-            })
             .child(panel)
     }
 }
