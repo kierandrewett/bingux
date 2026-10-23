@@ -255,7 +255,8 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   dropdown, field or slider in a row is cut to 168 px so the row's text
   keeps room, and a dropdown there shows only its value and a chevron, with
   no box. A segmented control becomes the same value picker, since a track
-  of segments does not fit beside a title. `Dim` resolves these sizes when a style is applied, so a style is
+  of segments does not fit beside a title. A row title wraps onto a
+  second line instead of being cut. `Dim` resolves these sizes when a style is applied, so a style is
   written once. Crossing the threshold remounts the page once.
 - **One inset.** `GUTTER` (16) is the only horizontal inset inside a card:
   row text, free content and the hairline start `GUTTER` from the card's

@@ -195,7 +195,17 @@ impl Component for Row {
             .label(&tokens, self.title.clone())
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis);
+        // On a phone a long title wraps onto a second line rather than
+        // being cut, as a narrow row has little room beside its control.
+        let wrapped = touch() && self.badge.is_none();
         let title_line: Element = match &self.badge {
+            None if wrapped => BODY
+                .in_ink(ink)
+                .paragraph(&tokens, self.title.clone())
+                .width(Size::fill())
+                .max_lines(2)
+                .text_overflow(TextOverflow::Ellipsis)
+                .into(),
             None => title.into(),
             Some(badge) => rect()
                 .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
