@@ -354,8 +354,11 @@ pub enum Paint {
     Separator,
     /// The edge of an idle control that needs one.
     Outline,
-    /// Primary text colour as a fill: a slider's fill, a thumb.
+    /// Primary text colour as a fill.
     Text,
+    /// The round knob of a slider: white in both schemes, lifted by a soft
+    /// shadow instead of an edge.
+    Knob,
     /// Secondary text colour as a fill.
     Muted,
     /// Secondary text colour at 30%: an empty signal bar.
@@ -427,6 +430,7 @@ impl Paint {
             Paint::Separator => tokens.separator,
             Paint::Outline => tokens.outline,
             Paint::Text => tokens.text,
+            Paint::Knob => Color::WHITE,
             Paint::Muted => tokens.muted,
             Paint::MutedFaint => tokens.muted.with_a(77),
             Paint::Danger => tokens.danger,
@@ -480,6 +484,8 @@ pub enum Elevation {
     Raised,
     /// Dialogs and sheets: 16 px down, 48 px blur.
     Floating,
+    /// A slider knob: 1 px down, 3 px blur.
+    Knob,
 }
 
 impl Elevation {
@@ -488,6 +494,7 @@ impl Elevation {
         match self {
             Elevation::Raised => (8.0, 24.0, 0.35),
             Elevation::Floating => (16.0, 48.0, 0.45),
+            Elevation::Knob => (1.0, 3.0, 0.4),
         }
     }
 }

@@ -270,8 +270,8 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   wraps to three lines and trailing content. A row with a subtitle grows to
   fit it.
 - **Controls are the shell's.** The switch is 36 x 20 with a 16 px thumb. The
-  slider has a 6 px track (8 px while dragging), a text-coloured fill that
-  turns accent while dragging and a 16 px thumb. Buttons are filled with
+  slider has a 6 px track (8 px while dragging), an accent fill and a 16 px
+  white knob on a soft shadow. Buttons are filled with
   `control` and have no idle outline; no control has one. A disabled row
   (`row(..).enabled(false)`) dims and disables every control in it.
 - **An action row** (`action_row`) is a form's last row: a small muted

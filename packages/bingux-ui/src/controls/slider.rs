@@ -1,5 +1,5 @@
-//! The slider: `SeekSlider.qml`. A thin track with a text-coloured fill and
-//! a round thumb. Track, fill and thumb share one centre line.
+//! The slider: `SeekSlider.qml`. A thin track with an accent fill and a
+//! white knob. Track, fill and thumb share one centre line.
 
 use freya::animation::*;
 use freya::prelude::*;
@@ -179,14 +179,9 @@ impl Component for Slider {
         } else {
             Dim::SliderTrack.px()
         };
-        let fill_paint = if !enabled {
-            Paint::Muted
-        } else if interacting {
-            Paint::Accent
-        } else {
-            Paint::Text
-        };
-        let thumb_x = travel * (value as f32 / PERCENT as f32);
+        let fill_paint = if enabled { Paint::Accent } else { Paint::Muted };
+        // Whole pixels keep the knob's edge crisp; a fractional left blurs it.
+        let thumb_x = (travel * (value as f32 / PERCENT as f32)).round();
         let centre_x = thumb_size / 2.0 + thumb_x;
         let fill_width = centre_x;
 
@@ -251,8 +246,8 @@ impl Component for Slider {
                     .layer(Layer::Relative(3))
                     .position(
                         Position::new_absolute()
-                            .top(centre - thumb / 2.0)
-                            .left(centre_x - thumb / 2.0),
+                            .top((centre - thumb / 2.0).round())
+                            .left((centre_x - thumb / 2.0).round()),
                     )
                     .width(Size::px(thumb))
                     .height(Size::px(thumb))
@@ -260,8 +255,8 @@ impl Component for Slider {
                         &tokens,
                         &[
                             rounded(Radius::Pill),
-                            bg(Paint::Text),
-                            border(Line::Outline),
+                            bg(Paint::Knob),
+                            shadow(Elevation::Knob),
                         ],
                     ),
             );
