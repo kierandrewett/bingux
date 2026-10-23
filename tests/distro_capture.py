@@ -561,3 +561,111 @@ def fit(frame, width, height):
     w = min(width, frame.shape[1])
     canvas[:h, :w] = frame[:h, :w]
     return canvas
+
+
+# ---- handover checks over recordings -------------------------------------------
+#
+# A recording is the run's out_dir: flow.mp4 (10 fps, slot k at k / 10 s after
+# power-on), timeline.json (named events) and frame-events.jsonl (every
+# framebuffer update with its class). Gap scans read frame-events.jsonl; the
+# frame checks decode only the short windows of each handover from flow.mp4.
+
+# Wallpaper-only corner of the 1280x800 desktop: no bar, no card, no dock.
+WALLPAPER_REGION = "240x100+0+700"
+WALLPAPER_LIMIT = 8.0
+# A black run shorter than this is a fade, longer is a defect.
+BLACK_RUN_LIMIT = 0.5
+
+
+def recording_events(out_dir):
+    """name -> first time (seconds since power-on) of each named event in timeline.json."""
+    data = json.loads((Path(out_dir) / "timeline.json").read_text())
+    events = {}
+    for event in data["events"]:
+        events.setdefault(event["name"], float(event["t"]))
+    return events
+
+
+def video_size(video):
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
+         "-of", "csv=p=0", str(video)],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    width, height = out.split(",")
+    return int(width), int(height)
+
+
+def decode_window(video, start, end, fps=FPS):
+    """[(t, frame)] for every 10 fps slot from start to end seconds, decoded from flow.mp4."""
+    width, height = video_size(video)
+    count = max(1, int(round((end - start) * fps)) + 1)
+    raw = subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-ss", f"{start:.3f}", "-i", str(video),
+         "-frames:v", str(count), "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        capture_output=True, check=True,
+    ).stdout
+    size = width * height * 3
+    return [
+        (round(start + i / fps, 3), np.frombuffer(raw, np.uint8, size, i * size).reshape(height, width, 3))
+        for i in range(len(raw) // size)
+    ]
+
+
+def frame_at(video, t):
+    """The recorded frame nearest t, or None past the end of the video."""
+    frames = decode_window(video, t, t)
+    return frames[0][1] if frames else None
+
+
+def in_any(t, spans):
+    return any(lo <= t <= hi for lo, hi in spans)
+
+
+def black_gaps(out_dir, exclude=()):
+    """Black runs in frame-events.jsonl longer than BLACK_RUN_LIMIT, outside the excluded spans.
+
+    A run starts at the first black update and ends at the next non-black update.
+    Returns [(start, end)] in seconds since power-on.
+    """
+    events = [json.loads(line) for line in (Path(out_dir) / "frame-events.jsonl").read_text().splitlines() if line]
+    runs = []
+    start = None
+    last = None
+    for event in events:
+        if event["class"] == "black":
+            if start is None:
+                start = event["t"]
+            last = event["t"]
+        elif start is not None:
+            runs.append((start, event["t"]))
+            start = None
+    if start is not None and last is not None:
+        runs.append((start, last))
+    return [
+        (round(a, 2), round(b, 2))
+        for a, b in runs
+        if b - a > BLACK_RUN_LIMIT and not any(a >= lo and b <= hi for lo, hi in exclude)
+    ]
+
+
+def handover_defects(video, start, end, exclude=()):
+    """Frames in [start, end] that are not content: black, placeholder or size change. Excluded spans are skipped."""
+    defects = []
+    for t, frame in decode_window(video, start, end):
+        if in_any(t, exclude):
+            continue
+        kind = classify(frame, (1280, 800))
+        if kind != "content":
+            defects.append((t, kind))
+    return defects
+
+
+def bar_matches(first, second):
+    """True when the top bar's clock sits at the same box in both frames."""
+    return boxes_match(bar_clock_box(first), bar_clock_box(second))
+
+
+def wallpaper_jump(first, second):
+    """Mean absolute difference (0 to 255) of the wallpaper-only corner between two frames."""
+    return wallpaper_difference(first, second, WALLPAPER_REGION)
