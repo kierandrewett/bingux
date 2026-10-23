@@ -196,7 +196,9 @@ work belongs in Git history and does not stay here as a second changelog.
       against the current Gnoblin build tree). Verify on the next ISO.
       ISO rebuilt with 6a9ecd7: `tests/distro-boot.py` passes (boot menu 6.3 s, installer
       interactive 52.4 s, live desktop bar 56.2 s after Try). The first-frame brightness
-      itself was not re-measured from the frames yet.
+      itself was re-measured on the uefi install run (install-test-uefi/live/flow.mp4, 10 fps luma):
+      console 16 at 43.7 s, then the dimmed installer background at 65.6 s (mean 38); no
+      bright 53.7 frame between them. Full-rate frame events not checked for a single-frame flash.
 - [ ] Greeter user manager (fix 4): `bingux.target` pulled bingux-searchd,
       bingux-statusd, xdg-desktop-portal-bingux and bingux-greeter-export into the
       `greeter` account's user manager. Those five units now carry
