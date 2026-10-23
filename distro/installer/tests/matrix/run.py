@@ -28,6 +28,8 @@ sys.path.insert(0, str(HERE.parent / "vm"))
 from vmdrive.checks import Checks  # noqa: E402
 from vmdrive.vm import LiveVm  # noqa: E402
 
+from fixtures import CHECK_MANIFEST, build_other_os_disk, build_qcow2  # noqa: E402
+
 DISK_BYTES = 10 * 1024**3
 DISK = "/dev/vda"
 USER = "tester"
@@ -65,7 +67,25 @@ CASES = {
         {"device": DISK + "2", "action": "format", "role": "home", "fs": "ext4"},
         {"device": DISK + "3", "action": "create", "role": "root", "size_bytes": 6 * 1024**3},
     ]}}),
+    # another OS (ext4, 4 GiB, manifest-checked) on a 10 GiB disk: install into the unallocated rest
+    "uefi-free-space": ("uefi", "ext4", False, {"storage": {"mode": "free_space"}}),
+    "bios-free-space": ("bios", "ext4", False, {"storage": {"mode": "free_space"}}),
+    # another OS (ext4, 6 GiB) shrunk to 4 GiB to make room for the root
+    "uefi-alongside-ext4": ("uefi", "ext4", False, {"storage": {"mode": "alongside", "shrink": {
+        "partition": DISK + "1", "size_bytes": 4 * 1024**3}}}),
+    # only ~0.5 GiB unallocated: free_space must refuse and leave the other OS untouched
+    "uefi-free-space-refused": ("uefi", "ext4", False, {"storage": {"mode": "free_space"}}),
 }
+
+# Cases whose disk starts as another OS: name -> (other-OS partition bytes). Built on the host.
+FIXTURES = {
+    "uefi-free-space": 4 * 1024**3,
+    "bios-free-space": 4 * 1024**3,
+    "uefi-alongside-ext4": 6 * 1024**3,
+    "uefi-free-space-refused": int(9.5 * 1024**3),
+}
+# Cases that must refuse at install time: the install result is not ok and nothing is booted.
+REFUSALS = {"uefi-free-space-refused"}
 
 # Guest disk layout a case needs before the probe: the matrix blank disk has no partition table.
 PREPARE = {
@@ -151,7 +171,7 @@ def build_overlay(src, scratch):
     return iso
 
 
-def install_phase(vm, checks, name, firmware, filesystem, encrypted, extra, overlay=False):
+def install_phase(vm, checks, name, firmware, filesystem, encrypted, extra, overlay=False, refuse=False):
     """Boot the live ISO, run probe and install. True when the install reports ok."""
     prefix = f"PYTHONPATH={OVERLAY_MOUNT} " if overlay else ""
     if not checks.expect(vm.wait_for_shell(timeout=600), f"{name}: live root shell up"):
@@ -188,6 +208,9 @@ def install_phase(vm, checks, name, firmware, filesystem, encrypted, extra, over
     rc, install_out = vm.run(f"{prefix}bingux-installer --json install --plan /tmp/plan.json", timeout=2400)
     result = last_json(install_out) or {}
     data = result.get("data", {})
+    if refuse:
+        checks.expect(result.get("ok") is False, f"{name}: install refused", f"rc={rc} result={result}")
+        return False
     ok = result.get("event") == "result" and result.get("ok") is True
     checks.expect(ok, f"{name}: install result ok", f"rc={rc} result={result}")
     checks.expect(data.get("filesystem") == filesystem and data.get("firmware") == firmware,
@@ -307,12 +330,16 @@ def run_case(name, iso, out_root, disk_dir, checks, cdrom=None):
     disk_dir.mkdir(parents=True, exist_ok=True)
     disk = disk_dir / f"{name}.qcow2"
     disk.unlink(missing_ok=True)
+    if name in FIXTURES:
+        raw = disk_dir / f"{name}.raw"
+        build_other_os_disk(raw, DISK_BYTES, FIXTURES[name])
+        build_qcow2(raw, disk)
 
     installed = False
     with LiveVm(out / "install") as vm:
         vm.start(iso=iso, disks=[(disk, DISK_BYTES)], firmware=firmware, cdrom=cdrom)
         installed = install_phase(GuestVm(vm), checks, name, firmware, filesystem, encrypted, extra,
-                                  overlay=cdrom is not None)
+                                  overlay=cdrom is not None, refuse=name in REFUSALS)
         if installed:
             vm.run("sync", timeout=120)
             vm.poweroff()
@@ -321,6 +348,10 @@ def run_case(name, iso, out_root, disk_dir, checks, cdrom=None):
         with LiveVm(out / "boot") as vm:
             vm.start(iso=None, disks=[(disk, DISK_BYTES)], firmware=firmware)
             boot_phase(GuestVm(vm), checks, name, firmware, filesystem, encrypted, extra, out)
+            if name in FIXTURES:
+                rc, manifest = GuestVm(vm).run(CHECK_MANIFEST, timeout=120)
+                checks.expect(rc == 0, f"{name}: other OS manifest verifies after install",
+                              f"rc={rc} out={manifest[-300:]!r}")
             vm.poweroff()
     disk.unlink(missing_ok=True)
 
