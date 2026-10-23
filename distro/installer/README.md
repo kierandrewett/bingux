@@ -260,6 +260,7 @@ Results (`~/.cache/bingux-storage/matrix/<case>/results.json`; log `~/.cache/bin
 | uefi-alongside-ext4 | PASS (17/17 checks) | `~/.cache/bingux-storage/matrix/uefi-alongside-ext4/` |
 | uefi-alongside-ntfs | PASS (17/17 checks; NTFS volume left flagged for chkdsk by `ntfsresize`, read with `ntfscat -f`) | `~/.cache/bingux-storage/matrix/uefi-alongside-ntfs/` |
 | manual-bios | PASS (17/17 checks) | `~/.cache/bingux-storage/matrix/manual-bios/` |
+| manual-luks | PASS (19/19 checks, LUKS2 root) | `~/.cache/bingux-storage/matrix/manual-luks/` |
 
 - Artifacts: `distro/out/installer-backend/matrix/<case>/{install,boot}/` (serial transcript, command
   log, screenshots) and `distro/out/installer-backend/matrix/<case>/results.json`. Exit status is 0 only
