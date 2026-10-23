@@ -327,6 +327,8 @@ fn page_motion(previous: &PageKey, next: &PageKey) -> Option<PageMotion> {
 #[derive(Default)]
 struct PageMemory {
     key: Option<PageKey>,
+    /// The page the scroll position was last reset for.
+    scrolled_key: Option<PageKey>,
     element: Option<Element>,
     pending: bool,
     duration: u64,
@@ -570,8 +572,16 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let scroll = use_scroll_controller(ScrollConfig::default);
         let mut scroll_effect = scroll;
         let effect_memory = memory.clone();
-        use_side_effect_with_deps(&page_key, move |_| {
-            scroll_effect.scroll_to_y(0);
+        // A new page starts at the top. The effect also runs again when the
+        // scroll position changes, because it reads the scroll state, so it
+        // only resets when the page itself changed; otherwise every wheel
+        // turn would jump back to the top.
+        use_side_effect_with_deps(&page_key, move |key| {
+            let fresh = effect_memory.borrow().scrolled_key.as_ref() != Some(key);
+            if fresh {
+                effect_memory.borrow_mut().scrolled_key = Some(key.clone());
+                scroll_effect.scroll_to_y(0);
+            }
             if effect_memory.borrow().pending {
                 effect_memory.borrow_mut().pending = false;
                 *generation.write() += 1;
