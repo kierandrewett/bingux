@@ -51,6 +51,16 @@ fingerprint, smart-card and failure-lock configuration before enabling it.
 Other distributions must provide an equivalent dedicated
 `bingux-lock` PAM service; copying GDM's PAM file is not a portable contract.
 
+## Screenshots
+
+![The Bingux lock screen](images/bingux-os-lock.webp)
+
+The keyboard layout menu, opened from the session bar:
+
+![The keyboard menu on the lock screen](images/bingux-os-lock-keyboard-menu.webp)
+
+Shots come from `tests/lock-ui.py`, which writes them to `build/lock-shots/`.
+
 ## Appearance
 
 The lock screen and the login greeter share `SessionScreen.qml`. There is no

@@ -50,6 +50,24 @@ on Fedora). Then enable `greetd.service` and disable any other display
 manager. The greeter session runs `bingux-statusd` for keyboard layouts and
 `bingux-greeter`; nothing else starts before someone signs in.
 
+## Screenshots
+
+![The Bingux login screen](images/bingux-os-login.webp)
+
+A wrong password keeps the field open with greetd's message:
+
+![The login screen after a wrong password](images/bingux-os-login-wrong-password.webp)
+
+The control centre opens from the top bar's status pill, the same panel the
+desktop uses:
+
+![The control centre on the login screen](images/bingux-os-control-centre.webp)
+
+Shots come from `tests/greeter-ui.py`, which writes them to
+`build/kiosk-shots/` (set `BINGUX_GREETER_SHOTS` to change the folder). Set
+`BINGUX_GREETER_WALLPAPER` to a real image to use it instead of the test
+backdrop.
+
 ## What the screen shows
 
 - The remembered account, front and centre: picture or monogram, display

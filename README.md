@@ -63,7 +63,8 @@ See [desktop panels](docs/popup-loading.md) for first opening and dismissal.
 See [portals](docs/portals.md) for the Screenshot backend, its permission rules and the known state of each portal interface.
 
 See the [login screen](docs/login-screen.md) and [secure session locking](docs/locking.md)
-for the greeter and the lock screen, and [Bingux OS](distro/README.md) for the live image.
+for the greeter and the lock screen, [Bingux OS](distro/README.md) for the live image,
+and [installing Bingux OS](docs/installer.md) for the installer.
 For shell behaviour and configuration, see the [shell guide](shell/bingux/README.md).
 If something does not start or shows no data, see [troubleshooting](docs/troubleshooting.md).
 
