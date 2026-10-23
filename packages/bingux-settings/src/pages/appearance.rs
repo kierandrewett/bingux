@@ -367,7 +367,11 @@ impl Component for AppearancePage {
                         Some(path) => row(file_name(&path)).trailing(
                             rect()
                                 .tw(&tokens, &[flex_row(), items(Align::Center), gap(S3)])
-                                .child(wallpaper_thumbnail(&tokens, &path))
+                                // On a phone the row has no room for the picture
+                                // beside the name and the button.
+                                .maybe_child(
+                                    (!touch()).then(|| wallpaper_thumbnail(&tokens, &path)),
+                                )
                                 .child(row_button("Choose picture", move |_| {
                                     run_wallpaper_change(model, overlays, choose_wallpaper)
                                 })),
