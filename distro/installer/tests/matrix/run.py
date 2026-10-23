@@ -102,6 +102,7 @@ FIXTURES = {
 }
 # Cases that must refuse at install time: the install result is not ok and nothing is booted.
 REFUSALS = {"uefi-free-space-refused"}
+REFUSAL_CODE = "no_free_space"  # the error code install must return for a REFUSALS case
 
 # Guest disk layout a case needs before the probe: the matrix blank disk has no partition table.
 PREPARE = {
@@ -233,7 +234,8 @@ def install_phase(vm, checks, name, firmware, filesystem, encrypted, extra, over
     result = last_json(install_out) or {}
     data = result.get("data", {})
     if refuse:
-        checks.expect(result.get("ok") is False, f"{name}: install refused", f"rc={rc} result={result}")
+        refused = result.get("event") == "error" and result.get("code") == REFUSAL_CODE
+        checks.expect(refused, f"{name}: install refused with {REFUSAL_CODE}", f"rc={rc} result={result}")
         return False
     ok = result.get("event") == "result" and result.get("ok") is True
     checks.expect(ok, f"{name}: install result ok", f"rc={rc} result={result}")
@@ -383,6 +385,14 @@ def run_case(name, iso, out_root, disk_dir, checks, cdrom=None):
         with tempfile.TemporaryDirectory(dir=disk_dir) as scratch:
             ok, detail = verify_ntfs_manifest(disk, "qcow2", Path(scratch))
         checks.expect(ok, f"{name}: other OS manifest verifies after install (host ntfscat)", detail)
+    if name in REFUSALS and name in FIXTURES:
+        # a refused install must leave the other OS untouched: the whole disk still equals the fixture
+        raw = disk_dir / f"{name}.raw"
+        compare = subprocess.run(["qemu-img", "compare", str(raw), str(disk)],
+                                 capture_output=True, text=True, check=False)
+        checks.expect(compare.returncode == 0, f"{name}: disk unchanged by the refused install",
+                      (compare.stdout + compare.stderr)[-300:])
+        raw.unlink(missing_ok=True)
     disk.unlink(missing_ok=True)
 
 
