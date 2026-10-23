@@ -1,9 +1,10 @@
 //! Text fields: Freya's `Input` in the shell's clothing (SwiftUI
 //! `TextField` and `SecureField`, libadwaita `GtkEntry`).
 //!
-//! A text field sits on `control` at radius 8 and is 32 px tall. Like every
-//! control it has no idle outline; focus draws the accent ring, an invalid
-//! value the danger one. A password field has a reveal button, and a right
+//! A text field sits on `control` at the control radius and is one control
+//! row tall. Like every control, it has no idle outline; focus draws the
+//! accent ring, an invalid value the danger one. A password field has a
+//! reveal button, and a right
 //! click opens Cut, Copy, Paste and Select all. Enter submits; Escape
 //! restores the last committed text and leaves the field.
 
@@ -11,24 +12,21 @@ use freya::prelude::*;
 
 use crate::controls::button::icon_button;
 use crate::icons::{self, Icon};
-use crate::scale::*;
 use crate::shell::menu::{MenuItem, menu_item, menu_separator};
 use crate::shell::overlays::Overlays;
+use crate::style::*;
 use crate::surface::{use_enabled, use_tokens};
+use crate::typography::{BODY, CAPTION, Ink};
 
 /// A multiline field is this many controls high.
 const MULTILINE_ROWS: f32 = 3.0;
-
-/// The height of one line of message text, reserved under a field that
-/// validates so the row does not jump when an error appears.
-const MESSAGE_LINE: f32 = TEXT_SM * 1.3;
 
 /// A single-line (or multi-line) text field bound to a `State<String>`.
 #[derive(PartialEq)]
 pub struct TextField {
     value: State<String>,
     placeholder: Option<String>,
-    width: f32,
+    width: Dim,
     fill: bool,
     well: bool,
     password: bool,
@@ -50,7 +48,7 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
     TextField {
         value,
         placeholder: None,
-        width: FIELD_WIDTH,
+        width: Dim::Field,
         fill: false,
         well: false,
         password: false,
@@ -79,7 +77,7 @@ impl TextField {
         self
     }
 
-    pub fn width(mut self, width: f32) -> Self {
+    pub fn width(mut self, width: Dim) -> Self {
         self.width = width;
         self
     }
@@ -181,34 +179,39 @@ impl Component for TextField {
         let mut revealed = use_state(|| false);
         let mut command = use_state::<Option<InputCommand>>(|| None);
         let overlays: Option<Overlays> = try_consume_context::<Overlays>();
-        let outline = if invalid {
-            tokens.danger
-        } else {
-            Color::TRANSPARENT
-        };
-        let focus_outline = if invalid {
-            tokens.danger
-        } else {
-            tokens.accent
-        };
-
+        // Freya's Input takes its look as theme values, not a box style, so
+        // the tokens are resolved here: the CONTROL recipe's radius and
+        // inset, the control or well fill, and the danger edge when invalid.
+        let paint = |paint: Paint| Preference::Specific(paint.color(&tokens));
         let fill = if self.well {
-            tokens.elevated
+            Paint::Card
         } else {
-            tokens.control
+            Paint::Control
         };
         let colors = InputColorsThemePartial {
-            background: Some(Preference::Specific(fill)),
-            focus_background: Some(Preference::Specific(fill)),
-            border_fill: Some(Preference::Specific(outline)),
-            focus_border_fill: Some(Preference::Specific(focus_outline)),
-            color: Some(Preference::Specific(tokens.text)),
-            placeholder_color: Some(Preference::Specific(tokens.muted.with_a(170))),
+            background: Some(paint(fill)),
+            focus_background: Some(paint(fill)),
+            border_fill: Some(paint(if invalid {
+                Paint::Danger
+            } else {
+                Paint::Transparent
+            })),
+            focus_border_fill: Some(paint(if invalid {
+                Paint::Danger
+            } else {
+                Paint::Accent
+            })),
+            color: Some(paint(Paint::Text)),
+            placeholder_color: Some(paint(Paint::Muted)),
         };
         let layout = InputLayoutThemePartial {
-            corner_radius: Some(Preference::Specific(CornerRadius::new_all(RADIUS))),
-            padding: Some(Preference::Specific(Gaps::new(6.0, 10.0, 6.0, 10.0))),
+            corner_radius: Some(Preference::Specific(CornerRadius::new_all(
+                Radius::Control.px(),
+            ))),
+            padding: Some(Preference::Specific(Gaps::new_symmetric(S2.px(), S3.px()))),
         };
+        let width = self.width.px();
+        let control_height = Dim::Control.px();
 
         let has_text = !value.read().is_empty();
         let masked = self.password && !revealed();
@@ -222,7 +225,7 @@ impl Component for TextField {
             .width(if self.fill {
                 Size::fill()
             } else {
-                Size::px(fit_field(self.width))
+                Size::px(width)
             })
             .enabled(use_enabled(self.enabled))
             .theme_colors(colors)
@@ -256,33 +259,33 @@ impl Component for TextField {
                 }
             });
         if !self.multiline {
-            input = input.height(Size::px(control_height()));
+            input = input.height(Size::px(control_height));
         } else {
             input = input
                 .multiline(true)
-                .height(Size::px(control_height() * MULTILINE_ROWS));
+                .height(Size::px(control_height * MULTILINE_ROWS));
         }
         if let Some(placeholder) = &self.placeholder {
             input = input.placeholder(placeholder.clone());
         }
         if let Some(icon) = self.leading {
-            input = input.leading(rect().margin((0.0, S1, 0.0, 0.0)).child(icons::icon(
+            input = input.leading(rect().tw(&tokens, &[mr(S1)]).child(icons::icon(
                 icon,
-                ICON_MD,
-                tokens.muted,
+                IconSize::Control,
+                Paint::Muted.color(&tokens),
             )));
         }
         let clear = self.clearable && has_text;
         if clear || self.password {
             let on_change = on_change.clone();
-            let mut trailing = rect().horizontal().center().spacing(S1);
+            let mut trailing = rect().tw(&tokens, &[flex_row(), center(), gap(S1)]);
             if clear {
                 trailing = trailing.child(
                     rect()
-                        .width(Size::px(BOX_SM))
-                        .height(Size::px(BOX_SM))
-                        .corner_radius(RADIUS_LG)
-                        .center()
+                        .tw(
+                            &tokens,
+                            &[w(Dim::Box5), h(Dim::Box5), rounded(Radius::Pill), center()],
+                        )
                         .on_press(move |event: Event<PressEventData>| {
                             event.stop_propagation();
                             value.set(String::new());
@@ -290,7 +293,11 @@ impl Component for TextField {
                                 on_change.call(String::new());
                             }
                         })
-                        .child(icons::icon(Icon::EditClear, ICON_SM, tokens.muted)),
+                        .child(icons::icon(
+                            Icon::EditClear,
+                            IconSize::Mark,
+                            Paint::Muted.color(&tokens),
+                        )),
                 );
             }
             if self.password {
@@ -301,7 +308,7 @@ impl Component for TextField {
                 };
                 trailing = trailing.child(
                     icon_button(icon, move |_| revealed.set(!revealed()))
-                        .size(BOX_SM)
+                        .size(Dim::Box5)
                         .tooltip(tip),
                 );
             }
@@ -336,7 +343,7 @@ impl Component for TextField {
             .width(if self.fill {
                 Size::fill()
             } else {
-                Size::px(fit_field(self.width))
+                Size::px(width)
             })
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 let right = matches!(event.data(), PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Right));
@@ -352,19 +359,16 @@ impl Component for TextField {
             .child(input);
 
         rect()
-            .spacing(S1)
-            .font_size(TEXT_MD)
+            .tw(&tokens, &[flex_col(), gap(S1), font(BODY)])
             .child(field)
             .maybe(self.validates, |column| {
                 column.child(
                     rect()
-                        .width(Size::fill())
-                        .min_height(Size::px(MESSAGE_LINE))
+                        .tw(&tokens, &[w_full(), min_h(Dim::CaptionLine)])
                         .maybe_child(self.invalid.clone().map(|message| {
-                            label()
-                                .text(message)
-                                .font_size(TEXT_SM)
-                                .color(tokens.danger)
+                            CAPTION
+                                .in_ink(Ink::Danger)
+                                .paragraph(&tokens, message)
                                 .max_lines(2)
                         })),
                 )

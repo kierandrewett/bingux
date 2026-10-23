@@ -1,18 +1,13 @@
-//! Sizes and the interaction surface every control shares.
+//! The interaction surface every control shares.
 //!
-//! One scale for the whole library. A row is 40 px, or 56 px with a
-//! subtitle; a control in a row is 32 px; a group card has a 12 px radius and a row
-//! or button 8 px. Interaction is a set of alpha layers drawn over the
-//! surface a control sits on: selection, then hover or press, as
-//! `ControlCentreButtonSurface.qml` does. Keyboard focus is a 2 px accent
-//! ring on controls. Idle outlines are not used; they turn lists into a grid
-//! of boxes.
+//! Interaction is a set of alpha layers drawn over the surface a control
+//! sits on: selection, then hover or press, as
+//! `ControlCentreButtonSurface.qml` does. Apply it with
+//! [`crate::style::surface`]; keyboard focus is [`crate::style::focus_ring`].
 
 use freya::prelude::*;
 
 use crate::theme::{SharedTokens, Tokens};
-
-pub use crate::scale::*;
 
 /// Whether the container around a control is enabled. A disabled row provides
 /// `false`, so the controls in it dim and ignore the pointer without each
@@ -38,29 +33,6 @@ pub fn use_enabled(own: bool) -> bool {
 /// component to accent and colour-scheme changes.
 pub fn use_tokens() -> Tokens {
     *use_consume::<SharedTokens>().0.read()
-}
-
-/// The 1 px outline around buttons, dropdowns, fields and segmented
-/// controls. Keyboard focus replaces it with the accent ring.
-pub fn field_border(tokens: &Tokens, focus: Focus) -> Border {
-    if focus == Focus::Keyboard {
-        return focus_border(tokens, focus);
-    }
-    Border::new()
-        .width(1.0)
-        .alignment(BorderAlignment::Inner)
-        .fill(tokens.outline)
-}
-
-pub fn focus_border(tokens: &Tokens, focus: Focus) -> Border {
-    if focus == Focus::Keyboard {
-        Border::new()
-            .width(RING_WIDTH)
-            .alignment(BorderAlignment::Inner)
-            .fill(tokens.accent)
-    } else {
-        Border::new()
-    }
 }
 
 /// Source-over composition: `top` drawn over `bottom`, both possibly

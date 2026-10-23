@@ -85,6 +85,7 @@ fn main() {
 /// so the images show what the machine running this reports.
 #[cfg(feature = "snapshot")]
 fn snapshot_pages(dir: &str, only: &[String]) {
+    use bingux_ui::style::{Paint, Tw, bg, h_full, w_full};
     let pages: Vec<PageId> = if only.is_empty() {
         PageId::ALL.to_vec()
     } else {
@@ -119,10 +120,10 @@ fn snapshot_pages(dir: &str, only: &[String]) {
         let path = format!("{dir}/{}.png", page.panel_name());
         let mut shot = bingux_ui::snapshot::Snapshot::new(
             move || {
+                let tokens = theme::load_tokens();
                 Element::from(
                     rect()
-                        .expanded()
-                        .background(Color::from_rgb(28, 28, 32))
+                        .tw(&tokens, &[w_full(), h_full(), bg(Paint::Bg)])
                         .child(app::App {
                             initial: page,
                             subpage: None,

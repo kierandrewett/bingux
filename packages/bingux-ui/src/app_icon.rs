@@ -16,7 +16,7 @@ use bytes::Bytes;
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::scale::*;
+use crate::style::*;
 use crate::surface::use_tokens;
 
 /// An icon file and whether it is a vector image. A vector icon is read
@@ -319,8 +319,8 @@ pub fn resolve(name: &str, size: u32) -> Option<IconFile> {
     found
 }
 
-/// An application icon of `size` logical pixels for the icon name `name`.
-pub fn app_icon(name: impl Into<String>, size: f32) -> AppIcon {
+/// An application icon of `size` for the icon name `name`.
+pub fn app_icon(name: impl Into<String>, size: IconSize) -> AppIcon {
     AppIcon {
         name: name.into(),
         size,
@@ -330,13 +330,13 @@ pub fn app_icon(name: impl Into<String>, size: f32) -> AppIcon {
 #[derive(PartialEq)]
 pub struct AppIcon {
     name: String,
-    size: f32,
+    size: IconSize,
 }
 
 impl Component for AppIcon {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let size = self.size;
+        let size = self.size.px();
         // Ask for twice the size so the icon stays sharp on a HiDPI output.
         let file = resolve(&self.name, (size * 2.0).ceil() as u32);
         match file {
@@ -351,13 +351,31 @@ impl Component for AppIcon {
                 .width(Size::px(size))
                 .height(Size::px(size))
                 .into_element(),
+            // No icon in the theme: a plain tile with the generic glyph.
             None => rect()
                 .width(Size::px(size))
                 .height(Size::px(size))
-                .background(tokens.control)
-                .corner_radius(if size > ICON_APP { RADIUS_LG } else { RADIUS })
-                .center()
-                .child(icons::icon(Icon::Application, size * 0.6, tokens.muted))
+                .tw(
+                    &tokens,
+                    &[
+                        bg(Paint::Control),
+                        rounded(if self.size == IconSize::AppLarge {
+                            Radius::Card
+                        } else {
+                            Radius::Control
+                        }),
+                        center(),
+                    ],
+                )
+                .child(icons::icon(
+                    Icon::Application,
+                    if self.size == IconSize::AppLarge {
+                        IconSize::Hero
+                    } else {
+                        IconSize::Control
+                    },
+                    Paint::Muted.color(&tokens),
+                ))
                 .into_element(),
         }
     }

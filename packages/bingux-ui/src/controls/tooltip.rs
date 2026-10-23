@@ -9,8 +9,9 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::scale::*;
+use crate::style::*;
 use crate::surface::use_tokens;
+use crate::typography::{CAPTION, Ink};
 
 /// How long the pointer rests on the glyph before the tooltip shows.
 const TOOLTIP_DELAY: Duration = Duration::from_millis(500);
@@ -21,11 +22,11 @@ const CHAR_WIDTH: f32 = 0.6;
 
 /// A state glyph with a hover tooltip. `text` is both the tooltip and the
 /// glyph's accessible label, so the state is announced without a tooltip.
-pub fn tooltip_icon(icon: Icon, size: f32, color: Color, text: impl Into<String>) -> Element {
+pub fn tooltip_icon(icon: Icon, size: IconSize, paint: Paint, text: impl Into<String>) -> Element {
     Element::from(TooltipIcon {
         icon,
         size,
-        color,
+        paint,
         text: text.into(),
     })
 }
@@ -33,8 +34,8 @@ pub fn tooltip_icon(icon: Icon, size: f32, color: Color, text: impl Into<String>
 #[derive(Clone, PartialEq)]
 struct TooltipIcon {
     icon: Icon,
-    size: f32,
-    color: Color,
+    size: IconSize,
+    paint: Paint,
     text: String,
 }
 
@@ -48,8 +49,7 @@ impl Component for TooltipIcon {
         let glyph = rect()
             .a11y_role(AccessibilityRole::Image)
             .a11y_alt(self.text.clone())
-            .width(Size::px(self.size))
-            .height(Size::px(self.size))
+            .tw(&tokens, &[w(Dim::IconBox), h(Dim::IconBox), center()])
             .on_pointer_enter(move |event: Event<PointerEventData>| {
                 let at = event.global_location();
                 anchor.set((at.x as f32, at.y as f32));
@@ -68,39 +68,37 @@ impl Component for TooltipIcon {
                 }
                 visible.set_if_modified(false);
             })
-            .child(icons::icon(self.icon, self.size, self.color));
+            .child(icons::icon(self.icon, self.size, self.paint.color(&tokens)));
 
         if !visible() {
             return glyph.into_element();
         }
 
-        let label_size = TEXT_SM;
+        // The bubble's size, estimated from the TOOLTIP recipe's padding and
+        // hairline, to pick a side that fits.
+        let label_size = CAPTION.size;
+        let edges = 2.0 * Dim::Hairline.px();
         let bubble_width =
-            self.text.chars().count() as f32 * label_size * CHAR_WIDTH + S2 + S2 + 2.0;
-        let bubble_height = label_size + S1 + S1 + 2.0;
+            self.text.chars().count() as f32 * label_size * CHAR_WIDTH + 2.0 * S2.px() + edges;
+        let bubble_height = label_size + 2.0 * S1.px() + edges;
         let window = *Platform::get().current_window().root_size.read();
         let position = choose_position(
             anchor(),
-            self.size / 2.0,
+            self.size.px() / 2.0,
             (bubble_width, bubble_height),
             (window.width, window.height),
         );
         let bubble = rect()
             .layer(Layer::Overlay)
-            .padding((S1, S2))
-            .corner_radius(RADIUS)
-            .background(tokens.tooltip_surface)
-            .border(
-                Border::new()
-                    .width(1.0)
-                    .alignment(BorderAlignment::Inner)
-                    .fill(tokens.tooltip_outline),
+            .tw(&tokens, TOOLTIP)
+            .tw(
+                &tokens,
+                &[border(Line::Stroke(Dim::Hairline, Paint::TooltipOutline))],
             )
             .child(
-                label()
-                    .text(self.text.clone())
-                    .font_size(label_size)
-                    .color(tokens.text)
+                CAPTION
+                    .in_ink(Ink::Text)
+                    .label(&tokens, self.text.clone())
                     .max_lines(1),
             );
         Attached::new(glyph)
@@ -123,12 +121,13 @@ fn choose_position(
     let (x, y) = anchor;
     let (width, height) = bubble;
     let (window_width, window_height) = window;
-    let gap = half + S1;
+    let gap = half + S1.px();
+    let margin = S2.px();
     let fits = |left: f32, top: f32| {
-        left >= S2
-            && top >= S2
-            && left + width <= window_width - S2
-            && top + height <= window_height - S2
+        left >= margin
+            && top >= margin
+            && left + width <= window_width - margin
+            && top + height <= window_height - margin
     };
     let centred_x = x - width / 2.0;
     let centred_y = y - height / 2.0;

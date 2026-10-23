@@ -1,11 +1,13 @@
 //! A numeric stepper (SwiftUI `Stepper`, libadwaita `GtkSpinButton`): a
-//! value label with `-` and `+` buttons in one 32 px pill on `control`.
+//! value label with `-` and `+` buttons in one pill on `control`, at the
+//! control height.
 
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::scale::*;
-use crate::surface::{focus_border, surface_color, use_enabled, use_tokens};
+use crate::style::*;
+use crate::surface::{use_enabled, use_tokens};
+use crate::typography::{BODY, Ink};
 
 /// Page Up and Page Down move the stepper this many steps.
 const PAGE_STEPS: i64 = 10;
@@ -125,14 +127,19 @@ impl Component for Stepper {
                 builder.set_max_numeric_value(max as f64);
                 builder.set_numeric_value_step(step as f64);
             })
-            .height(Size::px(control_height()))
-            .direction(Direction::Horizontal)
-            .cross_align(Alignment::Center)
-            .corner_radius(RADIUS)
-            .background(tokens.control)
+            .tw(
+                &tokens,
+                &[
+                    h(Dim::Control),
+                    flex_row(),
+                    items(Align::Center),
+                    px(S0_5),
+                    rounded(Radius::Control),
+                    bg(Paint::Control),
+                    focus_ring(focus()),
+                ],
+            )
             .maybe(!enabled, |element| element.opacity(0.45))
-            .border(focus_border(&tokens, focus()))
-            .padding((0.0, S0))
             .maybe(enabled, |element| element.on_key_down(on_key_down))
             .child(step_button(Icon::ListRemove, can_decrement, move |_| {
                 decrement();
@@ -140,17 +147,8 @@ impl Component for Stepper {
             }))
             .child(
                 rect()
-                    .min_width(Size::px(BOX_XL))
-                    .height(Size::fill())
-                    .padding((0.0, S1))
-                    .center()
-                    .child(
-                        label()
-                            .text(text)
-                            .font_size(TEXT_MD)
-                            .color(tokens.text)
-                            .max_lines(1),
-                    ),
+                    .tw(&tokens, &[min_w(Dim::Box11), h_full(), px(S1), center()])
+                    .child(BODY.in_ink(Ink::Text).label(&tokens, text).max_lines(1)),
             )
             .child(step_button(Icon::ListAdd, can_increment, move |_| {
                 increment();
@@ -159,7 +157,7 @@ impl Component for Stepper {
     }
 }
 
-/// One 28 px square half of the stepper pill.
+/// One square half of the stepper pill.
 #[derive(PartialEq)]
 struct StepButton {
     icon: Icon,
@@ -183,15 +181,21 @@ impl Component for StepButton {
         let enabled = self.enabled;
         let on_press = self.on_press.clone();
         rect()
-            .width(Size::px(BOX_MD))
-            .height(Size::px(BOX_MD))
-            .corner_radius(RADIUS)
-            .center()
-            .background(if enabled {
-                surface_color(&tokens, Color::TRANSPARENT, hovering(), pressing(), false)
-            } else {
-                Color::TRANSPARENT
-            })
+            .tw(
+                &tokens,
+                &[
+                    w(Dim::StepperHalf),
+                    h(Dim::StepperHalf),
+                    rounded(Radius::Control),
+                    center(),
+                    surface(
+                        Paint::Transparent,
+                        enabled && hovering(),
+                        enabled && pressing(),
+                        false,
+                    ),
+                ],
+            )
             .maybe(enabled, |element| {
                 element
                     .on_pointer_enter(move |_| hovering.set(true))
@@ -211,8 +215,12 @@ impl Component for StepButton {
             })
             .child(icons::icon(
                 self.icon,
-                ICON_MD,
-                if enabled { tokens.text } else { tokens.muted },
+                IconSize::Control,
+                if enabled {
+                    Paint::Text.color(&tokens)
+                } else {
+                    Paint::Muted.color(&tokens)
+                },
             ))
     }
 }

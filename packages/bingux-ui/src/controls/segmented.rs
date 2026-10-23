@@ -8,8 +8,9 @@ use std::rc::Rc;
 
 use freya::prelude::*;
 
-use crate::scale::*;
-use crate::surface::{focus_border, over, surface_color, use_enabled, use_tokens};
+use crate::style::*;
+use crate::surface::{use_enabled, use_tokens};
+use crate::typography::{BODY, Ink};
 
 /// The shell's segmented control: a quiet `control` rail where only the
 /// selected segment is raised.
@@ -54,13 +55,19 @@ impl Component for Segmented {
         };
         let key_ids = ids.clone();
         rect()
-            .height(Size::px(control_height()))
+            .tw(
+                &tokens,
+                &[
+                    h(Dim::Control),
+                    flex_row(),
+                    items(Align::Center),
+                    p(S1),
+                    gap(S1),
+                    rounded(Radius::Control),
+                    bg(Paint::Control),
+                ],
+            )
             .maybe(!enabled, |element| element.opacity(0.45))
-            .corner_radius(RADIUS)
-            .background(tokens.control)
-            .padding(S1)
-            .spacing(S1)
-            .direction(Direction::Horizontal)
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 if !enabled {
                     return;
@@ -113,23 +120,23 @@ impl Component for Segment {
         let enabled = use_enabled(true);
         let key = self.key.clone();
         let on_select = self.on_select.clone();
-        let base = if self.selected {
-            over(tokens.pressed, tokens.control)
-        } else {
-            Color::TRANSPARENT
-        };
         rect()
             .a11y_id(a11y_id)
             .a11y_focusable(enabled && self.selected)
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::Tab)
             .a11y_builder(|builder| builder.set_selected(self.selected))
-            .height(Size::fill())
-            .padding((0.0, S2))
-            .center()
-            .corner_radius(RADIUS - S1)
-            .background(surface_color(&tokens, base, hovering(), pressing(), false))
-            .border(focus_border(&tokens, focus()))
+            .tw(
+                &tokens,
+                &[
+                    h_full(),
+                    px(S2),
+                    center(),
+                    rounded(Radius::Control),
+                    surface(Paint::Pressed, hovering(), pressing(), self.selected),
+                    focus_ring(focus()),
+                ],
+            )
             .maybe(enabled, |element| {
                 element
                     .on_pointer_enter(move |_| hovering.set(true))
@@ -149,14 +156,8 @@ impl Component for Segment {
                     })
             })
             .child(
-                label()
-                    .text(self.text.clone())
-                    .color(if self.selected {
-                        tokens.text
-                    } else {
-                        tokens.muted
-                    })
-                    .font_size(TEXT_MD)
+                BODY.in_ink(if self.selected { Ink::Text } else { Ink::Muted })
+                    .label(&tokens, self.text.clone())
                     .max_lines(1),
             )
     }

@@ -5,8 +5,9 @@ use freya::prelude::*;
 
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
-use crate::scale::*;
-use crate::surface::{focus_border, is_activation_key, surface_color, use_enabled, use_tokens};
+use crate::style::*;
+use crate::surface::{is_activation_key, use_enabled, use_tokens};
+use crate::typography::{BODY, EMPHASIS, Ink};
 
 /// The shell's `ActionButton`: 36 px tall on `control` at radius 8, with no
 /// idle outline.
@@ -101,60 +102,54 @@ impl Component for ActionButton {
         let usable = use_enabled(self.enabled);
         let enabled = usable && !self.loading;
         let filled = self.accent || self.destructive;
-        let fill = if self.destructive {
-            tokens.danger
-        } else {
-            tokens.accent
-        };
-        let base = if filled {
-            fill
-        } else if self.flat {
-            Color::TRANSPARENT
-        } else {
-            tokens.control
-        };
-        let background = if filled {
-            if pressing() {
-                Color::lerp(fill, Color::BLACK, 0.16)
-            } else if hovering() {
-                Color::lerp(fill, Color::WHITE, 0.08)
-            } else {
-                base
-            }
-        } else {
-            surface_color(&tokens, base, hovering(), pressing(), false)
-        };
-        let color = if !usable {
-            tokens.muted
-        } else if filled {
-            tokens.accent_foreground
-        } else {
-            tokens.text
-        };
+        // The fill is a paint; the state layer on top comes from `surface`.
         // No idle outline: the shell's buttons are filled or flat. Only the
         // keyboard focus ring draws a border.
-        let border = focus_border(&tokens, focus());
+        let base = if self.destructive {
+            Paint::Danger
+        } else if filled {
+            Paint::Accent
+        } else if self.flat {
+            Paint::Transparent
+        } else {
+            Paint::Control
+        };
+        let ink = if !usable {
+            Ink::Muted
+        } else if filled {
+            Ink::OnAccent
+        } else {
+            Ink::Text
+        };
+        let color = ink.color(&tokens);
+        let ink_paint = if !usable {
+            Paint::Muted
+        } else if filled {
+            Paint::OnAccent
+        } else {
+            Paint::Text
+        };
         rect()
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::Button)
-            .height(Size::px(if self.compact {
-                control_height()
-            } else {
-                button_height()
-            }))
-            .min_width(Size::px(BOX_LG))
-            .maybe(self.grow, |element| element.width(Size::flex(1.0)))
-            .padding((0.0, S3))
-            .spacing(S2)
-            .direction(Direction::Horizontal)
-            .cross_align(Alignment::Center)
-            .main_align(Alignment::Center)
-            .corner_radius(RADIUS)
-            .background(background)
+            .tw(&tokens, if self.compact { BUTTON_COMPACT } else { BUTTON })
+            .tw(
+                &tokens,
+                &[
+                    min_w(Dim::Box9),
+                    flex_row(),
+                    items(Align::Center),
+                    justify(Align::Center),
+                    px(S3),
+                    gap(S2),
+                    surface(base, hovering(), pressing(), false),
+                    focus_ring(focus()),
+                ],
+            )
+            .maybe(self.grow, |element| element.tw(&tokens, &[w_flex()]))
             .maybe(!usable, |element| element.opacity(0.5))
-            .border(border)
             .maybe(enabled, |element| {
                 element
                     .on_pointer_enter(move |_| hovering.set(true))
@@ -181,18 +176,19 @@ impl Component for ActionButton {
             })
             .maybe_child(
                 self.loading
-                    .then(|| rect().child(spinner(SpinnerSize::Small).color(color))),
+                    .then(|| rect().child(spinner(SpinnerSize::Small).ink(ink_paint))),
             )
             .maybe_child(
                 (!self.loading)
-                    .then(|| self.icon.map(|icon| icons::icon(icon, ICON_MD, color)))
+                    .then(|| {
+                        self.icon
+                            .map(|icon| icons::icon(icon, IconSize::Control, color))
+                    })
                     .flatten(),
             )
             .child(
-                label()
-                    .text(self.text.clone())
-                    .color(color)
-                    .font_size(TEXT_MD)
+                BODY.in_ink(ink)
+                    .label(&tokens, self.text.clone())
                     .max_lines(1),
             )
     }
@@ -242,28 +238,28 @@ impl Component for RowButton {
         let enabled = use_enabled(true);
         let on_press = self.on_press.clone();
         let on_key = on_press.clone();
+        let base = if self.prominent {
+            Paint::Transparent
+        } else {
+            Paint::Control
+        };
+        let style = if self.prominent { EMPHASIS } else { BODY };
         rect()
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::Button)
             .maybe(!enabled, |element| element.opacity(0.5))
-            .height(Size::px(control_height()))
-            .padding((0.0, S3))
-            .center()
-            .corner_radius(RADIUS)
-            .background(surface_color(
+            .tw(&tokens, BUTTON_COMPACT)
+            .tw(
                 &tokens,
-                if self.prominent {
-                    Color::TRANSPARENT
-                } else {
-                    tokens.control
-                },
-                hovering(),
-                pressing(),
-                false,
-            ))
-            .border(focus_border(&tokens, focus()))
+                &[
+                    center(),
+                    px(S3),
+                    surface(base, hovering(), pressing(), false),
+                    focus_ring(focus()),
+                ],
+            )
             .maybe(enabled, |element| {
                 element
                     .on_pointer_enter(move |_| hovering.set(true))
@@ -289,15 +285,9 @@ impl Component for RowButton {
                     })
             })
             .child(
-                label()
-                    .text(self.text.clone())
-                    .color(tokens.text)
-                    .font_size(TEXT_MD)
-                    .font_weight(if self.prominent {
-                        FontWeight::SEMI_BOLD
-                    } else {
-                        FontWeight::NORMAL
-                    })
+                style
+                    .in_ink(Ink::Text)
+                    .label(&tokens, self.text.clone())
                     .max_lines(1),
             )
     }
@@ -307,7 +297,7 @@ impl Component for RowButton {
 #[derive(PartialEq)]
 pub struct IconButton {
     icon: Icon,
-    size: f32,
+    size: Dim,
     tooltip: Option<String>,
     on_press: EventHandler<()>,
     danger: bool,
@@ -316,7 +306,7 @@ pub struct IconButton {
 pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconButton {
     IconButton {
         icon,
-        size: button_height(),
+        size: Dim::Button,
         tooltip: None,
         on_press: on_press.into(),
         danger: false,
@@ -329,7 +319,7 @@ impl IconButton {
         self
     }
 
-    pub fn size(mut self, size: f32) -> Self {
+    pub fn size(mut self, size: Dim) -> Self {
         self.size = size;
         self
     }
@@ -350,10 +340,12 @@ impl Component for IconButton {
         let focus = use_focus(a11y_id);
         let on_press = self.on_press.clone();
         let on_key = on_press.clone();
-        let background = if self.danger && hovering() {
-            tokens.danger.with_af32(if pressing() { 1.0 } else { 0.8 })
+        // Only a hovered danger button takes the danger fill; the state
+        // layer from `surface` then sits over it.
+        let base = if self.danger && hovering() {
+            Paint::Danger
         } else {
-            surface_color(&tokens, Color::TRANSPARENT, hovering(), pressing(), false)
+            Paint::Transparent
         };
         let button = rect()
             .a11y_id(a11y_id)
@@ -362,12 +354,16 @@ impl Component for IconButton {
             .maybe(self.tooltip.is_some(), |element| {
                 element.a11y_alt(self.tooltip.clone().unwrap_or_default())
             })
-            .width(Size::px(self.size))
-            .height(Size::px(self.size))
-            .center()
-            .corner_radius(RADIUS)
-            .background(background)
-            .border(focus_border(&tokens, focus()))
+            .tw(&tokens, ICON_BUTTON)
+            .tw(
+                &tokens,
+                &[
+                    w(self.size),
+                    h(self.size),
+                    surface(base, hovering(), pressing(), false),
+                    focus_ring(focus()),
+                ],
+            )
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| {
                 hovering.set(false);
@@ -389,7 +385,11 @@ impl Component for IconButton {
                     on_key.call(());
                 }
             })
-            .child(icons::icon(self.icon, ICON_MD, tokens.text));
+            .child(icons::icon(
+                self.icon,
+                IconSize::Control,
+                Ink::Text.color(&tokens),
+            ));
         match &self.tooltip {
             Some(text) => TooltipContainer::new(Tooltip::new_text(text.clone()))
                 .child(button)

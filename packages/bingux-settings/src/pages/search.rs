@@ -16,7 +16,7 @@ use crate::ui::{
     primary_button, row, sheet, skeleton, slider_row, status, switch, switch_row, text_field,
     use_overlays,
 };
-use bingux_ui::scale::*;
+use bingux_ui::style::*;
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const PROVIDERS: [(&str, &str, Icon); 7] = [
@@ -651,13 +651,12 @@ fn engine_row(engine: Engine, engines: &[Engine], default: &str, ctx: Ctx) -> Ro
     let default_for_remove = default.to_string();
     let engine_name = engine.name.clone();
     let trailing = rect()
-        .direction(Direction::Horizontal)
-        .cross_align(Alignment::Center)
+        .tw_layout(&[flex_row(), items(Align::Center), gap(S2)])
         .child(switch(engine.enabled, move |_: bool| {
             write_engines(ctx, &default_for_toggle, toggled.clone());
         }))
         .child(
-            rect().margin((0.0, 0.0, 0.0, S2)).child(
+            rect().child(
                 icon_button(Icon::Delete, move |_| {
                     let default = default_for_remove.clone();
                     let without = without.clone();
@@ -833,21 +832,21 @@ impl Component for EngineBody {
             .row(row("Name").trailing(
                 text_field(form.name, |_: String| {})
                     .on_change(edited.clone())
-                    .width(FIELD_WIDTH_WIDE)
+                    .width(Dim::FieldWide)
                     .placeholder("Example Search"),
             ))
             .row(row("Shortcut").trailing(
                 text_field(form.shortcut, |_: String| {})
                     .on_change(edited.clone())
                     .invalid(problems.shortcut.map(str::to_string))
-                    .width(FIELD_WIDTH_WIDE)
+                    .width(Dim::FieldWide)
                     .placeholder("ex"),
             ))
             .row(row("Web address").trailing(
                 text_field(form.url, |_: String| {})
                     .on_change(edited)
                     .invalid(problems.url.map(str::to_string))
-                    .width(FIELD_WIDTH_WIDE)
+                    .width(Dim::FieldWide)
                     .placeholder("https://example.com/?q={query}"),
             ))
     }
@@ -1109,7 +1108,7 @@ impl Component for AssistantModel {
                 };
                 commit(ctx, set_args("search.ai", ai_toml(&next)));
             })
-            .width(FIELD_WIDTH_WIDE),
+            .width(Dim::FieldWide),
         )
     }
 }

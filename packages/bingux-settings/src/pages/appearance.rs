@@ -16,12 +16,13 @@ use freya::prelude::*;
 use crate::pages::bingux_config;
 use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, background, background_then, which};
-use crate::theme::{Scheme, SharedTokens, Tokens, accent_for, accent_names, read_gsettings};
+use crate::theme::{Scheme, SharedTokens, Tokens, accent_names, read_gsettings};
+use crate::ui::typography::{BODY, EMPHASIS};
 use crate::ui::{
     Group, Icon, Overlays, Status, choice_list, icon, page_column, row, row_button, skeleton,
     status, use_overlays, use_tokens,
 };
-use bingux_ui::scale::*;
+use bingux_ui::style::*;
 
 const INTERFACE: &str = "org.gnome.desktop.interface";
 const WALLPAPER_KEY: &str = "desktop.wallpaper";
@@ -156,43 +157,46 @@ fn run_wallpaper_change(
     });
 }
 
-/// One accent circle, set in a box of the icon-button size so the row keeps
-/// an even pitch. The selected one is ringed in the text colour and carries a
+/// One accent circle, set in a box of the control size so the row keeps an
+/// even pitch. The selected one is ringed in the text colour and carries a
 /// check. Hovering shows the accent's name.
 fn swatch(
+    tokens: &Tokens,
     name: &'static str,
-    color: Color,
     selected: bool,
-    ring: Color,
-    check: Color,
     on_press: impl FnMut(Event<PressEventData>) + 'static,
 ) -> Element {
-    let border = if selected {
-        Border::new()
-            .width(RING_WIDTH)
-            .alignment(BorderAlignment::Inner)
-            .fill(ring)
-    } else {
-        Border::new()
-    };
-    let mark = selected.then(|| Element::from(icon(Icon::Check, ICON_MD, check)));
+    let mark = selected.then(|| {
+        Element::from(icon(
+            Icon::Check,
+            IconSize::Control,
+            Paint::OnAccent.color(tokens),
+        ))
+    });
     let button = rect()
         .a11y_role(AccessibilityRole::Button)
         .a11y_alt(format!("Accent colour {name}"))
         .a11y_focusable(true)
-        .width(Size::px(BOX_LG))
-        .height(Size::px(BOX_LG))
-        .center()
-        .corner_radius(BOX_LG / 2.0)
-        .border(border)
+        .tw(
+            tokens,
+            &[w(Dim::Box9), h(Dim::Box9), center(), rounded(Radius::Pill)],
+        )
+        .maybe(selected, |ring| {
+            ring.tw(tokens, &[border(Line::Ring(Paint::Text))])
+        })
         .on_press(on_press)
         .child(
             rect()
-                .width(Size::px(BOX_MD))
-                .height(Size::px(BOX_MD))
-                .corner_radius(BOX_MD / 2.0)
-                .background(color)
-                .center()
+                .tw(
+                    tokens,
+                    &[
+                        w(Dim::Box7),
+                        h(Dim::Box7),
+                        rounded(Radius::Pill),
+                        bg(Paint::Swatch(name)),
+                        center(),
+                    ],
+                )
                 .maybe_child(mark),
         );
     let title = format!("{}{}", name[..1].to_uppercase(), &name[1..]);
@@ -200,64 +204,61 @@ fn swatch(
 }
 
 /// A grey line standing in for text in a scheme card.
-fn preview_line(width: Size, color: Color) -> impl IntoElement {
-    rect()
-        .width(width)
-        .height(Size::px(S1))
-        .corner_radius(RADIUS_SM)
-        .background(color)
+fn preview_line(tokens: &Tokens, width: Util, paint: Paint) -> impl IntoElement {
+    rect().tw(
+        tokens,
+        &[width, h(Dim::PreviewBar), rounded(Radius::Mark), bg(paint)],
+    )
 }
 
 /// A small window in one colour scheme: a title bar, a sidebar and content.
 /// The colours are fixed so each card shows its scheme, whatever is current.
-fn mock_window(dark: bool, accent: Color, width: Size) -> Element {
+fn mock_window(tokens: &Tokens, dark: bool, width: Util) -> Element {
     let (window, bar, sidebar, line) = if dark {
         (
-            Color::from_rgb(38, 38, 42),
-            Color::from_rgb(56, 56, 62),
-            Color::from_rgb(47, 47, 53),
-            Color::from_rgb(100, 100, 108),
+            Paint::MockDarkWindow,
+            Paint::MockDarkBar,
+            Paint::MockDarkSidebar,
+            Paint::MockDarkLine,
         )
     } else {
         (
-            Color::from_rgb(250, 250, 250),
-            Color::from_rgb(228, 228, 228),
-            Color::from_rgb(238, 238, 238),
-            Color::from_rgb(186, 186, 186),
+            Paint::MockLightWindow,
+            Paint::MockLightBar,
+            Paint::MockLightSidebar,
+            Paint::MockLightLine,
         )
     };
     let side = rect()
-        .width(Size::px(PREVIEW_SIDEBAR))
-        .height(Size::fill())
-        .background(sidebar)
-        .padding(S2)
-        .spacing(S2)
-        .child(preview_line(Size::fill(), line))
-        .child(preview_line(Size::fill(), line));
+        .tw(
+            tokens,
+            &[
+                flex_col(),
+                w(Dim::PreviewSidebar),
+                h_full(),
+                bg(sidebar),
+                p(S2),
+                gap(S2),
+            ],
+        )
+        .child(preview_line(tokens, w_full(), line))
+        .child(preview_line(tokens, w_full(), line));
     let content = rect()
-        .width(Size::flex(1.0))
-        .height(Size::fill())
-        .background(window)
-        .padding(S2)
-        .spacing(S2)
-        .child(preview_line(Size::px(PREVIEW_LINE), accent))
-        .child(preview_line(Size::fill(), line))
-        .child(preview_line(Size::fill(), line));
+        .tw(
+            tokens,
+            &[flex_col(), w_flex(), h_full(), bg(window), p(S2), gap(S2)],
+        )
+        .child(preview_line(tokens, w(Dim::PreviewLine), Paint::Accent))
+        .child(preview_line(tokens, w_full(), line))
+        .child(preview_line(tokens, w_full(), line));
     let body = rect()
-        .width(Size::fill())
-        .height(Size::flex(1.0))
-        .direction(Direction::Horizontal)
+        .tw(tokens, &[flex_row(), w_full(), h_flex()])
         .child(side)
         .child(content);
-    let top = rect()
-        .width(Size::fill())
-        .height(Size::px(S4))
-        .background(bar);
+    let top = rect().tw(tokens, &[w_full(), h(Dim::PreviewTitleBar), bg(bar)]);
     Element::from(
         rect()
-            .width(width)
-            .height(Size::fill())
-            .background(window)
+            .tw(tokens, &[flex_col(), width, h_full(), bg(window)])
             .child(top)
             .child(body),
     )
@@ -275,56 +276,49 @@ fn scheme_card(
     let windows = match scheme {
         Scheme::Default => Element::from(
             rect()
-                .width(Size::fill())
-                .height(Size::fill())
-                .direction(Direction::Horizontal)
-                .child(mock_window(false, tokens.accent, Size::flex(1.0)))
-                .child(mock_window(true, tokens.accent, Size::flex(1.0))),
+                .tw(&tokens, &[flex_row(), w_full(), h_full()])
+                .child(mock_window(&tokens, false, w_flex()))
+                .child(mock_window(&tokens, true, w_flex())),
         ),
-        Scheme::PreferLight => mock_window(false, tokens.accent, Size::fill()),
-        Scheme::PreferDark => mock_window(true, tokens.accent, Size::fill()),
+        Scheme::PreferLight => mock_window(&tokens, false, w_full()),
+        Scheme::PreferDark => mock_window(&tokens, true, w_full()),
     };
-    let border = Border::new()
-        .width(RING_WIDTH)
-        .alignment(BorderAlignment::Inner)
-        .fill(if selected {
-            tokens.accent
-        } else {
-            tokens.outline
-        });
+    let ring = if selected {
+        Paint::Accent
+    } else {
+        Paint::Outline
+    };
     let content = rect()
-        .width(Size::fill())
-        .height(Size::fill())
-        .corner_radius(RADIUS_LG)
-        .overflow(Overflow::Clip)
+        .tw(
+            &tokens,
+            &[w_full(), h_full(), rounded(Radius::Control), clip()],
+        )
         .child(windows);
     let frame = rect()
-        .width(Size::fill())
-        .height(Size::px(PREVIEW_HEIGHT))
-        .corner_radius(RADIUS_LG)
-        .border(border)
-        .padding((RING_WIDTH, RING_WIDTH))
+        .tw(
+            &tokens,
+            &[
+                w_full(),
+                h(Dim::PreviewHeight),
+                rounded(Radius::Card),
+                border(Line::Ring(ring)),
+                p(S0_5),
+            ],
+        )
         .child(content);
-    let caption = label()
-        .text(title)
-        .font_size(TEXT_MD)
-        .color(tokens.text)
-        .font_weight(if selected {
-            FontWeight::SEMI_BOLD
-        } else {
-            FontWeight::NORMAL
-        });
+    let caption = if selected { EMPHASIS } else { BODY };
     Element::from(
         rect()
             .a11y_role(AccessibilityRole::Button)
             .a11y_alt(format!("{title} colour scheme"))
             .a11y_focusable(true)
-            .width(Size::flex(1.0))
-            .spacing(S2)
-            .cross_align(Alignment::Center)
+            .tw(
+                &tokens,
+                &[flex_col(), w_flex(), gap(S2), items(Align::Center)],
+            )
             .on_press(on_press)
             .child(frame)
-            .child(caption),
+            .child(caption.label(&tokens, title)),
     )
 }
 
@@ -360,14 +354,9 @@ impl Component for AppearancePage {
 
         let swatches: Vec<Element> = accent_names()
             .map(|name| {
-                swatch(
-                    name,
-                    accent_for(name, tokens.scheme.is_dark()),
-                    name == tokens.accent_name,
-                    tokens.text,
-                    tokens.accent_foreground,
-                    move |_| apply_accent(shared, overlays, name),
-                )
+                swatch(&tokens, name, name == tokens.accent_name, move |_| {
+                    apply_accent(shared, overlays, name)
+                })
             })
             .collect();
 
@@ -377,10 +366,8 @@ impl Component for AppearancePage {
                     .row(match wallpaper_path {
                         Some(path) => row(file_name(&path)).trailing(
                             rect()
-                                .direction(Direction::Horizontal)
-                                .cross_align(Alignment::Center)
-                                .spacing(S3)
-                                .child(wallpaper_thumbnail(&path))
+                                .tw(&tokens, &[flex_row(), items(Align::Center), gap(S3)])
+                                .child(wallpaper_thumbnail(&tokens, &path))
                                 .child(row_button("Choose picture", move |_| {
                                     run_wallpaper_change(model, overlays, choose_wallpaper)
                                 })),
@@ -415,12 +402,11 @@ impl Component for AppearancePage {
                 Element::from(
                     Group::titled("Accent colour").row(
                         rect()
-                            .width(Size::fill())
-                            .direction(Direction::Horizontal)
-                            .content(Content::wrap_spacing(S1))
-                            .cross_align(Alignment::Center)
-                            .padding((S1, GUTTER - S1))
-                            .spacing(S1)
+                            .tw(&tokens, CARD_BODY)
+                            .tw(
+                                &tokens,
+                                &[flex_row(), wrap(S2), items(Align::Center), gap(S2)],
+                            )
                             .children(swatches),
                     ),
                 )
@@ -434,16 +420,20 @@ impl Component for AppearancePage {
                         .description("Applications follow this. The desktop shell stays dark.")
                         .row(
                             rect()
-                                .width(Size::fill())
-                                .cross_align(Alignment::Center)
-                                .padding((S3, GUTTER - S1))
+                                .tw(&tokens, CARD_BODY)
+                                .tw(&tokens, &[items(Align::Center)])
                                 .child(
                                     rect()
-                                        .width(Size::fill())
-                                        .max_width(Size::px(PREVIEW_ROW_WIDTH))
-                                        .direction(Direction::Horizontal)
-                                        .content(Content::Flex)
-                                        .spacing(S4)
+                                        .tw(
+                                            &tokens,
+                                            &[
+                                                flex_row(),
+                                                flex(),
+                                                w_full(),
+                                                max_w(Dim::PreviewRow),
+                                                gap(S4),
+                                            ],
+                                        )
                                         .child(scheme_card(
                                             "Default",
                                             Scheme::Default,
@@ -481,12 +471,17 @@ impl Component for AppearancePage {
 }
 
 /// Wallpaper thumbnail: a small rounded crop of the picture, 96 by 36.
-fn wallpaper_thumbnail(path: &str) -> Element {
+fn wallpaper_thumbnail(tokens: &Tokens, path: &str) -> Element {
     rect()
-        .width(Size::px(BOX_2XL))
-        .height(Size::px(BOX_LG))
-        .corner_radius(RADIUS)
-        .overflow(Overflow::Clip)
+        .tw(
+            tokens,
+            &[
+                w(Dim::Box24),
+                h(Dim::Box9),
+                rounded(Radius::Control),
+                clip(),
+            ],
+        )
         .child(
             ImageViewer::new(PathBuf::from(path))
                 .width(Size::fill())

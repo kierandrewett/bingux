@@ -14,23 +14,20 @@ use freya::prelude::*;
 
 use crate::controls::button::{action_button, primary_button};
 use crate::layout::divider;
-use crate::scale::*;
 use crate::shell::overlays::{Overlays, use_presence};
+use crate::style::*;
 use crate::surface::use_tokens;
+use crate::typography::{Ink, SECTION};
 
-/// The width of a sheet, as a GNOME dialog of its kind.
-const SHEET_WIDTH: f32 = 480.0;
-/// The gap between the top and bottom of the window and the sheet.
-const SHEET_MARGIN: f32 = S5;
 /// How far the sheet drops in from above as it opens.
-const SHEET_DROP: f32 = S3;
+const SHEET_DROP: f32 = S3.px();
 /// The height of the sheet header: padding, a compact control and the divider.
 fn sheet_header_height() -> f32 {
-    S3 * 2.0 + control_height() + 1.0
+    S3.px() * 2.0 + Dim::Control.px() + 1.0
 }
 /// The height of the tab bar slot under the header, when a sheet has tabs.
 fn sheet_tabs_height() -> f32 {
-    button_height() + S2
+    Dim::Button.px() + S2.px()
 }
 /// The tallest a sheet grows before its body scrolls, as a share of the window.
 const SHEET_MAX_HEIGHT_PERCENT: f32 = 80.0;
@@ -126,33 +123,21 @@ impl Component for SheetLayer {
         });
 
         let header = rect()
-            .width(Size::fill())
-            .content(Content::Flex)
-            .direction(Direction::Horizontal)
-            .cross_align(Alignment::Center)
-            .padding((S3, S3, S3, S3))
-            .child(
-                rect()
-                    .width(Size::flex(1.0))
-                    .direction(Direction::Horizontal)
-                    .main_align(Alignment::Start)
-                    .child(cancel),
+            .tw(
+                &tokens,
+                &[w_full(), flex_row(), items(Align::Center), p(S3)],
             )
+            .child(rect().tw(&tokens, &[flex(), flex_row()]).child(cancel))
             .child(
-                label()
+                SECTION
+                    .in_ink(Ink::Text)
+                    .label(&tokens, self.sheet.title.clone())
                     .width(Size::flex(1.0))
-                    .text(self.sheet.title.clone())
-                    .font_size(TEXT_LG)
-                    .font_weight(FontWeight::SEMI_BOLD)
-                    .color(tokens.text)
-                    .text_align(TextAlign::Center)
-                    .max_lines(1),
+                    .text_align(TextAlign::Center),
             )
             .child(
                 rect()
-                    .width(Size::flex(1.0))
-                    .direction(Direction::Horizontal)
-                    .main_align(Alignment::End)
+                    .tw(&tokens, &[flex(), flex_row(), justify(Align::End)])
                     .maybe_child(primary_element),
             );
 
@@ -170,24 +155,17 @@ impl Component for SheetLayer {
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Dialog)
             .a11y_alt(self.sheet.title.clone())
-            .width(Size::px(SHEET_WIDTH))
-            .height(Size::auto())
+            .tw(
+                &tokens,
+                &[
+                    w(Dim::Sheet),
+                    rounded(Radius::Overlay),
+                    bg(Paint::Popover),
+                    border(Line::Hairline),
+                    shadow(Elevation::Floating),
+                ],
+            )
             .max_height(Size::window_percent(SHEET_MAX_HEIGHT_PERCENT))
-            .corner_radius(RADIUS_XL)
-            .background(tokens.popover)
-            .border(
-                Border::new()
-                    .width(1.0)
-                    .alignment(BorderAlignment::Inner)
-                    .fill(tokens.outline),
-            )
-            .shadow(
-                Shadow::new()
-                    .position(ShadowPosition::Normal)
-                    .y(16.0)
-                    .blur(48.0)
-                    .color(Color::BLACK.with_af32(0.45)),
-            )
             .opacity(progress)
             .offset_y(-SHEET_DROP * (1.0 - progress))
             .on_press(|event: Event<PressEventData>| event.stop_propagation())
@@ -207,9 +185,8 @@ impl Component for SheetLayer {
             .child(divider(&tokens))
             .maybe_child(self.sheet.tabs.clone().map(|tabs| {
                 rect()
-                    .width(Size::fill())
+                    .tw(&tokens, &[w_full(), px(S4), pt(S2)])
                     .height(Size::px(sheet_tabs_height()))
-                    .padding((S2, S4, 0.0, S4))
                     .child(tabs)
             }))
             .child(
@@ -223,20 +200,23 @@ impl Component for SheetLayer {
                     }))
                     .child(
                         rect()
-                            .width(Size::fill())
-                            .padding(S4)
+                            .tw(&tokens, &[w_full(), p(S4)])
                             .child(self.sheet.body.clone()),
                     ),
             );
 
         rect()
             .position(Position::new_absolute().top(0.0).left(0.0))
-            .width(Size::window_percent(100.0))
-            .height(Size::window_percent(100.0))
             .layer(Layer::OverlayLevel(8))
-            .cross_align(Alignment::Center)
-            .padding((SHEET_MARGIN, 0.0, SHEET_MARGIN, 0.0))
-            .background(Color::BLACK.with_af32(0.4 * progress))
+            .tw(&tokens, &[w_full(), h_full(), py(S6), items(Align::Center)])
+            // The scrim fades in under the panel; the panel keeps its own
+            // opacity.
+            .child(
+                rect()
+                    .position(Position::new_absolute().top(0.0).left(0.0))
+                    .tw(&tokens, &[w_full(), h_full(), bg(Paint::Scrim)])
+                    .opacity(progress),
+            )
             .child(panel)
     }
 }

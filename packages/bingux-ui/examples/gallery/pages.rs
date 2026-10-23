@@ -4,6 +4,7 @@ use bingux_ui::charts::{
     Segment, Series, SeriesColour, Unit, bar_chart, donut, line_chart, ring, sparkline,
 };
 use bingux_ui::prelude::*;
+use bingux_ui::style::Align;
 use freya::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -83,7 +84,7 @@ impl Component for Gallery {
         };
         rect()
             .expanded()
-            .color(tokens.text)
+            .tw(&tokens, &[ink(Paint::Text)])
             .font_family(bingux_ui::theme::font_family())
             .child(OverlayHost::new(if subpage() && page() == Page::Rows {
                 NavigationSplitView::new("Gallery", Page::ALL.to_vec(), page, SubpageSample)
@@ -453,8 +454,12 @@ impl Component for FeedbackPage {
         )
         .child(
             Group::new("Progress".to_string())
-                .row(row("Determinate").trailing(progress_bar(progress()).width(Size::px(FIELD_WIDTH))))
-                .row(row("Indeterminate").trailing(progress_bar(None).width(Size::px(FIELD_WIDTH))))
+                .row(row("Determinate").trailing(
+                    rect().tw(&tokens, &[w(Dim::Field)]).child(progress_bar(progress()).width(Size::fill())),
+                ))
+                .row(row("Indeterminate").trailing(
+                    rect().tw(&tokens, &[w(Dim::Field)]).child(progress_bar(None).width(Size::fill())),
+                ))
                 .row(row("Step").trailing(action_button("Advance", move |_| {
                     progress.set((progress() + 0.15).min(1.0))
                 })
@@ -462,9 +467,7 @@ impl Component for FeedbackPage {
         )
         .child(
             rect()
-                .direction(Direction::Horizontal)
-                .spacing(S5)
-                .cross_align(Alignment::Center)
+                .tw(&tokens, &[flex_row(), items(Align::Center), gap(S6)])
                 .child(spinner(SpinnerSize::Small))
                 .child(spinner(SpinnerSize::Medium))
                 .child(spinner(SpinnerSize::Large).text("Loading")),
@@ -477,10 +480,8 @@ impl Component for FeedbackPage {
         .child(status(Status::Info("No devices found.".into())))
         .child(
             rect()
-                .width(Size::fill())
+                .tw(&tokens, &[w_full(), rounded(Radius::Card), bg(Paint::Card)])
                 .height(Size::px(SAMPLE_PANEL_HEIGHT))
-                .corner_radius(RADIUS_LG)
-                .background(tokens.card)
                 .child(
                     status_page(Icon::Bluetooth, "No devices found")
                         .description(
@@ -553,7 +554,7 @@ impl Component for TypographyPage {
             ),
         ];
         let mut column = page_column()
-            .padding((0.0, GUTTER))
+            .tw(&tokens, &[px(GUTTER)])
             .child(
                 Group::new("Network".to_string())
                     .description("Group description, 12 muted, under the group title.")
@@ -569,8 +570,7 @@ impl Component for TypographyPage {
         for (style, sample, note) in ramp {
             column = column.child(
                 rect()
-                    .width(Size::fill())
-                    .spacing(S1)
+                    .tw(&tokens, &[w_full(), flex_col(), gap(S1)])
                     .child(style.label(&tokens, sample))
                     .child(caption(note)),
             );
@@ -592,35 +592,30 @@ impl Component for IconsPage {
                     .row(
                         row("Sizes").trailing(
                             hstack(S3)
-                                .child(app_icon("org.gnome.Nautilus", ICON_APP_LG))
-                                .child(app_icon("org.gnome.Nautilus", ICON_XL))
-                                .child(app_icon("org.gnome.Nautilus", ICON_APP))
-                                .child(app_icon("org.gnome.Nautilus", ICON_APP_SM)),
+                                .child(app_icon("org.gnome.Nautilus", IconSize::AppLarge))
+                                .child(app_icon("org.gnome.Nautilus", IconSize::Hero))
+                                .child(app_icon("org.gnome.Nautilus", IconSize::App))
+                                .child(app_icon("org.gnome.Nautilus", IconSize::AppSmall)),
                         ),
                     )
-                    .row(row("Missing icon").trailing(app_icon("no-such-icon", ICON_APP))),
+                    .row(row("Missing icon").trailing(app_icon("no-such-icon", IconSize::App))),
             )
             .child(
                 rect()
-                    .width(Size::fill())
-                    .direction(Direction::Horizontal)
-                    .content(Content::wrap_spacing(8.0))
-                    .spacing(S2)
+                    .tw(&tokens, &[w_full(), flex_row(), wrap(S2), gap(S2)])
                     .children(Icon::ALL.iter().map(|glyph| {
                         Element::from(
                             rect()
                                 .width(Size::px(SAMPLE_TILE_WIDTH))
                                 .height(Size::px(SAMPLE_TILE_HEIGHT))
-                                .corner_radius(RADIUS_LG)
-                                .background(tokens.card)
-                                .center()
-                                .spacing(S1)
-                                .child(icon(*glyph, 20.0, tokens.text))
+                                .tw(
+                                    &tokens,
+                                    &[rounded(Radius::Card), bg(Paint::Card), center(), gap(S1)],
+                                )
+                                .child(icon(*glyph, IconSize::AppSmall, Paint::Text.color(&tokens)))
                                 .child(
-                                    label()
-                                        .text(format!("{glyph:?}"))
-                                        .font_size(TEXT_XS)
-                                        .color(tokens.muted)
+                                    typography::CAPTION
+                                        .label(&tokens, format!("{glyph:?}"))
                                         .max_lines(1),
                                 ),
                         )
@@ -683,7 +678,7 @@ impl Component for ChartsPage {
             ))
             .child(section_label("Share"))
             .child(
-                hstack(S5)
+                hstack(S6)
                     .child(chart_card(
                         &tokens,
                         donut([
@@ -706,7 +701,7 @@ impl Component for ChartsPage {
             .child(section_label("Sparklines"))
             .child(chart_card(
                 &tokens,
-                hstack(S5)
+                hstack(S6)
                     .child(
                         sparkline(day_wave(0.5, 20.0, 80.0).iter().map(|point| point.1))
                             .area()
@@ -720,22 +715,22 @@ impl Component for ChartsPage {
                 vstack(S4)
                     .child(
                         line_chart([Series::new("Empty", [])])
-                            .height(CHART_HEIGHT)
+                            .height(Dim::Chart)
                             .label("Empty"),
                     )
                     .child(
                         line_chart([Series::new("One point", [(0.0, 5.0)])])
-                            .height(CHART_HEIGHT)
+                            .height(Dim::Chart)
                             .label("One point"),
                     )
                     .child(
                         line_chart([Series::values("Flat", [40.0, 40.0, 40.0])])
-                            .height(CHART_HEIGHT)
+                            .height(Dim::Chart)
                             .label("Flat"),
                     )
                     .child(
                         line_chart([Series::values("Gaps", [1.0, f64::NAN, 3.0, 2.0])])
-                            .height(CHART_HEIGHT)
+                            .height(Dim::Chart)
                             .label("Gaps"),
                     ),
             ))
@@ -757,11 +752,7 @@ fn day_wave(phase: f64, low: f64, high: f64) -> Vec<(f64, f64)> {
 
 /// A bordered card holding one chart, at full width.
 fn chart_card(tokens: &Tokens, chart: impl IntoElement) -> Element {
-    card(tokens)
-        .padding(S4)
-        .min_width(Size::px(0.0))
-        .child(chart)
-        .into()
+    card(tokens).child(chart).into()
 }
 
 /// The tab row of the gallery sheet. It reads its selection while rendering.
@@ -796,12 +787,13 @@ pub struct FormDemoBody {
 
 impl Component for FormDemoBody {
     fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
         let tab = self.tab;
         let mut security = self.security;
         let mut auto_connect = self.auto_connect;
         if tab.read().as_str() == "security" {
             rect()
-                .spacing(S3)
+                .tw(&tokens, &[flex_col(), gap(S3)])
                 .child(form_row(
                     "Security",
                     dropdown(
@@ -819,7 +811,7 @@ impl Component for FormDemoBody {
                 ))
         } else {
             rect()
-                .spacing(S3)
+                .tw(&tokens, &[flex_col(), gap(S3)])
                 .child(form_row(
                     "Network name",
                     text_field(self.name, |_| {}).placeholder("Network name"),

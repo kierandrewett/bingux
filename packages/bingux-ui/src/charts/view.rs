@@ -17,7 +17,7 @@ use super::palette;
 use super::path::{self, Pt};
 use super::scale::{Domain, Linear, lone, nice, time};
 use super::svg::{self, Svg, clip_rect, num, stroke_line};
-use crate::scale::*;
+use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
 use crate::typography::{self, CAPTION, Ink, TextStyle};
@@ -28,8 +28,6 @@ const DEFAULT_WIDTH: f32 = 480.0;
 const EMPTY_TEXT: &str = "No data yet";
 /// The band behind the hovered bar.
 const BAND_OPACITY: f32 = 0.10;
-/// Stroke of the keyboard focus ring.
-const FOCUS_WIDTH: f32 = 2.0;
 /// Sparklines keep this much room at each side for their min and max marks.
 const SPARK_INSET: f32 = ACTIVE_RADIUS + 1.0;
 /// Sparklines keep this much room above and below the line for their marks.
@@ -215,8 +213,8 @@ impl LineChart {
     }
 
     /// The height of the plot, legend excluded.
-    pub fn height(mut self, height: f32) -> Self {
-        self.height = height;
+    pub fn height(mut self, height: Dim) -> Self {
+        self.height = height.px();
         self
     }
 }
@@ -245,8 +243,9 @@ impl BarChart {
         self
     }
 
-    pub fn height(mut self, height: f32) -> Self {
-        self.height = height;
+    /// The height of the plot, legend excluded.
+    pub fn height(mut self, height: Dim) -> Self {
+        self.height = height.px();
         self
     }
 }
@@ -463,7 +462,7 @@ impl Component for Chart {
 
         let chart = drawing(scene, &tokens, width, height)
             .width(Size::fill())
-            .min_width(Size::px(0.0))
+            .min_width(Size::px(NO_MIN))
             .a11y_id(a11y_id)
             .a11y_focusable(interactive)
             .a11y_role(AccessibilityRole::GenericContainer)
@@ -479,7 +478,7 @@ impl Component for Chart {
 
         rect()
             .width(Size::fill())
-            .min_width(Size::px(0.0))
+            .min_width(Size::px(NO_MIN))
             .child(chart)
             .maybe_child(legend)
             .into_element()
@@ -636,12 +635,9 @@ fn focus_outline(tokens: &Tokens, width: f32, height: f32) -> Rect {
         .layer(Layer::Relative(TIP_LAYER))
         .width(Size::px(width))
         .height(Size::px(height))
-        .corner_radius(RADIUS_LG)
-        .border(
-            Border::new()
-                .width(FOCUS_WIDTH)
-                .alignment(BorderAlignment::Inner)
-                .fill(tokens.accent),
+        .tw(
+            tokens,
+            &[rounded(Radius::Card), focus_ring(Focus::Keyboard)],
         )
 }
 
@@ -663,21 +659,8 @@ fn tooltip(tokens: &Tokens, tip: &Tip, width: f32, height: f32) -> Rect {
         .layer(Layer::Relative(TIP_LAYER))
         .width(Size::px(TIP_WIDTH))
         .height(Size::px(card_height))
-        .corner_radius(RADIUS)
-        .background(tokens.tooltip_surface)
-        .border(
-            Border::new()
-                .width(BORDER_WIDTH)
-                .alignment(BorderAlignment::Inner)
-                .fill(tokens.tooltip_outline),
-        )
-        .shadow(
-            Shadow::new()
-                .position(ShadowPosition::Normal)
-                .y(SHADOW_Y)
-                .blur(SHADOW_BLUR)
-                .color(Color::BLACK.with_af32(SHADOW_OPACITY)),
-        )
+        .tw(tokens, TOOLTIP)
+        .tw(tokens, &[shadow(Elevation::Raised)])
         .child(text_element(
             tokens,
             Text::new(
@@ -693,25 +676,20 @@ fn tooltip(tokens: &Tokens, tip: &Tip, width: f32, height: f32) -> Rect {
         let top = TIP_PAD + TIP_ROW * (index as f32 + 1.0);
         card = card
             .child(
-                rect()
-                    .position(
-                        Position::new_absolute()
-                            .top(top + (TIP_ROW - SWATCH) / 2.0)
-                            .left(TIP_PAD),
-                    )
-                    .width(Size::px(SWATCH))
-                    .height(Size::px(SWATCH))
-                    .corner_radius(SWATCH / 2.0)
-                    .background(row.colour),
+                palette::swatch(row.colour).position(
+                    Position::new_absolute()
+                        .top(top + (TIP_ROW - SWATCH) / 2.0)
+                        .left(TIP_PAD),
+                ),
             )
             .child(text_element(
                 tokens,
                 Text::new(
                     CAPTION.in_ink(Ink::Muted),
                     row.name.clone(),
-                    TIP_PAD + SWATCH + S2,
+                    TIP_PAD + SWATCH + S2.px(),
                     top,
-                    inner - SWATCH - S2,
+                    inner - SWATCH - S2.px(),
                     Align::Left,
                 ),
             ))
@@ -731,20 +709,22 @@ fn tooltip(tokens: &Tokens, tip: &Tip, width: f32, height: f32) -> Rect {
 }
 
 /// The legend under a multi-series chart.
-fn legend_row(tokens: &Tokens, items: &[(Color, String)]) -> Rect {
+fn legend_row(tokens: &Tokens, entries: &[(Color, String)]) -> Rect {
     let mut row = rect()
         .width(Size::fill())
         .height(Size::px(LABEL_HEIGHT))
-        .direction(Direction::Horizontal)
-        .spacing(S4)
-        .cross_align(Alignment::Center);
-    for (colour, name) in items {
+        .tw(
+            tokens,
+            &[flex_row(), gap(S4), items(crate::style::Align::Center)],
+        );
+    for (colour, name) in entries {
         row = row.child(
             rect()
-                .direction(Direction::Horizontal)
-                .spacing(S1)
-                .cross_align(Alignment::Center)
-                .child(swatch(*colour))
+                .tw(
+                    tokens,
+                    &[flex_row(), gap(S1), items(crate::style::Align::Center)],
+                )
+                .child(palette::swatch(*colour))
                 .child(CAPTION.label(tokens, name.clone())),
         );
     }
@@ -752,14 +732,6 @@ fn legend_row(tokens: &Tokens, items: &[(Color, String)]) -> Rect {
         .width(Size::fill())
         .child(rect().height(Size::px(LEGEND_GAP)))
         .child(row)
-}
-
-fn swatch(colour: Color) -> Rect {
-    rect()
-        .width(Size::px(SWATCH))
-        .height(Size::px(SWATCH))
-        .corner_radius(SWATCH / 2.0)
-        .background(colour)
 }
 
 /// A scene with a muted baseline and a note, at the chart's height.
@@ -772,7 +744,7 @@ fn empty(tokens: &Tokens, width: f32, height: f32) -> Scene {
         baseline,
         plot.right,
         baseline,
-        tokens.muted.with_af32(BASELINE_OPACITY),
+        Paint::Muted.color(tokens).with_af32(BASELINE_OPACITY),
         HAIRLINE,
     ));
     let centre = (plot.left + plot.right) / 2.0;
@@ -860,7 +832,7 @@ fn baseline(svg: &mut Svg, tokens: &Tokens, plot: Plot, y: &Linear, domain: &Dom
         crisp(zero),
         plot.right,
         crisp(zero),
-        tokens.muted.with_af32(BASELINE_OPACITY),
+        Paint::Muted.color(tokens).with_af32(BASELINE_OPACITY),
         HAIRLINE,
     ));
     zero
@@ -992,7 +964,7 @@ fn sparkline_scene(
             cy,
             DOT_RADIUS,
             colour,
-            Some((tokens.elevated, LINE_WIDTH)),
+            Some((Paint::Card.color(tokens), LINE_WIDTH)),
         ));
     }
     svg.push("</g>");
@@ -1006,7 +978,7 @@ fn sparkline_scene(
             cy,
             ACTIVE_RADIUS,
             colour,
-            Some((tokens.elevated, LINE_WIDTH)),
+            Some((Paint::Card.color(tokens), LINE_WIDTH)),
         ));
         Some(Tip {
             anchor: cx,
@@ -1074,7 +1046,7 @@ fn line_scene(
     let mut svg = Svg::new(width, height);
     let mut texts = y_grid(
         &mut svg,
-        tokens.outline,
+        Paint::Outline.color(tokens),
         plot,
         &y,
         &y_domain,
@@ -1130,7 +1102,7 @@ fn line_scene(
                     cy,
                     radius,
                     colour,
-                    Some((tokens.elevated, LINE_WIDTH)),
+                    Some((Paint::Card.color(tokens), LINE_WIDTH)),
                 ));
             }
         }
@@ -1150,7 +1122,7 @@ fn line_scene(
             CAPTION,
             format_value(first.y, chart.y_unit),
             x.map(last.x),
-            y.map(first.y) - LABEL_HEIGHT - S1,
+            y.map(first.y) - LABEL_HEIGHT - S1.px(),
             POINT_LABEL_WIDTH,
             Align::Right,
             width,
@@ -1167,7 +1139,7 @@ fn line_scene(
             plot.top,
             ax,
             plot.bottom,
-            tokens.muted.with_af32(CROSSHAIR_OPACITY),
+            Paint::Muted.color(tokens).with_af32(CROSSHAIR_OPACITY),
             HAIRLINE,
         ));
         let mut rows = Vec::new();
@@ -1180,7 +1152,7 @@ fn line_scene(
                 y.map(reading),
                 ACTIVE_RADIUS,
                 colour,
-                Some((tokens.elevated, LINE_WIDTH)),
+                Some((Paint::Card.color(tokens), LINE_WIDTH)),
             ));
             rows.push(TipRow {
                 colour,
@@ -1263,7 +1235,7 @@ fn bars_scene(
     let mut svg = Svg::new(width, height);
     let mut texts = y_grid(
         &mut svg,
-        tokens.outline,
+        Paint::Outline.color(tokens),
         plot,
         &y,
         &y_domain,
@@ -1281,8 +1253,8 @@ fn bars_scene(
             num(plot.top),
             num(band),
             num(plot.height()),
-            num(RADIUS),
-            svg::paint("fill", tokens.outline.with_af32(BAND_OPACITY)),
+            num(Radius::Control.px()),
+            svg::paint("fill", Paint::Outline.color(tokens).with_af32(BAND_OPACITY)),
         ));
     }
 
@@ -1439,7 +1411,7 @@ fn bar_segment(x: f32, from: f32, to: f32, width: f32, round: bool) -> Option<St
     if height < MIN_BAR || width <= 0.0 {
         return None;
     }
-    let radius = if round { RADIUS } else { 0.0 };
+    let radius = if round { Radius::Mark.px() } else { 0.0 };
     let upward = to < from;
     Some(if upward {
         path::bar(x, top, width, height, radius, 0.0)
@@ -1472,7 +1444,10 @@ fn ring_scene(ring: &Ring, tokens: &Tokens, progress: f32) -> Scene {
             GAUGE_START,
             GAUGE_START + GAUGE_SWEEP
         ),
-        svg::paint("stroke", tokens.muted.with_af32(RING_TRACK_OPACITY)),
+        svg::paint(
+            "stroke",
+            Paint::Muted.color(tokens).with_af32(RING_TRACK_OPACITY)
+        ),
         num(RING_STROKE),
     ));
     let sweep = GAUGE_SWEEP * value * progress;
@@ -1491,11 +1466,11 @@ fn ring_scene(ring: &Ring, tokens: &Tokens, progress: f32) -> Scene {
     }
 
     let caption_height = match &ring.caption {
-        Some(_) => S0 + LABEL_HEIGHT,
+        Some(_) => S0_5.px() + LABEL_HEIGHT,
         None => 0.0,
     };
     let top = centre - (CENTRE_LINE + caption_height) / 2.0;
-    let inner = RING_SIZE - (RING_STROKE + S1) * 2.0;
+    let inner = RING_SIZE - (RING_STROKE + S1.px()) * 2.0;
     let mut texts = vec![anchored(
         typography::HEADING.in_ink(Ink::Text),
         format_value((f64::from(value * progress) * 100.0).round(), Unit::Percent),
@@ -1510,7 +1485,7 @@ fn ring_scene(ring: &Ring, tokens: &Tokens, progress: f32) -> Scene {
             CAPTION,
             caption.clone(),
             centre,
-            top + CENTRE_LINE + S0,
+            top + CENTRE_LINE + S0_5.px(),
             inner,
             Align::Centre,
             RING_SIZE,
@@ -1556,12 +1531,15 @@ fn donut_scene(donut: &Donut, tokens: &Tokens, progress: f32) -> Scene {
     svg.push(format!(
         r#"<path d="{}" fill="none" {} stroke-width="{}"/>"#,
         path::arc(centre, centre, radius, 0.0, TAU),
-        svg::paint("stroke", tokens.muted.with_af32(RING_TRACK_OPACITY)),
+        svg::paint(
+            "stroke",
+            Paint::Muted.color(tokens).with_af32(RING_TRACK_OPACITY)
+        ),
         num(DONUT_STROKE),
     ));
 
     let mut texts = Vec::new();
-    let inner = DONUT_SIZE - (DONUT_STROKE + S1) * 2.0;
+    let inner = DONUT_SIZE - (DONUT_STROKE + S1.px()) * 2.0;
     if total > 0.0 {
         let segments = values.iter().filter(|&&value| value > 0.0).count();
         let gap = if segments > 1 { DONUT_GAP } else { 0.0 };
@@ -1589,7 +1567,7 @@ fn donut_scene(donut: &Donut, tokens: &Tokens, progress: f32) -> Scene {
             ));
         }
         let caption_height = match donut.caption {
-            Some(_) => S0 + LABEL_HEIGHT,
+            Some(_) => S0_5.px() + LABEL_HEIGHT,
             None => 0.0,
         };
         let top = centre - (CENTRE_LINE + caption_height) / 2.0;
@@ -1607,7 +1585,7 @@ fn donut_scene(donut: &Donut, tokens: &Tokens, progress: f32) -> Scene {
                 CAPTION,
                 caption.clone(),
                 centre,
-                top + CENTRE_LINE + S0,
+                top + CENTRE_LINE + S0_5.px(),
                 inner,
                 Align::Centre,
                 DONUT_SIZE,
@@ -1669,9 +1647,10 @@ fn donut_element(tokens: &Tokens, donut: &Donut, progress: f32) -> Element {
     rect()
         .width(Size::fill())
         .height(Size::px(height))
-        .direction(Direction::Horizontal)
-        .spacing(S4)
-        .cross_align(Alignment::Center)
+        .tw(
+            tokens,
+            &[flex_row(), gap(S4), items(crate::style::Align::Center)],
+        )
         .a11y_alt(alt)
         .child(drawing(scene, tokens, DONUT_SIZE, DONUT_SIZE))
         .child(
@@ -1686,22 +1665,29 @@ fn donut_row(tokens: &Tokens, row: DonutRow) -> Rect {
     rect()
         .width(Size::fill())
         .height(Size::px(DONUT_ROW))
-        .direction(Direction::Horizontal)
-        .cross_align(Alignment::Center)
-        .main_align(Alignment::SpaceBetween)
+        .tw(
+            tokens,
+            &[
+                flex_row(),
+                items(crate::style::Align::Center),
+                justify(crate::style::Align::Between),
+            ],
+        )
         .child(
             rect()
-                .direction(Direction::Horizontal)
-                .spacing(S2)
-                .cross_align(Alignment::Center)
-                .child(swatch(row.colour))
+                .tw(
+                    tokens,
+                    &[flex_row(), gap(S2), items(crate::style::Align::Center)],
+                )
+                .child(palette::swatch(row.colour))
                 .child(CAPTION.in_ink(Ink::Text).label(tokens, row.name)),
         )
         .child(
             rect()
-                .direction(Direction::Horizontal)
-                .spacing(S3)
-                .cross_align(Alignment::Center)
+                .tw(
+                    tokens,
+                    &[flex_row(), gap(S3), items(crate::style::Align::Center)],
+                )
                 .child(
                     typography::NUMERIC
                         .in_ink(Ink::Text)

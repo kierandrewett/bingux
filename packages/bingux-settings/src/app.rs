@@ -52,8 +52,7 @@ impl Component for App {
             None => {
                 let current = page();
                 rect()
-                    .width(Size::fill())
-                    .spacing(S6)
+                    .tw(&tokens, PAGE)
                     .child(current.render())
                     .child(RelatedPages { page: current })
                     .into()
@@ -78,8 +77,7 @@ impl Component for App {
             split = split.subpage(route.title(), move |_| navigator.pop());
         }
         rect()
-            .expanded()
-            .color(tokens.text)
+            .tw(&tokens, &[w_full(), h_full(), ink(Paint::Text)])
             .font_family(bingux_ui::theme::font_family())
             .child(OverlayHost::new(split))
     }

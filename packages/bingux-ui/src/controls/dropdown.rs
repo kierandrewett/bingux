@@ -1,33 +1,36 @@
-//! A dropdown: a 32 px `control` button with no idle outline, showing the
-//! current choice. Pressing it floats a popover of 36 px rows at radius 20
-//! with a 1 px outline; the selected row carries the accent selection layer
-//! and a tick. A long list scrolls inside a capped menu with a scrollbar and
-//! opens the current choice in view; the menu opens upward when there is no
-//! room below the button.
+//! A dropdown: a `control` button with no idle outline, showing the current
+//! choice. Pressing it floats a `menu` of `menu-item` rows; the selected row
+//! carries the accent selection layer and a tick. A long list scrolls inside
+//! a capped menu with a scrollbar and opens the current choice in view; the
+//! menu opens upward when there is no room below the button.
 
 use freya::animation::*;
 use freya::prelude::*;
 
 use crate::app_icon::app_icon;
 use crate::icons::{self, Icon};
-use crate::scale::*;
-use crate::surface::{focus_border, is_activation_key, surface_color, use_enabled, use_tokens};
+use crate::style::*;
+use crate::surface::{is_activation_key, use_enabled, use_tokens};
+use crate::typography::{BODY, Ink};
 
-/// Width of the floating option list.
-const MENU_WIDTH: f32 = 240.0;
-/// The tallest the option list gets before it scrolls, rows only.
-const MENU_MAX_ROWS_HEIGHT: f32 = 320.0;
 /// Space between the button and the menu, and how far the menu slides in.
 const MENU_GAP: f32 = 4.0;
 const MENU_SLIDE: f32 = 3.0;
-/// The widest the button gets before the label is cut with an ellipsis.
-const BUTTON_MAX_WIDTH: f32 = 360.0;
 /// A generous average glyph width at body size. Freya cannot size a button
 /// to an ellipsised label, so the button is sized from its longest option
 /// and does not change width when the choice changes.
 const GLYPH_WIDTH: f32 = 8.2;
-/// Left padding, gap and chevron with its right padding.
-const BUTTON_CHROME: f32 = S3 + S2 + ICON_MD + S2;
+
+/// Left padding, gap and chevron with its right padding. Used for the
+/// measured width only.
+fn button_chrome() -> f32 {
+    S3.px() + S2.px() + IconSize::Control.px() + S2.px()
+}
+
+/// The button on a phone: the value at the row's end, no box.
+const PHONE_VALUE: Recipe = &[pl(S0), pr(S0_5), justify(Align::End)];
+/// The button on a desktop: a filled control, the chevron at its end.
+const DESKTOP_VALUE: Recipe = &[pl(S3), pr(S2), justify(Align::Between)];
 
 /// `options` are `(key, label)` pairs; `on_select` receives the chosen key.
 #[derive(PartialEq)]
@@ -37,8 +40,8 @@ pub struct Dropdown {
     /// Application icon names, one per option, or none.
     icons: Vec<String>,
     enabled: bool,
-    min_width: f32,
-    max_width: f32,
+    min_width: Option<Dim>,
+    fixed_width: Option<Dim>,
     on_select: EventHandler<String>,
 }
 
@@ -52,8 +55,8 @@ pub fn dropdown(
         selected: selected.into(),
         icons: Vec::new(),
         enabled: true,
-        min_width: 0.0,
-        max_width: BUTTON_MAX_WIDTH,
+        min_width: None,
+        fixed_width: None,
         on_select: on_select.into(),
     }
 }
@@ -73,17 +76,16 @@ impl Dropdown {
 
     /// The button is at least this wide, so a column of dropdowns shares
     /// one left edge. It fits the longest option otherwise, up to
-    /// [`BUTTON_MAX_WIDTH`].
-    pub fn min_width(mut self, width: f32) -> Self {
-        self.min_width = width;
+    /// [`Dim::DropdownMax`].
+    pub fn min_width(mut self, width: Dim) -> Self {
+        self.min_width = Some(width);
         self
     }
 
     /// The button is exactly this wide, so every dropdown in a column shares
     /// both edges. A longer option is cut with an ellipsis.
-    pub fn width(mut self, width: f32) -> Self {
-        self.min_width = width;
-        self.max_width = width;
+    pub fn width(mut self, width: Dim) -> Self {
+        self.fixed_width = Some(width);
         self
     }
 }
@@ -141,32 +143,39 @@ impl Component for Dropdown {
         let icon_space = if self.icons.is_empty() {
             0.0
         } else {
-            ICON_APP_SM + S2
+            IconSize::AppSmall.px() + S2.px()
         };
-        let width = (longest * GLYPH_WIDTH + BUTTON_CHROME + icon_space)
-            .min(self.max_width)
-            .max(self.min_width);
-        let width = fit_field(width);
+        // The measured width is only maths; the bounds come from tokens.
+        let width = match self.fixed_width {
+            Some(fixed) => fixed.px(),
+            None => {
+                let min = self.min_width.map_or(0.0, Dim::px);
+                (longest * GLYPH_WIDTH + button_chrome() + icon_space)
+                    .min(Dim::DropdownMax.px())
+                    .max(min)
+            }
+        };
         let current_icon = selected_index.and_then(|index| self.icons.get(index).cloned());
         // The rows' height, and the part of it the menu shows.
-        let list_height = count as f32 * MENU_ITEM_HEIGHT;
-        let viewport_height = list_height.min(MENU_MAX_ROWS_HEIGHT);
+        let item_height = Dim::MenuItem.px();
+        let list_height = count as f32 * item_height;
+        let viewport_height = list_height.min(Dim::MenuList.px());
         // Rows that one Page Up or Page Down press moves through.
-        let page_rows = ((viewport_height / MENU_ITEM_HEIGHT) as usize).max(1);
-        let menu_height = viewport_height + 2.0 * S2;
+        let page_rows = ((viewport_height / item_height) as usize).max(1);
+        let menu_height = viewport_height + 2.0 * S2.px();
         // Scroll offset that puts row `index` in the middle of the menu, or
         // keeps it in view when `centre` is false.
         let offset_for = move |index: usize, current: i32, centre: bool| -> i32 {
-            let top = index as f32 * MENU_ITEM_HEIGHT;
+            let top = index as f32 * item_height;
             let furthest = (list_height - viewport_height).max(0.0);
             let want = if centre {
-                top - (viewport_height - MENU_ITEM_HEIGHT) / 2.0
+                top - (viewport_height - item_height) / 2.0
             } else {
                 let shown_top = -(current as f32);
                 if top < shown_top {
                     top
-                } else if top + MENU_ITEM_HEIGHT > shown_top + viewport_height {
-                    top + MENU_ITEM_HEIGHT - viewport_height
+                } else if top + item_height > shown_top + viewport_height {
+                    top + item_height - viewport_height
                 } else {
                     shown_top
                 }
@@ -263,40 +272,40 @@ impl Component for Dropdown {
             }
         };
 
+        // On a phone the button has no box: the value is muted and sits at
+        // the right, with the chevron.
+        let touch = touch();
         let button = rect()
             .a11y_id(a11y_id)
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::ComboBox)
             .a11y_builder(move |builder| builder.set_expanded(open()))
-            .height(Size::px(control_height()))
             .width(Size::px(width))
-            .padding(if touch() {
-                (0.0, S0, 0.0, 0.0)
-            } else {
-                (0.0, S2, 0.0, S3)
-            })
-            .spacing(S2)
-            .direction(Direction::Horizontal)
-            .cross_align(Alignment::Center)
-            .main_align(if touch() {
-                Alignment::End
-            } else {
-                Alignment::SpaceBetween
-            })
-            .corner_radius(RADIUS)
-            .background(surface_color(
+            .tw(
                 &tokens,
-                if touch() {
-                    Color::TRANSPARENT
-                } else {
-                    tokens.control
-                },
-                enabled && hovering(),
-                enabled && pressing(),
-                false,
-            ))
-            .border(focus_border(&tokens, focus()))
+                &[
+                    h(Dim::Control),
+                    flex_row(),
+                    items(Align::Center),
+                    gap(S2),
+                    rounded(Radius::Control),
+                    surface(
+                        if touch {
+                            Paint::Transparent
+                        } else {
+                            Paint::Control
+                        },
+                        enabled && hovering(),
+                        enabled && pressing(),
+                        false,
+                    ),
+                    focus_ring(focus()),
+                ],
+            )
+            // On a phone the value sits at the row's end with no box; on a
+            // desktop it is a filled control with the chevron at its end.
+            .tw(&tokens, if touch { PHONE_VALUE } else { DESKTOP_VALUE })
             .on_sized(move |event: Event<SizedEventData>| {
                 button_width.set_if_modified(event.area.width());
                 button_area.set_if_modified(event.area);
@@ -335,34 +344,33 @@ impl Component for Dropdown {
             })
             .child(
                 rect()
-                    .direction(Direction::Horizontal)
-                    .cross_align(Alignment::Center)
-                    .spacing(S2)
-                    .maybe_child(current_icon.map(|name| app_icon(name, ICON_APP_SM)))
+                    .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
+                    .maybe_child(current_icon.map(|name| app_icon(name, IconSize::AppSmall)))
                     .child(
-                        label()
-                            .text(current)
-                            .font_size(TEXT_MD)
-                            .color(if touch() { tokens.muted } else { tokens.text })
-                            .text_align(if touch() {
+                        BODY.in_ink(if touch { Ink::Muted } else { Ink::Text })
+                            .label(&tokens, current)
+                            .width(Size::px(width - button_chrome() - icon_space))
+                            .max_lines(1)
+                            .text_overflow(TextOverflow::Ellipsis)
+                            .text_align(if touch {
                                 TextAlign::Right
                             } else {
                                 TextAlign::Left
-                            })
-                            .width(Size::px(width - BUTTON_CHROME - icon_space))
-                            .max_lines(1)
-                            .text_overflow(TextOverflow::Ellipsis),
+                            }),
                     ),
             )
             .child(
                 rect()
-                    .width(Size::px(ICON_MD))
-                    .height(Size::px(ICON_MD))
-                    .child(icons::icon(Icon::PanDown, ICON_MD, tokens.muted)),
+                    .tw(&tokens, &[flex_row(), center()])
+                    .child(icons::icon(
+                        Icon::PanDown,
+                        IconSize::Control,
+                        Paint::Muted.color(&tokens),
+                    )),
             );
 
-        // The list is at least MENU_WIDTH and never narrower than the button.
-        let menu_width = button_width().max(MENU_WIDTH);
+        // The list is at least Dim::DropdownMenu and never narrower than the button.
+        let menu_width = button_width().max(Dim::DropdownMenu.px());
         // Open upward when the window has no room below the button and more
         // room above it.
         let window_height = Platform::get().current_window().root_size.read().height;
@@ -371,7 +379,7 @@ impl Component for Dropdown {
         let open_up = menu_height > below && above > below;
         let slide = MENU_SLIDE * (1.0 - progress);
         let menu_offset = if open_up {
-            -(control_height() + menu_height + MENU_GAP) + slide
+            -(Dim::Control.px() + menu_height + MENU_GAP) + slide
         } else {
             MENU_GAP - slide
         };
@@ -388,22 +396,7 @@ impl Component for Dropdown {
                         .layer(Layer::Overlay)
                         .opacity(progress)
                         .width(Size::px(menu_width))
-                        .padding(S2)
-                        .corner_radius(RADIUS_XL)
-                        .background(tokens.popover)
-                        .border(
-                            Border::new()
-                                .width(1.0)
-                                .alignment(BorderAlignment::Inner)
-                                .fill(tokens.outline),
-                        )
-                        .shadow(
-                            Shadow::new()
-                                .position(ShadowPosition::Normal)
-                                .y(S2)
-                                .blur(S5)
-                                .color(Color::BLACK.with_af32(0.35)),
-                        )
+                        .tw(&tokens, MENU)
                         .child(
                             rect()
                                 .width(Size::fill())
@@ -465,21 +458,16 @@ impl Component for DropdownItem {
         let on_leave = on_hover.clone();
         rect()
             .a11y_role(AccessibilityRole::MenuItem)
-            .width(Size::fill())
-            .height(Size::px(MENU_ITEM_HEIGHT))
-            .padding((0.0, S2))
-            .spacing(S2)
-            .direction(Direction::Horizontal)
-            .content(Content::Flex)
-            .cross_align(Alignment::Center)
-            .corner_radius(RADIUS)
-            .background(surface_color(
+            .tw(&tokens, MENU_ITEM)
+            .tw(
                 &tokens,
-                Color::TRANSPARENT,
-                hovering() || self.highlighted,
-                pressing(),
-                self.selected,
-            ))
+                &[surface(
+                    Paint::Transparent,
+                    hovering() || self.highlighted,
+                    pressing(),
+                    self.selected,
+                )],
+            )
             .on_pointer_enter(move |_| {
                 hovering.set(true);
                 on_hover.call(true);
@@ -501,24 +489,22 @@ impl Component for DropdownItem {
             .maybe_child(
                 self.icon
                     .as_ref()
-                    .map(|name| app_icon(name.clone(), ICON_APP_SM)),
+                    .map(|name| app_icon(name.clone(), IconSize::AppSmall)),
             )
             .child(
-                label()
-                    .text(self.text.clone())
-                    .font_size(TEXT_MD)
-                    .color(tokens.text)
+                BODY.in_ink(Ink::Text)
+                    .label(&tokens, self.text.clone())
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis)
                     .width(Size::flex(1.0)),
             )
             .child(icons::icon(
                 Icon::Check,
-                ICON_SM,
+                IconSize::Mark,
                 if self.selected {
-                    tokens.accent
+                    Paint::Accent.color(&tokens)
                 } else {
-                    Color::TRANSPARENT
+                    Paint::Transparent.color(&tokens)
                 },
             ))
     }

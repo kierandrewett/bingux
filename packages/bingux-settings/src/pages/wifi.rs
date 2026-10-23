@@ -17,7 +17,7 @@ use crate::ui::{
     status, strip_action, switch_row, text_field, use_overlays, use_page_busy, use_page_header,
     use_tokens,
 };
-use bingux_ui::scale::*;
+use bingux_ui::style::*;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
 const QUICK: Duration = Duration::from_secs(5);
@@ -26,8 +26,6 @@ const SCAN: Duration = Duration::from_secs(10);
 const CONNECT: Duration = Duration::from_secs(90);
 /// Busy line shown while a scan runs; the heading shows a spinner for it.
 const SCAN_LABEL: &str = "Scanning for Wi-Fi networks.";
-/// Width of the right-hand action column in the network list.
-const ACTION_WIDTH: f32 = BOX_2XL;
 /// The shortest password WPA allows for a hotspot.
 const HOTSPOT_PASSWORD_MIN: usize = 8;
 
@@ -311,8 +309,8 @@ fn signal_level(signal: u8) -> u8 {
 fn lock_icon(tokens: Tokens) -> Element {
     Element::from(icons::icon(
         Icon::NetworkWirelessEncrypted,
-        ICON_MD,
-        tokens.muted,
+        IconSize::Control,
+        Paint::Muted.color(&tokens),
     ))
 }
 
@@ -581,10 +579,12 @@ fn page(children: Vec<Element>) -> impl IntoElement {
 /// sit in the same place whether or not a row has them.
 fn action_slot(action: Option<Element>) -> Element {
     rect()
-        .width(Size::px(ACTION_WIDTH))
-        .direction(Direction::Horizontal)
-        .main_align(Alignment::End)
-        .cross_align(Alignment::Center)
+        .tw_layout(&[
+            w(Dim::Box24),
+            flex_row(),
+            justify(Align::End),
+            items(Align::Center),
+        ])
         .maybe_child(action)
         .into()
 }
@@ -697,7 +697,8 @@ fn visible_section(ui: Ui, model: &Model, tokens: Tokens) -> Element {
     let trailing = if scanning {
         Element::from(spinner(SpinnerSize::Small))
     } else {
-        Element::from(rect().width(Size::px(ICON_MD)).height(Size::px(ICON_MD)))
+        // A blank box the size of the spinner, so the row does not shift.
+        Element::from(rect().tw_layout(&[w(Dim::IconBox), h(Dim::IconBox)]))
     };
     if model.networks.is_empty() {
         return Element::from(
@@ -734,10 +735,7 @@ fn network_rows(ui: Ui, networks: &[Network], tokens: Tokens) -> Vec<Element> {
                 item = item.subtitle("Saved");
             }
 
-            let mut cluster = rect()
-                .direction(Direction::Horizontal)
-                .spacing(S2)
-                .cross_align(Alignment::Center);
+            let mut cluster = rect().tw_layout(&[flex_row(), gap(S2), items(Align::Center)]);
             if connecting {
                 cluster = cluster.child(Element::from(spinner(SpinnerSize::Small)));
             }
@@ -993,11 +991,12 @@ impl Component for NetworkPage {
             signal_icon(network.signal)
         });
         let hero = rect()
-            .width(Size::fill())
-            .cross_align(Alignment::Center)
-            .spacing(S2)
-            .padding((S2, 0.0, S2, 0.0))
-            .child(icons::icon(hero_icon, ICON_XL, tokens.text))
+            .tw(&tokens, &[w_full(), items(Align::Center), gap(S2), py(S2)])
+            .child(icons::icon(
+                hero_icon,
+                IconSize::Hero,
+                Paint::Text.color(&tokens),
+            ))
             .child(heading(ssid.clone()))
             .child(centered_caption(state));
 

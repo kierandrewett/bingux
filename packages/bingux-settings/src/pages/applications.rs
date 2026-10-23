@@ -273,12 +273,9 @@ impl Component for AppPage {
             .collect();
 
         let launch = app.clone();
-        let identity = rect()
-            .width(Size::fill())
-            .cross_align(Alignment::Center)
-            .spacing(S2)
-            .padding((S2, 0.0, S2, 0.0))
-            .child(app_icon(app.icon.clone(), ICON_APP_LG))
+        let identity = vstack(S2)
+            .tw_layout(&[w_full(), items(Align::Center), py(S2)])
+            .child(app_icon(app.icon.clone(), IconSize::AppLarge))
             .child(heading(app.name.clone()))
             .maybe_child((!app.comment.is_empty()).then(|| centered_caption(app.comment.clone())))
             .child(primary_button("Open", move |_| apps::launch(&launch)).compact());
@@ -358,7 +355,7 @@ impl Component for DefaultAppsPage {
                         set_default(model, busy, overlays, kind, id)
                     })
                     .app_icons(icons)
-                    .width(FIELD_WIDTH_APPS),
+                    .width(Dim::FieldApps),
                 ),
             )
         })))

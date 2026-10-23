@@ -10,8 +10,9 @@ use std::rc::Rc;
 
 use freya::prelude::*;
 
-use crate::scale::*;
-use crate::surface::{focus_border, surface_color, use_tokens};
+use crate::style::*;
+use crate::surface::use_tokens;
+use crate::typography::{BODY, EMPHASIS, Ink};
 
 /// A row of tabs. `options` holds `(key, label)` pairs.
 #[derive(PartialEq)]
@@ -37,6 +38,7 @@ pub fn tabs(
 
 impl Component for Tabs {
     fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
         let options = self.options.clone();
         let selected = self.selected.clone();
         let on_select = self.on_select.clone();
@@ -57,9 +59,7 @@ impl Component for Tabs {
         };
         let key_ids = ids.clone();
         rect()
-            .width(Size::fill())
-            .height(Size::px(button_height()))
-            .direction(Direction::Horizontal)
+            .tw(&tokens, &[w_full(), h(Dim::Button), flex_row()])
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 let Some(index) = options.iter().position(|(key, _)| *key == selected) else {
                     return;
@@ -114,9 +114,9 @@ impl Component for Tab {
         let key = self.key.clone();
         let on_select = self.on_select.clone();
         let underline = if self.selected {
-            tokens.accent
+            Paint::Accent
         } else {
-            Color::TRANSPARENT
+            Paint::Transparent
         };
         rect()
             .a11y_id(a11y_id)
@@ -125,19 +125,17 @@ impl Component for Tab {
             .a11y_role(AccessibilityRole::Tab)
             .a11y_builder(|builder| builder.set_selected(self.selected))
             .width(Size::percent(self.share))
-            .height(Size::fill())
-            .direction(Direction::Vertical)
-            .main_align(Alignment::Center)
-            .cross_align(Alignment::Center)
-            .corner_radius(RADIUS)
-            .background(surface_color(
+            .tw(
                 &tokens,
-                Color::TRANSPARENT,
-                hovering(),
-                pressing(),
-                false,
-            ))
-            .border(focus_border(&tokens, focus()))
+                &[
+                    h_full(),
+                    flex_col(),
+                    center(),
+                    rounded(Radius::Control),
+                    surface(Paint::Transparent, hovering(), pressing(), false),
+                    focus_ring(focus()),
+                ],
+            )
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| {
                 hovering.set(false);
@@ -154,28 +152,23 @@ impl Component for Tab {
                 a11y_id.request_focus();
             })
             .child(
-                label()
-                    .text(self.text.clone())
-                    .color(if self.selected {
-                        tokens.text
-                    } else {
-                        tokens.muted
-                    })
-                    .font_size(TEXT_MD)
-                    .font_weight(if self.selected {
-                        FontWeight::SEMI_BOLD
-                    } else {
-                        FontWeight::NORMAL
-                    })
-                    .max_lines(1),
+                if self.selected {
+                    EMPHASIS.in_ink(Ink::Text)
+                } else {
+                    BODY.in_ink(Ink::Muted)
+                }
+                .label(&tokens, self.text.clone())
+                .max_lines(1),
             )
-            .child(
-                rect()
-                    .width(Size::fill())
-                    .height(Size::px(S0))
-                    .margin((S1, 0.0, 0.0, 0.0))
-                    .corner_radius(RADIUS_SM)
-                    .background(underline),
-            )
+            .child(rect().tw(
+                &tokens,
+                &[
+                    w_full(),
+                    h(Dim::Underline),
+                    mt(S1),
+                    rounded(Radius::Mark),
+                    bg(underline),
+                ],
+            ))
     }
 }

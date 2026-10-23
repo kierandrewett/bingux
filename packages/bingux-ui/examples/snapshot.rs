@@ -7,8 +7,9 @@ mod pages;
 
 use bingux_ui::controls::text_field::text_field;
 use bingux_ui::prelude::{OverlayHost, sheet, use_overlays};
-use bingux_ui::scale::S3;
 use bingux_ui::snapshot::{Snapshot, snapshot};
+use bingux_ui::style::{Paint, S3, Tw, bg, flex_col, gap};
+use bingux_ui::surface::use_tokens;
 use bingux_ui::theme::WINDOW_SIZE;
 use freya::prelude::*;
 use pages::{Gallery, Page};
@@ -21,6 +22,7 @@ fn main() {
     let out = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "/tmp/bingux-ui-gallery".to_string());
+    let tokens = bingux_ui::theme::load_tokens();
     for page in Page::ALL {
         let name = format!("{page:?}").to_lowercase();
         let path = format!("{out}/{name}.png");
@@ -29,7 +31,7 @@ fn main() {
                 Element::from(
                     rect()
                         .expanded()
-                        .background(Color::from_rgb(28, 28, 32))
+                        .tw(&tokens, &[bg(Paint::Bg)])
                         .child(Gallery { initial: page }),
                 )
             },
@@ -48,7 +50,7 @@ fn main() {
             Element::from(
                 rect()
                     .expanded()
-                    .background(Color::from_rgb(28, 28, 32))
+                    .tw(&tokens, &[bg(Paint::Bg)])
                     .child(Gallery {
                         initial: Page::Controls,
                     }),
@@ -70,7 +72,7 @@ fn main() {
             Element::from(
                 rect()
                     .expanded()
-                    .background(Color::from_rgb(28, 28, 32))
+                    .tw(&tokens, &[bg(Paint::Bg)])
                     .child(Gallery {
                         initial: Page::Controls,
                     }),
@@ -91,7 +93,7 @@ fn main() {
             Element::from(
                 rect()
                     .expanded()
-                    .background(Color::from_rgb(28, 28, 32))
+                    .tw(&tokens, &[bg(Paint::Bg)])
                     .child(Gallery {
                         initial: Page::Rows,
                     }),
@@ -112,7 +114,7 @@ fn main() {
             Element::from(
                 rect()
                     .expanded()
-                    .background(Color::from_rgb(28, 28, 32))
+                    .tw(&tokens, &[bg(Paint::Bg)])
                     .child(Gallery {
                         initial: Page::Feedback,
                     }),
@@ -175,7 +177,7 @@ fn main() {
             Element::from(
                 rect()
                     .expanded()
-                    .background(Color::from_rgb(28, 28, 32))
+                    .tw(&tokens, &[bg(Paint::Bg)])
                     .child(Gallery {
                         initial: Page::Buttons,
                     }),
@@ -197,7 +199,7 @@ fn main() {
             Element::from(
                 rect()
                     .expanded()
-                    .background(Color::from_rgb(28, 28, 32))
+                    .tw(&tokens, &[bg(Paint::Bg)])
                     .child(Gallery {
                         initial: Page::Controls,
                     }),
@@ -220,7 +222,7 @@ fn main() {
             Element::from(
                 rect()
                     .expanded()
-                    .background(Color::from_rgb(28, 28, 32))
+                    .tw(&tokens, &[bg(Paint::Bg)])
                     .child(Gallery {
                         initial: Page::Controls,
                     }),
@@ -241,7 +243,7 @@ fn main() {
             Element::from(
                 rect()
                     .expanded()
-                    .background(Color::from_rgb(28, 28, 32))
+                    .tw(&tokens, &[bg(Paint::Bg)])
                     .child(Gallery {
                         initial: Page::Charts,
                     }),
@@ -268,11 +270,12 @@ struct SheetOpen {
 impl Component for SheetOpen {
     fn render(&self) -> impl IntoElement {
         let overlays = use_overlays();
+        let tokens = use_tokens();
         let long = self.long;
         let name = use_state(String::new);
         use_side_effect(move || {
             let mut body = rect()
-                .spacing(S3)
+                .tw(&tokens, &[flex_col(), gap(S3)])
                 .child(text_field(name, |_| {}).placeholder("Network name"));
             if long {
                 for index in 0..14 {
@@ -287,7 +290,7 @@ impl Component for SheetOpen {
         });
         rect()
             .expanded()
-            .background(Color::from_rgb(28, 28, 32))
+            .tw(&tokens, &[bg(Paint::Bg)])
             .child(Gallery {
                 initial: Page::Feedback,
             })
@@ -304,6 +307,7 @@ struct FormSheetOpen {
 impl Component for FormSheetOpen {
     fn render(&self) -> impl IntoElement {
         let overlays = use_overlays();
+        let tokens = use_tokens();
         let security = self.security;
         let name = use_state(String::new);
         let tab = use_state(move || String::from(if security { "security" } else { "details" }));
@@ -329,7 +333,7 @@ impl Component for FormSheetOpen {
         });
         rect()
             .expanded()
-            .background(Color::from_rgb(28, 28, 32))
+            .tw(&tokens, &[bg(Paint::Bg)])
             .child(Gallery {
                 initial: Page::Feedback,
             })

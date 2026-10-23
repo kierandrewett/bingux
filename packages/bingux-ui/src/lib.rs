@@ -17,10 +17,10 @@ pub mod icons;
 pub mod layout;
 pub mod rows;
 pub mod runtime;
-pub mod scale;
 pub mod shell;
 #[cfg(feature = "testing")]
 pub mod snapshot;
+pub mod style;
 pub mod surface;
 pub mod theme;
 pub mod typography;
@@ -42,7 +42,6 @@ pub mod prelude {
         ChoiceList, EntryRow, ExpanderRow, LevelRow, Row, choice_list, choice_row, entry_row,
         expander_row, level_row, property_row, row, slider_row, switch_row, text_row,
     };
-    pub use crate::scale::*;
     pub use crate::shell::{
         Banner, BannerKind, Dialog, HeaderBar, MenuButton, MenuItem, NavItem, NavigationSplitView,
         OverlayHost, Overlays, PageAction, PageHeader, Profile, ResponseKind, SearchField,
@@ -50,6 +49,7 @@ pub mod prelude {
         menu_item, menu_separator, sheet, status_page, use_overlays, use_page_busy,
         use_page_header,
     };
+    pub use crate::style::*;
     pub use crate::surface::use_tokens;
     pub use crate::theme::{Scheme, SharedTokens, Tokens, provide_tokens};
     pub use crate::typography::{self, Ink, TextStyle, styled_label, styled_paragraph};

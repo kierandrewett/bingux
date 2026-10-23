@@ -5,7 +5,8 @@
 
 use std::time::Duration;
 
-use bingux_ui::scale::{FIELD_WIDTH, GUTTER, S1, S2};
+use bingux_ui::layout::vstack;
+use bingux_ui::style::*;
 use freya::prelude::*;
 
 use crate::pages::bingux_config;
@@ -302,9 +303,8 @@ impl Component for DateBody {
             .enumerate()
             .map(|(index, name)| ((index + 1).to_string(), name.to_string()))
             .collect();
-        rect()
-            .width(Size::fill())
-            .spacing(S2)
+        vstack(S2)
+            .tw_layout(&[w_full()])
             .child(
                 Group::titled("Date")
                     .row(form_row(
@@ -316,7 +316,7 @@ impl Component for DateBody {
                         dropdown(month_options, month().to_string(), move |key: String| {
                             month.set(key.parse().unwrap_or(1))
                         })
-                        .min_width(FIELD_WIDTH),
+                        .min_width(Dim::Field),
                     ))
                     .row(form_row(
                         "Year",
@@ -392,10 +392,8 @@ impl Component for DateTimePage {
             Some(Err(message)) => (message, String::new()),
             None => ("Reading the clock.".to_string(), String::new()),
         };
-        let clock_face = rect()
-            .width(Size::fill())
-            .padding((S2, GUTTER))
-            .spacing(S1)
+        let clock_face = vstack(S1)
+            .tw_layout(&[w_full(), py(S2), px(GUTTER)])
             .child(styled_label(typography::HERO, clock))
             .child(caption(date));
 

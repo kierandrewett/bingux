@@ -1,6 +1,7 @@
 //! Interactive controls.
 
 pub mod action_strip;
+pub mod avatar;
 pub mod button;
 pub mod checkbox;
 pub mod dropdown;
@@ -16,6 +17,7 @@ pub mod text_field;
 pub mod tooltip;
 
 pub use action_strip::{ActionStrip, StripAction, action_strip, strip_action};
+pub use avatar::{Avatar, avatar};
 pub use button::{
     ActionButton, IconButton, RowButton, action_button, icon_button, primary_button, row_button,
 };

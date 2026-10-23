@@ -15,14 +15,19 @@ use freya::prelude::*;
 use crate::pages::gnoblin;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    ARRANGEMENT_HEIGHT, ARRANGEMENT_WIDTH, Group, Icon, Overlays, RADIUS_LG, RADIUS_SM,
-    ResponseKind, Status, Tokens, action_row, caption, choice_row, dialog, icon, icon_button,
-    page_column, primary_button, row, skeleton, status, switch_row, typography, use_overlays,
-    use_tokens,
+    Group, Icon, Overlays, ResponseKind, Status, Tokens, action_row, caption, choice_row, dialog,
+    icon, icon_button, page_column, primary_button, row, skeleton, status, switch_row, typography,
+    use_overlays, use_tokens,
 };
-use bingux_ui::scale::{
-    ARRANGEMENT_SNAP, FIELD_WIDTH, ICON_SM, RING_WIDTH, S0, S1, S2, S4, S5, button_height,
-};
+use bingux_ui::style::*;
+
+/// Pixel values of the spacing tokens, for the arrangement and slider
+/// geometry. Boxes themselves are styled with the tokens.
+const GAP_2: f32 = S2.px();
+const GAP_4: f32 = S4.px();
+/// How close, in logical pixels, a dragged display must be to another's edge
+/// to snap flush with it.
+const ARRANGEMENT_SNAP: i32 = 12;
 
 const SERVICE: &str = "org.gnome.Mutter.DisplayConfig";
 const OBJECT: &str = "/org/gnome/Mutter/DisplayConfig";
@@ -1052,26 +1057,31 @@ fn arrangement_hint(ctx: Ctx, monitors: &[Monitor]) -> String {
 /// The height of the footer on the arrangement card: one button high, with a
 /// gap of `S2` above it and below it.
 fn arrangement_footer_height() -> f32 {
-    button_height() + S2 * 2.0
+    Dim::Button.px() + GAP_2 * 2.0
 }
-
-/// The width of the hint text in the arrangement footer. A fixed width stops
-/// the text from taking the row, which would push the quick controls off the card.
-const ARRANGEMENT_HINT_WIDTH: f32 = 260.0;
 
 /// The footer of the arrangement card: the hint on the left and the quick
 /// controls for the selected display on the right, on one baseline.
 fn arrangement_footer(ctx: Ctx, monitors: &[Monitor], selected: usize) -> Element {
     rect()
-        .position(Position::new_absolute().left(S2).right(S2).bottom(S2))
-        .width(Size::fill())
-        .height(Size::px(button_height()))
-        .direction(Direction::Horizontal)
-        .main_align(Alignment::SpaceBetween)
-        .cross_align(Alignment::Center)
+        .position(
+            Position::new_absolute()
+                .left(GAP_2)
+                .right(GAP_2)
+                .bottom(GAP_2),
+        )
+        .tw_layout(&[
+            w_full(),
+            h(Dim::Button),
+            flex_row(),
+            justify(Align::Between),
+            items(Align::Center),
+        ])
         .child(
+            // A fixed width stops the hint from taking the row, which would
+            // push the quick controls off the card.
             rect()
-                .width(Size::px(ARRANGEMENT_HINT_WIDTH))
+                .tw_layout(&[w(Dim::ArrangementHint)])
                 .child(caption(arrangement_hint(ctx, monitors))),
         )
         .maybe_child(canvas_controls(ctx, monitors, selected))
@@ -1086,9 +1096,7 @@ fn canvas_controls(ctx: Ctx, monitors: &[Monitor], selected: usize) -> Option<El
     let primary = monitor.primary;
     Some(
         rect()
-            .width(Size::Inner)
-            .direction(Direction::Horizontal)
-            .spacing(S2)
+            .tw_layout(&[w_auto(), flex_row(), gap(S2)])
             .child(
                 icon_button(Icon::ObjectRotateRight, move |_| {
                     edit(ctx.model, ctx.error, move |monitors| {
@@ -1145,12 +1153,12 @@ fn frame_of(monitors: &[Monitor], area: (f32, f32)) -> Option<Frame> {
         .unwrap_or(top);
     let span_x = f64::from((right - left).max(1));
     let span_y = f64::from((bottom - top).max(1));
-    let inner_x = f64::from(area.0 - 2.0 * S4).max(1.0);
-    let inner_y = f64::from(area.1 - 2.0 * S4).max(1.0);
+    let inner_x = f64::from(area.0 - 2.0 * GAP_4).max(1.0);
+    let inner_y = f64::from(area.1 - 2.0 * GAP_4).max(1.0);
     let fit = (inner_x / span_x).min(inner_y / span_y);
     let origin = (
-        S4 + ((inner_x - span_x * fit) / 2.0) as f32,
-        S4 + ((inner_y - span_y * fit) / 2.0) as f32,
+        GAP_4 + ((inner_x - span_x * fit) / 2.0) as f32,
+        GAP_4 + ((inner_y - span_y * fit) / 2.0) as f32,
     );
     Some(Frame {
         left,
@@ -1591,27 +1599,26 @@ impl Component for Arrangement {
         let width = if measured > 0.0 {
             measured
         } else {
-            ARRANGEMENT_WIDTH
+            Dim::ArrangementWidth.px()
         };
         let active = *ctx.drag.read();
         let Some(current) = frame_of(
             monitors,
-            (width, ARRANGEMENT_HEIGHT - arrangement_footer_height()),
+            (
+                width,
+                Dim::ArrangementHeight.px() - arrangement_footer_height(),
+            ),
         ) else {
             return caption("No displays are on.").into_element();
         };
         let frame = active.map_or(current, |drag| drag.frame);
 
         let mut canvas = rect()
-            .width(Size::fill())
-            .height(Size::px(ARRANGEMENT_HEIGHT))
-            .corner_radius(RADIUS_LG)
-            .background(tokens.control)
-            .border(
-                Border::new()
-                    .width(1.0)
-                    .alignment(BorderAlignment::Inner)
-                    .fill(tokens.separator),
+            .tw(
+                &tokens,
+                // The canvas fills its card; the card draws the edge and
+                // rounds the corners.
+                &[w_full(), h(Dim::ArrangementHeight), bg(Paint::Control)],
             )
             .on_sized(move |event: Event<SizedEventData>| size.set(event.area))
             .on_capture_global_pointer_move(move |event: Event<PointerEventData>| {
@@ -1692,14 +1699,15 @@ impl Component for Tile {
         let monitor = &self.monitor;
         let frame = self.frame;
         let (width, height) = monitor.extent();
-        // Each box is inset by half the gap, so neighbouring boxes are S0 apart.
-        let inset = S0 / 2.0;
+        // Each box is inset by half the gap, so neighbouring boxes are S0_5 apart.
+        let gap = S0_5.px();
+        let inset = gap / 2.0;
         let target_left =
             frame.origin.0 + (f64::from(monitor.x - frame.left) * frame.fit) as f32 + inset;
         let target_top =
             frame.origin.1 + (f64::from(monitor.y - frame.top) * frame.fit) as f32 + inset;
-        let box_width = ((f64::from(width) * frame.fit) as f32 - S0).max(0.0);
-        let box_height = ((f64::from(height) * frame.fit) as f32 - S0).max(0.0);
+        let box_width = ((f64::from(width) * frame.fit) as f32 - gap).max(0.0);
+        let box_height = ((f64::from(height) * frame.fit) as f32 - gap).max(0.0);
         let time = if self.dragging {
             0
         } else {
@@ -1718,41 +1726,34 @@ impl Component for Tile {
                 .ease(Ease::Out)
         });
 
-        let (fill, ink) = if monitor.primary {
-            (tokens.accent, tokens.accent_foreground)
+        // The main display is filled with the accent; the selected one is
+        // ringed in the colour that stands out against its fill.
+        let (fill, ink, glyph) = if monitor.primary {
+            (Paint::Accent, typography::Ink::OnAccent, Paint::OnAccent)
         } else {
-            (tokens.elevated, tokens.text)
+            (Paint::Card, typography::Ink::Text, Paint::Text)
         };
-        let border = if self.selected {
-            Border::new()
-                .width(RING_WIDTH)
-                .alignment(BorderAlignment::Inner)
-                .fill(if monitor.primary {
-                    tokens.text
-                } else {
-                    tokens.accent
-                })
+        let ring = if monitor.primary {
+            Paint::Text
         } else {
-            Border::new()
+            Paint::Accent
         };
         let mut title = rect()
-            .width(Size::fill())
-            .direction(Direction::Horizontal)
-            .cross_align(Alignment::Center)
+            .tw(&tokens, &[w_full(), flex_row(), items(Align::Center)])
             .child(
                 typography::EMPHASIS
+                    .in_ink(ink)
                     .label(&tokens, monitor.name.clone())
-                    .color(ink)
                     .width(Size::fill())
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
             );
         if monitor.primary {
-            title = title.child(icon(Icon::Starred, ICON_SM, ink));
+            title = title.child(icon(Icon::Starred, IconSize::Mark, glyph.color(&tokens)));
         }
         let details = typography::CAPTION
-            .label(&tokens, monitor.selected().resolution())
-            .color(ink.with_af32(0.8));
+            .in_ink(ink)
+            .label(&tokens, monitor.selected().resolution());
 
         let ctx = self.ctx;
         let index = self.index;
@@ -1781,10 +1782,13 @@ impl Component for Tile {
             )
             .width(Size::px(box_width))
             .height(Size::px(box_height))
-            .corner_radius(RADIUS_SM)
-            .padding(S2)
-            .background(fill)
-            .border(border)
+            .tw(
+                &tokens,
+                &[flex_col(), rounded(Radius::Mark), p(S2), bg(fill)],
+            )
+            .maybe(self.selected, |tile| {
+                tile.tw(&tokens, &[border(Line::Ring(ring))])
+            })
             .on_pointer_down(on_press)
             .child(title)
             .child(details)
@@ -1967,8 +1971,9 @@ fn temperature_control(kelvin: u32, on_moved: impl Into<EventHandler<f64>>) -> E
             fraction * 100.0
         );
     }
+    let (width, height, radius) = (Dim::Field.px(), STRIP_HEIGHT, STRIP_HEIGHT / 2.0);
     let svg = format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{FIELD_WIDTH}" height="{S2}" viewBox="0 0 {FIELD_WIDTH} {S2}"><defs><linearGradient id="kelvin" x1="0" y1="0" x2="1" y2="0">{stops}</linearGradient></defs><rect width="{FIELD_WIDTH}" height="{S2}" rx="{S1}" fill="url(#kelvin)"/></svg>"#
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}"><defs><linearGradient id="kelvin" x1="0" y1="0" x2="1" y2="0">{stops}</linearGradient></defs><rect width="{width}" height="{height}" rx="{radius}" fill="url(#kelvin)"/></svg>"#
     );
     KelvinStrip {
         kelvin,
@@ -1978,6 +1983,10 @@ fn temperature_control(kelvin: u32, on_moved: impl Into<EventHandler<f64>>) -> E
     .into()
 }
 
+/// The strip's geometry: an 8 px gradient bar in a 24 px tall control, with
+/// a thumb 8 by 24 that grows a little while pressed.
+const STRIP_HEIGHT: f32 = GAP_2;
+const STRIP_CONTROL: f32 = S6.px();
 const SCALE_PRESSED: f32 = 1.1;
 const SCALE_MS: u64 = 120;
 const LEVEL_MAX: f64 = 100.0;
@@ -1987,7 +1996,7 @@ const KELVIN_PAGE_STEP: f64 = 10.0;
 
 /// The night light strip. It is the control itself: press or drag anywhere on
 /// it, or use the arrow, Home, End, Page Up and Page Down keys. The white pill
-/// is the thumb, S2 wide and S5 tall.
+/// is the thumb, S2 wide and S6 tall.
 #[derive(Clone, PartialEq)]
 struct KelvinStrip {
     kelvin: u32,
@@ -2015,12 +2024,13 @@ impl Component for KelvinStrip {
                 .function(Function::Expo)
                 .ease(Ease::Out)
         });
-        let thumb_width = S2 * scale.get().value();
-        let thumb_height = S5 * scale.get().value();
-        let travel = (FIELD_WIDTH - S2).max(1.0);
-        let centre_x = S2 / 2.0 + travel * (level / LEVEL_MAX) as f32;
+        let strip_width = Dim::Field.px();
+        let thumb_width = STRIP_HEIGHT * scale.get().value();
+        let thumb_height = STRIP_CONTROL * scale.get().value();
+        let travel = (strip_width - STRIP_HEIGHT).max(1.0);
+        let centre_x = STRIP_HEIGHT / 2.0 + travel * (level / LEVEL_MAX) as f32;
         let percent_at = move |x: f64| -> f64 {
-            let half = f64::from(S2 / 2.0);
+            let half = f64::from(STRIP_HEIGHT / 2.0);
             ((x - half) / f64::from(travel) * LEVEL_MAX).clamp(0.0, LEVEL_MAX)
         };
         let on_pointer_down = {
@@ -2066,7 +2076,7 @@ impl Component for KelvinStrip {
             }
         };
 
-        let ring = S2 + RING_WIDTH * 2.0;
+        let ring = STRIP_HEIGHT + Dim::Ring.px() * 2.0;
         rect()
             .a11y_id(a11y_id)
             .a11y_focusable(true)
@@ -2076,8 +2086,8 @@ impl Component for KelvinStrip {
                 builder.set_min_numeric_value(f64::from(TEMP_MIN));
                 builder.set_max_numeric_value(f64::from(TEMP_MAX));
             })
-            .width(Size::px(FIELD_WIDTH))
-            .height(Size::px(S5))
+            .tw(&tokens, &[w(Dim::Field)])
+            .height(Size::px(STRIP_CONTROL))
             .on_sized(move |event: Event<SizedEventData>| size.set(event.area))
             .on_pointer_down(on_pointer_down)
             .on_capture_global_pointer_move(on_move)
@@ -2085,30 +2095,31 @@ impl Component for KelvinStrip {
             .on_key_down(on_key_down)
             .child(
                 rect()
-                    .position(Position::new_absolute().top((S5 - S2) / 2.0).left(0.0))
-                    .width(Size::px(FIELD_WIDTH))
-                    .height(Size::px(S2))
+                    .position(
+                        Position::new_absolute()
+                            .top((STRIP_CONTROL - STRIP_HEIGHT) / 2.0)
+                            .left(0.0),
+                    )
+                    .width(Size::px(strip_width))
+                    .height(Size::px(STRIP_HEIGHT))
                     .child(
                         SvgViewer::new((svg.clone(), Bytes::from(svg)))
-                            .width(Size::px(FIELD_WIDTH))
-                            .height(Size::px(S2)),
+                            .width(Size::px(strip_width))
+                            .height(Size::px(STRIP_HEIGHT)),
                     ),
             )
             .maybe_child((focus() == Focus::Keyboard).then(|| {
                 rect()
                     .position(
                         Position::new_absolute()
-                            .top((S5 - ring) / 2.0)
+                            .top((STRIP_CONTROL - ring) / 2.0)
                             .left(centre_x - ring / 2.0),
                     )
                     .width(Size::px(ring))
                     .height(Size::px(ring))
-                    .corner_radius(ring / 2.0)
-                    .border(
-                        Border::new()
-                            .width(1.0)
-                            .alignment(BorderAlignment::Inner)
-                            .fill(tokens.accent),
+                    .tw(
+                        &tokens,
+                        &[rounded(Radius::Pill), border(Line::Edge(Paint::Accent))],
                     )
             }))
             .child(
@@ -2116,18 +2127,18 @@ impl Component for KelvinStrip {
                     .layer(Layer::Relative(3))
                     .position(
                         Position::new_absolute()
-                            .top((S5 - thumb_height) / 2.0)
+                            .top((STRIP_CONTROL - thumb_height) / 2.0)
                             .left(centre_x - thumb_width / 2.0),
                     )
                     .width(Size::px(thumb_width))
                     .height(Size::px(thumb_height))
-                    .corner_radius(thumb_width / 2.0)
-                    .background(Color::from_rgb(255, 255, 255))
-                    .border(
-                        Border::new()
-                            .width(S0 / 2.0)
-                            .alignment(BorderAlignment::Outer)
-                            .fill(Color::from_rgb(64, 64, 64)),
+                    .tw(
+                        &tokens,
+                        &[
+                            rounded(Radius::Pill),
+                            bg(Paint::Text),
+                            border(Line::Edge(Paint::Outline)),
+                        ],
                     ),
             )
             .into_element()

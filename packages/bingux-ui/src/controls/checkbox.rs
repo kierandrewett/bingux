@@ -10,14 +10,9 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::scale::*;
-use crate::surface::{is_activation_key, surface_color, use_enabled, use_tokens};
-
-/// Side of the 18 px check and radio boxes.
-const BOX_SIZE: f32 = 18.0;
-const DASH_WIDTH: f32 = 8.0;
-const DASH_HEIGHT: f32 = 2.0;
-const DOT_SIZE: f32 = 8.0;
+use crate::style::*;
+use crate::surface::{is_activation_key, use_enabled, use_tokens};
+use crate::typography::BODY;
 
 /// Tri-state checkbox value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -82,51 +77,41 @@ impl Component for Checkbox {
         let on_toggle = self.on_toggle.clone();
         let filled = state != CheckState::Off;
         let motion = tokens.motion(100);
-        let fill = use_animation_transition(
-            if filled {
-                tokens.accent
-            } else {
-                tokens.elevated
-            },
-            move |from, to| {
-                AnimColor::new(from, to)
-                    .time(motion)
-                    .function(Function::Expo)
-                    .ease(Ease::Out)
-            },
-        );
+        // The accent fades in over the control colour. The fade is an
+        // opacity, so the transition survives without a raw colour.
+        let fill = use_animation_transition(if filled { 1.0_f32 } else { 0.0 }, move |from, to| {
+            AnimNum::new(from, to)
+                .time(motion)
+                .function(Function::Expo)
+                .ease(Ease::Out)
+        });
         let fill = fill.get().value();
-        let border_color = if focus() == Focus::Keyboard {
-            tokens.text
+        // The border follows the state: keyboard focus ring, the accent
+        // when filled (the same colour as the fill), otherwise the outline.
+        let edge = if focus() == Focus::Keyboard {
+            focus_ring(Focus::Keyboard)
         } else if filled {
-            tokens.accent
-        } else if hovering() {
-            tokens.text.with_af32(0.6)
+            border(Line::Ring(Paint::Accent))
         } else {
-            tokens.outline
-        };
-        let overlay = if enabled && pressing() {
-            Color::BLACK.with_af32(0.16)
-        } else if enabled && hovering() {
-            Color::WHITE.with_af32(0.08)
-        } else {
-            Color::TRANSPARENT
+            border(Line::Outline)
         };
         let toggle = move || on_toggle.call(state == CheckState::Off);
         let glyph = match state {
             CheckState::Off => None,
             CheckState::On => Some(Element::from(icons::icon(
                 Icon::Check,
-                ICON_SM,
-                tokens.accent_foreground,
+                IconSize::Mark,
+                Paint::OnAccent.color(&tokens),
             ))),
-            CheckState::Mixed => Some(Element::from(
-                rect()
-                    .width(Size::px(DASH_WIDTH))
-                    .height(Size::px(DASH_HEIGHT))
-                    .corner_radius(1.0)
-                    .background(tokens.accent_foreground),
-            )),
+            CheckState::Mixed => Some(Element::from(rect().tw(
+                &tokens,
+                &[
+                    w(Dim::Dot),
+                    h(Dim::DashHeight),
+                    rounded(Radius::Mark),
+                    bg(Paint::OnAccent),
+                ],
+            ))),
         };
 
         rect()
@@ -141,9 +126,7 @@ impl Component for Checkbox {
                     CheckState::Mixed => Toggled::Mixed,
                 })
             })
-            .direction(Direction::Horizontal)
-            .cross_align(Alignment::Center)
-            .spacing(S2)
+            .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
             .maybe(!enabled, |element| element.opacity(0.45))
             .maybe(enabled, |element| {
                 let toggle_press = toggle.clone();
@@ -172,32 +155,33 @@ impl Component for Checkbox {
             })
             .child(
                 rect()
-                    .width(Size::px(BOX_SIZE))
-                    .height(Size::px(BOX_SIZE))
-                    .corner_radius(RADIUS_SM)
-                    .background(fill)
-                    .border(
-                        Border::new()
-                            .width(1.0)
-                            .alignment(BorderAlignment::Inner)
-                            .fill(border_color),
+                    .tw(
+                        &tokens,
+                        &[
+                            w(Dim::Check),
+                            h(Dim::Check),
+                            rounded(Radius::Mark),
+                            center(),
+                            surface(Paint::Control, hovering(), pressing(), false),
+                            edge,
+                        ],
                     )
                     .child(
                         rect()
                             .expanded()
-                            .corner_radius(RADIUS_SM)
-                            .background(overlay)
-                            .center()
+                            .tw(
+                                &tokens,
+                                &[rounded(Radius::Mark), center(), bg(Paint::Accent)],
+                            )
+                            .opacity(fill)
                             .maybe_child(glyph),
                     ),
             )
-            .maybe_child(self.text.clone().map(|text| {
-                label()
-                    .text(text)
-                    .font_size(TEXT_MD)
-                    .color(tokens.text)
-                    .max_lines(1)
-            }))
+            .maybe_child(
+                self.text
+                    .clone()
+                    .map(|text| BODY.label(&tokens, text).max_lines(1)),
+            )
     }
 }
 
@@ -267,9 +251,10 @@ impl Component for RadioGroup {
             .iter()
             .position(|(key, _)| *key == selected)
             .unwrap_or(0);
-        let mut container = rect().spacing(if self.horizontal { S4 } else { S2 });
+        // Layout only: the group paints nothing, so no tokens are needed.
+        let mut container = rect().tw_layout(&[gap(if self.horizontal { S4 } else { S2 })]);
         if self.horizontal {
-            container = container.direction(Direction::Horizontal);
+            container = container.tw_layout(&[flex_row()]);
         }
         container
             .a11y_role(AccessibilityRole::RadioGroup)
@@ -333,27 +318,28 @@ impl Component for RadioButton {
         let selected = self.selected;
         let on_select = self.on_select.clone();
         let motion = tokens.motion(100);
-        let dot =
-            use_animation_transition(if selected { DOT_SIZE } else { 0.0 }, move |from, to| {
+        // The dot grows from nothing: a runtime size, so a raw `Size::px`.
+        let dot = use_animation_transition(
+            if selected { Dim::Dot.px() } else { 0.0 },
+            move |from, to| {
                 AnimNum::new(from, to)
                     .time(motion)
                     .function(Function::Expo)
                     .ease(Ease::Out)
-            });
+            },
+        );
         let dot = dot.get().value();
-        let ring = if focus() == Focus::Keyboard {
-            tokens.text
+        let edge = if focus() == Focus::Keyboard {
+            focus_ring(Focus::Keyboard)
         } else if selected {
-            tokens.accent
-        } else if hovering() {
-            tokens.text.with_af32(0.6)
+            border(Line::Ring(Paint::Accent))
         } else {
-            tokens.outline
+            border(Line::Outline)
         };
         let fill = if selected {
-            tokens.accent
+            bg(Paint::Accent)
         } else {
-            surface_color(&tokens, tokens.elevated, hovering(), pressing(), false)
+            surface(Paint::Control, hovering(), pressing(), false)
         };
         let select = move || {
             if !selected {
@@ -366,9 +352,7 @@ impl Component for RadioButton {
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::RadioButton)
             .a11y_builder(move |builder| builder.set_toggled(Toggled::from(selected)))
-            .direction(Direction::Horizontal)
-            .cross_align(Alignment::Center)
-            .spacing(S2)
+            .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
             .maybe(!enabled, |element| element.opacity(0.45))
             .maybe(enabled, |element| {
                 let select_press = select.clone();
@@ -397,31 +381,24 @@ impl Component for RadioButton {
             })
             .child(
                 rect()
-                    .width(Size::px(BOX_SIZE))
-                    .height(Size::px(BOX_SIZE))
-                    .corner_radius(BOX_SIZE / 2.0)
-                    .background(fill)
-                    .border(
-                        Border::new()
-                            .width(1.0)
-                            .alignment(BorderAlignment::Inner)
-                            .fill(ring),
+                    .tw(
+                        &tokens,
+                        &[
+                            w(Dim::Check),
+                            h(Dim::Check),
+                            rounded(Radius::Pill),
+                            center(),
+                            fill,
+                            edge,
+                        ],
                     )
-                    .center()
                     .child(
                         rect()
                             .width(Size::px(dot))
                             .height(Size::px(dot))
-                            .corner_radius(dot / 2.0)
-                            .background(tokens.accent_foreground),
+                            .tw(&tokens, &[rounded(Radius::Pill), bg(Paint::OnAccent)]),
                     ),
             )
-            .child(
-                label()
-                    .text(self.text.clone())
-                    .font_size(TEXT_MD)
-                    .color(tokens.text)
-                    .max_lines(1),
-            )
+            .child(BODY.label(&tokens, self.text.clone()).max_lines(1))
     }
 }

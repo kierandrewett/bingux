@@ -19,7 +19,8 @@ use crate::ui::{
     status_page, strip_action, switch_row, use_overlays, use_page_busy, use_page_header,
     use_tokens,
 };
-use bingux_ui::scale::*;
+use bingux_ui::layout::{hstack, vstack};
+use bingux_ui::style::*;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(45);
@@ -670,16 +671,21 @@ fn device_row(device: &Device, busy: Option<&Busy>, tokens: Tokens, navigator: N
     let busy_label = busy
         .filter(|busy| busy.mac == device.mac)
         .map(|busy| busy.label.clone());
-    let mut glyphs = rect()
-        .direction(Direction::Horizontal)
-        .cross_align(Alignment::Center)
-        .spacing(S2);
+    let mut glyphs = hstack(S2);
     if device.connected && busy_label.is_none() {
-        glyphs = glyphs.child(icons::icon(Icon::Check, ICON_MD, tokens.accent));
+        glyphs = glyphs.child(icons::icon(
+            Icon::Check,
+            IconSize::Control,
+            Paint::Accent.color(&tokens),
+        ));
     }
     if let Some(level) = device.battery {
         glyphs = glyphs
-            .child(icons::icon(battery_icon(level), ICON_MD, tokens.muted))
+            .child(icons::icon(
+                battery_icon(level),
+                IconSize::Control,
+                Paint::Muted.color(&tokens),
+            ))
             .child(caption(format!("{level}%")));
     }
     let subtitle =
@@ -900,15 +906,12 @@ impl Component for BluetoothDevicePage {
             overlays,
         };
 
-        let identity = rect()
-            .width(Size::fill())
-            .cross_align(Alignment::Center)
-            .spacing(S2)
-            .padding((S2, 0.0, S2, 0.0))
+        let identity = vstack(S2)
+            .tw_layout(&[w_full(), items(Align::Center), py(S2)])
             .child(icons::icon(
                 device_icon(&device.icon),
-                ICON_XL,
-                tokens.muted,
+                IconSize::Hero,
+                Paint::Muted.color(&tokens),
             ))
             .child(heading(device_name(device)))
             .child(centered_caption(device_state(device)));

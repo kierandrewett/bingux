@@ -18,7 +18,7 @@ use crate::ui::{
 };
 use bingux_ui::controls::tabs;
 use bingux_ui::group::form_row;
-use bingux_ui::scale::*;
+use bingux_ui::style::*;
 
 const QUICK: Duration = Duration::from_secs(5);
 const APPLY: Duration = Duration::from_secs(30);
@@ -417,10 +417,7 @@ impl Component for EditorBody {
         let editor = self.editor;
         let wireless = self.wireless;
 
-        let mut column = rect()
-            .width(Size::fill())
-            .direction(Direction::Vertical)
-            .spacing(S3);
+        let mut column = rect().tw_layout(&[flex_col(), w_full(), gap(S3)]);
         let Some(loaded) = editor.loaded.read().clone() else {
             match editor.error.read().clone() {
                 Some(text) => column = column.child(status(Status::Error(text))),
@@ -490,8 +487,7 @@ fn details_tab(editor: Editor, loaded: &Loaded) -> Element {
     );
     Element::from(
         rect()
-            .width(Size::fill())
-            .direction(Direction::Vertical)
+            .tw_layout(&[flex_col(), w_full()])
             .child(facts)
             .child(settings)
             .child(forget),
@@ -586,8 +582,7 @@ fn security_tab(editor: Editor) -> Element {
             .row(
                 row("Password").trailing(
                     rect()
-                        .direction(Direction::Horizontal)
-                        .spacing(S2)
+                        .tw_layout(&[flex_row(), items(Align::Center), gap(S2)])
                         .child(reveal)
                         .child(field),
                 ),

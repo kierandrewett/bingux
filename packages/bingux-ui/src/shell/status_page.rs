@@ -7,8 +7,9 @@ use freya::prelude::*;
 
 use crate::controls::button::{action_button, row_button};
 use crate::icons::{self, Icon};
-use crate::scale::*;
+use crate::style::*;
 use crate::surface::use_tokens;
+use crate::typography::{BODY, HEADING, Ink};
 
 /// The widest a status page's text gets.
 const PAGE_MAX_WIDTH: f32 = 420.0;
@@ -62,38 +63,42 @@ impl Component for StatusPage {
         let tokens = use_tokens();
         rect()
             .expanded()
-            .center()
-            .padding(S6)
-            .spacing(S3)
+            .tw(&tokens, &[flex_col(), center(), p(S8), gap(S3)])
             .child(
                 rect()
-                    .width(Size::px(BOX_2XL))
-                    .height(Size::px(BOX_2XL))
-                    .corner_radius(RADIUS_LG * 2.0)
-                    .background(tokens.elevated)
-                    .center()
-                    .margin((0.0, 0.0, S2, 0.0))
-                    .child(icons::icon(self.icon, ICON_XL, tokens.muted)),
+                    .tw(
+                        &tokens,
+                        &[
+                            w(Dim::Box24),
+                            h(Dim::Box24),
+                            rounded(Radius::Tile),
+                            bg(Paint::Card),
+                            center(),
+                            mb(S2),
+                        ],
+                    )
+                    .child(icons::icon(
+                        self.icon,
+                        IconSize::Hero,
+                        Paint::Muted.color(&tokens),
+                    )),
             )
             .child(
-                label()
-                    .text(self.title.clone())
-                    .font_size(TEXT_XL)
-                    .font_weight(FontWeight::SEMI_BOLD)
-                    .color(tokens.text)
+                HEADING
+                    .in_ink(Ink::Text)
+                    .label(&tokens, self.title.clone())
                     .text_align(TextAlign::Center),
             )
             .maybe_child(self.description.clone().map(|text| {
-                paragraph()
-                    .max_width(Size::px(PAGE_MAX_WIDTH))
-                    .color(tokens.muted)
-                    .font_size(TEXT_MD)
-                    .text_align(TextAlign::Center)
-                    .child(text)
+                rect().max_width(Size::px(PAGE_MAX_WIDTH)).child(
+                    BODY.in_ink(Ink::Muted)
+                        .label(&tokens, text)
+                        .text_align(TextAlign::Center),
+                )
             }))
             .maybe_child(self.action.clone().map(|(label, on_press)| {
                 rect()
-                    .margin((S3, 0.0, 0.0, 0.0))
+                    .tw(&tokens, &[mt(S3)])
                     .child(action_button(label, on_press))
             }))
             .maybe_child(self.child.clone())
@@ -174,67 +179,81 @@ impl Component for Banner {
         if progress <= 0.0 {
             return rect().height(Size::px(0.0)).into();
         }
-        let tint = match self.kind {
-            BannerKind::Info => tokens.accent,
-            BannerKind::Warning => tokens.warning,
-            BannerKind::Error => tokens.danger,
+        let tone = match self.kind {
+            BannerKind::Info => Tone::Accent,
+            BannerKind::Warning => Tone::Warning,
+            BannerKind::Error => Tone::Danger,
         };
+        // The banner and the space under it grow from nothing, so the page
+        // below slides down rather than jumping.
+        let height = Dim::Box11.px() * progress;
+        let space_under = S4.px() * progress;
         let on_dismiss = self.on_dismiss.clone();
         Element::from(
             rect()
-                .width(Size::fill())
-                .height(Size::px(BOX_XL * progress))
-                .overflow(Overflow::Clip)
+                .tw(&tokens, &[flex_col(), w_full()])
                 .opacity(progress)
-                .margin((0.0, 0.0, S4 * progress, 0.0))
                 .child(
                     rect()
-                        .a11y_role(AccessibilityRole::Status)
-                        .a11y_alt(self.text.clone())
-                        .width(Size::fill())
-                        .height(Size::px(BOX_XL))
-                        .padding((0.0, S2, 0.0, S3))
-                        .spacing(S3)
-                        .direction(Direction::Horizontal)
-                        .content(Content::Flex)
-                        .cross_align(Alignment::Center)
-                        .corner_radius(RADIUS_LG)
-                        .background(tint.with_af32(0.16))
-                        .border(
-                            Border::new()
-                                .width(1.0)
-                                .alignment(BorderAlignment::Inner)
-                                .fill(tint.with_af32(0.28)),
-                        )
+                        .tw(&tokens, &[w_full(), clip()])
+                        .height(Size::px(height))
                         .child(
-                            label()
-                                .width(Size::flex(1.0))
-                                .text(self.text.clone())
-                                .font_size(TEXT_MD)
-                                .color(tokens.text)
-                                .max_lines(1)
-                                .text_overflow(TextOverflow::Ellipsis),
-                        )
-                        .maybe_child(
-                            self.action
-                                .clone()
-                                .map(|(label, on_press)| row_button(label, on_press).prominent()),
-                        )
-                        .maybe_child(on_dismiss.map(|on_dismiss| {
                             rect()
-                                .width(Size::px(BOX_MD))
-                                .height(Size::px(BOX_MD))
-                                .corner_radius(RADIUS_LG)
-                                .center()
-                                .a11y_role(AccessibilityRole::Button)
-                                .a11y_alt("Dismiss")
-                                .on_press(move |event: Event<PressEventData>| {
-                                    event.stop_propagation();
-                                    on_dismiss.call(());
-                                })
-                                .child(icons::icon(Icon::WindowClose, ICON_SM, tokens.muted))
-                        })),
-                ),
+                                .a11y_role(AccessibilityRole::Status)
+                                .a11y_alt(self.text.clone())
+                                .tw(
+                                    &tokens,
+                                    &[
+                                        w_full(),
+                                        h(Dim::Box11),
+                                        pl(S3),
+                                        pr(S2),
+                                        gap(S3),
+                                        flex_row(),
+                                        items(Align::Center),
+                                        rounded(Radius::Card),
+                                    ],
+                                )
+                                .tw(
+                                    &tokens,
+                                    &[
+                                        bg(Paint::Tint(tone)),
+                                        border(Line::Edge(Paint::TintEdge(tone))),
+                                    ],
+                                )
+                                .child(
+                                    BODY.label(&tokens, self.text.clone())
+                                        .width(Size::flex(1.0)),
+                                )
+                                .maybe_child(self.action.clone().map(|(label, on_press)| {
+                                    row_button(label, on_press).prominent()
+                                }))
+                                .maybe_child(on_dismiss.map(|on_dismiss| {
+                                    rect()
+                                        .tw(
+                                            &tokens,
+                                            &[
+                                                w(Dim::Box7),
+                                                h(Dim::Box7),
+                                                rounded(Radius::Card),
+                                                center(),
+                                            ],
+                                        )
+                                        .a11y_role(AccessibilityRole::Button)
+                                        .a11y_alt("Dismiss")
+                                        .on_press(move |event: Event<PressEventData>| {
+                                            event.stop_propagation();
+                                            on_dismiss.call(());
+                                        })
+                                        .child(icons::icon(
+                                            Icon::WindowClose,
+                                            IconSize::Mark,
+                                            Paint::Muted.color(&tokens),
+                                        ))
+                                })),
+                        ),
+                )
+                .child(rect().height(Size::px(space_under))),
         )
     }
 }

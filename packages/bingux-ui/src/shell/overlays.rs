@@ -11,12 +11,25 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use crate::controls::button::{ActionButton, action_button, primary_button};
-use crate::scale::*;
 use crate::shell::menu::{Menu, MenuItem, MenuLayer};
 use crate::shell::sheet::{Sheet, SheetLayer};
+use crate::style::*;
 use crate::surface::{is_activation_key, use_tokens};
+use crate::typography::{BODY, EMPHASIS, Ink, SECTION};
 
-const DIALOG_WIDTH: f32 = 400.0;
+/// The toast pill: 44 px tall, text then action and dismiss, on a raised popover.
+const TOAST: Recipe = &[
+    flex_row(),
+    items(Align::Center),
+    h(Dim::Box11),
+    pl(S4),
+    pr(S1),
+    gap(S3),
+    rounded(Radius::Pill),
+    bg(Paint::Popover),
+    border(Line::Outline),
+    shadow(Elevation::Raised),
+];
 
 /// How a dialog response is styled.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -361,11 +374,9 @@ impl Component for DialogLayer {
 
         rect()
             .position(Position::new_absolute().top(0.0).left(0.0))
-            .width(Size::window_percent(100.0))
-            .height(Size::window_percent(100.0))
             .layer(Layer::OverlayLevel(8))
-            .center()
-            .background(Color::BLACK.with_af32(0.4 * progress))
+            .tw(&tokens, &[w_full(), h_full(), center(), bg(Paint::Scrim)])
+            .opacity(progress)
             .on_press(move |_: Event<PressEventData>| overlays.dismiss_dialog())
             .child(
                 rect()
@@ -373,26 +384,9 @@ impl Component for DialogLayer {
                     .a11y_focusable(true)
                     .a11y_role(AccessibilityRole::AlertDialog)
                     .a11y_alt(self.dialog.title.clone())
-                    .width(Size::px(DIALOG_WIDTH))
-                    .padding(S4)
-                    .spacing(S3)
-                    .corner_radius(RADIUS_XL)
-                    .background(tokens.popover)
-                    .border(
-                        Border::new()
-                            .width(1.0)
-                            .alignment(BorderAlignment::Inner)
-                            .fill(tokens.outline),
-                    )
-                    .shadow(
-                        Shadow::new()
-                            .position(ShadowPosition::Normal)
-                            .y(16.0)
-                            .blur(48.0)
-                            .color(Color::BLACK.with_af32(0.45)),
-                    )
+                    .tw(&tokens, DIALOG)
+                    .tw(&tokens, &[w(Dim::Dialog)])
                     .scale(0.96 + 0.04 * progress)
-                    .opacity(progress)
                     .on_press(|event: Event<PressEventData>| event.stop_propagation())
                     .on_key_down(move |event: Event<KeyboardEventData>| {
                         if event.key == Key::Named(NamedKey::Escape) {
@@ -401,29 +395,21 @@ impl Component for DialogLayer {
                         }
                     })
                     .child(
-                        label()
-                            .text(self.dialog.title.clone())
-                            .font_size(TEXT_LG)
-                            .font_weight(FontWeight::SEMI_BOLD)
-                            .color(tokens.text)
+                        SECTION
+                            .label(&tokens, self.dialog.title.clone())
                             .text_align(TextAlign::Center)
                             .width(Size::fill()),
                     )
                     .maybe_child((!self.dialog.body.is_empty()).then(|| {
-                        paragraph()
+                        BODY.in_ink(Ink::Muted)
+                            .paragraph(&tokens, self.dialog.body.clone())
                             .width(Size::fill())
-                            .color(tokens.muted)
-                            .font_size(TEXT_MD)
                             .text_align(TextAlign::Center)
-                            .child(self.dialog.body.clone())
                     }))
                     .maybe_child(self.dialog.content.clone())
                     .child(
                         rect()
-                            .width(Size::fill())
-                            .direction(Direction::Horizontal)
-                            .content(Content::Flex)
-                            .spacing(S2)
+                            .tw(&tokens, &[w_full(), flex_row(), flex(), gap(S2)])
                             .children(buttons),
                     ),
             )
@@ -467,57 +453,31 @@ impl Component for ToastLayer {
             });
 
         rect()
-            .position(Position::new_absolute().bottom(24.0).left(0.0))
-            .width(Size::window_percent(100.0))
+            .position(Position::new_absolute().bottom(S6.px()).left(0.0))
             .layer(Layer::OverlayLevel(9))
-            .cross_align(Alignment::Center)
+            .tw(&tokens, &[w_full(), flex_col(), items(Align::Center)])
             .child(
                 rect()
                     .a11y_role(AccessibilityRole::Status)
                     .a11y_alt(self.toast.text.clone())
-                    .height(Size::px(BOX_XL))
-                    .padding((0.0, S1, 0.0, S4))
-                    .spacing(S3)
-                    .direction(Direction::Horizontal)
-                    .cross_align(Alignment::Center)
-                    .corner_radius(BOX_XL / 2.0)
-                    .background(tokens.popover)
-                    .border(
-                        Border::new()
-                            .width(1.0)
-                            .alignment(BorderAlignment::Inner)
-                            .fill(tokens.outline),
-                    )
-                    .shadow(
-                        Shadow::new()
-                            .position(ShadowPosition::Normal)
-                            .y(8.0)
-                            .blur(24.0)
-                            .color(Color::BLACK.with_af32(0.35)),
-                    )
+                    .tw(&tokens, TOAST)
                     .opacity(progress)
-                    .offset_y(S2 * (1.0 - progress))
-                    .child(
-                        label()
-                            .text(self.toast.text.clone())
-                            .font_size(TEXT_MD)
-                            .color(tokens.text)
-                            .max_lines(1),
-                    )
+                    .offset_y(S2.px() * (1.0 - progress))
+                    .child(BODY.label(&tokens, self.toast.text.clone()).max_lines(1))
                     .maybe_child(action)
                     .child(
                         rect()
-                            .width(Size::px(BOX_MD))
-                            .height(Size::px(BOX_MD))
-                            .corner_radius(RADIUS_LG)
-                            .center()
                             .a11y_role(AccessibilityRole::Button)
                             .a11y_alt("Dismiss")
+                            .tw(
+                                &tokens,
+                                &[w(Dim::Box7), h(Dim::Box7), rounded(Radius::Card), center()],
+                            )
                             .on_press(move |_: Event<PressEventData>| overlays.dismiss_toast(id))
                             .child(crate::icons::icon(
                                 crate::icons::Icon::WindowClose,
-                                ICON_SM,
-                                tokens.muted,
+                                IconSize::Mark,
+                                Paint::Muted.color(&tokens),
                             )),
                     ),
             )
@@ -539,15 +499,16 @@ impl Component for ToastAction {
         rect()
             .a11y_role(AccessibilityRole::Button)
             .a11y_focusable(true)
-            .height(Size::px(BOX_MD))
-            .padding((0.0, S2))
-            .corner_radius(RADIUS_LG)
-            .center()
-            .background(if hovering() {
-                tokens.hover
-            } else {
-                Color::TRANSPARENT
-            })
+            .tw(
+                &tokens,
+                &[
+                    h(Dim::Box7),
+                    px(S2),
+                    rounded(Radius::Card),
+                    center(),
+                    surface(Paint::Transparent, hovering(), false, false),
+                ],
+            )
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| hovering.set(false))
             .on_press(move |event: Event<PressEventData>| {
@@ -560,11 +521,9 @@ impl Component for ToastAction {
                 }
             })
             .child(
-                label()
-                    .text(self.text.clone())
-                    .font_size(TEXT_SM)
-                    .font_weight(FontWeight::SEMI_BOLD)
-                    .color(tokens.accent)
+                EMPHASIS
+                    .in_ink(Ink::Accent)
+                    .label(&tokens, self.text.clone())
                     .max_lines(1),
             )
     }

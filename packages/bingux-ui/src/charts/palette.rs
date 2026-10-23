@@ -2,9 +2,10 @@
 //! sit at golden-angle hue steps from the accent, so neighbours differ, and
 //! each is lifted until it reads against the surface.
 
-use freya::prelude::Color;
+use freya::prelude::*;
 
 use super::data::SeriesColour;
+use super::geometry::SWATCH;
 use crate::theme::Tokens;
 
 /// Golden-angle hue steps, in degrees, so the categorical colours spread
@@ -19,6 +20,16 @@ const LIGHTNESS_STEP: f32 = 0.02;
 const MAX_LIFTS: usize = 24;
 /// The least contrast a graphic keeps against its surface (WCAG non-text).
 pub(crate) const MIN_CONTRAST: f32 = 3.0;
+
+/// A round marker in a series colour, for the legend and tooltip. The colour
+/// is data, not a token, so it cannot be a Paint role.
+pub(crate) fn swatch(colour: Color) -> Rect {
+    rect()
+        .width(Size::px(SWATCH))
+        .height(Size::px(SWATCH))
+        .corner_radius(SWATCH / 2.0)
+        .background(colour)
+}
 
 /// The colour of series `index`.
 pub(crate) fn resolve(tokens: &Tokens, colour: SeriesColour, index: usize) -> Color {

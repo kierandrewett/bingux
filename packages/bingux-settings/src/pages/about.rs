@@ -3,12 +3,13 @@
 
 use std::time::Duration;
 
+use bingux_ui::style::*;
 use freya::prelude::*;
 
 use crate::system;
 use crate::ui::{
-    Group, ICON_APP_LG, S2, app_icon, centered_caption, expander_row, heading, page_column,
-    property_row, usage_meter, use_page_busy,
+    Group, app_icon, centered_caption, expander_row, heading, page_column, property_row,
+    usage_meter, use_page_busy, vstack,
 };
 
 #[derive(Clone, Default, PartialEq)]
@@ -171,12 +172,9 @@ impl Component for AboutPage {
 
         page_column()
             .child(
-                rect()
-                    .width(Size::fill())
-                    .cross_align(Alignment::Center)
-                    .spacing(S2)
-                    .padding((S2, 0.0, S2, 0.0))
-                    .child(app_icon("bingux-settings", ICON_APP_LG))
+                vstack(S2)
+                    .tw_layout(&[w_full(), items(Align::Center), py(S2)])
+                    .child(app_icon("bingux-settings", IconSize::AppLarge))
                     .child(heading(header_line(facts.os.clone())))
                     .child(centered_caption(header_line(facts.hostname.clone()))),
             )

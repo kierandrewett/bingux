@@ -5,8 +5,9 @@
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::scale::*;
-use crate::surface::{surface_color, use_tokens};
+use crate::style::*;
+use crate::surface::use_tokens;
+use crate::typography::{BODY, Ink};
 
 use super::overlays::{Overlays, use_overlays, use_presence};
 
@@ -79,15 +80,21 @@ pub(crate) struct Menu {
 }
 
 /// Space kept between a menu and the window edges.
-const MENU_EDGE: f32 = S2;
+const MENU_EDGE: f32 = S2.px();
 
 /// The height of a menu of `items`: its rows, separators and padding.
 fn menu_height(items: &[MenuItem]) -> f32 {
     let rows: f32 = items
         .iter()
-        .map(|item| if item.separator { S2 } else { MENU_ITEM_HEIGHT })
+        .map(|item| {
+            if item.separator {
+                Dim::MenuSeparator.px()
+            } else {
+                Dim::MenuItem.px()
+            }
+        })
         .sum();
-    rows + S2 + S2
+    rows + S2.px() + S2.px()
 }
 
 /// Where a menu of `size` opened at `at` sits on a window of `window`. It
@@ -143,7 +150,7 @@ impl Component for MenuLayer {
         let window = *Platform::get().current_window().root_size.read();
         let (x, y) = place_menu(
             (self.menu.x, self.menu.y),
-            (MENU_WIDTH, menu_height(&self.menu.items)),
+            (Dim::Menu.px(), menu_height(&self.menu.items)),
             (window.width, window.height),
         );
         let panel = rect()
@@ -152,23 +159,8 @@ impl Component for MenuLayer {
             .opacity(progress)
             .scale(0.96 + 0.04 * progress)
             .transform_origin(TransformOrigin::top_left())
-            .width(Size::px(MENU_WIDTH))
-            .padding(S2)
-            .corner_radius(RADIUS_XL)
-            .background(tokens.popover)
-            .border(
-                Border::new()
-                    .width(1.0)
-                    .alignment(BorderAlignment::Inner)
-                    .fill(tokens.outline),
-            )
-            .shadow(
-                Shadow::new()
-                    .position(ShadowPosition::Normal)
-                    .y(S2)
-                    .blur(S5)
-                    .color(Color::BLACK.with_af32(0.35)),
-            )
+            .tw(&tokens, MENU)
+            .tw(&tokens, &[w(Dim::Menu)])
             .on_press(|event: Event<PressEventData>| event.stop_propagation())
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 if event.key == Key::Named(NamedKey::Escape) {
@@ -182,8 +174,7 @@ impl Component for MenuLayer {
         // transparent, so the window stays visible behind the menu.
         rect()
             .position(Position::new_absolute().top(0.0).left(0.0))
-            .width(Size::window_percent(100.0))
-            .height(Size::window_percent(100.0))
+            .tw(&tokens, &[w_full(), h_full()])
             .layer(Layer::OverlayLevel(8))
             .on_press(move |event: Event<PressEventData>| {
                 event.stop_propagation();
@@ -206,27 +197,21 @@ impl Component for MenuRow {
         let mut pressing = use_state(|| false);
         if self.item.separator {
             return rect()
-                .width(Size::fill())
-                .height(Size::px(S2))
-                .main_align(Alignment::Center)
-                .child(
-                    rect()
-                        .width(Size::fill())
-                        .height(Size::px(1.0))
-                        .background(tokens.separator),
-                )
+                .tw(&tokens, &[w_full(), h(Dim::MenuSeparator), center()])
+                .child(rect().tw(&tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)]))
                 .into_element();
         }
         let enabled = self.item.enabled;
         let close = self.close;
         let on_press = self.item.on_press.clone();
-        let text_color = if !enabled {
-            tokens.muted
+        let ink = if !enabled {
+            Ink::Muted
         } else if self.item.destructive {
-            tokens.danger
+            Ink::Danger
         } else {
-            tokens.text
+            Ink::Text
         };
+        let text_color = ink.color(&tokens);
         // A tick for checked items; the icon otherwise. The space is kept
         // whenever either is set, so labels line up.
         let glyph = match (self.item.checked, self.item.icon) {
@@ -235,28 +220,22 @@ impl Component for MenuRow {
         };
         let leading = (self.item.checked.is_some() || self.item.icon.is_some()).then(|| {
             rect()
-                .width(Size::px(ICON_MD))
-                .height(Size::px(ICON_MD))
-                .maybe_child(glyph.map(|icon| icons::icon(icon, ICON_MD, text_color)))
+                .tw(&tokens, &[w(Dim::IconControl), h(Dim::IconControl)])
+                .maybe_child(glyph.map(|icon| icons::icon(icon, IconSize::Control, text_color)))
         });
         rect()
             .a11y_role(AccessibilityRole::MenuItem)
             .a11y_enabled(enabled)
-            .width(Size::fill())
-            .height(Size::px(MENU_ITEM_HEIGHT))
-            .padding((0.0, S2))
-            .spacing(S2)
-            .direction(Direction::Horizontal)
-            .content(Content::Flex)
-            .cross_align(Alignment::Center)
-            .corner_radius(RADIUS)
-            .background(surface_color(
+            .tw(&tokens, MENU_ITEM)
+            .tw(
                 &tokens,
-                Color::TRANSPARENT,
-                enabled && hovering(),
-                enabled && pressing(),
-                false,
-            ))
+                &[surface(
+                    Paint::Transparent,
+                    enabled && hovering(),
+                    enabled && pressing(),
+                    false,
+                )],
+            )
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| {
                 hovering.set(false);
@@ -279,10 +258,8 @@ impl Component for MenuRow {
             })
             .maybe_child(leading)
             .child(
-                label()
-                    .text(self.item.label.clone())
-                    .font_size(TEXT_MD)
-                    .color(text_color)
+                BODY.in_ink(ink)
+                    .label(&tokens, self.item.label.clone())
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis)
                     .width(Size::flex(1.0)),
@@ -316,21 +293,19 @@ impl Component for MenuButton {
         let items = self.items.clone();
         rect()
             .a11y_role(AccessibilityRole::Button)
-            .height(Size::px(control_height()))
-            .min_width(Size::px(BOX_LG))
-            .padding((0.0, S3))
-            .spacing(S2)
-            .direction(Direction::Horizontal)
-            .cross_align(Alignment::Center)
-            .main_align(Alignment::Center)
-            .corner_radius(RADIUS)
-            .background(surface_color(
+            .tw(
                 &tokens,
-                tokens.control,
-                hovering(),
-                pressing(),
-                false,
-            ))
+                &[
+                    h(Dim::Control),
+                    min_w(Dim::Box9),
+                    px(S3),
+                    gap(S2),
+                    flex_row(),
+                    center(),
+                    rounded(Radius::Control),
+                    surface(Paint::Control, hovering(), pressing(), false),
+                ],
+            )
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| {
                 hovering.set(false);
@@ -344,13 +319,15 @@ impl Component for MenuButton {
             })
             .on_global_pointer_up(move |_| pressing.set_if_modified(false))
             .child(
-                label()
-                    .text(self.label.clone())
-                    .color(tokens.text)
-                    .font_size(TEXT_MD)
+                BODY.in_ink(Ink::Text)
+                    .label(&tokens, self.label.clone())
                     .max_lines(1),
             )
-            .child(icons::icon(Icon::PanDown, ICON_SM, tokens.muted))
+            .child(icons::icon(
+                Icon::PanDown,
+                IconSize::Mark,
+                Paint::Muted.color(&tokens),
+            ))
             .into_element()
     }
 }

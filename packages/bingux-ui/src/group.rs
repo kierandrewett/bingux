@@ -10,8 +10,8 @@ use crate::controls::button::action_button;
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
 use crate::layout::page_column;
-use crate::scale::*;
-use crate::surface::{over, use_tokens};
+use crate::style::*;
+use crate::surface::use_tokens;
 use crate::theme::Tokens;
 use crate::typography::{self, BODY, CAPTION, Ink, SECTION, TITLE};
 
@@ -20,13 +20,8 @@ use crate::typography::{self, BODY, CAPTION, Ink, SECTION, TITLE};
 /// as the last row, or under the last group on a page.
 pub fn action_row(note: Option<&str>, action: impl IntoElement) -> Element {
     rect()
-        .width(Size::fill())
-        .height(Size::px(row_height()))
-        .padding((0.0, GUTTER))
-        .direction(Direction::Horizontal)
-        .cross_align(Alignment::Center)
-        .content(Content::Flex)
-        .child(rect().width(Size::flex(1.0)).maybe_child(note.map(caption)))
+        .tw_layout(ROW)
+        .child(rect().tw_layout(&[w_flex()]).maybe_child(note.map(caption)))
         .child(action)
         .into()
 }
@@ -51,15 +46,10 @@ impl Component for FormRow {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         rect()
-            .width(Size::fill())
-            .height(Size::px(row_height()))
-            .padding((0.0, GUTTER))
-            .direction(Direction::Horizontal)
-            .cross_align(Alignment::Center)
-            .content(Content::Flex)
+            .tw(&tokens, ROW)
             .child(
                 rect()
-                    .width(Size::flex(1.0))
+                    .tw(&tokens, &[w_flex()])
                     .child(BODY.label(&tokens, self.label.clone())),
             )
             .child(self.control.clone())
@@ -161,15 +151,10 @@ impl Component for Group {
         let children = card_rows(self.rows.clone(), lit);
         let heading = (self.title.is_some() || self.description.is_some()).then(|| {
             rect()
-                .width(Size::fill())
-                .padding((0.0, 0.0))
-                .direction(Direction::Horizontal)
-                .content(Content::Flex)
-                .cross_align(Alignment::Center)
+                .tw(&tokens, GROUP_HEAD)
                 .child(
                     rect()
-                        .width(Size::flex(1.0))
-                        .spacing(S0)
+                        .tw(&tokens, GROUP_HEAD_TEXT)
                         .maybe_child(
                             self.title
                                 .as_ref()
@@ -179,31 +164,12 @@ impl Component for Group {
                 )
                 .maybe_child(self.trailing.clone())
         });
-        // The page column owns the space between groups; the name sits
-        // a step above its card.
+        // The page column owns the space between groups.
         rect()
-            .width(Size::fill())
-            .spacing(S2)
+            .tw(&tokens, GROUP)
             .maybe_child(heading)
-            .child(card_surface(&tokens).children(children))
+            .child(rect().tw(&tokens, CARD).children(children))
     }
-}
-
-/// The card every group and skeleton section sits on: the card colour, a
-/// 16 px radius and a hairline edge, and content clipped to that radius so
-/// flush rows follow it.
-fn card_surface(tokens: &Tokens) -> Rect {
-    rect()
-        .width(Size::fill())
-        .corner_radius(RADIUS_LG)
-        .background(tokens.card)
-        .border(
-            Border::new()
-                .width(1.0)
-                .alignment(BorderAlignment::Inner)
-                .fill(tokens.separator),
-        )
-        .overflow(Overflow::Clip)
 }
 
 /// The row a [`Slot`] holds, given to the `Row` inside it so the row can
@@ -260,17 +226,11 @@ impl Component for Slot {
                     .is_some_and(|above| lit.contains(&above))
         };
         rect()
-            .width(Size::fill())
+            .tw(&tokens, &[flex_col(), w_full()])
             .maybe_child((index > 0).then(|| {
                 rect()
-                    .width(Size::fill())
-                    .height(Size::px(1.0))
-                    .margin((0.0, GUTTER))
-                    .background(if hide {
-                        Color::TRANSPARENT
-                    } else {
-                        tokens.separator
-                    })
+                    .tw(&tokens, SEPARATOR)
+                    .maybe(hide, |line| line.tw(&tokens, &[bg(Paint::Transparent)]))
             }))
             .child(self.row.clone())
     }
@@ -290,14 +250,7 @@ fn plain_rows(tokens: &Tokens, rows: Vec<Element>) -> Vec<Element> {
     let mut children = Vec::with_capacity(rows.len() * 2);
     for (index, row) in rows.into_iter().enumerate() {
         if index > 0 {
-            children.push(
-                rect()
-                    .width(Size::fill())
-                    .height(Size::px(1.0))
-                    .margin((0.0, GUTTER))
-                    .background(tokens.separator)
-                    .into(),
-            );
+            children.push(rect().tw(tokens, SEPARATOR).into());
         }
         children.push(row);
     }
@@ -368,29 +321,21 @@ impl Component for StatusBlock {
         };
         let color = ink.color(&tokens);
         // Only an error is tinted; it is a danger layer over the card.
-        let background = if matches!(self.status, Status::Error(_)) {
-            over(tokens.danger.with_af32(0.12), tokens.card)
+        let paint = if matches!(self.status, Status::Error(_)) {
+            Paint::DangerSoft
         } else {
-            tokens.card
+            Paint::Card
         };
-        let short = text.chars().count() <= 70;
-        // A status has the metrics of a row. A long message wraps and grows
-        // the block.
+        // A status is a card with the metrics of a row. A long message wraps
+        // and grows the block.
         rect()
-            .width(Size::fill())
-            .maybe(short, |card| card.height(Size::px(row_height())))
-            .maybe(!short, |card| card.min_height(Size::px(row_height())))
-            .padding((S2, GUTTER))
-            .spacing(S3)
-            .background(background)
-            .corner_radius(RADIUS_LG)
-            .direction(Direction::Horizontal)
-            .content(Content::Flex)
-            .cross_align(Alignment::Center)
+            .tw(&tokens, CARD)
+            .tw(&tokens, ROW_TALL)
+            .tw(&tokens, &[bg(paint)])
             .maybe_child(
                 matches!(self.status, Status::Loading(_)).then(|| spinner(SpinnerSize::Small)),
             )
-            .maybe_child(glyph.map(|glyph| icons::icon(glyph, ICON_LG, color)))
+            .maybe_child(glyph.map(|glyph| icons::icon(glyph, IconSize::Row, color)))
             .child(
                 BODY.in_ink(ink)
                     .paragraph(&tokens, text)
@@ -410,9 +355,6 @@ pub fn skeleton() -> Element {
     Skeleton.into()
 }
 
-const SKELETON_TITLE_WIDTH: f32 = 120.0;
-const SKELETON_LABEL_WIDTH: f32 = 180.0;
-const SKELETON_VALUE_WIDTH: f32 = 96.0;
 const SKELETON_ROWS: usize = 3;
 
 #[derive(PartialEq)]
@@ -421,40 +363,38 @@ struct Skeleton;
 impl Component for Skeleton {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let bar = |width: f32| {
-            rect()
-                .width(Size::px(width))
-                .height(Size::px(TEXT_SM))
-                .corner_radius(RADIUS_SM)
-                .background(tokens.elevated)
+        let bar = |width: Dim| {
+            rect().tw(
+                &tokens,
+                &[
+                    w(width),
+                    h(Dim::SkeletonLine),
+                    rounded(Radius::Mark),
+                    bg(Paint::Control),
+                ],
+            )
         };
         let section = || {
             let rows = (0..SKELETON_ROWS).map(|_| {
                 Element::from(
                     rect()
-                        .width(Size::fill())
-                        .height(Size::px(row_height()))
-                        .padding((0.0, GUTTER))
-                        .direction(Direction::Horizontal)
-                        .content(Content::Flex)
-                        .cross_align(Alignment::Center)
+                        .tw(&tokens, ROW)
                         .child(
                             rect()
-                                .width(Size::flex(1.0))
-                                .child(bar(SKELETON_LABEL_WIDTH)),
+                                .tw(&tokens, &[w_flex()])
+                                .child(bar(Dim::SkeletonLabel)),
                         )
-                        .child(bar(SKELETON_VALUE_WIDTH)),
+                        .child(bar(Dim::SkeletonValue)),
                 )
             });
             rect()
-                .width(Size::fill())
-                .spacing(S1)
+                .tw(&tokens, GROUP)
+                .child(bar(Dim::SkeletonTitle))
                 .child(
                     rect()
-                        .padding((0.0, GUTTER))
-                        .child(bar(SKELETON_TITLE_WIDTH)),
+                        .tw(&tokens, CARD)
+                        .children(plain_rows(&tokens, rows.collect())),
                 )
-                .child(card_surface(&tokens).children(plain_rows(&tokens, rows.collect())))
         };
         page_column().child(section()).child(section())
     }

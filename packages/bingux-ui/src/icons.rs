@@ -392,10 +392,11 @@ impl Icon {
     }
 }
 
-/// Draws `icon` as a square of `size` logical pixels filled with `color`.
-pub fn icon(icon: Icon, size: f32, color: Color) -> SvgViewer {
+/// Draws `icon` as a square of `size` filled with `color`. Pass a token
+/// colour: `Paint::Muted.color(&tokens)`.
+pub fn icon(icon: Icon, size: crate::style::IconSize, color: Color) -> SvgViewer {
     SvgViewer::new(icon.bytes())
-        .width(Size::px(size))
-        .height(Size::px(size))
+        .width(Size::px(size.px()))
+        .height(Size::px(size.px()))
         .fill(color)
 }

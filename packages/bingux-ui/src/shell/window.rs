@@ -5,9 +5,9 @@ use freya::prelude::*;
 
 use crate::controls::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
-use crate::scale::*;
-use crate::surface::{surface_color, use_tokens};
-use crate::theme::{HEADER_HEIGHT, WINDOW_CONTROL_BUTTON};
+use crate::style::*;
+use crate::surface::use_tokens;
+use crate::typography::EMPHASIS;
 
 /// Run `callback` with the winit window of the current Freya window.
 pub fn with_window(callback: impl FnOnce(&mut freya::winit::window::Window) + 'static) {
@@ -32,7 +32,7 @@ pub struct HeaderBar {
     centered: bool,
     leading: Vec<Element>,
     trailing: Vec<Element>,
-    background: Option<Color>,
+    background: Paint,
     title_slot: Option<Element>,
     busy: bool,
 }
@@ -44,7 +44,7 @@ impl HeaderBar {
             centered: false,
             leading: Vec::new(),
             trailing: Vec::new(),
-            background: None,
+            background: Paint::Surface,
             title_slot: None,
             busy: false,
         }
@@ -66,8 +66,9 @@ impl HeaderBar {
         self
     }
 
-    pub fn background(mut self, color: Color) -> Self {
-        self.background = Some(color);
+    /// The bar's fill; the surface colour by default.
+    pub fn fill(mut self, paint: Paint) -> Self {
+        self.background = paint;
         self
     }
 
@@ -87,11 +88,9 @@ impl HeaderBar {
 impl Component for HeaderBar {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let title = label()
-            .text(self.title.clone())
+        let title = EMPHASIS
+            .label(&tokens, self.title.clone())
             .width(Size::fill())
-            .font_size(TEXT_MD)
-            .font_weight(FontWeight::SEMI_BOLD)
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis)
             .text_align(if self.centered {
@@ -100,18 +99,18 @@ impl Component for HeaderBar {
                 TextAlign::Left
             });
         let text: Element = match &self.title_slot {
-            Some(slot) => rect().width(Size::flex(1.0)).child(slot.clone()).into(),
-            None => rect().width(Size::flex(1.0)).child(title).into(),
+            Some(slot) => rect().tw(&tokens, &[w_flex()]).child(slot.clone()).into(),
+            None => rect().tw(&tokens, &[w_flex()]).child(title).into(),
         };
         rect()
-            .width(Size::fill())
-            .height(Size::px(HEADER_HEIGHT))
-            .direction(Direction::Horizontal)
-            .content(Content::Flex)
-            .cross_align(Alignment::Center)
-            .padding((0.0, S2, 0.0, if self.leading.is_empty() { S3 } else { S2 }))
-            .spacing(S1)
-            .background(self.background.unwrap_or(tokens.surface))
+            .tw(&tokens, HEADER)
+            .tw(
+                &tokens,
+                &[
+                    pl(if self.leading.is_empty() { S3 } else { S2 }),
+                    bg(self.background),
+                ],
+            )
             .on_pointer_down(drag_on_pointer_down)
             .children(self.leading.clone())
             .child(text)
@@ -135,9 +134,7 @@ impl Component for WindowControls {
     fn render(&self) -> impl IntoElement {
         let maximized = freya::borderless::use_maximized();
         rect()
-            .direction(Direction::Horizontal)
-            .cross_align(Alignment::Center)
-            .spacing(S1)
+            .tw_layout(&[flex_row(), items(Align::Center), gap(S1)])
             .child(WindowControl {
                 icon: Icon::WindowMinimize,
                 tooltip: "Minimise",
@@ -183,21 +180,22 @@ impl Component for WindowControl {
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
         let action = self.action;
-        let circle = if hovering() {
-            if self.danger {
-                tokens.danger
-            } else {
-                surface_color(&tokens, Color::TRANSPARENT, true, false, false)
-            }
-        } else {
-            Color::TRANSPARENT
+        let fill = match (hovering(), self.danger) {
+            (false, _) => Paint::Transparent,
+            (true, true) => Paint::Danger,
+            (true, false) => Paint::Hover,
         };
         rect()
-            .width(Size::px(WINDOW_CONTROL_BUTTON))
-            .height(Size::px(WINDOW_CONTROL_BUTTON))
-            .corner_radius(WINDOW_CONTROL_BUTTON / 2.0)
-            .background(circle)
-            .center()
+            .tw(
+                &tokens,
+                &[
+                    w(Dim::WindowControl),
+                    h(Dim::WindowControl),
+                    rounded(Radius::Pill),
+                    bg(fill),
+                    center(),
+                ],
+            )
             .a11y_role(AccessibilityRole::Button)
             .a11y_alt(self.tooltip)
             .on_pointer_enter(move |_| hovering.set(true))
@@ -213,6 +211,10 @@ impl Component for WindowControl {
                     Action::Close => Platform::get().close_window(Platform::window_id()),
                 }
             })
-            .child(icons::icon(self.icon, ICON_MD, tokens.text))
+            .child(icons::icon(
+                self.icon,
+                IconSize::Control,
+                Paint::Text.color(&tokens),
+            ))
     }
 }

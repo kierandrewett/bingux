@@ -11,7 +11,7 @@
 
 use freya::prelude::*;
 
-use crate::scale::*;
+use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
 
@@ -35,6 +35,10 @@ pub enum Ink {
     Accent,
     /// Errors and destructive actions.
     Danger,
+    /// Text on an accent fill.
+    OnAccent,
+    Success,
+    Warning,
 }
 
 impl Ink {
@@ -44,6 +48,9 @@ impl Ink {
             Ink::Muted => tokens.muted,
             Ink::Accent => tokens.accent,
             Ink::Danger => tokens.danger,
+            Ink::OnAccent => tokens.accent_foreground,
+            Ink::Success => tokens.success,
+            Ink::Warning => tokens.warning,
         }
     }
 }

@@ -9,7 +9,7 @@ use crate::ui::{
     Group, Icon, Overlays, Row, Status, dropdown, level_row, page_column, row, segmented, skeleton,
     status, switch_row, use_overlays,
 };
-use bingux_ui::scale::*;
+use bingux_ui::style::*;
 use freya::prelude::*;
 
 use crate::pages::bingux_config;
@@ -208,7 +208,7 @@ fn dock_size_row(ctx: Ctx, size: u32) -> Element {
     let dragged = *ctx.pending.read();
     let percent = dragged.unwrap_or_else(|| percent_for_size(size));
     rect()
-        .width(Size::fill())
+        .tw_layout(&[w_full()])
         .on_global_pointer_up(move |_: Event<PointerEventData>| release_dock_size(ctx, size))
         .child(
             level_row("Icon size", percent, move |value: f64| {
@@ -230,7 +230,7 @@ fn segment_row(
     row(title).trailing(segmented(options, selected, on_select))
 }
 
-/// Dropdown on the right at `FIELD_WIDTH`, the same width as the icon size
+/// Dropdown on the right at `Dim::Field`, the same width as the icon size
 /// slider, so every control in the right column lines up.
 fn menu_row(
     title: &str,
@@ -238,7 +238,7 @@ fn menu_row(
     selected: &str,
     on_select: impl Into<EventHandler<String>>,
 ) -> Row {
-    row(title).trailing(dropdown(options, selected, on_select).min_width(FIELD_WIDTH))
+    row(title).trailing(dropdown(options, selected, on_select).min_width(Dim::Field))
 }
 
 #[derive(PartialEq)]

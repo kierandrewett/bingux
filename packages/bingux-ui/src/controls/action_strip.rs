@@ -6,12 +6,9 @@
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
-use crate::scale::*;
-use crate::surface::{focus_border, is_activation_key, surface_color, use_tokens};
+use crate::style::*;
+use crate::surface::{is_activation_key, use_tokens};
 use crate::typography::{BODY, Ink};
-
-/// A strip cell is this tall: icon, a small gap and one line of label.
-const CELL_HEIGHT: f32 = 76.0;
 const DISABLED_OPACITY: f32 = 0.45;
 
 /// One action in a strip.
@@ -57,22 +54,25 @@ pub fn action_strip(actions: Vec<StripAction>) -> ActionStrip {
 impl Component for ActionStrip {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let mut bar = rect()
-            .width(Size::fill())
-            .height(Size::px(CELL_HEIGHT))
-            .direction(Direction::Horizontal)
-            .content(Content::Flex)
-            .cross_align(Alignment::Center)
-            .corner_radius(RADIUS_LG)
-            .background(tokens.control);
+        // The divider is as tall as the cell less a gutter at each end.
+        let mut bar = rect().tw(
+            &tokens,
+            &[
+                w_full(),
+                h(Dim::StripCell),
+                flex_row(),
+                flex(),
+                items(Align::Center),
+                rounded(Radius::Card),
+                bg(Paint::Control),
+            ],
+        );
         for (index, action) in self.actions.iter().enumerate() {
             if index > 0 {
-                bar = bar.child(
-                    rect()
-                        .width(Size::px(1.0))
-                        .height(Size::px(CELL_HEIGHT - 2.0 * S4))
-                        .background(tokens.bar_divider),
-                );
+                bar = bar.child(rect().tw(
+                    &tokens,
+                    &[w(Dim::Hairline), h_full(), my(S4), bg(Paint::Separator)],
+                ));
             }
             bar = bar.child(StripCell(action.clone()));
         }
@@ -92,13 +92,6 @@ impl Component for StripCell {
         let focus = use_focus(a11y_id);
         let action = &self.0;
         let enabled = action.enabled;
-        let background = surface_color(
-            &tokens,
-            Color::TRANSPARENT,
-            enabled && hovering(),
-            enabled && pressing(),
-            false,
-        );
         let ink = if enabled { Ink::Text } else { Ink::Muted };
         let on_press = action.on_press.clone();
         let on_key = on_press.clone();
@@ -107,13 +100,24 @@ impl Component for StripCell {
             .a11y_focusable(enabled)
             .a11y_role(AccessibilityRole::Button)
             .a11y_alt(action.label.clone())
-            .width(Size::flex(1.0))
-            .height(Size::fill())
-            .center()
-            .spacing(S1)
-            .corner_radius(RADIUS_LG)
-            .background(background)
-            .border(focus_border(&tokens, focus()))
+            .tw(
+                &tokens,
+                &[
+                    w_flex(),
+                    h_full(),
+                    center(),
+                    gap(S1),
+                    rounded(Radius::Card),
+                    surface(
+                        Paint::Transparent,
+                        enabled && hovering(),
+                        enabled && pressing(),
+                        false,
+                    ),
+                    focus_ring(focus()),
+                ],
+            )
+            // Opacity is a live visual state, not a token, so it stays raw.
             .opacity(if enabled { 1.0 } else { DISABLED_OPACITY })
             .maybe(enabled, |cell| {
                 cell.on_pointer_enter(move |_| hovering.set(true))
@@ -133,7 +137,7 @@ impl Component for StripCell {
                         }
                     })
             })
-            .child(icons::icon(action.icon, ICON_LG, ink.color(&tokens)))
+            .child(icons::icon(action.icon, IconSize::Row, ink.color(&tokens)))
             .child(
                 BODY.in_ink(ink)
                     .label(&tokens, action.label.clone())

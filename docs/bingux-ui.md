@@ -41,8 +41,8 @@ impl Component for App {
             .row(row("Version").value("1.0"));
         rect()
             .expanded()
-            .color(tokens.text)
-            .font_family(bingux_ui::theme::FONT_FAMILY)
+            .tw(&tokens, &[w_full(), h_full()])
+            .font_family(bingux_ui::theme::font_family())
             .child(OverlayHost::new(NavigationSplitView::new(
                 "My App",
                 vec![Page::General, Page::About],
@@ -65,7 +65,7 @@ dialogs and shows toasts from any component below it.
 | Rows            | `row` (`subtitle`, `value`, `badge`, `leading`, `leading_app`, `navigates`, `selected`, `destructive`), `switch_row`, `slider_row` (a `level_row` for a setting), `level_row` (title and value over a full-width slider, with optional leading and trailing elements), `choice_row`, `text_row`, `entry_row`, `expander_row`, `property_row`                                                     |
 | Icons           | `icon` (bundled symbolic glyphs), `app_icon` (full-colour application icons from the icon theme)                                                                                                                                                                                                                                                                                                 |
 | Groups and text | `Group` (`description`), `section_label`, `caption`, `centered_caption`, `action_row`, `heading`, `status` (loading, empty, error, info blocks)                                                                                                                                                                                                                                                  |
-| Layout          | `hstack`, `vstack`, `spacer`, `divider`, `card`, `clamp`, `page_column`                                                                                                                                                                                                                                                                                                                          |
+| Layout          | `hstack(Space)`, `vstack(Space)`, `spacer`, `divider`, `card`, `clamp(Dim, child)`, `page_column`                                                                                                                                                                                                                                                                                                |
 | Shell           | `NavigationSplitView` with `NavItem` and `subpage`, `HeaderBar`, `WindowControls`, `status_page`, `banner`                                                                                                                                                                                                                                                                                       |
 | Page header     | `PageHeader` (`subtitle`, `action`) with `use_page_header`, a status line that replaces the sentence under the page title, and one action at the right of the title                                                                                                                                                                                                                              |
 | Search          | `NavigationSplitView::search_hits` with `SearchHit`: pages first, then matching settings, Up, Down and Enter, at most 20 results. Ctrl+F focuses it and Escape clears it                                                                                                                                                                                                                         |
@@ -171,6 +171,63 @@ steps of at least 1.25x, and a weight or colour change at each step. Use
 normal in Adwaita Sans; medium is only checked by eye, so re-check it if
 `LINK` ever looks like normal text.
 
+## Styling with tokens
+
+Every box is styled by data, as Tailwind classes style HTML. The style
+system is in `src/style/`:
+
+- `tokens.rs` holds the values. Each kind is its own type, so a number does
+  not compile where a token is expected:
+    - `Space`: `S0`, `S0_5`, `S1` to `S8`, `S10`, `S12`, with Tailwind
+      numbering (`S4` is 16 px, as `p-4` is). `GUTTER` is `S4`.
+    - `Radius`: `Mark`, `Control`, `Card`, `Overlay`, `Tile` and `Pill`.
+    - `Dim`: sizes by role, such as `Row`, `Control`, `Button` and `Field`.
+      Square boxes are named by Tailwind size step: `Box5` (20 px), `Box7`,
+      `Box9`, `Box11` and `Box24` (96 px).
+    - `IconSize`, `Paint` (colour roles), `Line` (borders) and `Elevation`
+      (shadows).
+- `mod.rs` holds the utilities. Each is one fact about a box, for example
+  `px(S4)`, `gap(S2)`, `rounded(Radius::Card)`, `bg(Paint::Card)`,
+  `border(Line::Hairline)`, `h(Dim::Row)`, `flex_row()`,
+  `items(Align::Center)`, `surface(base, hover, press, selected)`,
+  `focus_ring(focus)`, `shadow(Elevation::Raised)`, `ink(Paint::Text)` (the
+  text colour children inherit) and `font(BODY)` (for a component that draws
+  its own text).
+- `recipes.rs` holds the recipes: named lists of utilities such as `ROW`,
+  `CARD`, `GROUP`, `CONTROL`, `MENU_ITEM` and `NAV_ITEM`. It also holds the
+  spacing rhythm table, which sets the space between the page title,
+  groups, cards and rows.
+
+Apply utilities and recipes with `Tw::tw`. Later utilities override earlier
+ones, and padding and margin merge side by side:
+
+```rust
+use bingux_ui::prelude::*;
+
+let tokens = use_tokens();
+rect()
+    .tw(&tokens, ROW)
+    .tw(&tokens, &[surface(Paint::Transparent, hovering, pressing, selected)])
+    .child(BODY.label(&tokens, "Wi-Fi"))
+```
+
+Text uses a `TextStyle` from `typography.rs` with an `Ink`. An icon takes
+an `IconSize` and a token colour: `Paint::Muted.color(&tokens)`.
+
+`scripts/ui-lint.py` (run by `make check`) fails when code outside the style
+system does any of these:
+
+- Calls Freya's styling methods (`padding`, `spacing`, `margin`,
+  `corner_radius`, `background`, `border`, `shadow`, `font_size`,
+  `font_weight`, `direction`, `content`, alignment and `overflow`).
+- Reads a colour field of `Tokens`.
+- Uses a `Color` or `FontWeight` value.
+- Gives a box a fixed size that is not a `Dim`.
+
+A value computed at run time can still be passed to `Size::px`, such as a
+measured width, a drag offset or a chart's geometry. To add a value, add a
+token or a recipe first.
+
 ## Rules
 
 `bingux-ui` is the shell's look in Freya. The source of truth is the shell's
@@ -183,35 +240,25 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   and popovers `elevated`. Buttons, fields, dropdowns and segmented controls
   use `control`, one step lighter than `elevated`, so they stay visible on a
   card. Hover, pressed and selected are alpha layers drawn over
-  any base, as `ControlCentreButtonSurface` does, and selection is tinted with
-  the accent. Text is `#fafafa`, secondary text `#b0b0b0`.
-- **One scale, in `src/scale.rs`.** Spacing is `S0` to `S7` on a 4 px grid.
-  Radius is 12 for controls, row hover and sidebar items, 16 for group cards
-  and 20 for dialogs, popovers and toasts (`RADIUS`, `RADIUS_LG`,
-  `RADIUS_XL`). Type is 14 body, 13 secondary, 16 semibold section titles
-  and a 28 page title. A row is 56 px, or as tall as its subtitle needs. A
-  control in a row (dropdown, field, segmented control, stepper, `compact()`
-  or row button) is 36 px. The page column is 720 px wide and groups sit
-  32 px apart. A standalone `ActionButton` and a menu item are 40 px and
-  36 px. Dropdowns and fields in a row share one 240 px column
-  (`FIELD_WIDTH`), so their left edges line up; a field for a URL or a path
-  uses `FIELD_WIDTH_WIDE` (440 px); a dropdown grows to fit a
-  longer option.
+  any base, as `ControlCentreButtonSurface` does; selection is a neutral
+  light layer. Text is `#fafafa`, secondary text `#b0b0b0`.
+- **The token system is the only way to style a box.** See
+  [Styling with tokens](#styling-with-tokens). A row is 56 px, or as tall as
+  its subtitle needs. A control in a row (dropdown, field, segmented
+  control, stepper, compact button) is 36 px. The page column is 720 px
+  wide. A standalone button is 40 px and a menu item 36 px. Dropdowns and
+  fields in a row share one 240 px column (`Dim::Field`), so their left
+  edges line up; a field for a URL or a path uses `Dim::FieldWide` (440 px).
 - **Phone width uses fingertip sizes.** Below 740 px the split view calls
   `set_touch(true)`: a row is 60 px, a sidebar page 56 px, a control 44 px, a
-  standalone button 48 px, and the switch and slider handles grow (switch
-  48 x 28, slider thumb 22). A dropdown, field or slider in a row is cut to
-  168 px so the row's text keeps room, and a dropdown there shows only its
-  value and a chevron, with no box. Read these sizes through
-  `row_height()`, `nav_height()`, `control_height()`, `button_height()` and
-  `fit_field()`, not the constants, so the layout follows. Crossing the
-  threshold remounts the page once.
-- **`scripts/ui-lint.py` enforces it.** It fails on a raw number in a spacing,
-  padding, margin, radius, font-size, width, height or icon-size call, and on
-  `FontWeight::BOLD`. To use a new value, add it to `scale.rs` first.
-  `make check` runs it.
+  standalone button 48 px, and the switch and slider handles grow. A
+  dropdown, field or slider in a row is cut to 168 px so the row's text
+  keeps room, and a dropdown there shows only its value and a chevron, with
+  no box. `Dim` resolves these sizes when a style is applied, so a style is
+  written once. Crossing the threshold remounts the page once.
 - **One inset.** `GUTTER` (16) is the only horizontal inset inside a card:
-  row text and the hairline start `GUTTER` from the card's edge.
+  row text, free content and the hairline start `GUTTER` from the card's
+  edge.
 - **A group is a card.** A 16 px semibold title sits above a 16 px card with a
   hairline edge, aligned with the card. Rows sit flush in it with a hairline
   between them, inset by the gutter on both sides. The hairline above and
@@ -251,8 +298,8 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
 - **Application icons** (`app_icon`, `Row::leading_app`) are looked up as
   the dock looks them up: the current GTK icon theme, the themes it
   inherits, `hicolor`, then `/usr/share/pixmaps`; an absolute path is used as
-  it is. Sizes are `ICON_APP_SM` (20, in a dropdown), `ICON_APP` (32, in a
-  row) and `ICON_APP_LG` (64, at the head of a page). An icon that is not
+  it is. Sizes are `IconSize::AppSmall` (20, in a dropdown), `IconSize::App`
+  (32, in a row) and `IconSize::AppLarge` (64, at the head of a page). An icon that is not
   found draws a tile with the generic application glyph.
 - **A subpage** is `NavigationSplitView::subpage(title, on_back)`. The
   header shows a Back button and the title, and Alt+Left and the mouse Back

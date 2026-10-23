@@ -10,20 +10,12 @@ use freya::prelude::*;
 
 /// The shell's own font.
 const DEFAULT_FONT_FAMILY: &str = "Adwaita Sans";
-/// Height of the window header bar.
-pub const HEADER_HEIGHT: f32 = 48.0;
-/// Sidebar width.
-pub const SIDEBAR_WIDTH: f32 = 280.0;
 /// Width below which the window is laid out as a phone: the list of pages is
 /// a screen of its own and the window buttons are hidden.
 pub const NARROW_BELOW: f32 = 740.0;
 /// Window default and minimum size.
 pub const WINDOW_SIZE: (f32, f32) = (1000.0, 740.0);
 pub const WINDOW_MIN_SIZE: (f32, f32) = (360.0, 420.0);
-
-/// Window-control circle diameter and button size.
-pub const WINDOW_CONTROL_CIRCLE: f32 = 24.0;
-pub const WINDOW_CONTROL_BUTTON: f32 = 32.0;
 
 /// Accent names understood by GNOME's `accent-color` key, with the same RGB
 /// values as `Theme.qml`'s `accentColorFor` table.

@@ -1,65 +1,49 @@
-//! Layout helpers in SwiftUI's vocabulary: stacks, spacer, divider, card
-//! and clamp. Each returns a plain `Rect` so callers keep chaining Freya's
-//! builder methods.
+//! Layout helpers in SwiftUI's vocabulary: stacks, spacer, divider, card,
+//! clamp and the page column. Each returns a plain `Rect` styled with
+//! tokens, so callers keep chaining Freya's builder methods.
 
 use freya::prelude::*;
 
-use crate::scale::*;
+use crate::style::*;
 use crate::theme::Tokens;
 
-/// A horizontal stack with vertically centred children and `spacing`.
-pub fn hstack(spacing: f32) -> Rect {
-    rect()
-        .direction(Direction::Horizontal)
-        .cross_align(Alignment::Center)
-        .spacing(spacing)
+/// A horizontal stack with vertically centred children, `gap` apart.
+pub fn hstack(space: Space) -> Rect {
+    rect().tw_layout(&[flex_row(), items(Align::Center), gap(space)])
 }
 
-/// A vertical stack with `spacing`.
-pub fn vstack(spacing: f32) -> Rect {
-    rect().spacing(spacing)
+/// A vertical stack with children `gap` apart.
+pub fn vstack(space: Space) -> Rect {
+    rect().tw_layout(&[flex_col(), gap(space)])
 }
 
 /// Fills the remaining space in a flex row or column. The parent needs
-/// `.content(Content::Flex)`.
+/// `flex()`.
 pub fn spacer() -> Rect {
-    rect().width(Size::flex(1.0)).height(Size::flex(1.0))
+    rect().tw_layout(&[w_flex(), h_flex()])
 }
 
 /// A 1 px hairline in the separator colour, as between panes.
 pub fn divider(tokens: &Tokens) -> Rect {
-    rect()
-        .width(Size::fill())
-        .height(Size::px(1.0))
-        .background(tokens.separator)
+    rect().tw(tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)])
 }
 
-/// The group card surface with 16 px padding, for content that is not a
-/// list of rows.
+/// A group card holding free content: the card with 16 px padding.
 pub fn card(tokens: &Tokens) -> Rect {
-    rect()
-        .width(Size::fill())
-        .corner_radius(RADIUS_LG)
-        .background(tokens.card)
-        .padding(S4)
+    rect().tw(tokens, CARD).tw(tokens, CARD_BODY)
 }
 
-/// Centres `child` and caps its width, like `AdwClamp`. Pages use 640 px.
-pub fn clamp(max_width: f32, child: impl Into<Element>) -> Rect {
-    rect()
-        .width(Size::fill())
-        .cross_align(Alignment::Center)
-        .child(
-            rect()
-                .width(Size::fill())
-                .max_width(Size::px(max_width))
-                .child(child.into()),
-        )
+/// Centres `child` and caps its width at `max`, like `AdwClamp`.
+pub fn clamp(max: Dim, child: impl Into<Element>) -> Rect {
+    rect().tw_layout(&[w_full(), items(Align::Center)]).child(
+        rect()
+            .tw_layout(&[w_full(), max_w(max)])
+            .child(child.into()),
+    )
 }
 
-/// The root of a settings page: full width, with 24 px between groups, as
-/// the spacing between `ControlCentreDetails` sections. Groups and status
+/// The root of a settings page: groups 40 px apart. Groups and status
 /// blocks carry no outer margin of their own.
 pub fn page_column() -> Rect {
-    rect().width(Size::fill()).spacing(S6)
+    rect().tw_layout(PAGE)
 }

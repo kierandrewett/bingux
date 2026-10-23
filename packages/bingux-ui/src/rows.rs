@@ -15,8 +15,8 @@ use crate::controls::switch::switch;
 use crate::controls::text_field::text_field;
 use crate::group::use_row_lit;
 use crate::icons::{self, Icon};
-use crate::scale::*;
-use crate::surface::{focus_border, provide_enabled, surface_color, use_tokens};
+use crate::style::*;
+use crate::surface::{provide_enabled, use_tokens};
 use crate::typography::{BADGE, BODY, CAPTION, Ink, VALUE};
 
 /// The widest a read-only value gets before it is cut with an ellipsis.
@@ -31,6 +31,7 @@ pub struct Row {
     trailing: Option<Element>,
     leading: Option<Icon>,
     leading_app: Option<String>,
+    leading_avatar: Option<String>,
     leading_signal: Option<(u8, bool)>,
     on_press: Option<EventHandler<()>>,
     enabled: bool,
@@ -47,6 +48,7 @@ pub fn row(title: impl Into<String>) -> Row {
         trailing: None,
         leading: None,
         leading_app: None,
+        leading_avatar: None,
         leading_signal: None,
         on_press: None,
         enabled: true,
@@ -89,6 +91,12 @@ impl Row {
     /// Four signal bars at the start, `level` 0..=4.
     pub fn leading_signal(mut self, level: u8, secured: bool) -> Self {
         self.leading_signal = Some((level, secured));
+        self
+    }
+
+    /// An avatar with these initials before the text, for a person.
+    pub fn leading_avatar(mut self, initials: impl Into<String>) -> Self {
+        self.leading_avatar = Some(initials.into());
         self
     }
 
@@ -169,14 +177,6 @@ impl Component for Row {
         let interactive = self.on_press.is_some() && self.enabled;
         use_row_lit((interactive && (hovering() || pressing())) || self.selected);
         let single_line = self.subtitle.is_none();
-        let height = row_height();
-        let background = surface_color(
-            &tokens,
-            Color::TRANSPARENT,
-            interactive && hovering(),
-            interactive && pressing(),
-            self.selected,
-        );
         let ink = if !self.enabled {
             Ink::Muted
         } else if self.destructive {
@@ -184,10 +184,10 @@ impl Component for Row {
         } else {
             Ink::Text
         };
-        let icon_color = if self.selected {
-            tokens.accent
+        let icon_paint = if self.selected {
+            Paint::Accent
         } else {
-            tokens.muted
+            Paint::Muted
         };
 
         let title = BODY
@@ -198,17 +198,11 @@ impl Component for Row {
         let title_line: Element = match &self.badge {
             None => title.into(),
             Some(badge) => rect()
-                .direction(Direction::Horizontal)
-                .cross_align(Alignment::Center)
-                .spacing(S2)
+                .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
                 .child(title)
                 .child(
                     rect()
-                        .height(Size::px(BOX_SM))
-                        .padding((0.0, S2))
-                        .corner_radius(RADIUS)
-                        .background(tokens.accent.with_af32(0.18))
-                        .center()
+                        .tw(&tokens, BADGE_BOX)
                         .child(BADGE.label(&tokens, badge.clone()).max_lines(1)),
                 )
                 .into(),
@@ -216,17 +210,28 @@ impl Component for Row {
         // A subtitle wraps onto a second or third line, so a row that has one
         // grows to fit it. A row without one has the row height, and its
         // text is centred by the row.
-        let text_column = rect()
-            .width(Size::flex(1.0))
-            .spacing(S0)
-            .child(title_line)
-            .maybe_child(self.subtitle.as_ref().map(|subtitle| {
-                CAPTION
-                    .paragraph(&tokens, subtitle.clone())
-                    .max_lines(3)
-                    .text_overflow(TextOverflow::Ellipsis)
-                    .width(Size::fill())
-            }));
+        let text_column =
+            rect()
+                .tw(&tokens, ROW_TEXT)
+                .child(title_line)
+                .maybe_child(self.subtitle.as_ref().map(|subtitle| {
+                    CAPTION
+                        .paragraph(&tokens, subtitle.clone())
+                        .max_lines(3)
+                        .text_overflow(TextOverflow::Ellipsis)
+                        .width(Size::fill())
+                }));
+        let trailing = (self.trailing.is_some() || self.selected || self.navigates).then(|| {
+            rect()
+                .tw(&tokens, ROW_TRAILING)
+                .maybe_child(self.trailing.clone())
+                .maybe_child((self.selected && !self.navigates).then(|| {
+                    icons::icon(Icon::Check, IconSize::Mark, Paint::Accent.color(&tokens))
+                }))
+                .maybe_child(self.navigates.then(|| {
+                    icons::icon(Icon::GoNext, IconSize::Mark, Paint::Muted.color(&tokens))
+                }))
+        });
 
         let on_press = self.on_press.clone();
         rect()
@@ -237,15 +242,19 @@ impl Component for Row {
             } else {
                 AccessibilityRole::GenericContainer
             })
-            .width(Size::fill())
-            .maybe(single_line, |row| row.height(Size::px(height)))
-            .direction(Direction::Horizontal)
-            .content(Content::Flex)
-            .cross_align(Alignment::Center)
-            .padding((if single_line { 0.0 } else { S3 + S0 }, GUTTER))
-            .spacing(S3)
-            .background(background)
-            .border(focus_border(&tokens, focus()))
+            .tw(&tokens, if single_line { ROW } else { ROW_TALL })
+            .tw(
+                &tokens,
+                &[
+                    surface(
+                        Paint::Transparent,
+                        interactive && hovering(),
+                        interactive && pressing(),
+                        self.selected,
+                    ),
+                    focus_ring(focus()),
+                ],
+            )
             .maybe(interactive, |element| {
                 element
                     .on_pointer_enter(move |_| hovering.set(true))
@@ -264,27 +273,24 @@ impl Component for Row {
             })
             .maybe_child(
                 self.leading
-                    .map(|leading| icons::icon(leading, ICON_LG, icon_color)),
+                    .map(|leading| icons::icon(leading, IconSize::Row, icon_paint.color(&tokens))),
             )
             .maybe_child(
                 self.leading_signal
                     .map(|(level, secured)| crate::controls::signal_bars(level, secured)),
             )
             .maybe_child(
+                self.leading_avatar
+                    .as_ref()
+                    .map(|initials| crate::controls::avatar(initials.clone(), Dim::Box9)),
+            )
+            .maybe_child(
                 self.leading_app
                     .as_ref()
-                    .map(|name| app_icon(name.clone(), ICON_APP)),
+                    .map(|name| app_icon(name.clone(), IconSize::App)),
             )
             .child(text_column)
-            .maybe_child(self.trailing.clone())
-            .maybe_child(
-                (self.selected && !self.navigates)
-                    .then(|| icons::icon(Icon::Check, ICON_SM, tokens.accent)),
-            )
-            .maybe_child(
-                self.navigates
-                    .then(|| icons::icon(Icon::GoNext, ICON_SM, tokens.muted)),
-            )
+            .maybe_child(trailing)
     }
 }
 
@@ -380,13 +386,12 @@ impl Component for LevelRow {
         provide_enabled(self.enabled);
         let ink = if self.enabled { Ink::Text } else { Ink::Muted };
         let heading = rect()
-            .width(Size::fill())
-            .direction(Direction::Horizontal)
-            .content(Content::Flex)
-            .cross_align(Alignment::Center)
-            .spacing(S2)
+            .tw(
+                &tokens,
+                &[flex_row(), flex(), items(Align::Center), w_full(), gap(S2)],
+            )
             .child(
-                rect().width(Size::flex(1.0)).child(
+                rect().tw(&tokens, &[w_flex()]).child(
                     BODY.in_ink(ink)
                         .label(&tokens, self.title.clone())
                         .max_lines(1)
@@ -402,23 +407,27 @@ impl Component for LevelRow {
                 ),
             );
         rect()
-            .width(Size::fill())
-            .direction(Direction::Horizontal)
-            .content(Content::Flex)
-            .cross_align(Alignment::Center)
-            .padding((S1, GUTTER))
-            .spacing(S4)
+            .tw(&tokens, ROW_STACKED)
+            .tw(
+                &tokens,
+                &[flex_row(), flex(), items(Align::Center), gap(S4)],
+            )
             .maybe_child(self.leading.clone())
             .child(
                 rect()
-                    .width(Size::flex(1.0))
-                    .child(heading)
-                    .maybe_child(self.subtitle.as_ref().map(|subtitle| {
-                        CAPTION
-                            .label(&tokens, subtitle.clone())
-                            .max_lines(1)
-                            .text_overflow(TextOverflow::Ellipsis)
-                    }))
+                    .tw(&tokens, &[flex_col(), w_flex(), gap(S2)])
+                    .child(
+                        rect()
+                            .tw(&tokens, ROW_TEXT)
+                            .tw(&tokens, &[w_full()])
+                            .child(heading)
+                            .maybe_child(self.subtitle.as_ref().map(|subtitle| {
+                                CAPTION
+                                    .label(&tokens, subtitle.clone())
+                                    .max_lines(1)
+                                    .text_overflow(TextOverflow::Ellipsis)
+                            })),
+                    )
                     .child(slider(self.value, self.on_moved.clone()).fill()),
             )
             .maybe_child(self.trailing.clone())
@@ -442,7 +451,7 @@ pub fn choice_row(
     if short {
         return row(title).trailing(segmented(options, selected, on_select));
     }
-    row(title).trailing(dropdown(options, selected, on_select).min_width(FIELD_WIDTH))
+    row(title).trailing(dropdown(options, selected, on_select).min_width(Dim::Field))
 }
 
 /// A row with a text field on the right; `on_submit` fires on Enter.
@@ -513,7 +522,7 @@ impl Component for EntryRow {
         let draft = use_state(|| committed.clone());
         let on_commit = self.on_commit.clone();
         let field = text_field(draft, move |text: String| on_commit.call(text))
-            .width(FIELD_WIDTH)
+            .width(Dim::Field)
             .maybe_placeholder(self.placeholder.clone())
             .revert_to(committed);
         row(self.title.clone()).trailing(field)
@@ -567,42 +576,29 @@ impl Component for ExpanderRow {
                 .ease(Ease::Out)
         });
         let progress = reveal.get().value();
-        let chevron =
-            rect()
-                .rotate(progress * 90.0)
-                .child(icons::icon(Icon::GoNext, ICON_SM, tokens.muted));
+        let chevron = rect().rotate(progress * 90.0).child(icons::icon(
+            Icon::GoNext,
+            IconSize::Mark,
+            Paint::Muted.color(&tokens),
+        ));
         let header = row(self.title.clone())
             .maybe_subtitle(self.subtitle.clone())
             .trailing(chevron)
             .on_press(move |_| open.set(!open()));
+        // Child rows are set in by one gutter, with the same hairlines as
+        // the rows of a card.
         let mut children = Vec::with_capacity(self.children.len() * 2);
-        for (index, child) in self.children.iter().enumerate() {
-            if index > 0 {
-                children.push(
-                    rect()
-                        .width(Size::fill())
-                        .height(Size::px(1.0))
-                        .margin((0.0, 0.0, 0.0, GUTTER))
-                        .background(tokens.separator)
-                        .into(),
-                );
-            }
+        for child in &self.children {
+            children.push(rect().tw(&tokens, SEPARATOR).into());
             children.push(child.clone());
         }
         rect()
-            .width(Size::fill())
+            .tw(&tokens, &[flex_col(), w_full()])
             .child(header)
             .maybe_child((progress > 0.0).then(|| {
                 rect()
-                    .width(Size::fill())
+                    .tw(&tokens, &[flex_col(), w_full(), pl(GUTTER)])
                     .opacity(progress)
-                    .padding((0.0, 0.0, 0.0, S4))
-                    .child(
-                        rect()
-                            .width(Size::fill())
-                            .height(Size::px(1.0))
-                            .background(tokens.separator),
-                    )
                     .children(children)
             }))
     }
@@ -682,8 +678,7 @@ impl Component for ChoiceList {
             )));
         }
         rect()
-            .width(Size::fill())
-            .spacing(S5)
+            .tw(&tokens, &[flex_col(), w_full(), gap(S3)])
             .child(
                 crate::controls::search_field(query, |_| {})
                     .placeholder(self.placeholder.clone())
@@ -691,12 +686,12 @@ impl Component for ChoiceList {
             )
             .child(list)
             .maybe_child((hidden > 0).then(|| {
-                CAPTION
-                    .label(
+                rect()
+                    .tw(&tokens, &[w_full(), px(GUTTER)])
+                    .child(CAPTION.label(
                         &tokens,
                         format!("{hidden} more. Keep typing to narrow the list."),
-                    )
-                    .margin((0.0, GUTTER))
+                    ))
             }))
     }
 }

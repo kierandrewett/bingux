@@ -13,7 +13,7 @@ use std::time::Duration;
 use freya::prelude::*;
 use serde_json::Value;
 
-use bingux_ui::scale::*;
+use bingux_ui::style::*;
 
 use crate::apps;
 use crate::routes::{Navigator, Route, use_navigator};
@@ -610,7 +610,7 @@ fn identify(stream: &mut Stream, apps: &[apps::AppEntry]) {
         &stream.name,
     );
     let theme_has = |name: &str| {
-        !name.is_empty() && bingux_ui::app_icon::resolve(name, ICON_APP as u32 * 2).is_some()
+        !name.is_empty() && bingux_ui::app_icon::resolve(name, IconSize::App as u32 * 2).is_some()
     };
     stream.icon = if theme_has(named) {
         named.to_string()
@@ -745,7 +745,7 @@ fn mute_button(volume: f64, muted: bool, on_mute: impl Into<EventHandler<()>>) -
     let label = if muted { "Unmute" } else { "Mute" };
     icon_button(level_icon(volume, muted), on_mute)
         .tooltip(label)
-        .size(BOX_LG)
+        .size(Dim::Box9)
         .into()
 }
 
@@ -815,7 +815,7 @@ fn channel_group(kind: Kind, devices: &[Device], level: Option<Level>, ctx: Ctx)
                 set_volume(ctx.queue, ctx.overlays, id, percent);
             })
             // The blank leading box lines the text up with the device rows above.
-            .leading(rect().width(Size::px(ICON_LG)))
+            .leading(rect().tw_layout(&[w(Dim::IconBox)]))
             .trailing(mute_button(level.volume, level.muted, move |_| {
                 update_level(ctx.model, kind, |current| current.muted = mute_to);
                 set_mute(ctx, id, mute_to);
@@ -844,7 +844,7 @@ fn app_row(streams: &[Stream], ctx: Ctx) -> Element {
                 }
             })
             .subtitle(summary_of(streams))
-            .leading(app_icon(first.icon.clone(), ICON_APP))
+            .leading(app_icon(first.icon.clone(), IconSize::App))
             .trailing(mute_button(volume, muted, move |_| {
                 for id in &mute_ids {
                     update_stream(ctx.model, *id, |level| level.1 = !muted);
@@ -950,7 +950,11 @@ impl Component for SoundPage {
             page = page.child(
                 applications.row(
                     hstack(S3)
-                        .child(icon(Icon::Sound, ICON_MD, tokens.muted))
+                        .child(icon(
+                            Icon::Sound,
+                            IconSize::Control,
+                            Paint::Muted.color(&tokens),
+                        ))
                         .child(caption("No application is playing or recording sound.")),
                 ),
             );

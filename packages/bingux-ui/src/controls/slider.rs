@@ -1,35 +1,30 @@
 //! The slider: `SeekSlider.qml`. A thin track with a text-coloured fill and
-//! a round 16 px thumb. Track, fill and thumb share one centre line.
+//! a round thumb. Track, fill and thumb share one centre line.
 
 use freya::animation::*;
 use freya::prelude::*;
 
-use crate::scale::*;
+use crate::style::*;
 use crate::surface::{use_enabled, use_tokens};
+use crate::typography::{CAPTION, Ink};
 
-/// The track is 6 px, or 8 px while it is being dragged.
-const TRACK: f32 = 6.0;
-const TRACK_ACTIVE: f32 = 8.0;
-/// The thumb is a 16 px circle, 22 px for a fingertip.
-const THUMB: f32 = 16.0;
-const THUMB_TOUCH: f32 = 22.0;
+const DISABLED_OPACITY: f32 = 0.45;
 /// Thumb scale while pressed and while dragging.
 const SCALE_PRESSED: f32 = 1.1;
 const SCALE_DRAGGING: f32 = 1.3;
-const DISABLED_OPACITY: f32 = 0.45;
 const SCALE_MS: u64 = 120;
 const PERCENT: f64 = 100.0;
 /// Page Up and Page Down move the slider this many percent.
 const PAGE_STEP: f64 = 10.0;
 
-/// A thin track filled up to a 16 px thumb. The thumb stays inside the
-/// track, so 0 and 100 are the ends of the travel.
+/// A thin track filled up to a thumb. The thumb stays inside the track, so
+/// 0 and 100 are the ends of the travel.
 #[derive(PartialEq)]
 pub struct Slider {
     value: f64,
     enabled: bool,
     on_moved: EventHandler<f64>,
-    width: f32,
+    width: Dim,
     fluid: bool,
     step: Option<f64>,
     show_value: bool,
@@ -40,7 +35,7 @@ pub fn slider(value: f64, on_moved: impl Into<EventHandler<f64>>) -> Slider {
         value: value.clamp(0.0, 100.0),
         enabled: true,
         on_moved: on_moved.into(),
-        width: FIELD_WIDTH,
+        width: Dim::Field,
         fluid: false,
         step: None,
         show_value: false,
@@ -53,7 +48,8 @@ impl Slider {
         self
     }
 
-    pub fn width(mut self, width: f32) -> Self {
+    /// The slider is this wide. A field-sized dim shrinks on a phone.
+    pub fn width(mut self, width: Dim) -> Self {
         self.width = width;
         self
     }
@@ -85,10 +81,10 @@ impl Component for Slider {
         // thumb. Every part of the slider is placed from the centre of the hit
         // row, so the track, the fill and the thumb share one centre whatever
         // size the track and thumb are at that frame.
-        let thumb_size = if touch() { THUMB_TOUCH } else { THUMB };
-        let hit = control_height();
+        let thumb_size = Dim::SliderThumb.px();
+        let hit = Dim::Control.px();
         let centre = hit / 2.0;
-        let focus_ring = thumb_size + 2.0;
+        let focus_ring_size = thumb_size + 2.0;
         let tokens = use_tokens();
         let mut pressing = use_state(|| false);
         let mut dragging = use_state(|| false);
@@ -120,7 +116,7 @@ impl Component for Slider {
         let width = if self.fluid && measured > thumb_size {
             measured
         } else {
-            fit_field(self.width)
+            self.width.px()
         };
         let travel = (width - thumb_size).max(1.0);
         let step = self.step;
@@ -178,13 +174,17 @@ impl Component for Slider {
             }
         };
 
-        let track_height = if interacting { TRACK_ACTIVE } else { TRACK };
-        let fill_colour = if !enabled {
-            tokens.muted
-        } else if interacting {
-            tokens.accent
+        let track_height = if interacting {
+            Dim::SliderTrackActive.px()
         } else {
-            tokens.text
+            Dim::SliderTrack.px()
+        };
+        let fill_paint = if !enabled {
+            Paint::Muted
+        } else if interacting {
+            Paint::Accent
+        } else {
+            Paint::Text
         };
         let thumb_x = travel * (value as f32 / PERCENT as f32);
         let centre_x = thumb_size / 2.0 + thumb_x;
@@ -200,12 +200,9 @@ impl Component for Slider {
                 builder.set_min_numeric_value(0.0);
                 builder.set_max_numeric_value(PERCENT);
             })
-            .width(if self.fluid {
-                Size::fill()
-            } else {
-                Size::px(width)
-            })
-            .height(Size::px(hit))
+            .maybe(self.fluid, |element| element.width(Size::fill()))
+            .maybe(!self.fluid, |element| element.tw(&tokens, &[w(self.width)]))
+            .tw(&tokens, &[h(Dim::Control)])
             .maybe(!enabled, |element| element.opacity(DISABLED_OPACITY))
             .on_sized(move |event: Event<SizedEventData>| size.set(event.area))
             .maybe(enabled, |element| {
@@ -224,8 +221,7 @@ impl Component for Slider {
                     )
                     .width(Size::px(width))
                     .height(Size::px(track_height))
-                    .corner_radius(track_height / 2.0)
-                    .background(tokens.outline),
+                    .tw(&tokens, &[rounded(Radius::Pill), bg(Paint::Outline)]),
             )
             .child(
                 rect()
@@ -237,25 +233,18 @@ impl Component for Slider {
                     )
                     .width(Size::px(fill_width))
                     .height(Size::px(track_height))
-                    .corner_radius(track_height / 2.0)
-                    .background(fill_colour),
+                    .tw(&tokens, &[rounded(Radius::Pill), bg(fill_paint)]),
             )
             .maybe_child((enabled && focus() == Focus::Keyboard).then(|| {
                 rect()
                     .position(
                         Position::new_absolute()
-                            .top(centre - focus_ring / 2.0)
-                            .left(centre_x - focus_ring / 2.0),
+                            .top(centre - focus_ring_size / 2.0)
+                            .left(centre_x - focus_ring_size / 2.0),
                     )
-                    .width(Size::px(focus_ring))
-                    .height(Size::px(focus_ring))
-                    .corner_radius(focus_ring / 2.0)
-                    .border(
-                        Border::new()
-                            .width(1.0)
-                            .alignment(BorderAlignment::Inner)
-                            .fill(tokens.accent),
-                    )
+                    .width(Size::px(focus_ring_size))
+                    .height(Size::px(focus_ring_size))
+                    .tw(&tokens, &[rounded(Radius::Pill), focus_ring(focus())])
             }))
             .child(
                 rect()
@@ -267,30 +256,28 @@ impl Component for Slider {
                     )
                     .width(Size::px(thumb))
                     .height(Size::px(thumb))
-                    .corner_radius(thumb / 2.0)
-                    .background(tokens.text)
-                    .border(
-                        Border::new()
-                            .width(1.0)
-                            .alignment(BorderAlignment::Inner)
-                            .fill(tokens.elevated),
+                    .tw(
+                        &tokens,
+                        &[
+                            rounded(Radius::Pill),
+                            bg(Paint::Text),
+                            border(Line::Outline),
+                        ],
                     ),
             );
         if !self.show_value {
             return Element::from(row);
         }
         rect()
-            .direction(Direction::Horizontal)
-            .cross_align(Alignment::Center)
-            .spacing(S2)
+            .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
             .child(row)
             .child(
-                label()
-                    .text(format!("{}%", value.round() as i64))
-                    .font_size(TEXT_SM)
-                    .color(tokens.muted)
-                    .min_width(Size::px(BOX_LG))
-                    .text_align(TextAlign::End),
+                rect().tw(&tokens, &[min_w(Dim::Box9)]).child(
+                    CAPTION
+                        .in_ink(Ink::Muted)
+                        .label(&tokens, format!("{}%", value.round() as i64))
+                        .text_align(TextAlign::End),
+                ),
             )
             .into()
     }

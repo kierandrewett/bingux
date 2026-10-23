@@ -4,11 +4,9 @@
 
 use freya::prelude::*;
 
-use crate::scale::*;
+use crate::style::*;
 use crate::surface::use_tokens;
 use crate::typography::{CAPTION, HERO, Ink};
-
-const TRACK_HEIGHT: f32 = 6.0;
 
 /// `value` and `unit` are the large figure and its unit ("35", "GB used");
 /// `total` is the muted text at the right ("256 GB total"). `fraction` is
@@ -41,8 +39,7 @@ impl Component for UsageMeter {
         let fraction = self.fraction;
         rect()
             .width(Size::fill())
-            .padding((S2, GUTTER))
-            .spacing(S2)
+            .tw(&tokens, &[flex_col(), px(GUTTER), py(S2), gap(S2)])
             .a11y_role(AccessibilityRole::ProgressIndicator)
             .a11y_builder(move |builder| {
                 builder.set_numeric_value(fraction);
@@ -52,35 +49,37 @@ impl Component for UsageMeter {
             .child(
                 rect()
                     .width(Size::fill())
-                    .direction(Direction::Horizontal)
-                    .content(Content::Flex)
-                    .cross_align(Alignment::End)
-                    .spacing(S2)
+                    .tw(&tokens, &[flex_row(), items(Align::End), gap(S2)])
                     .child(HERO.label(&tokens, self.value.clone()).max_lines(1))
                     .child(
                         rect()
-                            .padding((0.0, 0.0, S3, 0.0))
+                            .tw(&tokens, &[pb(S3)])
                             .child(CAPTION.in_ink(Ink::Text).label(&tokens, self.unit.clone())),
                     )
-                    .child(rect().width(Size::flex(1.0)))
+                    .child(rect().tw(&tokens, &[w_flex()]))
                     .child(
                         rect()
-                            .padding((0.0, 0.0, S3, 0.0))
+                            .tw(&tokens, &[pb(S3)])
                             .child(CAPTION.label(&tokens, self.total.clone())),
                     ),
             )
             .child(
                 rect()
                     .width(Size::fill())
-                    .height(Size::px(TRACK_HEIGHT))
-                    .corner_radius(RADIUS_SM)
-                    .background(tokens.control)
+                    .tw(
+                        &tokens,
+                        &[
+                            h(Dim::Track),
+                            rounded(Radius::Mark),
+                            bg(Paint::Control),
+                            clip(),
+                        ],
+                    )
                     .child(
                         rect()
+                            // The filled share is a run-time percentage, so a raw width.
                             .width(Size::percent(fraction as f32 * 100.0))
-                            .height(Size::fill())
-                            .corner_radius(RADIUS_SM)
-                            .background(tokens.text),
+                            .tw(&tokens, &[h_full(), rounded(Radius::Mark), bg(Paint::Text)]),
                     ),
             )
     }

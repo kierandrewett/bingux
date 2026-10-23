@@ -17,14 +17,11 @@ use freya::prelude::*;
 
 use crate::controls::{action_button, icon_button, search_field};
 use crate::icons::{self, Icon};
-use crate::scale::*;
 use crate::shell::window::{HeaderBar, WindowControls};
-use crate::surface::{focus_border, is_activation_key, over, use_tokens};
-use crate::theme::{HEADER_HEIGHT, NARROW_BELOW, SIDEBAR_WIDTH, Tokens, WINDOW_CONTROL_BUTTON};
-use crate::typography::{BODY, CAPTION, Ink, PAGE_TITLE};
-
-/// The widest the page column gets; it is centred in the content frame.
-const PAGE_WIDTH: f32 = 720.0;
+use crate::style::*;
+use crate::surface::{is_activation_key, use_tokens};
+use crate::theme::{NARROW_BELOW, Tokens};
+use crate::typography::{BODY, CAPTION, EMPHASIS, Ink, PAGE_TITLE};
 
 /// One sidebar destination.
 pub trait NavItem: Copy + PartialEq + 'static {
@@ -51,7 +48,7 @@ pub struct NavigationSplitView<T: NavItem> {
     pub items: Vec<T>,
     pub selected: State<T>,
     pub content: Element,
-    pub page_width: f32,
+    pub page_width: Dim,
     /// Set while a subpage is open: its title and what Back does.
     pub subpage: Option<Subpage>,
     /// Settings the sidebar search can find, after the pages.
@@ -92,35 +89,27 @@ impl<T: NavItem> Component for ProfileCard<T> {
         let mut sidebar_open = self.sidebar_open;
         let full_page = self.full_page;
         // The Users page is also in the page list, which shows the selection.
-        let background = item_fill(&tokens, hovering(), pressing(), false);
-        let avatar = rect()
-            .width(Size::px(BOX_XL))
-            .height(Size::px(BOX_XL))
-            .corner_radius(BOX_XL / 2.0)
-            .background(tokens.accent)
-            .center()
-            .child(
-                label()
-                    .text(self.profile.initials.clone())
-                    .color(tokens.accent_foreground)
-                    .font_size(TEXT_MD)
-                    .font_weight(FontWeight::SEMI_BOLD),
-            );
-        rect().width(Size::fill()).padding((0.0, S2, S1, S2)).child(
+        let avatar = crate::controls::avatar(self.profile.initials.clone(), Dim::Box11);
+        rect().tw(&tokens, &[w_full(), px(S2), pb(S1)]).child(
             rect()
                 .a11y_id(a11y_id)
                 .a11y_focusable(true)
                 .a11y_role(AccessibilityRole::Button)
-                .width(Size::fill())
-                .height(Size::px(TALL_ROW_HEIGHT))
-                .direction(Direction::Horizontal)
-                .content(Content::Flex)
-                .cross_align(Alignment::Center)
-                .padding((0.0, S3))
-                .spacing(S3)
-                .corner_radius(RADIUS)
-                .background(background)
-                .border(focus_border(&tokens, focus()))
+                .tw(
+                    &tokens,
+                    &[
+                        flex_row(),
+                        flex(),
+                        items(Align::Center),
+                        w_full(),
+                        h(Dim::RowTall),
+                        px(S3),
+                        gap(S3),
+                        rounded(Radius::Control),
+                        surface(Paint::Transparent, hovering(), pressing(), false),
+                    ],
+                )
+                .tw(&tokens, &[focus_ring(focus())])
                 .on_pointer_enter(move |_| hovering.set(true))
                 .on_pointer_leave(move |_| {
                     hovering.set(false);
@@ -138,7 +127,7 @@ impl<T: NavItem> Component for ProfileCard<T> {
                 .child(avatar)
                 .child(
                     rect()
-                        .width(Size::flex(1.0))
+                        .tw(&tokens, &[w_flex()])
                         .child(
                             BODY.label(&tokens, self.profile.name.clone())
                                 .max_lines(1)
@@ -151,7 +140,11 @@ impl<T: NavItem> Component for ProfileCard<T> {
                                 .text_overflow(TextOverflow::Ellipsis),
                         ),
                 )
-                .child(icons::icon(Icon::GoNext, ICON_SM, tokens.muted)),
+                .child(icons::icon(
+                    Icon::GoNext,
+                    IconSize::Mark,
+                    Paint::Muted.color(&tokens),
+                )),
         )
     }
 }
@@ -341,14 +334,12 @@ struct PageMemory {
 }
 
 /// The page column: centred, at most `page_width` wide, with the page margins.
-fn page_column(content: Element, side: f32, page_width: f32) -> impl IntoElement {
+fn page_column(content: Element, side: Space, page_width: Dim) -> impl IntoElement {
     rect()
-        .width(Size::fill())
-        .cross_align(Alignment::Center)
-        .padding((S4, side, S6, side))
+        .tw_layout(&[w_full(), items(Align::Center), pt(S4), pb(S8), px(side)])
         .child(
             rect()
-                .width(Size::px(page_width))
+                .tw_layout(&[w(page_width)])
                 .max_width(Size::fill())
                 .child(content),
         )
@@ -359,15 +350,10 @@ fn page_column(content: Element, side: f32, page_width: f32) -> impl IntoElement
 /// action at the right.
 fn title_row(tokens: &Tokens, title: String, lead: String, action: Option<Element>) -> Element {
     rect()
-        .width(Size::fill())
-        .direction(Direction::Horizontal)
-        .content(Content::Flex)
-        .cross_align(Alignment::Center)
-        .spacing(S4)
+        .tw(tokens, PAGE_HEAD)
         .child(
             rect()
-                .width(Size::flex(1.0))
-                .spacing(S1)
+                .tw(tokens, PAGE_HEAD_TEXT)
                 .child(
                     PAGE_TITLE
                         .label(tokens, title)
@@ -400,7 +386,7 @@ impl<T: NavItem> NavigationSplitView<T> {
             items,
             selected,
             content: content.into(),
-            page_width: PAGE_WIDTH,
+            page_width: Dim::Page,
             subpage: None,
             hits: Vec::new(),
             start_on_list: false,
@@ -422,7 +408,7 @@ impl<T: NavItem> NavigationSplitView<T> {
         self
     }
 
-    pub fn page_width(mut self, width: f32) -> Self {
+    pub fn page_width(mut self, width: Dim) -> Self {
         self.page_width = width;
         self
     }
@@ -464,7 +450,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         set_touch(narrow);
         let start_on_list = self.start_on_list;
         let mut sidebar_open = use_state(move || narrow && start_on_list);
-        let side = if narrow { S4 } else { S6 };
+        let side = if narrow { S4 } else { S8 };
         let selected = self.selected;
         let sidebar = |full_page: bool| Sidebar {
             items: self.items.clone(),
@@ -522,17 +508,17 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             action => action_button(action.label, action.on_press).into(),
         });
         let header = if show_list {
-            HeaderBar::new(self.app_title.clone()).background(tokens.bg)
+            HeaderBar::new(self.app_title.clone()).fill(Paint::Bg)
         } else {
             let header = HeaderBar::new(if narrow { title.clone() } else { String::new() })
                 .busy(busy)
-                .background(tokens.bg);
+                .fill(Paint::Bg);
             match &back {
                 Some(on_back) => {
                     let on_back = on_back.clone();
                     header.leading(
                         icon_button(Icon::GoPrevious, move |_| on_back.call(()))
-                            .size(WINDOW_CONTROL_BUTTON)
+                            .size(Dim::WindowControlTarget)
                             .tooltip("Back"),
                     )
                 }
@@ -556,8 +542,7 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             Some(title_row(&tokens, title.clone(), lead, action))
         };
         let body: Element = rect()
-            .width(Size::fill())
-            .spacing(S6)
+            .tw(&tokens, PAGE_BODY)
             .maybe_child(head)
             .child(self.content.clone())
             .into();
@@ -686,9 +671,14 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         };
         rect()
             .expanded()
-            .direction(Direction::Horizontal)
-            .content(Content::Flex)
-            .background(if narrow { tokens.bg } else { tokens.sidebar })
+            .tw(
+                &tokens,
+                &[
+                    flex_row(),
+                    flex(),
+                    bg(if narrow { Paint::Bg } else { Paint::Sidebar }),
+                ],
+            )
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
                 let control = event.modifiers == Modifiers::CONTROL;
                 let letter = match &event.key {
@@ -725,16 +715,14 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                     // Sizes change with the touch density, so a change
                     // remounts the page and it is laid out again.
                     .key(narrow)
-                    .width(Size::flex(1.0))
-                    .height(Size::fill())
-                    .background(tokens.bg)
+                    .tw(&tokens, &[w_flex(), h_full(), bg(Paint::Bg)])
                     // On a desktop window the page is a rounded panel inset
                     // in the sidebar's frame.
                     .maybe(!narrow, |panel| {
-                        panel
-                            .margin((S2, S2, S2, 0.0))
-                            .corner_radius(RADIUS_LG)
-                            .overflow(Overflow::Clip)
+                        panel.tw(
+                            &tokens,
+                            &[my(S2), mr(S2), rounded(Radius::Card), clip()],
+                        )
                     })
                     .child(header)
                     .child(if show_list {
@@ -762,13 +750,10 @@ impl Component for ScrolledTitle {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let shown = -<(i32, i32)>::from(self.scroll).1 > TITLE_SCROLLED_OUT;
-        rect().width(Size::fill()).maybe_child(shown.then(|| {
-            label()
-                .text(self.title.clone())
+        rect().tw_layout(&[w_full()]).maybe_child(shown.then(|| {
+            EMPHASIS
+                .label(&tokens, self.title.clone())
                 .width(Size::fill())
-                .color(tokens.text)
-                .font_size(TEXT_MD)
-                .font_weight(FontWeight::SEMI_BOLD)
                 .text_align(TextAlign::Center)
                 .max_lines(1)
                 .text_overflow(TextOverflow::Ellipsis)
@@ -788,14 +773,19 @@ impl Component for ScrollEdge {
         let scrolled = <(i32, i32)>::from(self.scroll).1 < 0;
         rect()
             .position(Position::new_absolute().top(0.0).left(0.0))
-            .width(Size::fill())
-            .height(Size::px(1.0))
             .layer(Layer::Relative(2))
-            .background(if scrolled {
-                tokens.separator
-            } else {
-                Color::TRANSPARENT
-            })
+            .tw(
+                &tokens,
+                &[
+                    w_full(),
+                    h(Dim::Hairline),
+                    bg(if scrolled {
+                        Paint::Separator
+                    } else {
+                        Paint::Transparent
+                    }),
+                ],
+            )
     }
 }
 
@@ -838,7 +828,10 @@ fn group_label(tokens: &Tokens, group: &str) -> Element {
     if let Some(first) = name.get_mut(0..1) {
         first.make_ascii_uppercase();
     }
-    CAPTION.label(tokens, name).margin((S4, S3, S1, S3)).into()
+    rect()
+        .tw_layout(NAV_LABEL)
+        .child(CAPTION.label(tokens, name))
+        .into()
 }
 
 /// A search result for a setting: its title, with the page it is on under it.
@@ -863,35 +856,40 @@ impl<T: NavItem> Component for HitRow<T> {
         let query = self.query;
         let sidebar_open = self.sidebar_open;
         let full_page = self.full_page;
-        let background = item_fill(&tokens, hovering() || self.highlighted, false, false);
         rect()
             .a11y_id(a11y_id)
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Button)
-            .width(Size::fill())
+            .tw(
+                &tokens,
+                &[
+                    w_full(),
+                    py(S1),
+                    px(GUTTER),
+                    rounded(Radius::Control),
+                    surface(
+                        Paint::Transparent,
+                        hovering() || self.highlighted,
+                        false,
+                        false,
+                    ),
+                ],
+            )
             .height(Size::auto())
-            .padding((S1, GUTTER, S1, GUTTER))
-            .corner_radius(RADIUS)
-            .background(background)
-            .border(focus_border(&tokens, focus()))
+            .tw(&tokens, &[focus_ring(focus())])
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| hovering.set(false))
             .on_press(move |_: Event<PressEventData>| {
                 open_result(selected, query, sidebar_open, full_page, target)
             })
             .child(
-                label()
-                    .text(self.hit.title.clone())
-                    .color(tokens.text)
-                    .font_size(TEXT_MD)
+                BODY.label(&tokens, self.hit.title.clone())
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
             )
             .child(
-                label()
-                    .text(self.hit.detail.clone())
-                    .color(tokens.muted)
-                    .font_size(TEXT_SM)
+                CAPTION
+                    .label(&tokens, self.hit.detail.clone())
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
             )
@@ -970,18 +968,15 @@ impl<T: NavItem> Component for Sidebar<T> {
             }));
         }
 
-        rect()
-            .width(if full_page {
-                Size::fill()
-            } else {
-                Size::px(SIDEBAR_WIDTH)
-            })
-            .height(if full_page {
-                Size::flex(1.0)
-            } else {
-                Size::fill()
-            })
-            .maybe(full_page, |list| list.background(tokens.bg))
+        let shell = if full_page {
+            rect()
+                .width(Size::fill())
+                .height(Size::flex(1.0))
+                .tw(&tokens, &[flex_col(), bg(Paint::Bg)])
+        } else {
+            rect().tw(&tokens, SIDEBAR)
+        };
+        shell
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 // Up, Down and Enter walk the results only while a search is typed.
                 if !typing {
@@ -1021,16 +1016,13 @@ impl<T: NavItem> Component for Sidebar<T> {
                         .auto_hide_scrollbars(false)
                         .child(
                             rect()
-                                .width(Size::fill())
-                                .padding((S2, S2, S4, S2))
-                                .spacing(S0)
+                                .tw(&tokens, SIDEBAR_LIST)
+                                .tw(&tokens, &[pt(S2)])
                                 .children(entries)
                                 .maybe_child((typing && count == 0).then(|| {
-                                    label()
-                                        .text("Nothing matches.")
-                                        .color(tokens.muted)
-                                        .font_size(TEXT_MD)
-                                        .margin((S3, GUTTER, 0.0, GUTTER))
+                                    rect().tw(&tokens, &[pt(S3), px(S3)]).child(
+                                        BODY.in_ink(Ink::Muted).label(&tokens, "Nothing matches."),
+                                    )
                                 })),
                         ),
                 ),
@@ -1052,7 +1044,7 @@ impl Component for SearchField {
     }
 }
 
-/// The top band of the sidebar. It is HEADER_HEIGHT tall, like the page
+/// The top band of the sidebar. It is the header height, like the page
 /// header, so the search field sits on the window-control line. Typing resets
 /// the highlight to the first result.
 fn search_band(
@@ -1061,21 +1053,14 @@ fn search_band(
     search_id: AccessibilityId,
 ) -> impl IntoElement {
     let mut highlight = highlight;
-    rect()
-        .width(Size::fill())
-        .height(Size::px(HEADER_HEIGHT))
-        .direction(Direction::Horizontal)
-        .cross_align(Alignment::Center)
-        .padding((0.0, S2))
-        .spacing(S2)
-        .child(
-            search_field(query, move |_: String| {
-                highlight.set(0);
-            })
-            .a11y_id(search_id)
-            .well()
-            .fill_width(),
-        )
+    rect().tw_layout(SIDEBAR_SEARCH).child(
+        search_field(query, move |_: String| {
+            highlight.set(0);
+        })
+        .a11y_id(search_id)
+        .well()
+        .fill_width(),
+    )
 }
 
 #[derive(PartialEq)]
@@ -1103,31 +1088,27 @@ impl<T: NavItem> Component for NavEntry<T> {
         let mut sidebar_open = self.sidebar_open;
         let full_page = self.full_page;
         let is_selected = selected() == item;
-        let background = item_fill(
-            &tokens,
-            hovering() || self.highlighted,
-            pressing(),
-            is_selected,
-        );
         let icon_color = if is_selected {
-            tokens.accent
+            Paint::Accent.color(&tokens)
         } else {
-            tokens.muted
+            Paint::Muted.color(&tokens)
         };
         rect()
+            .tw(&tokens, NAV_ITEM)
+            .tw(
+                &tokens,
+                &[surface(
+                    Paint::Transparent,
+                    hovering() || self.highlighted,
+                    pressing(),
+                    is_selected,
+                )],
+            )
             .a11y_id(a11y_id)
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Tab)
             .a11y_builder(move |builder| builder.set_selected(is_selected))
-            .width(Size::fill())
-            .height(Size::px(nav_height()))
-            .direction(Direction::Horizontal)
-            .cross_align(Alignment::Center)
-            .spacing(S3)
-            .padding((0.0, S3))
-            .corner_radius(RADIUS)
-            .background(background)
-            .border(focus_border(&tokens, focus()))
+            .tw(&tokens, &[focus_ring(focus())])
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| {
                 hovering.set(false);
@@ -1164,32 +1145,11 @@ impl<T: NavItem> Component for NavEntry<T> {
                     selected.set(target);
                 }
             })
-            .child(icons::icon(item.icon(), ICON_LG, icon_color))
+            .child(icons::icon(item.icon(), IconSize::Row, icon_color))
             .child(
-                label()
-                    .text(item.title())
-                    .color(tokens.text)
-                    .font_size(TEXT_MD)
+                BODY.label(&tokens, item.title())
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
             )
-    }
-}
-
-/// Background of a sidebar row. The selection layer is the base for the
-/// selected row; hover and press are token layers drawn over whatever is
-/// beneath, so they stack the way ControlCentreButtonSurface does.
-fn item_fill(tokens: &Tokens, hovering: bool, pressing: bool, selected: bool) -> Color {
-    let base = if selected {
-        tokens.selection
-    } else {
-        Color::TRANSPARENT
-    };
-    if pressing {
-        over(tokens.pressed, base)
-    } else if hovering {
-        over(tokens.hover, base)
-    } else {
-        base
     }
 }

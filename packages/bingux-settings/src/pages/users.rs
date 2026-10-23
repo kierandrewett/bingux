@@ -9,15 +9,14 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
-use crate::icons::{self, Icon};
 use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::theme::Tokens;
 use crate::ui::{
-    Group, Status, caption, heading, page_column, row, skeleton, status, text_row, use_overlays,
-    use_tokens,
+    Group, Row, Status, avatar, caption, heading, page_column, row, skeleton, status, text_row,
+    use_overlays, use_tokens,
 };
-use bingux_ui::scale::*;
+use bingux_ui::style::*;
 
 const ACCOUNTS: &str = "org.freedesktop.Accounts";
 const ACCOUNTS_PATH: &str = "/org/freedesktop/Accounts";
@@ -228,10 +227,7 @@ impl Component for UsersPage {
                 };
                 let on_press: EventHandler<()> =
                     (move |_: ()| navigator.push(route.clone())).into();
-                Element::from(AccountRow {
-                    account: account.clone(),
-                    on_press,
-                })
+                Element::from(account_row(account, on_press))
             }))
         };
         page_column().child(group)
@@ -286,24 +282,12 @@ impl Component for AccountPage {
         } else {
             "Standard"
         };
-        let avatar = rect()
-            .width(Size::px(BOX_2XL))
-            .height(Size::px(BOX_2XL))
-            .corner_radius(BOX_2XL / 2.0)
-            .background(tokens.accent)
-            .center()
-            .child(
-                label()
-                    .text(initials(account.display_name()))
-                    .color(tokens.accent_foreground)
-                    .font_size(TEXT_DISPLAY)
-                    .font_weight(FontWeight::SEMI_BOLD),
-            );
         let header = rect()
-            .width(Size::fill())
-            .spacing(S1)
-            .cross_align(Alignment::Center)
-            .child(avatar)
+            .tw(
+                &tokens,
+                &[flex_col(), w_full(), gap(S1), items(Align::Center)],
+            )
+            .child(avatar(initials(account.display_name()), Dim::Box24))
             .child(heading(account.display_name().to_string()))
             .child(caption(role));
         page_column()
@@ -334,87 +318,23 @@ impl Component for AccountPage {
 
 /// One account in the list: initials avatar, full name with the user name
 /// underneath, the account type, and a chevron. The whole row opens details.
-#[derive(PartialEq)]
-struct AccountRow {
-    account: Account,
-    on_press: EventHandler<()>,
-}
-
-impl Component for AccountRow {
-    fn render(&self) -> impl IntoElement {
-        let tokens: Tokens = use_tokens();
-        let mut hovering = use_state(|| false);
-        let on_press = self.on_press.clone();
-        let name = self.account.display_name().to_string();
-        let role = if self.account.administrator {
-            "Administrator"
-        } else {
-            "Standard"
-        };
-        let subtitle = (!self.account.real_name.is_empty()).then(|| {
-            label()
-                .text(self.account.user_name.clone())
-                .color(tokens.muted)
-                .font_size(TEXT_MD)
-                .max_lines(1)
-                .text_overflow(TextOverflow::Ellipsis)
-        });
-
-        let avatar = rect()
-            .width(Size::px(BOX_LG))
-            .height(Size::px(BOX_LG))
-            .corner_radius(BOX_LG / 2.0)
-            .background(tokens.accent)
-            .center()
-            .child(
-                label()
-                    .text(initials(&name))
-                    .color(tokens.accent_foreground)
-                    .font_size(TEXT_MD)
-                    .font_weight(FontWeight::SEMI_BOLD),
-            );
-        let text_column = rect()
-            .width(Size::flex(1.0))
-            .main_align(Alignment::Center)
-            .spacing(S0)
-            .child(
-                label()
-                    .text(name)
-                    .color(tokens.text)
-                    .font_size(TEXT_LG)
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis),
-            )
-            .maybe_child(subtitle);
-
-        rect()
-            .width(Size::fill())
-            .height(Size::px(TALL_ROW_HEIGHT))
-            .direction(Direction::Horizontal)
-            .content(Content::Flex)
-            .cross_align(Alignment::Center)
-            .padding((0.0, GUTTER))
-            .spacing(S3)
-            .background(if hovering() {
-                tokens.hover
-            } else {
-                Color::TRANSPARENT
-            })
-            .a11y_role(AccessibilityRole::Button)
-            .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| hovering.set(false))
-            .on_press(move |_: Event<PressEventData>| on_press.call(()))
-            .child(avatar)
-            .child(text_column)
-            .child(
-                label()
-                    .text(role)
-                    .color(tokens.muted)
-                    .font_size(TEXT_MD)
-                    .max_lines(1),
-            )
-            .child(icons::icon(Icon::GoNext, ICON_MD, tokens.muted))
+fn account_row(account: &Account, on_press: impl Into<EventHandler<()>>) -> Row {
+    let name = account.display_name().to_string();
+    let role = if account.administrator {
+        "Administrator"
+    } else {
+        "Standard"
+    };
+    let on_press = on_press.into();
+    let mut item = row(name.clone())
+        .leading_avatar(initials(&name))
+        .value(role)
+        .navigates()
+        .on_press(move |_| on_press.call(()));
+    if !account.real_name.is_empty() {
+        item = item.subtitle(account.user_name.clone());
     }
+    item
 }
 
 /// The subset of JSON that `busctl --json=short` prints. The crate has no
