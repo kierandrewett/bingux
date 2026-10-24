@@ -442,6 +442,10 @@ impl Component for DialogLayer {
     }
 }
 
+/// The widest a toast's text gets, as a share of the window width, so the
+/// action and the close button stay on a phone.
+const TOAST_TEXT_MAX_WIDTH_PERCENT: f32 = 60.0;
+
 #[derive(PartialEq)]
 struct ToastLayer {
     overlays: Overlays,
@@ -489,7 +493,12 @@ impl Component for ToastLayer {
                     .tw(&tokens, TOAST)
                     .opacity(progress)
                     .offset_y(S2.px() * (1.0 - progress))
-                    .child(BODY.label(&tokens, self.toast.text.clone()).max_lines(1))
+                    .child(
+                        BODY.label(&tokens, self.toast.text.clone())
+                            .max_lines(1)
+                            .text_overflow(TextOverflow::Ellipsis)
+                            .max_width(Size::window_percent(TOAST_TEXT_MAX_WIDTH_PERCENT)),
+                    )
                     .maybe_child(action)
                     .child(
                         rect()
