@@ -185,6 +185,76 @@ fn main() {
         println!("[snapshot] wrote {path}");
     }
 
+    // A dropdown inside a popup: Escape closes the open list first, and a
+    // second Escape closes the popup. Each capture stops after one more key.
+    let escape = || Key::Named(NamedKey::Escape);
+    for (file, keys) in [
+        ("escape-0-dropdown-open", vec![]),
+        ("escape-1-dropdown-closed", vec![escape()]),
+        ("escape-2-popup-closed", vec![escape(), escape()]),
+    ] {
+        let path = format!("{out}/{file}.png");
+        let mut shot = Snapshot::new(
+            move || {
+                Element::from(Themed {
+                    child: WindowHost::new(OverlayHost::new(FormSheetOpen { security: true })).into(),
+                })
+            },
+            size,
+        );
+        shot.settle(std::time::Duration::from_millis(600))
+            .click(635.0, 228.0)
+            .settle(std::time::Duration::from_millis(400));
+        for key in keys {
+            shot.key(key).settle(std::time::Duration::from_millis(400));
+        }
+        shot.save(&path);
+        println!("[snapshot] wrote {path}");
+    }
+
+    // Cancel after a dropdown opens: the first click only dismisses the list
+    // (a click outside an overlay is consumed by it); the second closes the popup.
+    let path = format!("{out}/popup-cancel-dropdown-open.png");
+    let mut shot = Snapshot::new(
+        move || {
+            Element::from(Themed {
+                child: WindowHost::new(OverlayHost::new(FormSheetOpen { security: true })).into(),
+            })
+        },
+        size,
+    );
+    shot.settle(std::time::Duration::from_millis(600))
+        .click(635.0, 228.0)
+        .settle(std::time::Duration::from_millis(400))
+        .click(297.0, 104.0)
+        .settle(std::time::Duration::from_millis(600))
+        .click(297.0, 104.0)
+        .settle(std::time::Duration::from_millis(600))
+        .save(&path);
+    println!("[snapshot] wrote {path}");
+
+    // The spinners on the Feedback page, captured at two times after mount.
+    // The arc turns 800 ms per revolution, so the two frames differ by rotation.
+    for (file, settle_ms) in [("spinner-100ms", 100), ("spinner-450ms", 450)] {
+        let path = format!("{out}/{file}.png");
+        Snapshot::new(
+            move || {
+                Element::from(
+                    rect()
+                        .expanded()
+                        .tw(&tokens, &[bg(Paint::Bg)])
+                        .child(Gallery {
+                            initial: Page::Feedback,
+                        }),
+                )
+            },
+            (WINDOW_SIZE.0, 2000.0),
+        )
+        .settle(std::time::Duration::from_millis(settle_ms))
+        .save(&path);
+        println!("[snapshot] wrote {path}");
+    }
+
     // The menu opened from the Menus group at the top of the Buttons page.
     let mut shot = Snapshot::new(
         move || {

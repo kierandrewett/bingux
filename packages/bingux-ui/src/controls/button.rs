@@ -138,7 +138,6 @@ impl Component for ActionButton {
             .tw(
                 &tokens,
                 &[
-                    min_w(Dim::Box9),
                     flex_row(),
                     items(Align::Center),
                     justify(Align::Center),
@@ -148,6 +147,11 @@ impl Component for ActionButton {
                     focus_ring(focus()),
                 ],
             )
+            // A flat button has no fill, so a minimum width would only centre
+            // a short label inside empty space and push it off the row's edge.
+            .maybe(!self.flat, |element| {
+                element.tw(&tokens, &[min_w(Dim::Box9)])
+            })
             .maybe(self.grow, |element| element.tw(&tokens, &[w_flex()]))
             .maybe(!usable, |element| element.opacity(0.5))
             .maybe(enabled, |element| {

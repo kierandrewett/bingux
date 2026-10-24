@@ -207,6 +207,22 @@ fn snapshot_pages(dir: &str, only: &[String]) {
             shot.hover(x, y)
                 .settle(std::time::Duration::from_millis(500));
         }
+        // BINGUX_SETTINGS_SNAPSHOT_KEYS="escape,escape" presses those keys, in
+        // order, after the clicks, to close a popup or a menu from a script.
+        if let Ok(keys) = std::env::var("BINGUX_SETTINGS_SNAPSHOT_KEYS") {
+            for name in keys.split(',').map(str::trim).filter(|name| !name.is_empty()) {
+                let key = match name {
+                    "escape" => freya::prelude::Key::Named(freya::prelude::NamedKey::Escape),
+                    "return" => freya::prelude::Key::Named(freya::prelude::NamedKey::Enter),
+                    "tab" => freya::prelude::Key::Named(freya::prelude::NamedKey::Tab),
+                    other => {
+                        eprintln!("[snapshot] unknown key: {other}");
+                        continue;
+                    }
+                };
+                shot.key(key).settle(std::time::Duration::from_millis(1000));
+            }
+        }
         // BINGUX_SETTINGS_SNAPSHOT_DRAG="x1,y1,x2,y2" drags from the first point
         // to the second, after the clicks and before the capture, for a slider
         // or a drag handle.

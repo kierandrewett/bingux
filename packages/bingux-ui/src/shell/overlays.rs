@@ -119,6 +119,20 @@ pub struct Overlays {
 }
 
 impl Overlays {
+    /// Overlay state owned by `scope`, so a popup's overlays outlive the
+    /// component that opened it and go when the popup is removed.
+    pub(crate) fn in_scope(scope: ScopeId) -> Self {
+        Self {
+            dialog: State::create_in_scope(None, scope),
+            dialog_closing: State::create_in_scope(false, scope),
+            menu: State::create_in_scope(None, scope),
+            menu_closing: State::create_in_scope(false, scope),
+            toasts: State::create_in_scope(Vec::new(), scope),
+            toast_closing: State::create_in_scope(None, scope),
+            next_toast: State::create_in_scope(0, scope),
+        }
+    }
+
     /// Open `dialog`, replacing any dialog already open.
     pub fn show_dialog(mut self, dialog: Dialog) {
         self.dialog_closing.set(false);
@@ -268,7 +282,7 @@ pub(crate) fn use_presence(
     appear.get().value()
 }
 
-/// Provides [`Overlays`] and draws the dialog and toasts over `child`.
+/// Provides [`Overlays`] for the main window and draws its layers over `child`.
 #[derive(PartialEq)]
 pub struct OverlayHost {
     child: Element,
@@ -284,16 +298,66 @@ impl OverlayHost {
 
 impl Component for OverlayHost {
     fn render(&self) -> impl IntoElement {
-        let overlays = use_hook(|| Overlays {
-            dialog: State::create(None),
-            dialog_closing: State::create(false),
-            toasts: State::create(Vec::new()),
-            next_toast: State::create(0),
-            toast_closing: State::create(None),
-            menu: State::create(None),
-            menu_closing: State::create(false),
-        });
+        let scope = current_scope_id();
+        let overlays = use_hook(move || Overlays::in_scope(scope));
         use_provide_context(|| overlays);
+
+        rect()
+            .expanded()
+            .child(crate::window::WindowHost::new(self.child.clone()))
+            .child(OverlayLayers {
+                overlays,
+                stack: OverlayStack::Window,
+            })
+    }
+}
+
+/// Where an [`OverlayLayers`] draws. The main window's layers sit on fixed
+/// levels above its popups. A popup's layers sit inside its own frame, one
+/// overlay step above the panel, so they stay above that popup's content and
+/// below the main window's dialog and toasts.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum OverlayStack {
+    Window,
+    Popup,
+}
+
+impl OverlayStack {
+    fn menu_layer(self) -> Layer {
+        match self {
+            Self::Window => Layer::OverlayLevel(8),
+            Self::Popup => Layer::Overlay,
+        }
+    }
+
+    fn dialog_layer(self) -> Layer {
+        match self {
+            Self::Window => Layer::OverlayLevel(12),
+            Self::Popup => Layer::Overlay,
+        }
+    }
+
+    fn toast_layer(self) -> Layer {
+        match self {
+            Self::Window => Layer::OverlayLevel(13),
+            Self::Popup => Layer::Overlay,
+        }
+    }
+}
+
+/// Draws the toast, dialog and menu of one [`Overlays`] handle. The main
+/// window renders one; each popup renders its own inside its frame.
+#[derive(PartialEq)]
+pub(crate) struct OverlayLayers {
+    pub(crate) overlays: Overlays,
+    pub(crate) stack: OverlayStack,
+}
+
+impl Component for OverlayLayers {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let overlays = self.overlays;
+        let stack = self.stack;
         let dialog = overlays.dialog.read().clone();
         let dialog_closing = *overlays.dialog_closing.read();
         let toast = overlays.toasts.read().first().cloned();
@@ -302,23 +366,26 @@ impl Component for OverlayHost {
         let menu_closing = *overlays.menu_closing.read();
 
         rect()
-            .expanded()
-            .child(crate::window::WindowHost::new(self.child.clone()))
+            .position(Position::new_absolute().top(0.0).left(0.0))
+            .tw(&tokens, &[w_screen(), h_screen()])
             .maybe_child(toast.map(|(id, toast)| ToastLayer {
                 overlays,
                 id,
                 toast,
                 closing: toast_closing == Some(id),
+                layer: stack.toast_layer(),
             }))
             .maybe_child(dialog.map(|dialog| DialogLayer {
                 overlays,
                 dialog,
                 closing: dialog_closing,
+                layer: stack.dialog_layer(),
             }))
             .maybe_child(menu.map(|menu| MenuLayer {
                 overlays,
                 menu,
                 closing: menu_closing,
+                layer: stack.menu_layer(),
             }))
     }
 }
@@ -332,6 +399,7 @@ struct DialogLayer {
     overlays: Overlays,
     dialog: Dialog,
     closing: bool,
+    layer: Layer,
 }
 
 impl Component for DialogLayer {
@@ -363,7 +431,7 @@ impl Component for DialogLayer {
 
         rect()
             .position(Position::new_absolute().top(0.0).left(0.0))
-            .layer(Layer::OverlayLevel(10))
+            .layer(self.layer)
             .tw(
                 &tokens,
                 &[w_screen(), h_screen(), center(), bg(Paint::Scrim)],
@@ -419,6 +487,7 @@ struct ToastLayer {
     id: u64,
     toast: Toast,
     closing: bool,
+    layer: Layer,
 }
 
 impl Component for ToastLayer {
@@ -451,7 +520,7 @@ impl Component for ToastLayer {
 
         rect()
             .position(Position::new_absolute().bottom(S6.px()).left(0.0))
-            .layer(Layer::OverlayLevel(11))
+            .layer(self.layer)
             .tw(&tokens, &[w_screen(), flex_col(), items(Align::Center)])
             .child(
                 rect()

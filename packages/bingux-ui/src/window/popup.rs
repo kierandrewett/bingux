@@ -17,7 +17,7 @@ use super::{Window, WindowManager};
 use crate::address::Address;
 use crate::controls::button::{action_button, primary_button};
 use crate::layout::divider;
-use crate::shell::overlays::use_presence;
+use crate::shell::overlays::{OverlayLayers, OverlayStack, Overlays, use_presence};
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::typography::{Ink, SECTION};
@@ -123,6 +123,7 @@ pub(crate) struct PopupEntry {
     pub address: Option<Address>,
     pub content: Element,
     pub tabs: Option<Element>,
+    pub overlays: Overlays,
 }
 
 impl PopupEntry {
@@ -137,6 +138,7 @@ impl PopupEntry {
             address: popup.address,
             content: popup.content,
             tabs: popup.tabs,
+            overlays: Overlays::in_scope(scope),
         }
     }
 }
@@ -158,12 +160,14 @@ impl Component for PopupFrame {
         let tokens = use_tokens();
         let manager = self.manager;
         let entry = self.entry.clone();
+        let overlays = entry.overlays;
         let id = entry.id;
         let window = Window {
             manager,
             id: Some(id),
         };
         use_provide_context(move || window);
+        use_provide_context(move || overlays);
         let a11y_id = use_a11y();
 
         // The frame removes itself from the manager once its exit has played.
@@ -312,5 +316,9 @@ impl Component for PopupFrame {
                     .scale(OPEN_SCALE + (1.0 - OPEN_SCALE) * progress)
                     .child(panel),
             )
+            .child(OverlayLayers {
+                overlays,
+                stack: OverlayStack::Popup,
+            })
     }
 }

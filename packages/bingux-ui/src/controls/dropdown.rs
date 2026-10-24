@@ -227,6 +227,12 @@ impl Component for Dropdown {
                         }
                     }
                     Key::Named(NamedKey::Escape) => {
+                        // A closed dropdown returns before the shared stop
+                        // below, so Escape reaches the popup around it.
+                        if !open() {
+                            return;
+                        }
+                        event.stop_propagation();
                         open.set(false);
                         highlighted.set(None);
                     }

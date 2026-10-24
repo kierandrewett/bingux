@@ -313,7 +313,7 @@ impl Component for Slider {
             .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
             .child(row)
             .child(
-                rect().tw(&tokens, &[min_w(Dim::Box9)]).child(
+                rect().tw(&tokens, &[w(Dim::Box9)]).child(
                     CAPTION
                         .in_ink(Ink::Muted)
                         .label(&tokens, format!("{}%", value.round() as i64))

@@ -211,26 +211,14 @@ impl Component for Spinner {
             conf.on_finish(OnFinish::restart());
             AnimNum::new(0.0, 360.0).time(if tokens.reduced_motion { 2400 } else { 800 })
         });
-        // The arc is a rotating square whose top-half clip box shows half the
-        // ring. The rotation is an angle, so it stays a raw `rotate`.
-        // The clip box is the top half of the ring, so a turning ring shows
-        // as an arc.
-        let half = px / 2.0;
-        let arc = rect()
-            .width(Size::px(px))
-            .height(Size::px(px))
-            .rotate(animation.get().value())
-            .position(Position::new_absolute().top(0.0).left(0.0))
-            .child(
-                rect()
-                    .width(Size::px(px))
-                    .height(Size::px(half))
-                    .tw(&tokens, &[clip()])
-                    .child(rect().width(Size::px(px)).height(Size::px(px)).tw(
-                        &tokens,
-                        &[rounded(Radius::Pill), border(Line::Stroke(stroke, ink))],
-                    )),
-            );
+        // The angle is a prop, so each animation tick re-renders the arc and
+        // repaints it with the new rotation.
+        let arc = SpinnerArc {
+            px,
+            stroke: stroke.px(),
+            ink,
+            angle: animation.get().value(),
+        };
         let ring = rect()
             .width(Size::px(px))
             .height(Size::px(px))
@@ -250,6 +238,45 @@ impl Component for Spinner {
                 self.text
                     .clone()
                     .map(|text| CAPTION.label(&tokens, text).max_lines(1)),
+            )
+    }
+}
+
+/// The rotating half-ring. Freya clips in unrotated space, so the arc is
+/// drawn as a stroked SVG path (the top half of the ring) and the rect that
+/// holds it is rotated. Taking `angle` as a prop repaints it each tick.
+#[derive(PartialEq)]
+struct SpinnerArc {
+    px: f32,
+    stroke: f32,
+    ink: Paint,
+    angle: f32,
+}
+
+impl Component for SpinnerArc {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let px = self.px;
+        let centre = px / 2.0;
+        let radius = centre - self.stroke / 2.0;
+        let colour = self.ink.color(&tokens);
+        let svg = format!(
+            r##"<svg xmlns="http://www.w3.org/2000/svg" width="{px}" height="{px}" viewBox="0 0 {px} {px}"><path d="M{l} {centre}A{radius} {radius} 0 0 1 {r} {centre}" fill="none" stroke="#{hex}" stroke-opacity="{alpha}" stroke-width="{stroke}"/></svg>"##,
+            l = centre - radius,
+            r = centre + radius,
+            hex = format!("{:02x}{:02x}{:02x}", colour.r(), colour.g(), colour.b()),
+            alpha = f32::from(colour.a()) / 255.0,
+            stroke = self.stroke,
+        );
+        rect()
+            .width(Size::px(px))
+            .height(Size::px(px))
+            .rotate(self.angle)
+            .position(Position::new_absolute().top(0.0).left(0.0))
+            .child(
+                SvgViewer::new((svg.clone(), Bytes::from(svg)))
+                    .width(Size::px(px))
+                    .height(Size::px(px)),
             )
     }
 }

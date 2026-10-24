@@ -128,6 +128,7 @@ pub(crate) struct MenuLayer {
     pub(crate) menu: Menu,
     pub(crate) closing: bool,
     pub(crate) overlays: Overlays,
+    pub(crate) layer: Layer,
 }
 
 impl Component for MenuLayer {
@@ -174,7 +175,7 @@ impl Component for MenuLayer {
         // The shield closes the menu on a press outside it and keeps the
         // window behind from reacting while the menu is open.
         input_shield(&tokens, move || overlays.close_menu())
-            .layer(Layer::OverlayLevel(8))
+            .layer(self.layer)
             .child(panel)
     }
 }

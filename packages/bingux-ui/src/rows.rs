@@ -25,6 +25,11 @@ use crate::typography::{BADGE, BODY, CAPTION, Ink, VALUE};
 /// The widest a read-only value gets before it is cut with an ellipsis.
 const VALUE_MAX_WIDTH: f32 = 340.0;
 
+/// Whether the row around a value takes presses. Set by `Row`, read by
+/// `ValueText`.
+#[derive(Clone, Copy, PartialEq)]
+struct RowPressable(State<bool>);
+
 /// One row: optional leading icon, title, optional subtitle, and trailing
 /// content. The whole row is the target when `on_press` is set.
 #[derive(PartialEq)]
@@ -243,13 +248,28 @@ impl Component for ValueText {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let overlays = try_consume_context::<Overlays>();
-        let value = SelectableText::new()
-            .span(VALUE.span(&tokens, self.text.clone()))
-            .max_lines(1)
-            .line_height(VALUE.leading)
-            .text_align(TextAlign::End)
-            .text_overflow(TextOverflow::Ellipsis);
-        let value = value.width(Size::fill());
+        let pressable = use_try_consume::<RowPressable>().is_some_and(|flag| (flag.0)());
+        // A selection would take the press that opens a pressable row, so
+        // there the value is plain text; elsewhere it can be selected.
+        let value: Element = if pressable {
+            VALUE
+                .label(&tokens, self.text.clone())
+                .max_lines(1)
+                .line_height(VALUE.leading)
+                .text_align(TextAlign::End)
+                .text_overflow(TextOverflow::Ellipsis)
+                .width(Size::fill())
+                .into()
+        } else {
+            SelectableText::new()
+                .span(VALUE.span(&tokens, self.text.clone()))
+                .max_lines(1)
+                .line_height(VALUE.leading)
+                .text_align(TextAlign::End)
+                .text_overflow(TextOverflow::Ellipsis)
+                .width(Size::fill())
+                .into()
+        };
         let text = self.text.clone();
         let wrapper = rect().on_pointer_down(move |event: Event<PointerEventData>| {
             let text = text.clone();
@@ -290,6 +310,8 @@ impl Component for Row {
         let focus = use_focus(a11y_id);
         provide_enabled(self.enabled);
         let interactive = self.on_press.is_some() && self.enabled;
+        let mut pressable = use_provide_context(|| RowPressable(State::create(interactive)));
+        pressable.0.set_if_modified(interactive);
         // Only a row that opens something, such as one with a chevron, lights
         // on hover and press. A switch, slider or value row does not.
         let activatable = interactive && self.activatable;
@@ -398,7 +420,6 @@ impl Component for Row {
             .maybe_child(subtitle_line);
         let trailing = (self.trailing.is_some() || self.selected || self.navigates).then(|| {
             rect()
-                .tw(&tokens, &[pr(S3)])
                 .tw(&tokens, ROW_TRAILING)
                 // Half the row at most, so a long value shrinks inside it and
                 // the title and chevron keep their room.
@@ -434,7 +455,6 @@ impl Component for Row {
                     focus_ring(focus()),
                 ],
             )
-            .maybe(activatable, |element| element.cursor(CursorIcon::Pointer))
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 if open_row_menu(overlays, &menu, &event) {
                     return;
