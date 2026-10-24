@@ -394,7 +394,7 @@ impl Component for TextField {
                         .maybe_child(self.invalid.clone().map(|message| {
                             CAPTION
                                 .in_ink(Ink::Danger)
-                                .paragraph(&tokens, message)
+                                .selectable(&tokens, message)
                                 .max_lines(2)
                         })),
                 )

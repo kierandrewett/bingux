@@ -176,8 +176,16 @@ Row values are drawn with `SelectableText` and `TextStyle::span`, not a
 paragraph, so a user can select them with the mouse and copy them with Ctrl+C
 or a right-click Copy. This covers the `value` of `row` and the value of
 `property_row`. A value stays on one line, and a long value is cut with an
-ellipsis. Subtitles and captions are not selectable yet: `SelectableText` has
-no search highlights, so a selectable caption would lose its search marks.
+ellipsis.
+
+`TextStyle::selectable` is the one path for selectable text that wraps. It
+backs the `centered_caption`, the status block, the text field's invalid
+message, and the subtitle of a row or level row that does not press. A
+selectable text takes the pointer-down that a press starts from, so a row with
+`on_press` keeps its subtitle plain: its press keeps working, and the subtitle
+cannot be selected there. While a search marks words in a text, it is a
+paragraph with the marks instead, so it is not selectable until the search
+clears.
 
 ## Styling with tokens
 

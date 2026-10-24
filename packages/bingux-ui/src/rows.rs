@@ -369,12 +369,27 @@ impl Component for Row {
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis)
                     .into(),
-                None => search_highlight::marked(CAPTION, &tokens, subtitle)
-                    .unwrap_or_else(|| CAPTION.paragraph(&tokens, subtitle.clone()))
-                    .max_lines(3)
-                    .text_overflow(TextOverflow::Ellipsis)
-                    .width(Size::fill())
-                    .into(),
+                None => match search_highlight::marked(CAPTION, &tokens, subtitle) {
+                    Some(marked) => marked
+                        .max_lines(3)
+                        .text_overflow(TextOverflow::Ellipsis)
+                        .width(Size::fill())
+                        .into(),
+                    // A selectable text takes the pointer-down that a press
+                    // starts from, so a pressable row keeps its text plain.
+                    None if !interactive => CAPTION
+                        .selectable(&tokens, subtitle.clone())
+                        .max_lines(3)
+                        .text_overflow(TextOverflow::Ellipsis)
+                        .width(Size::fill())
+                        .into(),
+                    None => CAPTION
+                        .paragraph(&tokens, subtitle.clone())
+                        .max_lines(3)
+                        .text_overflow(TextOverflow::Ellipsis)
+                        .width(Size::fill())
+                        .into(),
+                },
             });
         let text_column = rect()
             .tw(&tokens, ROW_TEXT)
@@ -717,11 +732,19 @@ impl Component for LevelRow {
                             .tw(&tokens, ROW_TEXT)
                             .tw(&tokens, &[w_full()])
                             .child(heading)
-                            .maybe_child(self.subtitle.as_ref().map(|subtitle| {
-                                search_highlight::marked(CAPTION, &tokens, subtitle)
-                                    .unwrap_or_else(|| CAPTION.paragraph(&tokens, subtitle.clone()))
-                                    .max_lines(1)
-                                    .text_overflow(TextOverflow::Ellipsis)
+                            .maybe_child(self.subtitle.as_ref().map(|subtitle| -> Element {
+                                match search_highlight::marked(CAPTION, &tokens, subtitle) {
+                                    Some(marked) => marked
+                                        .max_lines(1)
+                                        .text_overflow(TextOverflow::Ellipsis)
+                                        .into(),
+                                    // A level row has no press, so its subtitle can be selected.
+                                    None => CAPTION
+                                        .selectable(&tokens, subtitle.clone())
+                                        .max_lines(1)
+                                        .text_overflow(TextOverflow::Ellipsis)
+                                        .into(),
+                                }
                             })),
                     )
                     .child(track.fill())

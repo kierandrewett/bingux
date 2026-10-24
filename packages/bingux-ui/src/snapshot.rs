@@ -69,6 +69,35 @@ impl Snapshot {
         self
     }
 
+    /// Press the left button at `from`, drag to `to` in steps, and release.
+    /// The steps let a selection grow as it does under a real pointer.
+    pub fn drag(&mut self, from: (f32, f32), to: (f32, f32)) -> &mut Self {
+        const STEPS: u32 = 10;
+        let start = CursorPoint::new(from.0 as f64, from.1 as f64);
+        self.runner.move_cursor((from.0 as f64, from.1 as f64));
+        self.runner.sync_and_update();
+        self.runner.send_event(PlatformEvent::Mouse {
+            name: MouseEventName::MouseDown,
+            cursor: start,
+            button: Some(MouseButton::Left),
+        });
+        self.runner.sync_and_update();
+        for step in 1..=STEPS {
+            let t = step as f32 / STEPS as f32;
+            let x = from.0 + (to.0 - from.0) * t;
+            let y = from.1 + (to.1 - from.1) * t;
+            self.runner.move_cursor((x as f64, y as f64));
+            self.runner.sync_and_update();
+        }
+        self.runner.send_event(PlatformEvent::Mouse {
+            name: MouseEventName::MouseUp,
+            cursor: CursorPoint::new(to.0 as f64, to.1 as f64),
+            button: Some(MouseButton::Left),
+        });
+        self.runner.sync_and_update();
+        self
+    }
+
     /// Hover a logical point.
     pub fn hover(&mut self, x: f32, y: f32) -> &mut Self {
         self.runner.move_cursor((x as f64, y as f64));

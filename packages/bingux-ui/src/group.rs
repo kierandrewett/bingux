@@ -78,7 +78,7 @@ impl Component for CenteredCaption {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         CAPTION
-            .paragraph(&tokens, self.text.clone())
+            .selectable(&tokens, self.text.clone())
             .width(Size::fill())
             .text_align(TextAlign::Center)
     }
@@ -445,7 +445,7 @@ impl Component for StatusBlock {
             .maybe_child(glyph.map(|glyph| icons::icon(glyph, IconSize::Row, color)))
             .child(
                 BODY.in_ink(ink)
-                    .paragraph(&tokens, text)
+                    .selectable(&tokens, text)
                     .width(Size::flex(1.0)),
             )
             .maybe_child(self.action.as_ref().map(|(label, on_press)| {

@@ -125,6 +125,16 @@ impl TextStyle {
             span
         }
     }
+
+    /// Text in this style that can be selected and copied with the mouse,
+    /// wrapping like a paragraph. Use it wherever the text is worth copying,
+    /// such as a value, a caption or a status. It takes no search marks, as a
+    /// selection takes the only highlight slot.
+    pub fn selectable(self, tokens: &Tokens, text: impl Into<String>) -> SelectableText {
+        SelectableText::new()
+            .span(self.span(tokens, text))
+            .line_height(self.leading)
+    }
 }
 
 /// A single large value: a clock, a percentage, the figure a page is about.
