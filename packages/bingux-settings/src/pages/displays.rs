@@ -503,6 +503,8 @@ enum Displays {
     Editable {
         serial: u32,
         monitors: Vec<Monitor>,
+        /// The layout the system holds. Apply shows only while the draft differs from it.
+        saved: Vec<Monitor>,
     },
     ReadOnly {
         reason: String,
@@ -611,9 +613,22 @@ fn fake_layout() -> Option<Displays> {
         rotated,
     ];
     monitors.truncate(count);
+    // Snapshot only: a saved layout that differs from the draft shows Apply.
+    let saved = match std::env::var_os("BINGUX_SETTINGS_FAKE_CHANGED") {
+        Some(_) => monitors
+            .iter()
+            .cloned()
+            .map(|mut monitor| {
+                monitor.x += 100;
+                monitor
+            })
+            .collect(),
+        None => monitors.clone(),
+    };
     Some(Displays::Editable {
         serial: 0,
         monitors,
+        saved,
     })
 }
 
@@ -629,7 +644,12 @@ fn load_displays() -> Result<Displays, CommandError> {
     if let Ok((serial, monitors)) = mutter_call(true, "GetCurrentState", None, &[])
         .and_then(|text| parse_mutter(&text).map_err(CommandError))
     {
-        return Ok(Displays::Editable { serial, monitors });
+        let saved = monitors.clone();
+        return Ok(Displays::Editable {
+            serial,
+            monitors,
+            saved,
+        });
     }
     // The editable layout is not available here, so show the read-only list.
     match load_gnoblin() {
@@ -1094,10 +1114,11 @@ fn arrangement_footer_height() -> f32 {
     Dim::Button.px() + GAP_4 + GAP_2
 }
 
-/// The footer of the arrangement card: the hint on the left. Rotation and the
-/// main display are set on each display's own page, so each setting has one
-/// home and the card stays a diagram.
-fn arrangement_footer(ctx: Ctx, monitors: &[Monitor]) -> Element {
+/// The footer of the arrangement card: the hint on the left and, once the
+/// layout has changed, Apply on the right. Rotation and the main display are
+/// set on each display's own page, so each setting has one home and the card
+/// stays a diagram.
+fn arrangement_footer(ctx: Ctx, monitors: &[Monitor], changed: bool) -> Element {
     rect()
         .position(Position::new_absolute().left(0.0).bottom(0.0))
         .tw_layout(&[
@@ -1108,14 +1129,17 @@ fn arrangement_footer(ctx: Ctx, monitors: &[Monitor]) -> Element {
             px(S4),
             pb(S4),
             flex_row(),
+            grow_children(),
             items(Align::Center),
         ])
         .child(
-            // A fixed width stops a long hint from taking the whole row.
+            // The hint takes the room left over, so Apply keeps its natural width
+            // at the end of the row.
             rect()
-                .tw_layout(&[w(Dim::ArrangementHint)])
+                .tw_layout(&[w_flex()])
                 .child(caption(arrangement_hint(ctx, monitors))),
         )
+        .maybe_child(changed.then(|| primary_button("Apply", move |_| apply(ctx)).compact()))
         .into()
 }
 
@@ -1598,6 +1622,7 @@ struct Arrangement {
     ctx: Ctx,
     monitors: Vec<Monitor>,
     selected: usize,
+    changed: bool,
     tokens: Tokens,
 }
 
@@ -1684,7 +1709,7 @@ impl Component for Arrangement {
             }
         }
         canvas
-            .child(arrangement_footer(ctx, monitors))
+            .child(arrangement_footer(ctx, monitors, self.changed))
             .into_element()
     }
 }
@@ -1844,7 +1869,13 @@ fn monitor_menu(ctx: Ctx, navigator: Navigator, index: usize, monitor: &Monitor)
     ]
 }
 
-fn arrangement_group(ctx: Ctx, monitors: &[Monitor], selected: usize, tokens: Tokens) -> Group {
+fn arrangement_group(
+    ctx: Ctx,
+    monitors: &[Monitor],
+    selected: usize,
+    changed: bool,
+    tokens: Tokens,
+) -> Group {
     Group::titled("Arrangement")
         .description("Each box is one display, in the place it has on the desktop.")
         .row(
@@ -1852,6 +1883,7 @@ fn arrangement_group(ctx: Ctx, monitors: &[Monitor], selected: usize, tokens: To
                 ctx,
                 monitors: monitors.to_vec(),
                 selected,
+                changed,
                 tokens,
             }
             .into_element(),
@@ -2241,9 +2273,9 @@ fn monitor_state(monitor: &Monitor) -> &'static str {
     }
 }
 
-/// Apply shows the new layout at once and asks the user to keep it. It sits
-/// under the last group.
-fn apply_footer(ctx: Ctx) -> Element {
+/// Apply shows the new layout at once and asks the user to keep it. It is the
+/// last row of a display's page, and it only appears once the layout changed.
+fn apply_row(ctx: Ctx) -> Element {
     action_row(
         Some("Asks you to keep the layout after it is applied."),
         primary_button("Apply", move |_| apply(ctx)).compact(),
@@ -2268,8 +2300,15 @@ fn use_page_ctx(model: State<Option<Page>>) -> Ctx {
 /// With several displays, the main page lists them. Each row opens that
 /// display's own page, so the arrangement stays the only shared control.
 fn monitor_list_group(ctx: Ctx, monitors: &[Monitor], navigator: Navigator) -> Group {
-    let mut group = Group::titled("Displays")
-        .description("Choose a display to change its resolution, scale and orientation.");
+    let description = if monitors.len() > 1 {
+        "Choose a display to change its resolution, scale and orientation. Identify numbers each display, in the order of this list."
+    } else {
+        "Choose a display to change its resolution, scale and orientation."
+    };
+    let mut group = Group::titled("Displays").description(description);
+    if monitors.len() > 1 {
+        group = group.trailing(identify_button(ctx.overlays, monitors));
+    }
     for (index, monitor) in monitors.iter().enumerate() {
         let label = monitor_label(index, monitor);
         group = group.row(
@@ -2291,16 +2330,13 @@ fn monitor_list_group(ctx: Ctx, monitors: &[Monitor], navigator: Navigator) -> G
 
 /// Numbers each display on its screen. The numbers follow the order of the
 /// list, so the user can match a row to a panel.
-fn identify_row(overlays: Overlays, monitors: &[Monitor]) -> Element {
+fn identify_button(overlays: Overlays, monitors: &[Monitor]) -> impl Into<Element> {
     let names = monitors
         .iter()
         .map(|monitor| monitor.connector.as_str())
         .collect::<Vec<_>>()
         .join(",");
-    action_row(
-        Some("Shows a number on each display, in the order of this list."),
-        row_button("Identify", move |_| identify(overlays, names.clone())),
-    )
+    row_button("Identify", move |_| identify(overlays, names.clone()))
 }
 
 /// Asks the desktop shell to number each display. The shell may be busy, so
@@ -2364,14 +2400,13 @@ impl Component for DisplaysPage {
                 page = page.child(group);
                 page
             }
-            Ok(Displays::Editable { monitors, .. }) => {
+            Ok(Displays::Editable {
+                monitors, saved, ..
+            }) => {
+                let changed = monitors != saved;
                 let chosen = (*ctx.selected.read()).min(monitors.len().saturating_sub(1));
-                let mut page = page.child(arrangement_group(ctx, &monitors, chosen, tokens));
-                page = page.child(monitor_list_group(ctx, &monitors, navigator));
-                if monitors.len() > 1 {
-                    page = page.child(identify_row(ctx.overlays, &monitors));
-                }
-                page.child(apply_footer(ctx))
+                page.child(arrangement_group(ctx, &monitors, chosen, changed, tokens))
+                    .child(monitor_list_group(ctx, &monitors, navigator))
             }
         };
 
@@ -2417,14 +2452,26 @@ impl Component for DisplayPage {
                     "This display is no longer connected.".to_string(),
                 ))),
             },
-            Ok(Displays::Editable { monitors, .. }) => match monitors.get(self.index) {
-                Some(monitor) => page
-                    .child(monitor_group(model, ctx.error, self.index, monitor))
-                    .child(apply_footer(ctx)),
-                None => page.child(status(Status::Info(
-                    "This display is no longer connected.".to_string(),
-                ))),
-            },
+            Ok(Displays::Editable {
+                monitors, saved, ..
+            }) => {
+                let changed = monitors != saved;
+                match monitors.get(self.index) {
+                    Some(monitor) => {
+                        let group = monitor_group(model, ctx.error, self.index, monitor);
+                        // Apply joins the display's own group once the layout changed.
+                        let group = if changed {
+                            group.row(apply_row(ctx))
+                        } else {
+                            group
+                        };
+                        page.child(group)
+                    }
+                    None => page.child(status(Status::Info(
+                        "This display is no longer connected.".to_string(),
+                    ))),
+                }
+            }
         }
     }
 }
