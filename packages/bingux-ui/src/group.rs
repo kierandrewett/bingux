@@ -177,6 +177,12 @@ impl Component for Group {
         let heading = (self.title.is_some() || self.description.is_some()).then(|| {
             rect()
                 .tw(&tokens, GROUP_HEAD)
+                // A title alone centres on the trailing controls, as a meter
+                // and a button sit on the Sound headings. With a description,
+                // the controls line up with the bottom of the text.
+                .maybe(self.description.is_none(), |element| {
+                    element.tw(&tokens, &[items(Align::Center)])
+                })
                 .child(
                     rect()
                         .tw(&tokens, GROUP_HEAD_TEXT)

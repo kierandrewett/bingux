@@ -22,8 +22,6 @@ const TICK: Duration = Duration::from_millis(50);
 const DECAY: f32 = 0.8;
 /// The quietest level the bar shows, in dBFS. Silence is an empty bar.
 const FLOOR_DB: f32 = -60.0;
-/// Segments in a segmented bar.
-const SEGMENTS: usize = 20;
 /// Bytes per read from `pw-record`.
 const CHUNK: usize = 4096;
 
@@ -176,9 +174,9 @@ fn fraction_of(amplitude: f32) -> f32 {
 pub struct LevelMeter {
     pub node: u32,
     pub source: Source,
-    /// Segments, as GNOME draws a device's level. Otherwise one thin bar, as
-    /// under an application's slider.
-    pub segmented: bool,
+    /// A short bar, 40 px long, for a heading. Otherwise one thin bar that
+    /// spans its row, as under an application's slider.
+    pub compact: bool,
 }
 
 impl Component for LevelMeter {
@@ -186,7 +184,7 @@ impl Component for LevelMeter {
         let tokens = use_tokens();
         let node = self.node;
         let source = self.source;
-        let segmented = self.segmented;
+        let compact = self.compact;
         // The displayed level as a 0 to 1 fraction of the travel.
         let mut level = use_state(|| 0.0_f32);
         let feed = use_hook(move || {
@@ -212,44 +210,22 @@ impl Component for LevelMeter {
         use_drop(move || feed.stop());
 
         let fill = *level.read();
-        if segmented {
-            let lit = (fill * SEGMENTS as f32).round() as usize;
-            let segments = (0..SEGMENTS).map(|index| -> Element {
-                let paint = if index < lit {
-                    Paint::Accent
-                } else {
-                    Paint::Control
-                };
-                rect()
-                    .tw(
-                        &tokens,
-                        &[
-                            w_flex(),
-                            h(Dim::SliderTrack),
-                            rounded(Radius::Mark),
-                            bg(paint),
-                        ],
-                    )
-                    .into()
-            });
-            rect()
-                .tw(&tokens, &[flex_row(), gap(S1), w_full()])
-                .children(segments)
-        } else {
-            rect()
-                .tw(
-                    &tokens,
-                    &[
-                        w_full(),
-                        h(Dim::SliderTrack),
-                        rounded(Radius::Pill),
-                        bg(Paint::Control),
-                    ],
-                )
-                .child(rect().width(Size::percent(fill * 100.0)).tw(
-                    &tokens,
-                    &[h_full(), rounded(Radius::Pill), bg(Paint::Accent)],
-                ))
-        }
+        // A compact bar is a short pill for a heading. Otherwise the bar spans
+        // its row, as under an application's slider.
+        let width = if compact { w(Dim::Button) } else { w_full() };
+        rect()
+            .tw(
+                &tokens,
+                &[
+                    width,
+                    h(Dim::SliderTrack),
+                    rounded(Radius::Pill),
+                    bg(Paint::Control),
+                ],
+            )
+            .child(rect().width(Size::percent(fill * 100.0)).tw(
+                &tokens,
+                &[h_full(), rounded(Radius::Pill), bg(Paint::Accent)],
+            ))
     }
 }

@@ -17,10 +17,12 @@ const LOADING_OPACITY: f32 = 0.55;
 /// `page` as it is while loading: dimmed, with a pane over it that takes every
 /// press. Returns `page` untouched once `loading` is false.
 pub fn veiled(page: Rect, loading: bool) -> Rect {
+    // A hook: it runs on every render, loading or not, so the number of hooks
+    // does not change when the data lands.
+    let tokens = use_tokens();
     if !loading {
         return page;
     }
-    let tokens = use_tokens();
     page.opacity(LOADING_OPACITY).child(
         rect()
             .position(Position::new_absolute().top(0.0).left(0.0))

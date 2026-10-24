@@ -22,11 +22,12 @@ use crate::apps;
 use crate::system::{self, CommandError, background, background_then};
 use crate::ui::{
     Group, Icon, LevelRow, Overlays, Status, action_button, app_icon, caption, dropdown, hstack,
-    icon, icon_button, level_row, menu_item, page_column, popup_column, row, skeleton, status,
-    switch_row, use_overlays, use_tokens,
+    icon, icon_button, level_row, menu_item, page_column, popup_column, row, status, switch_row,
+    use_overlays, use_tokens,
 };
 
 use self::meter::{LevelMeter, Source};
+use super::loading::veiled;
 
 mod meter;
 
@@ -124,6 +125,19 @@ struct Device {
     is_default: bool,
 }
 
+impl Device {
+    /// The port and the hardware, "Headphones - Fosi Audio K5 Pro", or the
+    /// name alone when the hardware is not known or repeats the name.
+    fn full_name(&self) -> String {
+        let detail = self.detail.trim();
+        if detail.is_empty() || detail == self.name {
+            self.name.clone()
+        } else {
+            format!("{} - {detail}", self.name)
+        }
+    }
+}
+
 /// Volume of the default device of one kind, as `wpctl get-volume` reports it.
 #[derive(Clone, PartialEq)]
 struct Level {
@@ -188,6 +202,45 @@ struct Model {
     /// `allow-volume-above-100-percent` key.
     above_100: bool,
 }
+
+impl Model {
+    /// The shape of a typical machine with blank values: one output with stereo
+    /// channels, so the Balance row is placed, and one input. The page draws it
+    /// under the veil until the first load lands.
+    fn placeholder() -> Self {
+        let device = |form: Form| Device {
+            id: PLACEHOLDER_NODE,
+            name: String::new(),
+            detail: String::new(),
+            form,
+            is_default: true,
+        };
+        let level = Level {
+            id: PLACEHOLDER_NODE,
+            volume: 0.0,
+            muted: false,
+        };
+        Self {
+            outputs: vec![device(Form::Speakers)],
+            inputs: vec![device(Form::Microphone)],
+            output: Some(level.clone()),
+            input: Some(level),
+            mix: Some(Mix {
+                sink: String::new(),
+                channels: vec![
+                    ("front-left".to_string(), 0.0),
+                    ("front-right".to_string(), 0.0),
+                ],
+            }),
+            streams: Vec::new(),
+            above_100: false,
+        }
+    }
+}
+
+/// The node id of the placeholder model. PipeWire gives id 0 to its core
+/// object, never to a sink or a source, so no meter reads from it.
+const PLACEHOLDER_NODE: u32 = 0;
 
 #[derive(Clone, Copy)]
 struct VolumeQueue {
@@ -1042,15 +1095,6 @@ fn mix_rows(mix: &Mix, ctx: Ctx, tokens: Tokens) -> Vec<Element> {
             .into(),
         );
     }
-    let test_mix = mix.clone();
-    rows.push(
-        row("Test speakers")
-            .subtitle("Play a tone through each speaker to check the wiring.")
-            .trailing(action_button("Test", move |_| {
-                open_test(ctx, test_mix.clone())
-            }))
-            .into(),
-    );
     rows
 }
 
@@ -1383,10 +1427,11 @@ fn mute_button(volume: f64, muted: bool, on_mute: impl Into<EventHandler<()>>) -
         .into()
 }
 
-/// The devices of one kind as a dropdown, each with its icon before its
-/// name. Choosing an entry makes it the default; the default's hardware
-/// shows as the row's subtitle. The right-click menu makes another device the
-/// default, and for the output it plays a test tone through each speaker.
+/// The devices of one kind as a dropdown, each with its icon before its full
+/// name, such as "Headphones - Fosi Audio K5 Pro", as GNOME Settings names
+/// them. Choosing an entry makes it the default. The right-click menu makes
+/// another device the default, and for the output it plays a test tone
+/// through each speaker.
 fn device_dropdown_row(kind: Kind, devices: &[Device], test: Option<Mix>, ctx: Ctx) -> Element {
     let default = devices.iter().find(|device| device.is_default);
     let selected = default
@@ -1395,7 +1440,7 @@ fn device_dropdown_row(kind: Kind, devices: &[Device], test: Option<Mix>, ctx: C
     let form = default.map(|device| device.form).unwrap_or_default();
     let options: Vec<(String, String)> = devices
         .iter()
-        .map(|device| (device.id.to_string(), device.name.clone()))
+        .map(|device| (device.id.to_string(), device.full_name()))
         .collect();
     let icons: Vec<Icon> = devices.iter().map(|device| device.form.icon()).collect();
     let mut item = row(kind.device_title()).leading(form.icon()).trailing(
@@ -1407,17 +1452,11 @@ fn device_dropdown_row(kind: Kind, devices: &[Device], test: Option<Mix>, ctx: C
         .icons(icons)
         .min_width(Dim::Field),
     );
-    if let Some(detail) = default
-        .map(|device| device.detail.clone())
-        .filter(|d| !d.is_empty())
-    {
-        item = item.subtitle(detail);
-    }
     let mut menu = Vec::new();
     for device in devices.iter().filter(|device| !device.is_default) {
         let id = device.id;
         menu.push(menu_item(
-            format!("Set as default: {}", device.name),
+            format!("Set as default: {}", device.full_name()),
             move |_| set_default(ctx, kind, id),
         ));
     }
@@ -1432,9 +1471,11 @@ fn device_dropdown_row(kind: Kind, devices: &[Device], test: Option<Mix>, ctx: C
     item.into()
 }
 
-/// A group for one kind of device: its dropdown, the volume with a meter
-/// under it and, for the output, the balance, fade and subwoofer sliders when
-/// the device has those channels. The boost switch sits under the output.
+/// A group for one kind of device: its dropdown, the volume and, for the
+/// output, the balance, fade and subwoofer sliders when the device has those
+/// channels. The boost switch sits under the output. As in GNOME Settings, the
+/// title line carries a short level meter and, for the output, the speaker
+/// test.
 fn channel_group(
     kind: Kind,
     devices: &[Device],
@@ -1448,6 +1489,30 @@ fn channel_group(
     if devices.is_empty() {
         return group.row(status(Status::Empty(kind.none_found().into())));
     }
+    let test = mix
+        .filter(|_| kind == Kind::Output)
+        .cloned()
+        .map(|test_mix| {
+            action_button("Test...", move |_| open_test(ctx, test_mix.clone())).compact()
+        });
+    let meter = level
+        .as_ref()
+        .filter(|level| level.id != PLACEHOLDER_NODE)
+        .map(|level| LevelMeter {
+            node: level.id,
+            source: kind.source(),
+            compact: true,
+        });
+    let group = if meter.is_some() || test.is_some() {
+        group.trailing(
+            rect()
+                .tw(&tokens, &[flex_row(), items(Align::Center), gap(S3)])
+                .maybe_child(meter)
+                .maybe_child(test),
+        )
+    } else {
+        group
+    };
     let mut group = group.row(device_dropdown_row(kind, devices, mix.cloned(), ctx));
     let has_mix = mix.is_some();
 
@@ -1472,11 +1537,6 @@ fn channel_group(
             })
             // The blank leading box lines the text up with the device rows above.
             .leading(rect().tw_layout(&[w(Dim::IconBox)]))
-            .footer(LevelMeter {
-                node: id,
-                source: kind.source(),
-                segmented: true,
-            })
             .trailing(mute_button(level.volume, level.muted, move |_| {
                 update_level(ctx.model, kind, |current| current.muted = mute_to);
                 set_mute(ctx, id, mute_to);
@@ -1525,7 +1585,7 @@ fn app_row(streams: &[Stream], above: bool, ctx: Ctx) -> Element {
             .footer(LevelMeter {
                 node: first.id,
                 source: Source::Stream,
-                segmented: false,
+                compact: false,
             })
             .trailing(mute_button(volume, muted, move |_| {
                 toggle_stream_mute(ctx, &mute_ids, muted)
@@ -1604,15 +1664,18 @@ impl Component for SoundPage {
     fn render(&self) -> impl IntoElement {
         let ctx = use_ctx();
         let tokens = use_tokens();
-        let Some(loaded) = ctx.model.read().clone() else {
-            return page_column().child(skeleton());
-        };
-        let data = match loaded {
-            Ok(data) => data,
-            Err(e) => {
-                return page_column().child(
-                    status(Status::Error(e.0))
-                        .action("Try again", move |_| background(ctx.model, load)),
+        // Before the first load lands, the page draws its real groups from a
+        // placeholder model under the veil, so nothing moves when data arrives.
+        let (data, loading) = match ctx.model.read().clone() {
+            None => (Model::placeholder(), true),
+            Some(Ok(data)) => (data, false),
+            Some(Err(e)) => {
+                return veiled(
+                    page_column().child(
+                        status(Status::Error(e.0))
+                            .action("Try again", move |_| background(ctx.model, load)),
+                    ),
+                    false,
                 );
             }
         };
@@ -1662,7 +1725,7 @@ impl Component for SoundPage {
                 ),
             );
         }
-        page
+        veiled(page, loading)
     }
 }
 
