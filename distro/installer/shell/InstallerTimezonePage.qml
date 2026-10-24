@@ -20,11 +20,18 @@ InstallerPage {
     property string query: ""
 
     readonly property real listWidth: Math.round(300 * ui)
+    // Gap between the map and the list column.
+    readonly property real columnGap: Math.round(20 * ui)
+    // Room between the list and the clock switch.
+    readonly property real switchGap: Math.round(16 * ui)
+    // Each choice row is InstallerOption's 58 px rowHeight at scale 1, plus the list spacing.
+    readonly property real rowSpacing: 4
+    readonly property real rowPitch: Math.round(58 * ui) + rowSpacing
     // The time zone line under the map: the text row and the gap above it.
     readonly property real labelHeight: Math.round(30 * ui) + Math.round(18 * ui)
     // The map takes the room beside the list, at the world map's aspect, and
     // stops at the height of the body less the line under it.
-    readonly property real mapWidth: Math.max(0, Math.floor(Math.min(page.width - listWidth - Theme.gap, (page.height - labelHeight) * 360 / 145)))
+    readonly property real mapWidth: Math.max(0, Math.floor(Math.min(page.width - listWidth - page.columnGap, (page.height - labelHeight) * 360 / 145)))
     readonly property real mapHeight: mapWidth * 145 / 360
     // A click or hover within this many map pixels of a city picks or shows it.
     readonly property real snapRadius: Math.round(56 * ui)
@@ -209,7 +216,9 @@ InstallerPage {
         id: listColumn
         x: page.width - width
         width: page.listWidth
-        height: page.mapHeight
+        height: page.height
+        // What the choice list may use: the column less the search, its gap, and the clock switch with its gap.
+        readonly property real listRoom: height - search.height - Theme.gap - clockRow.height - page.switchGap
 
         InstallerField {
             id: search
@@ -221,11 +230,11 @@ InstallerPage {
         ListView {
             anchors.top: search.bottom
             anchors.topMargin: Theme.gap
-            anchors.bottom: clockRow.top
-            anchors.bottomMargin: Theme.gap
+            // Whole rows only, so no row is cut at the bottom.
+            height: Math.max(0, Math.floor((listColumn.listRoom + page.rowSpacing) / page.rowPitch)) * page.rowPitch - page.rowSpacing
             width: parent.width
             clip: true
-            spacing: 4
+            spacing: page.rowSpacing
             boundsBehavior: Flickable.StopAtBounds
             model: page.matches
             delegate: InstallerOption {
