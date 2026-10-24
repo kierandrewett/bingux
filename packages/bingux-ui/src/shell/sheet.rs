@@ -140,7 +140,11 @@ impl Component for SheetLayer {
                 SECTION
                     .in_ink(Ink::Text)
                     .label(&tokens, self.sheet.title.clone())
-                    .width(Size::flex(1.0))
+                    // The title takes three parts to each side's one, so a
+                    // long title stays on one line and still centres.
+                    .width(Size::flex(3.0))
+                    .max_lines(1)
+                    .text_overflow(TextOverflow::Ellipsis)
                     .text_align(TextAlign::Center),
             )
             .child(
