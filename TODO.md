@@ -343,3 +343,12 @@ Results: `tests/distro-install.py` uefi-luks 24/24, uefi 23/23, bios 24/24; `tes
       passes for uefi (23 checks), bios (24) and uefi-luks (24): every page, finished page,
       no installer, no live account, no Arch name, installed boot, greeter, sign-in to desktop.
       Artifacts: distro/out/install-test-{uefi,bios,uefi-luks}.
+
+- [x] Installer and splash redesign (Kieran's review, 2026-10-24). Installer pages are a
+      16:9 wide card with lead text, large rows and a full-size time zone map
+      (commits 9ff08b3, 5246aa1, 06b1ce3, 68d6d26, 38bbc88, 50b3274). The Plymouth theme
+      is a black screen with the Bingux mark, "Bingux OS" and a spinner (f39d09d); seen in
+      a full UEFI boot of the ISO (install-test-uefi-luks/live/flow.mp4). ISO 2026.10.24:
+      `tests/distro-install.py` passes for uefi (23 ok), bios (24 ok) and uefi-luks (24 ok).
+      Not checked: the other page screenshots at 1920x1080 by me, the partitions page and
+      the expanded log in a real boot, the Plymouth splash at other resolutions.
