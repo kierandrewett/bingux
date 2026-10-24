@@ -128,8 +128,9 @@ fn snapshot_pages(dir: &str, only: &[String]) {
     // in the search box, so the search results can be captured. See
     // `search_results::initial_query`.
     // BINGUX_SETTINGS_SNAPSHOT_CLICK="x,y[;x,y...]" clicks those points
-    // (one second apart) after the page has loaded, before the capture, so
-    // a write path can be driven and checked from a script.
+    // after the page has loaded, before the capture, so a write path can be
+    // driven and checked from a script. Each click waits
+    // BINGUX_SETTINGS_SNAPSHOT_CLICK_SETTLE_MS before the next step.
     let clicks: Vec<(f32, f32)> = std::env::var("BINGUX_SETTINGS_SNAPSHOT_CLICK")
         .ok()
         .map(|list| {

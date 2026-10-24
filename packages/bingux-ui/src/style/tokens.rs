@@ -161,7 +161,7 @@ pub enum Dim {
     Dialog,
     /// A popup's width: 520 px.
     PopupWidth,
-    /// A popup's height until it asks for another: 480 px. Its body scrolls.
+    /// A popup's height until it asks for another: 600 px. Its body scrolls.
     PopupHeight,
     /// A dropdown's option list: 240 px, never narrower than its button.
     DropdownMenu,

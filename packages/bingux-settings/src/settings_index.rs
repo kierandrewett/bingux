@@ -34,6 +34,56 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
         "virtual private network tunnel connection",
     ),
     (
+        PageId::Network,
+        "MTU",
+        "packet size bytes maximum transmission unit automatic custom",
+    ),
+    (
+        PageId::Network,
+        "Wake on LAN",
+        "wake magic packet power ethernet wired",
+    ),
+    (
+        PageId::Network,
+        "Cloned MAC address",
+        "mac hardware address spoof identity",
+    ),
+    (
+        PageId::Network,
+        "IPv4 method",
+        "ip address dhcp automatic manual link-local disabled shared",
+    ),
+    (
+        PageId::Network,
+        "IPv6 method",
+        "ip address dhcp automatic manual ignore disabled shared",
+    ),
+    (
+        PageId::Network,
+        "Privacy extensions",
+        "ipv6 temporary addresses privacy random",
+    ),
+    (
+        PageId::Network,
+        "Automatic DNS",
+        "dns servers ignore automatic name resolution",
+    ),
+    (
+        PageId::Network,
+        "DNS search domains",
+        "dns search domain suffix",
+    ),
+    (
+        PageId::Network,
+        "Use this connection only for resources on its network",
+        "never default route gateway",
+    ),
+    (
+        PageId::WiFi,
+        "Random MAC address",
+        "mac hardware address randomise randomize privacy",
+    ),
+    (
         PageId::Bluetooth,
         "Bluetooth",
         "pair wireless devices on off headphones",
@@ -45,6 +95,7 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
     ),
     (PageId::Bluetooth, "Forget device", "remove unpair delete"),
     (PageId::Bluetooth, "Battery", "charge level device"),
+    (PageId::Bluetooth, "Name", "rename device alias"),
     (
         PageId::Displays,
         "Resolution",
@@ -156,6 +207,16 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
     (PageId::Keyboard, "Delay before repeat", "hold delay wait"),
     (
         PageId::Keyboard,
+        "Cursor blinking",
+        "caret cursor text insertion blink",
+    ),
+    (
+        PageId::Keyboard,
+        "Blink speed",
+        "cursor blink time caret speed",
+    ),
+    (
+        PageId::Keyboard,
         "Caps Lock key",
         "capslock shift caps uppercase",
     ),
@@ -192,6 +253,11 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
     ),
     (
         PageId::Mouse,
+        "Middle click paste",
+        "primary selection paste middle button",
+    ),
+    (
+        PageId::Mouse,
         "Natural scrolling",
         "scroll direction reverse touchpad mouse",
     ),
@@ -212,6 +278,16 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
         "touchpad disable mouse plugged",
     ),
     (
+        PageId::Mouse,
+        "Touchpad pointer acceleration",
+        "touchpad speed sensitivity fast slow",
+    ),
+    (
+        PageId::Mouse,
+        "Primary button",
+        "touchpad swap buttons left right click",
+    ),
+    (
         PageId::Appearance,
         "Wallpaper",
         "background picture image desktop",
@@ -227,6 +303,29 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
         "Font",
         "typeface text size window desktop",
     ),
+    (
+        PageId::Appearance,
+        "Text size",
+        "scale larger smaller font accessibility",
+    ),
+    (
+        PageId::Appearance,
+        "Large text",
+        "bigger scaling accessibility",
+    ),
+    (
+        PageId::Appearance,
+        "High contrast",
+        "contrast outline accessibility",
+    ),
+    (
+        PageId::Appearance,
+        "Reduce animations",
+        "motion transitions accessibility",
+    ),
+    (PageId::Appearance, "Cursor size", "pointer mouse big small"),
+    (PageId::Appearance, "Icons", "icon theme symbols"),
+    (PageId::Appearance, "Cursor", "pointer theme mouse"),
     (PageId::Desktop, "Show dock", "dock bar launcher hide"),
     (PageId::Desktop, "Icon size", "dock big small larger"),
     (
@@ -291,6 +390,11 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
     ),
     (
         PageId::Search,
+        "Search subfolders",
+        "recursive nested folders subdirectories",
+    ),
+    (
+        PageId::Search,
         "Previews",
         "thumbnails preview files images",
     ),
@@ -343,6 +447,21 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
         "apps programs uninstall list",
     ),
     (
+        PageId::Applications,
+        "Start at login",
+        "autostart startup login launch application",
+    ),
+    (
+        PageId::Applications,
+        "File types",
+        "mime type extension supported handle open",
+    ),
+    (
+        PageId::Applications,
+        "Notifications",
+        "banner alert lock screen sound notify",
+    ),
+    (
         PageId::DateTime,
         "Set automatically",
         "ntp network time sync clock",
@@ -387,6 +506,7 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
         "sign in autologin password skip",
     ),
     (PageId::Users, "Account locked", "disabled lock access"),
+    (PageId::Users, "Language", "locale region language format"),
     (
         PageId::About,
         "Device name",
@@ -399,6 +519,7 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
     ),
     (PageId::About, "Processor", "cpu chip cores"),
     (PageId::About, "Memory", "ram size gigabytes"),
+    (PageId::About, "Graphics", "gpu video card driver"),
     (PageId::About, "Disk", "storage drive space capacity"),
     (PageId::About, "Kernel", "linux version system"),
     (
