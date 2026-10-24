@@ -52,11 +52,10 @@ pub const GROUP_HEAD: Recipe = &[
     gap(S4),
 ];
 pub const GROUP_HEAD_TEXT: Recipe = &[flex_col(), w_flex(), gap(S1)];
-/// Several cards in one group.
-pub const CARD_STACK: Recipe = &[flex_col(), w_full(), gap(S3)];
-
-/// A group card: rows sit flush in it.
-pub const CARD: Recipe = &[
+/// A boxed surface: a group, a card, the action strip, the arrangement canvas.
+/// Every box uses this one recipe, so they share fill, hairline and radius.
+/// Rows sit flush in it.
+pub const BOX: Recipe = &[
     flex_col(),
     w_full(),
     rounded(Radius::Card),
@@ -64,9 +63,9 @@ pub const CARD: Recipe = &[
     border(Line::Hairline),
     clip(),
 ];
-/// Free content inside a card (swatches, previews, a chart): 16 px from the
-/// card edge on every side.
-pub const CARD_BODY: Recipe = &[flex_col(), w_full(), p(S4), gap(S3)];
+/// Free content inside a box (swatches, previews, a chart): 16 px from the
+/// box edge on every side.
+pub const BOX_BODY: Recipe = &[flex_col(), w_full(), p(S4), gap(S3)];
 
 /// A one-line row: 56 px, content 16 px from the card edge.
 pub const ROW: Recipe = &[

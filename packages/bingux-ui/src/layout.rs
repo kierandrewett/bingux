@@ -1,4 +1,4 @@
-//! Layout helpers in SwiftUI's vocabulary: stacks, spacer, divider, card,
+//! Layout helpers in SwiftUI's vocabulary: stacks, spacer, divider, box,
 //! clamp and the page column. Each returns a plain `Rect` styled with
 //! tokens, so callers keep chaining Freya's builder methods.
 
@@ -28,9 +28,9 @@ pub fn divider(tokens: &Tokens) -> Rect {
     rect().tw(tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)])
 }
 
-/// A group card holding free content: the card with 16 px padding.
-pub fn card(tokens: &Tokens) -> Rect {
-    rect().tw(tokens, CARD).tw(tokens, CARD_BODY)
+/// A box holding free content: the shared box with 16 px padding.
+pub fn boxed(tokens: &Tokens) -> Rect {
+    rect().tw(tokens, BOX).tw(tokens, BOX_BODY)
 }
 
 /// Centres `child` and caps its width at `max`, like `AdwClamp`.

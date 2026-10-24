@@ -527,7 +527,7 @@ impl Component for FeedbackPage {
         .child(status(Status::Info("No devices found.".into())))
         .child(
             rect()
-                .tw(&tokens, &[w_full(), rounded(Radius::Card), bg(Paint::Card)])
+                .tw(&tokens, BOX)
                 .height(Size::px(SAMPLE_PANEL_HEIGHT))
                 .child(
                     status_page(Icon::Bluetooth, "No devices found")
@@ -799,7 +799,7 @@ fn day_wave(phase: f64, low: f64, high: f64) -> Vec<(f64, f64)> {
 
 /// A bordered card holding one chart, at full width.
 fn chart_card(tokens: &Tokens, chart: impl IntoElement) -> Element {
-    card(tokens).child(chart).into()
+    boxed(tokens).child(chart).into()
 }
 
 /// The tab row of the gallery sheet. It reads its selection while rendering.

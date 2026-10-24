@@ -320,19 +320,15 @@ impl Component for SpecTile {
         let overlays = use_overlays();
         let copied = self.value.clone();
         let tile = rect()
+            .tw(&tokens, BOX)
             .tw(
                 &tokens,
                 &[
                     w_flex(),
                     h(Dim::RowTall),
-                    flex_col(),
                     justify(Align::Center),
                     gap(S1),
                     px(GUTTER),
-                    rounded(Radius::Card),
-                    bg(Paint::Card),
-                    border(Line::Hairline),
-                    clip(),
                 ],
             )
             .on_pointer_down(move |event: Event<PointerEventData>| {
@@ -559,7 +555,7 @@ impl Component for AboutPage {
         // The device card: the icon with the name, the operating system and the
         // model beside it, then the two actions in one row under them. The
         // actions sit on their own row so they never push past the card edge.
-        let hero = rect().tw(&tokens, CARD).child(
+        let hero = rect().tw(&tokens, BOX).child(
             rect()
                 .tw(&tokens, &[flex_col(), gap(GUTTER), p(GUTTER)])
                 .child(
@@ -638,7 +634,7 @@ impl Component for AboutPage {
                 None => ("\u{a0}".to_string(), String::new(), String::new(), 0.0),
             };
             rect()
-                .tw(&tokens, CARD)
+                .tw(&tokens, BOX)
                 .child(usage_meter(value, unit, total, fraction))
         };
 

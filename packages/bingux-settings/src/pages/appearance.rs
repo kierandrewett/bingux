@@ -421,7 +421,7 @@ impl Component for AppearancePage {
                 Element::from(
                     Group::titled("Accent colour").row(
                         rect()
-                            .tw(&tokens, CARD_BODY)
+                            .tw(&tokens, BOX_BODY)
                             .tw(
                                 &tokens,
                                 &[flex_row(), wrap(S2), items(Align::Center), gap(S2)],
@@ -439,7 +439,7 @@ impl Component for AppearancePage {
                         .description("Applications follow this. The desktop shell stays dark.")
                         .row(
                             rect()
-                                .tw(&tokens, CARD_BODY)
+                                .tw(&tokens, BOX_BODY)
                                 .tw(&tokens, &[items(Align::Center)])
                                 .child(
                                     rect()

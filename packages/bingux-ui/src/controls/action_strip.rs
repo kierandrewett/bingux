@@ -55,17 +55,9 @@ impl Component for ActionStrip {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         // The divider is as tall as the cell less a gutter at each end.
-        let mut bar = rect().tw(
+        let mut bar = rect().tw(&tokens, BOX).tw(
             &tokens,
-            &[
-                w_full(),
-                h(Dim::StripCell),
-                flex_row(),
-                grow_children(),
-                items(Align::Center),
-                rounded(Radius::Card),
-                bg(Paint::Control),
-            ],
+            &[h(Dim::StripCell), flex_row(), grow_children(), items(Align::Center)],
         );
         for (index, action) in self.actions.iter().enumerate() {
             if index > 0 {

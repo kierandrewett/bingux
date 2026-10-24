@@ -174,15 +174,7 @@ impl Component for TimeZoneMap {
         let mut card = rect()
             .width(Size::fill())
             .height(Size::px(height))
-            .tw(
-                &tokens,
-                &[
-                    rounded(Radius::Card),
-                    bg(Paint::Card),
-                    border(Line::Hairline),
-                    clip(),
-                ],
-            )
+            .tw(&tokens, BOX)
             .on_sized(move |event: Event<SizedEventData>| size.set(event.area))
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 let left = matches!(

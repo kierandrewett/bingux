@@ -62,7 +62,7 @@ dialogs and shows toasts from any component below it.
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Controls         | `switch`, `checkbox` (tri-state), `radio_group`, `slider` (`step`, `show_value`, `fill`), `segmented`, `dropdown` (`app_icons`, `width`), `stepper`, `usage_meter` (a figure, its total and a thin bar), `action_strip` of `strip_action` (two to four icon-over-label actions in one rounded bar), `text_field` (`password`, `invalid`, `clearable`), `search_field`, `progress_bar`, `spinner`                                                                                                                                         |
 | Buttons          | `action_button` (`suggested`, `destructive`, `flat`, `loading`, `icon`), `primary_button`, `row_button`, `icon_button` (`tooltip`, `danger`)                                                                                                                                                                                                                                                                                                                                                                                             |
-| Rows             | `row` (`subtitle`, `value`, `badge`, `leading`, `leading_space` (a blank icon column so text lines up), `leading_app`, `navigates`, `selected`, `destructive`, `context_menu`), `switch_row` (`nested` for sub-rows shown while on), `slider_row` (a `level_row` for a setting), `level_row` (title and value over a full-width slider, with optional leading and trailing elements), `choice_row`, `text_row`, `entry_row`, `expander_row`, `property_row`                                                                              |
+| Rows             | `row` (`subtitle`, `value` (selectable, one line), `badge`, `leading`, `leading_space` (a blank icon column so text lines up), `leading_app`, `navigates`, `selected`, `destructive`, `context_menu`, `on_press` (makes the row activatable)), `switch_row` (`nested` for sub-rows shown while on), `slider_row` (a `level_row` for a setting), `level_row` (title and value over a full-width slider, with optional leading and trailing elements), `choice_row`, `text_row`, `entry_row`, `expander_row`, `property_row`               |
 | Icons            | `icon` (bundled symbolic glyphs), `app_icon` (full-colour application icons from the icon theme)                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Groups and text  | `Group` (`description`), `section_label`, `caption`, `centered_caption`, `action_row`, `heading`, `status` (loading, empty, error, info blocks)                                                                                                                                                                                                                                                                                                                                                                                          |
 | Layout           | `hstack(Space)`, `vstack(Space)`, `spacer`, `divider`, `card`, `clamp(Dim, child)`, `page_column`                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -172,9 +172,12 @@ steps of at least 1.25x, and a weight or colour change at each step. Use
 normal in Adwaita Sans; medium is only checked by eye, so re-check it if
 `LINK` ever looks like normal text.
 
-Text a user may copy is drawn with `SelectableText` and `TextStyle::span`, not a
-paragraph. `property_row` does this for its value, so the value can be selected
-and copied, and a long value is cut with an ellipsis.
+Row values are drawn with `SelectableText` and `TextStyle::span`, not a
+paragraph, so a user can select them with the mouse and copy them with Ctrl+C
+or a right-click Copy. This covers the `value` of `row` and the value of
+`property_row`. A value stays on one line, and a long value is cut with an
+ellipsis. Subtitles and captions are not selectable yet: `SelectableText` has
+no search highlights, so a selectable caption would lose its search marks.
 
 ## Styling with tokens
 
@@ -268,12 +271,20 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   edge.
 - **A group is a card.** A 16 px semibold title sits above a 16 px card with a
   hairline edge, aligned with the card. Rows sit flush in it with a hairline
-  between them, inset by the gutter on both sides. The hairline above and
-  below a row goes while the row is hovered, pressed or selected, so its
-  highlight reads as one block (`Row` reports this to its group). A row is an
-  optional icon, a normal-weight title, an optional muted subtitle that
-  wraps to three lines and trailing content. A row with a subtitle grows to
+  between them, inset by the gutter on both sides. Every boxed surface (a group,
+  the action strip, a free-content box) draws its fill, hairline and radius from
+  the one `BOX` recipe, and `boxed(tokens)` builds one; do not draw a box by hand.
+  A row is an optional icon, a normal-weight title, an optional muted subtitle
+  that wraps to three lines and trailing content. A row with a subtitle grows to
   fit it.
+- **Row hover.** Only an activatable row shows a hover fill and a pointer: one
+  that navigates (a chevron), has `on_press`, or opens something. A switch,
+  slider, dropdown, segmented, value-only or entry row shows neither. A switch
+  row still toggles when its label is pressed, but it has no hover fill. The
+  hairline above and below a row goes while an activatable row is hovered or
+  pressed, or while it is selected, so its highlight reads as one block (`Row`
+  reports this to its group).
+- **Focus ring.** A row with `on_press` is focusable (a switch row included), and a keyboard-focused one draws the focus ring, as every control does.
 - **A row's menu and sub-rows.** `Row::context_menu(items)` opens a menu of
   `menu_item`s at the pointer on a right click, as the menu button does. A
   `switch_row(title, on, handler).nested(on, rows)` reveals its sub-rows under

@@ -41,10 +41,16 @@ pub fn label(style: TextStyle, tokens: &Tokens, text: &str) -> Element {
     }
 }
 
-/// Text in `style` that wraps, with the matched words marked.
+/// Text in `style` that wraps and can be selected and copied. While a search
+/// marks words in it, it is a paragraph with the marks instead: a selection
+/// takes the paragraph's only highlight slot, so a selectable text cannot show
+/// search marks.
 pub fn paragraph(style: TextStyle, tokens: &Tokens, text: &str) -> Element {
     match marked(style, tokens, text) {
-        None => style.paragraph(tokens, text).into(),
+        None => SelectableText::new()
+            .span(style.span(tokens, text))
+            .line_height(style.leading)
+            .into(),
         Some(paragraph) => paragraph.into(),
     }
 }

@@ -197,7 +197,7 @@ impl Component for Group {
             rect()
                 .tw(&tokens, GROUP)
                 .maybe_child(heading)
-                .child(rect().tw(&tokens, CARD).children(children)),
+                .child(rect().tw(&tokens, BOX).children(children)),
         )
     }
 }
@@ -436,7 +436,7 @@ impl Component for StatusBlock {
         // case needs the fixed row height).
         let short = text.chars().count() <= 70;
         rect()
-            .tw(&tokens, CARD)
+            .tw(&tokens, BOX)
             .tw(&tokens, if short { ROW } else { ROW_TALL })
             .tw(&tokens, &[bg(paint)])
             .maybe_child(
@@ -499,7 +499,7 @@ impl Component for Skeleton {
                 .child(bar(Dim::SkeletonTitle))
                 .child(
                     rect()
-                        .tw(&tokens, CARD)
+                        .tw(&tokens, BOX)
                         .children(plain_rows(&tokens, rows.collect())),
                 )
         };

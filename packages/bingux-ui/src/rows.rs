@@ -16,7 +16,7 @@ use crate::controls::text_field::text_field;
 use crate::group::{SlotFilter, card_rows, use_row_lit, use_row_match};
 use crate::icons::{self, Icon};
 use crate::search_highlight::{self, MatchSink};
-use crate::shell::menu::MenuItem;
+use crate::shell::menu::{MenuItem, menu_item};
 use crate::shell::overlays::Overlays;
 use crate::style::*;
 use crate::surface::{provide_enabled, use_tokens};
@@ -40,6 +40,8 @@ pub struct Row {
     on_press: Option<EventHandler<()>>,
     enabled: bool,
     navigates: bool,
+    /// Whether the row opens something: it shows a hover fill and a pointer.
+    activatable: bool,
     selected: bool,
     badge: Option<String>,
     destructive: bool,
@@ -61,6 +63,7 @@ pub fn row(title: impl Into<String>) -> Row {
         on_press: None,
         enabled: true,
         navigates: false,
+        activatable: false,
         selected: false,
         badge: None,
         destructive: false,
@@ -132,7 +135,17 @@ impl Row {
         self
     }
 
+    /// The row is pressed as a whole. Such a row also gets the hover fill and
+    /// the pointer cursor, as it opens something.
     pub fn on_press(mut self, on_press: impl Into<EventHandler<()>>) -> Self {
+        self.activatable = true;
+        self.pressed(on_press)
+    }
+
+    /// Sets the press handler without making the row activatable, for a row
+    /// that toggles when its label is pressed (a switch) but does not open
+    /// anything.
+    fn pressed(mut self, on_press: impl Into<EventHandler<()>>) -> Self {
         self.on_press = Some(on_press.into());
         self
     }
@@ -140,6 +153,7 @@ impl Row {
     /// Show a chevron and act like a link.
     pub fn navigates(mut self) -> Self {
         self.navigates = true;
+        self.activatable = true;
         self
     }
 
@@ -173,7 +187,10 @@ impl Row {
         if value.is_empty() {
             return self;
         }
-        self.trailing(ValueText { text: value })
+        self.trailing(ValueText {
+            text: value,
+            field: false,
+        })
     }
 
     /// Right click opens `items` as a context menu at the pointer. Use it for
@@ -211,19 +228,55 @@ fn open_row_menu(
     }
 }
 
+/// A read-only value on the right of a row. It is selectable: Ctrl+C copies
+/// it, and a right click offers Copy. It stays on one line, and a long value
+/// is cut with an ellipsis. `field` sets the value in the controls' column
+/// (a property row); otherwise it sizes to its text up to a limit.
 #[derive(PartialEq)]
 struct ValueText {
     text: String,
+    field: bool,
 }
 
 impl Component for ValueText {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        VALUE
-            .label(&tokens, self.text.clone())
+        let overlays = try_consume_context::<Overlays>();
+        let value = SelectableText::new()
+            .span(VALUE.span(&tokens, self.text.clone()))
             .max_lines(1)
-            .text_overflow(TextOverflow::Ellipsis)
-            .max_width(Size::px(VALUE_MAX_WIDTH))
+            .line_height(VALUE.leading)
+            .text_align(TextAlign::End)
+            .text_overflow(TextOverflow::Ellipsis);
+        let value = if self.field {
+            value.width(Size::fill())
+        } else {
+            value.width(Size::px(VALUE_MAX_WIDTH))
+        };
+        let text = self.text.clone();
+        let wrapper = rect().on_pointer_down(move |event: Event<PointerEventData>| {
+            let text = text.clone();
+            let items = vec![menu_item("Copy", move |_| {
+                if let Some(overlays) = overlays {
+                    copy_text(overlays, text.clone());
+                }
+            })];
+            open_row_menu(overlays, &items, &event);
+        });
+        let wrapper = if self.field {
+            wrapper.tw(&tokens, &[w(Dim::Field)])
+        } else {
+            wrapper
+        };
+        wrapper.child(value)
+    }
+}
+
+/// Copies `text` to the clipboard and says so, or says that it could not.
+fn copy_text(overlays: Overlays, text: String) {
+    match freya::clipboard::Clipboard::set(text) {
+        Ok(()) => overlays.toast("Copied."),
+        Err(_) => overlays.toast("The text could not be copied."),
     }
 }
 
@@ -236,9 +289,12 @@ impl Component for Row {
         let focus = use_focus(a11y_id);
         provide_enabled(self.enabled);
         let interactive = self.on_press.is_some() && self.enabled;
+        // Only a row that opens something, such as one with a chevron, lights
+        // on hover and press. A switch, slider or value row does not.
+        let activatable = interactive && self.activatable;
         let overlays = try_consume_context::<Overlays>();
         let menu = self.context_menu.clone();
-        use_row_lit((interactive && (hovering() || pressing())) || self.selected);
+        use_row_lit((activatable && (hovering() || pressing())) || self.selected);
         let query = search_highlight::current();
         let row_hit = query.as_deref().is_some_and(|query| {
             search_highlight::hits(query, &self.title)
@@ -351,18 +407,19 @@ impl Component for Row {
                 &[
                     surface(
                         Paint::Transparent,
-                        interactive && hovering(),
-                        interactive && pressing(),
+                        activatable && hovering(),
+                        activatable && pressing(),
                         self.selected,
                     ),
                     focus_ring(focus()),
                 ],
             )
+            .maybe(activatable, |element| element.cursor(CursorIcon::Pointer))
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 if open_row_menu(overlays, &menu, &event) {
                     return;
                 }
-                if interactive {
+                if activatable {
                     pressing.set(true);
                 }
             })
@@ -482,7 +539,7 @@ pub fn switch_row(
     let press = on_toggle.clone();
     row(title)
         .trailing(switch(on, move |next: bool| on_toggle.call(next)))
-        .on_press(move |_| press.call(!on))
+        .pressed(move |_| press.call(!on))
 }
 
 /// A level row for a setting: the title and its value over a full-width
@@ -704,32 +761,13 @@ pub fn text_row(
 }
 
 /// A read-only fact: title on the left, value on the right, for About
-/// pages. Long values wrap onto further lines instead of truncating.
+/// pages. The value stays on one line; a long one is cut with an ellipsis,
+/// and it can be selected and copied.
 pub fn property_row(title: impl Into<String>, value: impl Into<String>) -> Row {
-    let value = value.into();
-    row(title).trailing(PropertyValue { text: value })
-}
-
-#[derive(PartialEq)]
-struct PropertyValue {
-    text: String,
-}
-
-impl Component for PropertyValue {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        // One line that can be selected and copied. A long value is cut with
-        // an ellipsis, so it never pushes the title aside.
-        rect().tw(&tokens, &[w(Dim::Field)]).child(
-            SelectableText::new()
-                .span(VALUE.span(&tokens, self.text.clone()))
-                .max_lines(1)
-                .line_height(VALUE.leading)
-                .width(Size::fill())
-                .text_align(TextAlign::End)
-                .text_overflow(TextOverflow::Ellipsis),
-        )
-    }
+    row(title).trailing(ValueText {
+        text: value.into(),
+        field: true,
+    })
 }
 
 /// A row whose trailing text is editable in place: click to edit, Enter

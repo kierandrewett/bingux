@@ -39,7 +39,7 @@ pub mod prelude {
     };
     pub use crate::icons::{Icon, icon};
     pub use crate::layout::{
-        card, clamp, divider, hstack, page_column, sheet_column, spacer, vstack,
+        boxed, clamp, divider, hstack, page_column, sheet_column, spacer, vstack,
     };
     pub use crate::rows::{
         ChoiceList, EntryRow, ExpanderRow, LevelRow, Row, choice_list, choice_row, entry_row,

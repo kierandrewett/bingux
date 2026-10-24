@@ -491,7 +491,7 @@ impl Component for DateTimePage {
         };
         // Free content in the card: the card body's 16 px on every side.
         let clock_face = rect()
-            .tw_layout(CARD_BODY)
+            .tw_layout(BOX_BODY)
             .tw_layout(&[gap(S1)])
             .child(styled_label(typography::HERO, clock))
             .child(caption(date));

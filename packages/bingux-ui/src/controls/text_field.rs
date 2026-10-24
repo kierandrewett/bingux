@@ -33,6 +33,7 @@ pub struct TextField {
     multiline: bool,
     enabled: bool,
     leading: Option<Icon>,
+    leading_column: Option<Dim>,
     clearable: bool,
     invalid: Option<String>,
     validates: bool,
@@ -55,6 +56,7 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         multiline: false,
         enabled: true,
         leading: None,
+        leading_column: None,
         clearable: false,
         invalid: None,
         validates: false,
@@ -115,6 +117,13 @@ impl TextField {
     /// A muted icon before the text, such as the search glyph.
     pub fn leading(mut self, icon: Icon) -> Self {
         self.leading = Some(icon);
+        self
+    }
+
+    /// Draws the leading glyph centred in a box `column` wide, at row size,
+    /// followed by a gap of S3, so it lines up with a row icon column.
+    pub fn leading_column(mut self, column: Dim) -> Self {
+        self.leading_column = Some(column);
         self
     }
 
@@ -269,16 +278,24 @@ impl Component for TextField {
             input = input.placeholder(placeholder.clone());
         }
         if let Some(icon) = self.leading {
-            input = input.leading(
-                rect()
-                    .height(Size::fill())
-                    .tw(&tokens, &[mr(S1), flex_row(), center()])
-                    .child(icons::icon(
-                        icon,
-                        IconSize::Control,
-                        Paint::Muted.color(&tokens),
-                    )),
-            );
+            // With a column the glyph is a fixed-width box at row size, so the
+            // text lines up with the rows that share the column. Without one
+            // the glyph sits at control size, tucked against the text.
+            let (glyph_size, after) = match self.leading_column {
+                Some(_) => (IconSize::Row, S3),
+                None => (IconSize::Control, S1),
+            };
+            let mut glyph = rect()
+                .height(Size::fill())
+                .tw(&tokens, &[mr(after), flex_row(), center()]);
+            if let Some(column) = self.leading_column {
+                glyph = glyph.tw(&tokens, &[w(column)]);
+            }
+            input = input.leading(glyph.child(icons::icon(
+                icon,
+                glyph_size,
+                Paint::Muted.color(&tokens),
+            )));
         }
         let clear = self.clearable && has_text;
         if clear || self.password {
