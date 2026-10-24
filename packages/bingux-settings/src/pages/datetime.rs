@@ -16,6 +16,7 @@ use bingux_ui::style::*;
 use freya::prelude::*;
 use timezone_map::TimeZoneMap;
 
+use super::loading::veiled;
 use crate::pages::bingux_config;
 use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
@@ -26,6 +27,8 @@ use crate::ui::{
 };
 
 const INTERFACE: &str = "org.gnome.desktop.interface";
+const DATETIME: &str = "org.gnome.desktop.datetime";
+const CALENDAR: &str = "org.gnome.desktop.calendar";
 /// The most zones drawn at once. Typing narrows a longer list.
 const ZONE_LIMIT: usize = 60;
 
@@ -39,6 +42,8 @@ struct Model {
     clock_seconds: Option<bool>,
     show_weekday: Option<bool>,
     show_date: Option<bool>,
+    auto_zone: Option<bool>,
+    week_numbers: Option<bool>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -88,6 +93,12 @@ fn load() -> Result<Model, CommandError> {
     let show_date = backend::gsettings_get(INTERFACE, "clock-show-date")
         .ok()
         .map(|value| value == "true");
+    let auto_zone = backend::gsettings_get(DATETIME, "automatic-timezone")
+        .ok()
+        .map(|value| value == "true");
+    let week_numbers = backend::gsettings_get(CALENDAR, "show-weekdate")
+        .ok()
+        .map(|value| value == "true");
     let utc_offset = backend::run("date", &["+%:z"])?;
     Ok(Model {
         timezone,
@@ -97,7 +108,25 @@ fn load() -> Result<Model, CommandError> {
         clock_seconds,
         show_weekday,
         show_date,
+        auto_zone,
+        week_numbers,
     })
+}
+
+/// The page's shape with blank values, drawn under the veil while the first
+/// load runs. Every row a loaded page shows is already placed.
+fn placeholder() -> Model {
+    Model {
+        timezone: "UTC".to_string(),
+        utc_offset: "+00:00".to_string(),
+        ntp: true,
+        clock_format: "24h".to_string(),
+        clock_seconds: Some(false),
+        show_weekday: Some(false),
+        show_date: Some(false),
+        auto_zone: Some(false),
+        week_numbers: Some(false),
+    }
 }
 
 /// The local date and time, read once a second and formatted in `render`.
@@ -263,6 +292,22 @@ fn set_show_date(ctx: Ctx, on: bool) {
         ctx,
         move |model| model.show_date = Some(on),
         move || backend::gsettings_set(INTERFACE, "clock-show-date", flag(on)),
+    );
+}
+
+fn set_auto_zone(ctx: Ctx, on: bool) {
+    apply(
+        ctx,
+        move |model| model.auto_zone = Some(on),
+        move || backend::gsettings_set(DATETIME, "automatic-timezone", flag(on)),
+    );
+}
+
+fn set_week_numbers(ctx: Ctx, on: bool) {
+    apply(
+        ctx,
+        move |model| model.week_numbers = Some(on),
+        move || backend::gsettings_set(CALENDAR, "show-weekdate", flag(on)),
     );
 }
 
@@ -478,12 +523,12 @@ impl Component for DateTimePage {
         let window = use_window();
         use_page_busy(setting());
 
-        let Some(loaded) = ctx.model.read().clone() else {
-            return page_column().child(skeleton());
-        };
+        let loaded = ctx.model.read().clone();
+        let loading = loaded.is_none();
         let model_data = match loaded {
-            Ok(data) => data,
-            Err(e) => {
+            None => placeholder(),
+            Some(Ok(data)) => data,
+            Some(Err(e)) => {
                 return page_column()
                     .child(status(Status::Error(e.0)).action("Try again", move |_| reload(ctx)));
             }
@@ -515,11 +560,13 @@ impl Component for DateTimePage {
             .context_menu(vec![menu_item("Set date and time...", move |_| {
                 open_date_sheet(window, form, now)
             })]);
+        let auto_zone_on = model_data.auto_zone.unwrap_or(false);
         let zone = model_data.timezone.clone();
         let zone_row = row("Time zone")
             .subtitle(format!("UTC{}", model_data.utc_offset))
             .value(zone_label(&model_data.timezone))
             .navigates()
+            .enabled(!auto_zone_on)
             .on_press(move |_| navigator.push(Route::TimeZone))
             .context_menu(vec![
                 menu_item("Change time zone", move |_| navigator.push(Route::TimeZone)),
@@ -547,7 +594,7 @@ impl Component for DateTimePage {
             move |_| set_clock_format(ctx, other_format.clone()),
         )]);
 
-        page_column()
+        let page = page_column()
             .child(
                 Group::titled("Clock")
                     .row(clock_face)
@@ -558,6 +605,16 @@ impl Component for DateTimePage {
                         .context_menu(vec![toggle_item(ntp, move |next| set_ntp(ctx, next))])
                         .nested(!ntp, vec![time_row.into()]),
                     )
+                    .rows(model_data.auto_zone.map(|on| {
+                        Element::from(
+                            switch_row("Set time zone automatically", on, move |next: bool| {
+                                set_auto_zone(ctx, next)
+                            })
+                            .context_menu(vec![toggle_item(on, move |next| {
+                                set_auto_zone(ctx, next)
+                            })]),
+                        )
+                    }))
                     .row(zone_row),
             )
             .child(
@@ -592,8 +649,21 @@ impl Component for DateTimePage {
                                 set_show_date(ctx, next)
                             })]),
                         )
+                    }))
+                    .rows(model_data.week_numbers.map(|on| {
+                        Element::from(
+                            switch_row(
+                                "Show week numbers in the calendar",
+                                on,
+                                move |next: bool| set_week_numbers(ctx, next),
+                            )
+                            .context_menu(vec![toggle_item(on, move |next| {
+                                set_week_numbers(ctx, next)
+                            })]),
+                        )
                     })),
-            )
+            );
+        veiled(page, loading)
     }
 }
 

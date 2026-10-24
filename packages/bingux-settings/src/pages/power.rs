@@ -9,17 +9,18 @@ use bingux_ui::runtime::{optimistic, optimistic_then};
 use bingux_ui::style::*;
 use freya::prelude::*;
 
+use super::loading::{has_battery_hint, veiled};
 use crate::icons::Icon;
 use crate::system::{self, CommandError, CommandResult, background};
 use crate::ui::typography::{CAPTION, EMPHASIS};
 use crate::ui::{
     Curve, Group, Overlays, PageHeader, Series, Status, Unit, choice_row, icon, line_chart,
-    page_column, ring, row, skeleton, status, switch_row, use_overlays, use_page_header,
-    use_tokens, vstack,
+    page_column, ring, row, status, switch_row, use_overlays, use_page_header, use_tokens, vstack,
 };
 
 const SESSION: &str = "org.gnome.desktop.session";
 const SCREENSAVER: &str = "org.gnome.desktop.screensaver";
+const INTERFACE: &str = "org.gnome.desktop.interface";
 const POWER_PLUGIN: &str = "org.gnome.settings-daemon.plugins.power";
 
 /// Delays offered for automatic suspend, in seconds.
@@ -69,6 +70,8 @@ struct Model {
     power_button: Option<String>,
     /// `None` when the key is missing: the row is hidden.
     dim: Option<bool>,
+    /// `None` when the key is missing: the row is hidden.
+    show_percentage: Option<bool>,
     suspend_ac: Option<Suspend>,
     suspend_battery: Option<Suspend>,
 }
@@ -88,8 +91,51 @@ fn load() -> Model {
         dim: system::gsettings_get(POWER_PLUGIN, "idle-dim")
             .ok()
             .map(|raw| raw.trim() == "true"),
+        show_percentage: system::gsettings_get(INTERFACE, "show-battery-percentage")
+            .ok()
+            .map(|raw| raw.trim() == "true"),
         suspend_ac: suspend("ac"),
         suspend_battery: suspend("battery"),
+    }
+}
+
+/// The shape of a loaded page with blank values, drawn under the veil while
+/// the first load runs. Every row that a loaded page shows is already placed,
+/// so the values fill in without anything moving.
+fn placeholder() -> Model {
+    let battery = if has_battery_hint() {
+        Ok(Some(Battery {
+            fraction: Some(0.0),
+            percentage: "—".to_string(),
+            state: "—".to_string(),
+            time: Some(("Time to empty".to_string(), "—".to_string())),
+            history: Vec::new(),
+            offset: 0,
+            health: Some("—".to_string()),
+        }))
+    } else {
+        Ok(None)
+    };
+    let mode = |name: &str| (name.to_string(), profile_label(name));
+    let suspend = || Suspend {
+        enabled: false,
+        delay: 900,
+    };
+    Model {
+        battery,
+        profiles: Ok(Profiles {
+            choices: vec![mode("power-saver"), mode("balanced"), mode("performance")],
+            active: "balanced".to_string(),
+        }),
+        profiles_tool: true,
+        idle_delay: Ok(0),
+        lock_enabled: Ok(false),
+        lock_delay: Ok(0),
+        power_button: Some("interactive".to_string()),
+        dim: Some(false),
+        show_percentage: Some(false),
+        suspend_ac: Some(suspend()),
+        suspend_battery: Some(suspend()),
     }
 }
 
@@ -631,8 +677,9 @@ impl Component for PowerPage {
             action: None,
         });
 
-        let Some(model) = loaded.read().clone() else {
-            return page_column().child(skeleton());
+        let (model, loading) = match loaded.read().clone() {
+            Some(model) => (model, false),
+            None => (placeholder(), true),
         };
 
         let mut page = page_column();
@@ -640,7 +687,21 @@ impl Component for PowerPage {
         // Battery: no group on a machine without one.
         page = match model.battery.clone() {
             Ok(Some(battery)) => {
-                let page = page.child(battery_group(&battery));
+                let mut group = battery_group(&battery);
+                if let Some(on) = model.show_percentage {
+                    let on_now = shown(pending, "battery-percentage", on);
+                    group = group.row(switch_row(
+                        "Show battery percentage",
+                        on_now,
+                        move |on: bool| {
+                            let value = if on { "true" } else { "false" };
+                            set_switch(pending, overlays, "battery-percentage", on, move || {
+                                system::gsettings_set(INTERFACE, "show-battery-percentage", value)
+                            })
+                        },
+                    ));
+                }
+                let page = page.child(group);
                 match history_group(&battery) {
                     Some(group) => page.child(group),
                     None => page,
@@ -800,7 +861,7 @@ impl Component for PowerPage {
             )));
         }
 
-        page
+        veiled(page, loading)
     }
 }
 
