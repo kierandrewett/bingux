@@ -407,6 +407,7 @@ impl Component for DialogLayer {
                     .a11y_alt(self.dialog.title.clone())
                     .tw(&tokens, DIALOG)
                     .tw(&tokens, &[w(Dim::Dialog)])
+                    .max_width(Size::window_percent(94.0))
                     .scale(0.96 + 0.04 * progress)
                     .on_press(|event: Event<PressEventData>| event.stop_propagation())
                     .on_key_down(move |event: Event<KeyboardEventData>| {

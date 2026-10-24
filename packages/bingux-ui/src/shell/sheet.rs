@@ -32,6 +32,9 @@ fn sheet_tabs_height() -> f32 {
 }
 /// The tallest a sheet grows before its body scrolls, as a share of the window.
 const SHEET_MAX_HEIGHT_PERCENT: f32 = 80.0;
+/// The widest a sheet gets, as a share of the window width, so it keeps a margin
+/// on a phone.
+const SHEET_MAX_WIDTH_PERCENT: f32 = 94.0;
 /// One hundred percent, to turn `SHEET_MAX_HEIGHT_PERCENT` into a fraction.
 const WHOLE_PERCENT: f32 = 100.0;
 
@@ -185,6 +188,8 @@ impl Component for SheetLayer {
                 ],
             )
             .max_height(Size::window_percent(SHEET_MAX_HEIGHT_PERCENT))
+            // On a phone the sheet is the window width less a margin.
+            .max_width(Size::window_percent(SHEET_MAX_WIDTH_PERCENT))
             .offset_y(-SHEET_DROP * (1.0 - progress))
             .on_press(|event: Event<PressEventData>| event.stop_propagation())
             .on_key_down(move |event: Event<KeyboardEventData>| {
