@@ -13,8 +13,11 @@ use crate::controls::segmented::segmented;
 use crate::controls::slider::slider;
 use crate::controls::switch::switch;
 use crate::controls::text_field::text_field;
-use crate::group::use_row_lit;
+use crate::group::{SlotFilter, card_rows, use_row_lit, use_row_match};
 use crate::icons::{self, Icon};
+use crate::search_highlight::{self, MatchSink};
+use crate::shell::menu::MenuItem;
+use crate::shell::overlays::Overlays;
 use crate::style::*;
 use crate::surface::{provide_enabled, use_tokens};
 use crate::typography::{BADGE, BODY, CAPTION, Ink, VALUE};
@@ -33,12 +36,16 @@ pub struct Row {
     leading_app: Option<String>,
     leading_avatar: Option<String>,
     leading_signal: Option<(u8, bool)>,
+    leading_space: bool,
     on_press: Option<EventHandler<()>>,
     enabled: bool,
     navigates: bool,
     selected: bool,
     badge: Option<String>,
     destructive: bool,
+    context_menu: Vec<MenuItem>,
+    nested: Option<(bool, Vec<Element>)>,
+    font: Option<String>,
 }
 
 pub fn row(title: impl Into<String>) -> Row {
@@ -50,16 +57,29 @@ pub fn row(title: impl Into<String>) -> Row {
         leading_app: None,
         leading_avatar: None,
         leading_signal: None,
+        leading_space: false,
         on_press: None,
         enabled: true,
         navigates: false,
         selected: false,
         badge: None,
         destructive: false,
+        context_menu: Vec::new(),
+        nested: None,
+        font: None,
     }
 }
 
 impl Row {
+    /// Rows set in under this one, indented by a gutter and shown while
+    /// `shown` is true, with the reveal an expander uses. They are not mounted
+    /// while hidden, and a row among them that matches a search also makes this
+    /// row match.
+    pub fn nested(mut self, shown: bool, rows: Vec<Element>) -> Self {
+        self.nested = Some((shown, rows));
+        self
+    }
+
     pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
         let subtitle = subtitle.into();
         self.subtitle = (!subtitle.is_empty()).then_some(subtitle);
@@ -87,6 +107,13 @@ impl Row {
         self
     }
 
+    /// Reserves the leading icon column blank when there is no leading icon,
+    /// so the text lines up with icon rows in the same group.
+    pub fn leading_space(mut self) -> Self {
+        self.leading_space = true;
+        self
+    }
+
     /// A full-colour application icon, by icon name, in place of a glyph.
     /// Four signal bars at the start, `level` 0..=4.
     pub fn leading_signal(mut self, level: u8, secured: bool) -> Self {
@@ -94,9 +121,9 @@ impl Row {
         self
     }
 
-    /// An avatar with these initials before the text, for a person.
-    pub fn leading_avatar(mut self, initials: impl Into<String>) -> Self {
-        self.leading_avatar = Some(initials.into());
+    /// The avatar of the account with login name `user` before the text.
+    pub fn leading_avatar(mut self, user: impl Into<String>) -> Self {
+        self.leading_avatar = Some(user.into());
         self
     }
 
@@ -148,6 +175,40 @@ impl Row {
         }
         self.trailing(ValueText { text: value })
     }
+
+    /// Right click opens `items` as a context menu at the pointer. Use it for
+    /// the actions that belong to this item, such as Open or Uninstall.
+    pub fn context_menu(mut self, items: Vec<MenuItem>) -> Self {
+        self.context_menu = items;
+        self
+    }
+
+    /// Sets the title and subtitle in the font family `family`, on one line
+    /// each, so a list of fonts can show each in its own face. Search marks
+    /// are not drawn on such a row.
+    pub fn font(mut self, family: impl Into<String>) -> Self {
+        self.font = Some(family.into());
+        self
+    }
+}
+
+/// On a right press opens `items` at the pointer and stops the press there,
+/// so the row is not also pressed. Returns true when a menu opened.
+fn open_row_menu(
+    overlays: Option<Overlays>,
+    items: &[MenuItem],
+    event: &Event<PointerEventData>,
+) -> bool {
+    let right = matches!(event.data(), PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Right));
+    match overlays {
+        Some(overlays) if right && !items.is_empty() => {
+            event.stop_propagation();
+            let at = event.global_location();
+            overlays.show_menu((at.x as f32, at.y as f32), items.to_vec());
+            true
+        }
+        _ => false,
+    }
 }
 
 #[derive(PartialEq)]
@@ -175,7 +236,23 @@ impl Component for Row {
         let focus = use_focus(a11y_id);
         provide_enabled(self.enabled);
         let interactive = self.on_press.is_some() && self.enabled;
+        let overlays = try_consume_context::<Overlays>();
+        let menu = self.context_menu.clone();
         use_row_lit((interactive && (hovering() || pressing())) || self.selected);
+        let query = search_highlight::current();
+        let row_hit = query.as_deref().is_some_and(|query| {
+            search_highlight::hits(query, &self.title)
+                || self
+                    .subtitle
+                    .as_deref()
+                    .is_some_and(|subtitle| search_highlight::hits(query, subtitle))
+        });
+        let nested_shown = self.nested.as_ref().is_some_and(|(shown, _)| *shown);
+        let nested_lit = use_state(Vec::<usize>::new);
+        let nested_matched = use_state(Vec::<usize>::new);
+        let reveal = use_reveal(nested_shown);
+        let nested_hit = !nested_matched.read().is_empty();
+        use_row_match(row_hit || nested_hit);
         let single_line = self.subtitle.is_none();
         let ink = if !self.enabled {
             Ink::Muted
@@ -190,47 +267,63 @@ impl Component for Row {
             Paint::Muted
         };
 
-        let title = BODY
-            .in_ink(ink)
-            .label(&tokens, self.title.clone())
-            .max_lines(1)
-            .text_overflow(TextOverflow::Ellipsis);
+        let title = match &self.font {
+            Some(family) => BODY
+                .in_ink(ink)
+                .label(&tokens, self.title.clone())
+                .font_family(family.clone())
+                .max_lines(1)
+                .text_overflow(TextOverflow::Ellipsis)
+                .into(),
+            None => search_highlight::label(BODY.in_ink(ink), &tokens, &self.title),
+        };
         // On a phone a long title wraps onto a second line rather than
         // being cut, as a narrow row has little room beside its control.
-        let wrapped = touch() && self.badge.is_none();
+        let wrapped = touch() && self.badge.is_none() && self.font.is_none();
         let title_line: Element = match &self.badge {
-            None if wrapped => BODY
-                .in_ink(ink)
-                .paragraph(&tokens, self.title.clone())
+            None if wrapped => search_highlight::marked(BODY.in_ink(ink), &tokens, &self.title)
+                .unwrap_or_else(|| BODY.in_ink(ink).paragraph(&tokens, self.title.clone()))
                 .width(Size::fill())
                 .max_lines(2)
                 .text_overflow(TextOverflow::Ellipsis)
                 .into(),
-            None => title.into(),
+            None => title,
             Some(badge) => rect()
                 .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
                 .child(title)
+                // Optical: the title's caps sit about 2 px below its line-box
+                // centre, so the pill is nudged down by half a 4 px margin.
                 .child(
-                    rect()
-                        .tw(&tokens, BADGE_BOX)
-                        .child(BADGE.label(&tokens, badge.clone()).max_lines(1)),
+                    rect().tw(&tokens, &[mt(S1)]).child(
+                        rect()
+                            .tw(&tokens, BADGE_BOX)
+                            .child(BADGE.label(&tokens, badge.clone()).max_lines(1)),
+                    ),
                 )
                 .into(),
         };
         // A subtitle wraps onto a second or third line, so a row that has one
         // grows to fit it. A row without one has the row height, and its
         // text is centred by the row.
-        let text_column =
-            rect()
-                .tw(&tokens, ROW_TEXT)
-                .child(title_line)
-                .maybe_child(self.subtitle.as_ref().map(|subtitle| {
-                    CAPTION
-                        .paragraph(&tokens, subtitle.clone())
-                        .max_lines(3)
-                        .text_overflow(TextOverflow::Ellipsis)
-                        .width(Size::fill())
-                }));
+        let subtitle_line: Option<Element> =
+            self.subtitle.as_ref().map(|subtitle| match &self.font {
+                Some(family) => CAPTION
+                    .label(&tokens, subtitle.clone())
+                    .font_family(family.clone())
+                    .max_lines(1)
+                    .text_overflow(TextOverflow::Ellipsis)
+                    .into(),
+                None => search_highlight::marked(CAPTION, &tokens, subtitle)
+                    .unwrap_or_else(|| CAPTION.paragraph(&tokens, subtitle.clone()))
+                    .max_lines(3)
+                    .text_overflow(TextOverflow::Ellipsis)
+                    .width(Size::fill())
+                    .into(),
+            });
+        let text_column = rect()
+            .tw(&tokens, ROW_TEXT)
+            .child(title_line)
+            .maybe_child(subtitle_line);
         let trailing = (self.trailing.is_some() || self.selected || self.navigates).then(|| {
             rect()
                 .tw(&tokens, ROW_TRAILING)
@@ -244,7 +337,7 @@ impl Component for Row {
         });
 
         let on_press = self.on_press.clone();
-        rect()
+        let face = rect()
             .a11y_id(a11y_id)
             .a11y_focusable(interactive)
             .a11y_role(if interactive {
@@ -265,6 +358,14 @@ impl Component for Row {
                     focus_ring(focus()),
                 ],
             )
+            .on_pointer_down(move |event: Event<PointerEventData>| {
+                if open_row_menu(overlays, &menu, &event) {
+                    return;
+                }
+                if interactive {
+                    pressing.set(true);
+                }
+            })
             .maybe(interactive, |element| {
                 element
                     .on_pointer_enter(move |_| hovering.set(true))
@@ -272,7 +373,6 @@ impl Component for Row {
                         hovering.set(false);
                         pressing.set_if_modified(false);
                     })
-                    .on_pointer_down(move |_: Event<PointerEventData>| pressing.set(true))
                     .on_global_pointer_up(move |_| pressing.set_if_modified(false))
                     .on_press(move |_: Event<PressEventData>| {
                         if let Some(on_press) = &on_press {
@@ -281,10 +381,19 @@ impl Component for Row {
                         a11y_id.request_focus();
                     })
             })
-            .maybe_child(
-                self.leading
-                    .map(|leading| icons::icon(leading, IconSize::Row, icon_paint.color(&tokens))),
-            )
+            .maybe_child({
+                let leading: Option<Element> = match self.leading {
+                    Some(leading) => {
+                        Some(icons::icon(leading, IconSize::Row, icon_paint.color(&tokens)).into())
+                    }
+                    None => self.leading_space.then(|| {
+                        rect()
+                            .tw(&tokens, &[w(Dim::IconRow), h(Dim::IconRow)])
+                            .into()
+                    }),
+                };
+                leading
+            })
             .maybe_child(
                 self.leading_signal
                     .map(|(level, secured)| crate::controls::signal_bars(level, secured)),
@@ -292,7 +401,7 @@ impl Component for Row {
             .maybe_child(
                 self.leading_avatar
                     .as_ref()
-                    .map(|initials| crate::controls::avatar(initials.clone(), Dim::Box9)),
+                    .map(|user| crate::controls::avatar(user.clone(), Dim::Box9)),
             )
             .maybe_child(
                 self.leading_app
@@ -300,7 +409,66 @@ impl Component for Row {
                     .map(|name| app_icon(name.clone(), IconSize::App)),
             )
             .child(text_column)
-            .maybe_child(trailing)
+            .maybe_child(trailing);
+        let Some((_, rows)) = &self.nested else {
+            return face.into_element();
+        };
+        let filter = SlotFilter {
+            matched: nested_matched,
+            group_hit: row_hit,
+            searching: query.is_some(),
+        };
+        rect()
+            .tw(&tokens, &[flex_col(), w_full()])
+            .child(face)
+            .maybe_child((reveal > 0.0).then(|| {
+                Element::from(NestedRows {
+                    rows: rows.clone(),
+                    lit: nested_lit,
+                    filter,
+                    opacity: reveal,
+                })
+            }))
+            .into_element()
+    }
+}
+
+/// Eases from 0 to 1 as `open` turns on, over the motion time. Drives the
+/// reveal of children under a row, the same as an expander's.
+fn use_reveal(open: bool) -> f32 {
+    let tokens = use_tokens();
+    let motion = tokens.motion(160);
+    use_animation_transition(if open { 1.0 } else { 0.0 }, move |from, to| {
+        AnimNum::new(from, to)
+            .time(motion)
+            .function(Function::Cubic)
+            .ease(Ease::Out)
+    })
+    .get()
+    .value()
+}
+
+/// The rows under a row, set in by one gutter. They take the same hairlines,
+/// lit handling and search filtering as the rows of a card, through the same
+/// slots, so a row that is hovered or matches a search behaves as it would in
+/// the card. Their matches count once, through the row above them.
+#[derive(PartialEq)]
+struct NestedRows {
+    rows: Vec<Element>,
+    lit: State<Vec<usize>>,
+    filter: SlotFilter,
+    opacity: f32,
+}
+
+impl Component for NestedRows {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let count = use_state(|| 0usize);
+        use_provide_context(move || MatchSink(count));
+        rect()
+            .tw(&tokens, &[flex_col(), w_full(), pl(GUTTER)])
+            .opacity(self.opacity)
+            .children(card_rows(self.rows.clone(), self.lit, self.filter))
     }
 }
 
@@ -339,8 +507,12 @@ pub struct LevelRow {
     trailing: Option<Element>,
     value: f64,
     value_text: Option<String>,
+    max: f64,
+    mark: Option<f64>,
     enabled: bool,
     on_moved: EventHandler<f64>,
+    footer: Option<Element>,
+    context_menu: Vec<MenuItem>,
 }
 
 pub fn level_row(
@@ -353,14 +525,32 @@ pub fn level_row(
         subtitle: None,
         leading: None,
         trailing: None,
-        value: value.clamp(0.0, 100.0),
+        value,
         value_text: None,
+        max: 100.0,
+        mark: None,
         enabled: true,
+        footer: None,
+        context_menu: Vec::new(),
         on_moved: on_moved.into(),
     }
 }
 
 impl LevelRow {
+    /// The top of the travel, in percent. Above 100 is amplified output, such
+    /// as a volume past full; the track and the keys respect it.
+    pub fn max(mut self, max: f64) -> Self {
+        self.max = max.max(1.0);
+        self
+    }
+
+    /// A tick on the track at this percent, such as the 100% clipping point.
+    /// It does not limit the value.
+    pub fn mark(mut self, percent: f64) -> Self {
+        self.mark = Some(percent);
+        self
+    }
+
     /// The text at the right of the title line, such as "500 ms". Without
     /// it the row shows the value as a percentage.
     pub fn value_text(mut self, text: impl Into<String>) -> Self {
@@ -388,12 +578,37 @@ impl LevelRow {
         self.trailing = Some(trailing.into());
         self
     }
+
+    /// Text or controls under the slider, in the same column and indented
+    /// like the track, such as a meter's readout.
+    pub fn footer(mut self, footer: impl Into<Element>) -> Self {
+        self.footer = Some(footer.into());
+        self
+    }
+
+    /// Right click opens `items` as a context menu at the pointer, such as
+    /// Mute or Reset for a volume row.
+    pub fn context_menu(mut self, items: Vec<MenuItem>) -> Self {
+        self.context_menu = items;
+        self
+    }
 }
 
 impl Component for LevelRow {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let overlays = try_consume_context::<Overlays>();
+        let menu = self.context_menu.clone();
+        let value = self.value.clamp(0.0, self.max);
         provide_enabled(self.enabled);
+        let row_hit = search_highlight::current().as_deref().is_some_and(|query| {
+            search_highlight::hits(query, &self.title)
+                || self
+                    .subtitle
+                    .as_deref()
+                    .is_some_and(|subtitle| search_highlight::hits(query, subtitle))
+        });
+        use_row_match(row_hit);
         let ink = if self.enabled { Ink::Text } else { Ink::Muted };
         let heading = rect()
             .tw(
@@ -407,27 +622,35 @@ impl Component for LevelRow {
                 ],
             )
             .child(
-                rect().tw(&tokens, &[w_flex()]).child(
-                    BODY.in_ink(ink)
-                        .label(&tokens, self.title.clone())
-                        .max_lines(1)
-                        .text_overflow(TextOverflow::Ellipsis),
-                ),
+                rect()
+                    .tw(&tokens, &[w_flex()])
+                    .child(search_highlight::label(
+                        BODY.in_ink(ink),
+                        &tokens,
+                        &self.title,
+                    )),
             )
             .child(
                 VALUE.label(
                     &tokens,
                     self.value_text
                         .clone()
-                        .unwrap_or_else(|| format!("{}%", self.value.round() as i64)),
+                        .unwrap_or_else(|| format!("{}%", value.round() as i64)),
                 ),
             );
+        let mut track = slider(value, self.on_moved.clone()).max(self.max);
+        if let Some(mark) = self.mark {
+            track = track.mark(mark);
+        }
         rect()
             .tw(&tokens, ROW_STACKED)
             .tw(
                 &tokens,
                 &[flex_row(), grow_children(), items(Align::Center), gap(S4)],
             )
+            .on_pointer_down(move |event: Event<PointerEventData>| {
+                open_row_menu(overlays, &menu, &event);
+            })
             .maybe_child(self.leading.clone())
             .child(
                 rect()
@@ -438,13 +661,14 @@ impl Component for LevelRow {
                             .tw(&tokens, &[w_full()])
                             .child(heading)
                             .maybe_child(self.subtitle.as_ref().map(|subtitle| {
-                                CAPTION
-                                    .label(&tokens, subtitle.clone())
+                                search_highlight::marked(CAPTION, &tokens, subtitle)
+                                    .unwrap_or_else(|| CAPTION.paragraph(&tokens, subtitle.clone()))
                                     .max_lines(1)
                                     .text_overflow(TextOverflow::Ellipsis)
                             })),
                     )
-                    .child(slider(self.value, self.on_moved.clone()).fill()),
+                    .child(track.fill())
+                    .maybe_child(self.footer.clone()),
             )
             .maybe_child(self.trailing.clone())
     }
@@ -494,13 +718,16 @@ struct PropertyValue {
 impl Component for PropertyValue {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        // A long value wraps within the field column instead of pushing
-        // the title aside.
+        // One line that can be selected and copied. A long value is cut with
+        // an ellipsis, so it never pushes the title aside.
         rect().tw(&tokens, &[w(Dim::Field)]).child(
-            VALUE
-                .paragraph(&tokens, self.text.clone())
+            SelectableText::new()
+                .span(VALUE.span(&tokens, self.text.clone()))
+                .max_lines(1)
+                .line_height(VALUE.leading)
                 .width(Size::fill())
-                .text_align(TextAlign::End),
+                .text_align(TextAlign::End)
+                .text_overflow(TextOverflow::Ellipsis),
         )
     }
 }
@@ -588,14 +815,7 @@ impl Component for ExpanderRow {
         let tokens = use_tokens();
         let initial = self.expanded.unwrap_or(false);
         let mut open = use_state(move || initial);
-        let motion = tokens.motion(160);
-        let reveal = use_animation_transition(if open() { 1.0 } else { 0.0 }, move |from, to| {
-            AnimNum::new(from, to)
-                .time(motion)
-                .function(Function::Cubic)
-                .ease(Ease::Out)
-        });
-        let progress = reveal.get().value();
+        let progress = use_reveal(open());
         let chevron = rect().rotate(progress * 90.0).child(icons::icon(
             Icon::GoNext,
             IconSize::Mark,

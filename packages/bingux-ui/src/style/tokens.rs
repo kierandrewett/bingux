@@ -49,6 +49,8 @@ pub const GUTTER: Space = S4;
 pub enum Radius {
     /// Small marks: a checkbox, a skeleton bar, a scrubber.
     Mark,
+    /// A box inside a rounded rail: the rail radius less its inset (12 - 4).
+    Inner,
     /// Controls, rows and sidebar items.
     Control,
     /// Group cards and tiles.
@@ -66,6 +68,7 @@ impl Radius {
         match self {
             Radius::Mark => 4.0,
             Radius::Control => 12.0,
+            Radius::Inner => 8.0,
             Radius::Card => 16.0,
             Radius::Overlay => 20.0,
             Radius::Tile => 24.0,
@@ -331,6 +334,9 @@ pub enum Paint {
     Bg,
     /// Header bars.
     Surface,
+    /// The header bar that floats over a scrolling page: the page colour at
+    /// 82 %, so the blurred content behind it shows through faintly.
+    Frosted,
     /// The sidebar and the window frame around the page panel.
     Sidebar,
     /// Group cards.
@@ -422,6 +428,7 @@ impl Paint {
             Paint::Shield => Color::from_argb(0, 0, 0, 1),
             Paint::Bg => tokens.bg,
             Paint::Surface => tokens.surface,
+            Paint::Frosted => tokens.bg.with_af32(0.82),
             Paint::Sidebar => tokens.sidebar,
             Paint::Card => tokens.card,
             Paint::Control => tokens.control,

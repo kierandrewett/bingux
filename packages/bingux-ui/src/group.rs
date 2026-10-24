@@ -10,6 +10,7 @@ use crate::controls::button::action_button;
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
 use crate::layout::page_column;
+use crate::search_highlight;
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
@@ -91,7 +92,7 @@ struct CaptionText {
 impl Component for CaptionText {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        CAPTION.paragraph(&tokens, self.text.clone())
+        search_highlight::paragraph(CAPTION, &tokens, &self.text)
     }
 }
 
@@ -103,6 +104,7 @@ pub struct Group {
     title: Option<String>,
     description: Option<String>,
     trailing: Option<Element>,
+    filtered: bool,
     rows: Vec<Element>,
 }
 
@@ -112,6 +114,7 @@ impl Group {
             title: title.into(),
             description: None,
             trailing: None,
+            filtered: true,
             rows: Vec::new(),
         }
     }
@@ -142,13 +145,35 @@ impl Group {
         self.rows.extend(rows);
         self
     }
+
+    /// Shows every row whatever the search, for a group whose rows matched
+    /// the search by other text than their own, such as an index entry.
+    pub fn unfiltered(mut self) -> Self {
+        self.filtered = false;
+        self
+    }
 }
 
 impl Component for Group {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let lit = use_state(Vec::<usize>::new);
-        let children = card_rows(self.rows.clone(), lit);
+        let matched = use_state(Vec::<usize>::new);
+        let query = search_highlight::current();
+        let searching = self.filtered && query.is_some();
+        let group_hit = query.as_deref().is_some_and(|query| {
+            [self.title.as_deref(), self.description.as_deref()]
+                .into_iter()
+                .flatten()
+                .any(|text| search_highlight::hits(query, text))
+        });
+        search_highlight::use_match(group_hit);
+        let filter = SlotFilter {
+            matched,
+            group_hit,
+            searching,
+        };
+        let children = card_rows(self.rows.clone(), lit, filter);
         let heading = (self.title.is_some() || self.description.is_some()).then(|| {
             rect()
                 .tw(&tokens, GROUP_HEAD)
@@ -164,11 +189,16 @@ impl Component for Group {
                 )
                 .maybe_child(self.trailing.clone())
         });
+        let shown = !searching || group_hit || !matched.read().is_empty();
         // The page column owns the space between groups.
-        rect()
-            .tw(&tokens, GROUP)
-            .maybe_child(heading)
-            .child(rect().tw(&tokens, CARD).children(children))
+        search_highlight::collapse(
+            &tokens,
+            shown,
+            rect()
+                .tw(&tokens, GROUP)
+                .maybe_child(heading)
+                .child(rect().tw(&tokens, CARD).children(children)),
+        )
     }
 }
 
@@ -179,6 +209,8 @@ pub(crate) struct RowSlot {
     pub index: usize,
     /// The indexes of the rows that are hovered, pressed or selected.
     pub lit: State<Vec<usize>>,
+    /// The indexes of the rows that match the search, in this group.
+    pub matched: State<Vec<usize>>,
 }
 
 /// Marks the calling row as lit or not in its group, if it is in one. A lit
@@ -204,20 +236,70 @@ pub(crate) fn use_row_lit(lit: bool) {
     });
 }
 
+/// Records the calling row as matching the search in its group, if it is in
+/// one, and counts it into the search section above. The row calls this on
+/// every render, with whether its own text matches.
+pub(crate) fn use_row_match(matched: bool) {
+    let slot = use_try_consume::<RowSlot>();
+    use_side_effect_with_deps(&matched, move |matched| {
+        let Some(slot) = slot else { return };
+        let mut rows = slot.matched;
+        let listed = rows.peek().contains(&slot.index);
+        if *matched && !listed {
+            rows.write().push(slot.index);
+        } else if !*matched && listed {
+            rows.write().retain(|index| *index != slot.index);
+        }
+    });
+    use_drop(move || {
+        if let Some(slot) = slot {
+            let mut rows = slot.matched;
+            rows.write().retain(|index| *index != slot.index);
+        }
+    });
+    search_highlight::use_match(matched);
+}
+
+/// How a group's rows show during a search: a row shows when it matches or
+/// when the whole group does, and a group with no shown rows hides.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) struct SlotFilter {
+    pub(crate) matched: State<Vec<usize>>,
+    pub(crate) group_hit: bool,
+    pub(crate) searching: bool,
+}
+
+impl SlotFilter {
+    /// Whether the row at `index` shows, and whether it has a hairline above.
+    fn placement(self, index: usize) -> (bool, bool) {
+        if !self.searching || self.group_hit {
+            return (true, index > 0);
+        }
+        let matched = self.matched.read();
+        let shown = matched.contains(&index);
+        (shown, shown && matched.iter().any(|&above| above < index))
+    }
+}
+
 /// One row of a group with the hairline above it. The hairline is hidden
 /// while this row or the one above it is lit.
 #[derive(PartialEq)]
 struct Slot {
     index: usize,
     lit: State<Vec<usize>>,
+    filter: SlotFilter,
     row: Element,
 }
 
 impl Component for Slot {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let (index, lit) = (self.index, self.lit);
-        use_provide_context(move || RowSlot { index, lit });
+        let (index, lit, matched) = (self.index, self.lit, self.filter.matched);
+        use_provide_context(move || RowSlot {
+            index,
+            lit,
+            matched,
+        });
         let hide = {
             let lit = self.lit.read();
             lit.contains(&index)
@@ -225,36 +307,61 @@ impl Component for Slot {
                     .checked_sub(1)
                     .is_some_and(|above| lit.contains(&above))
         };
-        rect()
+        let (shown, divided) = self.filter.placement(index);
+        let content = rect()
             .tw(&tokens, &[flex_col(), w_full()])
-            .maybe_child((index > 0).then(|| {
-                rect()
-                    .tw(&tokens, SEPARATOR)
-                    .maybe(hide, |line| line.tw(&tokens, &[bg(Paint::Transparent)]))
-            }))
-            .child(self.row.clone())
+            .maybe_child(divided.then(|| hairline(&tokens, hide)))
+            .child(self.row.clone());
+        search_highlight::collapse(&tokens, shown, content)
     }
 }
 
 /// Rows with a hairline between each pair, inset by the gutter on both
 /// sides, that goes while either neighbour is lit.
-fn card_rows(rows: Vec<Element>, lit: State<Vec<usize>>) -> Vec<Element> {
+pub(crate) fn card_rows(
+    rows: Vec<Element>,
+    lit: State<Vec<usize>>,
+    filter: SlotFilter,
+) -> Vec<Element> {
     rows.into_iter()
         .enumerate()
-        .map(|(index, row)| Element::from(Slot { index, lit, row }))
+        .map(|(index, row)| {
+            Element::from(Slot {
+                index,
+                lit,
+                filter,
+                row,
+            })
+        })
         .collect()
+}
+
+/// The hairline above a row, laid over the row's top edge so it takes no room
+/// in the flow. It is inset by the gutter on both sides, and goes transparent
+/// while the row is hidden by a neighbour's highlight.
+fn hairline(tokens: &Tokens, hide: bool) -> Rect {
+    let line = rect().tw(
+        tokens,
+        &[w_full(), h(Dim::Hairline), mx(GUTTER), bg(Paint::Separator)],
+    );
+    rect()
+        .position(Position::new_absolute().top(0.0).left(0.0))
+        .tw(tokens, &[w_full(), h(Dim::Hairline)])
+        .maybe_child((!hide).then_some(line))
 }
 
 /// The same hairlines for a group that has no interactive rows.
 fn plain_rows(tokens: &Tokens, rows: Vec<Element>) -> Vec<Element> {
-    let mut children = Vec::with_capacity(rows.len() * 2);
-    for (index, row) in rows.into_iter().enumerate() {
-        if index > 0 {
-            children.push(rect().tw(tokens, SEPARATOR).into());
-        }
-        children.push(row);
-    }
-    children
+    rows.into_iter()
+        .enumerate()
+        .map(|(index, row)| {
+            rect()
+                .tw(tokens, &[flex_col(), w_full()])
+                .maybe_child((index > 0).then(|| hairline(tokens, false)))
+                .child(row)
+                .into()
+        })
+        .collect()
 }
 
 /// A group name: a heading above a card, larger and heavier than the row
@@ -272,10 +379,7 @@ struct SectionLabel {
 impl Component for SectionLabel {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        SECTION
-            .label(&tokens, self.text.clone())
-            .max_lines(1)
-            .text_overflow(TextOverflow::Ellipsis)
+        search_highlight::label(SECTION, &tokens, &self.text)
     }
 }
 

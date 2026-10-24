@@ -1,8 +1,6 @@
-//! The settings the sidebar search can find. Each entry names the page the
-//! setting is on, its title as the page shows it, and plain words a person
-//! might search for instead. Add a row when a page gains a setting.
-
-use bingux_ui::prelude::SearchHit;
+//! The settings the search finds. Each entry names the page the setting is
+//! on, its title as the page shows it, and plain words a person might search
+//! for instead. Add a row when a page gains a setting.
 
 use crate::pages::PageId;
 
@@ -417,15 +415,19 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
     (PageId::About, "Bingux version", "release system version"),
 ];
 
-/// Every setting, ready for the sidebar search. Choosing one opens its page.
-pub fn hits() -> Vec<SearchHit<PageId>> {
+/// The settings whose title or words contain every word of `query`, ignoring
+/// case, in index order. An empty query matches nothing.
+pub fn matching(query: &str) -> Vec<(PageId, &'static str)> {
+    let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+    if words.is_empty() {
+        return Vec::new();
+    }
     SETTINGS
         .iter()
-        .map(|(page, title, keywords)| SearchHit {
-            title: (*title).to_string(),
-            detail: page.title().to_string(),
-            keywords: (*keywords).to_string(),
-            target: *page,
+        .filter(|(_, title, keywords)| {
+            let haystack = format!("{title} {keywords}").to_lowercase();
+            words.iter().all(|word| haystack.contains(word.as_str()))
         })
+        .map(|(page, title, _)| (*page, *title))
         .collect()
 }

@@ -146,11 +146,23 @@ impl Component for Segment {
                     h_full(),
                     px(S2),
                     center(),
-                    rounded(Radius::Control),
-                    surface(Paint::Pressed, hovering(), pressing(), self.selected),
+                    rounded(Radius::Inner),
+                    surface(
+                        if self.selected {
+                            Paint::Card
+                        } else {
+                            Paint::Transparent
+                        },
+                        hovering(),
+                        pressing(),
+                        false,
+                    ),
                     focus_ring(focus()),
                 ],
             )
+            .maybe(self.selected, |element| {
+                element.tw(&tokens, &[shadow(Elevation::Knob)])
+            })
             .maybe(enabled, |element| {
                 element
                     .on_pointer_enter(move |_| hovering.set(true))

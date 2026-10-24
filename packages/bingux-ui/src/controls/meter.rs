@@ -82,7 +82,10 @@ impl Component for UsageMeter {
                         rect()
                             // The filled share is a run-time percentage, so a raw width.
                             .width(Size::percent(fraction as f32 * 100.0))
-                            .tw(&tokens, &[h_full(), rounded(Radius::Mark), bg(Paint::Text)]),
+                            .tw(
+                                &tokens,
+                                &[h_full(), rounded(Radius::Mark), bg(Paint::Accent)],
+                            ),
                     ),
             )
     }

@@ -70,7 +70,7 @@ pub fn prefetch_all() {
 
 impl PageId {
     /// Sidebar order.
-    pub const ALL: [PageId; 15] = [
+    pub const ALL: [PageId; 14] = [
         PageId::WiFi,
         PageId::Network,
         PageId::Bluetooth,
@@ -84,7 +84,6 @@ impl PageId {
         PageId::Search,
         PageId::Applications,
         PageId::DateTime,
-        PageId::Users,
         PageId::About,
     ];
 

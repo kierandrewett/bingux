@@ -20,6 +20,7 @@ use crate::ui::{
     use_tokens,
 };
 use bingux_ui::layout::{hstack, vstack};
+use bingux_ui::shell::{MenuItem, menu_item};
 use bingux_ui::style::*;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -355,6 +356,28 @@ fn run_job(ctx: Ctx, job: Job) {
     );
 }
 
+/// Flip a switch at once and run its bluetoothctl job in the background. The
+/// switch keeps the new value until the job has run and Bluetooth has been
+/// read again. A failure puts it back and toasts the reason.
+fn set_switch_job(ctx: Ctx, pending: State<Option<bool>>, job: Job, on: bool) {
+    let mut pending = pending;
+    let mut model = ctx.model;
+    let Job { steps, failed, .. } = job;
+    bingux_ui::runtime::optimistic_then(
+        pending,
+        Some(ctx.overlays),
+        None,
+        Some(on),
+        move || run_steps(&steps).map_err(|reason| format!("{failed} {reason}")),
+        move || {
+            background_then(load, move |loaded| {
+                model.set(Some(loaded));
+                pending.set(None);
+            });
+        },
+    );
+}
+
 fn power_job(on: bool) -> Job {
     let word = if on { "on" } else { "off" };
     Job {
@@ -482,9 +505,12 @@ impl Scanner {
             slot.generation += 1;
             slot.child.take()
         };
+        // Reaping waits for the child to exit, so it runs off the UI thread.
         if let Some(mut child) = child {
-            let _ = child.kill();
-            let _ = child.wait();
+            std::thread::spawn(move || {
+                let _ = child.kill();
+                let _ = child.wait();
+            });
         }
     }
 
@@ -631,13 +657,7 @@ fn device_state(device: &Device) -> String {
 /// forget once the device is paired.
 fn device_strip(device: &Device, ctx: Ctx) -> Element {
     let job = device_job(device);
-    let (icon, label) = if device.connected {
-        (Icon::WindowClose, "Disconnect")
-    } else if device.paired {
-        (Icon::Bluetooth, "Connect")
-    } else {
-        (Icon::ListAdd, "Pair")
-    };
+    let (icon, label) = device_action(device);
     let mut actions = vec![strip_action(icon, label, move |_| {
         run_job(ctx, job.clone())
     })];
@@ -648,6 +668,33 @@ fn device_strip(device: &Device, ctx: Ctx) -> Element {
         }));
     }
     action_strip(actions).into()
+}
+
+/// The one action a device allows, with its icon and label.
+fn device_action(device: &Device) -> (Icon, &'static str) {
+    if device.connected {
+        (Icon::WindowClose, "Disconnect")
+    } else if device.paired {
+        (Icon::Bluetooth, "Connect")
+    } else {
+        (Icon::ListAdd, "Pair")
+    }
+}
+
+/// The right-click menu for one device: its one action, and Forget once paired.
+fn device_menu(ctx: Ctx, device: &Device) -> Vec<MenuItem> {
+    let (icon, label) = device_action(device);
+    let job = device_job(device);
+    let mut items = vec![menu_item(label, move |_| run_job(ctx, job.clone())).icon(icon)];
+    if device.paired {
+        let forget = device.clone();
+        items.push(
+            menu_item("Forget", move |_| confirm_forget(ctx, &forget))
+                .icon(Icon::UserTrash)
+                .destructive(),
+        );
+    }
+    items
 }
 
 /// The name to show for a device. BlueZ uses the address when a device has
@@ -663,7 +710,13 @@ fn device_name(device: &Device) -> String {
 
 /// One device in a list: its icon, name and state. The row opens the
 /// device's page, where the connect or pair action lives.
-fn device_row(device: &Device, busy: Option<&Busy>, tokens: Tokens, navigator: Navigator) -> Row {
+fn device_row(
+    ctx: Ctx,
+    device: &Device,
+    busy: Option<&Busy>,
+    tokens: Tokens,
+    navigator: Navigator,
+) -> Row {
     let route = Route::Device {
         mac: device.mac.clone(),
         name: device_name(device),
@@ -694,7 +747,8 @@ fn device_row(device: &Device, busy: Option<&Busy>, tokens: Tokens, navigator: N
         .leading(device_icon(&device.icon))
         .trailing(Element::from(glyphs))
         .navigates()
-        .on_press(move |_| navigator.push(route.clone()));
+        .on_press(move |_| navigator.push(route.clone()))
+        .context_menu(device_menu(ctx, device));
     if let Some(subtitle) = subtitle {
         item = item.subtitle(subtitle);
     }
@@ -729,6 +783,8 @@ impl Component for BluetoothPage {
         let navigator = use_navigator();
         let model = system::cached("bluetooth");
         let busy_state = use_state::<Option<Busy>>(|| None);
+        let power_pending = use_state::<Option<bool>>(|| None);
+        let visible_pending = use_state::<Option<bool>>(|| None);
         let scanner = use_hook(Scanner::new);
         use_polling(model, Some(scanner.clone()));
 
@@ -768,8 +824,9 @@ impl Component for BluetoothPage {
                 busy: busy_state,
                 overlays,
             };
-            header = header.switch("Bluetooth", on, move |next: bool| {
-                run_job(ctx, power_job(next))
+            let shown = (*power_pending.read()).unwrap_or(on);
+            header = header.switch("Bluetooth", shown, move |next: bool| {
+                set_switch_job(ctx, power_pending, power_job(next), next)
             });
         }
         use_page_header(header);
@@ -797,7 +854,7 @@ impl Component for BluetoothPage {
                     "A switch on this computer has turned Bluetooth off. Turn the switch on to use Bluetooth."
                 }
                 Block::Software => {
-                    "A system setting has blocked Bluetooth. Turn off airplane mode or unblock Bluetooth to use it."
+                    "A system setting has blocked Bluetooth. Turn off \"Airplane mode\" or unblock Bluetooth to use it."
                 }
             };
             return page_column()
@@ -815,8 +872,8 @@ impl Component for BluetoothPage {
         if adapter.powered {
             page = page.child(Group::new(None::<String>).row(switch_row(
                 "Make this computer visible to other devices",
-                adapter.discoverable,
-                move |next: bool| run_job(ctx, visibility_job(next)),
+                (*visible_pending.read()).unwrap_or(adapter.discoverable),
+                move |next: bool| set_switch_job(ctx, visible_pending, visibility_job(next), next),
             )));
         }
 
@@ -837,7 +894,7 @@ impl Component for BluetoothPage {
         if !no_mine {
             page = page.child(
                 Group::titled("My devices").rows(mine.into_iter().map(|device| {
-                    Element::from(device_row(device, busy.as_ref(), tokens, navigator))
+                    Element::from(device_row(ctx, device, busy.as_ref(), tokens, navigator))
                 })),
             );
         }
@@ -853,7 +910,7 @@ impl Component for BluetoothPage {
                 group.row(status(Status::Empty("Looking for nearby devices.".into())))
             } else {
                 group.rows(nearby.into_iter().map(|device| {
-                    Element::from(device_row(device, busy.as_ref(), tokens, navigator))
+                    Element::from(device_row(ctx, device, busy.as_ref(), tokens, navigator))
                 }))
             });
         } else if no_mine {

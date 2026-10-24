@@ -13,12 +13,15 @@ use freya::animation::*;
 use freya::prelude::*;
 
 use crate::pages::gnoblin;
+use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
     Group, Icon, Overlays, ResponseKind, Status, Tokens, action_row, caption, choice_row, dialog,
-    icon, icon_button, page_column, primary_button, row, skeleton, status, switch_row, typography,
-    use_overlays, use_tokens,
+    icon, menu_item, menu_separator, page_column, primary_button, row, row_button, skeleton,
+    status, switch_row, typography, use_overlays, use_tokens,
 };
+use bingux_ui::runtime::optimistic;
+use bingux_ui::shell::MenuItem;
 use bingux_ui::style::*;
 
 /// Pixel values of the spacing tokens, for the arrangement and slider
@@ -533,12 +536,33 @@ fn load() -> Page {
     }
 }
 
-/// Snapshot builds only. `BINGUX_SETTINGS_FAKE_DISPLAYS` swaps in a two-display
-/// layout, so the arrangement can be checked on a machine with one monitor.
+/// Monitors are numbered in the order Mutter lists them, so the number on a
+/// tile matches the number that Identify shows on the screen.
+fn monitor_label(index: usize, monitor: &Monitor) -> String {
+    format!("{}. {}", index + 1, monitor.name)
+}
+
+/// A scaled monitor shows its scale, so the size on screen is not a surprise.
+fn monitor_caption(monitor: &Monitor) -> String {
+    let resolution = monitor.selected().resolution();
+    match (monitor.scale * 100.0).round() as u32 {
+        100 => resolution,
+        percent => format!("{resolution}, {percent}%"),
+    }
+}
+
+/// Snapshot builds only. `BINGUX_SETTINGS_FAKE_DISPLAYS=N` swaps in a fake
+/// layout of N displays (1 to 3, default 3). One of the three is rotated and
+/// scaled, so the arrangement can be checked on a machine with one monitor.
+///
 /// The layout is never sent to Mutter: `apply` refuses it.
 #[cfg(feature = "snapshot")]
 fn fake_layout() -> Option<Displays> {
-    std::env::var_os("BINGUX_SETTINGS_FAKE_DISPLAYS")?;
+    let count = std::env::var("BINGUX_SETTINGS_FAKE_DISPLAYS")
+        .ok()?
+        .parse::<usize>()
+        .unwrap_or(3)
+        .clamp(1, 3);
     let mode = |id: &str, width: u32, height: u32, refresh: f64, preferred: bool| Mode {
         id: id.to_string(),
         width,
@@ -559,27 +583,39 @@ fn fake_layout() -> Option<Displays> {
         scale: 1.0,
         transform: 0,
     };
+    let mut rotated = monitor(
+        "DP-2",
+        vec![mode("1920x1080@60", 1920, 1080, 60.0, true)],
+        false,
+        4480,
+        0,
+    );
+    rotated.scale = 1.25;
+    rotated.transform = 1;
+    let mut monitors = vec![
+        monitor(
+            "DP-1",
+            vec![
+                mode("2560x1440@59.95", 2560, 1440, 59.95, true),
+                mode("1920x1080@60", 1920, 1080, 60.0, false),
+            ],
+            true,
+            0,
+            0,
+        ),
+        monitor(
+            "HDMI-1",
+            vec![mode("1920x1080@60", 1920, 1080, 60.0, true)],
+            false,
+            2560,
+            180,
+        ),
+        rotated,
+    ];
+    monitors.truncate(count);
     Some(Displays::Editable {
         serial: 0,
-        monitors: vec![
-            monitor(
-                "DP-1",
-                vec![
-                    mode("2560x1440@59.95", 2560, 1440, 59.95, true),
-                    mode("1920x1080@60", 1920, 1080, 60.0, false),
-                ],
-                true,
-                0,
-                0,
-            ),
-            monitor(
-                "HDMI-1",
-                vec![mode("1920x1080@60", 1920, 1080, 60.0, true)],
-                false,
-                2560,
-                180,
-            ),
-        ],
+        monitors,
     })
 }
 
@@ -1055,80 +1091,34 @@ fn arrangement_hint(ctx: Ctx, monitors: &[Monitor]) -> String {
 }
 
 /// The height of the footer on the arrangement card: one button high, with a
-/// gap of `S2` above it and below it.
+/// gap of `S2` above it and `S4` below it, to match the frame.
 fn arrangement_footer_height() -> f32 {
-    Dim::Button.px() + GAP_2 * 2.0
+    Dim::Button.px() + GAP_4 + GAP_2
 }
 
-/// The footer of the arrangement card: the hint on the left and the quick
-/// controls for the selected display on the right, on one baseline.
-fn arrangement_footer(ctx: Ctx, monitors: &[Monitor], selected: usize) -> Element {
+/// The footer of the arrangement card: the hint on the left. Rotation and the
+/// main display are set on each display's own page, so each setting has one
+/// home and the card stays a diagram.
+fn arrangement_footer(ctx: Ctx, monitors: &[Monitor]) -> Element {
     rect()
-        .position(
-            Position::new_absolute()
-                .left(GAP_2)
-                .right(GAP_2)
-                .bottom(GAP_2),
-        )
+        .position(Position::new_absolute().left(0.0).bottom(0.0))
         .tw_layout(&[
+            // The footer spans the card and carries the inset as padding. An
+            // inset on both sides with a full width overflows the card edge.
             w_full(),
             h(Dim::Button),
+            px(S4),
+            pb(S4),
             flex_row(),
-            justify(Align::Between),
             items(Align::Center),
         ])
         .child(
-            // A fixed width stops the hint from taking the row, which would
-            // push the quick controls off the card.
+            // A fixed width stops a long hint from taking the whole row.
             rect()
                 .tw_layout(&[w(Dim::ArrangementHint)])
                 .child(caption(arrangement_hint(ctx, monitors))),
         )
-        .maybe_child(canvas_controls(ctx, monitors, selected))
         .into()
-}
-
-/// The rotate and main display buttons, at the right of the arrangement footer.
-/// Shown for the selected display when it is on.
-fn canvas_controls(ctx: Ctx, monitors: &[Monitor], selected: usize) -> Option<Element> {
-    let monitor = monitors.get(selected).filter(|monitor| monitor.enabled)?;
-    let index = selected;
-    let primary = monitor.primary;
-    Some(
-        rect()
-            .tw_layout(&[w_auto(), flex_row(), gap(S2)])
-            .child(
-                icon_button(Icon::ObjectRotateRight, move |_| {
-                    edit(ctx.model, ctx.error, move |monitors| {
-                        let next = next_orientation(monitors[index].transform);
-                        set_transform(monitors, index, &next.to_string())
-                    });
-                })
-                .tooltip("Rotate"),
-            )
-            .child(
-                icon_button(
-                    if primary {
-                        Icon::Starred
-                    } else {
-                        Icon::NonStarred
-                    },
-                    move |_| {
-                        if !primary {
-                            edit(ctx.model, ctx.error, move |monitors| {
-                                set_primary(monitors, index)
-                            });
-                        }
-                    },
-                )
-                .tooltip(if primary {
-                    "Main display"
-                } else {
-                    "Use as main display"
-                }),
-            )
-            .into(),
-    )
 }
 
 /// The bounds, scale and origin of the enabled displays in a canvas of `area`
@@ -1486,10 +1476,35 @@ fn write_night(
     );
 }
 
-fn set_night_enabled(model: State<Option<Page>>, error: State<Option<String>>, on: bool) {
-    update_night(model, |night| night.enabled = on);
-    let value = if on { "true" } else { "false" };
-    write_night(model, error, "night-light-enabled", value.to_string());
+/// The page with one night-light change applied. None while the page loads.
+fn with_night(page: &Option<Page>, change: impl FnOnce(&mut Night)) -> Option<Page> {
+    let mut next = page.clone()?;
+    if let Ok(night) = next.night.as_mut() {
+        change(night);
+    }
+    Some(next)
+}
+
+/// Shows one night-light change at once and writes it in the background. A
+/// failed write puts the page back as it was and shows a toast.
+fn night_write(ctx: Ctx, key: &'static str, value: String, change: impl FnOnce(&mut Night)) {
+    let previous = ctx.model.read().clone();
+    let Some(next) = with_night(&previous, change) else {
+        return;
+    };
+    optimistic(
+        ctx.model,
+        Some(ctx.overlays),
+        previous,
+        Some(next),
+        move || system::gsettings_set(COLOR, key, &value).map(|_| ()),
+    );
+}
+
+fn set_night_enabled(ctx: Ctx, on: bool) {
+    night_write(ctx, "night-light-enabled", on.to_string(), move |night| {
+        night.enabled = on
+    });
 }
 
 /// Updates the displayed temperature at once and writes it once the slider
@@ -1659,23 +1674,27 @@ impl Component for Arrangement {
             });
 
         let dragging = active.map(|drag| drag.index);
-        for (index, monitor) in monitors
-            .iter()
-            .enumerate()
-            .filter(|(_, monitor)| monitor.enabled)
-        {
-            canvas = canvas.child(Tile {
-                ctx,
-                index,
-                monitor: monitor.clone(),
-                frame,
-                selected: index == selected,
-                dragging: dragging == Some(index),
-                tokens,
-            });
+        // Boxes wait for the first measure. Until then the width is a guess,
+        // and a box placed by the guess would slide into its place.
+        if measured > 0.0 {
+            for (index, monitor) in monitors
+                .iter()
+                .enumerate()
+                .filter(|(_, monitor)| monitor.enabled)
+            {
+                canvas = canvas.child(Tile {
+                    ctx,
+                    index,
+                    monitor: monitor.clone(),
+                    frame,
+                    selected: index == selected,
+                    dragging: dragging == Some(index),
+                    tokens,
+                });
+            }
         }
         canvas
-            .child(arrangement_footer(ctx, monitors, selected))
+            .child(arrangement_footer(ctx, monitors))
             .into_element()
     }
 }
@@ -1743,7 +1762,7 @@ impl Component for Tile {
             .child(
                 typography::EMPHASIS
                     .in_ink(ink)
-                    .label(&tokens, monitor.name.clone())
+                    .label(&tokens, monitor_label(self.index, monitor))
                     .width(Size::fill())
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
@@ -1753,12 +1772,27 @@ impl Component for Tile {
         }
         let details = typography::CAPTION
             .in_ink(ink)
-            .label(&tokens, monitor.selected().resolution());
+            .label(&tokens, monitor_caption(monitor))
+            .max_lines(1)
+            .text_overflow(TextOverflow::Ellipsis);
 
         let ctx = self.ctx;
+        let navigator = use_navigator();
         let index = self.index;
         let origin = (monitor.x, monitor.y);
+        let menu_monitor = monitor.clone();
         let on_press = move |event: Event<PointerEventData>| {
+            let right = matches!(event.data(), PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Right));
+            if right {
+                let mut selected_state = ctx.selected;
+                selected_state.set(index);
+                let at = event.global_location();
+                ctx.overlays.show_menu(
+                    (at.x as f32, at.y as f32),
+                    monitor_menu(ctx, navigator, index, &menu_monitor),
+                );
+                return;
+            }
             if !event.data().is_primary() {
                 return;
             }
@@ -1795,6 +1829,41 @@ impl Component for Tile {
     }
 }
 
+/// The right-click menu for a display box. Each action stages a change in the
+/// draft, the same as the controls below it, so it waits for Apply.
+fn monitor_menu(ctx: Ctx, navigator: Navigator, index: usize, monitor: &Monitor) -> Vec<MenuItem> {
+    let mut make_main = menu_item("Make main", move |_| {
+        edit(ctx.model, ctx.error, move |monitors| {
+            set_primary(monitors, index)
+        });
+    });
+    if monitor.primary {
+        make_main = make_main.disabled();
+    }
+    let label = monitor_label(index, monitor);
+    vec![
+        make_main,
+        menu_item("Rotate", move |_| {
+            edit(ctx.model, ctx.error, move |monitors| {
+                let next = next_orientation(monitors[index].transform);
+                set_transform(monitors, index, &next.to_string())
+            });
+        }),
+        menu_item("Disable", move |_| {
+            edit(ctx.model, ctx.error, move |monitors| {
+                set_enabled(monitors, index, false)
+            });
+        }),
+        menu_separator(),
+        menu_item("Settings...", move |_| {
+            navigator.push(Route::Display {
+                index,
+                name: label.clone(),
+            })
+        }),
+    ]
+}
+
 fn arrangement_group(ctx: Ctx, monitors: &[Monitor], selected: usize, tokens: Tokens) -> Group {
     Group::titled("Arrangement")
         .description("Each box is one display, in the place it has on the desktop.")
@@ -1817,75 +1886,73 @@ fn monitor_group(
 ) -> Group {
     let enabled = monitor.enabled;
     let mode = monitor.selected();
-    Group::titled(&monitor.name)
+    // The subpage header already names the display, so its group is untitled.
+    Group::new(None::<String>)
         .description(monitor_state(monitor))
         .row(row("Port").value(monitor.connector.clone()))
-        .row(switch_row("Enabled", enabled, move |on: bool| {
-            edit(model, error, move |monitors| {
-                set_enabled(monitors, index, on)
-            });
-        }))
         .row(
-            choice_row(
-                "Resolution",
-                monitor.resolutions(),
-                &mode.resolution(),
-                move |key: String| {
-                    edit(model, error, move |monitors| {
-                        set_resolution(monitors, index, &key)
-                    });
-                },
-            )
-            .enabled(enabled),
-        )
-        .row(
-            choice_row(
-                "Refresh rate",
-                monitor.refresh_options(),
-                &mode.id,
-                move |id: String| {
-                    edit(model, error, move |monitors| {
-                        set_refresh(monitors, index, &id)
-                    });
-                },
-            )
-            .enabled(enabled),
-        )
-        .row(
-            choice_row(
-                "Scale",
-                monitor.scale_options(),
-                &monitor.scale_key(),
-                move |key: String| {
-                    edit(model, error, move |monitors| {
-                        set_scale(monitors, index, &key)
-                    });
-                },
-            )
-            .enabled(enabled),
-        )
-        .row(
-            choice_row(
-                "Orientation",
-                monitor.orientation_options(),
-                &monitor.transform.to_string(),
-                move |key: String| {
-                    edit(model, error, move |monitors| {
-                        set_transform(monitors, index, &key)
-                    });
-                },
-            )
-            .enabled(enabled),
-        )
-        .row(
-            switch_row("Primary", monitor.primary, move |on: bool| {
-                // Turning the primary display off would leave none; the only
-                // way to change it is to make another display primary.
-                if on {
-                    edit(model, error, move |monitors| set_primary(monitors, index));
-                }
+            switch_row("Enabled", enabled, move |on: bool| {
+                edit(model, error, move |monitors| {
+                    set_enabled(monitors, index, on)
+                });
             })
-            .enabled(enabled),
+            .nested(
+                enabled,
+                vec![
+                    choice_row(
+                        "Resolution",
+                        monitor.resolutions(),
+                        &mode.resolution(),
+                        move |key: String| {
+                            edit(model, error, move |monitors| {
+                                set_resolution(monitors, index, &key)
+                            });
+                        },
+                    )
+                    .into(),
+                    choice_row(
+                        "Refresh rate",
+                        monitor.refresh_options(),
+                        &mode.id,
+                        move |id: String| {
+                            edit(model, error, move |monitors| {
+                                set_refresh(monitors, index, &id)
+                            });
+                        },
+                    )
+                    .into(),
+                    choice_row(
+                        "Scale",
+                        monitor.scale_options(),
+                        &monitor.scale_key(),
+                        move |key: String| {
+                            edit(model, error, move |monitors| {
+                                set_scale(monitors, index, &key)
+                            });
+                        },
+                    )
+                    .into(),
+                    choice_row(
+                        "Orientation",
+                        monitor.orientation_options(),
+                        &monitor.transform.to_string(),
+                        move |key: String| {
+                            edit(model, error, move |monitors| {
+                                set_transform(monitors, index, &key)
+                            });
+                        },
+                    )
+                    .into(),
+                    switch_row("Primary", monitor.primary, move |on: bool| {
+                        // Turning the primary display off would leave none; the only
+                        // way to change it is to make another display primary.
+                        if on {
+                            edit(model, error, move |monitors| set_primary(monitors, index));
+                        }
+                    })
+                    .into(),
+                ],
+            ),
         )
 }
 
@@ -1900,33 +1967,31 @@ fn hour_key(hours: f64) -> String {
     ((hours.round() as u32) % 24).to_string()
 }
 
-fn set_night_schedule(model: State<Option<Page>>, error: State<Option<String>>, on: bool) {
-    update_night(model, |night| night.automatic = on);
-    write_night(
-        model,
-        error,
+fn set_night_schedule(ctx: Ctx, on: bool) {
+    night_write(
+        ctx,
         "night-light-schedule-automatic",
         on.to_string(),
+        move |night| night.automatic = on,
     );
 }
 
-fn set_night_hour(model: State<Option<Page>>, error: State<Option<String>>, from: bool, key: &str) {
+fn set_night_hour(ctx: Ctx, from: bool, key: &str) {
     let Ok(hour) = key.parse::<f64>() else {
         return;
     };
-    update_night(model, |night| {
+    let gsettings_key = if from {
+        "night-light-schedule-from"
+    } else {
+        "night-light-schedule-to"
+    };
+    night_write(ctx, gsettings_key, format!("{hour:.1}"), move |night| {
         if from {
             night.from = hour;
         } else {
             night.to = hour;
         }
     });
-    let gsettings_key = if from {
-        "night-light-schedule-from"
-    } else {
-        "night-light-schedule-to"
-    };
-    write_night(model, error, gsettings_key, format!("{hour:.1}"));
 }
 
 /// The colour a display shows at `kelvin`, from Tanner Helland's fit of
@@ -2147,39 +2212,41 @@ impl Component for KelvinStrip {
 
 fn night_group(ctx: Ctx, night: &Night) -> Group {
     let model = ctx.model;
-    let error = ctx.error;
-    let mut group = Group::titled("Night light")
+    Group::titled("Night light")
         .row(switch_row("Enabled", night.enabled, move |on: bool| {
-            set_night_enabled(model, error, on);
+            set_night_enabled(ctx, on);
         }))
         .row(
             row("Colour temperature")
                 .subtitle(temperature_word(night.kelvin))
                 .trailing(temperature_control(night.kelvin, move |level: f64| {
-                    set_night_level(model, error, ctx.night_ticket, level)
+                    set_night_level(model, ctx.error, ctx.night_ticket, level)
                 })),
         )
-        .row(switch_row(
-            "On a schedule",
-            night.automatic,
-            move |on: bool| set_night_schedule(model, error, on),
-        ));
-    if night.automatic {
-        group = group
-            .row(choice_row(
-                "From",
-                hour_options(),
-                &hour_key(night.from),
-                move |key: String| set_night_hour(model, error, true, &key),
-            ))
-            .row(choice_row(
-                "Until",
-                hour_options(),
-                &hour_key(night.to),
-                move |key: String| set_night_hour(model, error, false, &key),
-            ));
-    }
-    group
+        .row(
+            switch_row("On a schedule", night.automatic, move |on: bool| {
+                set_night_schedule(ctx, on)
+            })
+            .nested(
+                night.automatic,
+                vec![
+                    choice_row(
+                        "From",
+                        hour_options(),
+                        &hour_key(night.from),
+                        move |key: String| set_night_hour(ctx, true, &key),
+                    )
+                    .into(),
+                    choice_row(
+                        "Until",
+                        hour_options(),
+                        &hour_key(night.to),
+                        move |key: String| set_night_hour(ctx, false, &key),
+                    )
+                    .into(),
+                ],
+            ),
+        )
 }
 
 /// The line under a monitor's name: whether it is on, and whether it is the
@@ -2203,32 +2270,84 @@ fn apply_footer(ctx: Ctx) -> Element {
     )
 }
 
+/// The state every Displays page shares. The main page and a display's own
+/// page read the same draft and error, so an edit on one shows on the other.
+fn use_page_ctx(model: State<Option<Page>>) -> Ctx {
+    Ctx {
+        model,
+        error: use_state::<Option<String>>(|| None),
+        night_ticket: use_state::<u64>(|| 0),
+        prompt: use_state::<u64>(|| 0),
+        remaining: use_state::<u64>(|| KEEP_SECONDS),
+        selected: use_state::<usize>(|| 0),
+        drag: use_state::<Option<Drag>>(|| None),
+        overlays: use_overlays(),
+    }
+}
+
+/// With several displays, the main page lists them. Each row opens that
+/// display's own page, so the arrangement stays the only shared control.
+fn monitor_list_group(ctx: Ctx, monitors: &[Monitor], navigator: Navigator) -> Group {
+    let mut group = Group::titled("Displays")
+        .description("Choose a display to change its resolution, scale and orientation.");
+    for (index, monitor) in monitors.iter().enumerate() {
+        let label = monitor_label(index, monitor);
+        group = group.row(
+            row(label.clone())
+                .subtitle(monitor_caption(monitor))
+                .value(monitor_state(monitor))
+                .navigates()
+                .on_press(move |_| {
+                    navigator.push(Route::Display {
+                        index,
+                        name: label.clone(),
+                    })
+                })
+                .context_menu(monitor_menu(ctx, navigator, index, monitor)),
+        );
+    }
+    group
+}
+
+/// Numbers each display on its screen. The numbers follow the order of the
+/// list, so the user can match a row to a panel.
+fn identify_row(overlays: Overlays, monitors: &[Monitor]) -> Element {
+    let names = monitors
+        .iter()
+        .map(|monitor| monitor.connector.as_str())
+        .collect::<Vec<_>>()
+        .join(",");
+    action_row(
+        Some("Shows a number on each display, in the order of this list."),
+        row_button("Identify", move |_| identify(overlays, names.clone())),
+    )
+}
+
+/// Asks the desktop shell to number each display. The shell may be busy, so
+/// the call runs in the background and a failure appears as a toast.
+fn identify(overlays: Overlays, names: String) {
+    background_then(
+        move || system::run("binguxctl", &["ipc", "shell", "identify", &names], TIMEOUT),
+        move |result| {
+            if let Err(failure) = result {
+                overlays.toast(failure.0);
+            }
+        },
+    );
+}
+
 impl Component for DisplaysPage {
     fn render(&self) -> impl IntoElement {
         let model = system::use_cached("displays", load);
-        let error = use_state::<Option<String>>(|| None);
-        let night_ticket = use_state::<u64>(|| 0);
-        let prompt = use_state::<u64>(|| 0);
-        let remaining = use_state::<u64>(|| KEEP_SECONDS);
-        let selected = use_state::<usize>(|| 0);
-        let drag = use_state::<Option<Drag>>(|| None);
+        let ctx = use_page_ctx(model);
+        let navigator = use_navigator();
         let tokens = use_tokens();
-        let ctx = Ctx {
-            model,
-            error,
-            night_ticket,
-            prompt,
-            remaining,
-            selected,
-            drag,
-            overlays: use_overlays(),
-        };
 
         let mut page = page_column();
         let Some(loaded) = model.read().clone() else {
             return page.child(skeleton());
         };
-        if let Some(message) = error.read().clone() {
+        if let Some(message) = ctx.error.read().clone() {
             page = page.child(status(Status::Error(message)));
         }
 
@@ -2240,16 +2359,37 @@ impl Component for DisplaysPage {
                 let mut page = page.child(status(Status::Info(format!(
                     "{reason} Showing the connected displays."
                 ))));
-                for record in &records {
-                    page = page.child(record_group(record));
+                let mut group = Group::titled("Displays");
+                for (index, record) in records.iter().enumerate() {
+                    let title = record.title.clone();
+                    let open = title.clone();
+                    let menu = vec![menu_item("Open display details", move |_| {
+                        navigator.push(Route::Display {
+                            index,
+                            name: open.clone(),
+                        })
+                    })];
+                    group = group.row(
+                        row(record.title.clone())
+                            .navigates()
+                            .on_press(move |_| {
+                                navigator.push(Route::Display {
+                                    index,
+                                    name: title.clone(),
+                                })
+                            })
+                            .context_menu(menu),
+                    );
                 }
+                page = page.child(group);
                 page
             }
             Ok(Displays::Editable { monitors, .. }) => {
-                let chosen = (*selected.read()).min(monitors.len().saturating_sub(1));
+                let chosen = (*ctx.selected.read()).min(monitors.len().saturating_sub(1));
                 let mut page = page.child(arrangement_group(ctx, &monitors, chosen, tokens));
-                if let Some(monitor) = monitors.get(chosen) {
-                    page = page.child(monitor_group(model, error, chosen, monitor));
+                page = page.child(monitor_list_group(ctx, &monitors, navigator));
+                if monitors.len() > 1 {
+                    page = page.child(identify_row(ctx.overlays, &monitors));
                 }
                 page.child(apply_footer(ctx))
             }
@@ -2260,6 +2400,52 @@ impl Component for DisplaysPage {
             Err(failure) => page.child(status(Status::Error(failure.0))),
         };
         page
+    }
+}
+
+/// One display's settings, opened from the list on the Displays page. It
+/// shows the same controls as a single display does on the main page.
+#[derive(PartialEq)]
+pub struct DisplayPage {
+    pub index: usize,
+}
+
+impl Component for DisplayPage {
+    fn render(&self) -> impl IntoElement {
+        let model = system::use_cached("displays", load);
+        let ctx = use_page_ctx(model);
+
+        let mut page = page_column();
+        let Some(loaded) = model.read().clone() else {
+            return page.child(skeleton());
+        };
+        if let Some(message) = ctx.error.read().clone() {
+            page = page.child(status(Status::Error(message)));
+        }
+        match loaded.displays {
+            Err(failure) => page.child(
+                status(Status::Error(failure.0)).action("Try again", move |_| reload(model)),
+            ),
+            Ok(Displays::ReadOnly { records, .. }) => match records.get(self.index) {
+                Some(record) => page
+                    .child(status(Status::Info(
+                        "This display cannot be changed while the display service is unavailable."
+                            .to_string(),
+                    )))
+                    .child(record_group(record)),
+                None => page.child(status(Status::Info(
+                    "This display is no longer connected.".to_string(),
+                ))),
+            },
+            Ok(Displays::Editable { monitors, .. }) => match monitors.get(self.index) {
+                Some(monitor) => page
+                    .child(monitor_group(model, ctx.error, self.index, monitor))
+                    .child(apply_footer(ctx)),
+                None => page.child(status(Status::Info(
+                    "This display is no longer connected.".to_string(),
+                ))),
+            },
+        }
     }
 }
 

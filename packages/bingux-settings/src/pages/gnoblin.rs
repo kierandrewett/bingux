@@ -1,6 +1,6 @@
 //! Shared access to the running Gnoblin session: the committed config
-//! snapshot (to detect Lua overrides of GSettings input keys), input sources
-//! and detected devices. Written by the keyboard and mouse pages.
+//! snapshot (to detect Lua overrides of GSettings input keys) and detected
+//! devices. Written by the keyboard and mouse pages.
 
 use std::time::Duration;
 
@@ -13,9 +13,6 @@ pub const NOT_RUNNING: &str = "The desktop is not running, so this cannot be rea
 
 /// Shown beside a setting that the desktop configuration controls.
 pub const MANAGED: &str = "Managed by your desktop configuration";
-
-/// The system's XKB layout and variant names.
-const XKB_RULES: &str = "/usr/share/X11/xkb/rules/base.lst";
 
 /// A parsed JSON document. Objects keep their member order.
 #[derive(Clone, Debug, PartialEq)]
@@ -57,13 +54,6 @@ impl Json {
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Json::String(text) => Some(text),
-            _ => None,
-        }
-    }
-
-    pub fn as_bool(&self) -> Option<bool> {
-        match self {
-            Json::Bool(value) => Some(*value),
             _ => None,
         }
     }
@@ -333,90 +323,6 @@ pub fn config_path() -> Result<String, CommandError> {
     Ok(output.trim().to_string())
 }
 
-/// A keyboard layout or input method Gnoblin can switch to.
-#[derive(Clone, Debug, PartialEq)]
-pub struct InputSource {
-    pub kind: String,
-    pub id: String,
-    pub name: String,
-    pub active: bool,
-}
-
-/// The configured input sources, with the active one flagged. XKB layouts
-/// are named from the system's XKB rules; the id is shown when unknown.
-pub fn input_sources() -> Result<Vec<InputSource>, CommandError> {
-    let output = gnoblinctl(&["--json", "input", "list"])?;
-    let list = Json::parse(&output).map_err(parse_error)?;
-    let sources = list
-        .get(&["sources"])
-        .and_then(Json::as_array)
-        .ok_or_else(|| CommandError("The input sources could not be read.".to_string()))?;
-    Ok(sources
-        .iter()
-        .filter_map(|source| {
-            let text = |key: &str| source.get(&[key]).and_then(Json::as_str);
-            let kind = text("type")?.to_string();
-            let id = text("id")?.to_string();
-            let name = if kind == "xkb" {
-                xkb_name(&id).unwrap_or_else(|| id.clone())
-            } else {
-                text("name").or_else(|| text("short_name"))?.to_string()
-            };
-            Some(InputSource {
-                kind,
-                id,
-                name,
-                active: source
-                    .get(&["current"])
-                    .and_then(Json::as_bool)
-                    .unwrap_or(false),
-            })
-        })
-        .collect())
-}
-
-/// The display name of an XKB layout id such as `us`, `gb` or `us+dvorak`.
-fn xkb_name(id: &str) -> Option<String> {
-    parse_xkb_name(&std::fs::read_to_string(XKB_RULES).ok()?, id)
-}
-
-/// Finds `id` in an XKB `base.lst` file. Layouts are listed as `name  Name`,
-/// variants as `name  layout: Name`.
-fn parse_xkb_name(rules: &str, id: &str) -> Option<String> {
-    let (layout, variant) = match id.split_once('+') {
-        Some((layout, variant)) => (layout, Some(variant)),
-        None => (id, None),
-    };
-    let mut section = "";
-    let mut found = None;
-    for line in rules.lines() {
-        if let Some(header) = line.strip_prefix('!') {
-            section = header.trim();
-            continue;
-        }
-        let Some((name, rest)) = line.trim().split_once(char::is_whitespace) else {
-            continue;
-        };
-        let rest = rest.trim();
-        match (section, variant) {
-            ("layout", None) if name == layout => found = Some(rest.to_string()),
-            ("variant", Some(variant)) if name == variant => {
-                if let Some((owner, description)) = rest.split_once(':')
-                    && owner.trim() == layout
-                {
-                    found = Some(description.trim().to_string());
-                }
-            }
-            _ => {}
-        }
-    }
-    found
-}
-
-pub fn select_input_source(kind: &str, id: &str) -> CommandResult {
-    gnoblinctl(&["input", "select", kind, id])
-}
-
 /// Whether a touchpad is attached. Uses Gnoblin's device list when it
 /// answers, and the kernel's device list otherwise.
 pub fn has_touchpad() -> bool {
@@ -443,22 +349,5 @@ pub fn has_touchpad() -> bool {
                 line.starts_with("N: Name=") && line.to_ascii_lowercase().contains("touchpad")
             })
         }),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::parse_xkb_name;
-
-    const RULES: &str = "! layout\n  us              English (US)\n  gb              English (UK)\n! variant\n  dvorak          us: English (US, Dvorak)\n! option\n";
-
-    #[test]
-    fn names_layouts_and_variants() {
-        assert_eq!(parse_xkb_name(RULES, "gb").as_deref(), Some("English (UK)"));
-        assert_eq!(
-            parse_xkb_name(RULES, "us+dvorak").as_deref(),
-            Some("English (US, Dvorak)")
-        );
-        assert_eq!(parse_xkb_name(RULES, "fr"), None);
     }
 }

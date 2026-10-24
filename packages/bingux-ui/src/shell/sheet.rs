@@ -200,7 +200,6 @@ impl Component for SheetLayer {
             .child(
                 ScrollView::new()
                     .drag_scrolling(false)
-                    .auto_hide_scrollbars(false)
                     .width(Size::fill())
                     .height(Size::auto())
                     .max_height(Size::func(move |ctx| {

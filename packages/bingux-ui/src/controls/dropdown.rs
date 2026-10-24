@@ -33,13 +33,22 @@ const PHONE_VALUE: Recipe = &[pl(S0), pr(S0_5), justify(Align::End)];
 /// The button on a desktop: a filled control, the chevron at its end.
 const DESKTOP_VALUE: Recipe = &[pl(S3), pr(S2), justify(Align::Between)];
 
+/// What an option shows before its label.
+#[derive(Clone, PartialEq)]
+pub enum OptionIcon {
+    /// A desktop application's icon, by its name.
+    App(String),
+    /// A bundled symbolic icon, such as a headphone or a microphone.
+    Symbol(Icon),
+}
+
 /// `options` are `(key, label)` pairs; `on_select` receives the chosen key.
 #[derive(PartialEq)]
 pub struct Dropdown {
     options: Vec<(String, String)>,
     selected: String,
-    /// Application icon names, one per option, or none.
-    icons: Vec<String>,
+    /// The icon before each option's label, one per option, in order.
+    icons: Vec<OptionIcon>,
     enabled: bool,
     min_width: Option<Dim>,
     fixed_width: Option<Dim>,
@@ -66,7 +75,14 @@ impl Dropdown {
     /// Draw an application icon before each option; `icons` has one icon
     /// name per option, in the same order.
     pub fn app_icons(mut self, icons: Vec<String>) -> Self {
-        self.icons = icons;
+        self.icons = icons.into_iter().map(OptionIcon::App).collect();
+        self
+    }
+
+    /// Draw a symbolic icon before each option, in the same order as the
+    /// options: a headphone for a headset, a speaker for the built-in output.
+    pub fn icons(mut self, icons: Vec<Icon>) -> Self {
+        self.icons = icons.into_iter().map(OptionIcon::Symbol).collect();
         self
     }
 
@@ -107,7 +123,7 @@ impl Component for Dropdown {
         let enabled = use_enabled(self.enabled);
         let on_select = self.on_select.clone();
         let options = self.options.clone();
-        let icon_names = self.icons.clone();
+        let option_icons = self.icons.clone();
         let selected_index = options.iter().position(|(key, _)| *key == self.selected);
         let current = selected_index
             .map(|index| options[index].1.clone())
@@ -347,7 +363,12 @@ impl Component for Dropdown {
             .child(
                 rect()
                     .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
-                    .maybe_child(current_icon.map(|name| app_icon(name, IconSize::AppSmall)))
+                    .maybe_child(current_icon.map(|icon| {
+                        option_icon(
+                            icon,
+                            if touch { Paint::Muted } else { Paint::Text }.color(&tokens),
+                        )
+                    }))
                     .child(
                         BODY.in_ink(if touch { Ink::Muted } else { Ink::Text })
                             .label(&tokens, current)
@@ -420,12 +441,11 @@ impl Component for Dropdown {
                                 .child(
                                     ScrollView::new_controlled(scroll)
                                         .drag_scrolling(false)
-                                        .auto_hide_scrollbars(false)
                                         .children(options.iter().enumerate().map(
                                             |(index, (_, text))| {
                                                 let choose = choose.clone();
                                                 Element::from(DropdownItem {
-                                                    icon: icon_names.get(index).cloned(),
+                                                    icon: option_icons.get(index).cloned(),
                                                     text: text.clone(),
                                                     selected: Some(index) == selected_index,
                                                     highlighted: hovered_item().is_none()
@@ -456,7 +476,7 @@ impl Component for Dropdown {
 
 #[derive(PartialEq)]
 struct DropdownItem {
-    icon: Option<String>,
+    icon: Option<OptionIcon>,
     text: String,
     selected: bool,
     highlighted: bool,
@@ -504,8 +524,8 @@ impl Component for DropdownItem {
             })
             .maybe_child(
                 self.icon
-                    .as_ref()
-                    .map(|name| app_icon(name.clone(), IconSize::AppSmall)),
+                    .clone()
+                    .map(|icon| option_icon(icon, Paint::Text.color(&tokens))),
             )
             .child(
                 BODY.in_ink(Ink::Text)
@@ -523,5 +543,13 @@ impl Component for DropdownItem {
                     Paint::Transparent.color(&tokens)
                 },
             ))
+    }
+}
+
+/// The icon before an option's label: an application icon or a symbol.
+fn option_icon(icon: OptionIcon, colour: Color) -> Element {
+    match icon {
+        OptionIcon::App(name) => app_icon(name, IconSize::AppSmall).into(),
+        OptionIcon::Symbol(symbol) => icons::icon(symbol, IconSize::AppSmall, colour).into(),
     }
 }

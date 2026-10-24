@@ -7,6 +7,14 @@
 //! keys, so the shell, the portal and GNOME apps all see them; without
 //! gsettings those two groups are left out. Changing either updates the
 //! shared palette at once, so the whole window recolours.
+//!
+//! The page opens on a picture of the desktop: the chosen wallpaper with the
+//! top bar, a window and the dock. The colour scheme cards show the same
+//! desktop in each scheme. The font subpage lives in `appearance/fonts.rs`.
+
+mod fonts;
+
+pub use fonts::FontPage;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -14,13 +22,19 @@ use std::time::Duration;
 use freya::prelude::*;
 
 use crate::pages::bingux_config;
+use crate::pages::desktop::{
+    self,
+    preview::{Frame, Scene, framed, scene},
+};
 use crate::routes::{Route, use_navigator};
-use crate::system::{self, CommandError, background, background_then, which};
+use crate::system::{
+    self, CommandError, background, background_then, optimistic, optimistic_then, which,
+};
 use crate::theme::{Scheme, SharedTokens, Tokens, accent_names, read_gsettings};
 use crate::ui::typography::{BODY, EMPHASIS};
 use crate::ui::{
-    Group, Icon, Overlays, Status, choice_list, icon, page_column, row, row_button, skeleton,
-    status, use_overlays, use_tokens,
+    Group, Icon, Overlays, Status, icon, menu_item, menu_separator, page_column, row, row_button,
+    skeleton, status, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
 
@@ -36,6 +50,9 @@ struct Model {
     font: String,
     /// Whether gsettings can read the accent and colour scheme.
     gsettings: bool,
+    /// The desktop settings, which the picture's dock and sidebar follow.
+    /// `None` when they could not be read.
+    desktop: Option<desktop::Model>,
 }
 
 type Loaded = Result<Model, CommandError>;
@@ -56,6 +73,7 @@ fn load() -> Loaded {
         wallpaper,
         font,
         gsettings,
+        desktop: desktop::load().ok(),
     })
 }
 
@@ -79,20 +97,41 @@ fn reload(mut model: State<Option<Loaded>>) {
     background(model, load);
 }
 
-/// Opens the chooser, stores the picked file and reads the value back.
-/// Resolves to `None` when the user cancelled.
-fn choose_wallpaper() -> Result<Option<Model>, CommandError> {
-    let Some(path) = system::pick_path("Choose a wallpaper", system::Pick::Image)? else {
-        return Ok(None);
+/// Stores the wallpaper: a picture's path, or `None` for the GNOME background.
+/// The new picture shows at once. The model is reloaded from the shell once the
+/// write has landed, and a failed write puts the old one back with a toast.
+fn set_wallpaper(mut model: State<Option<Loaded>>, overlays: Overlays, path: Option<String>) {
+    let previous = model.read().clone();
+    let Some(Ok(current)) = previous.clone() else {
+        return;
     };
-    config(&["set", WALLPAPER_KEY, path.as_str()])?;
-    load().map(Some)
+    let mut value = current;
+    value.wallpaper = path.clone().unwrap_or_default();
+    let work = move || match path {
+        Some(path) => config(&["set", WALLPAPER_KEY, path.as_str()]),
+        None => config(&["unset", WALLPAPER_KEY]),
+    };
+    optimistic_then(
+        model,
+        Some(overlays),
+        previous,
+        Some(Ok(value)),
+        move || work().map(|_| ()),
+        move || background_then(load, move |loaded| model.set(Some(loaded))),
+    );
 }
 
-/// Removes the wallpaper setting so the GNOME background applies again.
-fn use_gnome_background() -> Result<Option<Model>, CommandError> {
-    config(&["unset", WALLPAPER_KEY])?;
-    load().map(Some)
+/// Opens the picture chooser on a background thread, then stores the picked
+/// file. A cancelled chooser leaves the page as it was.
+fn choose_wallpaper(model: State<Option<Loaded>>, overlays: Overlays) {
+    background_then(
+        || system::pick_path("Choose a wallpaper", system::Pick::Image),
+        move |picked| match picked {
+            Ok(Some(path)) => set_wallpaper(model, overlays, Some(path)),
+            Ok(None) => {}
+            Err(failure) => overlays.toast(failure.0),
+        },
+    );
 }
 
 fn file_name(path: &str) -> String {
@@ -102,58 +141,25 @@ fn file_name(path: &str) -> String {
         .unwrap_or_else(|| path.to_string())
 }
 
-/// Sets the accent immediately, writes GNOME's key, and rolls back on failure.
-fn apply_accent(mut shared: State<Tokens>, overlays: Overlays, name: &'static str) {
+/// Sets the accent at once, writes GNOME's key in the background, and rolls
+/// back on failure.
+fn apply_accent(shared: State<Tokens>, overlays: Overlays, name: &'static str) {
     let previous = *shared.read();
-    shared.set(Tokens::new(name, previous.scheme, previous.reduced_motion));
-    let value = format!("'{name}'");
-    background_then(
-        move || system::gsettings_set(INTERFACE, "accent-color", &value),
-        move |result| match result {
-            Ok(_) => {}
-            Err(failure) => {
-                shared.set(previous);
-                overlays.toast(failure.0);
-            }
-        },
-    );
+    let value = Tokens::new(name, previous.scheme, previous.reduced_motion);
+    let text = format!("'{name}'");
+    optimistic(shared, Some(overlays), previous, value, move || {
+        system::gsettings_set(INTERFACE, "accent-color", &text).map(|_| ())
+    });
 }
 
-/// Sets the colour scheme immediately, writes GNOME's key, and rolls back on
-/// failure.
-fn apply_scheme(mut shared: State<Tokens>, overlays: Overlays, scheme: Scheme) {
+/// Sets the colour scheme at once, writes GNOME's key in the background, and
+/// rolls back on failure.
+fn apply_scheme(shared: State<Tokens>, overlays: Overlays, scheme: Scheme) {
     let previous = *shared.read();
-    shared.set(Tokens::new(
-        previous.accent_name,
-        scheme,
-        previous.reduced_motion,
-    ));
-    let value = format!("'{}'", scheme.gsettings_value());
-    background_then(
-        move || system::gsettings_set(INTERFACE, "color-scheme", &value),
-        move |result| match result {
-            Ok(_) => {}
-            Err(failure) => {
-                shared.set(previous);
-                overlays.toast(failure.0);
-            }
-        },
-    );
-}
-
-/// Runs a wallpaper change in the background and stores the reloaded model.
-/// A cancelled chooser leaves the page as it was.
-fn run_wallpaper_change(
-    mut model: State<Option<Loaded>>,
-    overlays: Overlays,
-    work: fn() -> Result<Option<Model>, CommandError>,
-) {
-    background_then(work, move |result| match result {
-        Ok(Some(loaded)) => {
-            model.set(Some(Ok(loaded)));
-        }
-        Ok(None) => {}
-        Err(failure) => overlays.toast(failure.0),
+    let value = Tokens::new(previous.accent_name, scheme, previous.reduced_motion);
+    let text = format!("'{}'", scheme.gsettings_value());
+    optimistic(shared, Some(overlays), previous, value, move || {
+        system::gsettings_set(INTERFACE, "color-scheme", &text).map(|_| ())
     });
 }
 
@@ -203,109 +209,78 @@ fn swatch(
     Element::from(TooltipContainer::new(Tooltip::new_text(title)).child(button))
 }
 
-/// A grey line standing in for text in a scheme card.
-fn preview_line(tokens: &Tokens, width: Util, paint: Paint) -> impl IntoElement {
-    rect().tw(
+/// The scene for the hero and the cards: the settings' dock and sidebar, or a
+/// bare picture when the desktop settings could not be read.
+fn scene_for<'a>(
+    desktop: Option<&'a desktop::Model>,
+    dark: bool,
+    wallpaper: Option<&'a str>,
+) -> Scene<'a> {
+    match desktop {
+        Some(model) => Scene::of(model, dark, wallpaper),
+        None => Scene {
+            dark,
+            wallpaper,
+            dock: None,
+            sidebar: None,
+        },
+    }
+}
+
+/// One colour scheme's desktop picture. Cards leave out the wallpaper, so each
+/// scheme reads as its colours alone.
+fn card_picture(
+    tokens: &Tokens,
+    dark: bool,
+    desktop: Option<&desktop::Model>,
+    width: Util,
+) -> Element {
+    Element::from(rect().tw(tokens, &[width]).child(scene(
         tokens,
-        &[width, h(Dim::PreviewBar), rounded(Radius::Mark), bg(paint)],
-    )
+        &scene_for(desktop, dark, None),
+        Frame::Card,
+        None,
+    )))
 }
 
-/// A small window in one colour scheme: a title bar, a sidebar and content.
-/// The colours are fixed so each card shows its scheme, whatever is current.
-fn mock_window(tokens: &Tokens, dark: bool, width: Util) -> Element {
-    let (window, bar, sidebar, line) = if dark {
-        (
-            Paint::MockDarkWindow,
-            Paint::MockDarkBar,
-            Paint::MockDarkSidebar,
-            Paint::MockDarkLine,
-        )
-    } else {
-        (
-            Paint::MockLightWindow,
-            Paint::MockLightBar,
-            Paint::MockLightSidebar,
-            Paint::MockLightLine,
-        )
-    };
-    let side = rect()
-        .tw(
-            tokens,
-            &[
-                flex_col(),
-                w(Dim::PreviewSidebar),
-                h_full(),
-                bg(sidebar),
-                p(S2),
-                gap(S2),
-            ],
-        )
-        .child(preview_line(tokens, w_full(), line))
-        .child(preview_line(tokens, w_full(), line));
-    let content = rect()
-        .tw(
-            tokens,
-            &[flex_col(), w_flex(), h_full(), bg(window), p(S2), gap(S2)],
-        )
-        .child(preview_line(tokens, w(Dim::PreviewLine), Paint::Accent))
-        .child(preview_line(tokens, w_full(), line))
-        .child(preview_line(tokens, w_full(), line));
-    let body = rect()
-        .tw(tokens, &[flex_row(), w_full(), h_flex()])
-        .child(side)
-        .child(content);
-    let top = rect().tw(tokens, &[w_full(), h(Dim::PreviewTitleBar), bg(bar)]);
-    Element::from(
-        rect()
-            .tw(tokens, &[flex_col(), width, h_full(), bg(window)])
-            .child(top)
-            .child(body),
-    )
-}
-
-/// One colour scheme card, drawn as a small window, with its name under it.
-/// The chosen card is ringed in the accent colour, as GNOME's Style switcher.
+/// One colour scheme card: the desktop drawn in that scheme, with its name
+/// under it. The chosen card is ringed in the accent colour, as GNOME's Style
+/// switcher. The default scheme shows the light and the dark desktop side by
+/// side.
 fn scheme_card(
     title: &'static str,
     scheme: Scheme,
     tokens: Tokens,
+    desktop: Option<&desktop::Model>,
     on_press: impl FnMut(Event<PressEventData>) + 'static,
 ) -> Element {
     let selected = tokens.scheme == scheme;
-    let windows = match scheme {
+    let picture = match scheme {
         Scheme::Default => Element::from(
             rect()
-                .tw(&tokens, &[flex_row(), w_full(), h_full()])
-                .child(mock_window(&tokens, false, w_flex()))
-                .child(mock_window(&tokens, true, w_flex())),
+                .tw(&tokens, &[flex_row(), w_full(), gap(S2)])
+                .child(card_picture(&tokens, false, desktop, w_flex()))
+                .child(card_picture(&tokens, true, desktop, w_flex())),
         ),
-        Scheme::PreferLight => mock_window(&tokens, false, w_full()),
-        Scheme::PreferDark => mock_window(&tokens, true, w_full()),
+        Scheme::PreferLight => card_picture(&tokens, false, desktop, w_full()),
+        Scheme::PreferDark => card_picture(&tokens, true, desktop, w_full()),
     };
     let ring = if selected {
         Paint::Accent
     } else {
         Paint::Outline
     };
-    let content = rect()
-        .tw(
-            &tokens,
-            &[w_full(), h_full(), rounded(Radius::Control), clip()],
-        )
-        .child(windows);
     let frame = rect()
         .tw(
             &tokens,
             &[
                 w_full(),
-                h(Dim::PreviewHeight),
                 rounded(Radius::Card),
                 border(Line::Ring(ring)),
-                p(S0_5),
+                p(S1),
             ],
         )
-        .child(content);
+        .child(picture);
     let caption = if selected { EMPHASIS } else { BODY };
     Element::from(
         rect()
@@ -320,6 +295,11 @@ fn scheme_card(
             .child(frame)
             .child(caption.label(&tokens, title)),
     )
+}
+
+/// Whether a pointer press is a right click, which opens the picture menu.
+fn is_secondary(event: &Event<PointerEventData>) -> bool {
+    matches!(event.data(), PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Right))
 }
 
 #[derive(PartialEq)]
@@ -351,6 +331,7 @@ impl Component for AppearancePage {
             model_value.font.clone()
         };
         let wallpaper_path = Some(model_value.wallpaper.clone()).filter(|path| !path.is_empty());
+        let dark = tokens.scheme != Scheme::PreferLight;
 
         let swatches: Vec<Element> = accent_names()
             .map(|name| {
@@ -360,7 +341,41 @@ impl Component for AppearancePage {
             })
             .collect();
 
+        let picture = rect()
+            .tw(&tokens, &[w_full()])
+            .on_pointer_down(move |event: Event<PointerEventData>| {
+                if !is_secondary(&event) {
+                    return;
+                }
+                let at = event.global_location();
+                overlays.show_menu(
+                    (at.x as f32, at.y as f32),
+                    vec![
+                        menu_item("Choose picture", move |_| choose_wallpaper(model, overlays))
+                            .icon(Icon::ImageGeneric),
+                        menu_separator(),
+                        menu_item("Use system wallpaper", move |_| {
+                            set_wallpaper(model, overlays, None)
+                        }),
+                    ],
+                );
+            })
+            .child(framed(
+                &tokens,
+                scene(
+                    &tokens,
+                    &scene_for(
+                        model_value.desktop.as_ref(),
+                        dark,
+                        wallpaper_path.as_deref(),
+                    ),
+                    Frame::Hero,
+                    None,
+                ),
+            ));
+
         page_column()
+            .child(picture)
             .child(
                 Group::titled("Wallpaper")
                     .row(match wallpaper_path {
@@ -373,20 +388,20 @@ impl Component for AppearancePage {
                                     (!touch()).then(|| wallpaper_thumbnail(&tokens, &path)),
                                 )
                                 .child(row_button("Choose picture", move |_| {
-                                    run_wallpaper_change(model, overlays, choose_wallpaper)
+                                    choose_wallpaper(model, overlays)
                                 })),
                         ),
                         None => row("No picture chosen")
                             .subtitle("The system wallpaper is in use.")
                             .trailing(row_button("Choose picture", move |_| {
-                                run_wallpaper_change(model, overlays, choose_wallpaper)
+                                choose_wallpaper(model, overlays)
                             })),
                     })
                     .row(
                         row("System wallpaper")
                             .subtitle("Go back to the wallpaper that came with the system.")
                             .trailing(row_button("Use it", move |_| {
-                                run_wallpaper_change(model, overlays, use_gnome_background)
+                                set_wallpaper(model, overlays, None)
                             })),
                     ),
             )
@@ -442,6 +457,7 @@ impl Component for AppearancePage {
                                             "Default",
                                             Scheme::Default,
                                             tokens,
+                                            model_value.desktop.as_ref(),
                                             move |_| {
                                                 apply_scheme(shared, overlays, Scheme::Default)
                                             },
@@ -450,6 +466,7 @@ impl Component for AppearancePage {
                                             "Light",
                                             Scheme::PreferLight,
                                             tokens,
+                                            model_value.desktop.as_ref(),
                                             move |_| {
                                                 apply_scheme(shared, overlays, Scheme::PreferLight)
                                             },
@@ -458,6 +475,7 @@ impl Component for AppearancePage {
                                             "Dark",
                                             Scheme::PreferDark,
                                             tokens,
+                                            model_value.desktop.as_ref(),
                                             move |_| {
                                                 apply_scheme(shared, overlays, Scheme::PreferDark)
                                             },
@@ -468,7 +486,7 @@ impl Component for AppearancePage {
             }))
             .maybe_child((!model_value.gsettings).then(|| {
                 Element::from(status(Status::Info(
-                    "Accent colour and colour scheme are not available on this system.".into(),
+                    "\"Accent colour\" and \"Colour scheme\" are not available on this system.".into(),
                 )))
             }))
     }
@@ -493,67 +511,6 @@ fn wallpaper_thumbnail(tokens: &Tokens, path: &str) -> Element {
                 .aspect_ratio(AspectRatio::Max),
         )
         .into()
-}
-
-/// Every installed font family, sorted, each listed once under its first name.
-fn installed_fonts() -> Result<Vec<String>, CommandError> {
-    let text = system::run("fc-list", &[":", "family"], Duration::from_secs(5))?;
-    let mut families: Vec<String> = text
-        .lines()
-        .filter_map(|line| line.split(',').next())
-        .map(|name| name.trim().to_string())
-        .filter(|name| !name.is_empty())
-        .collect();
-    families.sort_by_key(|name| name.to_lowercase());
-    families.dedup();
-    Ok(families)
-}
-
-/// The font subpage: every installed family, narrowed by typing. The first
-/// choice restores the system font.
-#[derive(PartialEq)]
-pub struct FontPage;
-
-impl Component for FontPage {
-    fn render(&self) -> impl IntoElement {
-        let model: State<Option<Loaded>> = system::cached("appearance");
-        let navigator = use_navigator();
-        let overlays = use_overlays();
-        let fonts = use_state::<Option<Result<Vec<String>, CommandError>>>(|| None);
-        use_hook(move || background(fonts, installed_fonts));
-
-        let list = match fonts.read().clone() {
-            Some(Ok(list)) => list,
-            Some(Err(failure)) => {
-                return page_column().child(status(Status::Error(failure.0)));
-            }
-            None => return page_column().child(skeleton()),
-        };
-        let current = match model.read().as_ref() {
-            Some(Ok(data)) => data.font.clone(),
-            _ => String::new(),
-        };
-        let mut options = vec![(String::new(), "System default".to_string())];
-        options.extend(list.into_iter().map(|family| (family.clone(), family)));
-
-        page_column().child(
-            choice_list(options, current, move |family: String| {
-                let mut model = model;
-                background_then(
-                    move || set_font(&family),
-                    move |result| match result {
-                        Ok(Some(loaded)) => {
-                            model.set(Some(Ok(loaded)));
-                            navigator.pop();
-                        }
-                        Ok(None) => {}
-                        Err(failure) => overlays.toast(failure.0),
-                    },
-                );
-            })
-            .placeholder("Search for a font"),
-        )
-    }
 }
 
 /// Start loading this page's data before it is opened.

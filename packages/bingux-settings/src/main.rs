@@ -9,7 +9,9 @@
 mod app;
 mod apps;
 mod pages;
+mod passwd;
 mod routes;
+mod search_results;
 mod settings_index;
 
 /// Pages were written against these module paths; they map onto bingux-ui.
@@ -93,6 +95,9 @@ fn snapshot_pages(dir: &str, only: &[String]) {
             .filter_map(|name| PageId::from_panel(name))
             .collect()
     };
+    // BINGUX_SETTINGS_SNAPSHOT_SEARCH="text" starts the window with that text
+    // in the search box, so the search results can be captured. See
+    // `search_results::initial_query`.
     // BINGUX_SETTINGS_SNAPSHOT_CLICK="x,y[;x,y...]" clicks those points
     // (one second apart) after the page has loaded, before the capture, so
     // a write path can be driven and checked from a script.
@@ -116,7 +121,14 @@ fn snapshot_pages(dir: &str, only: &[String]) {
             Some((w.trim().parse().ok()?, h.trim().parse().ok()?))
         })
         .unwrap_or(theme::WINDOW_SIZE);
+    // BINGUX_SETTINGS_SNAPSHOT_SUBPAGE="default" or an application's desktop id
+    // opens that subpage instead of the panel's main page, for example to
+    // capture an application's page.
+    let subpage = std::env::var("BINGUX_SETTINGS_SNAPSHOT_SUBPAGE")
+        .ok()
+        .and_then(|name| routes::Route::from_name(&name));
     for page in pages {
+        let subpage = subpage.clone();
         let path = format!("{dir}/{}.png", page.panel_name());
         let mut shot = bingux_ui::snapshot::Snapshot::new(
             move || {
@@ -126,7 +138,7 @@ fn snapshot_pages(dir: &str, only: &[String]) {
                         .tw(&tokens, &[w_full(), h_full(), bg(Paint::Bg)])
                         .child(app::App {
                             initial: page,
-                            subpage: None,
+                            subpage: subpage.clone(),
                             list_first: std::env::var_os("BINGUX_SETTINGS_SNAPSHOT_LIST").is_some(),
                         }),
                 )
@@ -142,6 +154,12 @@ fn snapshot_pages(dir: &str, only: &[String]) {
         shot.settle(std::time::Duration::from_millis(settle_ms));
         for (x, y) in &clicks {
             shot.click(*x, *y)
+                .settle(std::time::Duration::from_millis(1000));
+        }
+        // BINGUX_SETTINGS_SNAPSHOT_RIGHT_CLICK="x,y" right-clicks there, to
+        // open a context menu, before the capture.
+        if let Some([x, y]) = snapshot_numbers::<2>("BINGUX_SETTINGS_SNAPSHOT_RIGHT_CLICK") {
+            shot.right_click(x, y)
                 .settle(std::time::Duration::from_millis(1000));
         }
         // BINGUX_SETTINGS_SNAPSHOT_SCROLL="x,y,dy" scrolls the wheel by dy over

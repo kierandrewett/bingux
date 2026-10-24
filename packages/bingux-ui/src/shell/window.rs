@@ -24,12 +24,11 @@ pub fn drag_on_pointer_down(event: Event<PointerEventData>) {
     }
 }
 
-/// A header bar: optional leading element, a title that fills the middle,
-/// and trailing elements. Dragging the bar moves the window.
+/// A header bar: optional leading elements, a title centred across the whole
+/// bar, and trailing elements. Dragging the bar moves the window.
 #[derive(PartialEq)]
 pub struct HeaderBar {
     title: String,
-    centered: bool,
     leading: Vec<Element>,
     trailing: Vec<Element>,
     background: Paint,
@@ -41,19 +40,12 @@ impl HeaderBar {
     pub fn new(title: impl Into<String>) -> Self {
         Self {
             title: title.into(),
-            centered: false,
             leading: Vec::new(),
             trailing: Vec::new(),
             background: Paint::Surface,
             title_slot: None,
             busy: false,
         }
-    }
-
-    /// Centre the title, as the sidebar header does.
-    pub fn centered(mut self) -> Self {
-        self.centered = true;
-        self
     }
 
     pub fn leading(mut self, element: impl Into<Element>) -> Self {
@@ -72,7 +64,7 @@ impl HeaderBar {
         self
     }
 
-    /// Show a spinner beside the title while a page is busy.
+    /// Show a spinner beside the leading controls while a page is busy.
     pub fn busy(mut self, busy: bool) -> Self {
         self.busy = busy;
         self
@@ -88,20 +80,55 @@ impl HeaderBar {
 impl Component for HeaderBar {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let title = EMPHASIS
-            .label(&tokens, self.title.clone())
-            .width(Size::fill())
-            .max_lines(1)
-            .text_overflow(TextOverflow::Ellipsis)
-            .text_align(if self.centered {
-                TextAlign::Center
-            } else {
-                TextAlign::Left
-            });
+        // The title is laid out on the whole bar, so its centre is the bar's
+        // centre whatever the controls weigh. Its side insets are the wider of
+        // the two control clusters, so it never runs under a control.
+        let mut leading_width = use_state(|| 0.0_f32);
+        let mut trailing_width = use_state(|| 0.0_f32);
+        let mut title_width = use_state(|| 0.0_f32);
+        let inset = leading_width().max(trailing_width()) + S2.px() + S1.px();
         let text: Element = match &self.title_slot {
-            Some(slot) => rect().tw(&tokens, &[w_flex()]).child(slot.clone()).into(),
-            None => rect().tw(&tokens, &[w_flex()]).child(title).into(),
+            Some(slot) => slot.clone(),
+            None => EMPHASIS
+                .label(&tokens, self.title.clone())
+                .width(Size::fill())
+                .max_lines(1)
+                .text_overflow(TextOverflow::Ellipsis)
+                .text_align(TextAlign::Center)
+                .into(),
         };
+        // Drawn first, so the controls above it take the pointer where they overlap.
+        // The title is inset on both sides by the wider cluster so it never runs under a control.
+        // The measured title width less both insets is the title's run-time width.
+        let centre_width = (title_width() - inset * 2.0).max(0.0);
+        let title = rect()
+            .position(Position::new_absolute().top(0.0).left(0.0))
+            .tw(&tokens, &[w_full(), h_full()])
+            .on_sized(move |event: Event<SizedEventData>| {
+                title_width.set_if_modified(event.area.width());
+            })
+            .child(
+                rect()
+                    .position(Position::new_absolute().top(0.0).left(inset))
+                    .width(Size::px(centre_width))
+                    // Freya does not size an absolute box from top and bottom,
+                    // so the row takes the bar's full height to centre the title.
+                    .tw(&tokens, &[h_full(), flex_row(), items(Align::Center)])
+                    .child(text),
+            );
+        let leading = rect()
+            .tw(&tokens, &[flex_row(), items(Align::Center), gap(S1)])
+            .on_sized(move |event: Event<SizedEventData>| {
+                leading_width.set_if_modified(event.area.width());
+            })
+            .children(self.leading.clone())
+            .maybe_child(self.busy.then(busy_indicator));
+        let trailing = rect()
+            .tw(&tokens, &[flex_row(), items(Align::Center), gap(S1)])
+            .on_sized(move |event: Event<SizedEventData>| {
+                trailing_width.set_if_modified(event.area.width());
+            })
+            .children(self.trailing.clone());
         rect()
             .tw(&tokens, HEADER)
             .tw(
@@ -112,10 +139,10 @@ impl Component for HeaderBar {
                 ],
             )
             .on_pointer_down(drag_on_pointer_down)
-            .children(self.leading.clone())
-            .child(text)
-            .maybe_child(self.busy.then(busy_indicator))
-            .children(self.trailing.clone())
+            .child(title)
+            .child(leading)
+            .child(rect().tw(&tokens, &[w_flex()]))
+            .child(trailing)
     }
 }
 

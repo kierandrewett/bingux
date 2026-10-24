@@ -269,11 +269,16 @@ impl Component for TextField {
             input = input.placeholder(placeholder.clone());
         }
         if let Some(icon) = self.leading {
-            input = input.leading(rect().tw(&tokens, &[mr(S1)]).child(icons::icon(
-                icon,
-                IconSize::Control,
-                Paint::Muted.color(&tokens),
-            )));
+            input = input.leading(
+                rect()
+                    .height(Size::fill())
+                    .tw(&tokens, &[mr(S1), flex_row(), center()])
+                    .child(icons::icon(
+                        icon,
+                        IconSize::Control,
+                        Paint::Muted.color(&tokens),
+                    )),
+            );
         }
         let clear = self.clearable && has_text;
         if clear || self.password {
@@ -286,7 +291,11 @@ impl Component for TextField {
                             &tokens,
                             &[w(Dim::Box5), h(Dim::Box5), rounded(Radius::Pill), center()],
                         )
-                        .on_press(move |event: Event<PressEventData>| {
+                        .on_pointer_down(move |event: Event<PointerEventData>| {
+                            let left = matches!(event.data(), PointerEventData::Mouse(mouse) if mouse.button == Some(MouseButton::Left));
+                            if !left {
+                                return;
+                            }
                             event.stop_propagation();
                             value.set(String::new());
                             if let Some(on_change) = &on_change {

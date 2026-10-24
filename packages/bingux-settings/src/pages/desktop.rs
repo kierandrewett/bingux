@@ -7,13 +7,17 @@ use std::time::Duration;
 
 use crate::ui::{
     Group, Icon, Overlays, Row, Status, dropdown, level_row, page_column, row, segmented, skeleton,
-    status, switch_row, use_overlays,
+    status, switch_row, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
 use freya::prelude::*;
 
 use crate::pages::bingux_config;
-use crate::system::{self, CommandError, background, background_then};
+use crate::system::{self, CommandError, background, background_then, optimistic_then};
+
+pub(crate) mod preview;
+
+use preview::desktop_preview;
 
 /// Control Centre tiles: the camelCase key in `dump`, its label and its icon.
 const TILES: [(&str, &str, Icon); 5] = [
@@ -31,11 +35,13 @@ const DOCK_SIZE_MIN: f64 = 32.0;
 const DOCK_SIZE_RANGE: f64 = 48.0;
 
 #[derive(Clone, Debug, PartialEq)]
-struct Model {
+pub(crate) struct Model {
     dock: bool,
     sidebar: bool,
     /// `None` is "Automatic": the key is null or absent in the shell file.
     sidebar_edge: Option<String>,
+    /// Absolute path of the wallpaper, or empty for none.
+    wallpaper: String,
     metrics: bool,
     clock_seconds: bool,
     dock_size: u32,
@@ -74,6 +80,11 @@ impl Model {
             metrics: flag(desktop, "metrics")?,
             clock_seconds: flag(desktop, "clockSeconds")?,
             dock_size: number(desktop, "dockSize")?.round() as u32,
+            wallpaper: desktop
+                .get("wallpaper")
+                .and_then(Json::as_str)
+                .unwrap_or_default()
+                .to_string(),
             dock_alignment: text(desktop, "dockAlignment")?,
             dock_click: text(desktop, "dockClick")?,
             dock_middle_click: text(desktop, "dockMiddleClick")?,
@@ -107,16 +118,13 @@ fn number(object: &Json, key: &str) -> Result<f64, String> {
         .ok_or_else(|| UNREADABLE.to_string())
 }
 
-/// The `save` patch for all Control Centre tiles, with `index` set to `on`.
-/// `save` takes every tile, so the unchanged ones are sent back as they are.
-fn tiles_patch(tiles: [bool; 5], index: usize, on: bool) -> String {
+/// The `save` patch for all Control Centre tiles. `save` takes every tile, so
+/// the patch always carries all five.
+fn tiles_patch(tiles: [bool; 5]) -> String {
     let fields = TILES
         .iter()
         .enumerate()
-        .map(|(i, (key, _, _))| {
-            let value = if i == index { on } else { tiles[i] };
-            format!("\"{key}\":{value}")
-        })
+        .map(|(i, (key, _, _))| format!("\"{key}\":{}", tiles[i]))
         .collect::<Vec<_>>()
         .join(",");
     format!("{{\"desktop\":{{\"controlCentre\":{{{fields}}}}}}}")
@@ -131,7 +139,7 @@ fn size_for_percent(percent: f64) -> u32 {
     (DOCK_SIZE_MIN + percent.clamp(0.0, 100.0) / 100.0 * DOCK_SIZE_RANGE).round() as u32
 }
 
-fn load() -> Result<Model, CommandError> {
+pub(crate) fn load() -> Result<Model, CommandError> {
     let text = system::run(&bingux_config(), &["dump"], Duration::from_secs(5))?;
     let json = Json::parse(&text).map_err(|_| CommandError(UNREADABLE.to_string()))?;
     Model::from_json(&json).map_err(CommandError)
@@ -141,7 +149,33 @@ fn load() -> Result<Model, CommandError> {
 enum Change {
     Set(&'static str, String),
     Unset(&'static str),
-    Save(String),
+    Tiles([bool; 5]),
+}
+
+impl Model {
+    /// Applies `change` to the model the page shows, before the shell confirms it.
+    fn apply_local(&mut self, change: &Change) {
+        match change {
+            Change::Set(key, value) => match *key {
+                "desktop.dock" => self.dock = value == "true",
+                "desktop.sidebar" => self.sidebar = value == "true",
+                "desktop.metrics" => self.metrics = value == "true",
+                "desktop.clock_seconds" => self.clock_seconds = value == "true",
+                "desktop.dock_size" => self.dock_size = value.parse().unwrap_or(self.dock_size),
+                "desktop.dock_alignment" => self.dock_alignment = value.clone(),
+                "desktop.dock_click" => self.dock_click = value.clone(),
+                "desktop.dock_middle_click" => self.dock_middle_click = value.clone(),
+                "desktop.dock_scroll" => self.dock_scroll = value.clone(),
+                "desktop.dock_scroll_direction" => self.dock_scroll_direction = value.clone(),
+                "desktop.sidebar_edge" => self.sidebar_edge = Some(value.clone()),
+                "privacy.public_ip_lookup" => self.public_ip_lookup = value == "true",
+                _ => {}
+            },
+            Change::Unset("desktop.sidebar_edge") => self.sidebar_edge = None,
+            Change::Unset(_) => {}
+            Change::Tiles(tiles) => self.tiles = *tiles,
+        }
+    }
 }
 
 fn apply(change: &Change) -> Result<(), CommandError> {
@@ -150,7 +184,8 @@ fn apply(change: &Change) -> Result<(), CommandError> {
     let result = match change {
         Change::Set(key, value) => system::run(&program, &["set", *key, value.as_str()], timeout),
         Change::Unset(key) => system::run(&program, &["unset", *key], timeout),
-        Change::Save(patch) => {
+        Change::Tiles(tiles) => {
+            let patch = tiles_patch(*tiles);
             system::run_with_stdin(&program, &["save"], Some(patch.as_str()), timeout)
         }
     };
@@ -158,34 +193,33 @@ fn apply(change: &Change) -> Result<(), CommandError> {
 }
 
 #[derive(Clone, Copy)]
-struct Ctx {
+pub(crate) struct Ctx {
     model: State<Option<Result<Model, CommandError>>>,
     overlays: Overlays,
     /// The dock slider's percent while it is dragged, until the write lands.
     pending: State<Option<f64>>,
 }
 
-/// Apply a change on a worker thread, then reload the model from the shell.
+/// Shows `change` at once, writes it in the background and reloads the model
+/// from the shell once the write has landed. A failed write puts the previous
+/// model back with a toast.
 fn write(ctx: Ctx, change: Change) {
-    background_then(
+    let previous = ctx.model.read().clone();
+    let Some(Ok(current)) = previous.clone() else {
+        return;
+    };
+    let mut value = current;
+    value.apply_local(&change);
+    let mut pending = ctx.pending;
+    pending.set(None);
+    let mut model = ctx.model;
+    optimistic_then(
+        ctx.model,
+        Some(ctx.overlays),
+        previous,
+        Some(Ok(value)),
         move || apply(&change),
-        move |result| {
-            let mut pending = ctx.pending;
-            match result {
-                Ok(()) => {
-                    background_then(load, move |loaded| {
-                        let mut model = ctx.model;
-                        model.set(Some(loaded));
-                        let mut pending = ctx.pending;
-                        pending.set(None);
-                    });
-                }
-                Err(failure) => {
-                    ctx.overlays.toast(failure.0);
-                    pending.set(None);
-                }
-            }
-        },
+        move || background_then(load, move |loaded| model.set(Some(loaded))),
     );
 }
 
@@ -254,6 +288,8 @@ impl Component for DesktopPage {
             overlays,
             pending,
         };
+        let tokens = use_tokens();
+        let searching = bingux_ui::search_highlight::current().is_some();
 
         let Some(loaded) = model.read().clone() else {
             return page_column().child(skeleton());
@@ -268,24 +304,50 @@ impl Component for DesktopPage {
             }
         };
         let edge = m.sidebar_edge.clone().unwrap_or_else(|| "auto".to_string());
-        page_column()
-            .child(
-                Group::titled("Dock")
-                    .row(switch_row("Show dock", m.dock, move |on: bool| {
-                        write(ctx, Change::Set("desktop.dock", on.to_string()))
-                    }))
-                    .row(dock_size_row(ctx, m.dock_size))
-                    .row(segment_row(
-                        "Alignment",
-                        vec![
-                            ("left".into(), "Left".into()),
-                            ("center".into(), "Centre".into()),
-                            ("right".into(), "Right".into()),
-                        ],
-                        &m.dock_alignment,
-                        move |key: String| write(ctx, Change::Set("desktop.dock_alignment", key)),
-                    )),
-            )
+        let mut dock =
+            Group::titled("Dock").row(switch_row("Show dock", m.dock, move |on: bool| {
+                write(ctx, Change::Set("desktop.dock", on.to_string()))
+            }));
+        if m.dock {
+            dock = dock.row(dock_size_row(ctx, m.dock_size)).row(segment_row(
+                "Alignment",
+                vec![
+                    ("left".into(), "Left".into()),
+                    ("center".into(), "Centre".into()),
+                    ("right".into(), "Right".into()),
+                ],
+                &m.dock_alignment,
+                move |key: String| write(ctx, Change::Set("desktop.dock_alignment", key)),
+            ));
+        }
+        let mut sidebar =
+            Group::titled("Sidebar").row(switch_row("Show sidebar", m.sidebar, move |on: bool| {
+                write(ctx, Change::Set("desktop.sidebar", on.to_string()))
+            }));
+        if m.sidebar {
+            sidebar = sidebar.row(menu_row(
+                "Side of the screen",
+                vec![
+                    ("auto".into(), "Automatic".into()),
+                    ("left".into(), "Left".into()),
+                    ("right".into(), "Right".into()),
+                    ("top".into(), "Top".into()),
+                ],
+                &edge,
+                move |key: String| {
+                    if key == "auto" {
+                        write(ctx, Change::Unset("desktop.sidebar_edge"))
+                    } else {
+                        write(ctx, Change::Set("desktop.sidebar_edge", key))
+                    }
+                },
+            ));
+        }
+        let mut page = page_column();
+        if !searching {
+            page = page.child(desktop_preview(&tokens, ctx, &m));
+        }
+        page.child(dock)
             .child(
                 Group::titled("Dock mouse actions")
                     .description(
@@ -334,29 +396,7 @@ impl Component for DesktopPage {
                         },
                     )),
             )
-            .child(
-                Group::titled("Sidebar")
-                    .row(switch_row("Show sidebar", m.sidebar, move |on: bool| {
-                        write(ctx, Change::Set("desktop.sidebar", on.to_string()))
-                    }))
-                    .row(menu_row(
-                        "Side of the screen",
-                        vec![
-                            ("auto".into(), "Automatic".into()),
-                            ("left".into(), "Left".into()),
-                            ("right".into(), "Right".into()),
-                            ("top".into(), "Top".into()),
-                        ],
-                        &edge,
-                        move |key: String| {
-                            if key == "auto" {
-                                write(ctx, Change::Unset("desktop.sidebar_edge"))
-                            } else {
-                                write(ctx, Change::Set("desktop.sidebar_edge", key))
-                            }
-                        },
-                    )),
-            )
+            .child(sidebar)
             .child(
                 Group::titled("Top bar")
                     .row(
@@ -380,7 +420,9 @@ impl Component for DesktopPage {
                         let tiles = m.tiles;
                         Element::from(
                             switch_row(*label, tiles[index], move |on: bool| {
-                                write(ctx, Change::Save(tiles_patch(tiles, index, on)))
+                                let mut next = tiles;
+                                next[index] = on;
+                                write(ctx, Change::Tiles(next))
                             })
                             .leading(*icon),
                         )

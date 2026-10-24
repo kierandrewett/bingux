@@ -1,20 +1,23 @@
 //! Users: the accounts AccountsService knows about, read with `busctl` on the
 //! system bus and listed with the current user first. Pressing a row opens
 //! its details, where the full name is written with `SetRealName` (polkit may
-//! ask for authentication) and the password is changed in a terminal running
-//! `passwd`.
+//! ask for authentication). The signed-in user changes their password in a
+//! sheet; `passwd` runs on a pseudo-terminal, so no terminal window opens.
 
 use std::process::Command;
 use std::time::Duration;
 
 use freya::prelude::*;
 
-use crate::routes::{Route, use_navigator};
-use crate::system::{self, CommandError, CommandResult, background, background_then};
+use crate::passwd;
+use crate::routes::{Navigator, Route, use_navigator};
+use crate::system::{
+    self, CommandError, CommandResult, background, background_then, optimistic_then,
+};
 use crate::theme::Tokens;
 use crate::ui::{
-    Group, Row, Status, avatar, caption, heading, page_column, row, skeleton, status, text_row,
-    use_overlays, use_tokens,
+    Group, Overlays, Status, action_button, avatar, caption, heading, menu_item, page_column, row,
+    sheet, skeleton, status, text_field, use_overlays, use_tokens,
 };
 use bingux_ui::style::*;
 
@@ -27,13 +30,6 @@ const READ_TIMEOUT: Duration = Duration::from_secs(5);
 /// Writes can wait for a polkit authentication dialog.
 const WRITE_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// Terminal launchers that can run `passwd`, in order of preference.
-const PASSWORD_TERMINALS: [(&str, &[&str]); 3] = [
-    ("gnome-terminal", &["--", "passwd"]),
-    ("kgx", &["--", "passwd"]),
-    ("xdg-terminal-exec", &["passwd"]),
-];
-
 #[derive(Clone, PartialEq)]
 struct Account {
     path: String,
@@ -42,6 +38,8 @@ struct Account {
     administrator: bool,
     locked: bool,
     automatic_login: bool,
+    /// The signed-in user. Only their own password can be changed here.
+    current: bool,
 }
 
 impl Account {
@@ -72,16 +70,18 @@ fn load() -> Result<Vec<Account>, CommandError> {
     let mut accounts = Vec::with_capacity(paths.len());
     for path in paths {
         let path = path.as_str().ok_or_else(unexpected)?;
-        accounts.push(read_account(path)?);
+        accounts.push(read_account(path, &current)?);
     }
-    accounts.sort_by_key(|account| account.user_name != current);
+    accounts.sort_by_key(|account| !account.current);
     Ok(accounts)
 }
 
-fn read_account(path: &str) -> Result<Account, CommandError> {
+fn read_account(path: &str, signed_in: &str) -> Result<Account, CommandError> {
+    let user_name = text_property(path, "UserName")?;
     Ok(Account {
         path: path.to_string(),
-        user_name: text_property(path, "UserName")?,
+        current: user_name == signed_in,
+        user_name,
         real_name: text_property(path, "RealName")?,
         administrator: number_property(path, "AccountType")? == ACCOUNT_TYPE_ADMINISTRATOR,
         locked: bool_property(path, "Locked")?,
@@ -145,28 +145,10 @@ fn set_real_name(path: &str, name: &str) -> CommandResult {
     )
 }
 
-/// Open the first installed terminal running `passwd`. The launcher returns
-/// once the terminal is up, so waiting on it only reaps the process.
-fn change_password() -> Result<(), CommandError> {
-    let (program, arguments) = PASSWORD_TERMINALS
-        .iter()
-        .find(|(program, _)| system::which(program))
-        .ok_or_else(|| {
-            CommandError("No terminal app was found. Install one, then try again.".into())
-        })?;
-    let mut child = Command::new(program)
-        .args(*arguments)
-        .spawn()
-        .map_err(|_| CommandError("The terminal window could not be opened.".into()))?;
-    child
-        .wait()
-        .map_err(|_| CommandError("The terminal window closed unexpectedly.".into()))?;
-    Ok(())
-}
-
 /// The signed-in person for the sidebar: the full name from the passwd entry
-/// (the user name when it has none) and the user name. A quick local lookup.
-pub fn signed_in() -> Option<(String, String)> {
+/// (the user name when it has none) and the user name. Runs `getent` on a
+/// background thread; render reads it through `use_signed_in`.
+fn signed_in() -> Option<(String, String)> {
     let user = std::env::var("USER").ok().filter(|user| !user.is_empty())?;
     let output = Command::new("getent")
         .args(["passwd", &user])
@@ -183,16 +165,13 @@ pub fn signed_in() -> Option<(String, String)> {
     Some((full_name.unwrap_or(&user).to_string(), user.clone()))
 }
 
-/// Up to two capital letters: the first letter of the first and last words.
-/// Up to two initials for an avatar, from the first and last word.
-pub fn initials(name: &str) -> String {
-    let words: Vec<&str> = name.split_whitespace().collect();
-    let letters: String = match words.as_slice() {
-        [] => String::new(),
-        [only] => only.chars().take(1).collect(),
-        [first, .., last] => first.chars().take(1).chain(last.chars().take(1)).collect(),
-    };
-    letters.to_uppercase()
+/// The signed-in person for the sidebar, or `None` until the lookup has run.
+/// The lookup runs in the background so the first frame never waits on
+/// `getent`; the sidebar profile appears once it is known.
+pub fn use_signed_in() -> Option<(String, String)> {
+    let model = system::use_cached("signed-in", signed_in);
+    let loaded = model.read().clone();
+    loaded.flatten()
 }
 
 #[derive(PartialEq)]
@@ -202,6 +181,7 @@ impl Component for UsersPage {
     fn render(&self) -> impl IntoElement {
         let model = system::use_cached("users", load);
         let navigator = use_navigator();
+        let password = use_password();
 
         let Some(loaded) = model.read().clone() else {
             return page_column().child(skeleton());
@@ -223,11 +203,9 @@ impl Component for UsersPage {
             group.rows(accounts.iter().map(|account| {
                 let route = Route::Account {
                     path: account.path.clone(),
-                    name: account.real_name.clone(),
+                    name: account.display_name().to_string(),
                 };
-                let on_press: EventHandler<()> =
-                    (move |_: ()| navigator.push(route.clone())).into();
-                Element::from(account_row(account, on_press))
+                account_row(account, route, navigator, password)
             }))
         };
         page_column().child(group)
@@ -244,39 +222,63 @@ impl Component for AccountPage {
     fn render(&self) -> impl IntoElement {
         let model: State<Option<Result<Vec<Account>, CommandError>>> =
             system::use_cached("users", load);
-        let overlays = use_overlays();
-        let tokens: Tokens = use_tokens();
-        let Some(Ok(accounts)) = model.read().clone() else {
-            return page_column().child(skeleton());
+        let loaded = model.read().clone();
+        let accounts = match loaded {
+            None => return Element::from(page_column().child(skeleton())),
+            Some(Err(e)) => {
+                return Element::from(
+                    page_column().child(
+                        status(Status::Error(e.0))
+                            .action("Try again", move |_| background(model, load)),
+                    ),
+                );
+            }
+            Some(Ok(accounts)) => accounts,
         };
-        let Some(account) = accounts.iter().find(|account| account.path == self.path) else {
-            return page_column().child(status(Status::Empty(
+        let Some(account) = accounts
+            .into_iter()
+            .find(|account| account.path == self.path)
+        else {
+            return Element::from(page_column().child(status(Status::Empty(
                 "This account no longer exists.".to_string(),
-            )));
+            ))));
         };
-        let draft = use_state(|| account.real_name.clone());
+        Element::from(AccountDetails { model, account })
+    }
+}
+
+/// The details of one loaded account. It is its own component so that its
+/// hooks run on every render, after the loading checks in `AccountPage`. It
+/// re-renders only when the account itself changes.
+#[derive(Clone)]
+struct AccountDetails {
+    model: State<Option<Result<Vec<Account>, CommandError>>>,
+    account: Account,
+}
+
+impl PartialEq for AccountDetails {
+    fn eq(&self, other: &Self) -> bool {
+        self.account == other.account
+    }
+}
+
+impl Component for AccountDetails {
+    fn render(&self) -> impl IntoElement {
+        let model = self.model;
+        let account = &self.account;
+        let tokens: Tokens = use_tokens();
+        let password = use_password();
+        let name = use_name(account, model);
         let path = account.path.clone();
-        let name_row = text_row("Full name", draft, move |name: String| {
-            let path = path.clone();
-            background_then(
-                move || set_real_name(&path, &name),
-                move |result: CommandResult| match result {
-                    Ok(_) => {
-                        background(model, load);
-                    }
-                    Err(e) => {
-                        overlays.toast(e.0);
-                    }
-                },
-            );
-        });
-        let password_row = row("Change password").navigates().on_press(move |_| {
-            background_then(change_password, move |result: Result<(), CommandError>| {
-                if let Err(e) = result {
-                    overlays.toast(e.0);
-                }
-            });
-        });
+        let name_row = row("Full name")
+            .value(name.shown.read().clone())
+            .on_press(move |_| name.open(path.clone()));
+        let shown_name = name.shown.read().clone();
+        let heading_text = if shown_name.is_empty() {
+            account.user_name.clone()
+        } else {
+            shown_name
+        };
         let role = if account.administrator {
             "Administrator"
         } else {
@@ -287,9 +289,19 @@ impl Component for AccountPage {
                 &tokens,
                 &[flex_col(), w_full(), gap(S1), items(Align::Center)],
             )
-            .child(avatar(initials(account.display_name()), Dim::Box24))
-            .child(heading(account.display_name().to_string()))
+            .child(avatar(account.user_name.clone(), Dim::Box24))
+            .child(heading(heading_text))
             .child(caption(role));
+        let password_group = account.current.then(|| {
+            Element::from(
+                Group::titled("Password")
+                    .description("Changes the password you sign in with.")
+                    .row(
+                        row("Your password")
+                            .trailing(action_button("Change password", move |_| password.open())),
+                    ),
+            )
+        });
         page_column()
             .child(header)
             .child(
@@ -308,33 +320,276 @@ impl Component for AccountPage {
                     }))
                     .row(row("Account locked").value(if account.locked { "Yes" } else { "No" })),
             )
-            .child(
-                Group::titled("Password")
-                    .description("Opens a terminal window where you type your new password.")
-                    .row(password_row),
-            )
+            .maybe_child(password_group)
     }
 }
 
-/// One account in the list: initials avatar, full name with the user name
-/// underneath, the account type, and a chevron. The whole row opens details.
-fn account_row(account: &Account, on_press: impl Into<EventHandler<()>>) -> Row {
-    let name = account.display_name().to_string();
+/// The change-password sheet's fields and its submit path. It is `Copy`, so the
+/// sheet body and its primary button share one set of fields.
+#[derive(Clone, Copy, PartialEq)]
+struct PasswordSheet {
+    current: State<String>,
+    new: State<String>,
+    confirm: State<String>,
+    /// The problem shown inside the sheet: a check failure or `passwd`'s message.
+    error: State<Option<String>>,
+    overlays: Overlays,
+}
+
+/// The sheet's fields, held by the page that opens it.
+fn use_password() -> PasswordSheet {
+    PasswordSheet {
+        current: use_state(String::new),
+        new: use_state(String::new),
+        confirm: use_state(String::new),
+        error: use_state(|| None::<String>),
+        overlays: use_overlays(),
+    }
+}
+
+impl PasswordSheet {
+    /// Opens the sheet with empty fields.
+    fn open(self) {
+        self.clear();
+        // Snapshot builds fill the sheet so its states can be captured:
+        // BINGUX_SETTINGS_SNAPSHOT_PASSWORD="current|new|confirm" and
+        // BINGUX_SETTINGS_SNAPSHOT_PASSWORD_ERROR="text" for the inline error.
+        #[cfg(feature = "snapshot")]
+        self.prefill_from_snapshot();
+        self.show();
+    }
+
+    #[cfg(feature = "snapshot")]
+    fn prefill_from_snapshot(self) {
+        let Ok(fields) = std::env::var("BINGUX_SETTINGS_SNAPSHOT_PASSWORD") else {
+            return;
+        };
+        let mut parts = fields.split('|').map(str::to_string);
+        let (mut current, mut new, mut confirm) = (self.current, self.new, self.confirm);
+        current.set(parts.next().unwrap_or_default());
+        new.set(parts.next().unwrap_or_default());
+        confirm.set(parts.next().unwrap_or_default());
+        if let Ok(text) = std::env::var("BINGUX_SETTINGS_SNAPSHOT_PASSWORD_ERROR") {
+            let mut error = self.error;
+            error.set(Some(text));
+        }
+    }
+
+    /// Shows the sheet with whatever is in the fields.
+    fn show(self) {
+        self.overlays.show_sheet(
+            sheet("Change password", PasswordBody { sheet: self })
+                .primary("Save", move |_| self.submit()),
+        );
+    }
+
+    fn clear(self) {
+        let mut current = self.current;
+        let mut new = self.new;
+        let mut confirm = self.confirm;
+        let mut error = self.error;
+        current.set(String::new());
+        new.set(String::new());
+        confirm.set(String::new());
+        error.set(None);
+    }
+
+    /// Checks the fields, then changes the password in the background. A
+    /// failure reopens the sheet with the fields kept and `passwd`'s message.
+    fn submit(self) {
+        let current = self.current.read().clone();
+        let new = self.new.read().clone();
+        let confirm = self.confirm.read().clone();
+        let mut error = self.error;
+        if let Some(problem) = password_problem(&current, &new, &confirm) {
+            error.set(Some(problem.to_string()));
+            return;
+        }
+        self.overlays.close_sheet();
+        error.set(None);
+        background_then(
+            move || passwd::change(&current, &new),
+            move |result: Result<(), String>| match result {
+                Ok(()) => {
+                    self.clear();
+                    self.overlays.toast("Password changed.".to_string());
+                }
+                Err(message) => {
+                    let mut error = self.error;
+                    error.set(Some(message));
+                    self.show();
+                }
+            },
+        );
+    }
+}
+
+/// The first problem with the three password fields, if there is one.
+fn password_problem(current: &str, new: &str, confirm: &str) -> Option<&'static str> {
+    if current.is_empty() {
+        Some("Enter your current password.")
+    } else if new.is_empty() {
+        Some("Enter a new password.")
+    } else if new != confirm {
+        Some("The new passwords do not match.")
+    } else {
+        None
+    }
+}
+
+/// The sheet's three password fields and the error line under them.
+#[derive(Clone, PartialEq)]
+struct PasswordBody {
+    sheet: PasswordSheet,
+}
+
+impl Component for PasswordBody {
+    fn render(&self) -> impl IntoElement {
+        let sheet = self.sheet;
+        let current = text_field(sheet.current, move |_: String| sheet.submit())
+            .placeholder("Current password")
+            .password();
+        let new = text_field(sheet.new, move |_: String| sheet.submit())
+            .placeholder("New password")
+            .password();
+        let confirm = text_field(sheet.confirm, move |_: String| sheet.submit())
+            .placeholder("Retype the new password")
+            .password();
+        let error = sheet.error.read().clone();
+        page_column()
+            .child(
+                Group::new(None::<String>)
+                    .row(row("Current").trailing(current))
+                    .row(row("New").trailing(new))
+                    .row(row("Retype").trailing(confirm)),
+            )
+            .maybe_child(error.map(|text| Element::from(status(Status::Error(text)))))
+    }
+}
+
+/// The Full name sheet's field. The sheet and its Save button share these
+/// fields. The account page's row shows `shown`. It changes at once when a
+/// rename is submitted, and goes back if the write fails.
+#[derive(Clone, Copy, PartialEq)]
+struct NameSheet {
+    /// The text in the sheet's field.
+    field: State<String>,
+    /// The full name the row shows.
+    shown: State<String>,
+    /// The last full name the system accepted, to put back if a write fails.
+    saved: State<String>,
+    model: State<Option<Result<Vec<Account>, CommandError>>>,
+    overlays: Overlays,
+}
+
+/// The rename sheet's state, held by the account page that opens it.
+fn use_name(
+    account: &Account,
+    model: State<Option<Result<Vec<Account>, CommandError>>>,
+) -> NameSheet {
+    NameSheet {
+        field: use_state(String::new),
+        shown: use_state(|| account.real_name.clone()),
+        saved: use_state(|| account.real_name.clone()),
+        model,
+        overlays: use_overlays(),
+    }
+}
+
+impl NameSheet {
+    /// Opens the sheet with the current full name in its field.
+    fn open(self, path: String) {
+        let mut field = self.field;
+        field.set(self.shown.read().clone());
+        self.show(path);
+    }
+
+    fn show(self, path: String) {
+        self.overlays.show_sheet(
+            sheet(
+                "Change full name",
+                NameBody {
+                    sheet: self,
+                    path: path.clone(),
+                },
+            )
+            .primary("Save", move |_| self.submit(path.clone())),
+        );
+    }
+
+    /// Shows the new name at once and writes it in the background. A failure
+    /// puts back the last name the system accepted.
+    fn submit(self, path: String) {
+        let name = self.field.read().clone();
+        let previous = self.saved.read().clone();
+        let accepted = name.clone();
+        let model = self.model;
+        let mut saved = self.saved;
+        self.overlays.close_sheet();
+        optimistic_then(
+            self.shown,
+            Some(self.overlays),
+            previous,
+            name.clone(),
+            move || set_real_name(&path, &name).map(|_| ()),
+            move || {
+                saved.set(accepted);
+                background(model, load);
+            },
+        );
+    }
+}
+
+/// The rename sheet's one field.
+#[derive(Clone, PartialEq)]
+struct NameBody {
+    sheet: NameSheet,
+    path: String,
+}
+
+impl Component for NameBody {
+    fn render(&self) -> impl IntoElement {
+        let sheet = self.sheet;
+        let path = self.path.clone();
+        let field = text_field(sheet.field, move |_: String| sheet.submit(path.clone()));
+        page_column().child(Group::new(None::<String>).row(row("Full name").trailing(field)))
+    }
+}
+
+/// One account in the list: avatar, full name, then the user name and account
+/// type underneath, and a chevron. A click opens its details. A right click
+/// opens a menu with Open, and Change password for the signed-in user.
+fn account_row(
+    account: &Account,
+    route: Route,
+    navigator: Navigator,
+    password: PasswordSheet,
+) -> Element {
     let role = if account.administrator {
         "Administrator"
     } else {
         "Standard"
     };
-    let on_press = on_press.into();
-    let mut item = row(name.clone())
-        .leading_avatar(initials(&name))
-        .value(role)
-        .navigates()
-        .on_press(move |_| on_press.call(()));
-    if !account.real_name.is_empty() {
-        item = item.subtitle(account.user_name.clone());
+    let subtitle = if account.real_name.is_empty() {
+        role.to_string()
+    } else {
+        format!("{} ({role})", account.user_name)
+    };
+    let item = row(account.display_name().to_string())
+        .leading_avatar(account.user_name.clone())
+        .subtitle(subtitle)
+        .navigates();
+    let current = account.current;
+    let open_route = route.clone();
+    let mut menu = vec![menu_item("Open", move |_| {
+        navigator.push(open_route.clone())
+    })];
+    if current {
+        menu.push(menu_item("Change password", move |_| password.open()));
     }
-    item
+    item.on_press(move |_| navigator.push(route.clone()))
+        .context_menu(menu)
+        .into()
 }
 
 /// The subset of JSON that `busctl --json=short` prints. The crate has no

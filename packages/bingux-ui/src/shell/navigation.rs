@@ -17,6 +17,7 @@ use freya::prelude::*;
 
 use crate::controls::{action_button, icon_button, search_field};
 use crate::icons::{self, Icon};
+use crate::shell::sections::{self, SearchHit};
 use crate::shell::window::{HeaderBar, WindowControls};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_tokens};
@@ -51,21 +52,20 @@ pub struct NavigationSplitView<T: NavItem> {
     pub page_width: Dim,
     /// Set while a subpage is open: its title and what Back does.
     pub subpage: Option<Subpage>,
-    /// Settings the sidebar search can find, after the pages.
-    pub hits: Vec<SearchHit<T>>,
     /// See [`NavigationSplitView::start_on_list`].
     pub start_on_list: bool,
     pub profile: Option<Profile<T>>,
+    /// While the search has text, `results` replaces the page content, and
+    /// Enter in the search field calls `on_submit`. See
+    /// [`NavigationSplitView::search`].
+    pub search: Option<(State<String>, Element, EventHandler<()>)>,
 }
 
-/// The signed-in person at the top of the sidebar: an avatar with
-/// `initials`, the name, a muted line under it, and a chevron. Pressing it
-/// opens `target`.
+/// The signed-in person at the top of the sidebar: an avatar and the name,
+/// laid out like a sidebar item. Pressing it opens `target`.
 #[derive(Clone, PartialEq)]
 pub struct Profile<T> {
     pub name: String,
-    pub detail: String,
-    pub initials: String,
     pub target: T,
 }
 
@@ -88,64 +88,58 @@ impl<T: NavItem> Component for ProfileCard<T> {
         let mut selected = self.selected;
         let mut sidebar_open = self.sidebar_open;
         let full_page = self.full_page;
-        // The Users page is also in the page list, which shows the selection.
-        let avatar = crate::controls::avatar(self.profile.initials.clone(), Dim::Box11);
-        rect().tw(&tokens, &[w_full(), px(S2), pb(S1)]).child(
-            rect()
-                .a11y_id(a11y_id)
-                .a11y_focusable(true)
-                .a11y_role(AccessibilityRole::Button)
-                .tw(
-                    &tokens,
-                    &[
-                        flex_row(),
-                        grow_children(),
-                        items(Align::Center),
-                        w_full(),
-                        h(Dim::RowTall),
-                        px(S3),
-                        gap(S3),
-                        rounded(Radius::Control),
-                        surface(Paint::Transparent, hovering(), pressing(), false),
-                    ],
-                )
-                .tw(&tokens, &[focus_ring(focus())])
-                .on_pointer_enter(move |_| hovering.set(true))
-                .on_pointer_leave(move |_| {
-                    hovering.set(false);
-                    pressing.set_if_modified(false);
-                })
-                .on_pointer_down(move |_: Event<PointerEventData>| pressing.set(true))
-                .on_global_pointer_up(move |_| pressing.set_if_modified(false))
-                .on_press(move |_: Event<PressEventData>| {
-                    selected.set(target);
-                    if full_page {
-                        sidebar_open.set(false);
-                    }
-                    a11y_id.request_focus();
-                })
-                .child(avatar)
-                .child(
-                    rect()
-                        .tw(&tokens, &[w_flex()])
-                        .child(
-                            BODY.label(&tokens, self.profile.name.clone())
-                                .max_lines(1)
-                                .text_overflow(TextOverflow::Ellipsis),
-                        )
-                        .child(
-                            CAPTION
-                                .label(&tokens, self.profile.detail.clone())
-                                .max_lines(1)
-                                .text_overflow(TextOverflow::Ellipsis),
+        let user = crate::controls::avatar::current_user();
+        let name = self.profile.name.clone();
+        let is_selected = selected() == target;
+        // The avatar is centred on the icon column of the sidebar items, so it
+        // is drawn larger than the icon's slot and pulled back over it.
+        let slot = IconSize::Row.px();
+        let overhang = (Dim::Box7.px() - slot) / 2.0;
+        rect()
+            .tw(&tokens, &[w_full(), px(S2), pt(S1), pb(S2)])
+            .child(
+                rect()
+                    .a11y_id(a11y_id)
+                    .a11y_focusable(true)
+                    .a11y_role(AccessibilityRole::Button)
+                    .tw(&tokens, &[focus_ring(focus())])
+                    .tw(&tokens, NAV_ITEM)
+                    .tw(
+                        &tokens,
+                        &[surface(
+                            Paint::Transparent,
+                            hovering(),
+                            pressing(),
+                            is_selected,
+                        )],
+                    )
+                    .on_pointer_enter(move |_| hovering.set(true))
+                    .on_pointer_leave(move |_| {
+                        hovering.set(false);
+                        pressing.set_if_modified(false);
+                    })
+                    .on_pointer_down(move |_: Event<PointerEventData>| pressing.set(true))
+                    .on_global_pointer_up(move |_| pressing.set_if_modified(false))
+                    .on_press(move |_: Event<PressEventData>| {
+                        selected.set(target);
+                        if full_page {
+                            sidebar_open.set(false);
+                        }
+                        a11y_id.request_focus();
+                    })
+                    .child(
+                        rect().width(Size::px(slot)).height(Size::px(slot)).child(
+                            rect()
+                                .position(Position::new_absolute().top(-overhang).left(-overhang))
+                                .child(crate::controls::avatar(user, Dim::Box7)),
                         ),
-                )
-                .child(icons::icon(
-                    Icon::GoNext,
-                    IconSize::Mark,
-                    Paint::Muted.color(&tokens),
-                )),
-        )
+                    )
+                    .child(
+                        BODY.label(&tokens, name)
+                            .max_lines(1)
+                            .text_overflow(TextOverflow::Ellipsis),
+                    ),
+            )
     }
 }
 
@@ -155,24 +149,6 @@ impl<T: NavItem> Component for ProfileCard<T> {
 pub struct Subpage {
     pub title: String,
     pub on_back: EventHandler<()>,
-}
-
-/// A setting the sidebar search can find. `detail` names the page it is on,
-/// and choosing the hit opens `target`. `keywords` are extra words to match.
-#[derive(Clone, PartialEq)]
-pub struct SearchHit<T> {
-    pub title: String,
-    pub detail: String,
-    pub keywords: String,
-    pub target: T,
-}
-
-impl<T> SearchHit<T> {
-    fn matches(&self, needle: &str) -> bool {
-        self.title.to_lowercase().contains(needle)
-            || self.detail.to_lowercase().contains(needle)
-            || self.keywords.to_lowercase().contains(needle)
-    }
 }
 
 /// The ids of the pages that are busy. The split view provides it, and a page
@@ -336,9 +312,11 @@ struct PageMemory {
 }
 
 /// The page column: centred, at most `page_width` wide, with the page margins.
-fn page_column(content: Element, side: Space, page_width: Dim) -> impl IntoElement {
+fn page_column(content: Element, side: Space, page_width: Dim, inset: bool) -> impl IntoElement {
     rect()
         .tw_layout(&[w_full(), items(Align::Center), pt(S4), pb(S8), px(side)])
+        // Under a floating header bar the page starts below it at rest.
+        .maybe_child(inset.then(|| rect().tw_layout(&[h(Dim::Header)])))
         .child(
             rect()
                 .tw_layout(&[w(page_width)])
@@ -390,9 +368,9 @@ impl<T: NavItem> NavigationSplitView<T> {
             content: content.into(),
             page_width: Dim::Page,
             subpage: None,
-            hits: Vec::new(),
             start_on_list: false,
             profile: None,
+            search: None,
         }
     }
 
@@ -415,12 +393,6 @@ impl<T: NavItem> NavigationSplitView<T> {
         self
     }
 
-    /// Settings the sidebar search can find, listed after the pages.
-    pub fn search_hits(mut self, hits: Vec<SearchHit<T>>) -> Self {
-        self.hits = hits;
-        self
-    }
-
     /// On a narrow window, open on the list of pages instead of the selected
     /// page. Use it when the user did not ask for a page.
     pub fn start_on_list(mut self, start: bool) -> Self {
@@ -434,16 +406,35 @@ impl<T: NavItem> NavigationSplitView<T> {
         self.profile = Some(profile);
         self
     }
+
+    /// Search the app. While `query` has text, `results` replaces the page
+    /// content and a narrow window shows them instead of the sidebar list.
+    /// Enter in the search field calls `on_submit` (open the best match).
+    /// The caller owns `query`.
+    pub fn search(
+        mut self,
+        query: State<String>,
+        results: Element,
+        on_submit: impl Into<EventHandler<()>>,
+    ) -> Self {
+        self.search = Some((query, results, on_submit.into()));
+        self
+    }
 }
 
 impl<T: NavItem> Component for NavigationSplitView<T> {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let mut query = use_state(String::new);
-        let highlight = use_state(|| 0usize);
+        let fallback_query = use_state(String::new);
+        let mut query = self
+            .search
+            .as_ref()
+            .map_or(fallback_query, |(query, _, _)| *query);
         let search_id = use_a11y();
+        let search_focus = use_focus(search_id);
         let busy_pages = use_provide_context(|| BusyPages(State::create(Vec::new())));
         let page_headers = use_provide_context(|| PageHeaders(State::create(Vec::new())));
+        let section_registry = sections::provide();
         let busy = !busy_pages.0.read().is_empty();
         // On a narrow window this is true while the list of pages is the screen.
         let width = Platform::get().current_window().root_size.read().width;
@@ -454,18 +445,30 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         let mut sidebar_open = use_state(move || narrow && start_on_list);
         let side = if narrow { S4 } else { S8 };
         let selected = self.selected;
+        let scroll = use_scroll_controller(ScrollConfig::default);
+        // The pages with results, when the split view searches.
+        let search_hits = self
+            .search
+            .as_ref()
+            .map(|_| sections::hits(&section_registry.0.read()));
         let sidebar = |full_page: bool| Sidebar {
             items: self.items.clone(),
-            hits: self.hits.clone(),
             selected,
             query,
-            highlight,
             search_id,
             sidebar_open,
             full_page,
             profile: self.profile.clone(),
+            hits: search_hits.clone(),
+            scroll,
         };
-        let show_list = narrow && sidebar_open();
+        let results = self
+            .search
+            .as_ref()
+            .map(|(_, results, on_submit)| (results.clone(), on_submit.clone()));
+        let searching = results.is_some() && !query.read().trim().is_empty();
+        let submit = results.as_ref().map(|(_, on_submit)| on_submit.clone());
+        let show_list = narrow && sidebar_open() && !searching;
         // The header is the drag region. It carries Back, the spinner while a
         // page is busy and the window buttons. On a phone it also carries the
         // page title and the page's action; on a desktop window those are the
@@ -482,18 +485,25 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             sidebar_open.set(true);
         })
         .into();
+        let clear_search: EventHandler<()> = (move |_: ()| {
+            let mut query = query;
+            query.set(String::new());
+        })
+        .into();
         let back = match &self.subpage {
             Some(subpage) => Some(subpage.on_back.clone()),
+            None if searching => narrow.then(|| clear_search.clone()),
             None => (narrow && !show_list).then(|| to_list.clone()),
         };
         let (title, mut lead) = match &self.subpage {
             Some(subpage) => (subpage.title.clone(), String::new()),
+            None if searching => ("Search results".to_string(), String::new()),
             None => (
                 selected().title().to_string(),
                 selected().lead().to_string(),
             ),
         };
-        let page_header = if show_list {
+        let page_header = if show_list || searching {
             PageHeader::default()
         } else {
             page_header
@@ -509,12 +519,14 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             } => crate::controls::switch(on, move |_: bool| on_press.call(())).into(),
             action => action_button(action.label, action.on_press).into(),
         });
+        // A desktop header floats over the page and blurs what scrolls under it.
+        let overlay = !narrow && !show_list;
         let header = if show_list {
             HeaderBar::new(self.app_title.clone()).fill(Paint::Bg)
         } else {
             let header = HeaderBar::new(if narrow { title.clone() } else { String::new() })
                 .busy(busy)
-                .fill(Paint::Bg);
+                .fill(if overlay { Paint::Frosted } else { Paint::Bg });
             match &back {
                 Some(on_back) => {
                     let on_back = on_back.clone();
@@ -543,10 +555,15 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
         } else {
             Some(title_row(&tokens, title.clone(), lead, action))
         };
+        // Results replace the page content while the search has text.
+        let shown: Element = match results {
+            Some((results, _)) if searching => results,
+            _ => self.content.clone(),
+        };
         let body: Element = rect()
             .tw(&tokens, PAGE_BODY)
             .maybe_child(head)
-            .child(self.content.clone())
+            .child(shown)
             .into();
         // Alt+Left and the mouse Back button go back one step.
         let back_key = back;
@@ -569,7 +586,6 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 .function(Function::Expo)
                 .ease(Ease::Out)
         });
-        let scroll = use_scroll_controller(ScrollConfig::default);
         let mut scroll_effect = scroll;
         let effect_memory = memory.clone();
         // A new page starts at the top. The effect also runs again when the
@@ -650,8 +666,12 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
             .child(
                 ScrollView::new_controlled(scroll)
                     .drag_scrolling(false)
-                    .auto_hide_scrollbars(false)
-                    .child(page_column(body, side, self.page_width)),
+                    .child(
+                        rect()
+                            .width(Size::fill())
+                            .on_sized(sections::origin_handler(section_registry))
+                            .child(page_column(body, side, self.page_width, overlay)),
+                    ),
             );
         let outgoing = outgoing.map(|(offset, opacity, layer, element)| {
             rect()
@@ -661,19 +681,23 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                 .offset_x(offset)
                 .opacity(opacity)
                 .layer(Layer::Relative(layer))
-                .child(
-                    ScrollView::new()
-                        .drag_scrolling(false)
-                        .auto_hide_scrollbars(false)
-                        .child(page_column(element, side, self.page_width)),
-                )
+                .child(ScrollView::new().drag_scrolling(false).child(page_column(
+                    element,
+                    side,
+                    self.page_width,
+                    overlay,
+                )))
         });
+        let edge_top = if overlay { Dim::Header.px() } else { 0.0 };
         let content_area = rect()
             .width(Size::fill())
             .height(Size::flex(1.0))
             .child(page)
             .maybe_child(outgoing)
-            .child(ScrollEdge { scroll });
+            .child(ScrollEdge {
+                scroll,
+                top: edge_top,
+            });
         let header = if narrow || show_list {
             header
         } else {
@@ -708,6 +732,12 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                     search_id.request_focus();
                 } else if control && (letter == "q" || letter == "w") {
                     Platform::get().close_window(Platform::window_id());
+                } else if event.key == Key::Named(NamedKey::Enter)
+                    && searching
+                    && search_focus.read().is_focused()
+                    && let Some(submit) = &submit
+                {
+                    submit.call(());
                 } else if event.key == Key::Named(NamedKey::Escape) && !query.read().is_empty() {
                     query.set(String::new());
                 }
@@ -734,7 +764,18 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
                             &[my(S2), mr(S2), rounded(Radius::Card), clip()],
                         )
                     })
-                    .child(header)
+                    .child(if overlay {
+                        Element::from(
+                            rect()
+                                .position(Position::new_absolute().top(0.0).left(0.0))
+                                .width(Size::fill())
+                                .layer(Layer::Relative(HEADER_LAYER))
+                                .backdrop_blur(HEADER_BLUR)
+                                .child(header),
+                        )
+                    } else {
+                        Element::from(header)
+                    })
                     .child(if show_list {
                         Element::from(sidebar(true))
                     } else {
@@ -744,9 +785,20 @@ impl<T: NavItem> Component for NavigationSplitView<T> {
     }
 }
 
+/// How much the content behind a floating header bar is blurred.
+const HEADER_BLUR: f32 = 20.0;
+/// The layer the floating header bar draws on. Layers add up with element
+/// depth, so this sits above the deepest page content and below overlays.
+const HEADER_LAYER: i16 = 1500;
+
 /// How far the page has to scroll before its title row is out of view and
 /// the title moves to the header bar.
 const TITLE_SCROLLED_OUT: i32 = 48;
+
+/// How long the header title takes to slide into place.
+const TITLE_SLIDE_MS: u64 = 220;
+/// How far below its resting place the header title starts, in pixels.
+const TITLE_SLIDE_PX: f32 = 8.0;
 
 /// The page title in the header bar, centred, shown once the title row at
 /// the top of the page has scrolled out of view.
@@ -760,13 +812,26 @@ impl Component for ScrolledTitle {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let shown = -<(i32, i32)>::from(self.scroll).1 > TITLE_SCROLLED_OUT;
+        let duration = tokens.motion(TITLE_SLIDE_MS);
+        let anim = use_animation_transition(shown, move |_, _| {
+            AnimNum::new(0.0, 1.0)
+                .time(duration)
+                .function(Function::Expo)
+                .ease(Ease::Out)
+        });
+        let progress = anim.get().value().clamp(0.0, 1.0);
+        let title = EMPHASIS
+            .label(&tokens, self.title.clone())
+            .width(Size::fill())
+            .text_align(TextAlign::Center)
+            .max_lines(1)
+            .text_overflow(TextOverflow::Ellipsis);
         rect().tw_layout(&[w_full()]).maybe_child(shown.then(|| {
-            EMPHASIS
-                .label(&tokens, self.title.clone())
+            rect()
                 .width(Size::fill())
-                .text_align(TextAlign::Center)
-                .max_lines(1)
-                .text_overflow(TextOverflow::Ellipsis)
+                .offset_y((1.0 - progress) * TITLE_SLIDE_PX)
+                .opacity(progress)
+                .child(title)
         }))
     }
 }
@@ -775,6 +840,7 @@ impl Component for ScrolledTitle {
 #[derive(PartialEq)]
 struct ScrollEdge {
     scroll: ScrollController,
+    top: f32,
 }
 
 impl Component for ScrollEdge {
@@ -782,7 +848,7 @@ impl Component for ScrollEdge {
         let tokens = use_tokens();
         let scrolled = <(i32, i32)>::from(self.scroll).1 < 0;
         rect()
-            .position(Position::new_absolute().top(0.0).left(0.0))
+            .position(Position::new_absolute().top(self.top).left(0.0))
             .layer(Layer::Relative(2))
             .tw(
                 &tokens,
@@ -802,34 +868,17 @@ impl Component for ScrollEdge {
 #[derive(PartialEq)]
 struct Sidebar<T: NavItem> {
     items: Vec<T>,
-    hits: Vec<SearchHit<T>>,
     selected: State<T>,
     query: State<String>,
-    highlight: State<usize>,
     search_id: AccessibilityId,
     sidebar_open: State<bool>,
     /// Drawn as the whole window below the header, not as a column.
     full_page: bool,
     profile: Option<Profile<T>>,
-}
-
-/// The most settings the sidebar search lists.
-const MAX_HITS: usize = 20;
-
-/// Makes `target` the selected page and clears the search. On a narrow window
-/// the page list closes too.
-fn open_result<T: NavItem>(
-    mut selected: State<T>,
-    mut query: State<String>,
-    mut sidebar_open: State<bool>,
-    full_page: bool,
-    target: T,
-) {
-    selected.set(target);
-    query.set(String::new());
-    if full_page {
-        sidebar_open.set(false);
-    }
+    /// The pages with search results, when the split view searches. While
+    /// the search has text, the sidebar lists these instead of its pages.
+    hits: Option<Vec<SearchHit>>,
+    scroll: ScrollController,
 }
 
 /// The name of a group of pages, in small muted type above its first page.
@@ -844,74 +893,11 @@ fn group_label(tokens: &Tokens, group: &str) -> Element {
         .into()
 }
 
-/// A search result for a setting: its title, with the page it is on under it.
-#[derive(PartialEq)]
-struct HitRow<T: NavItem> {
-    hit: SearchHit<T>,
-    highlighted: bool,
-    selected: State<T>,
-    query: State<String>,
-    sidebar_open: State<bool>,
-    full_page: bool,
-}
-
-impl<T: NavItem> Component for HitRow<T> {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let mut hovering = use_state(|| false);
-        let a11y_id = use_a11y();
-        let focus = use_focus(a11y_id);
-        let target = self.hit.target;
-        let selected = self.selected;
-        let query = self.query;
-        let sidebar_open = self.sidebar_open;
-        let full_page = self.full_page;
-        rect()
-            .a11y_id(a11y_id)
-            .a11y_focusable(true)
-            .a11y_role(AccessibilityRole::Button)
-            .tw(
-                &tokens,
-                &[
-                    w_full(),
-                    py(S1),
-                    px(GUTTER),
-                    rounded(Radius::Control),
-                    surface(
-                        Paint::Transparent,
-                        hovering() || self.highlighted,
-                        false,
-                        false,
-                    ),
-                ],
-            )
-            .height(Size::auto())
-            .tw(&tokens, &[focus_ring(focus())])
-            .on_pointer_enter(move |_| hovering.set(true))
-            .on_pointer_leave(move |_| hovering.set(false))
-            .on_press(move |_: Event<PressEventData>| {
-                open_result(selected, query, sidebar_open, full_page, target)
-            })
-            .child(
-                BODY.label(&tokens, self.hit.title.clone())
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis),
-            )
-            .child(
-                CAPTION
-                    .label(&tokens, self.hit.detail.clone())
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis),
-            )
-    }
-}
-
 impl<T: NavItem> Component for Sidebar<T> {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let selected = self.selected;
         let query = self.query;
-        let mut highlight = self.highlight;
         let sidebar_open = self.sidebar_open;
         let full_page = self.full_page;
         let needle = query.read().trim().to_lowercase();
@@ -929,27 +915,21 @@ impl<T: NavItem> Component for Sidebar<T> {
                         .any(|word| word.starts_with(&needle))
             })
             .collect();
-        let hits: Vec<SearchHit<T>> = if typing {
-            self.hits
-                .iter()
-                .filter(|hit| hit.matches(&needle))
-                .take(MAX_HITS)
-                .cloned()
-                .collect()
-        } else {
-            Vec::new()
-        };
-        // Pages first, then settings: one list that Up, Down and Enter walk.
-        let targets: Vec<T> = visible
-            .iter()
-            .copied()
-            .chain(hits.iter().map(|hit| hit.target))
-            .collect();
-        let count = targets.len();
-        let current = highlight().min(count.saturating_sub(1));
+        // While searching, the list is the pages with results: the same set
+        // the results pane shows, one block each.
+        let hit_list = self.hits.as_ref().filter(|_| typing);
         let mut entries: Vec<Element> = Vec::new();
+        let no_matches = typing && hit_list.map_or(visible.is_empty(), |hits| hits.is_empty());
+        if let Some(hits) = hit_list {
+            entries.extend(hits.iter().map(|hit| {
+                Element::from(SearchHitRow {
+                    hit: hit.clone(),
+                    scroll: self.scroll,
+                })
+            }));
+        }
         let mut last_group = "";
-        for (index, item) in visible.iter().enumerate() {
+        for item in visible.iter().filter(|_| hit_list.is_none()) {
             let group = item.group();
             if group != last_group && !group.is_empty() {
                 entries.push(group_label(&tokens, group));
@@ -959,20 +939,6 @@ impl<T: NavItem> Component for Sidebar<T> {
                 item: *item,
                 siblings: visible.clone(),
                 selected,
-                sidebar_open,
-                full_page,
-                highlighted: typing && index == current,
-            }));
-        }
-        if !hits.is_empty() {
-            entries.push(group_label(&tokens, "settings"));
-        }
-        for (offset, hit) in hits.iter().enumerate() {
-            entries.push(Element::from(HitRow {
-                hit: hit.clone(),
-                highlighted: visible.len() + offset == current,
-                selected,
-                query,
                 sidebar_open,
                 full_page,
             }));
@@ -986,58 +952,98 @@ impl<T: NavItem> Component for Sidebar<T> {
         } else {
             rect().tw(&tokens, SIDEBAR)
         };
-        shell
-            .on_key_down(move |event: Event<KeyboardEventData>| {
-                // Up, Down and Enter walk the results only while a search is typed.
-                if !typing {
-                    return;
-                }
-                match &event.key {
-                    Key::Named(NamedKey::ArrowDown) => {
-                        event.stop_propagation();
-                        highlight.set((current + 1).min(count.saturating_sub(1)));
-                    }
-                    Key::Named(NamedKey::ArrowUp) => {
-                        event.stop_propagation();
-                        highlight.set(current.saturating_sub(1));
-                    }
-                    Key::Named(NamedKey::Enter) => {
-                        if let Some(target) = targets.get(current).copied() {
-                            event.stop_propagation();
-                            open_result(selected, query, sidebar_open, full_page, target);
-                        }
-                    }
-                    _ => {}
-                }
+        let card = self.profile.clone().filter(|_| !typing).map(|profile| {
+            Element::from(ProfileCard {
+                profile,
+                selected,
+                sidebar_open,
+                full_page,
             })
-            .child(search_band(query, self.highlight, self.search_id))
-            .maybe_child(self.profile.clone().filter(|_| !typing).map(|profile| {
-                Element::from(ProfileCard {
-                    profile,
-                    selected,
-                    sidebar_open,
-                    full_page,
-                })
-            }))
+        });
+        shell
+            .child(search_band(query, self.search_id))
+            .maybe_child(card)
             .child(
-                rect().width(Size::fill()).height(Size::flex(1.0)).child(
-                    ScrollView::new()
-                        .drag_scrolling(false)
-                        .auto_hide_scrollbars(false)
-                        .child(
+                rect()
+                    .width(Size::fill())
+                    .height(Size::flex(1.0))
+                    .min_height(Size::px(0.0))
+                    .child(
+                        ScrollView::new().drag_scrolling(false).child(
                             rect()
                                 .tw(&tokens, SIDEBAR_LIST)
                                 .tw(&tokens, &[pt(S2)])
                                 .children(entries)
-                                .maybe_child((typing && count == 0).then(|| {
+                                .maybe_child(no_matches.then(|| {
                                     rect().tw(&tokens, &[pt(S3), px(S3)]).child(
                                         BODY.in_ink(Ink::Muted).label(&tokens, "Nothing matches."),
                                     )
                                 })),
                         ),
-                ),
+                    ),
             )
     }
+}
+
+/// A page with search results, listed in the sidebar while searching.
+/// Pressing it scrolls the results to the page's block.
+#[derive(Clone, PartialEq)]
+struct SearchHitRow {
+    hit: SearchHit,
+    scroll: ScrollController,
+}
+
+impl Component for SearchHitRow {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let mut hovering = use_state(|| false);
+        let mut pressing = use_state(|| false);
+        let a11y_id = use_a11y();
+        let focus = use_focus(a11y_id);
+        let mut scroll = self.scroll;
+        let offset = self.hit.offset;
+        rect()
+            .tw(&tokens, NAV_ITEM)
+            .tw(
+                &tokens,
+                &[surface(Paint::Transparent, hovering(), pressing(), false)],
+            )
+            .a11y_id(a11y_id)
+            .a11y_focusable(true)
+            .a11y_role(AccessibilityRole::Tab)
+            .tw(&tokens, &[focus_ring(focus())])
+            .on_pointer_enter(move |_| hovering.set(true))
+            .on_pointer_leave(move |_| {
+                hovering.set(false);
+                pressing.set_if_modified(false);
+            })
+            .on_pointer_down(move |_: Event<PointerEventData>| pressing.set(true))
+            .on_global_pointer_up(move |_| pressing.set_if_modified(false))
+            .on_press(move |_: Event<PressEventData>| {
+                scroll.scroll_to_y((section_top() - offset as f32).round() as i32);
+            })
+            .on_key_down(move |event: Event<KeyboardEventData>| {
+                if is_activation_key(&event.key) {
+                    event.stop_propagation();
+                    scroll.scroll_to_y((section_top() - offset as f32).round() as i32);
+                }
+            })
+            .child(icons::icon(
+                self.hit.icon,
+                IconSize::Row,
+                Paint::Muted.color(&tokens),
+            ))
+            .child(
+                BODY.label(&tokens, self.hit.title.clone())
+                    .max_lines(1)
+                    .text_overflow(TextOverflow::Ellipsis),
+            )
+    }
+}
+
+/// Where a search hit's block top sits when it is opened: just under the frosted header.
+fn section_top() -> f32 {
+    Dim::Header.px() + S2.px()
 }
 
 /// The sidebar search field: a rounded well with a search glyph, on the top band.
@@ -1048,28 +1054,19 @@ pub struct SearchField {
 
 impl Component for SearchField {
     fn render(&self) -> impl IntoElement {
-        let highlight = use_state(|| 0usize);
         let search_id = use_a11y();
-        search_band(self.query, highlight, search_id)
+        search_band(self.query, search_id)
     }
 }
 
 /// The top band of the sidebar. It is the header height, like the page
-/// header, so the search field sits on the window-control line. Typing resets
-/// the highlight to the first result.
-fn search_band(
-    query: State<String>,
-    highlight: State<usize>,
-    search_id: AccessibilityId,
-) -> impl IntoElement {
-    let mut highlight = highlight;
+/// header, so the search field sits on the window-control line.
+fn search_band(query: State<String>, search_id: AccessibilityId) -> impl IntoElement {
     rect().tw_layout(SIDEBAR_SEARCH).child(
-        search_field(query, move |_: String| {
-            highlight.set(0);
-        })
-        .a11y_id(search_id)
-        .well()
-        .fill_width(),
+        search_field(query, |_: String| {})
+            .a11y_id(search_id)
+            .well()
+            .fill_width(),
     )
 }
 
@@ -1081,8 +1078,6 @@ struct NavEntry<T: NavItem> {
     selected: State<T>,
     sidebar_open: State<bool>,
     full_page: bool,
-    /// Drawn with the hover layer: the keyboard highlight of the search.
-    highlighted: bool,
 }
 
 impl<T: NavItem> Component for NavEntry<T> {
@@ -1109,7 +1104,7 @@ impl<T: NavItem> Component for NavEntry<T> {
                 &tokens,
                 &[surface(
                     Paint::Transparent,
-                    hovering() || self.highlighted,
+                    hovering(),
                     pressing(),
                     is_selected,
                 )],

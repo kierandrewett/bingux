@@ -1,16 +1,22 @@
-//! Network: the wired connections NetworkManager manages. Everything comes
-//! from `nmcli`.
+//! Network: the wired devices and the VPN profiles NetworkManager manages.
+//! Each one is a row that opens its own subpage, where its state and actions
+//! live. Everything comes from `nmcli`, on background threads.
 
 use std::time::Duration;
 
 use freya::prelude::*;
 
 use super::wifi_editor::{Target, use_editor};
-use crate::icons::Icon;
+use crate::icons::{self, Icon};
+use crate::routes::{Navigator, Route, use_navigator};
 use crate::system::{self, CommandError};
 use crate::ui::{
-    Group, PageHeader, Status, page_column, row, skeleton, status, switch_row, use_page_header,
+    Group, Overlays, PageHeader, ResponseKind, Status, Tokens, action_strip, centered_caption,
+    dialog, heading, page_column, row, skeleton, status, strip_action, use_overlays,
+    use_page_header, use_tokens,
 };
+use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
+use bingux_ui::style::*;
 
 const QUICK: Duration = Duration::from_secs(5);
 const CONNECT: Duration = Duration::from_secs(60);
@@ -23,6 +29,16 @@ struct WiredDevice {
 }
 
 type Loaded = Result<Vec<WiredDevice>, CommandError>;
+
+/// One VPN profile and whether it is up.
+#[derive(Clone, PartialEq)]
+struct Vpn {
+    name: String,
+    wireguard: bool,
+    active: bool,
+}
+
+type VpnLoaded = Result<Vec<Vpn>, CommandError>;
 
 /// Split one `nmcli -t` line on its unescaped colons, undoing `\:` and `\\`.
 fn split_terse(line: &str) -> Vec<String> {
@@ -91,11 +107,27 @@ fn wired_state(state: &str) -> String {
     }
 }
 
-/// One VPN profile and whether it is up.
-#[derive(Clone, PartialEq)]
-struct Vpn {
-    name: String,
-    active: bool,
+fn is_connected(device: &WiredDevice) -> bool {
+    device.state.starts_with("connected")
+}
+
+/// The connection's name, when the device has one. NetworkManager writes
+/// `--` for a device with no connection.
+fn has_connection(device: &WiredDevice) -> bool {
+    !device.connection.is_empty() && device.connection != "--"
+}
+
+/// The row title for a wired device: its connection's name, else its place
+/// in the list.
+fn wired_title(devices: &[WiredDevice], index: usize) -> String {
+    let device = &devices[index];
+    if has_connection(device) {
+        device.connection.clone()
+    } else if devices.len() > 1 {
+        format!("Ethernet {}", index + 1)
+    } else {
+        "Ethernet".to_string()
+    }
 }
 
 /// Split a terse listing of `NAME,TYPE` pairs into `(name, type)` pairs.
@@ -126,14 +158,15 @@ fn parse_vpns(all: &str, active: &str) -> Vec<Vpn> {
     parse_pairs(all)
         .into_iter()
         .filter(|(_, kind)| is_vpn(kind))
-        .map(|(name, _)| Vpn {
+        .map(|(name, kind)| Vpn {
             active: active_names.contains(&name),
+            wireguard: kind == "wireguard",
             name,
         })
         .collect()
 }
 
-fn load_vpns() -> Result<Vec<Vpn>, CommandError> {
+fn load_vpns() -> VpnLoaded {
     let all = system::run(
         "nmcli",
         &["-t", "-f", "NAME,TYPE", "connection", "show"],
@@ -147,26 +180,381 @@ fn load_vpns() -> Result<Vec<Vpn>, CommandError> {
     Ok(parse_vpns(&all, &active))
 }
 
-/// Bring a VPN profile up or down, then reload the VPN list.
-fn toggle_vpn(model: State<Option<Result<Vec<Vpn>, CommandError>>>, name: String, on: bool) {
-    let action = if on { "up" } else { "down" };
-    system::background_then(
-        move || system::run("nmcli", &["connection", action, "id", &name], CONNECT).map(|_| ()),
-        move |_| system::background(model, load_vpns),
+/// Pending values for switches that are changing, by key (`wired:enp3s0`,
+/// `vpn:Home`). The page and its subpages share it, so a change shows the
+/// same everywhere at once.
+fn pending() -> State<Vec<(String, bool)>> {
+    thread_local! {
+        static PENDING: State<Vec<(String, bool)>> = State::create_global(Vec::new());
+    }
+    PENDING.with(|pending| *pending)
+}
+
+fn wired_key(device: &str) -> String {
+    format!("wired:{device}")
+}
+
+fn vpn_key(name: &str) -> String {
+    format!("vpn:{name}")
+}
+
+/// The value a change has set for `key`, while it is in flight.
+fn pending_for(key: &str) -> Option<bool> {
+    pending()
+        .read()
+        .iter()
+        .find(|(other, _)| other == key)
+        .map(|(_, on)| *on)
+}
+
+/// Show `on` for `key` at once and run `command` in the background. On
+/// success the list is read again, and that read drops the pending value. A
+/// failure puts the old value back and shows the error.
+fn toggle_link<T>(
+    model: State<Option<Result<Vec<T>, CommandError>>>,
+    load: fn() -> Result<Vec<T>, CommandError>,
+    overlays: Overlays,
+    key: String,
+    on: bool,
+    command: impl FnOnce() -> Result<(), CommandError> + Send + 'static,
+) where
+    T: Clone + PartialEq + Send + 'static,
+{
+    let shown = pending();
+    let previous = shown.read().clone();
+    let mut value = previous.clone();
+    value.retain(|(other, _)| *other != key);
+    value.push((key.clone(), on));
+    bingux_ui::runtime::optimistic_then(
+        shown,
+        Some(overlays),
+        previous,
+        value,
+        command,
+        move || {
+            system::background_then(load, move |loaded| {
+                let mut model = model;
+                model.set(Some(loaded));
+                let mut shown = shown;
+                let mut list = shown.read().clone();
+                list.retain(|(other, _)| *other != key);
+                shown.set(list);
+            });
+        },
     );
+}
+
+fn set_wired(model: State<Option<Loaded>>, overlays: Overlays, device: String, connect: bool) {
+    let action = if connect { "connect" } else { "disconnect" };
+    let key = wired_key(&device);
+    toggle_link(model, load, overlays, key, connect, move || {
+        system::run("nmcli", &["device", action, &device], CONNECT).map(|_| ())
+    });
+}
+
+fn set_vpn(model: State<Option<VpnLoaded>>, overlays: Overlays, name: String, up: bool) {
+    let action = if up { "up" } else { "down" };
+    let key = vpn_key(&name);
+    toggle_link(model, load_vpns, overlays, key, up, move || {
+        system::run("nmcli", &["connection", action, "id", &name], CONNECT).map(|_| ())
+    });
+}
+
+/// Ask first: forgetting deletes the VPN profile from this computer.
+fn confirm_forget_vpn(model: State<Option<VpnLoaded>>, overlays: Overlays, name: String) {
+    overlays.show_dialog(
+        dialog(
+            format!("Forget \"{name}\"?"),
+            "The VPN profile is deleted from this computer.",
+        )
+        .cancel("Cancel")
+        .response("Forget", ResponseKind::Destructive, move |_| {
+            let target = name.clone();
+            system::background_then(
+                move || {
+                    system::run("nmcli", &["connection", "delete", "id", &target], CONNECT)
+                        .map(|_| ())
+                },
+                move |result| {
+                    if let Err(error) = result {
+                        overlays.toast(error.0);
+                    }
+                    system::background(model, load_vpns);
+                },
+            );
+        }),
+    );
+}
+
+/// The right-click menu for one wired device: connect or disconnect, and its
+/// details.
+fn wired_menu(
+    navigator: Navigator,
+    model: State<Option<Loaded>>,
+    overlays: Overlays,
+    device: &WiredDevice,
+    title: &str,
+) -> Vec<MenuItem> {
+    let name = device.name.clone();
+    let connect = !is_connected(device);
+    let toggle = if connect {
+        menu_item("Connect", move |_| {
+            set_wired(model, overlays, name.clone(), true)
+        })
+        .icon(Icon::NetworkWired)
+    } else {
+        menu_item("Disconnect", move |_| {
+            set_wired(model, overlays, name.clone(), false)
+        })
+        .icon(Icon::WindowClose)
+    };
+    let route = Route::Wired {
+        device: device.name.clone(),
+        name: title.to_string(),
+    };
+    vec![
+        toggle,
+        menu_item("Details", move |_| navigator.push(route.clone())).icon(Icon::PreferencesSystem),
+    ]
+}
+
+/// The right-click menu for one VPN: connect or disconnect, its details, and
+/// forget.
+fn vpn_menu(
+    navigator: Navigator,
+    model: State<Option<VpnLoaded>>,
+    overlays: Overlays,
+    name: &str,
+    up: bool,
+) -> Vec<MenuItem> {
+    let toggle_name = name.to_string();
+    let forget = name.to_string();
+    let route = Route::Vpn {
+        name: name.to_string(),
+    };
+    let toggle = if up {
+        menu_item("Disconnect", move |_| {
+            set_vpn(model, overlays, toggle_name.clone(), false)
+        })
+        .icon(Icon::WindowClose)
+    } else {
+        menu_item("Connect", move |_| {
+            set_vpn(model, overlays, toggle_name.clone(), true)
+        })
+        .icon(Icon::NetworkVpn)
+    };
+    vec![
+        toggle,
+        menu_item("Details", move |_| navigator.push(route.clone())).icon(Icon::PreferencesSystem),
+        menu_separator(),
+        menu_item("Forget", move |_| {
+            confirm_forget_vpn(model, overlays, forget.clone())
+        })
+        .icon(Icon::UserTrash)
+        .destructive(),
+    ]
 }
 
 /// The header line: the connected wired device, or that none is connected.
 fn wired_subtitle(wired: &[WiredDevice]) -> String {
-    match wired
-        .iter()
-        .find(|device| device.state.starts_with("connected"))
-    {
-        Some(device) if !device.connection.is_empty() && device.connection != "--" => {
-            format!("Connected to {}", device.connection)
-        }
+    match wired.iter().find(|device| is_connected(device)) {
+        Some(device) if has_connection(device) => format!("Connected to {}", device.connection),
         Some(_) => "Connected to Ethernet".to_string(),
         None => "Not connected".to_string(),
+    }
+}
+
+/// The state a row or subpage shows: the pending value while a change is in
+/// flight, else the state that was loaded.
+fn wired_label(device: &WiredDevice) -> String {
+    match pending_for(&wired_key(&device.name)) {
+        Some(true) => "Connected".to_string(),
+        Some(false) => "Not connected".to_string(),
+        None => wired_state(&device.state),
+    }
+}
+
+fn vpn_label(on: bool) -> &'static str {
+    if on { "Connected" } else { "Not connected" }
+}
+
+/// The icon, title and state at the top of a subpage.
+fn hero(tokens: Tokens, icon: Icon, title: String, state: String) -> Element {
+    rect()
+        .tw(&tokens, &[w_full(), items(Align::Center), gap(S2), py(S2)])
+        .child(icons::icon(
+            icon,
+            IconSize::Hero,
+            Paint::Text.color(&tokens),
+        ))
+        .child(heading(title))
+        .child(centered_caption(state))
+        .into()
+}
+
+/// One wired device: its state, its actions and its facts.
+#[derive(PartialEq)]
+pub struct WiredPage {
+    pub device: String,
+    pub name: String,
+}
+
+impl Component for WiredPage {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let navigator = use_navigator();
+        let overlays = use_overlays();
+        let editor = use_editor();
+        let model = system::use_cached("network", load);
+
+        // Go back to the list once the device is gone.
+        let gone = self.device.clone();
+        use_side_effect(move || {
+            if let Some(Ok(devices)) = &*model.read()
+                && !devices.iter().any(|device| device.name == gone)
+            {
+                navigator.pop();
+            }
+        });
+
+        let loaded = model.read().clone();
+        let Some(loaded) = loaded else {
+            return page_column().child(skeleton());
+        };
+        let devices = match loaded {
+            Ok(devices) => devices,
+            Err(failure) => {
+                return page_column().child(
+                    status(Status::Error(failure.0))
+                        .action("Try again", move |_| system::background(model, load)),
+                );
+            }
+        };
+        let Some(device) = devices.iter().find(|device| device.name == self.device) else {
+            return page_column();
+        };
+        let state = wired_label(device);
+        let connected = pending_for(&wired_key(&device.name)).unwrap_or(is_connected(device));
+
+        let mut blocks = vec![hero(
+            tokens,
+            Icon::NetworkWired,
+            self.name.clone(),
+            state.clone(),
+        )];
+
+        let mut actions = Vec::new();
+        let name = device.name.clone();
+        if connected {
+            actions.push(strip_action(Icon::WindowClose, "Disconnect", move |_| {
+                set_wired(model, overlays, name.clone(), false)
+            }));
+        } else {
+            actions.push(strip_action(Icon::NetworkWired, "Connect", move |_| {
+                set_wired(model, overlays, name.clone(), true)
+            }));
+        }
+        if has_connection(device) {
+            let target = Target {
+                name: device.connection.clone(),
+                wireless: false,
+                facts: Vec::new(),
+            };
+            actions.push(strip_action(
+                Icon::PreferencesSystem,
+                "Settings",
+                move |_| editor.open(target.clone()),
+            ));
+        }
+        blocks.push(Element::from(action_strip(actions)));
+
+        let connection = if has_connection(device) {
+            device.connection.clone()
+        } else {
+            "None".to_string()
+        };
+        let details = Group::titled("Details")
+            .row(row("Status").value(state))
+            .row(row("Device").value(device.name.clone()))
+            .row(row("Connection").value(connection));
+        blocks.push(Element::from(details));
+        page_column().children(blocks)
+    }
+}
+
+/// One VPN profile: whether it is up, what you can do with it, and its type.
+#[derive(PartialEq)]
+pub struct VpnPage {
+    pub name: String,
+}
+
+impl Component for VpnPage {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let navigator = use_navigator();
+        let overlays = use_overlays();
+        let model = system::use_cached("vpn", load_vpns);
+
+        // Go back to the list once the profile is gone.
+        let gone = self.name.clone();
+        use_side_effect(move || {
+            if let Some(Ok(profiles)) = &*model.read()
+                && !profiles.iter().any(|profile| profile.name == gone)
+            {
+                navigator.pop();
+            }
+        });
+
+        let loaded = model.read().clone();
+        let Some(loaded) = loaded else {
+            return page_column().child(skeleton());
+        };
+        let profiles = match loaded {
+            Ok(profiles) => profiles,
+            Err(failure) => {
+                return page_column().child(
+                    status(Status::Error(failure.0))
+                        .action("Try again", move |_| system::background(model, load_vpns)),
+                );
+            }
+        };
+        let Some(profile) = profiles.iter().find(|profile| profile.name == self.name) else {
+            return page_column();
+        };
+        let up = pending_for(&vpn_key(&profile.name)).unwrap_or(profile.active);
+
+        let mut actions = Vec::new();
+        let name = profile.name.clone();
+        if up {
+            actions.push(strip_action(Icon::WindowClose, "Disconnect", move |_| {
+                set_vpn(model, overlays, name.clone(), false)
+            }));
+        } else {
+            actions.push(strip_action(Icon::NetworkVpn, "Connect", move |_| {
+                set_vpn(model, overlays, name.clone(), true)
+            }));
+        }
+        let forget = profile.name.clone();
+        actions.push(strip_action(Icon::UserTrash, "Forget", move |_| {
+            confirm_forget_vpn(model, overlays, forget.clone())
+        }));
+
+        let kind = if profile.wireguard {
+            "WireGuard"
+        } else {
+            "VPN"
+        };
+        let details = Group::titled("Details").row(row("Type").value(kind));
+        page_column().children(vec![
+            hero(
+                tokens,
+                Icon::NetworkVpn,
+                self.name.clone(),
+                vpn_label(up).to_string(),
+            ),
+            Element::from(action_strip(actions)),
+            Element::from(details),
+        ])
     }
 }
 
@@ -175,9 +563,10 @@ pub struct NetworkPage;
 
 impl Component for NetworkPage {
     fn render(&self) -> impl IntoElement {
+        let navigator = use_navigator();
         let vpns = system::use_cached("vpn", load_vpns);
-        let editor = use_editor();
         let model = system::use_cached("network", load);
+        let overlays = use_overlays();
         let subtitle = model
             .read()
             .as_ref()
@@ -200,8 +589,6 @@ impl Component for NetworkPage {
             }
         };
         let wired_group = Group::titled("Wired");
-        // The connection's name ("Wired connection 1") says more than the
-        // interface name ("enp42s0"). Without a connection, say Ethernet.
         let wired_group = if wired.is_empty() {
             wired_group.row(status(Status::Empty("No wired network devices.".into())))
         } else {
@@ -210,31 +597,20 @@ impl Component for NetworkPage {
                     .iter()
                     .enumerate()
                     .map(|(index, device)| {
-                        let title = if !device.connection.is_empty() && device.connection != "--" {
-                            device.connection.clone()
-                        } else if wired.len() > 1 {
-                            format!("Ethernet {}", index + 1)
-                        } else {
-                            "Ethernet".to_string()
+                        let title = wired_title(&wired, index);
+                        let route = Route::Wired {
+                            device: device.name.clone(),
+                            name: title.clone(),
                         };
-                        let connection = device.connection.clone();
-                        let mut item = row(title).leading(Icon::NetworkWired);
-                        // A check mark says the device is connected; any other state is named.
-                        item = if device.state.starts_with("connected") {
-                            item.selected(true)
-                        } else {
-                            item.value(wired_state(&device.state))
-                        };
-                        if !connection.is_empty() && connection != "--" {
-                            item = item.on_press(move |_| {
-                                editor.open(Target {
-                                    name: connection.clone(),
-                                    wireless: false,
-                                    facts: Vec::new(),
-                                })
-                            });
-                        }
-                        Element::from(item)
+                        let menu = wired_menu(navigator, model, overlays, device, &title);
+                        Element::from(
+                            row(title)
+                                .leading(Icon::NetworkWired)
+                                .value(wired_label(device))
+                                .navigates()
+                                .on_press(move |_| navigator.push(route.clone()))
+                                .context_menu(menu),
+                        )
                     })
                     .collect::<Vec<_>>(),
             )
@@ -246,12 +622,18 @@ impl Component for NetworkPage {
             let rows = list
                 .into_iter()
                 .map(|vpn| {
-                    let name = vpn.name.clone();
+                    let up = pending_for(&vpn_key(&vpn.name)).unwrap_or(vpn.active);
+                    let route = Route::Vpn {
+                        name: vpn.name.clone(),
+                    };
+                    let menu = vpn_menu(navigator, vpns, overlays, &vpn.name, up);
                     Element::from(
-                        switch_row(vpn.name.clone(), vpn.active, move |on: bool| {
-                            toggle_vpn(vpns, name.clone(), on)
-                        })
-                        .leading(Icon::NetworkVpn),
+                        row(vpn.name)
+                            .leading(Icon::NetworkVpn)
+                            .value(vpn_label(up))
+                            .navigates()
+                            .on_press(move |_| navigator.push(route.clone()))
+                            .context_menu(menu),
                     )
                 })
                 .collect::<Vec<_>>();

@@ -101,11 +101,28 @@ impl TextStyle {
             .font_weight(self.weight)
             .line_height(self.leading)
             .letter_spacing(self.tracking)
-            .child(text.into());
+            // A span, not a child: paragraph highlights (search marks) are
+            // only painted for the paragraph's own spans.
+            .span(text.into());
         if self.tabular {
             paragraph.font_tabular()
         } else {
             paragraph
+        }
+    }
+
+    /// A styled piece of text for a [`SelectableText`], which takes spans
+    /// rather than a paragraph, so the text can be selected and copied.
+    pub fn span(self, tokens: &Tokens, text: impl Into<String>) -> Span<'static> {
+        let span = Span::new(text.into())
+            .color(self.ink.color(tokens))
+            .font_size(self.size)
+            .font_weight(self.weight)
+            .letter_spacing(self.tracking);
+        if self.tabular {
+            span.font_tabular()
+        } else {
+            span
         }
     }
 }

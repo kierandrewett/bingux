@@ -1,27 +1,35 @@
 //! Date and time: the live clock, whether the clock sets itself, the time
-//! zone and the clock format. The time zone is a subpage and setting the clock
-//! by hand is a sheet. Backends: `timedatectl`, `gsettings` (clock format,
-//! weekday and date) and `bingux-config` (clock seconds).
+//! zone and the clock format. The time zone is a subpage with a world map and
+//! a list, and setting the clock by hand is a sheet. Backends: `timedatectl`,
+//! `gsettings` (clock format, weekday and date) and `bingux-config` (clock
+//! seconds).
+
+mod backend;
+mod timezone_map;
 
 use std::time::Duration;
 
 use bingux_ui::layout::vstack;
+use bingux_ui::runtime::optimistic_then;
+use bingux_ui::shell::MenuItem;
 use bingux_ui::style::*;
 use freya::prelude::*;
+use timezone_map::TimeZoneMap;
 
 use crate::pages::bingux_config;
 use crate::routes::{Route, use_navigator};
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Overlays, Status, caption, choice_list, choice_row, dropdown, form_row, page_column,
-    row, sheet, skeleton, status, stepper, styled_label, switch_row, typography, use_overlays,
-    use_page_busy,
+    Group, Overlays, Status, caption, choice_row, dropdown, form_row, menu_item, page_column, row,
+    search_field, sheet, skeleton, status, stepper, styled_label, switch_row, typography,
+    use_overlays, use_page_busy,
 };
 
-const TIMEOUT: Duration = Duration::from_secs(5);
 const INTERFACE: &str = "org.gnome.desktop.interface";
+/// The most zones drawn at once. Typing narrows a longer list.
+const ZONE_LIMIT: usize = 60;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 struct Model {
     timezone: String,
     /// Offset from UTC, as `+01:00`.
@@ -37,6 +45,14 @@ struct Model {
 struct Ctx {
     model: State<Option<Result<Model, CommandError>>>,
     overlays: Overlays,
+}
+
+/// The page's shared state. The subpage and the page read the same cache.
+fn context(overlays: Overlays) -> Ctx {
+    Ctx {
+        model: system::cached("datetime"),
+        overlays,
+    }
 }
 
 /// Parses the `Key=value` lines of `timedatectl show`.
@@ -59,20 +75,20 @@ fn parse_timedatectl(text: &str) -> Result<(String, bool), CommandError> {
 }
 
 fn load() -> Result<Model, CommandError> {
-    let show = system::run("timedatectl", &["show"], TIMEOUT)?;
+    let show = backend::run("timedatectl", &["show"])?;
     let (timezone, ntp) = parse_timedatectl(&show)?;
-    let clock_format = system::unquote(&system::gsettings_get(INTERFACE, "clock-format")?);
+    let clock_format = system::unquote(&backend::gsettings_get(INTERFACE, "clock-format")?);
     // A missing bingux-config only loses the Show seconds row, not the page.
-    let clock_seconds = system::run(&bingux_config(), &["get", "desktop.clock_seconds"], TIMEOUT)
+    let clock_seconds = backend::run(&bingux_config(), &["get", "desktop.clock_seconds"])
         .ok()
         .map(|value| value == "true");
-    let show_weekday = system::gsettings_get(INTERFACE, "clock-show-weekday")
+    let show_weekday = backend::gsettings_get(INTERFACE, "clock-show-weekday")
         .ok()
         .map(|value| value == "true");
-    let show_date = system::gsettings_get(INTERFACE, "clock-show-date")
+    let show_date = backend::gsettings_get(INTERFACE, "clock-show-date")
         .ok()
         .map(|value| value == "true");
-    let utc_offset = system::run("date", &["+%:z"], TIMEOUT)?;
+    let utc_offset = backend::run("date", &["+%:z"])?;
     Ok(Model {
         timezone,
         utc_offset,
@@ -98,7 +114,7 @@ struct Now {
 
 fn read_now() -> Result<Now, String> {
     let failed = || "The time could not be read.".to_string();
-    let text = system::run("date", &["+%Y %m %d %H %M %S %A"], TIMEOUT).map_err(|e| e.0)?;
+    let text = backend::run("date", &["+%Y %m %d %H %M %S %A"]).map_err(|e| e.0)?;
     let parts: Vec<&str> = text.split_whitespace().collect();
     let &[year, month, day, hour, minute, second, weekday] = parts.as_slice() else {
         return Err(failed());
@@ -145,12 +161,16 @@ fn date_text(now: &Now) -> String {
     format!("{}, {} {month} {}", now.weekday, now.day, now.year)
 }
 
+fn flag(on: bool) -> &'static str {
+    if on { "true" } else { "false" }
+}
+
 fn set_timezone(zone: &str) -> CommandResult {
-    system::run("timedatectl", &["set-timezone", zone], TIMEOUT)
+    backend::run("timedatectl", &["set-timezone", zone])
 }
 
 fn set_time(text: &str) -> CommandResult {
-    system::run("timedatectl", &["set-time", text], TIMEOUT)
+    backend::run("timedatectl", &["set-time", text])
 }
 
 /// `Europe/London` as "London, Europe"; `America/Argentina/Buenos_Aires` as
@@ -165,26 +185,103 @@ fn zone_label(zone: &str) -> String {
     }
 }
 
-/// Reloads the model in the background.
+/// Reloads the model in the background, so the page shows what the backend
+/// holds once a write has landed.
 fn reload(ctx: Ctx) {
     let mut model = ctx.model;
-    background_then(load, move |result| {
-        model.set(Some(result));
-    });
+    background_then(load, move |result| model.set(Some(result)));
 }
 
-/// Runs a write in the background, then reloads, or shows a failure as a toast.
-fn commit(ctx: Ctx, work: impl FnOnce() -> CommandResult + Send + 'static) {
-    background_then(work, move |result| match result {
-        Ok(_) => reload(ctx),
-        Err(e) => ctx.overlays.toast(e.0),
-    });
+/// Shows `edit` on the model at once, then runs `work` in the background. A
+/// failure puts the model back as it was and shows the error as a toast; a
+/// success reloads the model from the backend.
+fn apply(
+    ctx: Ctx,
+    edit: impl FnOnce(&mut Model),
+    work: impl FnOnce() -> CommandResult + Send + 'static,
+) {
+    let Some(Ok(model)) = ctx.model.read().clone() else {
+        return;
+    };
+    let mut value = model.clone();
+    edit(&mut value);
+    optimistic_then(
+        ctx.model,
+        Some(ctx.overlays),
+        Some(Ok(model)),
+        Some(Ok(value)),
+        move || work().map(|_| ()),
+        move || reload(ctx),
+    );
 }
 
-/// Writes a true or false setting in the interface schema.
-fn set_interface_flag(ctx: Ctx, key: &'static str, next: bool) {
-    let value = if next { "true" } else { "false" };
-    commit(ctx, move || system::gsettings_set(INTERFACE, key, value));
+/// The right-click item that flips a switch: "Turn on" while it is off.
+fn toggle_item(on: bool, set: impl Fn(bool) + 'static) -> MenuItem {
+    menu_item(if on { "Turn off" } else { "Turn on" }, move |_| set(!on))
+}
+
+fn set_ntp(ctx: Ctx, on: bool) {
+    apply(
+        ctx,
+        move |model| model.ntp = on,
+        move || backend::run("timedatectl", &["set-ntp", flag(on)]),
+    );
+}
+
+fn set_clock_format(ctx: Ctx, key: String) {
+    let quoted = format!("'{key}'");
+    apply(
+        ctx,
+        move |model| model.clock_format = key,
+        move || backend::gsettings_set(INTERFACE, "clock-format", &quoted),
+    );
+}
+
+fn set_seconds(ctx: Ctx, on: bool) {
+    apply(
+        ctx,
+        move |model| model.clock_seconds = Some(on),
+        move || {
+            backend::run(
+                &bingux_config(),
+                &["set", "desktop.clock_seconds", flag(on)],
+            )
+        },
+    );
+}
+
+fn set_weekday(ctx: Ctx, on: bool) {
+    apply(
+        ctx,
+        move |model| model.show_weekday = Some(on),
+        move || backend::gsettings_set(INTERFACE, "clock-show-weekday", flag(on)),
+    );
+}
+
+fn set_show_date(ctx: Ctx, on: bool) {
+    apply(
+        ctx,
+        move |model| model.show_date = Some(on),
+        move || backend::gsettings_set(INTERFACE, "clock-show-date", flag(on)),
+    );
+}
+
+/// Sets the time zone, shown at once.
+fn pick_zone(ctx: Ctx, zone: String) {
+    let work = zone.clone();
+    apply(
+        ctx,
+        move |model| model.timezone = zone,
+        move || set_timezone(&work),
+    );
+}
+
+/// Copies `text` to the clipboard and says so with a toast.
+fn copy_text(overlays: Overlays, text: String, done: &'static str) {
+    match freya::clipboard::Clipboard::set(text) {
+        Ok(()) => overlays.toast(done),
+        Err(_) => overlays.toast("The text could not be copied."),
+    }
 }
 
 const MONTHS: [&str; 12] = [
@@ -342,12 +439,11 @@ pub struct DateTimePage;
 
 impl Component for DateTimePage {
     fn render(&self) -> impl IntoElement {
-        let model = system::cached("datetime");
         let navigator = use_navigator();
         let overlays = use_overlays();
+        let ctx = context(overlays);
         let now = use_state::<Option<Result<Now, String>>>(|| None);
         let setting = use_state(|| false);
-        let ctx = Ctx { model, overlays };
         let form = DateForm {
             year: use_state(|| 2000),
             month: use_state(|| 1),
@@ -371,10 +467,9 @@ impl Component for DateTimePage {
 
         use_page_busy(setting());
 
-        let Some(loaded) = model.read().clone() else {
+        let Some(loaded) = ctx.model.read().clone() else {
             return page_column().child(skeleton());
         };
-
         let model_data = match loaded {
             Ok(data) => data,
             Err(e) => {
@@ -400,99 +495,111 @@ impl Component for DateTimePage {
             .child(caption(date));
 
         let ntp = model_data.ntp;
-        let clock_format = model_data.clock_format.clone();
+        let twelve_hour = model_data.clock_format == "12h";
 
+        // Shown only while "Set automatically" is off, so it needs no subtitle
+        // or disabled state of its own.
         let time_row = row("Set date and time")
-            .subtitle(if ntp {
-                "Turn off Set automatically to change the clock yourself."
-            } else {
-                ""
-            })
-            .enabled(!ntp)
-            .on_press(move |_| open_date_sheet(form, now));
+            .on_press(move |_| open_date_sheet(form, now))
+            .context_menu(vec![menu_item("Set date and time...", move |_| {
+                open_date_sheet(form, now)
+            })]);
+        let zone = model_data.timezone.clone();
         let zone_row = row("Time zone")
             .subtitle(format!("UTC{}", model_data.utc_offset))
             .value(zone_label(&model_data.timezone))
             .navigates()
-            .on_press(move |_| navigator.push(Route::TimeZone));
+            .on_press(move |_| navigator.push(Route::TimeZone))
+            .context_menu(vec![
+                menu_item("Change time zone", move |_| navigator.push(Route::TimeZone)),
+                menu_item("Copy time zone name", move |_| {
+                    copy_text(overlays, zone.clone(), "Time zone name copied.")
+                }),
+            ]);
+
+        let other_format = if twelve_hour { "24h" } else { "12h" }.to_string();
+        let format_row = choice_row(
+            "Clock format",
+            vec![
+                ("24h".to_string(), "24-hour".to_string()),
+                ("12h".to_string(), "12-hour".to_string()),
+            ],
+            if twelve_hour { "12h" } else { "24h" },
+            move |key: String| set_clock_format(ctx, key),
+        )
+        .context_menu(vec![menu_item(
+            if twelve_hour {
+                "Use 24-hour"
+            } else {
+                "Use 12-hour"
+            },
+            move |_| set_clock_format(ctx, other_format.clone()),
+        )]);
 
         page_column()
             .child(
                 Group::titled("Clock")
                     .row(clock_face)
-                    .row(switch_row("Set automatically", ntp, move |next: bool| {
-                        let value = if next { "true" } else { "false" };
-                        commit(ctx, move || {
-                            system::run("timedatectl", &["set-ntp", value], TIMEOUT)
-                        });
-                    }))
-                    .row(time_row)
+                    .row(
+                        switch_row("Set automatically", ntp, move |next: bool| {
+                            set_ntp(ctx, next)
+                        })
+                        .context_menu(vec![toggle_item(ntp, move |next| set_ntp(ctx, next))])
+                        .nested(!ntp, vec![time_row.into()]),
+                    )
                     .row(zone_row),
             )
             .child(
                 Group::titled("Format")
-                    .row(choice_row(
-                        "Clock format",
-                        vec![
-                            ("24h".to_string(), "24-hour".to_string()),
-                            ("12h".to_string(), "12-hour".to_string()),
-                        ],
-                        &clock_format,
-                        move |key: String| {
-                            let quoted = format!("'{key}'");
-                            commit(ctx, move || {
-                                system::gsettings_set(INTERFACE, "clock-format", &quoted)
-                            });
-                        },
-                    ))
-                    .rows(model_data.clock_seconds.map(|clock_seconds| {
-                        Element::from(switch_row(
-                            "Show seconds",
-                            clock_seconds,
-                            move |next: bool| {
-                                let value = if next { "true" } else { "false" };
-                                commit(ctx, move || {
-                                    system::run(
-                                        &bingux_config(),
-                                        &["set", "desktop.clock_seconds", value],
-                                        TIMEOUT,
-                                    )
-                                });
-                            },
-                        ))
+                    .row(format_row)
+                    .rows(model_data.clock_seconds.map(|on| {
+                        Element::from(
+                            switch_row("Show seconds", on, move |next: bool| {
+                                set_seconds(ctx, next)
+                            })
+                            .context_menu(vec![toggle_item(on, move |next| {
+                                set_seconds(ctx, next)
+                            })]),
+                        )
                     }))
                     .rows(model_data.show_weekday.map(|on| {
-                        Element::from(switch_row(
-                            "Show weekday in the top bar",
-                            on,
-                            move |next: bool| set_interface_flag(ctx, "clock-show-weekday", next),
-                        ))
+                        Element::from(
+                            switch_row("Show weekday in the top bar", on, move |next: bool| {
+                                set_weekday(ctx, next)
+                            })
+                            .context_menu(vec![toggle_item(on, move |next| {
+                                set_weekday(ctx, next)
+                            })]),
+                        )
                     }))
                     .rows(model_data.show_date.map(|on| {
-                        Element::from(switch_row(
-                            "Show date in the top bar",
-                            on,
-                            move |next: bool| set_interface_flag(ctx, "clock-show-date", next),
-                        ))
+                        Element::from(
+                            switch_row("Show date in the top bar", on, move |next: bool| {
+                                set_show_date(ctx, next)
+                            })
+                            .context_menu(vec![toggle_item(on, move |next| {
+                                set_show_date(ctx, next)
+                            })]),
+                        )
                     })),
             )
     }
 }
 
-/// The time zone subpage: every zone, narrowed by typing. The UTC offset is
-/// shown only on the selected zone.
+/// The time zone subpage: a world map to click, and below it the list of every
+/// zone, narrowed by typing. Right click a zone to set it or copy its name.
 #[derive(PartialEq)]
 pub struct TimeZonePage;
 
 impl Component for TimeZonePage {
     fn render(&self) -> impl IntoElement {
-        let model: State<Option<Result<Model, CommandError>>> = system::cached("datetime");
-        let navigator = use_navigator();
         let overlays = use_overlays();
+        let ctx = context(overlays);
+        let query = use_state(String::new);
         let zones = use_state::<Option<Result<Vec<String>, CommandError>>>(|| None);
         use_hook(move || {
             background(zones, || {
-                system::run("timedatectl", &["list-timezones"], TIMEOUT)
+                backend::run("timedatectl", &["list-timezones"])
                     .map(|text| text.lines().map(str::to_string).collect())
             })
         });
@@ -502,38 +609,76 @@ impl Component for TimeZonePage {
                 _ => page_column().child(skeleton()),
             };
         };
-        let (current, current_offset) = match model.read().as_ref() {
-            Some(Ok(data)) => (data.timezone.clone(), data.utc_offset.clone()),
-            _ => (String::new(), String::new()),
+        let (current, offset) = match displayed(ctx) {
+            Some(model) => (model.timezone, model.utc_offset),
+            None => (String::new(), String::new()),
         };
-        let options = list
+
+        let needle = query.read().trim().to_lowercase();
+        let mut matching: Vec<&String> = list
             .iter()
-            .map(|zone| {
-                let label = zone_label(zone);
-                let label = if *zone == current && !current_offset.is_empty() {
-                    format!("{label} (UTC{current_offset})")
-                } else {
-                    label
-                };
-                (zone.clone(), label)
+            .filter(|zone| {
+                needle.is_empty()
+                    || zone.to_lowercase().contains(&needle)
+                    || zone_label(zone).to_lowercase().contains(&needle)
             })
             .collect();
-        page_column().child(
-            choice_list(options, current, move |zone: String| {
-                background_then(
-                    move || set_timezone(&zone),
-                    move |result| match result {
-                        Ok(_) => {
-                            reload(Ctx { model, overlays });
-                            navigator.pop();
-                        }
-                        Err(failure) => overlays.toast(failure.0),
-                    },
-                );
-            })
-            .placeholder("Search for a city"),
-        )
+        // Before anything is typed, the current zone comes first, so it is in
+        // view whichever part of the long list it belongs to.
+        if needle.is_empty()
+            && let Some(at) = matching.iter().position(|zone| **zone == current)
+        {
+            let chosen = matching.remove(at);
+            matching.insert(0, chosen);
+        }
+        let hidden = matching.len().saturating_sub(ZONE_LIMIT);
+
+        let rows = matching.iter().take(ZONE_LIMIT).map(|zone| {
+            let zone = zone.to_string();
+            let chosen = zone == current;
+            let mut item = row(zone_label(&zone)).selected(chosen);
+            if chosen && !offset.is_empty() {
+                item = item.subtitle(format!("UTC{offset}"));
+            }
+            let set = zone.clone();
+            let copy = zone.clone();
+            let mut set_item = menu_item("Set time zone", move |_| pick_zone(ctx, set.clone()));
+            if chosen {
+                set_item = set_item.disabled();
+            }
+            let copy_item = menu_item("Copy time zone name", move |_| {
+                copy_text(overlays, copy.clone(), "Time zone name copied.")
+            });
+            Element::from(
+                item.on_press(move |_| pick_zone(ctx, zone.clone()))
+                    .context_menu(vec![set_item, copy_item]),
+            )
+        });
+        let mut group = Group::new(None::<String>).rows(rows);
+        if matching.is_empty() {
+            group = group.row(status(Status::Empty("Nothing matches.".to_string())));
+        }
+
+        let mut page = page_column()
+            .child(TimeZoneMap::new(current.clone(), ctx))
+            .child(
+                search_field(query, |_| {})
+                    .placeholder("Search for a city")
+                    .fill_width(),
+            )
+            .child(group);
+        if hidden > 0 {
+            page = page.child(caption(format!(
+                "{hidden} more. Keep typing to narrow the list."
+            )));
+        }
+        page
     }
+}
+
+/// The model as the screen shows it, or `None` while it loads or has failed.
+fn displayed(ctx: Ctx) -> Option<Model> {
+    ctx.model.read().clone()?.ok()
 }
 
 /// Start loading this page's data before it is opened.

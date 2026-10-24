@@ -7,7 +7,9 @@
 
 use freya::prelude::*;
 
-use crate::pages::{PageId, appearance, applications, bluetooth, datetime, sound, users, wifi};
+use crate::pages::{
+    PageId, appearance, applications, bluetooth, datetime, displays, keyboard, network, users, wifi,
+};
 
 /// A page below a sidebar page.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -16,36 +18,55 @@ pub enum Route {
     App { id: String, name: String },
     /// The default application for each kind of file and link.
     DefaultApps,
+    /// One kind of file or link, by its place in the default applications
+    /// list, with its name for the header. Its applications are listed there.
+    DefaultApp { kind: usize, name: String },
     /// One Bluetooth device, by address, with its name for the header.
     Device { mac: String, name: String },
     /// The saved Wi-Fi networks.
     WifiSaved,
     /// One Wi-Fi network, by name.
     Network { ssid: String },
+    /// One wired network device, by interface name, with its connection name for the header.
+    Wired { device: String, name: String },
+    /// One VPN profile, by connection name.
+    Vpn { name: String },
     /// One user account, by account path, with its full name for the header.
     Account { path: String, name: String },
     /// The time zone list.
     TimeZone,
     /// The installed fonts, for the window and the desktop.
     Font,
-    /// The full list of output or input devices, when there are too many to
-    /// show on the Sound page.
-    SoundDevices { input: bool },
+    /// One display on the Displays page, by its place in the list, with its
+    /// label for the header.
+    Display { index: usize, name: String },
+    /// The keyboard shortcuts, with a search box.
+    Shortcuts,
+    /// One input source, by its value in the configuration file, with its
+    /// name for the header.
+    InputSource {
+        source: keyboard::sources::Source,
+        name: String,
+    },
 }
 
 impl Route {
     pub fn title(&self) -> String {
         match self {
             Self::App { name, .. } => name.clone(),
+            Self::Display { name, .. } => name.clone(),
             Self::DefaultApps => "Default applications".to_string(),
-            Self::Device { .. } => "Device details".to_string(),
+            Self::DefaultApp { name, .. } => name.clone(),
+            Self::Device { name, .. } => name.clone(),
             Self::WifiSaved => "Saved networks".to_string(),
-            Self::Network { .. } => "Network details".to_string(),
+            Self::Network { ssid } => ssid.clone(),
+            Self::Wired { name, .. } => name.clone(),
+            Self::Vpn { name } => name.clone(),
             Self::Account { name, .. } => name.clone(),
             Self::TimeZone => "Time zone".to_string(),
             Self::Font => "Font".to_string(),
-            Self::SoundDevices { input: true } => "Input device".to_string(),
-            Self::SoundDevices { input: false } => "Output device".to_string(),
+            Self::Shortcuts => "Shortcuts".to_string(),
+            Self::InputSource { name, .. } => name.clone(),
         }
     }
 
@@ -54,6 +75,12 @@ impl Route {
     pub fn from_name(name: &str) -> Option<Self> {
         if name == "default" {
             return Some(Self::DefaultApps);
+        }
+        if name == "shortcuts" {
+            return Some(Self::Shortcuts);
+        }
+        if name == "timezone" {
+            return Some(Self::TimeZone);
         }
         crate::apps::installed()
             .into_iter()
@@ -69,13 +96,25 @@ impl Route {
         match self {
             Self::App { id, .. } => applications::AppPage { id: id.clone() }.into(),
             Self::DefaultApps => applications::DefaultAppsPage.into(),
+            Self::DefaultApp { kind, .. } => applications::DefaultKindPage { kind: *kind }.into(),
             Self::Device { mac, .. } => bluetooth::BluetoothDevicePage { mac: mac.clone() }.into(),
             Self::WifiSaved => wifi::SavedNetworksPage.into(),
             Self::Network { ssid } => wifi::NetworkPage { ssid: ssid.clone() }.into(),
+            Self::Wired { device, name } => network::WiredPage {
+                device: device.clone(),
+                name: name.clone(),
+            }
+            .into(),
+            Self::Vpn { name } => network::VpnPage { name: name.clone() }.into(),
             Self::Account { path, .. } => users::AccountPage { path: path.clone() }.into(),
             Self::TimeZone => datetime::TimeZonePage.into(),
             Self::Font => appearance::FontPage.into(),
-            Self::SoundDevices { input } => sound::DevicePage { input: *input }.into(),
+            Self::Display { index, .. } => displays::DisplayPage { index: *index }.into(),
+            Self::Shortcuts => keyboard::ShortcutsPage.into(),
+            Self::InputSource { source, .. } => keyboard::InputSourcePage {
+                source: source.clone(),
+            }
+            .into(),
         }
     }
 }

@@ -537,6 +537,7 @@ dependencies = [
  "bingux-ui",
  "bytes",
  "freya",
+ "libc",
  "serde_json",
 ]
 

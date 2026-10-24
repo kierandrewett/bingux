@@ -9,6 +9,10 @@ use crate::surface::{use_enabled, use_tokens};
 use crate::typography::{CAPTION, Ink};
 
 const DISABLED_OPACITY: f32 = 0.45;
+/// Width of the 100% tick on the track, in px.
+const TICK_WIDTH: f32 = 2.0;
+/// Height of the 100% tick, as a fraction of the thumb: taller than the track.
+const TICK_HEIGHT: f32 = 0.9;
 /// Thumb scale while pressed and while dragging.
 const SCALE_PRESSED: f32 = 1.1;
 const SCALE_DRAGGING: f32 = 1.3;
@@ -18,10 +22,15 @@ const PERCENT: f64 = 100.0;
 const PAGE_STEP: f64 = 10.0;
 
 /// A thin track filled up to a thumb. The thumb stays inside the track, so
-/// 0 and 100 are the ends of the travel.
+/// the ends of the travel are 0 and `max` (100 unless set with `.max()`).
 #[derive(PartialEq)]
 pub struct Slider {
     value: f64,
+    /// The top of the travel, in percent. 100 unless the slider can go
+    /// past full volume.
+    max: f64,
+    /// A tick on the track at this percent, such as the 100% clipping point.
+    mark: Option<f64>,
     enabled: bool,
     on_moved: EventHandler<f64>,
     width: Dim,
@@ -32,7 +41,9 @@ pub struct Slider {
 
 pub fn slider(value: f64, on_moved: impl Into<EventHandler<f64>>) -> Slider {
     Slider {
-        value: value.clamp(0.0, 100.0),
+        value,
+        max: PERCENT,
+        mark: None,
         enabled: true,
         on_moved: on_moved.into(),
         width: Dim::Field,
@@ -73,6 +84,20 @@ impl Slider {
         self.show_value = true;
         self
     }
+
+    /// The top of the travel, in percent. Values past 100 are for an
+    /// amplified output; the track and the keyboard respect this top.
+    pub fn max(mut self, max: f64) -> Self {
+        self.max = max.max(1.0);
+        self
+    }
+
+    /// Draw a tick on the track at `percent`, such as where the sound
+    /// starts to clip. The tick does not limit the value.
+    pub fn mark(mut self, percent: f64) -> Self {
+        self.mark = Some(percent);
+        self
+    }
 }
 
 impl Component for Slider {
@@ -92,7 +117,9 @@ impl Component for Slider {
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
         let on_moved = self.on_moved.clone();
-        let value = self.value;
+        let max = self.max;
+        let mark = self.mark;
+        let value = self.value.clamp(0.0, max);
         let enabled = use_enabled(self.enabled);
         let interacting = pressing() && dragging();
 
@@ -122,13 +149,13 @@ impl Component for Slider {
         let step = self.step;
         let snap = move |percent: f64| -> f64 {
             match step {
-                Some(step) => ((percent / step).round() * step).clamp(0.0, 100.0),
+                Some(step) => ((percent / step).round() * step).clamp(0.0, max),
                 None => percent,
             }
         };
         let percent_at = move |x: f64| -> f64 {
             let half = thumb_size as f64 / 2.0;
-            snap(((x - half) / travel as f64 * PERCENT).clamp(0.0, PERCENT))
+            snap(((x - half) / travel as f64 * max).clamp(0.0, max))
         };
         let on_pointer_down = {
             let on_moved = on_moved.clone();
@@ -165,12 +192,12 @@ impl Component for Slider {
                     Key::Named(NamedKey::ArrowLeft) | Key::Named(NamedKey::ArrowDown) => -delta,
                     Key::Named(NamedKey::ArrowRight) | Key::Named(NamedKey::ArrowUp) => delta,
                     Key::Named(NamedKey::Home) => -value,
-                    Key::Named(NamedKey::End) => PERCENT - value,
+                    Key::Named(NamedKey::End) => max - value,
                     Key::Named(NamedKey::PageUp) => PAGE_STEP,
                     Key::Named(NamedKey::PageDown) => -PAGE_STEP,
                     _ => return,
                 };
-                on_moved.call(snap((value + delta).clamp(0.0, PERCENT)));
+                on_moved.call(snap((value + delta).clamp(0.0, max)));
             }
         };
 
@@ -181,7 +208,7 @@ impl Component for Slider {
         };
         let fill_paint = if enabled { Paint::Accent } else { Paint::Muted };
         // Whole pixels keep the knob's edge crisp; a fractional left blurs it.
-        let thumb_x = (travel * (value as f32 / PERCENT as f32)).round();
+        let thumb_x = (travel * ((value / max) as f32)).round();
         let centre_x = thumb_size / 2.0 + thumb_x;
         let fill_width = centre_x;
 
@@ -193,7 +220,7 @@ impl Component for Slider {
             .a11y_builder(move |builder| {
                 builder.set_numeric_value(value);
                 builder.set_min_numeric_value(0.0);
-                builder.set_max_numeric_value(PERCENT);
+                builder.set_max_numeric_value(max);
             })
             .maybe(self.fluid, |element| element.width(Size::fill()))
             .maybe(!self.fluid, |element| element.tw(&tokens, &[w(self.width)]))
@@ -230,6 +257,25 @@ impl Component for Slider {
                     .height(Size::px(track_height))
                     .tw(&tokens, &[rounded(Radius::Pill), bg(fill_paint)]),
             )
+            .maybe_child(mark.filter(|point| *point < max).map(|point| {
+                // Taller than the track and in the text colour, so the tick
+                // stays visible over the accent fill.
+                let tick = TICK_WIDTH;
+                let tick_height = thumb_size * TICK_HEIGHT;
+                rect()
+                    .layer(Layer::Relative(2))
+                    .position(
+                        Position::new_absolute()
+                            .top(centre - tick_height / 2.0)
+                            .left(
+                                thumb_size / 2.0 + (travel * ((point / max) as f32)).round()
+                                    - tick / 2.0,
+                            ),
+                    )
+                    .width(Size::px(tick))
+                    .height(Size::px(tick_height))
+                    .tw(&tokens, &[rounded(Radius::Pill), bg(Paint::Text)])
+            }))
             .maybe_child((enabled && focus() == Focus::Keyboard).then(|| {
                 rect()
                     .position(

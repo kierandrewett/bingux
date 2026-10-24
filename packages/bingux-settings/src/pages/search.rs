@@ -16,6 +16,7 @@ use crate::ui::{
     primary_button, row, sheet, skeleton, slider_row, status, switch, switch_row, text_field,
     use_overlays,
 };
+use bingux_ui::shell::menu_item;
 use bingux_ui::style::*;
 
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -650,6 +651,27 @@ fn engine_row(engine: Engine, engines: &[Engine], default: &str, ctx: Ctx) -> Ro
     let default_for_toggle = default.to_string();
     let default_for_remove = default.to_string();
     let engine_name = engine.name.clone();
+    let is_default = engine.id == default;
+    let enabled = engine.enabled;
+    let set_id = engine.id.clone();
+    let toggle_default = default.to_string();
+    let toggle_list = toggled.clone();
+    let remove_name = engine.name.clone();
+    let remove_default = default.to_string();
+    let remove_list = without.clone();
+    let menu = vec![
+        menu_item("Set as default", move |_| {
+            commit(ctx, set_args("search.default_engine", toml_string(&set_id)));
+        })
+        .checked(is_default),
+        menu_item(if enabled { "Turn off" } else { "Turn on" }, move |_| {
+            write_engines(ctx, &toggle_default, toggle_list.clone());
+        }),
+        menu_item("Remove", move |_| {
+            confirm_remove(ctx, &remove_name, &remove_default, &remove_list);
+        })
+        .destructive(),
+    ];
     let trailing = rect()
         .tw_layout(&[flex_row(), items(Align::Center), gap(S2)])
         .child(switch(engine.enabled, move |_: bool| {
@@ -658,20 +680,7 @@ fn engine_row(engine: Engine, engines: &[Engine], default: &str, ctx: Ctx) -> Ro
         .child(
             rect().child(
                 icon_button(Icon::Delete, move |_| {
-                    let default = default_for_remove.clone();
-                    let without = without.clone();
-                    ctx.overlays.show_dialog(
-                        dialog(
-                            format!("Remove {}?", engine_name),
-                            "Its shortcut stops working. You can add the engine again later.",
-                        )
-                        .cancel("Cancel")
-                        .response(
-                            "Remove",
-                            ResponseKind::Destructive,
-                            move |_| write_engines(ctx, &default, without.clone()),
-                        ),
-                    );
+                    confirm_remove(ctx, &engine_name, &default_for_remove, &without);
                 })
                 .tooltip("Remove engine"),
             ),
@@ -680,6 +689,23 @@ fn engine_row(engine: Engine, engines: &[Engine], default: &str, ctx: Ctx) -> Ro
         .leading(Icon::WebBrowser)
         .subtitle(format!("Shortcut {}", engine.shortcut))
         .trailing(trailing)
+        .context_menu(menu)
+}
+
+/// Asks before removing an engine, then writes the engines without it.
+fn confirm_remove(ctx: Ctx, name: &str, default: &str, without: &[Engine]) {
+    let default = default.to_string();
+    let without = without.to_vec();
+    ctx.overlays.show_dialog(
+        dialog(
+            format!("Remove {name}?"),
+            "Its shortcut stops working. You can add the engine again later.",
+        )
+        .cancel("Cancel")
+        .response("Remove", ResponseKind::Destructive, move |_| {
+            write_engines(ctx, &default, without.clone())
+        }),
+    );
 }
 
 /// The add-engine row. Its sheet writes the full engines array with the new engine appended.
@@ -865,35 +891,24 @@ fn files_group(data: &Model, ctx: Ctx) -> Group {
                 let remaining: Vec<String> =
                     roots.iter().filter(|item| *item != root).cloned().collect();
                 let folder = root.clone();
+                let menu = vec![
+                    menu_item("Stop searching", {
+                        let (folder, remaining) = (folder.clone(), remaining.clone());
+                        move |_| confirm_remove_folder(ctx, folder.clone(), remaining.clone())
+                    })
+                    .destructive(),
+                ];
                 let trailing = rect().child(
                     icon_button(Icon::Delete, move |_| {
-                        let remaining = remaining.clone();
-                        ctx.overlays.show_dialog(
-                            dialog(
-                                format!("Stop searching {}?", folder_name(&folder)),
-                                "Files in this folder no longer appear in search results.",
-                            )
-                            .cancel("Cancel")
-                            .response(
-                                "Remove",
-                                ResponseKind::Destructive,
-                                move |_| {
-                                    let args = if remaining.is_empty() {
-                                        vec!["unset".into(), "search.file_roots".into()]
-                                    } else {
-                                        set_args("search.file_roots", string_array(&remaining))
-                                    };
-                                    commit(ctx, args);
-                                },
-                            ),
-                        );
+                        confirm_remove_folder(ctx, folder.clone(), remaining.clone());
                     })
                     .tooltip("Remove folder"),
                 );
                 group = group.row(
                     row(folder_name(root))
                         .subtitle(folder_location(root))
-                        .trailing(trailing),
+                        .trailing(trailing)
+                        .context_menu(menu),
                 );
             }
         }
@@ -902,6 +917,25 @@ fn files_group(data: &Model, ctx: Ctx) -> Group {
         roots: data.file_roots.clone().unwrap_or_default(),
         ctx,
     })
+}
+
+/// Asks before a folder leaves the file search roots. Removing the last one restores the home folders.
+fn confirm_remove_folder(ctx: Ctx, folder: String, remaining: Vec<String>) {
+    ctx.overlays.show_dialog(
+        dialog(
+            format!("Stop searching {}?", folder_name(&folder)),
+            "Files in this folder no longer appear in search results.",
+        )
+        .cancel("Cancel")
+        .response("Remove", ResponseKind::Destructive, move |_| {
+            let args = if remaining.is_empty() {
+                vec!["unset".into(), "search.file_roots".into()]
+            } else {
+                set_args("search.file_roots", string_array(&remaining))
+            };
+            commit(ctx, args);
+        }),
+    );
 }
 
 /// Adds a folder to the file search roots. The folder is chosen with the system file picker.
@@ -919,9 +953,16 @@ impl Component for FileRootAdd {
         let choose = move |_| {
             let roots = roots.clone();
             background_then(
-                || system::pick_path("Choose a folder", system::Pick::Folder),
+                || {
+                    // The folder check stats the disk, so it runs here, not on the UI thread.
+                    system::pick_path("Choose a folder", system::Pick::Folder)
+                        .map(|picked| picked.map(|path| (searchable(&path), path)))
+                },
                 move |result| match result {
-                    Ok(Some(path)) => add_folder(ctx, &roots, path),
+                    Ok(Some((true, path))) => add_folder(ctx, &roots, path),
+                    Ok(Some((false, _))) => {
+                        ctx.overlays.toast("That folder cannot be searched.");
+                    }
                     Ok(None) => {}
                     Err(failure) => {
                         ctx.overlays.toast(failure.0);
@@ -934,12 +975,13 @@ impl Component for FileRootAdd {
     }
 }
 
-/// Checks a chosen folder and adds it to the file search roots.
+/// True for an absolute path to a folder. Call from a background task: it reads the disk.
+fn searchable(path: &str) -> bool {
+    Path::new(path).is_absolute() && Path::new(path).is_dir()
+}
+
+/// Adds a checked folder to the file search roots.
 fn add_folder(ctx: Ctx, roots: &[String], path: String) {
-    if !Path::new(&path).is_absolute() || !Path::new(&path).is_dir() {
-        ctx.overlays.toast("That folder cannot be searched.");
-        return;
-    }
     if roots.contains(&path) {
         ctx.overlays
             .toast(format!("{} is already searched.", folder_name(&path)));

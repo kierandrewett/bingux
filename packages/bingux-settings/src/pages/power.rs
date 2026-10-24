@@ -2,15 +2,20 @@
 //! suspend and the power button action. Everything is read in the background
 //! when the page opens and reloaded after each successful change.
 
+use std::collections::BTreeMap;
 use std::time::Duration;
 
+use bingux_ui::runtime::{optimistic, optimistic_then};
+use bingux_ui::style::*;
 use freya::prelude::*;
 
 use crate::icons::Icon;
-use crate::system::{self, CommandError, CommandResult, background, background_then};
+use crate::system::{self, CommandError, CommandResult, background};
+use crate::ui::typography::{CAPTION, EMPHASIS};
 use crate::ui::{
-    Curve, Group, Overlays, PageHeader, Series, Status, Unit, choice_row, line_chart, page_column,
-    ring, row, skeleton, status, switch_row, use_overlays, use_page_header,
+    Curve, Group, Overlays, PageHeader, Series, Status, Unit, choice_row, icon, line_chart,
+    page_column, ring, row, skeleton, status, switch_row, use_overlays, use_page_header,
+    use_tokens, vstack,
 };
 
 const SESSION: &str = "org.gnome.desktop.session";
@@ -32,6 +37,9 @@ struct Battery {
     history: Vec<(f64, f64)>,
     /// Local offset from UTC in seconds, for the time axis.
     offset: i64,
+    /// Full charge capacity against the design capacity, as `93%`. UPower
+    /// reports `capacity` for most batteries; `None` hides the row.
+    health: Option<String>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -52,6 +60,8 @@ struct Suspend {
 struct Model {
     battery: Result<Option<Battery>, CommandError>,
     profiles: Result<Profiles, CommandError>,
+    /// Whether `powerprofilesctl` is installed, checked off the UI thread.
+    profiles_tool: bool,
     idle_delay: Result<u32, CommandError>,
     lock_enabled: Result<bool, CommandError>,
     lock_delay: Result<u32, CommandError>,
@@ -67,6 +77,7 @@ fn load() -> Model {
     Model {
         battery: battery(),
         profiles: profiles(),
+        profiles_tool: system::which("powerprofilesctl"),
         idle_delay: gsettings_u32(SESSION, "idle-delay"),
         lock_enabled: system::gsettings_get(SCREENSAVER, "lock-enabled")
             .map(|raw| raw.trim() == "true"),
@@ -100,6 +111,7 @@ fn battery() -> Result<Option<Battery>, CommandError> {
     let mut percentage = None;
     let mut state = None;
     let mut time = None;
+    let mut health = None;
     for line in info.lines() {
         let Some((key, value)) = line.trim().split_once(':') else {
             continue;
@@ -107,6 +119,7 @@ fn battery() -> Result<Option<Battery>, CommandError> {
         let value = value.trim();
         match key.trim() {
             "percentage" => percentage = Some(value.to_string()),
+            "capacity" => health = parse_health(value),
             "state" => state = Some(battery_state(value)),
             "time to empty" => time = Some(("Time to empty".to_string(), value.to_string())),
             "time to full" => time = Some(("Time to full".to_string(), value.to_string())),
@@ -122,7 +135,14 @@ fn battery() -> Result<Option<Battery>, CommandError> {
         time,
         history: charge_history(path).unwrap_or_default(),
         offset: utc_offset(),
+        health,
     }))
+}
+
+/// Capacity such as `93.4%` as a whole-number health label, `93%`.
+fn parse_health(text: &str) -> Option<String> {
+    let value: f64 = text.trim().strip_suffix('%')?.trim().parse().ok()?;
+    (value.is_finite() && value > 0.0).then(|| format!("{}%", value.round() as i64))
 }
 
 /// A percentage such as `87%` as a fraction in `0..=1`.
@@ -338,102 +358,193 @@ fn header_subtitle(battery: &Result<Option<Battery>, CommandError>) -> Option<St
     }
 }
 
-/// Run a write in the background; on success reload the model, on failure
-/// show the message as a toast.
-fn apply(
-    loaded: State<Option<Model>>,
-    overlays: Overlays,
-    work: impl FnOnce() -> CommandResult + Send + 'static,
-) {
-    background_then(work, move |result| match result {
-        Ok(_) => {
-            background(loaded, load);
-        }
-        Err(e) => overlays.toast(e.0),
-    });
+/// Choices shown at once, by key. A value here wins over the loaded one until
+/// the page is left, as switches do.
+type Picks = State<BTreeMap<String, String>>;
+
+fn picked(picks: Picks, key: &str, loaded: &str) -> String {
+    picks
+        .read()
+        .get(key)
+        .cloned()
+        .unwrap_or_else(|| loaded.to_string())
 }
 
-/// The three power modes as rows with icons. A mode the computer does not
-/// offer stays visible but cannot be chosen.
-fn mode_group(loaded: State<Option<Model>>, overlays: Overlays, profiles: &Profiles) -> Group {
-    let mut group = Group::titled("Power mode");
+/// Show a choice at once and run its command in the background. A failure
+/// reverts the choice and shows the error as a toast; success reloads the
+/// model.
+fn choose(
+    picks: Picks,
+    loaded: State<Option<Model>>,
+    overlays: Overlays,
+    key: &str,
+    value: String,
+    work: impl FnOnce() -> CommandResult + Send + 'static,
+) {
+    let previous = picks.read().clone();
+    let mut next = previous.clone();
+    next.insert(key.to_string(), value);
+    optimistic_then(
+        picks,
+        Some(overlays),
+        previous,
+        next,
+        move || work().map(|_| ()),
+        move || background(loaded, load),
+    );
+}
+
+/// The three power modes as cards with icons, side by side. A mode the
+/// computer does not offer stays visible but cannot be chosen.
+fn mode_group(
+    loaded: State<Option<Model>>,
+    picks: Picks,
+    overlays: Overlays,
+    profiles: &Profiles,
+) -> Group {
+    let tokens = use_tokens();
+    let mut cards = rect().tw(&tokens, &[flex_row(), w_full(), gap(S2)]);
+    let chosen = picked(picks, "profile", &profiles.active);
     for name in ["power-saver", "balanced", "performance"] {
         let offered = profiles.choices.iter().any(|(key, _)| key == name);
-        let active = profiles.active == name;
+        let active = chosen == name;
         let key = name.to_string();
-        let mut item = row(profile_label(name))
-            .leading(profile_icon(name))
-            .subtitle(profile_meaning(name))
-            .selected(active)
-            .enabled(offered);
-        if !offered {
-            item = item.value("Not available");
+        let state = if !offered {
+            "Not available"
         } else if active {
-            item = item.value("In use");
+            "In use"
         } else {
-            item = item.on_press(move |_| {
+            ""
+        };
+        let mut card = rect()
+            .a11y_role(AccessibilityRole::Button)
+            .a11y_alt(profile_label(name))
+            .a11y_focusable(offered)
+            .tw(
+                &tokens,
+                &[
+                    flex_col(),
+                    w_flex(),
+                    gap(S2),
+                    items(Align::Center),
+                    p(S3),
+                    rounded(Radius::Card),
+                    bg(Paint::Control),
+                    border(Line::Ring(if active {
+                        Paint::Accent
+                    } else {
+                        Paint::Control
+                    })),
+                ],
+            )
+            .child(icon(
+                profile_icon(name),
+                IconSize::Hero,
+                Paint::Text.color(&tokens),
+            ))
+            .child(EMPHASIS.label(&tokens, profile_label(name)))
+            .child(CAPTION.label(&tokens, profile_meaning(name)));
+        if !state.is_empty() {
+            card = card.child(CAPTION.label(&tokens, state));
+        }
+        if offered && !active {
+            card = card.on_press(move |_| {
                 let key = key.clone();
-                apply(loaded, overlays, move || {
+                choose(picks, loaded, overlays, "profile", key.clone(), move || {
                     system::run("powerprofilesctl", &["set", &key], Duration::from_secs(5))
                 });
             });
         }
-        group = group.row(item);
+        cards = cards.child(card);
     }
-    group
+    Group::titled("Power mode").row(cards)
 }
 
-/// A switch for automatic suspend on one power source, with the delay below
-/// it. The delay is editable only while the switch is on.
+/// Switches shown at once: a value here wins over the loaded one until the
+/// page is left, so a switch never waits on its command.
+type Pending = State<BTreeMap<String, bool>>;
+
+fn shown(pending: Pending, key: &str, loaded: bool) -> bool {
+    pending.read().get(key).copied().unwrap_or(loaded)
+}
+
+/// Flip a switch at once and run its command in the background. A failure
+/// reverts the switch and shows the error as a toast.
+fn set_switch(
+    pending: Pending,
+    overlays: Overlays,
+    key: &str,
+    on: bool,
+    work: impl FnOnce() -> CommandResult + Send + 'static,
+) {
+    let previous = pending.read().clone();
+    let mut value = previous.clone();
+    value.insert(key.to_string(), on);
+    optimistic(pending, Some(overlays), previous, value, move || {
+        work().map(|_| ())
+    });
+}
+
+/// A switch for automatic suspend on one power source. The delay is nested
+/// under the switch and shown only while the switch is on.
 fn suspend_rows(
     loaded: State<Option<Model>>,
     overlays: Overlays,
+    pending: Pending,
+    picks: Picks,
     source: &'static str,
     title: &str,
     state: &Suspend,
 ) -> Group {
     let key_type = format!("sleep-inactive-{source}-type");
     let key_timeout = format!("sleep-inactive-{source}-timeout");
+    let pending_key = format!("suspend-{source}");
+    let on = shown(pending, &pending_key, state.enabled);
     let toggle_key = key_type.clone();
-    Group::titled(title)
-        .row(switch_row(
-            "Suspend when inactive",
-            state.enabled,
-            move |on: bool| {
-                let value = if on { "'suspend'" } else { "'nothing'" };
-                let key = toggle_key.clone();
-                apply(loaded, overlays, move || {
-                    system::gsettings_set(POWER_PLUGIN, &key, value)
-                });
-            },
-        ))
-        .row(
-            choice_row(
-                "Suspend after",
-                timeout_choices(SUSPEND_DELAYS, state.delay, "Never"),
-                &state.delay.to_string(),
-                move |key: String| {
-                    let key_timeout = key_timeout.clone();
-                    apply(loaded, overlays, move || {
-                        system::gsettings_set(POWER_PLUGIN, &key_timeout, &key)
-                    });
-                },
-            )
-            .enabled(state.enabled),
-        )
+    let toggle_pending_key = pending_key.clone();
+    let delay_key = format!("suspend-delay-{source}");
+    let delay = choice_row(
+        "Suspend after",
+        timeout_choices(SUSPEND_DELAYS, state.delay, "Never"),
+        &picked(picks, &delay_key, &state.delay.to_string()),
+        move |key: String| {
+            let key_timeout = key_timeout.clone();
+            choose(
+                picks,
+                loaded,
+                overlays,
+                &delay_key,
+                key.clone(),
+                move || system::gsettings_set(POWER_PLUGIN, &key_timeout, &key),
+            );
+        },
+    );
+    let toggle = switch_row("Suspend when inactive", on, move |on: bool| {
+        let value = if on { "'suspend'" } else { "'nothing'" };
+        let key = toggle_key.clone();
+        set_switch(pending, overlays, &toggle_pending_key, on, move || {
+            system::gsettings_set(POWER_PLUGIN, &key, value)
+        });
+    })
+    .nested(on, vec![delay.into()]);
+    Group::titled(title).row(toggle)
 }
 
-/// The charge as a ring with the state under the percentage, then the time
-/// left. A battery that reports no percentage gets plain rows instead.
+/// The charge as a centred ring with the state under the percentage, then the
+/// time left. The ring is 120 px tall, so it sits in a block of its own
+/// rather than inside a row, where it would overlap the rows around it.
+/// A battery that reports no percentage gets plain rows instead.
 fn battery_group(battery: &Battery) -> Group {
     let group = Group::titled("Battery");
     let group = match battery.fraction {
         Some(fraction) => group.row(
-            row("Charge").leading(Icon::BatteryLevel50).trailing(
-                ring(fraction)
-                    .caption(battery.state.clone())
-                    .label(format!("Charge {}, {}", battery.percentage, battery.state)),
-            ),
+            vstack(S2)
+                .tw_layout(&[w_full(), items(Align::Center), py(S2)])
+                .child(
+                    ring(fraction)
+                        .caption(battery.state.clone())
+                        .label(format!("Charge {}, {}", battery.percentage, battery.state)),
+                ),
         ),
         None => group
             .row(
@@ -443,8 +554,17 @@ fn battery_group(battery: &Battery) -> Group {
             )
             .row(row("State").value(battery.state.clone())),
     };
-    match &battery.time {
+    let group = match &battery.time {
         Some((label, value)) => group.row(row(label.clone()).value(value.clone())),
+        None => group,
+    };
+    match &battery.health {
+        Some(health) => group.row(
+            row("Battery health")
+                .leading(Icon::BatteryLevel50)
+                .subtitle("Full charge capacity compared with when the battery was new")
+                .value(health.clone()),
+        ),
         None => group,
     }
 }
@@ -489,6 +609,7 @@ fn fake_battery() -> Option<Battery> {
         time: Some(("Time to full".to_string(), "1 hour 20 minutes".to_string())),
         history,
         offset: utc_offset(),
+        health: Some("94%".to_string()),
     })
 }
 
@@ -499,6 +620,8 @@ impl Component for PowerPage {
     fn render(&self) -> impl IntoElement {
         let loaded = system::use_cached("power", load);
         let overlays = use_overlays();
+        let pending: Pending = use_state(BTreeMap::new);
+        let picks: Picks = use_state(BTreeMap::new);
         let subtitle = loaded
             .read()
             .as_ref()
@@ -529,75 +652,89 @@ impl Component for PowerPage {
 
         // Power mode
         page = match model.profiles.clone() {
-            Ok(profiles) => page.child(mode_group(loaded, overlays, &profiles)),
-            Err(_) if !system::which("powerprofilesctl") => {
-                page.child(Group::titled("Power mode").row(status(Status::Info(
-                    "Power modes are not available on this computer.".into(),
-                ))))
-            }
+            Ok(profiles) => page.child(mode_group(loaded, picks, overlays, &profiles)),
+            Err(_) if !model.profiles_tool => page.child(Group::titled("Power mode").row(status(
+                Status::Info("Power modes are not available on this computer.".into()),
+            ))),
             Err(e) => page.child(Group::titled("Power mode").row(status(Status::Error(e.0)))),
         };
 
         // Screen: blanking, locking and dimming
-        let lock_on = matches!(model.lock_enabled, Ok(true));
         let mut screen = Group::titled("Screen");
         screen = match model.idle_delay.clone() {
             Ok(current) => screen.row(choice_row(
                 "Blank screen after",
                 timeout_choices(&[0, 60, 120, 300, 600, 900, 1800], current, "Never"),
-                &current.to_string(),
+                &picked(picks, "idle-delay", &current.to_string()),
                 move |key: String| {
-                    apply(loaded, overlays, move || {
-                        system::gsettings_set(SESSION, "idle-delay", &format!("uint32 {key}"))
-                    })
+                    choose(
+                        picks,
+                        loaded,
+                        overlays,
+                        "idle-delay",
+                        key.clone(),
+                        move || {
+                            system::gsettings_set(SESSION, "idle-delay", &format!("uint32 {key}"))
+                        },
+                    );
                 },
             )),
             Err(e) => screen.row(row("Blank screen after").subtitle(e.0).enabled(false)),
         };
         if let Some(dim) = model.dim {
+            let on = shown(pending, "dim", dim);
             screen = screen.row(switch_row(
                 "Dim screen when inactive",
-                dim,
+                on,
                 move |on: bool| {
                     let value = if on { "true" } else { "false" };
-                    apply(loaded, overlays, move || {
+                    set_switch(pending, overlays, "dim", on, move || {
                         system::gsettings_set(POWER_PLUGIN, "idle-dim", value)
                     })
                 },
             ));
         }
         screen = match model.lock_enabled.clone() {
-            Ok(enabled) => screen.row(switch_row(
-                "Automatic screen lock",
-                enabled,
-                move |on: bool| {
-                    let value = if on { "true" } else { "false" };
-                    apply(loaded, overlays, move || {
-                        system::gsettings_set(SCREENSAVER, "lock-enabled", value)
-                    })
-                },
-            )),
-            Err(e) => screen.row(row("Automatic screen lock").subtitle(e.0).enabled(false)),
-        };
-        screen = match model.lock_delay.clone() {
-            Ok(current) => screen.row(
-                choice_row(
-                    "Lock after",
-                    timeout_choices(&[0, 5, 30, 60, 300, 900], current, "Immediately"),
-                    &current.to_string(),
-                    move |key: String| {
-                        apply(loaded, overlays, move || {
-                            system::gsettings_set(
-                                SCREENSAVER,
+            Ok(enabled) => {
+                let on = shown(pending, "lock", enabled);
+                // The delay means nothing while the lock is off, so it is
+                // nested under the switch and shown only while it is on.
+                let delay = match model.lock_delay.clone() {
+                    Ok(current) => choice_row(
+                        "Lock after",
+                        timeout_choices(&[0, 5, 30, 60, 300, 900], current, "Immediately"),
+                        &picked(picks, "lock-delay", &current.to_string()),
+                        move |key: String| {
+                            choose(
+                                picks,
+                                loaded,
+                                overlays,
                                 "lock-delay",
-                                &format!("uint32 {key}"),
-                            )
+                                key.clone(),
+                                move || {
+                                    system::gsettings_set(
+                                        SCREENSAVER,
+                                        "lock-delay",
+                                        &format!("uint32 {key}"),
+                                    )
+                                },
+                            );
+                        },
+                    )
+                    .into(),
+                    Err(e) => row("Lock after").subtitle(e.0).enabled(false).into(),
+                };
+                screen.row(
+                    switch_row("Automatic screen lock", on, move |on: bool| {
+                        let value = if on { "true" } else { "false" };
+                        set_switch(pending, overlays, "lock", on, move || {
+                            system::gsettings_set(SCREENSAVER, "lock-enabled", value)
                         })
-                    },
+                    })
+                    .nested(on, vec![delay]),
                 )
-                .enabled(lock_on),
-            ),
-            Err(e) => screen.row(row("Lock after").subtitle(e.0).enabled(false)),
+            }
+            Err(e) => screen.row(row("Automatic screen lock").subtitle(e.0).enabled(false)),
         };
         page = page.child(screen);
 
@@ -606,6 +743,8 @@ impl Component for PowerPage {
             page = page.child(suspend_rows(
                 loaded,
                 overlays,
+                pending,
+                picks,
                 "ac",
                 "When plugged in",
                 state,
@@ -615,6 +754,8 @@ impl Component for PowerPage {
             page = page.child(suspend_rows(
                 loaded,
                 overlays,
+                pending,
+                picks,
                 "battery",
                 "On battery",
                 state,
@@ -639,15 +780,22 @@ impl Component for PowerPage {
             page = page.child(Group::titled("Power button").row(choice_row(
                 "When the power button is pressed",
                 options,
-                &current,
+                &picked(picks, "power-button", &current),
                 move |key: String| {
-                    apply(loaded, overlays, move || {
-                        system::gsettings_set(
-                            POWER_PLUGIN,
-                            "power-button-action",
-                            &format!("'{key}'"),
-                        )
-                    })
+                    choose(
+                        picks,
+                        loaded,
+                        overlays,
+                        "power-button",
+                        key.clone(),
+                        move || {
+                            system::gsettings_set(
+                                POWER_PLUGIN,
+                                "power-button-action",
+                                &format!("'{key}'"),
+                            )
+                        },
+                    );
                 },
             )));
         }

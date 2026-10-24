@@ -1,49 +1,81 @@
-//! A person's avatar: their initials on an accent circle.
+//! An account's avatar, drawn the way the Bingux shell draws the signed-in
+//! user: the picture AccountsService keeps for the account, clipped to a
+//! circle, or the default person glyph when there is no picture.
+
+use std::path::PathBuf;
 
 use freya::prelude::*;
 
+use crate::icons::{self, Icon};
 use crate::style::*;
 use crate::surface::use_tokens;
-use crate::typography::{EMPHASIS, Ink, TITLE};
 
-/// An avatar of `size` showing `initials`. The large size (`Dim::Box24`)
-/// uses title type, every smaller size emphasis type.
-pub fn avatar(initials: impl Into<String>, size: Dim) -> Avatar {
+/// An avatar of `size` for the account with login name `user`.
+pub fn avatar(user: impl Into<String>, size: Dim) -> Avatar {
     Avatar {
-        initials: initials.into(),
+        user: user.into(),
         size,
+    }
+}
+
+/// The login name of the signed-in account, for its avatar.
+pub fn current_user() -> String {
+    std::env::var("USER").unwrap_or_default()
+}
+
+/// Where AccountsService keeps the picture of `user`. The Bingux shell reads
+/// the same file for the signed-in account.
+fn account_picture(user: &str) -> Option<PathBuf> {
+    if user.is_empty() || user.contains('/') {
+        return None;
+    }
+    let path = PathBuf::from("/var/lib/AccountsService/icons").join(user);
+    path.is_file().then_some(path)
+}
+
+/// The default glyph's size inside an avatar of `size`.
+fn glyph_size(size: Dim) -> IconSize {
+    match size {
+        Dim::Box7 | Dim::Box11 => IconSize::Row,
+        Dim::Box24 => IconSize::Hero,
+        _ => IconSize::Control,
     }
 }
 
 #[derive(PartialEq)]
 pub struct Avatar {
-    initials: String,
+    user: String,
     size: Dim,
 }
 
 impl Component for Avatar {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let style = if self.size == Dim::Box24 {
-            TITLE
-        } else {
-            EMPHASIS
-        };
-        rect()
-            .tw(
-                &tokens,
-                &[
-                    w(self.size),
-                    h(self.size),
-                    rounded(Radius::Pill),
-                    bg(Paint::Accent),
-                    center(),
-                ],
-            )
-            .child(
-                style
-                    .in_ink(Ink::OnAccent)
-                    .label(&tokens, self.initials.clone()),
-            )
+        let frame = rect().tw(
+            &tokens,
+            &[
+                w(self.size),
+                h(self.size),
+                rounded(Radius::Pill),
+                bg(Paint::Control),
+                center(),
+                clip(),
+            ],
+        );
+        match account_picture(&self.user) {
+            Some(path) => {
+                let px = self.size.px();
+                frame.child(
+                    ImageViewer::new(path)
+                        .width(Size::px(px))
+                        .height(Size::px(px)),
+                )
+            }
+            None => frame.child(icons::icon(
+                Icon::AvatarDefault,
+                glyph_size(self.size),
+                Paint::Muted.color(&tokens),
+            )),
+        }
     }
 }

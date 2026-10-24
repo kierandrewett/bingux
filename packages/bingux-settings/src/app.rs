@@ -5,6 +5,8 @@ use freya::prelude::*;
 
 use crate::pages::PageId;
 use crate::routes::{Route, provide_navigator, use_navigator};
+use crate::search_results::SearchResults;
+use crate::settings_index;
 
 impl NavItem for PageId {
     fn title(self) -> &'static str {
@@ -46,7 +48,7 @@ impl Component for App {
         let navigator = provide_navigator(page, self.subpage.iter().cloned().collect());
         let open = navigator.routes();
         let top: Option<Route> = open.last().cloned();
-        let signed_in = use_hook(crate::pages::users::signed_in);
+        let signed_in = crate::pages::users::use_signed_in();
         let content: Element = match &top {
             Some(route) => route.render(),
             None => {
@@ -58,17 +60,23 @@ impl Component for App {
                     .into()
             }
         };
+        let query = use_state(crate::search_results::initial_query);
+        let results: Element = SearchResults { query }.into();
+        // Enter opens the page of the best match and clears the search.
+        let open_first: EventHandler<()> = (move |_: ()| {
+            let text = query.read().clone();
+            if let Some((page, _)) = settings_index::matching(&text).first() {
+                navigator.goto(*page);
+            }
+            let mut query = query;
+            query.set(String::new());
+        })
+        .into();
         let mut split = NavigationSplitView::new("Settings", PageId::ALL.to_vec(), page, content)
-            .search_hits(crate::settings_index::hits())
+            .search(query, results, open_first)
             .start_on_list(self.list_first);
-        if let Some((name, user)) = &signed_in {
+        if let Some((name, _)) = &signed_in {
             split = split.profile(Profile {
-                initials: crate::pages::users::initials(name),
-                detail: if name == user {
-                    "Your account".to_string()
-                } else {
-                    user.clone()
-                },
                 name: name.clone(),
                 target: PageId::Users,
             });

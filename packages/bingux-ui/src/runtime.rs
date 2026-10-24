@@ -8,6 +8,7 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
+use crate::shell::overlays::Overlays;
 use freya::prelude::*;
 
 /// A readable failure from a system command.
@@ -233,6 +234,48 @@ pub fn background_then<T: Send + 'static>(
                 }
                 Err(mpsc::TryRecvError::Empty) => timer(Duration::from_millis(30)).await,
                 Err(mpsc::TryRecvError::Disconnected) => return,
+            }
+        }
+    });
+}
+
+/// Show `value` at once, run `work` in the background, and revert to `previous`
+/// with a toast of the error if `work` fails. For a control whose change is
+/// applied by a command: the control never waits on the command.
+pub fn optimistic<T, E>(
+    shown: State<T>,
+    overlays: Option<Overlays>,
+    previous: T,
+    value: T,
+    work: impl FnOnce() -> Result<(), E> + Send + 'static,
+) where
+    T: Clone + PartialEq + 'static,
+    E: std::fmt::Display + Send + 'static,
+{
+    optimistic_then(shown, overlays, previous, value, work, || {});
+}
+
+/// As [`optimistic`], and on success run `done` on the UI thread, for example
+/// to reload a cached model after the command has changed it.
+pub fn optimistic_then<T, E>(
+    shown: State<T>,
+    overlays: Option<Overlays>,
+    previous: T,
+    value: T,
+    work: impl FnOnce() -> Result<(), E> + Send + 'static,
+    done: impl FnOnce() + 'static,
+) where
+    T: Clone + PartialEq + 'static,
+    E: std::fmt::Display + Send + 'static,
+{
+    let mut shown = shown;
+    shown.set(value);
+    background_then(work, move |result| match result {
+        Ok(()) => done(),
+        Err(error) => {
+            shown.set(previous.clone());
+            if let Some(overlays) = overlays {
+                overlays.toast(error.to_string());
             }
         }
     });

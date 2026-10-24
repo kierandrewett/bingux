@@ -322,6 +322,9 @@ impl Component for RowsPage {
     fn render(&self) -> impl IntoElement {
         let mut name = use_state(|| "Bingux".to_string());
         let mut committed = use_state(|| "Workstation".to_string());
+        let sharing = use_state(|| true);
+        let mut advanced = use_state(|| false);
+        let overlays = use_overlays();
         page_column()
             .child(
                 Group::new("Plain rows".to_string())
@@ -372,6 +375,50 @@ impl Component for RowsPage {
                         "Processor",
                         "AMD Ryzen 7 5800X 8-Core Processor with a long name that wraps",
                     )),
+            )
+            .child(
+                Group::new("Behaviour".to_string())
+                    .description(
+                        "Context menus, optimistic changes, nested rows and selectable values."
+                            .to_string(),
+                    )
+                    .row(row("Right-click for a menu").context_menu(vec![
+                        menu_item("Rename", |_| {}),
+                        menu_item("Duplicate", |_| {}).disabled(),
+                        menu_item("Delete", |_| {}).destructive(),
+                    ]))
+                    .row(switch_row(
+                        "Share on network",
+                        sharing(),
+                        move |next: bool| {
+                            bingux_ui::runtime::optimistic(
+                                sharing,
+                                Some(overlays),
+                                !next,
+                                next,
+                                move || -> Result<(), String> {
+                                    if next {
+                                        Err("The share service did not start".to_string())
+                                    } else {
+                                        Ok(())
+                                    }
+                                },
+                            )
+                        },
+                    ))
+                    .row(
+                        switch_row("Hardware acceleration", advanced(), move |next: bool| {
+                            advanced.set(next)
+                        })
+                        .nested(
+                            advanced(),
+                            vec![
+                                property_row("Driver", "vulkan-radeon").into(),
+                                property_row("Renderer", "llvmpipe").into(),
+                            ],
+                        ),
+                    )
+                    .row(property_row("Hostname", "bingux-workstation")),
             )
     }
 }

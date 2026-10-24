@@ -16,6 +16,7 @@ use bytes::Bytes;
 use freya::prelude::*;
 
 use crate::icons::{self, Icon};
+use crate::runtime::background_then;
 use crate::style::*;
 use crate::surface::use_tokens;
 
@@ -303,20 +304,54 @@ fn find(name: &str, size: u32) -> Option<IconFile> {
     file_in(pixmaps, name)
 }
 
+type Cache = Mutex<HashMap<(String, u32), Option<IconFile>>>;
+static CACHE: LazyLock<Cache> = LazyLock::new(Default::default);
+
+/// The cached lookup for icon `name` at `size`, without scanning: `None`
+/// when it has not been looked up yet. Cheap enough for render.
+fn cached(name: &str, size: u32) -> Option<Option<IconFile>> {
+    CACHE.lock().ok()?.get(&(name.to_string(), size)).cloned()
+}
+
 /// Find the file for icon `name` at about `size` physical pixels.
 pub fn resolve(name: &str, size: u32) -> Option<IconFile> {
-    type Cache = Mutex<HashMap<(String, u32), Option<IconFile>>>;
-    static CACHE: LazyLock<Cache> = LazyLock::new(Default::default);
-    let cache = &*CACHE;
-    let key = (name.to_string(), size);
-    if let Some(found) = cache.lock().ok()?.get(&key) {
-        return found.clone();
+    if let Some(found) = cached(name, size) {
+        return found;
     }
     let found = find(name, size);
-    if let Ok(mut cache) = cache.lock() {
-        cache.insert(key, found.clone());
+    if let Ok(mut cache) = CACHE.lock() {
+        cache.insert((name.to_string(), size), found.clone());
     }
     found
+}
+
+/// The file for icon `name` at `size`. A cached result is used at once; an
+/// uncached one is looked up on a background thread, and the result is `None`
+/// while it runs. `Some(file)` holds `None` when the theme has no such icon.
+/// The lookup scans icon directories, so it must never run in render.
+fn use_resolved(name: &str, size: u32) -> Option<Option<IconFile>> {
+    let key = (name.to_string(), size);
+    let found = use_state::<Option<((String, u32), Option<IconFile>)>>(|| None);
+    use_side_effect_with_deps(&key, move |key: &(String, u32)| {
+        if cached(&key.0, key.1).is_some() {
+            return;
+        }
+        let mut found = found;
+        let looked_up = key.clone();
+        let done = key.clone();
+        background_then(
+            move || resolve(&looked_up.0, looked_up.1),
+            move |file| found.set(Some((done, file))),
+        );
+    });
+    if let Some(file) = cached(name, size) {
+        return Some(file);
+    }
+    let current = found.read();
+    match &*current {
+        Some((looked_up, file)) if *looked_up == key => Some(file.clone()),
+        _ => None,
+    }
 }
 
 /// An application icon of `size` for the icon name `name`.
@@ -338,21 +373,38 @@ impl Component for AppIcon {
         let tokens = use_tokens();
         let size = self.size.px();
         // Ask for twice the size so the icon stays sharp on a HiDPI output.
-        let file = resolve(&self.name, (size * 2.0).ceil() as u32);
-        match file {
-            Some(IconFile {
+        let found = use_resolved(&self.name, (size * 2.0).ceil() as u32);
+        match found {
+            Some(Some(IconFile {
                 path,
                 svg: Some(bytes),
-            }) => SvgViewer::new((path, bytes))
+            })) => SvgViewer::new((path, bytes))
                 .width(Size::px(size))
                 .height(Size::px(size))
                 .into_element(),
-            Some(IconFile { path, svg: None }) => ImageViewer::new(path)
+            Some(Some(IconFile { path, svg: None })) => ImageViewer::new(path)
                 .width(Size::px(size))
                 .height(Size::px(size))
+                .into_element(),
+            // The lookup is still running: an empty tile of the same size, so
+            // the row does not jump when the icon arrives.
+            None => rect()
+                .width(Size::px(size))
+                .height(Size::px(size))
+                .tw(
+                    &tokens,
+                    &[
+                        bg(Paint::Control),
+                        rounded(if self.size == IconSize::AppLarge {
+                            Radius::Card
+                        } else {
+                            Radius::Control
+                        }),
+                    ],
+                )
                 .into_element(),
             // No icon in the theme: a plain tile with the generic glyph.
-            None => rect()
+            Some(None) => rect()
                 .width(Size::px(size))
                 .height(Size::px(size))
                 .tw(

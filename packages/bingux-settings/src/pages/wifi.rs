@@ -3,6 +3,7 @@
 //! comes from `nmcli`. The lists are read once when the page opens and again
 //! every few seconds while it stays open.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use freya::prelude::*;
@@ -10,16 +11,23 @@ use freya::prelude::*;
 use super::wifi_editor::{Editor, Target, use_editor};
 use crate::icons::{self, Icon};
 use crate::routes::{Navigator, Route, use_navigator};
-use crate::system::{self, CommandError, background, background_then};
+use crate::system::{self, CommandError, background_then};
 use crate::ui::{
     Group, Overlays, PageHeader, ResponseKind, SpinnerSize, Status, Tokens, action_strip,
     centered_caption, dialog, heading, icon_button, page_column, row, sheet, skeleton, spinner,
     status, strip_action, switch_row, text_field, use_overlays, use_page_busy, use_page_header,
     use_tokens,
 };
+use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 use bingux_ui::style::*;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
+
+/// Switches whose command has started and has finished. A read taken while no
+/// command is in flight shows the backend's real state.
+static SWITCHES_STARTED: AtomicUsize = AtomicUsize::new(0);
+static SWITCHES_FINISHED: AtomicUsize = AtomicUsize::new(0);
+
 const QUICK: Duration = Duration::from_secs(5);
 /// `device wifi list` takes about four seconds on a busy radio.
 const SCAN: Duration = Duration::from_secs(10);
@@ -83,18 +91,41 @@ fn split_terse(line: &str) -> Vec<String> {
     fields
 }
 
-/// Returns `(wifi_hardware, wifi_on, airplane)` from `radio -f WIFI-HW,WIFI,WWAN-HW,WWAN`.
-fn parse_radio(output: &str) -> Result<(String, bool, bool), CommandError> {
+/// Returns `(wifi_hardware, wifi_on)` from `radio -f WIFI-HW,WIFI`. Airplane
+/// mode is not read here: it is a separate switch with its own source, so a
+/// Wi-Fi radio that is simply off never reads as airplane mode.
+fn parse_radio(output: &str) -> Result<(String, bool), CommandError> {
     let fields = split_terse(output.trim());
-    if fields.len() < 4 {
+    if fields.len() < 2 {
         return Err(CommandError("Wi-Fi status could not be read.".into()));
     }
     let wifi_hw = fields[0].clone();
     let wifi_on = fields[1] == "enabled";
-    let wwan_hw = &fields[2];
-    let wwan = &fields[3];
-    let airplane = !wifi_on && (wwan_hw == "missing" || wwan == "disabled");
-    Ok((wifi_hw, wifi_on, airplane))
+    Ok((wifi_hw, wifi_on))
+}
+
+/// True when the kernel has every radio blocked in software: the airplane
+/// state. Each radio reports a `soft` flag in `/sys/class/rfkill`; airplane
+/// mode is on only when there is at least one radio and all of them are
+/// blocked. Snapshot builds can fake it with `BINGUX_SETTINGS_FAKE_AIRPLANE`.
+fn airplane_blocked() -> bool {
+    #[cfg(feature = "snapshot")]
+    if let Some(value) = std::env::var_os("BINGUX_SETTINGS_FAKE_AIRPLANE") {
+        return value == "1";
+    }
+    let Ok(entries) = std::fs::read_dir("/sys/class/rfkill") else {
+        return false;
+    };
+    let mut any = false;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let soft = std::fs::read_to_string(path.join("soft")).unwrap_or_default();
+        any = true;
+        if soft.trim() != "1" {
+            return false;
+        }
+    }
+    any
 }
 
 /// Names of the Wi-Fi connection profiles in `NAME,TYPE` output.
@@ -171,11 +202,42 @@ fn active_hotspot() -> Option<String> {
     })
 }
 
+/// Snapshot builds only: `BINGUX_SETTINGS_FAKE_WIFI` stands in a Wi-Fi radio
+/// that is on, with one connected network, two saved and one visible only.
+/// Nothing is read from `nmcli`, and no radio is changed.
+#[cfg(feature = "snapshot")]
+fn fake_model() -> Option<Model> {
+    std::env::var_os("BINGUX_SETTINGS_FAKE_WIFI")?;
+    let network = |ssid: &str, signal: u8, in_use: bool, saved: bool| Network {
+        ssid: ssid.into(),
+        signal,
+        secured: true,
+        in_use,
+        saved,
+        band: "5 GHz".into(),
+        rate: "540 Mbit/s".into(),
+    };
+    Some(Model {
+        wifi_hw: "enabled".into(),
+        wifi_on: true,
+        airplane: false,
+        networks: vec![
+            network("Home", 82, true, true),
+            network("Office", 64, false, true),
+            network("Neighbour", 41, false, false),
+        ],
+        saved_names: vec!["Home".into(), "Office".into()],
+        hotspot: None,
+    })
+}
+
 fn load() -> Result<Model, CommandError> {
-    let (wifi_hw, wifi_on, airplane) = parse_radio(&nmcli(
-        &["-t", "-f", "WIFI-HW,WIFI,WWAN-HW,WWAN", "radio"],
-        QUICK,
-    )?)?;
+    #[cfg(feature = "snapshot")]
+    if let Some(model) = fake_model() {
+        return Ok(model);
+    }
+    let (wifi_hw, wifi_on) = parse_radio(&nmcli(&["-t", "-f", "WIFI-HW,WIFI", "radio"], QUICK)?)?;
+    let airplane = airplane_blocked();
     let saved_names = parse_saved_wifi(
         &nmcli(&["-t", "-f", "NAME,TYPE", "connection", "show"], QUICK).unwrap_or_default(),
     );
@@ -214,11 +276,26 @@ fn load() -> Result<Model, CommandError> {
 }
 
 fn toggle_wifi(on: bool) -> Result<(), CommandError> {
+    #[cfg(feature = "snapshot")]
+    if std::env::var_os("BINGUX_SETTINGS_FAKE_WIFI").is_some() {
+        return Ok(());
+    }
     nmcli(&["radio", "wifi", if on { "on" } else { "off" }], QUICK).map(|_| ())
 }
 
 fn toggle_airplane(on: bool) -> Result<(), CommandError> {
-    nmcli(&["radio", "all", if on { "on" } else { "off" }], QUICK).map(|_| ())
+    #[cfg(feature = "snapshot")]
+    if std::env::var_os("BINGUX_SETTINGS_FAKE_AIRPLANE").is_some() {
+        return Ok(());
+    }
+    // rfkill, not `nmcli radio all`: it blocks and unblocks every radio the
+    // kernel knows about, which is what airplane mode means.
+    system::run(
+        "rfkill",
+        &[if on { "block" } else { "unblock" }, "all"],
+        QUICK,
+    )
+    .map(|_| ())
 }
 
 fn scan_networks() -> Result<(), CommandError> {
@@ -269,6 +346,36 @@ fn forget_connection(name: &str) -> Result<(), CommandError> {
 
 fn down_connection(name: &str) -> Result<(), CommandError> {
     nmcli(&["connection", "down", "id", name], QUICK).map(|_| ())
+}
+
+fn up_connection(name: &str) -> Result<(), CommandError> {
+    nmcli(&["connection", "up", "id", name], CONNECT).map(|_| ())
+}
+
+/// The saved password of a profile, read from NetworkManager's secrets.
+fn saved_password(name: &str) -> Result<String, CommandError> {
+    let output = nmcli(
+        &[
+            "-s",
+            "-g",
+            "802-11-wireless-security.psk",
+            "connection",
+            "show",
+            "id",
+            name,
+        ],
+        QUICK,
+    )?;
+    // nmcli escapes colons in a terse value; split_terse undoes that.
+    let password = split_terse(output.trim_end_matches(['\r', '\n']))
+        .into_iter()
+        .next()
+        .unwrap_or_default();
+    if password.is_empty() {
+        Err(CommandError("This network has no saved password.".into()))
+    } else {
+        Ok(password)
+    }
 }
 
 /// Words for a signal strength from its percentage. Only the details view
@@ -339,6 +446,10 @@ struct Ui {
     sheet_error: State<Option<String>>,
     password: State<String>,
     show_password: State<bool>,
+    /// The Wi-Fi and airplane values the user just set, shown until the
+    /// backend has applied them and the list has been read again.
+    wifi_pending: State<Option<bool>>,
+    airplane_pending: State<Option<bool>>,
     hidden_ssid: State<String>,
     hidden_password: State<String>,
     hotspot_name: State<String>,
@@ -363,6 +474,8 @@ fn use_ui() -> Ui {
         sheet_error: use_state(|| None::<String>),
         password: use_state(String::new),
         show_password: use_state(|| false),
+        wifi_pending: use_state(|| None::<bool>),
+        airplane_pending: use_state(|| None::<bool>),
         hidden_ssid: use_state(String::new),
         hidden_password: use_state(String::new),
         hotspot_name: use_state(String::new),
@@ -375,7 +488,20 @@ fn use_ui() -> Ui {
 
 impl Ui {
     fn reload(self) {
-        background(self.model, load);
+        // A read is the backend's truth only if no switch was changing while it
+        // ran, so the optimistic values are cleared on such a read alone.
+        let started = SWITCHES_STARTED.load(Ordering::SeqCst);
+        let quiet = started == SWITCHES_FINISHED.load(Ordering::SeqCst);
+        background_then(load, move |loaded| {
+            if quiet && SWITCHES_STARTED.load(Ordering::SeqCst) == started {
+                let mut wifi = self.wifi_pending;
+                wifi.set(None);
+                let mut airplane = self.airplane_pending;
+                airplane.set(None);
+            }
+            let mut model = self.model;
+            model.set(Some(loaded));
+        });
     }
 
     /// Run one nmcli action in the background with a busy line, then reload
@@ -405,21 +531,40 @@ impl Ui {
     }
 
     fn set_wifi(self, on: bool) {
-        let label = if on {
-            "Turning Wi-Fi on."
-        } else {
-            "Turning Wi-Fi off."
-        };
-        self.act(label, move || toggle_wifi(on), || {});
+        self.set_switch(self.wifi_pending, on, move || toggle_wifi(on));
     }
 
     fn set_airplane(self, on: bool) {
-        let label = if on {
-            "Turning airplane mode on."
-        } else {
-            "Turning airplane mode off."
-        };
-        self.act(label, move || toggle_airplane(on), || {});
+        self.set_switch(self.airplane_pending, on, move || toggle_airplane(on));
+    }
+
+    /// Flip a switch on screen at once and run its command in the background,
+    /// through the shared optimistic helper: a failure reverts the switch and
+    /// shows a toast. The next clean read of the backend clears the value.
+    fn set_switch(
+        self,
+        pending: State<Option<bool>>,
+        on: bool,
+        work: impl FnOnce() -> Result<(), CommandError> + Send + 'static,
+    ) {
+        SWITCHES_STARTED.fetch_add(1, Ordering::SeqCst);
+        bingux_ui::runtime::optimistic(pending, Some(self.overlays), None, Some(on), move || {
+            let result = work();
+            SWITCHES_FINISHED.fetch_add(1, Ordering::SeqCst);
+            result
+        });
+    }
+
+    /// The model as its switches show it: a switch that is changing shows the
+    /// new value at once, before the backend has applied it.
+    fn shown(self, mut model: Model) -> Model {
+        if let Some(on) = *self.wifi_pending.read() {
+            model.wifi_on = on;
+        }
+        if let Some(on) = *self.airplane_pending.read() {
+            model.airplane = on;
+        }
+        model
     }
 
     fn rescan(self) {
@@ -449,8 +594,29 @@ impl Ui {
         self.act("Disconnecting.", move || down_connection(&name), || {});
     }
 
-    /// Ask first: forgetting drops the saved password.
-    fn confirm_forget(self, name: String) {
+    /// Bring up a saved network by its profile name.
+    fn activate(self, name: String) {
+        let label = format!("Connecting to {name}.");
+        self.act(&label, move || up_connection(&name), || {});
+    }
+
+    /// Copy a saved network's password to the clipboard, and say so.
+    fn copy_password(self, name: String) {
+        background_then(
+            move || saved_password(&name),
+            move |result| match result {
+                Ok(password) => match freya::clipboard::Clipboard::set(password) {
+                    Ok(()) => self.overlays.toast("Copied."),
+                    Err(_) => self.overlays.toast("The password could not be copied."),
+                },
+                Err(error) => self.overlays.toast(error.0),
+            },
+        );
+    }
+
+    /// Ask first: forgetting drops the saved password. `leave` pops the details
+    /// page once the network is gone.
+    fn confirm_forget(self, name: String, leave: bool) {
         let navigator = self.navigator;
         self.overlays.show_dialog(
             dialog(
@@ -463,7 +629,11 @@ impl Ui {
                 self.act(
                     "Forgetting the network.",
                     move || forget_connection(&target),
-                    move || navigator.pop(),
+                    move || {
+                        if leave {
+                            navigator.pop();
+                        }
+                    },
                 );
             }),
         );
@@ -684,7 +854,7 @@ fn visible_section(ui: Ui, model: &Model, tokens: Tokens) -> Element {
     }
     if !model.wifi_on {
         let text = if model.airplane {
-            "Wi-Fi is off in airplane mode."
+            "Wi-Fi is off because \"Airplane mode\" is on."
         } else {
             "Wi-Fi is off."
         };
@@ -762,9 +932,59 @@ fn network_rows(ui: Ui, networks: &[Network], tokens: Tokens) -> Vec<Element> {
                     ui.join(&press);
                 }
             });
-            Element::from(item.trailing(action_slot(Some(Element::from(cluster)))))
+            Element::from(
+                item.trailing(action_slot(Some(Element::from(cluster))))
+                    .context_menu(network_menu(ui, network)),
+            )
         })
         .collect()
+}
+
+/// The right-click menu for one network row: connect or disconnect, the saved
+/// network actions, and the details page.
+fn network_menu(ui: Ui, network: &Network) -> Vec<MenuItem> {
+    let ssid = network.ssid.clone();
+    let mut items = Vec::new();
+    if network.in_use {
+        let name = ssid.clone();
+        items.push(
+            menu_item("Disconnect", move |_| ui.disconnect(name.clone())).icon(Icon::WindowClose),
+        );
+    } else {
+        let press = network.clone();
+        items.push(
+            menu_item("Connect", move |_| ui.join(&press))
+                .icon(Icon::NetworkWirelessSignalExcellent),
+        );
+    }
+    if network.saved {
+        items.push(menu_separator());
+        items.extend(saved_items(ui, &ssid, false));
+    }
+    items.push(menu_separator());
+    let details = ssid;
+    items.push(
+        menu_item("Network details", move |_| {
+            ui.navigator.push(Route::Network {
+                ssid: details.clone(),
+            })
+        })
+        .icon(Icon::PreferencesSystem),
+    );
+    items
+}
+
+/// The actions every saved network offers: copy its password and forget it.
+/// `leave` says whether forgetting also leaves the details page it is opened from.
+fn saved_items(ui: Ui, name: &str, leave: bool) -> Vec<MenuItem> {
+    let copy = name.to_string();
+    let forget = name.to_string();
+    vec![
+        menu_item("Copy password", move |_| ui.copy_password(copy.clone())).icon(Icon::EditCopy),
+        menu_item("Forget", move |_| ui.confirm_forget(forget.clone(), leave))
+            .icon(Icon::UserTrash)
+            .destructive(),
+    ]
 }
 
 /// The hotspot row: the state and a turn-off row while one runs, or the form otherwise.
@@ -819,13 +1039,17 @@ impl Component for WifiPage {
         let tokens = use_tokens();
         use_polling(ui);
         use_page_busy(ui.busy.read().is_some());
+        // What the switches show: a switch being changed shows its new value
+        // at once, before the backend has applied it.
+        let loaded = ui.model.read().clone();
+        let shown = loaded.map(|loaded| loaded.map(|model| ui.shown(model)));
         // The master switch lives in the header bar, as in GNOME.
-        let master = match ui.model.read().as_ref() {
+        let master = match shown.as_ref() {
             Some(Ok(model)) if wifi_usable(&model.wifi_hw) => Some(model.wifi_on),
             _ => None,
         };
         let mut header = PageHeader {
-            subtitle: Some(wifi_subtitle(ui.model.read().as_ref())),
+            subtitle: Some(wifi_subtitle(shown.as_ref())),
             action: None,
         };
         if let Some(on) = master {
@@ -833,8 +1057,7 @@ impl Component for WifiPage {
         }
         use_page_header(header);
 
-        let loaded = ui.model.read().clone();
-        let Some(loaded) = loaded else {
+        let Some(loaded) = shown else {
             return page(vec![skeleton()]);
         };
         let model = match loaded {
@@ -847,40 +1070,38 @@ impl Component for WifiPage {
         };
 
         let mut blocks: Vec<Element> = Vec::new();
-
-        let usable = wifi_usable(&model.wifi_hw);
-        let mut items: Vec<Element> = Vec::new();
-        if !usable {
-            items.push(Element::from(
-                row("Wi-Fi")
-                    .subtitle("Wi-Fi is not available on this computer.")
-                    .enabled(false),
-            ));
-        } else if !model.wifi_on {
-            items.push(Element::from(
-                row("Wi-Fi is off").subtitle("Use the switch at the top to turn it on."),
-            ));
-        }
-        if model.wifi_on && usable {
-            let navigator = ui.navigator;
-            items.push(Element::from(
-                row("Saved networks")
-                    .navigates()
-                    .on_press(move |_| navigator.push(Route::WifiSaved)),
-            ));
-            items.push(Element::from(
-                row("Connect to hidden network...")
-                    .navigates()
-                    .on_press(move |_| ui.open_hidden()),
-            ));
-            items.push(hotspot_row(ui, &model));
-        }
-        blocks.push(Element::from(Group::new(None::<String>).rows(items)));
+        // Airplane mode comes first: it switches every radio, Wi-Fi included.
         blocks.push(Element::from(Group::new(None::<String>).row(switch_row(
             "Airplane mode",
             model.airplane,
             move |on: bool| ui.set_airplane(on),
         ))));
+
+        // Wi-Fi settings show only while Wi-Fi is on; they depend on it.
+        if !wifi_usable(&model.wifi_hw) {
+            blocks.push(Element::from(
+                Group::new(None::<String>).row(
+                    row("Wi-Fi")
+                        .subtitle("Wi-Fi is not available on this computer.")
+                        .enabled(false),
+                ),
+            ));
+        } else if model.wifi_on {
+            let navigator = ui.navigator;
+            blocks.push(Element::from(Group::new(None::<String>).rows(vec![
+                    Element::from(
+                        row("Saved networks")
+                            .navigates()
+                            .on_press(move |_| navigator.push(Route::WifiSaved)),
+                    ),
+                    Element::from(
+                        row("Connect to hidden network...")
+                            .navigates()
+                            .on_press(move |_| ui.open_hidden()),
+                    ),
+                    hotspot_row(ui, &model),
+                ])));
+        }
 
         blocks.push(visible_section(ui, &model, tokens));
 
@@ -917,11 +1138,23 @@ impl Component for SavedNetworksPage {
         }
         let rows = model.saved_names.iter().map(|name| {
             let target = name.clone();
-            Element::from(row(name.clone()).navigates().on_press(move |_| {
-                ui.navigator.push(Route::Network {
-                    ssid: target.clone(),
-                })
-            }))
+            let connect = name.clone();
+            let mut menu = vec![
+                menu_item("Connect", move |_| ui.activate(connect.clone()))
+                    .icon(Icon::NetworkWirelessSignalExcellent),
+                menu_separator(),
+            ];
+            menu.extend(saved_items(ui, name, false));
+            Element::from(
+                row(name.clone())
+                    .navigates()
+                    .on_press(move |_| {
+                        ui.navigator.push(Route::Network {
+                            ssid: target.clone(),
+                        })
+                    })
+                    .context_menu(menu),
+            )
         });
         page(vec![Element::from(
             Group::new(None::<String>).rows(rows.collect::<Vec<_>>()),
@@ -1017,7 +1250,7 @@ impl Component for NetworkPage {
         if saved {
             let name = ssid.clone();
             actions.push(strip_action(Icon::UserTrash, "Forget", move |_| {
-                ui.confirm_forget(name.clone())
+                ui.confirm_forget(name.clone(), true)
             }));
             let target = Target {
                 name: ssid.clone(),
